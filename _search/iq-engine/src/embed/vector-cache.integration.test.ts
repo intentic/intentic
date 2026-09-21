@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { embedPending } from "../engines/semantic.js";
-import { openIndex, type IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { openIndex } from "../store/db.js";
 import type { Embedder } from "./embedder.js";
 import { openVectorCache, vectorCachePath } from "./vector-cache.js";
 
@@ -48,7 +49,7 @@ const refusingEmbedder: Embedder = {
     embedQuery: () => Promise.reject(new Error("cache miss reached the model")),
 };
 
-const insertChunks = (db: IndexDb, texts: readonly string[]): void => {
+const insertChunks = (db: SqliteDb, texts: readonly string[]): void => {
     db.run("INSERT INTO files (path, mtime_ms, size, hash) VALUES ('a.ts', 0, 1, 'f1')");
     const id = Number(db.get("SELECT id FROM files WHERE path = 'a.ts'")!["id"]);
     texts.forEach((text, i) => {
@@ -56,7 +57,7 @@ const insertChunks = (db: IndexDb, texts: readonly string[]): void => {
     });
 };
 
-const storedVectors = (db: IndexDb): Map<string, Uint8Array> => {
+const storedVectors = (db: SqliteDb): Map<string, Uint8Array> => {
     const map = new Map<string, Uint8Array>();
     for (const row of db.all("SELECT c.hash, v.embedding FROM chunks c JOIN chunk_vectors v ON v.chunk_id = c.id")) {
         map.set(row["hash"] as string, row["embedding"] as Uint8Array);

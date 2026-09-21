@@ -3,7 +3,8 @@ import { appendFile, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeRecallFixture } from "../testing.js";
-import { openRecallDb, type RecallDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { openRecallDb } from "../store/db.js";
 import { ingest } from "./ingest.js";
 
 const SESSION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -12,7 +13,7 @@ const SESSION_B = "aaaaaaaa-0000-4000-8000-000000000002";
 let root: string;
 let projectsDir: string;
 let cleanup: () => Promise<void>;
-let db: RecallDb;
+let db: SqliteDb;
 
 beforeAll(async () => {
     let claudeDir: string;

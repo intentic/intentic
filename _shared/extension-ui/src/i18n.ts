@@ -37,6 +37,27 @@ export type ExtensionT = (key: string, values?: Record<string, unknown>, plural?
 export const extensionT = (extensionId: string): ExtensionT => useT(`ext.${extensionId}`);
 
 /**
+ * One extension's words in one call: the catalog the host mounts (`messages`) and the translator its components
+ * read (`t`), which were the same twenty lines in every in-repo extension. The loader stays at the CALL SITE
+ * because its specifier has to be a literal template — that is what emits one chunk per language rather than one
+ * request carrying all of them — and the id is passed in rather than derived, so this package's published types
+ * still reach no further than `vue` and the locale table.
+ *
+ * ```ts
+ * // src/i18n.ts
+ * export const { messages, t } = extensionI18n(extensionIdOf(manifest), base, (locale) => import(`./locales/${locale}.json`));
+ * ```
+ */
+export const extensionI18n = (
+    extensionId: string,
+    base: MessageTree,
+    load: (locale: string) => Promise<{ readonly default: MessageTree }>,
+): {
+    readonly messages: { readonly base: MessageTree; readonly load: (locale: string) => Promise<{ readonly default: MessageTree }> };
+    readonly t: ExtensionT;
+} => ({ messages: { base, load }, t: extensionT(extensionId) });
+
+/**
  * Mounts an extension's own messages under its slice of the tree — what the HOST does before it calls `activate`, and
  * what a test that calls `activate` itself has to do instead, or every label it asserts on reads as a dotted key.
  *

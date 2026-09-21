@@ -1,5 +1,6 @@
 import { stat } from "node:fs/promises";
 import { isAbsolute, relative, sep } from "node:path";
+import { estimateTokens } from "@intentic/base/format";
 import { errorMessage } from "@intentic/base/errors";
 import { IGNORED_DIRS, isAgentWorktreePath, isReferencePath } from "@intentic/workspace-ignore";
 import { STATE_DIR } from "@intentic/constants";
@@ -20,7 +21,6 @@ import { pptxDeriver } from "./derivers/pptx.js";
 import { rtfDeriver } from "./derivers/rtf.js";
 import { xlsxDeriver } from "./derivers/xlsx.js";
 import { isFresh, readSidecar, removeSidecar, sidecarBody, sidecarPathFor, sha256OfFile, writeSidecar } from "./sidecar.js";
-import { tokensOf } from "./env.js";
 
 // Pipeline both commands and the daemon's sweep run: place the file, recognize it, route it, keep its shadow honest.
 // One module, so `read` and `derive` cannot disagree about a file's markdown.
@@ -106,7 +106,7 @@ export const ensureSidecar = async (workspaceRoot: string, absPath: string, now:
     const existing = await readSidecar(sidecarPath);
     if (isFresh(existing, sourceSha, stamp)) {
         const body = sidecarBody(existing ?? "");
-        return { kind: "fresh", relPath, format, sidecarPath, body, tokens: tokensOf(body) };
+        return { kind: "fresh", relPath, format, sidecarPath, body, tokens: estimateTokens(body) };
     }
     // Neutralized once here so every consumer gets folded text; a corrupt file's failure is a loud skip, not fatal.
     let doc: DerivedDoc;

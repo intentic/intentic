@@ -7,7 +7,8 @@ import { ingest } from "./ingest/ingest.js";
 import { ftsQueryOf, rankFilesForTopic } from "./rank/files.js";
 import { grabExcerpts } from "./rank/grab.js";
 import { matchSessions } from "./rank/match.js";
-import { openRecallDb, type RecallDb } from "./store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { openRecallDb } from "./store/db.js";
 import { projectsDirOf } from "./transcript/slug.js";
 import type { IngestStats } from "./ingest/ingest.js";
 import type { TopicFile, TopicOptions } from "./rank/files.js";
@@ -66,8 +67,8 @@ export const createRecall = (options: RecallOptions): Recall => {
     const projectsDir = projectsDirOf(options.root, options.claudeDir);
     // Mirrors iq-engine's IQ_DIR, no dependency import; recall.db sits beside index.db in a dir iq excludes.
     const dbPath = options.dbPath ?? join(options.root, `${STATE_DIR}/local/cache/iq/recall.db`);
-    let opened: RecallDb | undefined;
-    const db = (): RecallDb => (opened ??= openRecallDb(dbPath));
+    let opened: SqliteDb | undefined;
+    const db = (): SqliteDb => (opened ??= openRecallDb(dbPath));
     // Read once per Recall, lazily, only by the listing path that joins rows against it.
     let fleet: Map<string, Conversation> | undefined;
     const conversations = (): Map<string, Conversation> => (fleet ??= conversationsBySession(options.historyRoot));

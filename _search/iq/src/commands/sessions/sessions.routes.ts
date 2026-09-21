@@ -1,4 +1,6 @@
-import { buildCommand, buildRouteMap, numberParser, type CommandContext } from "@stricli/core";
+import { countParser } from "@intentic/agent-cli/flags";
+import { estimateTokens } from "@intentic/base/format";
+import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { createRecall, parseLine, readLines, type Recall, type SessionMatch, typedPromptOf } from "@intentic/iq-recall";
 import { loadConfig } from "../../env.config.js";
 
@@ -43,8 +45,8 @@ const list = buildCommand({
     docs: { brief: "Recent sessions of this workspace, newest first" },
     parameters: {
         flags: {
-            days: { kind: "parsed", parse: numberParser, default: "45", brief: "Only sessions active in the last N days" },
-            limit: { kind: "parsed", parse: numberParser, default: "50", brief: "Max sessions" },
+            days: { kind: "parsed", parse: countParser, default: "45", brief: "Only sessions active in the last N days" },
+            limit: { kind: "parsed", parse: countParser, default: "50", brief: "Max sessions" },
             json: { kind: "boolean", default: false, brief: "One JSON array" },
         },
         positional: {
@@ -87,8 +89,8 @@ const files = buildCommand({
     docs: { brief: "Files past sessions touched while working on a topic (frecency × inverse-ubiquity ranked)" },
     parameters: {
         flags: {
-            days: { kind: "parsed", parse: numberParser, default: "90", brief: "Only associations from the last N days" },
-            limit: { kind: "parsed", parse: numberParser, default: "20", brief: "Max files" },
+            days: { kind: "parsed", parse: countParser, default: "90", brief: "Only associations from the last N days" },
+            limit: { kind: "parsed", parse: countParser, default: "20", brief: "Max files" },
             json: { kind: "boolean", default: false, brief: "One JSON array" },
         },
         positional: { kind: "tuple", parameters: [{ parse: String, brief: "Topic words", placeholder: "query" }] },
@@ -250,7 +252,7 @@ const match = buildCommand({
     docs: { brief: "Rank recent sessions against a prompt; --hook consumes a UserPromptSubmit payload from stdin" },
     parameters: {
         flags: {
-            days: { kind: "parsed", parse: numberParser, default: "45", brief: "Only sessions active in the last N days" },
+            days: { kind: "parsed", parse: countParser, default: "45", brief: "Only sessions active in the last N days" },
             json: { kind: "boolean", default: false, brief: "One JSON array" },
             hook: { kind: "boolean", default: false, brief: "Read the UserPromptSubmit payload from stdin; emit hook JSON" },
         },
@@ -295,9 +297,9 @@ const grab = buildCommand({
     docs: { brief: "Ranked conversation excerpts from past sessions for a topic (asked → answered fragments)" },
     parameters: {
         flags: {
-            days: { kind: "parsed", parse: numberParser, default: "90", brief: "Only turns from the last N days" },
-            limit: { kind: "parsed", parse: numberParser, default: "10", brief: "Max excerpts" },
-            budget: { kind: "parsed", parse: numberParser, default: "1500", brief: "Output token budget (est. 4 chars/token)" },
+            days: { kind: "parsed", parse: countParser, default: "90", brief: "Only turns from the last N days" },
+            limit: { kind: "parsed", parse: countParser, default: "10", brief: "Max excerpts" },
+            budget: { kind: "parsed", parse: countParser, default: "1500", brief: "Output token budget" },
             json: { kind: "boolean", default: false, brief: "One JSON array" },
         },
         positional: { kind: "tuple", parameters: [{ parse: String, brief: "Topic words", placeholder: "query" }] },
@@ -325,7 +327,7 @@ const grab = buildCommand({
                                   `    session (${excerpt.bookends.turns} turns): opened "${cap(collapse(excerpt.bookends.first), 120)}" → ended "${cap(collapse(excerpt.bookends.last), 120)}"`,
                               ]),
                     ].join("\n");
-                    spent += Math.ceil(block.length / 4);
+                    spent += estimateTokens(block);
                     // Always show the top hit; past the budget, report the remainder instead of printing it.
                     if (shown > 0 && spent > flags.budget) {
                         this.process.stdout.write(`… ${excerpts.length - shown} more past --budget ${flags.budget}\n`);

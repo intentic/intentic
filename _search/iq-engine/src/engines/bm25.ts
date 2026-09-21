@@ -1,5 +1,5 @@
 import { STOPWORDS } from "../plan/tokens.js";
-import type { IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import type { EngineHit } from "../types.js";
 
 const TOP_K = 50;
@@ -19,7 +19,7 @@ const PRF_TERMS = 8;
 
 // RM3-style pseudo-relevance feedback: mine the strongest non-query terms from the first-pass top docs. The
 // caller runs the expanded query as a SECOND engine into RRF fusion, so original-query ranks keep their weight.
-export const prfTerms = (db: IndexDb, query: string): string[] => {
+export const prfTerms = (db: SqliteDb, query: string): string[] => {
     const match = toMatch(query);
     if (match === undefined) {
         return [];
@@ -52,7 +52,7 @@ export const prfTerms = (db: IndexDb, query: string): string[] => {
 
 // The ranked sparse tier: BM25 over the indexed chunks (rarity-weighted, unlike ripgrep's unranked matching).
 // bm25() returns negative "lower is better" scores; displayed normalized to 0..1.
-export const bm25Search = (db: IndexDb, query: string, allowed: ReadonlySet<string>): EngineHit[] => {
+export const bm25Search = (db: SqliteDb, query: string, allowed: ReadonlySet<string>): EngineHit[] => {
     const match = toMatch(query);
     if (match === undefined) {
         return [];

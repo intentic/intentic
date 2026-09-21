@@ -1,4 +1,4 @@
-import type { RecallDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import { decayOf, ftsQueryOf, matchingTitles, matchingTurns, sessionFiles } from "./files.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -27,7 +27,7 @@ export interface MatchOptions {
 
 // Feature B: rank recent sessions against a new session's first prompt. Purely statistical. BM25 over
 // prompts/titles + recency decay + optional file overlap, so it works without any LLM access.
-export const matchSessions = (db: RecallDb, prompt: string, options: MatchOptions = {}): SessionMatch[] => {
+export const matchSessions = (db: SqliteDb, prompt: string, options: MatchOptions = {}): SessionMatch[] => {
     const fts = ftsQueryOf(prompt);
     if (fts === undefined) {
         return [];

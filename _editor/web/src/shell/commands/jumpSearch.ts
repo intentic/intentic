@@ -65,7 +65,7 @@ export const scopedQuery = (kind: JumpKind | undefined, text: string): string =>
 
 export interface ScoredRow {
     readonly kind: JumpKind;
-    // 0..1, the one axis both rankers answer on (commandSearch.nameScore, fuzzyPaths.fuzzyScore); 0 for a row listed
+    // 0..1, the one axis both rankers answer on (commandSearch.nameScore, @intentic/base/fuzzy); 0 for a row listed
     // without a query, which leaves JUMP_KINDS to order the palette.
     readonly score: number;
 }

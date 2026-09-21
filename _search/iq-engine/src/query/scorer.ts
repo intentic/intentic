@@ -2,7 +2,7 @@ import type { Embedder } from "../embed/embedder.js";
 import type { Reranker } from "../embed/reranker.js";
 import type { VectorCache } from "../embed/vector-cache.js";
 import { embedPending, semanticSearch } from "../engines/semantic.js";
-import type { IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import type { EngineHit } from "../types.js";
 
 export interface SemanticOutcome {
@@ -24,7 +24,7 @@ export interface QueryScorer {
 
 export interface InThreadScorerOptions {
     // Passed per query since the one-shot engine may reopen the handle each run; models are held instead.
-    readonly db: IndexDb;
+    readonly db: SqliteDb;
     readonly embedder: () => Promise<Embedder | undefined>;
     readonly reranker: () => Promise<Reranker | undefined>;
     // True if a query may spend its own latency filling NULL embeddings; false when an indexer owns that backlog.

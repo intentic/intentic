@@ -1,12 +1,12 @@
 // CLI end-to-end against a temp workspace: derive, freshness, budgeted read, sweep with orphan pruning, the ignore
 // floor, and forged markers dying in the sidecar's bytes.
-// Driven in-process through the same `run(app, …)` seam cli.ts calls, stdout captured by a spy; no build artifact, no
-// child process.
+// Driven in-process through the same `run(app, …)` seam cli.ts calls (@intentic/agent-cli/testing); no build
+// artifact, no child process.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { run, type StricliProcess } from "@stricli/core";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "./app.js";
 import { deriverStamp } from "./lib/derivers/deriver.js";
 import { docxDeriver } from "./lib/derivers/docx.js";
@@ -23,23 +23,7 @@ afterAll(() => {
     rmSync(root, { recursive: true, force: true });
 });
 
-/** Runs the CLI in-process; returns captured stdout and the exit code the process would have carried. */
-const fileq = async (...args: string[]): Promise<{ out: string; exit: number }> => {
-    let out = "";
-    const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
-        out += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-        return true;
-    }) as typeof process.stdout.write);
-    const previous = process.exitCode;
-    process.exitCode = undefined;
-    try {
-        await run(app, args, { process: process as StricliProcess });
-        return { out, exit: typeof process.exitCode === "number" ? process.exitCode : 0 };
-    } finally {
-        spy.mockRestore();
-        process.exitCode = previous;
-    }
-};
+const fileq = (...args: string[]): Promise<CliOutcome> => captureCli(app, args);
 
 const sidecarOf = (relPath: string): string => join(root, ".intentic/local/cache/derived", `${relPath}.md`);
 
@@ -48,7 +32,7 @@ describe("derive", () => {
         writeFileSync(join(root, "plan.docx"), docxBytes("Plan", ["First body line."]));
         const first = await fileq("derive", "plan.docx");
         expect(first.out).toContain("derived plan.docx");
-        expect(first.exit).toBe(0);
+        expect(first.exitCode).toBe(0);
         const sidecar = readFileSync(sidecarOf("plan.docx"), "utf8");
         expect(sidecar).toContain("source: plan.docx");
         expect(sidecar).toContain(`deriver: ${deriverStamp(docxDeriver)}`);
@@ -70,9 +54,9 @@ describe("derive", () => {
     it("refuses the ignore floor and says why", async () => {
         mkdirSync(join(root, "node_modules/pkg"), { recursive: true });
         writeFileSync(join(root, "node_modules/pkg/manual.docx"), docxBytes("Manual", ["x"]));
-        const { out, exit } = await fileq("derive", "node_modules/pkg/manual.docx");
+        const { out, exitCode } = await fileq("derive", "node_modules/pkg/manual.docx");
         expect(out).toContain("ignored-path");
-        expect(exit).toBe(1);
+        expect(exitCode).toBe(1);
     });
 
     it("a forged envelope marker in the document dies in the sidecar's bytes", async () => {
@@ -93,8 +77,8 @@ describe("read", () => {
     it("prints a capsule, the content, and the sidecar path", async () => {
         const bodyLine = "A line worth reading.";
         writeFileSync(join(root, "notes.docx"), docxBytes("Notes", [bodyLine]));
-        const { out, exit } = await fileq("read", join(root, "notes.docx"));
-        expect(exit).toBe(0);
+        const { out, exitCode } = await fileq("read", join(root, "notes.docx"));
+        expect(exitCode).toBe(0);
         expect(out).toContain("fileq:");
         expect(out).toContain("docx");
         expect(out).toContain(bodyLine);
@@ -112,8 +96,8 @@ describe("read", () => {
     it("--plain prints the markdown alone, whole, with no capsule to strip", async () => {
         const long = Array.from({ length: 200 }, (_, i) => `Paragraph ${i} with a good number of words in it to cost tokens.`);
         writeFileSync(join(root, "plain.docx"), docxBytes("Plain", long));
-        const { out, exit } = await fileq("read", "--plain", join(root, "plain.docx"));
-        expect(exit).toBe(0);
+        const { out, exitCode } = await fileq("read", "--plain", join(root, "plain.docx"));
+        expect(exitCode).toBe(0);
         expect(out.startsWith("fileq:")).toBe(false);
         expect(out).not.toContain("saved:");
         expect(out).not.toContain("[cut at");
@@ -143,16 +127,16 @@ describe("read", () => {
 
     it("answers 1, not a stack, for a file nothing derives", async () => {
         writeFileSync(join(root, "data.bin"), Buffer.from([0, 1, 2, 3]));
-        const { out, exit } = await fileq("read", join(root, "data.bin"));
-        expect(exit).toBe(1);
+        const { out, exitCode } = await fileq("read", join(root, "data.bin"));
+        expect(exitCode).toBe(1);
         expect(out).toContain("unsupported");
     });
 
     it("answers 1 with the reason, not a stack, for a corrupt file outside the workspace", async () => {
         const outside = mkdtempSync(join(tmpdir(), "fileq-outside-"));
         writeFileSync(join(outside, "broken.ipynb"), "{ this is not json");
-        const { out, exit } = await fileq("read", join(outside, "broken.ipynb"));
-        expect(exit).toBe(1);
+        const { out, exitCode } = await fileq("read", join(outside, "broken.ipynb"));
+        expect(exitCode).toBe(1);
         expect(out).toContain("derive-failed (ipynb)");
         expect(out).not.toContain("    at ");
         rmSync(outside, { recursive: true, force: true });
@@ -166,8 +150,8 @@ describe("sweep", () => {
         // An orphan: a shadow whose source never existed in this workspace.
         mkdirSync(join(root, ".intentic/local/cache/derived/gone"), { recursive: true });
         writeFileSync(join(root, ".intentic/local/cache/derived/gone/old.pdf.md"), "---\nsource: gone/old.pdf\n---\n");
-        const { out, exit } = await fileq("sweep");
-        expect(exit).toBe(0);
+        const { out, exitCode } = await fileq("sweep");
+        expect(exitCode).toBe(0);
         expect(out).toContain("derived docs/photo.png");
         expect(out).toContain("pruned gone/old.pdf");
         expect(out).not.toContain("node_modules");
@@ -184,8 +168,8 @@ describe("sweep", () => {
 
 describe("git-attributes", () => {
     it("names every derivable extension diff=fileq, except the ones that are text underneath", async () => {
-        const { out, exit } = await fileq("git-attributes");
-        expect(exit).toBe(0);
+        const { out, exitCode } = await fileq("git-attributes");
+        expect(exitCode).toBe(0);
         expect(out).toContain("*.docx diff=fileq\n");
         expect(out).toContain("*.ipynb diff=fileq\n");
         expect(out).toContain("*.png diff=fileq\n");

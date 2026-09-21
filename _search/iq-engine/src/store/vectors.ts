@@ -1,4 +1,4 @@
-import type { IndexDb } from "./db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 
 // Writes chunk embeddings into chunk_vectors and answers nearest-neighbor queries against them. Ranking runs inside
 // SQLite via sqlite-vec rather than scoring vectors in JavaScript.
@@ -23,7 +23,7 @@ const stretch = (vec: Float32Array): Uint8Array => {
 };
 
 /** Stores a freshly computed embedding for `chunkId` and marks the chunk embedded. */
-export const putVector = (db: IndexDb, chunkId: number, fileId: number, vec: Float32Array): void => {
+export const putVector = (db: SqliteDb, chunkId: number, fileId: number, vec: Float32Array): void => {
     db.run(
         "INSERT INTO chunk_vectors (chunk_id, embedding, file_id) VALUES (?, vec_quantize_int8(?, 'unit'), ?)",
         asInt(chunkId),
@@ -36,7 +36,7 @@ export const putVector = (db: IndexDb, chunkId: number, fileId: number, vec: Flo
 /**
  * Re-stores an already-quantized vector on the reindex path, when a chunk's text (and so its embedding) is unchanged.
  */
-export const copyVector = (db: IndexDb, chunkId: number, fileId: number, quantized: Uint8Array): void => {
+export const copyVector = (db: SqliteDb, chunkId: number, fileId: number, quantized: Uint8Array): void => {
     // vec_int8 is required here: sqlite-vec infers element type from blob length, and 384 bytes would misread as 96
     // floats.
     db.run("INSERT INTO chunk_vectors (chunk_id, embedding, file_id) VALUES (?, vec_int8(?), ?)", asInt(chunkId), quantized, asInt(fileId));
@@ -44,7 +44,7 @@ export const copyVector = (db: IndexDb, chunkId: number, fileId: number, quantiz
 };
 
 /** Stored vectors of one file's chunks, keyed by chunk hash; what replaceFile carries across a reindex. */
-export const vectorsOfFile = (db: IndexDb, path: string): Map<string, Uint8Array> => {
+export const vectorsOfFile = (db: SqliteDb, path: string): Map<string, Uint8Array> => {
     const vectors = new Map<string, Uint8Array>();
     for (const row of db.all(
         "SELECT c.hash, v.embedding FROM chunks c JOIN chunk_vectors v ON v.chunk_id = c.id JOIN files f ON f.id = c.file_id WHERE f.path = ?",
@@ -56,7 +56,7 @@ export const vectorsOfFile = (db: IndexDb, path: string): Map<string, Uint8Array
 };
 
 /** Drops every stored vector; a model swap invalidates all of them at once. */
-export const clearVectors = (db: IndexDb): void => {
+export const clearVectors = (db: SqliteDb): void => {
     db.run("DELETE FROM chunk_vectors");
     db.run("UPDATE chunks SET embedded = 0");
 };
@@ -68,7 +68,7 @@ export interface VectorHit {
 }
 
 /** The `k` nearest chunks to `queryVec`, restricted to `allowedFileIds` when given; pass undefined to search every indexed file. */
-export const nearestChunks = (db: IndexDb, queryVec: Float32Array, k: number, allowedFileIds: readonly number[] | undefined): VectorHit[] => {
+export const nearestChunks = (db: SqliteDb, queryVec: Float32Array, k: number, allowedFileIds: readonly number[] | undefined): VectorHit[] => {
     if (allowedFileIds?.length === 0) {
         return [];
     }

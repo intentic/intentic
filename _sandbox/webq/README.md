@@ -56,6 +56,9 @@ it, but it is no longer a pure island: `@intentic/fileq` imports the DOM → mar
   (url, title, fetched_at) so a file found later still says what it is.
 - Exit codes follow the grep convention agents already know: 0 content, 1 none (HTTP error, empty crawl),
   2 broken invocation or broken install — and a broken install announces itself on stdout instead of
-  dying as a bare stack, for the same reason iq's does.
-- The integration suite drives the CLI in-process, not as a child process: some sandboxes give each process
-  its own loopback, which turns a spawn-based suite into a hang that says nothing about webq.
+  dying as a bare stack. That whole contract, the `WEBQ_HOME` layout, the capsule line and the budget cut are
+  [`@intentic/agent-cli`](../../_tools/agent-cli)'s, shared verbatim with `iq` and `fileq`: `src/cli.ts` names
+  this tool and its noun, and nothing else.
+- The integration suite drives the CLI in-process, not as a child process (`@intentic/agent-cli/testing`):
+  some sandboxes give each process its own loopback, which turns a spawn-based suite into a hang that says
+  nothing about webq.

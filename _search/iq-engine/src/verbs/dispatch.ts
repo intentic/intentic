@@ -20,7 +20,7 @@ import { estimateTokens } from "../render/budget.js";
 import { cursorId, decodeCursor, readSpool, writeSpool } from "../render/cursor.js";
 import { renderList } from "../render/list.js";
 import { renderText, type Rendered } from "../render/text.js";
-import type { IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import type { EngineHit, EngineResult, FileEntry, QueryOutcome, QueryRequest, RankedGroup, RankedHit, Verb } from "../types.js";
 import { classOf, filterScope, langOf, sweep } from "../workspace/scan.js";
 import { contextOf, outlineOf, parseAnchor, readOf } from "./context.js";
@@ -28,7 +28,7 @@ import { contextOf, outlineOf, parseAnchor, readOf } from "./context.js";
 export interface DispatchContext {
     readonly root: string;
     readonly indexDir: string;
-    readonly db: IndexDb;
+    readonly db: SqliteDb;
     readonly generation: number;
     // How current the index is: fresh from the CLI, or building/stale mid-revalidation from the daemon.
     readonly freshness: WorkspaceSearchFreshness;
@@ -105,7 +105,7 @@ interface FileSymbolRange {
     readonly endLine: number;
 }
 
-const symbolsOf = (db: IndexDb, cache: Map<string, FileSymbolRange[]>, path: string): FileSymbolRange[] => {
+const symbolsOf = (db: SqliteDb, cache: Map<string, FileSymbolRange[]>, path: string): FileSymbolRange[] => {
     const cached = cache.get(path);
     if (cached !== undefined) {
         return cached;
@@ -117,14 +117,14 @@ const symbolsOf = (db: IndexDb, cache: Map<string, FileSymbolRange[]>, path: str
     return rows;
 };
 
-const enclosingSymbol = (db: IndexDb, cache: Map<string, FileSymbolRange[]>, path: string, line: number): FileSymbolRange | undefined =>
+const enclosingSymbol = (db: SqliteDb, cache: Map<string, FileSymbolRange[]>, path: string, line: number): FileSymbolRange | undefined =>
     symbolsOf(db, cache, path)
         .filter((symbol) => symbol.line <= line && symbol.endLine >= line)
         .toSorted((a, b) => a.endLine - a.line - (b.endLine - b.line))[0];
 
 // symctx: gives every line-anchored hit its enclosing symbol so a follow-up context/Read is often unnecessary;
 // def-tagged hits skip it since they already are the symbol.
-const enrichContext = (db: IndexDb, groups: readonly RankedGroup[]): void => {
+const enrichContext = (db: SqliteDb, groups: readonly RankedGroup[]): void => {
     const cache = new Map<string, FileSymbolRange[]>();
     for (const group of groups) {
         for (const hit of group.hits) {
@@ -150,7 +150,7 @@ const isCall = (ref: EngineHit): boolean => ref.tags.some((tag) => tag.kind === 
 // "name" that breaks an rg pattern outright.
 const isSearchableName = (name: string): boolean => name !== "" && !/\s/.test(name);
 
-const relatedOf = async (db: IndexDb, groups: readonly RankedGroup[], rgBase: Omit<RgOptions, "pattern">): Promise<string[]> => {
+const relatedOf = async (db: SqliteDb, groups: readonly RankedGroup[], rgBase: Omit<RgOptions, "pattern">): Promise<string[]> => {
     const cache = new Map<string, FileSymbolRange[]>();
     const seen = new Set<string>();
     const anchors: { name: string; path: string; line: number }[] = [];
@@ -194,7 +194,7 @@ interface Chunk {
     readonly text: string;
 }
 
-const chunkAt = (db: IndexDb, path: string, line: number): Chunk | undefined => {
+const chunkAt = (db: SqliteDb, path: string, line: number): Chunk | undefined => {
     const row = db.get(
         "SELECT c.start_line, c.end_line, c.text FROM chunks c JOIN files f ON f.id = c.file_id WHERE f.path = ? AND c.start_line <= ? AND c.end_line >= ? LIMIT 1",
         path,
@@ -258,7 +258,7 @@ const fitSpan = (lines: readonly string[], from: number, to: number, anchorLine:
     return { from: slid, to: spend(slid, to) };
 };
 
-const packGroups = async (db: IndexDb, root: string, groups: readonly RankedGroup[], budget: number): Promise<RankedGroup[]> => {
+const packGroups = async (db: SqliteDb, root: string, groups: readonly RankedGroup[], budget: number): Promise<RankedGroup[]> => {
     const cache = new Map<string, FileSymbolRange[]>();
     const ceiling = Math.floor((budget * PACK_SHARE) / PACK_TOP);
     return Promise.all(
@@ -385,7 +385,7 @@ export const fieldMargin = (ordered: readonly { path: string }[], scored: readon
 // Cross-encoder pass over the fused top hits, blended in via RRF rather than dictating the order outright; undefined
 // when this host has no cross-encoder, and the fused order then stands.
 const rerankGroups = async (
-    db: IndexDb,
+    db: SqliteDb,
     scorer: QueryScorer,
     query: string,
     groups: RankedGroup[],

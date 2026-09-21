@@ -1,9 +1,9 @@
+import { packageVersion } from "@intentic/agent-cli/version";
 import { buildApplication, buildRouteMap } from "@stricli/core";
 import { deriveCommand } from "./commands/derive.command.js";
 import { gitAttributesCommand } from "./commands/git-attributes.command.js";
 import { readCommand } from "./commands/read.command.js";
 import { sweepCommand } from "./commands/sweep.command.js";
-import { version } from "./version.js";
 
 // The agent-facing contract, kept small — this is what `fileq --help` prints.
 const HELP = `fileq — binary workspace files as clean, budgeted markdown.
@@ -41,7 +41,7 @@ export const app = buildApplication(
     }),
     {
         name: "fileq",
-        versionInfo: { currentVersion: version },
+        versionInfo: { currentVersion: packageVersion(import.meta.url) },
         scanner: { caseStyle: "allow-kebab-for-camel" },
         determineExitCode: () => 2,
     },

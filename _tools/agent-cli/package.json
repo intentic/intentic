@@ -1,0 +1,107 @@
+{
+    "name": "@intentic/agent-cli",
+    "version": "0.0.0",
+    "description": "The process contract, budgeted output and test seam every agent-facing CLI in this repo keeps",
+    "license": "MIT",
+    "type": "module",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/intentic/intentic.git",
+        "directory": "_tools/agent-cli"
+    },
+    "files": [
+        "dist"
+    ],
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "exports": {
+        "./run": {
+            "types": "./dist/run.d.ts",
+            "import": {
+                "@intentic/src": "./src/run.ts",
+                "default": "./dist/run.js"
+            },
+            "require": {
+                "@intentic/src": "./src/run.ts",
+                "default": "./dist/run.js"
+            }
+        },
+        "./output": {
+            "types": "./dist/output.d.ts",
+            "import": {
+                "@intentic/src": "./src/output.ts",
+                "default": "./dist/output.js"
+            },
+            "require": {
+                "@intentic/src": "./src/output.ts",
+                "default": "./dist/output.js"
+            }
+        },
+        "./env": {
+            "types": "./dist/env.d.ts",
+            "import": {
+                "@intentic/src": "./src/env.ts",
+                "default": "./dist/env.js"
+            },
+            "require": {
+                "@intentic/src": "./src/env.ts",
+                "default": "./dist/env.js"
+            }
+        },
+        "./flags": {
+            "types": "./dist/flags.d.ts",
+            "import": {
+                "@intentic/src": "./src/flags.ts",
+                "default": "./dist/flags.js"
+            },
+            "require": {
+                "@intentic/src": "./src/flags.ts",
+                "default": "./dist/flags.js"
+            }
+        },
+        "./version": {
+            "types": "./dist/version.d.ts",
+            "import": {
+                "@intentic/src": "./src/version.ts",
+                "default": "./dist/version.js"
+            },
+            "require": {
+                "@intentic/src": "./src/version.ts",
+                "default": "./dist/version.js"
+            }
+        },
+        "./testing": {
+            "types": "./dist/testing.d.ts",
+            "import": {
+                "@intentic/src": "./src/testing.ts",
+                "default": "./dist/testing.js"
+            },
+            "require": {
+                "@intentic/src": "./src/testing.ts",
+                "default": "./dist/testing.js"
+            }
+        }
+    },
+    "scripts": {
+        "build": "tsgo",
+        "typecheck": "tsgo --noEmit -p tsconfig.test.json",
+        "watch": "tsgo --build --watch",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "@intentic/base": "workspace:*",
+        "@intentic/constants": "workspace:*",
+        "@stricli/core": "catalog:",
+        "tslib": "catalog:"
+    },
+    "devDependencies": {
+        "@intentic/testing": "workspace:*",
+        "@intentic/tsconfig": "workspace:*",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "vitest": "catalog:"
+    }
+}

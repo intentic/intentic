@@ -2,7 +2,8 @@ import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { openIndex, type IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { openIndex } from "../store/db.js";
 import { listFiles } from "../store/index-store.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import { sweep } from "../workspace/scan.js";
@@ -11,7 +12,7 @@ import { indexLag, revalidate } from "./indexer.js";
 let root: string;
 let cleanup: () => Promise<void>;
 let indexDir: string;
-let db: IndexDb;
+let db: SqliteDb;
 
 beforeAll(async () => {
     ({ root, cleanup } = await makeFixtureWorkspace());

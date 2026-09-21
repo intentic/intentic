@@ -2,13 +2,16 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { toolOutDir } from "@intentic/agent-cli/env";
+import { countParser } from "@intentic/agent-cli/flags";
+import { capsule, clip } from "@intentic/agent-cli/output";
+import { estimateTokens } from "@intentic/base/format";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { errorMessage } from "@intentic/base/errors";
 import { deriverStamp, neutralizeDoc, type DerivedDoc } from "../lib/derivers/deriver.js";
 import { detectFormat } from "../lib/formats.js";
 import { DERIVERS, ensureSidecar, type Outcome } from "../lib/derive.js";
-import { defaultOutDir, tokensOf, workspaceRoot } from "../lib/env.js";
-import { numberParser } from "../lib/flags.js";
+import { workspaceRoot } from "../lib/env.js";
 
 interface ReadFlags {
     readonly budget: number;
@@ -20,7 +23,7 @@ export const readCommand = buildCommand({
     docs: { brief: "One file as clean markdown: budgeted on stdout, whole in its sidecar" },
     parameters: {
         flags: {
-            budget: { kind: "parsed", parse: numberParser, default: "4000", brief: "Max stdout tokens; 0 prints only the capsule" },
+            budget: { kind: "parsed", parse: countParser, default: "4000", brief: "Max stdout tokens; 0 prints only the capsule" },
             json: { kind: "boolean", default: false, brief: "Machine-readable result on stdout" },
             plain: { kind: "boolean", default: false, brief: "The markdown alone, whole and unbudgeted; nothing saved for a file outside the workspace (git textconv)" },
         },
@@ -48,14 +51,12 @@ export const readCommand = buildCommand({
             );
             return;
         }
-        this.process.stdout.write(`fileq: ${result.title ?? basename(absPath)} · ${result.format} · ${result.tokens} tokens · ${result.source}\n`);
-        for (const note of result.notes) {
-            this.process.stdout.write(`note: ${note}\n`);
-        }
+        const fields = [result.title ?? basename(absPath), result.format, `${result.tokens} tokens`, result.source];
+        this.process.stdout.write(capsule("fileq", fields, result.notes));
         this.process.stdout.write(`saved: ${result.savedPath}\n`);
         if (flags.budget > 0 && result.body !== "") {
             this.process.stdout.write("---\n");
-            this.process.stdout.write(clip(result.body, flags.budget, result.savedPath));
+            this.process.stdout.write(withFinalNewline(clip(result.body, flags.budget, result.savedPath, "document")));
         }
     },
 });
@@ -129,7 +130,7 @@ const readOutsideWorkspace = async (absPath: string, save: boolean): Promise<Rea
         process.stdout.write(`fileq: cannot read ${absPath}: derive-failed (${format}): ${errorMessage(error).split("\n")[0]}\n`);
         return undefined;
     }
-    const outDir = defaultOutDir();
+    const outDir = toolOutDir("fileq");
     const hash = createHash("sha256").update(absPath).digest("hex").slice(0, 8);
     const savedPath = join(
         outDir,
@@ -145,7 +146,7 @@ const readOutsideWorkspace = async (absPath: string, save: boolean): Promise<Rea
         format,
         deriver: deriverStamp(DERIVERS[format]),
         body: doc.markdown,
-        tokens: tokensOf(doc.markdown),
+        tokens: estimateTokens(doc.markdown),
         savedPath,
         source: "derived",
         title: doc.title,
@@ -153,11 +154,5 @@ const readOutsideWorkspace = async (absPath: string, save: boolean): Promise<Rea
     };
 };
 
-const clip = (markdown: string, budgetTokens: number, path: string): string => {
-    if (tokensOf(markdown) <= budgetTokens) {
-        return `${markdown}\n`;
-    }
-    const cut = markdown.slice(0, budgetTokens * 4);
-    const atLine = cut.slice(0, cut.lastIndexOf("\n") + 1);
-    return `${atLine}\n[cut at ${budgetTokens} of ${tokensOf(markdown)} tokens: Read ${path} for the whole document]\n`;
-};
+// A document's last line is content, and a sidecar body need not end in a newline; a clipped one already does.
+const withFinalNewline = (text: string): string => (text.endsWith("\n") ? text : `${text}\n`);

@@ -118,6 +118,24 @@ for (const { name, dir, pkg } of packages) {
 // Budgets.
 
 const VITEST_CONFIG = "vitest.config.ts";
+
+// A helper in @intentic/testing/vitest that spreads BOTH suites itself carries the budget for every config calling
+// it, so naming it is naming the ceiling. Read out of that file rather than listed here: a second helper must not
+// have to be remembered in two places.
+const budgetedHelpers = () => {
+    const source = readFileSync(join(root, "_tools/testing/src/vitest.ts"), "utf8");
+    const declarations = [...source.matchAll(/^export const (\w+)\s*=/gmu)];
+    return declarations
+        .filter(({ 1: name }, index) => {
+            const start = declarations[index].index;
+            const end = declarations[index + 1]?.index ?? source.length;
+            const body = source.slice(start, end);
+            return name !== "UNIT_SUITE" && name !== "INTEGRATION_SUITE" && /\bUNIT_SUITE\b/.test(body) && /\bINTEGRATION_SUITE\b/.test(body);
+        })
+        .map(({ 1: name }) => name);
+};
+
+const HELPERS = budgetedHelpers();
 const budgetless = [];
 for (const { name, dir, pkg } of packages) {
     if (!/vitest/.test(pkg.scripts?.test ?? "") || walk(dir).length === 0) {
@@ -133,7 +151,8 @@ for (const { name, dir, pkg } of packages) {
     }
     const source = readFileSync(config, "utf8");
     // Matched on the suite names, not the import specifier: _tools/testing imports them from its own source.
-    if (!/\bUNIT_SUITE\b|\bINTEGRATION_SUITE\b/.test(source) && !/\btestTimeout\b/.test(source)) {
+    const named = /\bUNIT_SUITE\b|\bINTEGRATION_SUITE\b/.test(source) || HELPERS.some((helper) => new RegExp(`\\b${helper}\\b`, "u").test(source));
+    if (!named && !/\btestTimeout\b/.test(source)) {
         budgetless.push(
             `${name}: ${VITEST_CONFIG} spreads neither UNIT_SUITE nor INTEGRATION_SUITE and sets no testTimeout, ` +
                 `so its suites inherit the 5s hang detector silently. Use the shared pair, or state the ceiling ` +

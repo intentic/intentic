@@ -2,7 +2,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tokensOf } from "./env.js";
+import { estimateTokens } from "@intentic/base/format";
 import type { PageResult } from "./page.js";
 
 export interface SavedPage {
@@ -43,7 +43,7 @@ export const savePage = async (outDir: string, page: PageResult, fetchedAt: Date
     ].join("\n");
     const content = `${frontMatter}${page.markdown}`;
     await writeFile(path, content);
-    return { path, tokens: tokensOf(page.markdown) };
+    return { path, tokens: estimateTokens(page.markdown) };
 };
 
 export interface IndexEntry {

@@ -4,8 +4,8 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
-import { run, type StricliProcess } from "@stricli/core";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { app } from "./app.js";
 import { chromiumAvailable } from "./lib/browser.js";
 
@@ -62,28 +62,12 @@ afterAll(async () => {
     rmSync(home, { recursive: true, force: true });
 });
 
-/** Runs the CLI in-process; returns captured stdout and the exit code the process would have carried. */
-const webq = async (...args: string[]): Promise<{ out: string; exit: number }> => {
-    let out = "";
-    const spy = vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
-        out += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-        return true;
-    }) as typeof process.stdout.write);
-    const previous = process.exitCode;
-    process.exitCode = undefined;
-    try {
-        await run(app, args, { process: process as StricliProcess });
-        return { out, exit: typeof process.exitCode === "number" ? process.exitCode : 0 };
-    } finally {
-        spy.mockRestore();
-        process.exitCode = previous;
-    }
-};
+const webq = (...args: string[]): Promise<CliOutcome> => captureCli(app, args);
 
 describe("webq fetch", () => {
     it("prints a capsule, clips to the budget, and saves the whole page", async () => {
-        const { out, exit } = await webq("fetch", `${base}/a`, "--budget", "60");
-        expect(exit).toBe(0);
+        const { out, exitCode } = await webq("fetch", `${base}/a`, "--budget", "60");
+        expect(exitCode).toBe(0);
         expect(out).toContain("webq: Alpha");
         expect(out).toContain("· network");
         expect(out).toContain("[cut at 60 of");
@@ -116,8 +100,8 @@ describe("webq fetch", () => {
     });
 
     it("exits 1 on an HTTP error page", async () => {
-        const { exit } = await webq("fetch", `${base}/gone`, "--budget", "0");
-        expect(exit).toBe(1);
+        const { exitCode } = await webq("fetch", `${base}/gone`, "--budget", "0");
+        expect(exitCode).toBe(1);
     });
 
     it("emits machine-readable output under --json", async () => {
@@ -131,8 +115,8 @@ describe("webq fetch", () => {
 describe("webq crawl", () => {
     it("crawls the site under its caps, obeying robots and staying on-origin", async () => {
         const outDir = join(home, "crawl-basic");
-        const { out, exit } = await webq("crawl", `${base}/`, "--max-pages", "10", "--out", outDir, "--fresh");
-        expect(exit).toBe(0);
+        const { out, exitCode } = await webq("crawl", `${base}/`, "--max-pages", "10", "--out", outDir, "--fresh");
+        expect(exitCode).toBe(0);
         expect(out).toContain("3 pages");
         expect(out).toContain("robots 1");
         expect(out).toContain("offsite 1");
@@ -155,8 +139,8 @@ describe("webq crawl", () => {
     });
 
     it("exits 1 when nothing could be crawled", async () => {
-        const { exit } = await webq("crawl", `${base}/gone`, "--max-pages", "2", "--out", join(home, "crawl-empty"), "--fresh");
-        expect(exit).toBe(1);
+        const { exitCode } = await webq("crawl", `${base}/gone`, "--max-pages", "2", "--out", join(home, "crawl-empty"), "--fresh");
+        expect(exitCode).toBe(1);
     });
 });
 

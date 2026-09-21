@@ -15,7 +15,7 @@ import { useAgents } from "../../features/agents/fleet/useAgents";
 import { useRole } from "../../features/sandbox/secrets/useRole";
 import { useTerminalsQuery } from "../../features/terminal/terminalsQuery";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
-import { fuzzyScore } from "../../features/workspace/search/fuzzyPaths";
+import { fuzzyScore } from "@intentic/base/fuzzy";
 import { useFuzzyFiles } from "../../features/workspace/search/useFuzzyFiles";
 import { useWorkspaceTabs } from "../../features/workspace/tabs/useWorkspaceTabs";
 

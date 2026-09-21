@@ -48,6 +48,7 @@
         "test:watch": "vitest"
     },
     "dependencies": {
+        "@intentic/agent-cli": "workspace:*",
         "@intentic/base": "workspace:*",
         "@stricli/core": "catalog:",
         "parse5": "catalog:",

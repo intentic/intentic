@@ -1,5 +1,5 @@
+import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
 import { existsSync } from "node:fs";
-import { run, type StricliProcess } from "@stricli/core";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeRecallFixture } from "@intentic/iq-recall/testing";
 import { app } from "../../app.js";
@@ -24,19 +24,7 @@ afterAll(async () => {
     await cleanup();
 });
 
-const invoke = async (argv: string[]): Promise<{ out: string; err: string; exitCode: number }> => {
-    let out = "";
-    let err = "";
-    const fake = {
-        stdout: { write: (chunk: string) => void (out += chunk) },
-        stderr: { write: (chunk: string) => void (err += chunk) },
-        env: process.env,
-        exitCode: undefined as number | string | null | undefined,
-    };
-    await run(app, argv, { process: fake as unknown as StricliProcess });
-    const code = typeof fake.exitCode === "number" ? fake.exitCode : 0;
-    return { out, err, exitCode: code !== 0 && code !== 1 ? 2 : code };
-};
+const invoke = (argv: string[]): Promise<CliOutcome> => captureCli(app, argv);
 
 test("sessions ingest reports counts", async () => {
     const { out, exitCode } = await invoke(["sessions", "ingest"]);

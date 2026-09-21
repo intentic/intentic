@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type StoredSymbol, symbolRows } from "../engines/symbols.js";
-import type { IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import type { RankedGroup } from "../types.js";
 import { isIqDenied } from "../workspace/floor.js";
 
@@ -16,7 +16,7 @@ interface FileSymbol {
     readonly heuristic: boolean;
 }
 
-const symbolsOfFile = (db: IndexDb, path: string): FileSymbol[] =>
+const symbolsOfFile = (db: SqliteDb, path: string): FileSymbol[] =>
     db
         .all(
             "SELECT s.name, s.kind, s.line, s.end_line, s.signature, s.heuristic FROM symbols s JOIN files f ON f.id = s.file_id WHERE f.path = ? ORDER BY s.line",
@@ -40,7 +40,7 @@ const guard = (path: string): string => {
 };
 
 // `iq outline <path>`, the file's symbol skeleton, with each entry's preceding doc first-line when present.
-export const outlineOf = async (db: IndexDb, root: string, rawPath: string): Promise<RankedGroup[]> => {
+export const outlineOf = async (db: SqliteDb, root: string, rawPath: string): Promise<RankedGroup[]> => {
     const path = guard(rawPath);
     const symbols = symbolsOfFile(db, path);
     if (symbols.length === 0) {
@@ -107,7 +107,7 @@ const matchesChain = (siblings: readonly StoredSymbol[], symbol: StoredSymbol, c
 
 // Every symbol the ref could mean, best first: exported ahead of local, then smallest span, since the tightest
 // definition of a name is what someone asking to read it means.
-const refMatches = (db: IndexDb, ref: SymbolRef, allowed: ReadonlySet<string>): StoredSymbol[] => {
+const refMatches = (db: SqliteDb, ref: SymbolRef, allowed: ReadonlySet<string>): StoredSymbol[] => {
     const byPath = new Map<string, StoredSymbol[]>();
     for (const row of symbolRows(db, "")) {
         byPath.set(row.path, [...(byPath.get(row.path) ?? []), row]);
@@ -138,7 +138,7 @@ const bodyOf = async (root: string, symbol: StoredSymbol, grow: number, rank: nu
 // `iq read <symbol>`, the named symbol's live body, grown by -C. Unlike `context` the caller needs no line number,
 // which is the whole point: the model names what it wants to see.
 export const readOf = async (
-    db: IndexDb,
+    db: SqliteDb,
     root: string,
     raw: string,
     grow: number,
@@ -181,7 +181,7 @@ export const parseAnchor = (anchor: string): { path: string; line: number; endLi
 };
 
 // `iq context <path:line>`, the smallest enclosing symbol's live body (fallback: ±20 lines), grown by -C.
-export const contextOf = async (db: IndexDb, root: string, anchor: string, grow: number): Promise<{ groups: RankedGroup[]; label: string }> => {
+export const contextOf = async (db: SqliteDb, root: string, anchor: string, grow: number): Promise<{ groups: RankedGroup[]; label: string }> => {
     const { path, line } = parseAnchor(anchor);
     const content = await readFile(join(root, path), "utf8").catch(() => undefined);
     if (content === undefined) {

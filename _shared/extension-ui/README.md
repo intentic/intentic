@@ -29,9 +29,11 @@ authors is a marketplace-phase task.
 
 - [src/index.ts](src/index.ts), the whole surface: which components and helpers an extension may render with.
 - [src/format.ts](src/format.ts): the shared formatters, so two extensions render a duration the same way.
-- [src/i18n.ts](src/i18n.ts): the extension's words. `extensionT(id)` is its translator, bound to its own slice of
-  the host's one message tree; `registerExtensionMessages` mounts a catalog, which is what the host does before
-  `activate` and what a test calling `activate` itself has to do instead.
+- [src/i18n.ts](src/i18n.ts): the extension's words. `extensionI18n(id, base, load)` is the one call every in-repo
+  extension's `src/i18n.ts` now makes, returning the catalog the host mounts and the translator its components read;
+  `extensionT(id)` is that translator alone, bound to its own slice of the host's one message tree, and
+  `registerExtensionMessages` mounts a catalog, which is what the host does before `activate` and what a test
+  calling `activate` itself has to do instead.
 
 ## The one control worth calling out
 

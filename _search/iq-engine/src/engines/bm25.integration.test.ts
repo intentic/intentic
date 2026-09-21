@@ -2,11 +2,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { openIndex, type IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { openIndex } from "../store/db.js";
 import { bm25Search, toMatch } from "./bm25.js";
 
 let dir: string;
-let db: IndexDb;
+let db: SqliteDb;
 
 const insertChunk = (fileId: number, line: number, text: string): void => {
     db.run(

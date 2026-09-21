@@ -1,8 +1,8 @@
+import { packageVersion } from "@intentic/agent-cli/version";
 import { buildApplication, buildRouteMap } from "@stricli/core";
 import { cacheCommand } from "./commands/cache.command.js";
 import { crawlCommand } from "./commands/crawl.command.js";
 import { fetchCommand } from "./commands/fetch.command.js";
-import { version } from "./lib/version.js";
 
 // The agent-facing contract, kept small — this is what `webq --help` prints.
 const HELP = `Web pages as clean markdown, built for an agent's context window.
@@ -36,7 +36,7 @@ export const app = buildApplication(
     }),
     {
         name: "webq",
-        versionInfo: { currentVersion: version },
+        versionInfo: { currentVersion: packageVersion(import.meta.url) },
         scanner: { caseStyle: "allow-kebab-for-camel" },
         determineExitCode: () => 2,
     },

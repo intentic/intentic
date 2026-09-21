@@ -116,9 +116,11 @@ review surfaces render both versions through `/diff/derived` (the daemon's `deri
   output under `FILEQ_HOME` (XDG default) so a budget cut always has a file to point at.
 - Exit codes follow the grep convention agents already know: 0 content, 1 nothing derivable, 2 broken
   invocation or broken install — and a broken install announces itself on stdout instead of dying as a bare
-  stack, for the same reason iq's and webq's do.
-- The integration suites drive the CLI in-process, not as a child process (webq's harness, webq's reasons),
-  and build every binary fixture in code (`src/testing.ts`) so what a fixture contains is reviewable.
+  stack. That whole contract, the `FILEQ_HOME` layout, the capsule line and the budget cut are
+  [`@intentic/agent-cli`](../../_tools/agent-cli)'s, shared verbatim with `iq` and `webq`: `src/cli.ts` names
+  this tool and its noun, and nothing else.
+- The integration suites drive the CLI in-process, not as a child process (`@intentic/agent-cli/testing`,
+  webq's reasons), and build every binary fixture in code (`src/testing.ts`) so a fixture is reviewable.
 - No per-file timeout inside the CLI: a pathological parse is bounded by the daemon's timeout on the spawn,
   and by nothing when run by hand. Sweeps on document-heavy trees take minutes and say so as they go.
 - A deriver's parser is loaded inside its `derive()`, never at the top of its module: `derive.ts` imports all

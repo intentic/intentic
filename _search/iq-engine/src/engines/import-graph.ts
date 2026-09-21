@@ -1,4 +1,5 @@
-import { type IndexDb, openIndex } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { openIndex } from "../store/db.js";
 
 // The resolved import graph shared by every engine that needs which file reaches which; not a verb itself. Built once
 // because resolution needs the whole file set while the indexer sees one file at a time. Both directions (`imports`,
@@ -17,7 +18,7 @@ export interface ImportGraph {
 }
 
 // First chunk per file, a generated banner or package.json name; passed in so callers share one scan.
-export const fileHeads = (db: IndexDb): Map<number, string> =>
+export const fileHeads = (db: SqliteDb): Map<number, string> =>
     new Map(
         db
             .all("SELECT file_id, text FROM chunks WHERE id IN (SELECT MIN(id) FROM chunks GROUP BY file_id)")
@@ -64,7 +65,7 @@ const candidatesFor = (base: string): string[] => {
 
 // Workspace package name → its directory, from each package.json's "name"; lets a cross-package import
 // (`@intentic/sdk`) resolve to that package's entry file instead of leaving the graph fragmented into islands.
-const packageDirs = (db: IndexDb, heads: ReadonlyMap<number, string>): Map<string, string> => {
+const packageDirs = (db: SqliteDb, heads: ReadonlyMap<number, string>): Map<string, string> => {
     const dirs = new Map<string, string>();
     for (const row of db.all("SELECT id, path FROM files WHERE path LIKE '%package.json'")) {
         const name = /"name"\s*:\s*"([^"]+)"/.exec(heads.get(Number(row["id"])) ?? "")?.[1];
@@ -97,7 +98,7 @@ const resolveSpecifier = (
     return tryAll(normalize(`${dir}${subpath}`)) ?? tryAll(normalize(`${dir}/src${subpath}`));
 };
 
-export const buildImportGraph = (db: IndexDb, allowed: ReadonlySet<string>, heads: ReadonlyMap<number, string>): ImportGraph => {
+export const buildImportGraph = (db: SqliteDb, allowed: ReadonlySet<string>, heads: ReadonlyMap<number, string>): ImportGraph => {
     const pathsById = new Map(
         db
             .all("SELECT id, path FROM files")

@@ -1,5 +1,5 @@
 import type { WorkspaceSearchFreshness } from "@intentic/sandbox-contract";
-import type { IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import type { FileEntry, Scope } from "../types.js";
 import { filterScope } from "../workspace/scan.js";
 import { type HotspotFile, rankHotspots } from "./hotspots.js";
@@ -44,14 +44,14 @@ export interface HealthRequest {
 }
 
 export interface HealthContext {
-    readonly db: IndexDb;
+    readonly db: SqliteDb;
     readonly root: string;
     readonly freshness: WorkspaceSearchFreshness;
 }
 
 // Per-file symbol counts and branch points in one pass over the index; filtering happens in memory against the scoped
 // path set rather than in SQL.
-const fileStats = (db: IndexDb, allowed: ReadonlySet<string>): { symbols: number; complexity: number } => {
+const fileStats = (db: SqliteDb, allowed: ReadonlySet<string>): { symbols: number; complexity: number } => {
     let symbols = 0;
     let complexity = 0;
     for (const row of db.all(

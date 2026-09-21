@@ -1,6 +1,6 @@
 import type { Embedder } from "../embed/embedder.js";
 import type { VectorCache } from "../embed/vector-cache.js";
-import type { IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import { nearestChunks, putVector } from "../store/vectors.js";
 import type { EngineHit } from "../types.js";
 
@@ -12,7 +12,7 @@ const BATCH = 16;
 // Opportunistic embedding top-up during a query: fills NULL embeddings until the cap or budget runs out, returns how
 // many remain (0 = complete). Cache is checked before the model per hash; shared hashes embed once.
 export const embedPending = async (
-    db: IndexDb,
+    db: SqliteDb,
     embedder: Embedder,
     cache?: VectorCache,
     cap = TOPUP_CAP,
@@ -57,7 +57,7 @@ export const embedPending = async (
 
 // Ranks inside SQLite, then reads only the shown chunks' text, instead of pulling every vector into JS. Scope is pushed
 // into the ranking itself, since a global top-K can differ from the scoped one.
-export const semanticSearch = (db: IndexDb, queryVec: Float32Array, allowed: ReadonlySet<string>): EngineHit[] => {
+export const semanticSearch = (db: SqliteDb, queryVec: Float32Array, allowed: ReadonlySet<string>): EngineHit[] => {
     const files = db.all("SELECT id, path FROM files");
     const allowedIds = files.filter((file) => allowed.has(file["path"] as string)).map((file) => Number(file["id"]));
     const nearest = nearestChunks(db, queryVec, TOP_K, allowedIds.length === files.length ? undefined : allowedIds);

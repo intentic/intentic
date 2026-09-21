@@ -1,9 +1,10 @@
 /* `webq cache`: what the shared cache holds and the one switch that empties it. */
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { toolHome } from "@intentic/agent-cli/env";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { cacheClear } from "../lib/cache.js";
-import { cacheDir, webqHome } from "../lib/env.js";
+import { cacheDir } from "../lib/env.js";
 
 export const cacheCommand = buildCommand({
     docs: { brief: "Show the shared fetch cache; --clear empties it" },
@@ -20,7 +21,7 @@ export const cacheCommand = buildCommand({
             return;
         }
         const { entries, bytes } = await measure(cacheDir());
-        this.process.stdout.write(`webq home: ${webqHome()}\ncache: ${entries} entries, ${(bytes / 1024 / 1024).toFixed(1)} MiB\n`);
+        this.process.stdout.write(`webq home: ${toolHome("webq")}\ncache: ${entries} entries, ${(bytes / 1024 / 1024).toFixed(1)} MiB\n`);
     },
 });
 

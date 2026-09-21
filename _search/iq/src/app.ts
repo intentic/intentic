@@ -1,3 +1,4 @@
+import { packageVersion } from "@intentic/agent-cli/version";
 import { buildApplication, buildRouteMap, text_en } from "@stricli/core";
 import { ast } from "./commands/ast.command.js";
 import { context } from "./commands/context.command.js";
@@ -8,7 +9,6 @@ import { find } from "./commands/find.command.js";
 import { hotspots } from "./commands/hotspots.command.js";
 import { impact } from "./commands/impact.command.js";
 import { indexCommand } from "./commands/index-cmd/index-cmd.routes.js";
-import { version } from "./lib/version.js";
 import { log } from "./commands/log.command.js";
 import { map } from "./commands/map.command.js";
 import { multi } from "./commands/multi.command.js";
@@ -95,7 +95,7 @@ export const app = buildApplication(
     }),
     {
         name: "iq",
-        versionInfo: { currentVersion: version },
+        versionInfo: { currentVersion: packageVersion(import.meta.url) },
         scanner: { caseStyle: "allow-kebab-for-camel" },
         determineExitCode: () => 2,
         localization: { loadText: (locale) => (locale.startsWith("en") ? { ...text_en, formatException } : undefined) },

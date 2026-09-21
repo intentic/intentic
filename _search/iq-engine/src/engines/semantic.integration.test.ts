@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import type { Embedder } from "../embed/embedder.js";
-import { openIndex, type IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { openIndex } from "../store/db.js";
 import { putVector } from "../store/vectors.js";
 import { embedPending, semanticSearch } from "./semantic.js";
 
 let dir: string;
-let db: IndexDb;
+let db: SqliteDb;
 
 const vec = (values: number[]): Float32Array => {
     const f = new Float32Array(384);

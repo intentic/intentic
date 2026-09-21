@@ -1,4 +1,4 @@
-import type { RecallDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import { decayOf, ftsQueryOf, TURN_BM25 } from "./files.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -45,7 +45,7 @@ const repeatKey = (prompt: string): string => prompt.toLowerCase().replaceAll(/\
 
 // Ranked conversation excerpts for a topic: BM25 over prompt+response × recency decay. Each hit carries the prompt,
 // answer snippet, and session/turn coordinates for forking or reading the transcript.
-export const grabExcerpts = (db: RecallDb, query: string, options: GrabOptions = {}): TurnExcerpt[] => {
+export const grabExcerpts = (db: SqliteDb, query: string, options: GrabOptions = {}): TurnExcerpt[] => {
     const fts = ftsQueryOf(query);
     if (fts === undefined) {
         return [];
@@ -95,7 +95,7 @@ const collapseRepeats = (ranked: readonly RankedTurn[]): (RankedTurn & { repeats
 
 // One query for every returned session's opening prompt, closing prompt and turn count; runs after the slice, so cost
 // scales with `limit`, not the whole match set.
-const withBookends = (db: RecallDb, hits: readonly Omit<TurnExcerpt, "bookends">[]): TurnExcerpt[] => {
+const withBookends = (db: SqliteDb, hits: readonly Omit<TurnExcerpt, "bookends">[]): TurnExcerpt[] => {
     const ids = [...new Set(hits.map((hit) => hit.sessionId))];
     if (ids.length === 0) {
         return [];

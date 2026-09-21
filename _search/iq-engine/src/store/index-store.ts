@@ -1,5 +1,5 @@
 import type { ChunkRow, IndexStatus, SymbolRow } from "../types.js";
-import type { IndexDb } from "./db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import { copyVector, vectorsOfFile } from "./vectors.js";
 
 export interface StoredFile {
@@ -12,7 +12,7 @@ export interface StoredFile {
     readonly hash: string;
 }
 
-export const listFiles = (db: IndexDb): Map<string, StoredFile> => {
+export const listFiles = (db: SqliteDb): Map<string, StoredFile> => {
     const map = new Map<string, StoredFile>();
     for (const row of db.all("SELECT id, path, repo, lang, mtime_ms, size, hash FROM files")) {
         map.set(row["path"] as string, {
@@ -28,18 +28,18 @@ export const listFiles = (db: IndexDb): Map<string, StoredFile> => {
     return map;
 };
 
-export const touchFile = (db: IndexDb, id: number, mtimeMs: number, size: number): void => {
+export const touchFile = (db: SqliteDb, id: number, mtimeMs: number, size: number): void => {
     db.run("UPDATE files SET mtime_ms = ?, size = ? WHERE id = ?", Math.round(mtimeMs), size, id);
 };
 
-export const deleteFile = (db: IndexDb, id: number): void => {
+export const deleteFile = (db: SqliteDb, id: number): void => {
     db.run("DELETE FROM files WHERE id = ?", id);
 };
 
 // Replace one file's index rows in a single shape: upsert the file, drop derived rows, reinsert. Embeddings for
 // unchanged chunk content are copied over by hash so renames/moves/reformats never re-embed.
 export const replaceFile = (
-    db: IndexDb,
+    db: SqliteDb,
     file: { path: string; repo: string | undefined; lang: string | undefined; mtimeMs: number; size: number; hash: string; complexity: number },
     symbols: readonly SymbolRow[],
     chunks: readonly ChunkRow[],
@@ -92,24 +92,24 @@ export const replaceFile = (
     }
 };
 
-export const getMeta = (db: IndexDb, key: string): string | undefined =>
+export const getMeta = (db: SqliteDb, key: string): string | undefined =>
     db.get("SELECT value FROM meta WHERE key = ?", key)?.["value"] as string | undefined;
 
-export const setMeta = (db: IndexDb, key: string, value: string): void => {
+export const setMeta = (db: SqliteDb, key: string, value: string): void => {
     db.run("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value);
 };
 
-export const bumpGeneration = (db: IndexDb): number => {
+export const bumpGeneration = (db: SqliteDb): number => {
     const next = Number(getMeta(db, "generation") ?? "0") + 1;
     setMeta(db, "generation", String(next));
     return next;
 };
 
-export const generationOf = (db: IndexDb): number => Number(getMeta(db, "generation") ?? "0");
+export const generationOf = (db: SqliteDb): number => Number(getMeta(db, "generation") ?? "0");
 
 // What the index holds right now. Reported only by callers that have just finished revalidating it, which is
 // why freshness is flatly "fresh", a query's own view of staleness is the engine's business, not the store's.
-export const readIndexStatus = (db: IndexDb, generation: number): IndexStatus => {
+export const readIndexStatus = (db: SqliteDb, generation: number): IndexStatus => {
     const count = (sql: string): number => Number(db.get(sql)?.["n"] ?? 0);
     return {
         files: count("SELECT COUNT(*) AS n FROM files"),

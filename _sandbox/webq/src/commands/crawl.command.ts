@@ -1,10 +1,11 @@
 /* `webq crawl <url>`: a bounded same-site crawl into a directory of markdown files plus an index. */
 import { join } from "node:path";
+import { toolOutDir } from "@intentic/agent-cli/env";
+import { countParser } from "@intentic/agent-cli/flags";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { DEFAULT_MAX_AGE_S } from "../lib/cache.js";
 import { crawl } from "../lib/crawl.js";
-import { defaultOutDir } from "../lib/env.js";
-import { numberParser, sharedFlagParameters, type SharedFlags, urlParser } from "../lib/flags.js";
+import { sharedFlagParameters, type SharedFlags, urlParser } from "../lib/flags.js";
 import { slugFor } from "../lib/output.js";
 
 type CrawlFlags = SharedFlags & {
@@ -24,20 +25,20 @@ export const crawlCommand = buildCommand({
     parameters: {
         flags: {
             ...sharedFlagParameters,
-            maxPages: { kind: "parsed", parse: numberParser, default: "20", brief: "Hard page cap" },
-            depth: { kind: "parsed", parse: numberParser, default: "2", brief: "Link hops from the start URL" },
-            concurrency: { kind: "parsed", parse: numberParser, default: "4", brief: "Pages in flight at once" },
+            maxPages: { kind: "parsed", parse: countParser, default: "20", brief: "Hard page cap" },
+            depth: { kind: "parsed", parse: countParser, default: "2", brief: "Link hops from the start URL" },
+            concurrency: { kind: "parsed", parse: countParser, default: "4", brief: "Pages in flight at once" },
             sitemap: { kind: "boolean", default: false, brief: "Seed the frontier from the site's sitemap" },
             external: { kind: "boolean", default: false, brief: "Follow links off the start origin too" },
             ignoreRobots: { kind: "boolean", default: false, brief: "Crawl paths robots.txt disallows (your responsibility)" },
             include: { kind: "parsed", parse: String, variadic: true, optional: true, brief: "Only URLs containing this (or *-glob); repeatable" },
             exclude: { kind: "parsed", parse: String, variadic: true, optional: true, brief: "Skip URLs containing this (or *-glob); repeatable" },
-            delay: { kind: "parsed", parse: numberParser, default: "0", brief: "Milliseconds between requests (robots crawl-delay still respected)" },
+            delay: { kind: "parsed", parse: countParser, default: "0", brief: "Milliseconds between requests (robots crawl-delay still respected)" },
         },
         positional: { kind: "tuple", parameters: [{ parse: urlParser, brief: "Where the crawl starts", placeholder: "url" }] },
     },
     async func(this: CommandContext, flags: CrawlFlags, url: string) {
-        const outDir = flags.out ?? join(defaultOutDir(), slugFor(url).replace(/\.md$/, ""));
+        const outDir = flags.out ?? join(toolOutDir("webq"), slugFor(url).replace(/\.md$/, ""));
         const report = await crawl(url, {
             outDir,
             maxPages: flags.maxPages,

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { MODEL_ID } from "../embed/embedder.js";
-import type { IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import {
     bumpGeneration,
     deleteFile,
@@ -38,7 +38,7 @@ export interface RevalidateResult {
 const isBinary = (buf: Buffer): boolean => buf.includes(0);
 
 // Invalidate stored vectors on model changes while preserving chunks.
-export const syncModel = (db: IndexDb, modelDir: string | undefined): void => {
+export const syncModel = (db: SqliteDb, modelDir: string | undefined): void => {
     if (modelDir === undefined) {
         return;
     }
@@ -60,7 +60,7 @@ const knownStale = (entry: FileEntry, previous: StoredFile | undefined): boolean
 
 // Files the index doesn't match (new, changed, gone): the freshness signal for a reader that doesn't own writing the
 // index, compared against its own sweep. Pure reads.
-export const indexLag = (db: IndexDb, entries: readonly FileEntry[]): number => {
+export const indexLag = (db: SqliteDb, entries: readonly FileEntry[]): number => {
     const stored = listFiles(db);
     const seen = new Set<string>();
     let lag = 0;
@@ -80,7 +80,7 @@ export const indexLag = (db: IndexDb, entries: readonly FileEntry[]): number => 
 
 // Brings the index in line with the sweep: mtime+size diff, hash-confirms touched files, delete+reinsert per genuine
 // change. Reads only new/changed files.
-export const revalidate = async (db: IndexDb, entries: readonly FileEntry[], parse?: ParseFile): Promise<RevalidateResult> => {
+export const revalidate = async (db: SqliteDb, entries: readonly FileEntry[], parse?: ParseFile): Promise<RevalidateResult> => {
     const stored = listFiles(db);
     const seen = new Set<string>();
     const reparseAll = parse !== undefined && getMeta(db, "parser_version") !== PARSER_VERSION;

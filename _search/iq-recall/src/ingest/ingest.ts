@@ -2,7 +2,7 @@ import { readdirSync, statSync } from "node:fs";
 import { basename, isAbsolute, join, relative } from "node:path";
 import { readLines } from "../transcript/line-reader.js";
 import { aiTitleOf, assistantTextOf, fileTouchesOf, parseLine, timestampOf, typedPromptOf, uuidOf } from "../transcript/lines.js";
-import type { RecallDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 
 export interface IngestStats {
     transcripts: number;
@@ -114,7 +114,7 @@ const parseDelta = async (path: string, fromByte: number, lastOrdinal: number, r
     return delta;
 };
 
-const applyDelta = (db: RecallDb, transcriptPath: string, sessionId: string, delta: Delta, stat: { mtimeMs: number; size: number }): void => {
+const applyDelta = (db: SqliteDb, transcriptPath: string, sessionId: string, delta: Delta, stat: { mtimeMs: number; size: number }): void => {
     db.run(
         `INSERT INTO sessions (session_id, slug, title, version, git_branch, first_ts, last_ts) VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id) DO UPDATE SET
@@ -183,7 +183,7 @@ const applyDelta = (db: RecallDb, transcriptPath: string, sessionId: string, del
 
 // Incrementally mirrors the transcript dir into the recall index: unchanged files are skipped by (mtime, size), grown
 // files resume from their stored byte offset. `deadlineMs` bounds how long a pass may run; absent, it walks everything.
-export const ingest = async (db: RecallDb, options: { root: string; projectsDir: string; deadlineMs?: number }): Promise<IngestStats> => {
+export const ingest = async (db: SqliteDb, options: { root: string; projectsDir: string; deadlineMs?: number }): Promise<IngestStats> => {
     const onDisk = new Map<string, { mtimeMs: number; size: number }>();
     let entries: string[];
     try {

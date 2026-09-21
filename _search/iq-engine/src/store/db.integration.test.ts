@@ -3,7 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
-import { compactIndex, openIndex, type Row } from "./db.js";
+import type { Row } from "@intentic/base/sqlite";
+import { compactIndex, openIndex } from "./db.js";
 
 const dirs: string[] = [];
 

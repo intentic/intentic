@@ -83,6 +83,28 @@
                 "default": "./dist/format.js"
             }
         },
+        "./fuzzy": {
+            "types": "./dist/fuzzy.d.ts",
+            "import": {
+                "@intentic/src": "./src/fuzzy.ts",
+                "default": "./dist/fuzzy.js"
+            },
+            "require": {
+                "@intentic/src": "./src/fuzzy.ts",
+                "default": "./dist/fuzzy.js"
+            }
+        },
+        "./sqlite": {
+            "types": "./dist/sqlite.d.ts",
+            "import": {
+                "@intentic/src": "./src/sqlite.ts",
+                "default": "./dist/sqlite.js"
+            },
+            "require": {
+                "@intentic/src": "./src/sqlite.ts",
+                "default": "./dist/sqlite.js"
+            }
+        },
         "./plain-text": {
             "types": "./dist/plain-text.d.ts",
             "import": {
@@ -110,6 +132,7 @@
         "@intentic/tsconfig": "workspace:*",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
+        "fast-check": "catalog:",
         "vitest": "catalog:"
     }
 }

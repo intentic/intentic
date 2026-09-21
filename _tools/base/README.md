@@ -1,7 +1,7 @@
 # @intentic/base
 
-The runtime primitives every tier shares: the `when` condition language, disposal, the async schedulers, and
-the outside-text neutralizer.
+The runtime primitives every tier shares: the `when` condition language, disposal, the async schedulers, the
+outside-text neutralizer, the fuzzy path scorer, and the SQLite driver seam.
 
 Almost nothing in here knows what this product is. That is the point: each module replaced a decision
 that had been made independently, and differently, in the daemon and in the web app, where the copies could
@@ -25,6 +25,12 @@ and a package that offers them as one thing invites being treated as a junk draw
   reserved tokens are folded (homoglyphs, zero-width characters) and replaced before content is sealed or
   written to disk. Shared because the daemon's seams, webq's saved pages and fileq's derived sidecars must all
   neutralize identically — a drifted copy is a working forgery.
+- **`fuzzy`**: the fzf-style path scorer and the ranking order built on it. Both ends of quick-open answer with
+  it — the sandbox's iq `files` engine and the app's own search box — and they used to answer with two copies of
+  it, kept identical by hand, where the same keystrokes could have put a different file first on either side.
+- **`sqlite`**: the narrow seam a `node:sqlite` store is written against — the five-method driver interface, the
+  BEGIN/COMMIT/ROLLBACK transaction the driver has no helper for, and the schema-version guard that treats a
+  mismatch as cache loss. iq's index and iq's session recall are written against this one, not against two.
 - **`async`**: the four shapes of "don't do that again yet", named so the choice between them is visible:
   `Delayer` restarts its clock on every call, `Coalescer` opens a window on the first call and lets later ones
   join it, `SingleFlight` shares one run per key among concurrent callers, and `retry` is the loop with the
@@ -60,6 +66,8 @@ when nobody needs it any more.
 - [src/when.ts](src/when.ts): the grammar, the parser, and what a condition means against a context.
 - [src/lifecycle.ts](src/lifecycle.ts): `DisposableStore` and the two things built on it.
 - [src/async.ts](src/async.ts): the schedulers, each with the case that made it a separate name.
+- [src/fuzzy.ts](src/fuzzy.ts): the path scorer, with its substring/subsequence split and why the substring
+  branch is deliberately uncapped.
 - [src/when.test.ts](src/when.test.ts), the evaluation rules that are decisions rather than syntax: an absent
   key is false, ordering refuses anything but numbers, comparison crosses the type boundary by string form.
 - [src/async.test.ts](src/async.test.ts): the Delayer/Coalescer distinction pinned as behaviour.

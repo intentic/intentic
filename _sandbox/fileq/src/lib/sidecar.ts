@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { estimateTokens } from "@intentic/base/format";
 import { neutralizeOutsideText } from "@intentic/base/outside-text";
 import { STATE_DIR } from "@intentic/constants";
-import { tokensOf } from "./env.js";
 import type { DerivedDoc } from "./derivers/deriver.js";
 
 // One markdown shadow per derivable file, at a predictable mirrored path under .intentic/local/cache/derived (portable,
@@ -127,7 +127,7 @@ export const writeSidecar = async (workspaceRoot: string, input: WriteSidecarInp
     ].join("\n");
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, `${frontMatter}${body === "" ? "" : `${body}\n`}`);
-    return { path, body, tokens: tokensOf(body) };
+    return { path, body, tokens: estimateTokens(body) };
 };
 
 /** A source that vanished takes its shadow with it; answers whether there was one to remove. */

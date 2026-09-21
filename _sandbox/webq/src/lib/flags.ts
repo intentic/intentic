@@ -1,13 +1,6 @@
 /* Flag parsers and the flag groups both verbs share — declared once so `webq fetch` and `webq crawl`. */
+import { countParser } from "@intentic/agent-cli/flags";
 import type { BrowserMode } from "./page.js";
-
-export const numberParser = (raw: string): number => {
-    const value = Number(raw);
-    if (!Number.isFinite(value) || value < 0) {
-        throw new Error(`expected a non-negative number, got "${raw}"`);
-    }
-    return value;
-};
 
 const browserModeParser = (raw: string): BrowserMode => {
     if (raw === "auto" || raw === "never" || raw === "force") {
@@ -29,9 +22,9 @@ export const sharedFlagParameters = {
     browser: { kind: "parsed", parse: browserModeParser, default: "auto", brief: "JS rendering: auto|never|force" },
     out: { kind: "parsed", parse: String, optional: true, brief: "Directory for the markdown files" },
     fresh: { kind: "boolean", default: false, brief: "Bypass the cache for this run" },
-    maxAge: { kind: "parsed", parse: numberParser, optional: true, brief: "Cache freshness window in seconds (default 900)" },
-    timeout: { kind: "parsed", parse: numberParser, default: "20", brief: "Per-page deadline in seconds" },
-    threshold: { kind: "parsed", parse: numberParser, optional: true, brief: "Fit-pruning score floor (default 0.48; lower keeps more)" },
+    maxAge: { kind: "parsed", parse: countParser, optional: true, brief: "Cache freshness window in seconds (default 900)" },
+    timeout: { kind: "parsed", parse: countParser, default: "20", brief: "Per-page deadline in seconds" },
+    threshold: { kind: "parsed", parse: countParser, optional: true, brief: "Fit-pruning score floor (default 0.48; lower keeps more)" },
     json: { kind: "boolean", default: false, brief: "Machine-readable result on stdout" },
 } as const;
 

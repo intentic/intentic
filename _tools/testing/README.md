@@ -10,7 +10,8 @@ The test-support seams every package's suites share: deep, self-naming stand-ins
 ## Key files
 
 - [src/index.ts](src/index.ts): the stand-ins.
-- [src/vitest.ts](src/vitest.ts): shared configuration.
+- [src/vitest.ts](src/vitest.ts): shared configuration — the two suite kinds and their ceilings, plus
+  `extensionProjects()`, the whole config every in-repo extension spreads (both suites, resolved against source).
 - [src/e2e.ts](src/e2e.ts): the opt-in gate `*.e2e.test.ts` suites sit behind.
 - [src/stripe-fake.ts](src/stripe-fake.ts): a Stripe that speaks Stripe's own form encoding, over real HTTP.
 - [src/fly-fake.ts](src/fly-fake.ts): a Fly Machines API that remembers what it was told, over `fetch`.

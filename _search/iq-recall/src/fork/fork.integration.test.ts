@@ -2,7 +2,8 @@ import { existsSync, readFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { makeRecallFixture } from "../testing.js";
-import { openRecallDb, type RecallDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { openRecallDb } from "../store/db.js";
 import { ingest } from "../ingest/ingest.js";
 import { type Line, parseLine, parentUuidOf, typeOf, uuidOf } from "../transcript/lines.js";
 import { selectForkPoint } from "./fork-point.js";
@@ -13,7 +14,7 @@ const SESSION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 let root: string;
 let projectsDir: string;
 let cleanup: () => Promise<void>;
-let db: RecallDb;
+let db: SqliteDb;
 
 beforeAll(async () => {
     const fixture = await makeRecallFixture();

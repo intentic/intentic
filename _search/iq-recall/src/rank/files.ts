@@ -1,4 +1,4 @@
-import type { RecallDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 
 // Mirrors iq-engine's RECENCY_HALF_LIFE_DAYS: a two-week-old association is worth half a fresh one.
 const HALF_LIFE_DAYS = 14;
@@ -28,7 +28,7 @@ const chunked = <T>(items: readonly T[], size: number): T[][] => {
 const inList = (n: number): string => Array.from({ length: n }, () => "?").join(", ");
 
 // Inverse ubiquity: a file touched in nearly every session (package.json, configs) carries no topical signal.
-export const fileIdf = (db: RecallDb, paths: readonly string[]): Map<string, number> => {
+export const fileIdf = (db: SqliteDb, paths: readonly string[]): Map<string, number> => {
     const total = Number(db.get("SELECT COUNT(*) AS n FROM sessions")?.["n"] ?? 0);
     const idf = new Map<string, number>();
     for (const chunk of chunked(paths, 500)) {
@@ -56,7 +56,7 @@ export interface MatchingTurn {
 export const TURN_BM25 = "-bm25(turns_fts, 1.0, 0.5)";
 
 // Turns whose prompt or response matches the query; bm25 is sign-flipped to positive-better.
-export const matchingTurns = (db: RecallDb, fts: string, sinceTs: number): MatchingTurn[] =>
+export const matchingTurns = (db: SqliteDb, fts: string, sinceTs: number): MatchingTurn[] =>
     db
         .all(
             `SELECT t.id AS id, t.session_id AS session, t.ts AS ts, ${TURN_BM25} AS score
@@ -68,7 +68,7 @@ export const matchingTurns = (db: RecallDb, fts: string, sinceTs: number): Match
         .map((row) => ({ turnId: Number(row["id"]), sessionRowId: Number(row["session"]), ts: Number(row["ts"]), score: Number(row["score"]) }));
 
 // Session row id to title bm25 score (positive-better), for sessions whose ai-title matches the query.
-export const matchingTitles = (db: RecallDb, fts: string): Map<number, number> =>
+export const matchingTitles = (db: SqliteDb, fts: string): Map<number, number> =>
     new Map(
         db
             .all(
@@ -95,7 +95,7 @@ export interface TopicOptions {
 
 // Files past sessions associated with this topic, ranked by prompt/title BM25 × recency decay × inverse ubiquity;
 // modified files score higher than merely-read ones.
-export const rankFilesForTopic = (db: RecallDb, query: string, options: TopicOptions = {}): TopicFile[] => {
+export const rankFilesForTopic = (db: SqliteDb, query: string, options: TopicOptions = {}): TopicFile[] => {
     const fts = ftsQueryOf(query);
     if (fts === undefined) {
         return [];
@@ -156,7 +156,7 @@ export const rankFilesForTopic = (db: RecallDb, query: string, options: TopicOpt
 };
 
 // All distinct files a session touched, workspace-relative.
-export const sessionFiles = (db: RecallDb, sessionRowId: number): Set<string> =>
+export const sessionFiles = (db: SqliteDb, sessionRowId: number): Set<string> =>
     new Set(
         db
             .all("SELECT DISTINCT tf.path AS path FROM turn_files tf JOIN turns t ON t.id = tf.turn_id WHERE t.session_id = ?", sessionRowId)

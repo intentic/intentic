@@ -148,4 +148,6 @@ MIT
 - [src/commands](src/commands): one file per verb; the CLI surface an agent actually types.
 - [src/app.ts](src/app.ts): verb dispatch and intent detection for a bare query.
 - [src/lib](src/lib): rendering results inside a token budget.
-- [src/cli.ts](src/cli.ts): the entry point.
+- [src/cli.ts](src/cli.ts): the entry point — the grep-dialect redirects, over
+  [`@intentic/agent-cli`](../../_tools/agent-cli)'s process contract (EPIPE, errors on stdout, exit-code
+  clamp), which `fileq` and `webq` keep the same way.

@@ -1,4 +1,4 @@
-import type { IndexDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import type { FileEntry, RankedGroup } from "../types.js";
 import { churnOf, type ChurnOptions } from "./git.js";
 
@@ -22,7 +22,7 @@ export interface HotspotFile {
     readonly latestMs: number;
 }
 
-export const rankHotspots = async (db: IndexDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<HotspotFile[]> => {
+export const rankHotspots = async (db: SqliteDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<HotspotFile[]> => {
     const complexity = new Map(
         db.all("SELECT path, complexity FROM files WHERE complexity > 0").map((row) => [row["path"] as string, Number(row["complexity"])]),
     );
@@ -50,7 +50,7 @@ export const rankHotspots = async (db: IndexDb, root: string, entries: readonly 
         .toSorted((a, b) => b.score - a.score || (a.path < b.path ? -1 : 1));
 };
 
-export const hotspotFiles = async (db: IndexDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<RankedGroup[]> =>
+export const hotspotFiles = async (db: SqliteDb, root: string, entries: readonly FileEntry[], options: HotspotOptions): Promise<RankedGroup[]> =>
     (await rankHotspots(db, root, entries, options)).map((file, rank) => {
         const score = 1 / (rank + 1);
         const summary = `${file.commits} commit${file.commits === 1 ? "" : "s"}   +${file.adds} -${file.dels}   cx ${file.complexity}   score ${file.score}`;

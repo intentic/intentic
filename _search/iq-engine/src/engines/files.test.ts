@@ -1,17 +1,16 @@
 import { expect, test } from "vitest";
-import { fileSearch, filesVerbHits, fuzzyScore } from "./files.js";
+import { fileSearch, filesVerbHits } from "./files.js";
 
 const PATHS = ["alpha/src/widget.ts", "alpha/src/registry.ts", "beta/app.py", "notes.md"];
 
-test("fuzzyScore: substring beats subsequence, basename beats dir match", () => {
-    expect(fuzzyScore("widget", "alpha/src/widget.ts")!).toBeGreaterThan(fuzzyScore("wdgt", "alpha/src/widget.ts")!);
-    expect(fuzzyScore("zzz", "notes.md")).toBeUndefined();
-});
-
-test("fileSearch ranks fuzzy matches and supports exact globs", () => {
+// The scorer itself is @intentic/base/fuzzy's, tested there; what is this engine's is the tag, the clamp and the glob.
+test("fileSearch ranks fuzzy matches, clamps the tagged score, and supports exact globs", () => {
     const fuzzy = fileSearch("widget", PATHS, false);
     expect(fuzzy[0]?.path).toBe("alpha/src/widget.ts");
     expect(fuzzy[0]?.tags[0]?.kind).toBe("fuzzy");
+    // A substring hit scores above 1 by design; the tag a reader sees is clamped to two decimals in 0..1.
+    const tag = fuzzy[0]?.tags[0];
+    expect(tag?.kind === "fuzzy" ? tag.score : undefined).toBe(1);
 
     const glob = fileSearch("**/*.py", PATHS, true);
     expect(glob.map((hit) => hit.path)).toEqual(["beta/app.py"]);

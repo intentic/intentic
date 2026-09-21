@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { guardSchemaVersion, type Row, type SqliteDb, wrapDb } from "@intentic/base/sqlite";
 import { getLoadablePath } from "sqlite-vec";
 
 // Bump on any schema or extraction-logic change that must reindex; a mismatch drops and rebuilds the whole index.
@@ -92,21 +93,10 @@ CREATE TRIGGER IF NOT EXISTS chunks_vec_ad AFTER DELETE ON chunks BEGIN
 END;
 `;
 
-export type Row = Record<string, string | number | bigint | Uint8Array | null>;
-
-// Driver seam: callers use only these five methods, so swapping node:sqlite for another driver touches only this file.
-export interface IndexDb {
-    all(sql: string, ...params: (string | number | bigint | Uint8Array | null)[]): Row[];
-    get(sql: string, ...params: (string | number | bigint | Uint8Array | null)[]): Row | undefined;
-    run(sql: string, ...params: (string | number | bigint | Uint8Array | null)[]): void;
-    transaction(fn: () => void): void;
-    close(): void;
-}
-
-const pragmaNumber = (db: IndexDb, name: "freelist_count" | "page_count"): number => Number(db.get(`PRAGMA ${name}`)?.[name] ?? 0);
+const pragmaNumber = (db: SqliteDb, name: "freelist_count" | "page_count"): number => Number(db.get(`PRAGMA ${name}`)?.[name] ?? 0);
 
 /** Reclaims freelist pages once fragmentation exceeds the threshold; returns whether a vacuum ran. */
-export const compactIndex = (db: IndexDb): boolean => {
+export const compactIndex = (db: SqliteDb): boolean => {
     const pageCount = pragmaNumber(db, "page_count");
     const freePages = pragmaNumber(db, "freelist_count");
     if (pageCount === 0 || freePages / pageCount < COMPACT_FREELIST_RATIO) {
@@ -120,25 +110,6 @@ export const compactIndex = (db: IndexDb): boolean => {
 // errors immediately instead of racing.
 export type IndexMode = "write" | "read";
 
-const wrap = (db: DatabaseSync): IndexDb => ({
-    all: (sql, ...params) => db.prepare(sql).all(...params) as Row[],
-    get: (sql, ...params) => db.prepare(sql).get(...params) as Row | undefined,
-    run: (sql, ...params) => {
-        db.prepare(sql).run(...params);
-    },
-    transaction: (fn) => {
-        db.exec("BEGIN");
-        try {
-            fn();
-            db.exec("COMMIT");
-        } catch (error) {
-            db.exec("ROLLBACK");
-            throw error;
-        }
-    },
-    close: () => db.close(),
-});
-
 // vec0 is a loadable extension: every handle, including readers, must load it before referencing chunk_vectors. Loading
 // is disabled again right after so no other SQL can open a shared library.
 const loadVectorExtension = (db: DatabaseSync): void => {
@@ -147,14 +118,14 @@ const loadVectorExtension = (db: DatabaseSync): void => {
     db.enableLoadExtension(false);
 };
 
-const open = (dir: string, mode: IndexMode): IndexDb => {
+const open = (dir: string, mode: IndexMode): SqliteDb => {
     if (mode === "read") {
         const readOnly = new DatabaseSync(join(dir, "index.db"), { readOnly: true, allowExtension: true });
         // A checkpoint briefly locks the file even under WAL; a reader arriving then must wait, not fail.
         readOnly.exec("PRAGMA busy_timeout = 5000;");
         loadVectorExtension(readOnly);
         // No DDL or schema check: the lock guarantees a live writer already owns and created the schema.
-        return wrap(readOnly);
+        return wrapDb(readOnly);
     }
     // Creates only the index directory; the open call below creates index.db itself.
     mkdirSync(dir, { recursive: true });
@@ -170,16 +141,8 @@ const open = (dir: string, mode: IndexMode): IndexDb => {
     // Must precede the DDL: it creates a vec0 table, which needs this extension loaded first.
     loadVectorExtension(db);
     db.exec(DDL);
-    const wrapped = wrap(db);
-    const version = wrapped.get("SELECT value FROM meta WHERE key = 'schema_version'")?.["value"];
-    if (version === undefined) {
-        wrapped.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", SCHEMA_VERSION);
-        return wrapped;
-    }
-    if (version !== SCHEMA_VERSION) {
-        db.close();
-        throw new Error(`iq index schema ${String(version)} != ${SCHEMA_VERSION}`);
-    }
+    const wrapped = wrapDb(db);
+    guardSchemaVersion(wrapped, SCHEMA_VERSION, "iq index");
     return wrapped;
 };
 
@@ -189,7 +152,7 @@ export const isIndexBusy = (error: unknown): boolean =>
 
 // Opens the index at `<dir>/index.db`; treats corruption or schema drift as cache loss by deleting the dir and
 // rebuilding. A held write lock from a concurrent writer propagates instead. A "read" open never recreates anything.
-export const openIndex = (dir: string, mode: IndexMode): IndexDb => {
+export const openIndex = (dir: string, mode: IndexMode): SqliteDb => {
     try {
         return open(dir, mode);
     } catch (error) {

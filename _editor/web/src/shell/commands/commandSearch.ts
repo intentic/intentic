@@ -10,7 +10,7 @@ import { commandLabel, type RegisteredCommand } from "./useCommands";
 //   the row someone typed the first letters of is the row under the cursor.
 
 // The four tiers a name match lands in, as fractions of one: the same 0..1 axis a path scores on
-// (fuzzyPaths.fuzzyScore), which is what lets the palette order files against agents, terminals and commands.
+// (@intentic/base/fuzzy), which is what lets the palette order files against agents, terminals and commands.
 const NAME_PREFIX = 0.95;
 const WORD_START = 0.8;
 const IN_NAME = 0.6;

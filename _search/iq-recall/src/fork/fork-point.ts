@@ -1,6 +1,6 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
-import type { RecallDb } from "../store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
 import { fileIdf, rankFilesForTopic } from "../rank/files.js";
 
 export interface ForkPoint {
@@ -17,7 +17,7 @@ export interface ForkPoint {
 // score(P_k) = (Σ idf(fresh relevant files) − 1.5 × Σ idf(stale relevant files)) / sqrt(tokens + 1000).
 // Stale reads are penalized harder than missing ones, a fork that believes outdated file contents is worse
 // than one that has to re-read. All prefixes ≤ 0 → no fork point beats starting fresh.
-export const selectForkPoint = (db: RecallDb, root: string, sessionId: string, prompt?: string): ForkPoint | undefined => {
+export const selectForkPoint = (db: SqliteDb, root: string, sessionId: string, prompt?: string): ForkPoint | undefined => {
     const session = db.get("SELECT id FROM sessions WHERE session_id = ?", sessionId);
     if (session === undefined) {
         return undefined;

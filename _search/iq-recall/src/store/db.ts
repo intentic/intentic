@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { guardSchemaVersion, type SqliteDb, wrapDb } from "@intentic/base/sqlite";
 
 // Bumped on any table/column change OR extraction-logic change that must re-ingest, mismatch drops and
 // recreates everything (the recall index is a pure cache over ~/.claude/projects transcripts).
@@ -74,57 +75,20 @@ CREATE TRIGGER IF NOT EXISTS sessions_fts_au AFTER UPDATE OF title ON sessions B
 END;
 `;
 
-export type Row = Record<string, string | number | bigint | Uint8Array | null>;
-
-// The narrow driver seam, mirroring iq-engine's IndexDb (not exported there): swapping node:sqlite
-// (experimental) for another driver touches only this file.
-export interface RecallDb {
-    all(sql: string, ...params: (string | number | bigint | Uint8Array | null)[]): Row[];
-    get(sql: string, ...params: (string | number | bigint | Uint8Array | null)[]): Row | undefined;
-    run(sql: string, ...params: (string | number | bigint | Uint8Array | null)[]): void;
-    transaction(fn: () => void): void;
-    close(): void;
-}
-
-const open = (dbPath: string): RecallDb => {
+const open = (dbPath: string): SqliteDb => {
     mkdirSync(dirname(dbPath), { recursive: true });
     const db = new DatabaseSync(dbPath);
     db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
     db.exec(DDL);
-    const wrapped: RecallDb = {
-        all: (sql, ...params) => db.prepare(sql).all(...params) as Row[],
-        get: (sql, ...params) => db.prepare(sql).get(...params) as Row | undefined,
-        run: (sql, ...params) => {
-            db.prepare(sql).run(...params);
-        },
-        transaction: (fn) => {
-            db.exec("BEGIN");
-            try {
-                fn();
-                db.exec("COMMIT");
-            } catch (error) {
-                db.exec("ROLLBACK");
-                throw error;
-            }
-        },
-        close: () => db.close(),
-    };
-    const version = wrapped.get("SELECT value FROM meta WHERE key = 'schema_version'")?.["value"];
-    if (version === undefined) {
-        wrapped.run("INSERT INTO meta (key, value) VALUES ('schema_version', ?)", SCHEMA_VERSION);
-        return wrapped;
-    }
-    if (version !== SCHEMA_VERSION) {
-        db.close();
-        throw new Error(`iq recall schema ${String(version)} != ${SCHEMA_VERSION}`);
-    }
+    const wrapped = wrapDb(db);
+    guardSchemaVersion(wrapped, SCHEMA_VERSION, "iq recall");
     return wrapped;
 };
 
 // Open the recall db, treating any failure (corruption, schema drift) as cache loss. Only the db's own files
 // are removed, it shares .intentic/local/cache/iq with index.db, whose openIndex wipes the whole dir on ITS failures;
 // recall re-ingests from transcripts either way.
-export const openRecallDb = (dbPath: string): RecallDb => {
+export const openRecallDb = (dbPath: string): SqliteDb => {
     try {
         return open(dbPath);
     } catch {

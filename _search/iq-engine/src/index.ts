@@ -12,7 +12,8 @@ import { indexLag, revalidate, syncModel } from "./indexer/indexer.js";
 import { parseEntry } from "./indexer/parse-entry.js";
 import { inThreadScorer } from "./query/scorer.js";
 import { workerScorer } from "./query/worker-scorer.js";
-import { compactIndex, type IndexDb, isIndexBusy, openIndex } from "./store/db.js";
+import type { SqliteDb } from "@intentic/base/sqlite";
+import { compactIndex, isIndexBusy, openIndex } from "./store/db.js";
 import { generationOf, readIndexStatus } from "./store/index-store.js";
 import { claimIndexer, indexerAlive, releaseIndexer } from "./store/indexer-lock.js";
 import type { FileEntry, IndexStatus, QueryOutcome, QueryRequest } from "./types.js";
@@ -113,7 +114,7 @@ export interface ResidentEngine {
 
 // What a query can honestly say about the index it just searched: having revalidated it, "fresh" is a fact; having only
 // read it, the answer is the file-level lag instead.
-const freshnessOf = (db: IndexDb, entries: FileEntry[], sweepStart: number, wrote: boolean): WorkspaceSearchFreshness => {
+const freshnessOf = (db: SqliteDb, entries: FileEntry[], sweepStart: number, wrote: boolean): WorkspaceSearchFreshness => {
     const ageMs = Date.now() - sweepStart;
     if (wrote) {
         return { state: "fresh", ageMs };

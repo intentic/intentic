@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
-import { buildChoiceParser, numberParser } from "@stricli/core";
+import { countParser } from "@intentic/agent-cli/flags";
+import { buildChoiceParser } from "@stricli/core";
 import { canonicalLang, type RenderOptions, type Scope, type Verb, type VerbOptions } from "@intentic/iq-engine";
 
 // Unknown --lang tokens are usage errors, never a silent empty filter; both extensions and canonical names are
@@ -52,9 +53,9 @@ export const scopeFlagParameters = {
 } as const;
 
 export const outputFlagParameters = {
-    budget: { kind: "parsed", parse: numberParser, default: "1500", brief: "Max output tokens; the tool allocates them" },
-    limit: { kind: "parsed", parse: numberParser, optional: true, brief: "Cap result groups (files)" },
-    contextLines: { kind: "parsed", parse: numberParser, optional: true, brief: "Context lines around matches" },
+    budget: { kind: "parsed", parse: countParser, default: "1500", brief: "Max output tokens; the tool allocates them" },
+    limit: { kind: "parsed", parse: countParser, optional: true, brief: "Cap result groups (files)" },
+    contextLines: { kind: "parsed", parse: countParser, optional: true, brief: "Context lines around matches" },
     filesOnly: { kind: "boolean", default: false, brief: "Ranked paths + match counts only" },
     count: { kind: "boolean", default: false, brief: "Counts only" },
     full: { kind: "boolean", default: false, brief: "Disable snippet elision (budget still applies)" },
