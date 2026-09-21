@@ -1,14 +1,14 @@
 // The guide panel renders whatever the catalog says, so the only thing worth pinning is that the split is
 // faithful: no character of a step is lost, dropped or promoted to a literal it wasn't marked as.
 import { expect, it } from "vitest";
-import { guideParts } from "./credentialGuide";
+import { guideParts, guidePartsPrefixed } from "./credentialGuide";
 
 it(`marks backticked runs as literals and leaves the prose alone`, () => {
     expect(guideParts("Classic: generate a token with the `repo` scope (add `write:public_key` for ssh).")).toStrictEqual([
-        { text: `Classic: generate a token with the `, literal: false },
-        { text: `repo`, literal: true },
-        { text: ` scope (add `, literal: false },
-        { text: `write:public_key`, literal: true },
+        { text: `Classic: generate a token with the`, literal: false },
+        { text: ` repo`, literal: true },
+        { text: ` scope (add`, literal: false },
+        { text: ` write:public_key`, literal: true },
         { text: ` for ssh).`, literal: false },
     ]);
 });
@@ -29,7 +29,15 @@ it(`loses nothing when a literal opens or closes the line`, () => {
         { text: " → toggle it on", literal: false },
     ]);
     expect(guideParts("scope `connections:write`")).toStrictEqual([
-        { text: `scope `, literal: false },
-        { text: `connections:write`, literal: true },
+        { text: `scope`, literal: false },
+        { text: ` connections:write`, literal: true },
+    ]);
+});
+
+it(`carries a scopes prefix gap onto the first catalog part`, () => {
+    expect(guidePartsPrefixed(`Needs`, "`provision`: create sandboxes")).toStrictEqual([
+        { text: `Needs`, literal: false },
+        { text: ` provision`, literal: true },
+        { text: `: create sandboxes`, literal: false },
     ]);
 });

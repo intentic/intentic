@@ -297,9 +297,11 @@ const ACTION = ui.iconButton(`text-subtle disabled:opacity-40 disabled:hover:bg-
                 <template v-if="row.detail">
                     <span class="@xl:hidden">{{ row.detail }} · </span>
                 </template>
-                <template v-if="row.entry.kind === `generated`">{{ t(`capabilities.secretEntryRow.generated`) }} </template
-                >{{ t(`capabilities.secretEntryRow.livesIn`) }}
-                <span class="font-mono text-subtle">{{ row.entry.storedAt }}</span>
+                <template v-if="row.entry.kind === `generated`">{{
+                    `${t(`capabilities.secretEntryRow.generated`)} ${t(`capabilities.secretEntryRow.livesIn`)}`
+                }}</template>
+                <template v-else>{{ t(`capabilities.secretEntryRow.livesIn`) }}</template>
+                <span class="font-mono text-subtle"> {{ row.entry.storedAt }}</span>
                 <template v-if="row.entry.ci !== undefined">
                     · {{ row.entry.ci.synced ? t(`capabilities.secretEntryRow.ciSynced`) : t(`capabilities.secretEntryRow.ciOutOfDate`) }}</template
                 >

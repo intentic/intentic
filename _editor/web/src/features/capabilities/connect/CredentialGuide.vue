@@ -2,7 +2,7 @@
 <script setup lang="ts">
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { computed } from "vue";
-import { guideParts } from "./credentialGuide";
+import { guideParts, guidePartsPrefixed } from "./credentialGuide";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -31,6 +31,9 @@ const literal = `font-medium text-content`;
 
 const linkLabel = computed(() => entry.guide?.linkLabel ?? `Create a token`);
 const scopes = computed(() => entry.guide?.scopes);
+const scopeParts = computed(() =>
+    scopes.value === undefined ? [] : guidePartsPrefixed(t(`capabilities.credentialGuide.needs`), scopes.value),
+);
 const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
 </script>
 
@@ -54,8 +57,12 @@ const steps = computed<readonly string[]>(() => entry.guide?.steps ?? []);
         <p v-if="scopes" class="flex items-start gap-2 text-xs leading-relaxed text-muted">
             <Icon name="key" class="mt-0.5 shrink-0 text-2xs text-subtle" />
             <span class="min-w-0">
-                <span class="text-subtle">{{ t(`capabilities.credentialGuide.needs`) }} </span>
-                <span v-for="(part, index) in guideParts(scopes)" :key="index" :class="part.literal ? literal : ''">{{ part.text }}</span>
+                <span
+                    v-for="(part, index) in scopeParts"
+                    :key="index"
+                    :class="part.literal ? literal : index === 0 ? 'text-subtle' : ''"
+                    >{{ part.text }}</span
+                >
             </span>
         </p>
 
