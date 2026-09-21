@@ -95,11 +95,6 @@ const archiveCards = (el: HTMLElement): string[] =>
     );
 // The lane's tail: a direct child of the section, unlike the header's own buttons. Absent once the whole pile is drawn.
 const tailRow = (el: HTMLElement): HTMLElement | null => el.querySelectorAll(`section`)[2]!.querySelector(`:scope > button`);
-// Asks for the count by its own hook rather than by what it is wearing: this read `span.rounded-full`, which was the
-// count's pill until the pill came off, and then silently matched the lane's 2px DOT instead — a passing selector
-// pointed at the wrong element, reporting `''` where a number belonged.
-const laneCount = (el: HTMLElement): string => el.querySelectorAll(`section`)[2]!.querySelector(`[data-lane-count]`)!.textContent!.trim();
-
 const openArchive = async (el: HTMLElement): Promise<void> => {
     el.querySelector<HTMLElement>(`[aria-label^="Open the archive"]`)!.click();
     await settle();
@@ -115,8 +110,6 @@ it(`draws one page of the archive, however deep the pile behind it`, async () =>
     expect(archiveCards(board)).toHaveLength(30);
     // Newest-archived first, from the top: the page is the head of the list, not a sample of it.
     expect(archiveCards(board).slice(0, 3)).toEqual([`old 0`, `old 1`, `old 2`]);
-    // The header keeps counting the whole pile: paging is a drawing decision, not a claim about what's filed.
-    expect(laneCount(board)).toBe(`70`);
     expect(tailRow(board)?.textContent?.trim()).toBe(`40 more`);
 });
 

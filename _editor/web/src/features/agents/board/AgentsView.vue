@@ -50,7 +50,7 @@ import { useT } from "@intentic/ui/i18n";
 // Kanban across Attention/Active/Finished, pure projections of laneOf; a drop runs the action that causes a lane change
 // (laneDrop), never assigns status directly.
 // Board is sized by its own width, not the viewport's: below NARROW_BOARD_PX the three lanes stack instead of columns,
-// same lanes/order/counts/drop targets either way.
+// same lanes/order/drop targets either way.
 // Finished has no way out on its own, so it gets a window (FINISHED_WINDOW), a Clear, and an Archive view; archiving is
 // lossless (no confirm); the archive's own "Delete all" is bulk-only and confirms first.
 const t = useT();
@@ -204,7 +204,6 @@ const scopedRuns = computed<WorkflowRun[]>(() => {
 });
 // Both halves of the ledger, kept in both list and filtered forms: an archived run is off the board like an archived
 // agent, shown in Finished's archive view instead.
-// Kept in both forms since a "n of m" count needs the unfiltered denominator too.
 const boardRunRows = computed(() => scopedRuns.value.filter((run) => run.archivedAt === undefined));
 const liveRuns = computed(() => boardRunRows.value.filter(runKept));
 const archivedRunRows = computed(() => workflowRuns.value.filter((run) => run.archivedAt !== undefined));
@@ -394,17 +393,6 @@ const cardsFor = (lane: FleetLane): FleetAgent[] => {
 // the pager's state as the search's answer.
 const keptIn = (lane: FleetLane): number =>
     (lane === `finished` && archiveOpen.value ? archiveRows.value.length : cardsFor(lane).length) + runsFor(lane).length;
-// The "n of m" on a lane header; the denominator is the lane, not the window, since the window is lifted anyway while
-// filtering.
-// A run counts as the one row it is on both sides, or a workflow's match could leave the lane reading 0 of 3 with the
-// run visible underneath.
-const laneCount = (lane: FleetLane): string => {
-    const held =
-        archiveOpen.value && lane === `finished`
-            ? archiveSize.value
-            : boardLanes.value[lane].length + runsInLane(boardRunRows.value, lane, Number.POSITIVE_INFINITY, needingYou.value).length;
-    return filtering.value ? `${keptIn(lane)} of ${held}` : `${held}`;
-};
 // What the tail row collapses: the window's own count, plus the runs the same window capped, since a hidden run hides
 // its steps with it.
 const hiddenRuns = computed(
@@ -810,7 +798,7 @@ const started = computed(
             archiveSize.value >
         0,
 );
-// Derive header totals from the same cards and runs as the lanes.
+// Filter tally totals from the same cards and runs as the lanes.
 const kept = computed(() => LANES.value.reduce((sum, lane) => sum + keptIn(lane.key), 0));
 // Must not claim more than it knows: "n of 40" asserts all forty were checked, which is false while the daemon's half
 // of the filter is still outstanding.
@@ -1273,15 +1261,11 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                                 <Icon name="arrow-left" class="text-2xs" />
                             </button>
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ t(`agents.agentsView.archived`) }}</span>
-                            <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ laneCount("finished") }}</span>
                             <Icon v-if="archiveLoading" name="spinner" spin class="text-2xs text-muted" />
                         </template>
                         <template v-else>
                             <span class="h-2 w-2 rounded-full" :class="lane.dot"></span>
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
-                            <!-- "3 of 12" while filtering: which lane a match sits in is half the answer, so lanes stay and report their own share on screen. -->
-                            <!-- `data-lane-count` is the count's own hook, so a test asks for the count rather than for whatever class it happens to wear. -->
-                            <span data-lane-count class="text-2xs tabular-nums text-subtle">{{ laneCount(lane.key) }}</span>
                         </template>
                         <span class="flex-1"></span>
                         <template v-if="lane.key === 'finished' && !archiveOpen">
@@ -1297,7 +1281,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             >
                                 <Icon name="history" class="text-2xs" />{{ archiveSize }}
                             </button>
-                            <!-- Hidden while filtering, like the drag: Clear archives the WHOLE lane, which isn't the right scope above a lane reading "1 of 12". -->
+                            <!-- Hidden while filtering, like the drag: Clear archives the whole lane, not the filtered subset on screen. -->
                             <Button
                                 v-if="clearable > 0 && !filtering"
                                 size="small"
