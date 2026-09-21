@@ -3,9 +3,9 @@ import { type ConversationPrompt, ConversationPromptSchema, type PromptSection }
 import { CopyButton, MarkdownDocument, Modal, Notice } from "@intentic/ui";
 import { formatTokens, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
-import { AGENT_SYSTEM_PROMPT } from "../../../lib/queryKeys";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { AGENT_SYSTEM_PROMPT } from "../../../../lib/queryKeys";
+import { sandboxJson } from "../../../sandbox/client/sandboxClient";
+import { useSandboxQuery } from "../../../sandbox/client/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
 
 // THE ONE PART OF A TURN THE TRANSCRIPT CANNOT SHOW. A preamble note rides the message and is drawn beside it; the

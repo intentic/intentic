@@ -2,9 +2,9 @@
 import { explorerColorClass } from "@intentic/ui";
 import { formatDuration } from "@intentic/ui/format";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { audioWave, WAVE_BARS } from "../drafts/audioWave";
-import { useChatSurface } from "../tools/chatToolSurface";
-import { useClippedName } from "./clippedName";
+import { audioWave, WAVE_BARS } from "../../drafts/audioWave";
+import { useChatSurface } from "../../tools/chatToolSurface";
+import { useClippedName } from "../clippedName";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();

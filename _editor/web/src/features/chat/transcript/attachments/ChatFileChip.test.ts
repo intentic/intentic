@@ -5,8 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type App, createApp, h } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
-import { CHAT_SURFACE, type ChatSurface } from "../tools/chatToolSurface";
-import type { FilePeek } from "../drafts/filePeek";
+import { CHAT_SURFACE, type ChatSurface } from "../../tools/chatToolSurface";
+import type { FilePeek } from "../../drafts/filePeek";
 import ChatFileChip from "./ChatFileChip.vue";
 
 const openFile = vi.fn();

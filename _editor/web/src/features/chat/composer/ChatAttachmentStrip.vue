@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { attachmentPeek } from "../drafts/attachmentPeeks";
 import { attachmentAudio, attachmentKind } from "../drafts/attachmentPreviews";
-import ChatAudioChip from "../transcript/ChatAudioChip.vue";
-import ChatFileChip from "../transcript/ChatFileChip.vue";
-import ChatImageThumb from "../transcript/ChatImageThumb.vue";
+import ChatAudioChip from "../transcript/attachments/ChatAudioChip.vue";
+import ChatFileChip from "../transcript/attachments/ChatFileChip.vue";
+import ChatImageThumb from "../transcript/attachments/ChatImageThumb.vue";
 
 /* What a sent prompt's attachments look like: a hover-previewable thumbnail per image, a player per sound, a bare tile with the file's own first lines for everything else. */
 

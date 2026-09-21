@@ -4,7 +4,7 @@ import { basename } from "@intentic/ui/path";
 import { attachmentPeek } from "../features/chat/drafts/attachmentPeeks";
 import { attachmentPreview } from "../features/chat/drafts/attachmentPreviews";
 import { isImagePath } from "../features/chat/drafts/filePeek";
-import ChatFileChip from "../features/chat/transcript/ChatFileChip.vue";
+import ChatFileChip from "../features/chat/transcript/attachments/ChatFileChip.vue";
 
 // Floating card for a truncated session name on hover (the chat tab strip, the Changes panel's origin chips): the
 // derived title (sandbox-contract's deriveTitle) is truncated a second time by its column, so this reveals the

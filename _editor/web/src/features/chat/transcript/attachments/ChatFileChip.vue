@@ -2,10 +2,10 @@
 import { AnchoredOverlay, Button, explorerColorClass, iconForEntry, type Side } from "@intentic/ui";
 import { formatBytes } from "@intentic/ui/format";
 import { computed, onBeforeUnmount, ref } from "vue";
-import { type FilePeek, peekLead, peekLines, peekOmitted } from "../drafts/filePeek";
+import { type FilePeek, peekLead, peekLines, peekOmitted } from "../../drafts/filePeek";
 import ChatImageThumb from "./ChatImageThumb.vue";
-import { useClippedName } from "./clippedName";
-import { useChatSurface } from "../tools/chatToolSurface";
+import { useClippedName } from "../clippedName";
+import { useChatSurface } from "../../tools/chatToolSurface";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
