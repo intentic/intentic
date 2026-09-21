@@ -65,9 +65,10 @@ const restarting = computed(() => restartRunning(sandbox.activeSandboxId.value))
 const { isGuest } = useRole();
 const hubPath = computed(() => sandboxHubPath(isGuest.value));
 
-// WHERE THIS SANDBOX RUNS: Intentic's cloud, a machine of the owner's, or somebody else's. A standing fact, never an
-// errand, so it takes the tile's one free corner as a quiet mark rather than a plated badge — and its sentence rides
-// the control's own label, because a glyph alone cannot be the only place a reader can learn this.
+// WHERE THIS SANDBOX RUNS: Intentic's cloud, a machine of the owner's, or somebody else's. Drawn as one mark with the
+// connection's state — the glyph says which machine, its ink says whether that machine answers — because both are
+// facts about the same link and two corners saying it was twice the tile for one sentence. That sentence rides the
+// control's own label, because a glyph alone cannot be the only place a reader can learn this.
 const placement = useSandboxPlacement();
 
 // One label for the whole control, badge included, since a tooltip on the badge would nest inside this one.
@@ -79,9 +80,11 @@ const switcherLabel = computed(() => {
     return [name, placement.value?.detail, status, restarting.value, tooltip].filter((part) => part !== undefined).join(` · `);
 });
 
-// A short retry keeps the healthy dot; changing colour is itself the alarm being avoided.
-const connectionDotClass = computed(() => availabilityVisual.value.dotClass);
+// A short retry keeps the healthy ink; changing colour is itself the alarm being avoided.
+const connectionInkClass = computed(() => availabilityVisual.value.inkClass);
 const connectionLabel = computed(() => availabilityVisual.value.label.toLowerCase());
+
+const isActive = (option: SandboxSummary): boolean => option.id === sandbox.activeSandboxId.value;
 
 const ROW_TONE: Record<SandboxAttentionItem["tone"], string> = {
     info: `text-link`,
@@ -115,8 +118,7 @@ const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 
 // How much is waiting in every other sandbox; absent for the active row since its badge is already on the rail.
 // An unanswered box gets undefined, drawn as a dash, never a zero.
-const attentionFor = (option: SandboxSummary): number | undefined =>
-    option.id === sandbox.activeSandboxId.value ? undefined : attentionByBox.value.get(option.id);
+const attentionFor = (option: SandboxSummary): number | undefined => (isActive(option) ? undefined : attentionByBox.value.get(option.id));
 
 // Whether this row has ever answered, separating "0" from "-"; a single number can't carry both.
 const answered = (option: SandboxSummary): boolean => attentionFor(option) !== undefined;
@@ -124,7 +126,7 @@ const answered = (option: SandboxSummary): boolean => attentionFor(option) !== u
 // The same fact per row, and the ACTIVE row borrows the refined one above rather than deriving its own: the tile and
 // the row it opens onto are the same sandbox, and a glyph that changed between them would read as two answers.
 const placementFor = (option: SandboxSummary): SandboxPlacement =>
-    option.id === sandbox.activeSandboxId.value && placement.value !== undefined ? placement.value : placementOf(option);
+    isActive(option) && placement.value !== undefined ? placement.value : placementOf(option);
 
 const pick = (option: SandboxSummary): void => {
     open.value = false;
@@ -307,37 +309,35 @@ const confirmRemove = async (): Promise<void> => {
             }}</span>
             <Icon name="server" v-else class="text-lg" />
         </button>
-        <!-- WHERE IT RUNS, in the tile's one remaining corner. A plate, where the running mark below is a bare glyph:
-             this one sits over whatever picture the owner uploaded, and a glyph alone on a photo is unreadable. The
-             plate is the tile's own ground, so it reads as a notch cut into the logo rather than a second badge. Ink
-             is `text-subtle` on purpose — a fact that is always true must never carry the weight of an errand.
-             aria-hidden: the sentence is already in the button's label above, and a second voice would say it twice. -->
+        <!-- WHERE IT RUNS AND WHETHER IT ANSWERS, one mark on the corner presence has always been read off. The glyph
+             is the machine, its ink the connection: quiet whenever the answer is neither "online" nor "wrong", so a
+             fact that is always true carries an errand's weight only when there is one. A plate, where the running
+             mark is a bare glyph: this one sits over whatever picture the owner uploaded, and a glyph alone on a photo
+             is unreadable. The plate is the tile's own ground, so it reads as a notch cut into the logo rather than a
+             second badge. No active sandbox is no link to report, so the corner stays empty rather than guessing.
+             aria-hidden: both sentences are already in the button's label above. -->
         <span
             v-if="placement"
-            class="sandbox-switcher-mark pointer-events-none absolute left-0.5 top-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none text-subtle"
+            class="sandbox-switcher-mark pointer-events-none absolute bottom-0.5 right-0.5 inline-flex h-[1.6em] w-[1.6em] items-center justify-center rounded-full bg-[color:var(--ui-tile-ground)] leading-none"
+            :class="connectionInkClass"
             aria-hidden="true"
         >
-            <!-- The badge's own plate and glyph measures across the tile, so the two top corners weigh the same; only
-                 the ink differs, which is the whole difference between an errand and a standing fact. -->
+            <!-- Plate and glyph measure as the attention badge does, so the corners weigh the same; only the ink differs. -->
             <Icon :name="placement.icon" class="text-[0.9em]" />
         </span>
         <!-- One corner badge: a count when the amount is the message, a glyph otherwise; aria-hidden as redundant. -->
         <!-- Inside the tile, on the same corner and at the same size as every badge on the rail below it: this is
              the same object saying the same kind of thing, and hanging it outside made it look like a different one. -->
         <ViewBadgeChip :badge="attentionBadge" class="sandbox-switcher-mark pointer-events-none absolute right-0.5 top-0.5" aria-hidden="true" />
-        <!-- The rail's running mark, in the one corner this tile has spare: its bottom right is the connection dot, which is
-     a different kind of thing and the one thing here that must never be crowded. The sentence rides the control's own
-     label, since a tooltip on a mark inside a tooltipped button nests inside it. -->
+        <!-- The rail's running mark, on a corner of its own: it is an errand in flight, where the two beside it are
+     standing facts, and the one thing here that must never be crowded. The sentence rides the control's own label,
+     since a tooltip on a mark inside a tooltipped button nests inside it. -->
         <TileMark
             v-if="restarting !== undefined"
             name="spinner"
             spin
             :class="[RUNNING_MARK_CLASS, `sandbox-switcher-mark pointer-events-none absolute bottom-0.5 left-0.5`]"
         />
-        <span
-            class="pointer-events-none absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-[color:var(--ui-tile-ground)]"
-            :class="connectionDotClass"
-        ></span>
     </span>
 
     <!-- Zeroed padding: PrimeVue's popover padding reads as a frame around rows with their own inset. -->
@@ -401,30 +401,27 @@ const confirmRemove = async (): Promise<void> => {
                     option.name
                 }}</span>
                 <!-- Where that one runs, beside its name: the reason to switch to a box is often which machine it is
-                     on. Not on a row that already carries the "Shared" pill, where the two would say one thing twice
-                     and the second of them costs the name the width it truncates at. -->
+                     on. On the ACTIVE row it is the tile's mark exactly — the same glyph inked by the connection —
+                     and so it is drawn even under a "Shared" pill, which says whose the box is and not whether it
+                     answers. On every other row it is the placement alone, dropped where the pill already says it. -->
                 <Icon
-                    v-if="placementFor(option).kind !== 'shared'"
+                    v-if="isActive(option) || placementFor(option).kind !== 'shared'"
                     :name="placementFor(option).icon"
-                    class="shrink-0 text-2xs text-subtle"
-                    v-tooltip.top="placementFor(option).detail"
-                    :aria-label="placementFor(option).detail"
+                    class="shrink-0 text-2xs"
+                    :class="isActive(option) ? connectionInkClass : 'text-subtle'"
+                    v-tooltip.top="isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail"
+                    :aria-label="isActive(option) ? `${placementFor(option).detail} · ${connectionLabel}` : placementFor(option).detail"
                 />
+                <!-- What's waiting in that sandbox; nothing waiting draws nothing, an unanswered box draws a dash. The
+                     active row is never either: its own badge is on the rail, so it reports no count to read. -->
                 <span
-                    v-if="option.id === sandbox.activeSandboxId.value"
-                    class="shrink-0 h-1.5 w-1.5 rounded-full"
-                    :class="connectionDotClass"
-                    v-tooltip.top="connectionLabel"
-                ></span>
-                <!-- What's waiting in that sandbox; nothing waiting draws nothing, an unanswered box draws a dash. -->
-                <span
-                    v-else-if="answered(option) && attentionFor(option)! > 0"
+                    v-if="!isActive(option) && answered(option) && attentionFor(option)! > 0"
                     class="ui-status-pill shrink-0 bg-warning/15 text-2xs font-semibold leading-4 text-warning"
                     v-tooltip.top="t(`sandbox.sandboxSwitcher.waitingIn`, { option: attentionFor(option), name: option.name })"
                     >{{ attentionFor(option) }}</span
                 >
                 <span
-                    v-else-if="!answered(option)"
+                    v-else-if="!isActive(option) && !answered(option)"
                     class="shrink-0 px-1 text-2xs leading-4 text-subtle"
                     v-tooltip.top="t(`sandbox.sandboxSwitcher.isntAnsweringWhatsWaiting`, { name: option.name })"
                     :aria-label="t(`sandbox.sandboxSwitcher.notAnswering`)"

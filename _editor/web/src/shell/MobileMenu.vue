@@ -120,8 +120,9 @@ const unfinished = computed(() => unfinishedSandboxes(sandbox.sandboxes.value));
 // Where each box runs. The active row borrows the refined answer (a named device, this very computer); the others
 // have only what the platform lists, which still separates Intentic's cloud from hardware of the owner's own.
 const placement = useSandboxPlacement();
+const isActive = (option: SandboxSummary): boolean => option.id === sandbox.activeSandboxId.value;
 const placementFor = (option: SandboxSummary): SandboxPlacement =>
-    option.id === sandbox.activeSandboxId.value && placement.value !== undefined ? placement.value : placementOf(option);
+    isActive(option) && placement.value !== undefined ? placement.value : placementOf(option);
 
 // A place, so a link; switching sandboxes re-points the daemon, so that stays a button.
 const resumeSetup = (id: string) => ({ path: `/setup`, query: { sandbox: id } });
@@ -187,7 +188,7 @@ const logout = async (): Promise<void> => {
             </RouterLink>
         </section>
 
-        <!-- Sandboxes: tap to switch; the active one shows its live status dot. -->
+        <!-- Sandboxes: tap to switch; the active one's placement mark carries its live status. -->
         <section class="flex flex-col gap-1">
             <h2 class="px-1 text-2xs font-semibold uppercase tracking-wide text-subtle">{{ t(`shell.mobileMenu.sandboxes`) }}</h2>
             <button
@@ -205,23 +206,20 @@ const logout = async (): Promise<void> => {
                 <span class="min-w-0 flex-1 truncate" :class="option.id === sandbox.activeSandboxId.value ? 'text-link' : 'text-content'">{{
                     option.name
                 }}</span>
-                <!-- Same mark, same meaning as the desktop rail's tile: which machine this box is on. No tooltip on a
-                     phone, so the sentence is the icon's own label and the row reads it out in full. -->
+                <!-- Same mark, same meaning as the desktop rail's tile: which machine this box is on, inked on the
+                     active row by whether that machine answers. Drawn there even under a "Shared" pill, which says
+                     whose the box is and not whether it is up. No tooltip on a phone, so the sentence is the icon's
+                     own label and the row reads it out in full. -->
                 <Icon
-                    v-if="placementFor(option).kind !== 'shared'"
+                    v-if="isActive(option) || placementFor(option).kind !== 'shared'"
                     :name="placementFor(option).icon"
-                    class="shrink-0 text-xs text-subtle"
-                    :aria-label="placementFor(option).detail"
+                    class="shrink-0 text-xs"
+                    :class="isActive(option) ? availabilityVisual.inkClass : 'text-subtle'"
+                    :aria-label="isActive(option) ? `${placementFor(option).detail} · ${availabilityVisual.label}` : placementFor(option).detail"
                 />
                 <span v-if="option.role !== 'owner'" class="ui-status-pill shrink-0 bg-content/10 text-2xs font-medium text-subtle">{{
                     t(`shell.mobileMenu.shared`)
                 }}</span>
-                <span
-                    v-if="option.id === sandbox.activeSandboxId.value"
-                    class="h-2 w-2 shrink-0 rounded-full"
-                    :class="availabilityVisual.dotClass"
-                    :aria-label="availabilityVisual.label"
-                ></span>
             </button>
             <RouterLink
                 to="/setup"

@@ -19,7 +19,10 @@ export type SandboxAvailability = "starting" | "warming" | "live" | "stale" | "b
 export interface SandboxAvailabilityVisual {
     readonly label: string;
     readonly variant: StatusVariant;
+    // Fill, for a mark that is a disc.
     readonly dotClass: string;
+    // Ink, for a mark that is a glyph — the same reading where the shape is already carrying another fact.
+    readonly inkClass: string;
 }
 
 // One label/color per state; `stale` deliberately reads as live, since a retry shorter than the busy threshold
@@ -28,20 +31,20 @@ export const sandboxAvailabilityVisual = (availability: SandboxAvailability): Sa
     switch (availability) {
         case "live":
         case "stale":
-            return { label: t(`sandbox.availability.online`), variant: "success", dotClass: "bg-success" };
+            return { label: t(`sandbox.availability.online`), variant: "success", dotClass: "bg-success", inkClass: "text-success" };
         case "busy":
-            return { label: t(`sandbox.availability.busyCatchingUp`), variant: "neutral", dotClass: "bg-info" };
+            return { label: t(`sandbox.availability.busyCatchingUp`), variant: "neutral", dotClass: "bg-info", inkClass: "text-info" };
         case "warming":
         case "starting":
-            return { label: t(`sandbox.availability.starting`), variant: "neutral", dotClass: "bg-subtle" };
+            return { label: t(`sandbox.availability.starting`), variant: "neutral", dotClass: "bg-subtle", inkClass: "text-subtle" };
         // Off, not broken: its machine is asleep or its container is stopped, and it says so rather than pretending
         // to be on its way up, which is what "starting" did for as long as anyone left the tab open.
         case "detached":
-            return { label: t(`sandbox.availability.notConnected`), variant: "neutral", dotClass: "bg-subtle" };
+            return { label: t(`sandbox.availability.notConnected`), variant: "neutral", dotClass: "bg-subtle", inkClass: "text-subtle" };
         case "removed":
-            return { label: t(`sandbox.availability.removed`), variant: "warning", dotClass: "bg-warning" };
+            return { label: t(`sandbox.availability.removed`), variant: "warning", dotClass: "bg-warning", inkClass: "text-warning" };
         case "blocked":
-            return { label: t(`sandbox.availability.needsAttention`), variant: "warning", dotClass: "bg-warning" };
+            return { label: t(`sandbox.availability.needsAttention`), variant: "warning", dotClass: "bg-warning", inkClass: "text-warning" };
     }
 };
 
