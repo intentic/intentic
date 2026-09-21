@@ -73,6 +73,12 @@ const live = computed(() => rebuildRunning(run.phase));
 // The two costs, side by side: the build interrupts nothing, the swap at the end of it is the restart.
 const cost = `Builds the image while you keep working (may take minutes), then restarts (~30s). /work is kept.`;
 
+// THE OTHER OFFER, NAMED BEFORE IT IS MISTAKEN FOR THIS ONE. The Sandbox overview carries "Reload sandbox" when the
+// daemon's route surface drifts from this app's, and the two read as one action on two tabs: both say "from your
+// checkout", both restart the container. They are not the same size. This builds a whole image; that recompiles the
+// daemon inside the container already running, which is all a code change needs.
+const insteadOfReload = `Only for the image. A daemon change alone is the quicker “Reload sandbox” on the Sandbox overview.`;
+
 const command = computed(() =>
     props.root === undefined ? `pnpm rebuild:sandbox ${props.slug}` : `cd ${props.root} && pnpm rebuild:sandbox ${props.slug}`,
 );
@@ -203,6 +209,7 @@ const checkout = computed(() => {
                     </div>
 
                     <p class="text-2xs leading-relaxed text-subtle">{{ cost }}</p>
+                    <p class="text-2xs leading-relaxed text-subtle">{{ insteadOfReload }}</p>
                 </div>
             </AnchoredOverlay>
 

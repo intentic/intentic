@@ -3,7 +3,7 @@
 // jsdom: mounts the component tree and reads rendered text.
 import { type Device, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, defineComponent, h, ref } from "vue";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { resetDaemonRoutes, setDaemonRoutes } from "../useDaemonRoutes";
 import { resetContractFreshness } from "../contractFreshness";
 import { IconStub } from "@intentic/ui/testing";
@@ -45,13 +45,10 @@ const mount = (): HTMLElement => {
     document.body.append(el);
     app = createApp({ render: () => h(SandboxBehindCard) });
     app.component(`Icon`, IconStub);
-    app.component(
-        `Button`,
-        defineComponent({
-            props: { label: String },
-            setup: (props) => () => h(`button`, props.label),
-        }),
-    );
+    // NO GLOBAL `Button` STUB. The card imports <Button> itself, so a stub here never reached one — but <Row>
+    // builds its own headline as `<component :is="'button'">`, and Vue resolves that string against registered
+    // components before falling back to the element. A component called `Button` therefore swallowed every row
+    // header on this card, slots and all, and the rows rendered as empty buttons.
     // Registered app-wide by the router plugin in the real app; the connect offer below is a link.
     app.component(
         `RouterLink`,
@@ -91,17 +88,39 @@ it(`names the sandbox as behind only when a missing route proves it`, () => {
     setDaemonRoutes(withoutVpn, SHAPES);
     const text = mount().textContent ?? ``;
     expect(text).toContain(`Sandbox is behind the app`);
-    expect(text).toContain(`VPN won't work until the sandbox is reloaded.`);
+    expect(text).toContain(`This sandbox was built before these calls existed`);
+    // The area reads as the product names it, with what the reader would be looking at when it bites.
+    expect(text).toContain(`VPN`);
+    expect(text).toContain(`this sandbox's VPN connection`);
+    expect(text).toContain(`${LEVEL.length - withoutVpn.length} missing`);
     expect(text).not.toMatch(/reload this page/i);
 });
 
+// "Routes disagree" named the mechanism and nothing else. Both sides make the SAME calls here; what they can't agree
+// on is what travels inside one — which is the whole reason a screen can look fine and still save nothing.
 it(`refuses to name a side when only the payloads disagree`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const text = mount().textContent ?? ``;
     expect(text).toContain(`App and sandbox are out of sync`);
-    expect(text).toContain(`1 route disagrees (Settings); it may show blank values or fail to save.`);
+    expect(text).toContain(`Both sides make the same calls and disagree about the fields inside them.`);
+    expect(text).toContain(`Sandbox settings`);
+    expect(text).toContain(`everything on the Sandbox tabs`);
+    expect(text).toContain(`1 differ`);
     expect(text).not.toContain(`Sandbox is behind the app`);
     expect(text).toMatch(/reload page/i);
+});
+
+// The question the old card never answered: WHICH two programs. Each names itself, what it is, and how many calls
+// it knows — the scale the disagreement count is read against.
+it(`names both programs and the size of each one's call surface`, () => {
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    const text = mount().textContent ?? ``;
+    expect(text).toContain(`This page`);
+    expect(text).toContain(`the editor, loaded in this browser tab`);
+    expect(text).toContain(`This sandbox`);
+    expect(text).toContain(`the daemon answering this page`);
+    expect(text).toContain(`${SANDBOX_ROUTE_NAMES.length} calls`);
+    expect(text).toContain(`${SANDBOX_ROUTE_NAMES.length - 1} of ${SANDBOX_ROUTE_NAMES.length} shared calls match`);
 });
 
 // One shared schema reaches dozens of routes across areas that have nothing to do with each other, so the area list
@@ -111,27 +130,43 @@ it(`counts the drifted routes, not just the areas they land in`, () => {
     expect(agentRoutes.length).toBeGreaterThan(1);
     setDaemonRoutes(LEVEL, reshaped(...agentRoutes));
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`${agentRoutes.length} routes disagree (Agent); they may show blank values or fail to save.`);
+    expect(text).toContain(`Running a turn`);
+    expect(text).toContain(`${agentRoutes.length} differ`);
+    expect(text).toContain(`${agentRoutes.length} calls · 1 area`);
 });
 
-it(`keeps the warning to the problem, impact, and fixes`, () => {
+// The dotted route names are the evidence, not the report: they used to be all the card said, and now they are what
+// a chevron opens, under the sentence that says what that kind of gap costs.
+it(`keeps the route names behind the row, with what the gap costs`, () => {
     const agentRoute = Object.keys(SHAPES).find((name) => name.startsWith(`agent.`));
     expect(agentRoute).toEqual(expect.any(String));
     setDaemonRoutes(LEVEL, reshaped(agentRoute!));
-    const text = mount().textContent ?? ``;
-    expect(text).toContain(`1 route disagrees (Agent); it may show blank values or fail to save.`);
-    expect(text).not.toContain(`Everything else works`);
-    expect(text).not.toContain(`Still showing`);
+    const el = mount();
+    expect(el.textContent ?? ``).not.toContain(agentRoute!);
+
+    const row = [...el.querySelectorAll(`button[aria-expanded]`)].find((button) => button.textContent?.includes(`Running a turn`));
+    expect(row).toEqual(expect.any(HTMLButtonElement));
+    row?.dispatchEvent(new MouseEvent(`click`, { bubbles: true, detail: 1 }));
+    return nextTick().then(() => {
+        const text = el.textContent ?? ``;
+        expect(text).toContain(agentRoute!);
+        expect(text).toContain(`disagree about the fields inside them`);
+        expect(text).not.toContain(`Everything else works`);
+        expect(text).not.toContain(`Still showing`);
+    });
 });
 
 // The case the old threshold answered with silence: every route disagreeing is a different build, not a feature list.
+// It is also the one case a row per area is a wall rather than a list, so the rows stand down to one sentence.
 it(`calls a total disagreement one mismatch rather than naming every area`, () => {
     const allDifferent = Object.fromEntries(Object.keys(SHAPES).map((name) => [name, `different`]));
     setDaemonRoutes(LEVEL, allDifferent);
     const text = mount().textContent ?? ``;
     expect(text).toContain(`App and sandbox are running different contracts`);
-    expect(text).toContain(`${Object.keys(SHAPES).length} of ${Object.keys(SHAPES).length} routes disagree`);
+    expect(text).toContain(`${Object.keys(SHAPES).length} of ${Object.keys(SHAPES).length} shared calls carry different fields`);
     expect(text).toContain(`different builds rather than one changed field`);
+    // Not forty rows of areas: the `where` line of one that would otherwise be listed.
+    expect(text).not.toContain(`the file tree, the editor and search`);
 });
 
 // The dev case the card used to misdiagnose: this app bundles the contract from source, the sandbox loads it compiled,
@@ -142,7 +177,7 @@ it(`names an uncompiled contract as the cause and withholds the page reload`, ()
     const el = mount();
     const text = el.textContent ?? ``;
     expect(text).toContain(`Sandbox is running an older compiled contract`);
-    expect(text).toContain(`1 route differs`);
+    expect(text).toContain(`1 call differs`);
     expect(text).toContain(`Reloading this page won't help.`);
     expect(text).not.toContain(`App and sandbox are out of sync`);
     expect([...el.querySelectorAll(`button`)].some((button) => button.textContent === `Reload page`)).toBe(false);
@@ -159,8 +194,11 @@ it(`calls a two-way gap a fork rather than naming either side as behind`, () => 
     setDaemonRoutes([...withoutVpn, `future.feature`], SHAPES);
     const text = mount().textContent ?? ``;
     expect(text).toContain(`App and sandbox are on different builds`);
-    expect(text).toContain(`VPN won't work here, and the sandbox offers 1 route this page doesn't know`);
-    expect(text).toContain(`neither side is simply older`);
+    expect(text).toContain(`1 call in the sandbox's direction`);
+    expect(text).toContain(`neither is simply older`);
+    // Both directions get a row of their own, since they are different failures: one feature is gone, one is unused.
+    expect(text).toContain(`${LEVEL.length - withoutVpn.length} missing`);
+    expect(text).toContain(`1 extra`);
     expect(text).not.toContain(`Sandbox is behind the app`);
     expect(text).not.toContain(`This page is older than the sandbox.`);
 });

@@ -29,6 +29,11 @@ export const resetDaemonRoutes = (): void => {
 // An unknown daemon or route answers true; a feature only hides on positive evidence it's missing.
 export const supportsRoute = (name: string): boolean => advertised.value === undefined || advertised.value.has(name);
 
+// How many calls each side names, which is what makes a drift count mean anything: "7 disagree" out of a surface
+// neither side's size is stated for is a number with no scale. Undefined for a daemon that never said.
+export const advertisedRouteCount = computed<number | undefined>(() => advertised.value?.size);
+export const ourRouteCount = SANDBOX_ROUTE_NAMES.length;
+
 // This build's own route names, as a set, for the two directions of comparison below.
 const OURS: ReadonlySet<string> = new Set(SANDBOX_ROUTE_NAMES);
 
