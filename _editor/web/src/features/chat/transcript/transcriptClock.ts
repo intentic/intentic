@@ -157,24 +157,21 @@ export class TranscriptClock {
 
     // Flushes the buffer first, so a patch from an earlier attach can't land on rows that just replaced its target.
     // `drawn` is the bubble this window drew ahead of the head, replaced in place.
-    attachRun(head: AttachHead, drawn?: number): { readonly base: number; readonly userMessageId: number | undefined } {
+    attachRun(head: AttachHead, drawn?: number): void {
         this.catchUp();
-        const next = attachRun(this.state.value, head, drawn);
-        this.state.value = next;
-        const base = next.attached?.base ?? next.messages.length;
-        return { base, userMessageId: next.messages.slice(base).find((message) => message.role === `user`)?.id };
+        this.state.value = attachRun(this.state.value, head, drawn);
     }
 
-    // A refused turn produced nothing, so leaving its bubble would read as said-and-answered when the agent never saw
-    // it, and a later attach would show it twice.
-    takeBackUserBubble(userMessageId: number): ChatMessage | undefined {
-        const index = this.messages.value.findIndex((message) => message.id === userMessageId);
-        const bubble = this.messages.value[index];
-        if (bubble === undefined || bubble.role !== `user`) {
-            return undefined;
+    /**
+     * Drops a bubble THIS window drew for a send the daemon never accepted. Refuses any row carrying a `run` stamp:
+     * the daemon addresses those by index, so deleting one here lands every later patch on the wrong row.
+     */
+    dropLocal(id: number): void {
+        const bubble = this.messages.value.find((message) => message.id === id);
+        if (bubble === undefined || bubble.run !== undefined) {
+            return;
         }
-        this.state.value = { ...this.state.value, messages: this.state.value.messages.filter((message) => message.id !== userMessageId) };
-        return bubble;
+        this.state.value = { ...this.state.value, messages: this.state.value.messages.filter((message) => message.id !== id) };
     }
 
     // Replaces the transcript with rows that carry no ids of their own (a branch's inherited turns, the daemon's

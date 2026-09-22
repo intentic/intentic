@@ -121,6 +121,12 @@ export class TurnRun {
         return this.fold.steerRows;
     }
 
+    // Whether this turn was refused before it ran, with its message handed back to the composer; such a run is not
+    // written down (see the settle below).
+    get ranNothing(): boolean {
+        return this.fold.ranNothing;
+    }
+
     // One helper's transcript, by the id of the call that spawned it; empty if this run heard nothing from it.
     rowsOf(tag: string): readonly TranscriptRow[] {
         return this.children.get(tag)?.rows ?? [];
@@ -388,8 +394,9 @@ export function startTurnRun(
                 }
             }, RETAIN_MS);
             expiry.unref();
-            // Durable transcript, written once the turn is whole, including a settled failure or an abort.
-            if (transcript !== undefined) {
+            // Durable transcript, written once the turn is whole, including a settled failure or an abort; a turn
+            // refused before it ran is not written at all, since the composer holds its message for another press.
+            if (transcript !== undefined && !run.ranNothing) {
                 try {
                     // Journal deletion is the commit point; await the transcript first so a crash can't lose both.
                     await transcript(run.rows, run.steerRows).catch(() => undefined);

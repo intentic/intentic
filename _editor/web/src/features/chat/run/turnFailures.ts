@@ -4,7 +4,7 @@ import type { PickUp } from "./pickUp";
 import { markAccountReauth } from "../accounts/providerAccounts";
 import type { TranscriptClock } from "../transcript/transcriptClock";
 import type { SessionRef } from "./turnRequest";
-import type { TurnContext } from "./turnStream";
+import type { SentMessage, TurnContext } from "./turnStream";
 import { bindingWindow, usageStatusFor } from "../session/usageStatus";
 import { importOrReload } from "../../../router/staleChunk";
 
@@ -29,7 +29,7 @@ const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const
 
 // The subset of a conversation a failure can touch or act on.
 export interface FailureHost {
-    // Where a failure's notice line goes, and where a refused turn's bubble is pulled back out to.
+    // Where a failure's notice line goes.
     readonly transcript: TranscriptClock;
     readonly provider: Ref<AgentProvider>;
     readonly account: Ref<string | undefined>;
@@ -43,8 +43,8 @@ export interface FailureHost {
     readonly pickUp: Ref<PickUp | undefined>;
     // A probe stands down while a turn is live, the run it was hunting is already here.
     readonly streaming: Ref<boolean>;
-    // Pulls the user's undelivered message out of the transcript, back into the queue for their next send.
-    requeue(userMessageId: number): void;
+    // Queues the undelivered message again; takes the words, since the daemon has already retracted its row.
+    requeue(sent: SentMessage | undefined): void;
     // Holds the queue in place: a message behind a killed turn must not race the daemon's resume to POST /agent
     // and lose.
     hold(): void;
@@ -72,7 +72,7 @@ export class TurnFailures {
         switch (code) {
             case `claude-reauth`:
                 // Credential dead, nothing ran: message isn't in the conversation; return it to the queue.
-                this.host.requeue(turn.userMessageId);
+                this.host.requeue(turn.sent);
                 // No red line: the composer already shows a reauth banner with the one-click fix.
                 this.markReauth(message);
                 return;
@@ -86,15 +86,15 @@ export class TurnFailures {
                 return;
             case `unknown-command`:
                 // Unrecognized command, nothing ran: message goes back to the held queue, not flushed.
-                this.host.requeue(turn.userMessageId);
+                this.host.requeue(turn.sent);
                 return;
             case `context-window-too-small`:
                 // Model can't hold this turn: message held until a bigger model is picked.
-                this.host.requeue(turn.userMessageId);
+                this.host.requeue(turn.sent);
                 return;
             case `sandbox-memory-low`:
                 // Sandbox out of memory; not auto-resent, since retrying now would just refuse again.
-                this.host.requeue(turn.userMessageId);
+                this.host.requeue(turn.sent);
                 return;
             case `session-not-found`:
                 // Session vanished mid-turn: drop the dead id so the next send starts fresh. No red line.
@@ -113,7 +113,7 @@ export class TurnFailures {
             case `trial-model-unavailable`:
             case `trial-exhausted`:
                 // Message undelivered and refunded; held for explicit retry, not the outage auto-resume loop.
-                this.host.requeue(turn.userMessageId);
+                this.host.requeue(turn.sent);
                 importOrReload(
                     () => import(`../models/useChat-catalog`),
                     async (chat) => {
@@ -151,18 +151,19 @@ export class TurnFailures {
                 () => import(`../models/useChat-catalog`),
                 (chat) => chat.loadProviderModels(this.host.provider.value),
             );
-            this.host.requeue(turn.userMessageId);
+            this.host.requeue(turn.sent);
             this.host.error.value = message;
             return;
         }
         if (code === `engine-version-floor`) {
             // Nothing ran (old engine refused): message held for retry. Error text adds where to install a newer
             // engine, since the daemon's own message can't say that.
-            this.host.requeue(turn.userMessageId);
+            this.host.requeue(turn.sent);
             const floor = error.engine?.floor;
+            // Where to install is all this adds; that the message is held is the transcript notice's line to say.
             this.host.error.value =
                 `${message} Install a newer engine under Sandbox ▸ Environment ▸ Agent engines` +
-                `${floor === undefined ? `` : ` (${floor} or newer)`}. Your message is held below.`;
+                `${floor === undefined ? `` : ` (${floor} or newer)`}.`;
             return;
         }
         this.host.error.value = message;
@@ -199,7 +200,7 @@ export class TurnFailures {
     private applyOutageError(error: TurnError, turn: TurnContext): void {
         const { message, outage } = error;
         if (outage === undefined) {
-            this.host.requeue(turn.userMessageId);
+            this.host.requeue(turn.sent);
             this.host.error.value = message;
             return;
         }

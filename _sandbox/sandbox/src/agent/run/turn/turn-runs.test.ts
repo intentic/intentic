@@ -297,6 +297,21 @@ describe(`turn runs`, () => {
         );
     });
 
+    // A turn refused before it ran is not a turn: its message is back in the composer, so writing the pair down would
+    // put those same words in the conversation once per press. Nothing at all reaches the record.
+    it(`writes no record for a turn that was refused before it ran`, async () => {
+        const { turnFn, push, close } = crankedTurn();
+        const transcript = vi.fn(async () => true);
+        const run = startTurnRun(turnFn, turn(`c-unrun`), { opening, transcript })!;
+        push({ kind: `error`, code: `sandbox-memory-low`, message: `Not enough sandbox memory to start this turn.` });
+        close();
+
+        await vi.waitFor(() => expect(run.done).toBe(true));
+        expect(transcript).not.toHaveBeenCalled();
+        // The refusal still stands on the live run, so the press that failed says why; only the message is gone.
+        expect(run.rows.map((row) => row.role)).toEqual([`notice`]);
+    });
+
     // Fake journal with slow, ordered writes, to prove recordTurn/clearTurn never race however slow the writes are.
     // writeMs > clearMs mirrors a real disk: an unserialized clear would otherwise outrun a slower write.
     const fakeJournal = (writeMs = 20, clearMs = 1) => {

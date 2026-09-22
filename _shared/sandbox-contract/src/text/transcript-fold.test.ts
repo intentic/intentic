@@ -507,4 +507,46 @@ describe(`a refusal that ran nothing`, () => {
     it(`offers no press on the held refusals that a raise would not fix`, () => {
         expect(foldOf(`land it`, [REFUSED]).at(-1)?.noticeAction).toBeUndefined();
     });
+
+    // The bug this retraction exists for: the composer keeps the words for another press, so a bubble left standing
+    // here is the SAME message a second time, and a third, once per press against a gate that keeps refusing.
+    it(`takes the message back out, leaving the composer's copy as the only one`, () => {
+        const fold = new TranscriptFold(openingOf(`land it`));
+        const patches = fold.apply(REFUSED);
+
+        expect(fold.rows).toEqual([{ role: `notice`, text: expect.stringContaining(`held for you to send again`) }]);
+        expect(fold.ranNothing).toBe(true);
+        // Dropped ahead of the notice that stands in for it: a window applies patches in order, and an append first
+        // would have it renumber every row under an index that is about to move.
+        expect(patches).toEqual([
+            { op: `drop`, index: 0 },
+            { op: `append`, row: expect.objectContaining({ role: `notice` }) },
+        ]);
+    });
+
+    // Three presses is what the screenshot of this bug showed: one paragraph, four times, with a refusal between each.
+    it(`leaves nothing behind however many times the same message is refused`, () => {
+        const pressed = [0, 1, 2].map(() => foldOf(`land it`, [REFUSED]));
+
+        expect(pressed.flat().filter((row) => row.role === `user`)).toEqual([]);
+    });
+
+    it(`keeps the message of a run that started itself, which has no composer to repeat from`, () => {
+        const fold = new TranscriptFold(openingOf(`land it`));
+        fold.apply({ ...REFUSED, unattended: true });
+
+        expect(fold.rows[0]).toEqual(expect.objectContaining({ role: `user`, text: `land it` }));
+        expect(fold.ranNothing).toBe(false);
+    });
+
+    // A refusal is only a retraction where it refused the whole turn. One arriving after the agent has spoken ends a
+    // turn that happened, and everything it said is kept and recorded.
+    it(`keeps a turn the refusal interrupted rather than prevented`, () => {
+        const fold = new TranscriptFold(openingOf(`land it`));
+        fold.apply({ kind: `delta`, text: `on it` });
+        fold.apply(REFUSED);
+
+        expect(fold.rows.map((row) => row.role)).toEqual([`user`, `assistant`, `notice`]);
+        expect(fold.ranNothing).toBe(false);
+    });
 });

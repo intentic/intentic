@@ -42,7 +42,7 @@ import { TranscriptClock } from "../transcript/transcriptClock";
 import { rememberedModelFor, rememberedProviderFor, rememberPick, startingMode, turnDefaults, type TurnPick } from "../run/turnDefaults";
 import { TurnFailures } from "../run/turnFailures";
 import { type SessionRef, type TurnSettings, boundSession, resumes, turnRequestBody } from "../run/turnRequest";
-import { type AttachEntry, type AttachHead, followRun, postTurnControl, type TurnContext } from "../run/turnStream";
+import { type AttachEntry, type AttachHead, followRun, postTurnControl, type SentMessage, type TurnContext } from "../run/turnStream";
 import { formatReset, formatUtilization, isStale, modelAllowance, SPENT_PERCENT, usageStatusFor } from "./usageStatus";
 import { uuid } from "../../../lib/uuid";
 
@@ -335,7 +335,7 @@ export class Conversation {
         error: this.error,
         pickUp: this.pickUp,
         streaming: this.streaming,
-        requeue: (userMessageId: number) => this.requeueUndelivered(userMessageId),
+        requeue: (sent: SentMessage | undefined) => this.requeueUndelivered(sent),
         hold: () => {
             this.interrupted = true;
         },
@@ -381,6 +381,9 @@ export class Conversation {
     // Queued messages handed to a send the daemon has not acknowledged; they are still in `queued`, so nothing about
     // them is lost if this window dies, and a refusal has nothing to hand back (requeueUndelivered).
     private undelivered: readonly QueuedMessage[] = [];
+
+    // Whether this turn's message has already gone back to the queue; cleared per turn by beginTurn.
+    private requeued = false;
 
     // The conversation's whole identity: key for the fleet entry, worktree, tab, and mirror; a word pair, not a UUID.
     constructor(readonly conversationId: string = newConversationId()) {
@@ -966,8 +969,10 @@ export class Conversation {
             text,
             ...(attachments.length > 0 ? { attachments: attachments.map((file) => file.path) } : {}),
         });
+        // This window's own copy of the words, for a refusal to hand back; the daemon retracts its row itself.
+        const sent: SentMessage = { text, attachments };
         // Everything but the run, which the daemon only names in the ack below.
-        const turn: Omit<TurnContext, "run"> = { userMessageId, provider: settings.agent, account: settings.account, harness: settings.harness };
+        const turn: Omit<TurnContext, "run"> = { sent, provider: settings.agent, account: settings.account, harness: settings.harness };
         // This turn starts from the user's pick; the previous turn's live posture is history by the time this runs.
         this.liveMode.value = undefined;
         const controller = new AbortController();
@@ -1006,7 +1011,8 @@ export class Conversation {
                     return;
                 }
                 const refusal = await sandboxError(response, { method: `POST`, path: `/agent` });
-                this.requeueUndelivered(userMessageId);
+                this.transcript.dropLocal(userMessageId);
+                this.requeueUndelivered(sent);
                 this.error.value = `${refusal.message} Your message is held below: send it again once that's sorted.`;
                 return;
             }
@@ -1036,7 +1042,8 @@ export class Conversation {
             const stopped = err instanceof DOMException && err.name === `AbortError`;
             // The send that never left: the bubble returns to the queue, and the continue offer is refused too.
             if (!this.turnAccepted) {
-                this.requeueUndelivered(userMessageId);
+                this.transcript.dropLocal(userMessageId);
+                this.requeueUndelivered(sent);
                 this.error.value = stopped ? null : `${errorMessage(err, `Chat failed.`)} Your message is held below, send it again to deliver it.`;
                 return;
             }
@@ -1057,6 +1064,8 @@ export class Conversation {
         this.standing.value = undefined;
         // Nothing is delivered until the daemon says so; reattach() sets it true, adopting a run already accepted.
         this.turnAccepted = false;
+        // This turn has not handed its message back yet; the latch is per turn, not per conversation.
+        this.requeued = false;
         // Whatever interrupted the last turn is history, so this one's clean end may flush the queue.
         this.interrupted = false;
         this.error.value = null;
@@ -1138,24 +1147,24 @@ export class Conversation {
         this.queued.value = this.queued.value.filter((message) => !delivered.includes(message));
     }
 
-    // Take a bubble the daemon turned away out of the transcript and queue it at the front, for the user to resend.
-    // A turn refused before it ran produced nothing, so an auto-flushed queue would just re-fail it.
-    private requeueUndelivered(userMessageId: number): void {
+    // Queues a turned-away message at the front again. Held, not flushed: a refusal that ran nothing would re-fail,
+    // and the words come from this window's own send, since the daemon has already retracted its row.
+    private requeueUndelivered(sent: SentMessage | undefined): void {
         this.interrupted = true;
-        const bubble = this.transcript.takeBackUserBubble(userMessageId);
-        if (bubble === undefined) {
-            return;
-        }
         // Refused before the ack: the words never left the queue, so they are already where a resend reads them.
-        if (this.undelivered.length > 0) {
+        if (sent === undefined || this.undelivered.length > 0) {
             return;
         }
-        const held = { text: bubble.text, attachments: (bubble.attachments ?? []).map((path) => ({ name: basename(path), path })) };
+        // Latched per turn: a fact replays on every attach, so one refusal would queue the message once per reconnect.
+        if (this.requeued) {
+            return;
+        }
+        this.requeued = true;
         // Pressed again while this turn was already failing, so the words are the same nudge already queued.
-        if (repeatsNudge(held, this.queued.value[0])) {
+        if (repeatsNudge(sent, this.queued.value[0])) {
             return;
         }
-        this.queued.value = [{ id: uuid(), ...held }, ...this.queued.value];
+        this.queued.value = [{ id: uuid(), text: sent.text, attachments: sent.attachments }, ...this.queued.value];
     }
 
     // Drop the session ref and terminal/browser handles when the next turn opens a fresh session, a new tmux session.
@@ -1404,9 +1413,10 @@ export class Conversation {
                 this.turnAccepted = true;
             }
             // This window may have drawn this run already; the head's rows replace what it holds, nothing draws twice.
-            const { userMessageId } = this.transcript.attachRun(head);
+            this.transcript.attachRun(head);
+            // No `sent`: this window did not type these words, so a refusal has nothing of its own to hand back and
+            // must not lift another composer's message into this one.
             turn = {
-                userMessageId: userMessageId ?? turn?.userMessageId ?? -1,
                 run: head.run,
                 provider: this.provider.value,
                 account: this.account.value,

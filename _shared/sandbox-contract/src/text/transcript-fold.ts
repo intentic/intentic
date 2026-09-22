@@ -1,6 +1,15 @@
 import { cancelledRequests, settledRequests } from "../policy/request-status.js";
 import type { AgentEvent } from "../events/agent-events.js";
-import { REQUEST_FIELDS, holdsRequest, isAwaitingDecision, type TranscriptRequests, type TranscriptPatch, type TranscriptRow, type TranscriptSubagent, type TranscriptTool } from "../events/transcript.js";
+import {
+    REQUEST_FIELDS,
+    holdsRequest,
+    isAwaitingDecision,
+    type TranscriptRequests,
+    type TranscriptPatch,
+    type TranscriptRow,
+    type TranscriptSubagent,
+    type TranscriptTool,
+} from "../events/transcript.js";
 import { contextTrimLine } from "../schemas/context-trim.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { watchWakeRow } from "../events/watch-wake.js";
@@ -19,7 +28,8 @@ interface CardPlace {
 }
 
 // Strips undefined fields, so spreading a partial frame never overwrites a field an earlier frame already set.
-const defined = <T extends object>(value: T): Partial<T> => Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined)) as Partial<T>;
+const defined = <T extends object>(value: T): Partial<T> =>
+    Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined)) as Partial<T>;
 
 const cardOf = (event: Extract<AgentEvent, { kind: "tool_call" }>): TranscriptTool => ({
     id: event.id,
@@ -114,6 +124,9 @@ const HELD_FOR_RESEND: ReadonlySet<string> = new Set([
     "trial-unavailable",
     "trial-model-unavailable",
     "trial-exhausted",
+    // Both refuse at the door leaving the words in the composer, which is the whole of what this set means.
+    "model-unavailable",
+    "engine-version-floor",
 ]);
 
 // Row for a turn-ending error: the provider's own message plus one clause on what happens next. The live wait itself is
@@ -127,7 +140,11 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
                 : { role: "notice", text: `${message} Retrying by itself: attempt ${event.outage.attempt} of ${event.outage.maxAttempts}.` };
         case "claude-token-refused":
             return event.autoResume === "scheduled"
-                ? { role: "notice", text: `${message} The credential is being renewed and this turn continues automatically.`, noticeWait: "credentialRenewal" }
+                ? {
+                      role: "notice",
+                      text: `${message} The credential is being renewed and this turn continues automatically.`,
+                      noticeWait: "credentialRenewal",
+                  }
                 : { role: "notice", text: `${message} Reconnect the account to pick this conversation back up.` };
         case "rate_limit":
             return { role: "notice", text: message };
@@ -164,8 +181,10 @@ export class TranscriptFold {
     private readonly cards = new Map<string, CardPlace>();
     // requestId to the row holding its card, for frames landing on it later (a reply, a late sentence, a receipt).
     private readonly parked = new Map<string, number>();
-    // The turn's opening user row, where the checkpoint and daemon notes land.
-    private readonly opener: number | undefined;
+    // The turn's opening user row, where the checkpoint and daemon notes land; cleared once `retract` takes it back.
+    private opener: number | undefined;
+    // Set by `retract`: this turn was refused before it ran, and its message went back to the composer.
+    private unrun = false;
 
     constructor(
         opening: readonly TranscriptRow[],
@@ -286,7 +305,8 @@ export class TranscriptFold {
                 return this.pushRow({ role: "notice", text: `Context compacted to free up space.` });
             case "error":
                 // Keeps a refusal (no prose from the provider) from reading as a session that ended mid-question.
-                return this.pushRow(errorRow(event));
+                // A refusal that ran nothing takes its message back out ahead of the notice standing in for it.
+                return [...this.retract(event), ...this.pushRow(errorRow(event))];
             case "plan": {
                 // Folds a plan into an identical retired prose bubble instead of drawing the same markdown twice.
                 const adjacent = this.rows.at(-1);
@@ -406,6 +426,35 @@ export class TranscriptFold {
     }
 
     /**
+     * Whether the turn ran nothing: refused before the model saw it, message handed back; never recorded (turn-runs).
+     * Re-derived rather than latched, so a stream that spoke after its refusal still keeps what it said.
+     */
+    get ranNothing(): boolean {
+        return this.unrun && !this.rows.some((row) => row.role === "assistant");
+    }
+
+    // Attended refusals only: the composer holds those words for another press, so a bubble left standing repeats them
+    // once per press. Splicing is safe because nothing ran — no open bubble, no parked card, no steer above it.
+    private retract(event: Extract<AgentEvent, { kind: "error" }>): TranscriptPatch[] {
+        const { code } = event;
+        if (code === undefined || !HELD_FOR_RESEND.has(code) || event.unattended === true) {
+            return [];
+        }
+        if (this.rows.some((row) => row.role === "assistant") || this.steerRows.length > 0) {
+            return [];
+        }
+        this.unrun = true;
+        const opener = this.opener;
+        // An opening the daemon wrote (a watch wake, a resume disclosure) has no bubble to take back, and is still unrun.
+        if (opener === undefined) {
+            return [];
+        }
+        this.rows.splice(opener, 1);
+        this.opener = undefined;
+        return [{ op: "drop", index: opener }];
+    }
+
+    /**
      * Ends the turn: closes the open bubble, freezes every still-pending card as nobody's decision, and notes a user
      * stop.
      */
@@ -520,7 +569,12 @@ export class TranscriptFold {
 }
 
 /** Folds a whole turn at once: opening rows, every frame, and how it ended; what a settled turn reads back as. */
-export const foldTurn = (opening: readonly TranscriptRow[], events: readonly AgentEvent[], ending: TurnEnding = "settled", tag?: string): TranscriptRow[] => {
+export const foldTurn = (
+    opening: readonly TranscriptRow[],
+    events: readonly AgentEvent[],
+    ending: TurnEnding = "settled",
+    tag?: string,
+): TranscriptRow[] => {
     const fold = new TranscriptFold(opening, tag);
     for (const event of events) {
         fold.apply(event);
@@ -588,4 +642,5 @@ export const mapTool = (tools: readonly TranscriptTool[], id: string, fn: (tool:
 };
 
 // Which row fields are cards, exported for readers that count rows by them.
-export const cardFieldsOf = (row: TranscriptRow): TranscriptRequests => Object.fromEntries(REQUEST_FIELDS.flatMap((field) => (row[field] === undefined ? [] : [[field, row[field]]])));
+export const cardFieldsOf = (row: TranscriptRow): TranscriptRequests =>
+    Object.fromEntries(REQUEST_FIELDS.flatMap((field) => (row[field] === undefined ? [] : [[field, row[field]]])));

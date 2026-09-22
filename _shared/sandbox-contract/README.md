@@ -52,7 +52,9 @@ mismatch is a type error rather than a runtime surprise.
   THE fold from a turn's frames to its rows, and the patches each frame is worth. The daemon runs it inside every
   run, the demo runs it over its recording, and the browser only applies the patches it emits, so there is one
   opinion about what a turn looks like. Its notices (a stop, a refusal, a landing, a routed tier) are written
-  here too. [src/policy/request-status.ts](src/policy/request-status.ts) is how a request settles: raised `pending`, and given its
+  here too, and so is the one turn that leaves NO rows: a refusal that ran nothing takes its message back out
+  with it and is never recorded, since the composer still holds those words
+  ([docs/design/turns-that-never-ran.md](../../docs/design/turns-that-never-ran.md)). [src/policy/request-status.ts](src/policy/request-status.ts) is how a request settles: raised `pending`, and given its
   status by the reply that released it or by the stop that cancelled it. One card is settled by a reply the
   daemon may REFUSE: a `credential_offer` is addressed to the named people the owner's gate lists rather than
   to whoever holds a session, so a reply that reaches this derivation at all is one the daemon already accepted

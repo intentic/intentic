@@ -3,16 +3,23 @@ import { type AgentHarness, type AgentProvider, type AttachFrame, sseData, sseFr
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { sandboxRequestVia } from "../../sandbox/client/sandboxClient";
 import { acquireStreamSlot } from "../../sandbox/client/streamBudget";
+import type { ChatAttachment } from "../transcript/transcript";
 
 // Attach reads a running turn's rows from the daemon and every change after (/agent/attach); the side channel
 // (/agent/steer, /agent/stop, /agent/reply) sends to it. This file owns the connection, slot budget, reconnect
 // backoff, and give-up rules; the Conversation decides what a fact means.
 
+// What this window handed to a turn, kept so a refusal can put it back in the composer.
+export interface SentMessage {
+    readonly text: string;
+    readonly attachments: readonly ChatAttachment[];
+}
+
 // One in-flight turn's streaming context: which run's rows render under which attribution, captured onto the
 // session the stream mints.
 export interface TurnContext {
-    // The turn's user bubble; a refused turn's words are taken back out from here.
-    readonly userMessageId: number;
+    // The words this window sent, for a refusal to hand back; absent on a reattach, which typed nothing of its own.
+    readonly sent?: SentMessage;
     // The run these rows belong to, as the daemon named it in the attach head.
     readonly run: string;
     readonly provider: AgentProvider;
