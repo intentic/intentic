@@ -147,8 +147,3 @@ export const describeLanding = async (services: Services, id: string): Promise<v
         throw error;
     }
 };
-
-// Fire-and-forget: a failure here is a log line, never the land's problem.
-export const describeLandingInBackground = (services: Services, id: string): void => {
-    void describeLanding(services, id).catch((error: unknown) => services.logger.debug({ err: error, agent: id }, "landed subject: draft failed"));
-};

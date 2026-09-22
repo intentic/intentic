@@ -1,11 +1,49 @@
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Rule } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
-import { versionRuleOf } from "./version-landed.js";
+import { unstubbed } from "@intentic/testing";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import type { Services } from "../../composition.js";
+import { settleLanding, versionRuleOf } from "./version-landed.js";
+
+const describeLanding = vi.fn<() => Promise<void>>();
+vi.mock("./landed-subject.js", () => ({ describeLanding: () => describeLanding() }));
+const commitOnly = vi.fn<(dir: string, paths: readonly string[], subject: string) => Promise<boolean>>(async () => true);
+vi.mock("../../git/changes/changes-index.js", () => ({
+    commitOnly: (dir: string, paths: readonly string[], subject: string) => commitOnly(dir, paths, subject),
+}));
+vi.mock("../../git/remote/root-repo.js", () => ({ commitWorktreeRemainder: async () => false }));
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rule => ({ label: over.id, enabled: true, ...over });
 
 const version = (id: string, over: Partial<Rule> = {}): Rule =>
     rule({ id, moment: "agent.landed", action: { kind: "builtin", name: "version-landed" }, ...over });
+
+const servicesWith = (rules: readonly Rule[], landedSubject?: string): Services =>
+    unstubbed<Services>("services", {
+        sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
+        agents: unstubbed<Services["agents"]>("agents", {
+            entry: () =>
+                ({
+                    id: "c1",
+                    title: "Recent commits",
+                    repos: [{ repo: "root", base: "a".repeat(40) }],
+                    ...(landedSubject === undefined ? {} : { landedSubject }),
+                }) as ReturnType<Services["agents"]["entry"]>,
+        }),
+        agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
+            mainDir: () => WORKSPACE_ROOT,
+            withRepoLock: async (_repo, run) => run(),
+        }),
+        agentOrigins: unstubbed<Services["agentOrigins"]>("agentOrigins", { forRepo: async () => ({ "a.ts": ["c1"] }) }),
+        ruleFirings: unstubbed<Services["ruleFirings"]>("ruleFirings", { stamp: async () => undefined }),
+        logger: unstubbed<Services["logger"]>("logger", { debug: () => undefined, info: () => undefined, warn: () => undefined }),
+    });
+
+beforeEach(() => {
+    describeLanding.mockReset();
+    describeLanding.mockResolvedValue(undefined);
+    commitOnly.mockClear();
+});
 
 describe(`the version rule`, () => {
     test(`stands only as the versioner built-in at the landed moment`, () => {
@@ -19,5 +57,25 @@ describe(`the version rule`, () => {
     test(`a switched-off rule leaves every commit to the owner`, () => {
         expect(versionRuleOf([version(`auto-version`, { enabled: false })])).toBeUndefined();
         expect(versionRuleOf([])).toBeUndefined();
+    });
+});
+
+describe(`settling a landing`, () => {
+    test(`commits the claim under the subject drafted for it`, async () => {
+        await settleLanding(servicesWith([version(`auto-version`)], `fix: cascading markers`), `c1`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `fix: cascading markers`);
+    });
+
+    // The report already tells the owner the draft failed; the landing must still reach history.
+    test(`a failed draft still commits, under the conversation's title`, async () => {
+        describeLanding.mockRejectedValue(new Error(`every model set for this job names an account this sandbox no longer has`));
+        await settleLanding(servicesWith([version(`auto-version`)]), `c1`);
+        expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits`);
+    });
+
+    test(`without the rule the subject is still drafted for the chip, and nothing is committed`, async () => {
+        await settleLanding(servicesWith([], `fix: cascading markers`), `c1`);
+        expect(describeLanding).toHaveBeenCalledOnce();
+        expect(commitOnly).not.toHaveBeenCalled();
     });
 });

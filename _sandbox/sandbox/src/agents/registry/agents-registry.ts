@@ -13,7 +13,8 @@ import {
     type TodoItem,
     type TurnBreak,
     type TurnBreakPolicy,
-    type UnfinishedWork,type SessionOwner
+    type UnfinishedWork,
+    type SessionOwner,
 } from "@intentic/sandbox-contract";
 import { isFailureSentence, isSelfIdentityAnswer, isToolCallStandIn } from "../../agent/providers/failure-sentences.js";
 import { opt } from "../../agent/run/opt.js";
@@ -179,10 +180,7 @@ const contextFill = (state: RuntimeState | undefined): Pick<AgentSummary, "conte
 
 // Half a pair names no deadline, so the frame is read only whole; one carrying neither leaves the last deadline
 // standing, since a silent frame never said the entry died.
-const promptCacheOf = (
-    event: Extract<AgentEvent, { kind: "context_usage" }>,
-    last: RuntimeState["promptCache"],
-): RuntimeState["promptCache"] =>
+const promptCacheOf = (event: Extract<AgentEvent, { kind: "context_usage" }>, last: RuntimeState["promptCache"]): RuntimeState["promptCache"] =>
     event.cachedAt !== undefined && event.cacheTtlMs !== undefined ? { at: event.cachedAt, ttlMs: event.cacheTtlMs } : last;
 
 // The frame's own verdict decides, not the code, except a rate limit: its reopening can be hours away, so treating it
@@ -1130,7 +1128,9 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             if (held.some(mine) === on) {
                 return summaryOf(entry);
             }
-            const reactions = on ? [...held, { emoji, email: by.email, ...(by.name !== undefined ? { name: by.name } : {}), at }] : held.filter((mark) => !mine(mark));
+            const reactions = on
+                ? [...held, { emoji, email: by.email, ...(by.name !== undefined ? { name: by.name } : {}), at }]
+                : held.filter((mark) => !mine(mark));
             // Emptied back to absent rather than to `[]`, so a card nobody marks reads the same as one nobody ever did.
             const { reactions: _cleared, ...carried } = entry;
             const next = { ...carried, ...(reactions.length > 0 ? { reactions } : {}) };
@@ -1399,8 +1399,15 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // Only a verdict may replace a verdict: a measure land touches no conflict gate and reports none, so it
             // carries the stored report across rather than reading silence as resolved.
             const verdict = outcome.adjudicated ? outcome.conflicts : (outcome.conflicts ?? cleared);
+            // The drafted message describes the claim at its landedTips; once one moves it describes the previous
+            // landing, and left in place it would head the commit of work it never read.
+            const moved = outcome.repos.some((row) => row.landedTip !== entry.repos.find((composed) => composed.repo === row.repo)?.landedTip);
+            const { landedSubject: _subject, landedNote: _note, landedBreaking: _breaking, ...undescribed } = carried;
+            if (moved) {
+                messageDrafts.delete(id);
+            }
             replace({
-                ...carried,
+                ...(moved ? undescribed : carried),
                 repos: [...outcome.repos],
                 diffFiles: outcome.diff.files,
                 diffInsertions: outcome.diff.insertions,

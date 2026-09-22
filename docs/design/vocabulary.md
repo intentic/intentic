@@ -189,13 +189,17 @@ maker, home and visitor chat, and the `card` split across the wire types, the ca
 user-facing copy. What is left of this stage is `lane`: the billing sense is done ("free plan"), the agents
 board's columns and the rail's lanes are not, and they are 328 files of internal UI vocabulary.
 
-**Stage 3. The collisions a contributor sees.** `gate`, `tier`, `loop`, `slot`, `probe`, `registry`, `ledger`,
-`powers`, `kit`, and `host` to `device`. The last one moves a wire group and needs a `Breaking-Note:` trailer,
-which [contract-shrink.mjs](../../_tools/checks/contract-shrink.mjs) will demand at the push anyway.
+**Stage 3. The collisions a contributor sees. DONE.** Three of the ten were collisions and were split: `gate`
+(the command and outbound guards, the sign-in wall), `loop` (a paired device's resident loop is the agent), and
+`host` to `device` (a wire group, carried with its `Breaking-Note:`). The other seven — `tier`, `slot`, `probe`,
+`registry`, `ledger`, `powers`, `kit` — are one idea each and stay, per the
+[audit's correction](../audits/vocabulary-audit.md#correction-seven-of-these-are-not-collisions) and the
+table under "The splits".
 
-**Stage 4. The opaque words.** `chore` to `maintenance` and `netdisk` to `disk` both move routes and want a
-breaking note; the mount path and the capability kind change with them, and per AGENTS.md there is no migration
-for stored state. The rest are internal and cheap.
+**Stage 4. The opaque words. DONE**, and not as first written: `chore` and `netdisk` stay, because their plain
+replacements were already spoken for (see "The opaque words" above). What moved is `angkor` to `plate`, the rail
+`seat` to `tile`, and two user-facing "inventory" sentences to "your machines". No route moved, so no breaking
+note.
 
 **Stage 5. The guard. DONE**, and carrying the nine words stages 1 and 2 retired. Stages 3 and 4 each add their
 own entries to `RETIRED` as they land, which is what keeps the list honest: a word is only retired once nothing
@@ -262,10 +266,16 @@ For i18n, move the key in all five catalogs at once, preserving key order, and l
 [i18n-keys.mjs](../../_tools/checks/i18n-keys.mjs) find the call sites that did not follow.
 `node _tools/checks/i18n-catalogs.mjs --fix` re-sorts afterwards.
 
-## What the translated catalogs still carry
+## What the translated catalogs carry
 
-`de`, `es`, `fr` and `pl` are translated, not seeded, and their words were translated from the old English: the
-German for a persona is still `Karte`, the Polish still `kartę`. Every key moved with the English in these
-passes, so the catalogs stay in parity and nothing renders as a dotted path, but the four translations say the
-retired word until a translator passes over them. That is a translation job, not a rename, and it is the one
-piece of this work a sweep cannot do.
+`de`, `es`, `fr` and `pl` are translated, not seeded, so a rename in the English leaves the old word in four
+other languages until someone reads them. That pass ran on 2026-09-22 (a translation job, not a rename, and the
+one piece of this work a sweep cannot do): a persona is `Persona`/`persona` in all four, not `Karte`/`tarjeta`/
+`carte`; a held decision is a request (`Anfrage`, `solicitud`, `demande`, `prośba`), a transcript tool call a
+block, a settings panel its own name; `Recepción`/`Recepcja` became visitor chat; the billing `lane` that the
+English had already made "free plan" is now `kostenloser Tarif`, `offre gratuite`, `darmowy plan`; and Polish
+"Show home" stopped saying `biurko`.
+
+Four words look retired and are not, so a future scan should skip them: Polish `karta` for a browser, editor or
+terminal *tab*; French `carte du projet` for the project *map*; `hosted`/`hostowany` for the hosted plan; and
+`hostname` in every language.

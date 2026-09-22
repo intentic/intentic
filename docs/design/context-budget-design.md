@@ -331,3 +331,10 @@ What shipped, three changes:
 One thing deliberately not done: the helper arithmetic is NOT the turn arithmetic, and the two should not be
 merged. A turn pays the floor and a one-shot does not, so a shared "budget" would either refuse helpers that
 work or admit turns that cannot. They share `declaredWindow` and nothing else.
+
+## 13. The prize, planned (Sep 2026)
+
+§6's first bullet — the reduced tool surface — has its own build plan in
+[small-window-profile.md](small-window-profile.md): what the SDK already offers for it, what each turn sends
+today, the one profile and the six tools in it, and the order to build it in, starting with the floor
+measurement the CLI already reports.

@@ -50,17 +50,16 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
     return committed;
 };
 
-// What happens to a landing once it is in the tree. With the rule standing, the subject is drafted FIRST and awaited,
-// so the commit carries it rather than a placeholder that would need amending; without the rule, the draft runs in
-// the background as it always did, for the Changes panel's chip.
+// What happens to a landing once it is in the tree: the subject is drafted first, then, with the rule standing, the
+// claim is committed under it. A draft that fails is already told on its report; it must not cost the commit, which
+// falls back to the title.
 export const settleLanding = async (services: Services, id: string): Promise<void> => {
     const { rules } = await services.sandboxSettings.get();
     const rule = versionRuleOf(rules);
+    await describeLanding(services, id).catch((error: unknown) => services.logger.debug({ err: error, agent: id }, "landed subject: draft failed"));
     if (rule === undefined) {
-        await describeLanding(services, id);
         return;
     }
-    await describeLanding(services, id);
     const committed = await commitClaim(services, id);
     if (committed.length === 0) {
         return;

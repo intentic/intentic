@@ -6,10 +6,7 @@ import type { DependencyOrigin } from "../workspace/deps/dependency-origin.js";
 import { queueVerify, type VerifyDeps } from "../workspace/deps/verify-deps.js";
 import { announceUnwatchedWrite, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 
-// What the daemon does around a dependency install the coordinator decided on: an activity entry naming who is behind
-// and why, and a queued verify that repairs the installed tree. Wired before the data gate opens, though the watcher
-// itself starts later: registering now means a turn arriving the instant boot finishes queues behind an already
-// reserved repair, instead of racing to discover the stale tree.
+// Wired before the data gate opens, so a turn arriving as boot finishes queues behind an already reserved repair.
 
 const conversationOf = (origin: DependencyOrigin): string | undefined =>
     origin.kind === "land" ? origin.agentId : origin.kind === "request" ? origin.conversationId : undefined;
@@ -29,7 +26,6 @@ const reasonOf = (origin: DependencyOrigin): string => {
     return "a workspace change left the installed tree behind";
 };
 
-// The optional fields an activity entry carries when the install can be attributed to a conversation.
 const attribution = (origin: DependencyOrigin): { conversationId?: string; title?: string } => {
     const conversationId = conversationOf(origin);
     const title = titleOf(origin);

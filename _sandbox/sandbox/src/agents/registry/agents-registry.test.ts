@@ -1066,6 +1066,38 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.diff).toEqual({ files: 12, insertions: 412, deletions: 96 });
     });
 
+    // The sentence describes the claim at its landedTips: a later land that moves one puts different work in the tree,
+    // and the old sentence would head its commit; a measure that moves none changes nothing it described.
+    it("recordLanded retires the drafted message once a landedTip moves, and keeps it across a land that moves none", async () => {
+        const store = memoryStore();
+        const registry = createAgentsRegistry(store, standings(), presences());
+        await registry.init();
+        await registry.begin(turn(), 1_000);
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        const landedAt = (tip: string, landed: boolean) =>
+            registry.recordLanded("c1", {
+                landed,
+                changed: landed,
+                repos: [{ repo: "root", base: "a".repeat(40), landedTip: tip }],
+                diff: { files: 1, insertions: 1, deletions: 0 },
+                adjudicated: landed,
+            });
+        await landedAt("b".repeat(40), true);
+        await registry.setLandedSubject("c1", { subject: "fix: cascading markers", note: "Markers stop cascading." });
+        registry.setLandedMessageDraft("c1", { startedAt: 1_500, steps: [], outcome: "written", finishedAt: 1_600 });
+
+        await landedAt("b".repeat(40), false);
+        expect(registry.get("c1")?.landedMessage).toEqual({ subject: "fix: cascading markers", note: "Markers stop cascading." });
+        expect(registry.get("c1")?.landedMessageDraft?.outcome).toBe("written");
+
+        await landedAt("c".repeat(40), true);
+        expect(registry.get("c1")?.landedMessage).toBeUndefined();
+        expect(registry.get("c1")?.landedMessageDraft).toBeUndefined();
+        const saved = store.saved().find((entry) => entry.id === "c1");
+        expect(saved?.landedSubject).toBeUndefined();
+        expect(saved?.landedNote).toBeUndefined();
+    });
+
     it("setLandedSubject keeps the release note and the breaking warning whole, and bounds the subject by git's header limit rather than a card's width", async () => {
         const store = memoryStore();
         const registry = createAgentsRegistry(store, standings(), presences());
@@ -1471,7 +1503,10 @@ describe("agents registry", () => {
                 const registry = createAgentsRegistry(memoryStore(), standings(), presences());
                 await registry.init();
                 await registry.begin(turn(), 1_000);
-                registry.observe("c1", list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]));
+                registry.observe(
+                    "c1",
+                    list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]),
+                );
                 expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
             });
 
