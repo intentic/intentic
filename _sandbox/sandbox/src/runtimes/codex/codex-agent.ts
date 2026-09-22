@@ -10,6 +10,7 @@ import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } f
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { resultContent, toolCategoryOf, workspacePath } from "../../agent/tools/tool-calls.js";
 import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
+import { workloadStamp } from "../../platform/boot/leftovers.js";
 import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";
 import { type CommandGuard, vendorSubject } from "../../guard/command-guard.js";
 import { createTurnGate } from "../../guard/turn-gate.js";
@@ -41,17 +42,17 @@ const EFFORT_LEVELS = new Set(["minimal", "low", "medium", "high", "xhigh", "max
 const reasoningEffort = (effort: string): CodexReasoningEffort | undefined =>
     EFFORT_LEVELS.has(effort) ? (effort as CodexReasoningEffort) : undefined;
 
-// Explicit environment app-server inherits: undefined entries dropped, cli-kind credentials merged, CODEX_HOME pinned
-// to the workspace auth/session store. CODEX_API_KEY is dropped here; only a turn that resolves a codexEndpoint sets
-// it, or a daemon-side bearer would leak to native account turns too.
-const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined): Record<string, string> => {
+// Explicit environment app-server inherits: undefined entries dropped, cli-kind credentials merged, CODEX_HOME pinned,
+// and the owner stamp every turn workload carries. CODEX_API_KEY is dropped: only a turn that resolves a codexEndpoint
+// sets it, or a daemon-side bearer would leak to native account turns too.
+const codexEnv = (codexHome: string, cliEnv: Record<string, string> | undefined, conversationId: string | undefined): Record<string, string> => {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(process.env)) {
         if (value !== undefined && key !== "CODEX_API_KEY") {
             env[key] = value;
         }
     }
-    return { ...env, ...cliEnv, CODEX_HOME: codexHome };
+    return { ...env, ...cliEnv, CODEX_HOME: codexHome, ...(conversationId === undefined ? {} : workloadStamp(conversationId)) };
 };
 
 // The translator provider block speaks Responses wire format with a fixed local bearer (env_key) and
@@ -653,7 +654,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
     return async function* runCodexAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
         // Per-account CODEX_HOME when resolved; a subscription turn's bearer rides CODEX_API_KEY instead.
         const activeCodexHome = request.codexHome ?? options.codexHome;
-        const env = codexEnv(activeCodexHome, request.cliEnv);
+        const env = codexEnv(activeCodexHome, request.cliEnv, request.conversationId);
         // Owner's system prompt and the daemon's additions, as the two config keys Codex reads them from. Merged under
         // the translator provider block, not over, so a future key added to either side can't silently win.
         const instructions = await codexInstructionConfig(request, activeCodexHome);

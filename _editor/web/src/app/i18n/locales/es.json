@@ -307,6 +307,48 @@
             "runNowExactlyWhat": "Ejecútalo ahora, con exactamente lo que se disparó: la sesión aparece en este tablero",
             "waiting": "te espera"
         },
+        "liveMetrics": {
+            "coresValue": "{cores} núcleo | {cores} núcleos",
+            "cpu": "{percent} de CPU",
+            "cpuHint": "CPU que ha usado todo el sandbox en los últimos segundos, frente a todos los núcleos que puede usar.",
+            "cpuLabel": "CPU",
+            "cpuValue": "{percent} de {cores} núcleo | {percent} de {cores} núcleos",
+            "daemonHint": "El proceso de control del propio sandbox: su memoria, su CPU (100 % es un núcleo) y cuán ocupado estuvo su bucle de eventos.",
+            "daemonLabel": "Daemon",
+            "diskHint": "Espacio usado en el volumen donde está el espacio de trabajo.",
+            "diskLabel": "Disco",
+            "loadHint": "La carga media de 1, 5 y 15 minutos. Es de toda la máquina, así que otros sandboxes en ella también cuentan.",
+            "loadLabel": "Carga",
+            "loop": "bucle {percent}",
+            "memoryHint": "Memoria en uso, sin la caché de archivos que el kernel recupera primero, frente al límite del sandbox. Es la cifra que se agota.",
+            "memoryLabel": "Memoria",
+            "pressureHint": "Qué parte de los últimos diez segundos algo pasó esperando CPU, memoria o disco. Por encima de cero, el trabajo ya hace cola.",
+            "pressureLabel": "Presión",
+            "pressureValue": "CPU {cpu} · memoria {memory} · E/S {io}",
+            "processes": "{count} proceso | {count} procesos",
+            "processesHint": "Todos los procesos que se ejecutan en el sandbox, el daemon incluido.",
+            "processesLabel": "Procesos",
+            "role": {
+                "agentRuntime": "entornos de agentes",
+                "browser": "navegadores",
+                "container": "contenedores",
+                "extension": "extensiones",
+                "git": "git",
+                "languageServer": "servidores de lenguaje",
+                "localModel": "modelos locales",
+                "other": "otros",
+                "searchEngine": "búsqueda",
+                "terminal": "terminales",
+                "toolchain": "compilaciones y pruebas",
+                "translator": "traductores"
+            },
+            "rolesHint": "Memoria residente de cada proceso del sandbox, según el tipo de trabajo. La memoria que comparten dos procesos cuenta en cada uno.",
+            "rolesLabel": "Memoria por tipo",
+            "sandboxLabel": "Recursos del sandbox",
+            "sessionHint": "Lo que usan los procesos de esta conversación: CPU de los últimos segundos, donde 100 % es un núcleo entero, y memoria residente.",
+            "swapHint": "Memoria que el kernel ha llevado al disco. Un poco es normal; mucha y en aumento significa que al sandbox le falta memoria.",
+            "swapLabel": "Swap"
+        },
         "ownerMark": {
             "ownedBy": "Pertenece a {name}",
             "spawnedBy": "Iniciada por la conversación {parent}; la abre",
@@ -3363,6 +3405,11 @@
     },
     "settings": {
         "appearance": {
+            "agents": {
+                "group": "Tablero de agentes",
+                "liveMetrics": "Métricas para geeks",
+                "liveMetricsHint": "CPU y memoria de cada agente y de todo el sandbox, en el tablero de agentes. Solo se mide mientras el tablero está abierto con esto activado."
+            },
             "changes": {
                 "diffOpen": "Dónde se abre un diff",
                 "diffOpenBiggest": "El cambio más grande",

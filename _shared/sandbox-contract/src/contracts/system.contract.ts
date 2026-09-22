@@ -12,6 +12,7 @@ import {
     DevicesListSchema,
 } from "../schemas/devices.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
+import { SandboxMetricsSchema } from "../schemas/metrics.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepairSchema } from "../schemas/system.js";
 import {
@@ -100,6 +101,16 @@ export const systemContract = {
             description: "Token and cost totals per account, added up from the record of every finished turn.",
         })
         .output(UsageSummarySchema),
+    // Measured per request and never in the background: a sandbox nobody is asking pays nothing for this route.
+    metrics: oc
+        .route({
+            method: "GET",
+            path: "/system/metrics",
+            summary: "What the sandbox is using right now",
+            description:
+                "CPU and memory for the sandbox as a whole, for the daemon that runs it, for each kind of process, and for each conversation's own processes. Measured when you ask and never in between, so CPU is the use since the previous reading: the first reading after a quiet spell has memory and no CPU, and the next one a few seconds later has both.",
+        })
+        .output(SandboxMetricsSchema),
     // Control plane only; live I/O is /system/terminal WebSocket, exempt from the Bearer auth these routes take.
     terminals: oc
         .route({

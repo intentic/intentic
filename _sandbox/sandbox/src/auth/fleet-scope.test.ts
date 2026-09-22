@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import type { ProvenCaller } from "./auth.js";
-import { framedEvent, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
+import type { SandboxMetrics } from "@intentic/sandbox-contract";
+import { framedEvent, framedMetrics, type Provenance, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
 
 // The two fences over the fleet, as pure rules: whose conversation counts as a guest's, what a fenced member may see
 // of work that is not theirs, and which frames of the event stream reach either. The routes apply these; this pins
@@ -102,5 +103,43 @@ describe("framedEvent", () => {
     test("heartbeats and presence ride through untouched", () => {
         const beat = { kind: "heartbeat" as const, rev: 1 };
         expect(framedEvent(guest, undefined, beat)).toBe(beat);
+    });
+});
+
+describe("framedMetrics", () => {
+    const metrics: SandboxMetrics = {
+        at: 1,
+        sandbox: { cores: 2, memoryBytes: 1, memoryLimitBytes: 2, loadAverage: [0, 0, 0], processes: 5 },
+        daemon: { rssBytes: 1, heapUsedBytes: 1 },
+        sessions: {
+            mine: { processes: 1, rssBytes: 10 },
+            theirs: { processes: 1, rssBytes: 20 },
+            support: { processes: 1, rssBytes: 30 },
+            // Stamped, but not a conversation this registry holds: another daemon's, or one already archived.
+            stray: { processes: 1, rssBytes: 40 },
+        },
+        roles: { agentRuntime: { processes: 4, rssBytes: 100 } },
+    };
+    const registry: Record<string, Provenance> = {
+        mine: { owner: { email: "dee@example.com" } },
+        theirs: { owner: { email: "ada@example.com" } },
+        support: { owner: { email: "ada@example.com" }, areas: ["support"] },
+    };
+    const agentOf = (id: string): Provenance | undefined => registry[id];
+
+    test("a guest is told of its own conversations only; the sandbox-wide figures stay whole", () => {
+        const framed = framedMetrics(guest, metrics, agentOf);
+        expect(framed.sessions).toEqual({ mine: { processes: 1, rssBytes: 10 } });
+        expect(framed.sandbox).toEqual(metrics.sandbox);
+        expect(framed.roles).toEqual({ agentRuntime: { processes: 4, rssBytes: 100 } });
+    });
+
+    test("a fenced member is told of the work behind their own areas", () => {
+        expect(Object.keys(framedMetrics(fenced, metrics, agentOf).sessions)).toEqual(["support"]);
+    });
+
+    test("a conversation the registry does not know is left out even for a caller who sees the fleet whole", () => {
+        expect(Object.keys(framedMetrics(viewer, metrics, agentOf).sessions)).toEqual(["mine", "theirs", "support"]);
+        expect(Object.keys(framedMetrics(undefined, metrics, agentOf).sessions)).toEqual(["mine", "theirs", "support"]);
     });
 });

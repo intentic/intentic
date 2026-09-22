@@ -51,6 +51,7 @@ import { sessionCategory } from "../../../../app/sessionCategory";
 import IdentityTile from "../../../capabilities/connect/IdentityTile.vue";
 import MatchLine from "../../../../components/MatchLine.vue";
 import SessionChip from "../session/SessionChip.vue";
+import SessionMetrics from "../../metrics/SessionMetrics.vue";
 import { boxImageOf, boxNameOf } from "../../fleet/fleetScope";
 import { accountBadge } from "../session/accountChip";
 import { previewOf } from "../../../chat/panel/useChat-strip";
@@ -724,6 +725,9 @@ const grab = (event: PointerEvent): void => {
                     <span class="text-2xs leading-snug text-subtle">{{ words.requestLandHint }}.</span>
                 </template>
             </div>
+
+            <!-- Opt-in geek metrics: draws only when the board provides a reading naming this conversation, so never for another box's card. -->
+            <SessionMetrics v-if="localOnly" :conversation-id="agent.id" :class="dense ? 'w-full' : ''" />
 
             <!-- The closing summary line: counted stats, then the drill-in and time held to the line's right (see `summary`). -->
             <div

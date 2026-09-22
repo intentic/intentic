@@ -187,6 +187,7 @@ export * from "./schemas/logs.js";
 export * from "./schemas/loops.js";
 export * from "./schemas/maintenance.js";
 export * from "./schemas/marketplace.js";
+export * from "./schemas/metrics.js";
 export * from "./schemas/panels.js";
 export * from "./schemas/personas.js";
 export * from "./schemas/providers/plan-limits.js";

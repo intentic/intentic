@@ -307,6 +307,48 @@
             "runNowExactlyWhat": "Jetzt ausführen, mit genau dem, was ausgelöst hat: die Session landet auf diesem Board",
             "waiting": "wartet auf Sie"
         },
+        "liveMetrics": {
+            "coresValue": "{cores} Kern | {cores} Kerne",
+            "cpu": "{percent} CPU",
+            "cpuHint": "CPU, die die ganze Sandbox in den letzten Sekunden genutzt hat, gemessen an allen Kernen, die sie nutzen darf.",
+            "cpuLabel": "CPU",
+            "cpuValue": "{percent} von {cores} Kern | {percent} von {cores} Kernen",
+            "daemonHint": "Der eigene Steuerprozess der Sandbox: sein Speicher, seine CPU (100 % ist ein Kern) und wie ausgelastet seine Ereignisschleife war.",
+            "daemonLabel": "Daemon",
+            "diskHint": "Belegter Platz auf dem Volume, auf dem der Arbeitsbereich liegt.",
+            "diskLabel": "Platte",
+            "loadHint": "Die durchschnittliche Last über 1, 5 und 15 Minuten. Sie gilt für die ganze Maschine, andere Sandboxes darauf zählen also mit.",
+            "loadLabel": "Last",
+            "loop": "Schleife {percent}",
+            "memoryHint": "Belegter Arbeitsspeicher ohne den Dateicache, den der Kernel zuerst zurückholt, gemessen am Limit der Sandbox. Diese Zahl ist es, die ausgeht.",
+            "memoryLabel": "Arbeitsspeicher",
+            "pressureHint": "Wie viel der letzten zehn Sekunden etwas auf CPU, Speicher oder Platte gewartet hat. Über null staut sich Arbeit bereits.",
+            "pressureLabel": "Druck",
+            "pressureValue": "CPU {cpu} · Speicher {memory} · E/A {io}",
+            "processes": "{count} Prozess | {count} Prozesse",
+            "processesHint": "Jeder Prozess, der in der Sandbox läuft, den Daemon eingeschlossen.",
+            "processesLabel": "Prozesse",
+            "role": {
+                "agentRuntime": "Agenten-Laufzeiten",
+                "browser": "Browser",
+                "container": "Container",
+                "extension": "Erweiterungen",
+                "git": "Git",
+                "languageServer": "Sprachserver",
+                "localModel": "lokale Modelle",
+                "other": "Sonstiges",
+                "searchEngine": "Suche",
+                "terminal": "Terminals",
+                "toolchain": "Builds und Tests",
+                "translator": "Übersetzer"
+            },
+            "rolesHint": "Belegter Arbeitsspeicher aller Prozesse der Sandbox, nach Art der Arbeit. Speicher, den zwei Prozesse teilen, zählt bei jedem.",
+            "rolesLabel": "Speicher nach Art",
+            "sandboxLabel": "Ressourcen der Sandbox",
+            "sessionHint": "Was die Prozesse dieser Unterhaltung nutzen: CPU der letzten Sekunden, wobei 100 % ein ganzer Kern ist, und belegter Arbeitsspeicher.",
+            "swapHint": "Arbeitsspeicher, den der Kernel auf die Platte ausgelagert hat. Ein wenig ist normal; viel und weiter wachsend heißt, der Sandbox fehlt Speicher.",
+            "swapLabel": "Swap"
+        },
         "ownerMark": {
             "ownedBy": "Gehört {name}",
             "spawnedBy": "Gestartet von Konversation {parent}; öffnet sie",
@@ -3363,6 +3405,11 @@
     },
     "settings": {
         "appearance": {
+            "agents": {
+                "group": "Agenten-Board",
+                "liveMetrics": "Geek-Metriken",
+                "liveMetricsHint": "CPU und Arbeitsspeicher für jeden Agenten und die ganze Sandbox, auf dem Agenten-Board. Gemessen wird nur, solange das Board offen und dies eingeschaltet ist."
+            },
             "changes": {
                 "diffOpen": "Wo ein Diff aufgeht",
                 "diffOpenBiggest": "Größte Änderung",

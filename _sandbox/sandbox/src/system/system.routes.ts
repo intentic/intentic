@@ -38,7 +38,7 @@ import { buildId } from "../version.js";
 import { manifestProblems } from "../store/manifest-problems.js";
 import { repairManifest } from "../store/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
-import { framedEvent } from "../auth/fleet-scope.js";
+import { framedEvent, framedMetrics } from "../auth/fleet-scope.js";
 import { frameBacklog } from "./frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
 
@@ -336,6 +336,8 @@ export const createSystemRoutes = (services: Services) => {
             }
             return { accounts: [...totals.values()] };
         }),
+        // Measured by this request, never in the background; each caller is told only of conversations it may see.
+        metrics: i.metrics.handler(async ({ context }) => framedMetrics(context.identity, await services.liveMetrics.read(), services.agents.get)),
         // Every attachable session behind the terminal panel.
         // - web-*: the user's own shells
         // - panel-*: dev servers, labeled by panel key; dockerd and local-model panels read as kind "process", and a

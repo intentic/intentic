@@ -3,6 +3,7 @@ import { loadavg } from "node:os";
 import { join } from "node:path";
 import { monitorEventLoopDelay, performance, PerformanceObserver } from "node:perf_hooks";
 import { getHeapSpaceStatistics, getHeapStatistics } from "node:v8";
+import { PROCESS_ROLES, type ProcessRole } from "@intentic/sandbox-contract";
 import { gitSpawnStats } from "@intentic/scaffold";
 import type { Logger } from "pino";
 import { logsRoot } from "../../logs/log-files.js";
@@ -15,24 +16,6 @@ import { queueSnapshot } from "./queue-slots.js";
 
 const SAMPLE_INTERVAL_MS = 60_000;
 export const RESOURCE_METRICS_FILE = "resource-metrics.jsonl";
-
-export type ProcessRole =
-    | "languageServer"
-    | "searchEngine"
-    | "agentRuntime"
-    | "browser"
-    | "git"
-    | "translator"
-    | "extension"
-    | "terminal"
-    // A build, test, typecheck or lint run and the package manager driving it: the fan-out shape, which is what every
-    // memory peak this log has recorded was made of.
-    | "toolchain"
-    // An inference server this sandbox runs for itself.
-    | "localModel"
-    // A process of a nested Docker container: charged to this cgroup, visible to nothing else here.
-    | "container"
-    | "other";
 
 export interface ProcessRow {
     readonly pid: number;
@@ -301,20 +284,7 @@ const processSnapshot = async (
     const descendantPids = descendantsOf(rows, process.pid);
     const total = emptyProcessSummary();
     const descendants = emptyProcessSummary();
-    const byRole: Record<ProcessRole, ProcessSummary> = {
-        languageServer: emptyProcessSummary(),
-        searchEngine: emptyProcessSummary(),
-        agentRuntime: emptyProcessSummary(),
-        browser: emptyProcessSummary(),
-        git: emptyProcessSummary(),
-        translator: emptyProcessSummary(),
-        extension: emptyProcessSummary(),
-        terminal: emptyProcessSummary(),
-        toolchain: emptyProcessSummary(),
-        localModel: emptyProcessSummary(),
-        container: emptyProcessSummary(),
-        other: emptyProcessSummary(),
-    };
+    const byRole = Object.fromEntries(PROCESS_ROLES.map((role) => [role, emptyProcessSummary()])) as Record<ProcessRole, ProcessSummary>;
     for (const row of rows) {
         addProcess(total, row, previousCpu);
         addProcess(byRole[row.role], row, previousCpu);

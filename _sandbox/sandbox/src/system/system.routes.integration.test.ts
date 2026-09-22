@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test, expect } from "bun:test";
 import { stubEnv } from "@intentic/testing/bun";
 
+import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { createApp } from "../app.js";
 
 import { createLogger } from "../logger.js";
@@ -584,4 +585,42 @@ test("events: the beat states the fleet revision it was sent at, so a browser ca
     expect(moved.beat).toBe(moved.roster);
 
     controller.abort();
+});
+
+// The route answers the one reading the sampler took (platform/resources/live-metrics.ts), told of the conversations
+// this daemon's roster holds: a stamp another daemon or an archived conversation left behind is nobody's card.
+test("system.metrics answers the reading, told only of conversations this daemon knows", async () => {
+    const reading: SandboxMetrics = {
+        at: 1,
+        sandbox: { cores: 2, memoryBytes: 1, memoryLimitBytes: 2, loadAverage: [0, 0, 0], processes: 4 },
+        daemon: { rssBytes: 1, heapUsedBytes: 1 },
+        sessions: { c1: { processes: 2, rssBytes: 10, cpuPercent: 50 }, stray: { processes: 1, rssBytes: 30 } },
+        roles: { agentRuntime: { processes: 3, rssBytes: 40 } },
+    };
+    const composed = services({
+        liveMetrics: { read: async () => reading },
+        auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: async () => {} },
+    });
+    await composed.agents.begin({ conversationId: "c1", isolated: false, prompt: "work", provider: "claude", harness: "native" }, 1_000);
+    expect(await clientFor(createApp(composed)).system.metrics()).toEqual({
+        ...reading,
+        sessions: { c1: { processes: 2, rssBytes: 10, cpuPercent: 50 } },
+    });
+});
+
+test("system.metrics is not a guest's to read, and refusing one costs no reading", async () => {
+    let readings = 0;
+    const app = createApp(
+        services({
+            liveMetrics: {
+                read: async () => {
+                    readings += 1;
+                    throw new Error("a refused caller reached the sampler");
+                },
+            },
+            auth: { authorize: async () => proven("g@x.com", "guest", ["google"], ["support"]), authorizeOwner: rejectForbidden },
+        }),
+    );
+    expect((await app.request("/system/metrics")).status).toBe(403);
+    expect(readings).toBe(0);
 });

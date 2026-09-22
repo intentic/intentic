@@ -78,12 +78,13 @@ const formatLocale = ref(`en`);
 const dateFormats = new Map<DateStyle, Intl.DateTimeFormat>();
 const relativeFormats = new Map<Intl.RelativeTimeFormatNumeric, Intl.RelativeTimeFormat>();
 const numberFormats = new Map<number, Intl.NumberFormat>();
+const percentFormats = new Map<number, Intl.NumberFormat>();
 
 // Half of Europe writes "1,4 MB". A decimal point is a language's answer, not a constant, so every number this
 // module prints with a fraction goes through here.
 // EVERY ONE OF THESE READS `.value` BEFORE THE CACHE, never only on a miss: the read is what the calling render
 // subscribes to, and a cache hit that skipped it would leave that render tracking nothing.
-const formatFixed = (value: number, digits: number): string => {
+export const formatFixed = (value: number, digits: number): string => {
     const locale = formatLocale.value;
     let format = numberFormats.get(digits);
     if (format === undefined) {
@@ -132,7 +133,21 @@ export const setFormatLocale = (tag: string): void => {
     dateFormats.clear();
     relativeFormats.clear();
     numberFormats.clear();
+    percentFormats.clear();
     formatLocale.value = tag;
+};
+
+// A percentage given as 0–100 (or past it: a process busy on four cores is 400): one decimal under ten, whole above,
+// and the sign where the language writes it ("37 %" in French and German).
+export const formatPercent = (percent: number): string => {
+    const locale = formatLocale.value;
+    const digits = Math.abs(percent) < 10 ? 1 : 0;
+    let format = percentFormats.get(digits);
+    if (format === undefined) {
+        format = new Intl.NumberFormat(locale, { style: `percent`, minimumFractionDigits: digits, maximumFractionDigits: digits });
+        percentFormats.set(digits, format);
+    }
+    return format.format(percent / 100);
 };
 
 /** A calendar day on its own: "Jul 28, 2026". */

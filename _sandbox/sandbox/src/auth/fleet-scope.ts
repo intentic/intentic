@@ -1,4 +1,4 @@
-import { type Fence, fenceAllows, fenceReaches, type SystemEvent } from "@intentic/sandbox-contract";
+import { type Fence, fenceAllows, fenceReaches, type SandboxMetrics, type SystemEvent } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
 import type { Caller } from "./auth.js";
 
@@ -61,6 +61,18 @@ export const refuseUnlessVisible = (caller: Caller | undefined, agent: Provenanc
         throw new ORPCError("FORBIDDEN", { message: "not one of your conversations" });
     }
 };
+
+// The sandbox-wide figures whole, a conversation's only when the registry knows it and the caller may see it: which
+// agents behind a fence are busy is itself a reading of the work the fence hides.
+export const framedMetrics = (caller: Caller | undefined, metrics: SandboxMetrics, agentOf: (id: string) => Provenance | undefined): SandboxMetrics => ({
+    ...metrics,
+    sessions: Object.fromEntries(
+        Object.entries(metrics.sessions).filter(([id]) => {
+            const agent = agentOf(id);
+            return agent !== undefined && visibleTo(caller, agent);
+        }),
+    ),
+});
 
 // A path batch cut to the caller's own folders. An empty list already means "refetch the whole tree", and that
 // refetch is itself fenced, so it rides on unchanged rather than being mistaken for a batch with nothing left in it.

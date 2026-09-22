@@ -255,6 +255,7 @@ import { type PlatformTunnel, startPlatformTunnel } from "./platform/listeners/l
 import { createResourceReaper, type ResourceReaper } from "./platform/boot/reaper.js";
 import { createClientLogger, createPerfLogger } from "./logger.js";
 import { createPerfTracker, type PerfTracker } from "./platform/resources/perf.js";
+import { createLiveMetrics, type LiveMetrics } from "./platform/resources/live-metrics.js";
 import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-run.js";
 import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
@@ -303,6 +304,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly perf: PerfTracker;
     // Cardinalities behind heap growth in the resource series; stays allocation-light, called every minute.
     readonly resourceOwners: () => Readonly<Record<string, unknown>>;
+    // CPU and memory per conversation and for the sandbox, measured only when GET /system/metrics asks.
+    readonly liveMetrics: LiveMetrics;
     // Where the boot chain lives; app.ts gates every data route on `converged`, and /events streams its progress.
     readonly boot: BootTracker;
     // Promises the daemon makes to itself, checked while running, reported and never thrown; read by diagnostics.
@@ -1129,6 +1132,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 perf: { operations: operations.length, spans: operations.reduce((total, operation) => total + operation.count, 0) },
             };
         },
+        liveMetrics: createLiveMetrics({ workspaceRoot: workspace.root }),
         // Born converged: main() closes the gate, so a test or host-internal preview build has nothing to wait for.
         boot: createBootTracker(logger),
         announcer: createAnnouncer(config, logger),

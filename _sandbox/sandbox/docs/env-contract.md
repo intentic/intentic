@@ -65,11 +65,12 @@ must pass on (`WORKSPACE_ROOT_EXCLUDE_ENV`).
 ## 3. The process (`platform/leftovers.ts`)
 
 `INTENTIC_TURN_OWNER=<conversation id>` stamps every workload the daemon spawns on a turn's behalf: the
-agent process, its shell, a `tmux-run` command. Two reserved owners are not conversations: `daemon` (the
-pooled ACP agent processes the daemon keeps across turns) and `one-shot` (the toolless helper calls). The
-stamp is how the `agents` CLI knows whose children a shell is asking about, and how the leftovers sweep tells
-a live workload from one a previous daemon left behind — an unstamped process is somebody's own and is never
-touched.
+agent process (Codex's per-turn app-server included), its shell, a `tmux-run` command. Two reserved owners
+are not conversations: `daemon` (the pooled ACP agent processes the daemon keeps across turns) and `one-shot`
+(the toolless helper calls). The stamp is how the `agents` CLI knows whose children a shell is asking about,
+how the leftovers sweep tells a live workload from one a previous daemon left behind — an unstamped process is
+somebody's own and is never touched — and how the Agents board's geek metrics say whose a process's CPU and
+memory are (`platform/resources/live-metrics.ts`).
 
 ## Files that act as environment
 

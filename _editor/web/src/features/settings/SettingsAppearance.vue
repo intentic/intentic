@@ -16,6 +16,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { computed } from "vue";
 import { useToolCalls } from "../chat/tools/useToolCalls";
 import { showWorkTerminals } from "../terminal/useWorkTerminals";
+import { showLiveMetrics } from "../agents/metrics/liveMetrics";
 import { type DiffOpen, useLayout } from "../../shell/window/useLayout";
 import { useChangeGrouping } from "../workspace/changes/useChangeGrouping";
 import { useChangeWeight } from "../workspace/changes/changeWeight";
@@ -289,6 +290,18 @@ const treatPreview = (entry: { name: string; type: "file" | "dir" }) =>
                 :description="t(`settings.appearance.chat.showToolCallsHint`)"
             >
                 <template #control><ToggleSwitch v-model="showToolCalls" /></template>
+            </Row>
+        </RowGroup>
+
+        <!-- The Agents board's CPU and memory readout; off means the sandbox measures nothing for it, not that it hides it. -->
+        <RowGroup :label="t(`settings.appearance.agents.group`)">
+            <Row
+                as="label"
+                icon="cpu"
+                :title="t(`settings.appearance.agents.liveMetrics`)"
+                :description="t(`settings.appearance.agents.liveMetricsHint`)"
+            >
+                <template #control><ToggleSwitch v-model="showLiveMetrics" /></template>
             </Row>
         </RowGroup>
 

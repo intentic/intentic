@@ -3,7 +3,7 @@ import type { Disposable } from "@intentic/extension-api";
 import { type AutomationApproval, isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
 import { Button, clipboardOf, ui, ContextMenu, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, onBeforeUpdate, onMounted, onUnmounted, onUpdated, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUpdate, onMounted, onUnmounted, onUpdated, provide, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { composeAgent, startAgent } from "../fleet/agentActions";
 import { usePanels } from "../../extensions/usePanels";
@@ -43,6 +43,8 @@ import { commandShortcut, registerCommand } from "../../../shell/commands/useCom
 import MatchLine from "../../../components/MatchLine.vue";
 import { buildIdeas, buildPrompt } from "./buildIdeas";
 import AgentCard from "./cards/AgentCard.vue";
+import SandboxMetricsStrip from "../metrics/SandboxMetricsStrip.vue";
+import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
 import { uuid } from "../../../lib/uuid";
@@ -84,6 +86,9 @@ const {
 // Whole store, not a destructure: the first-screen connect offer acts on the focused chat, and the card is that
 // conversation's view as one object.
 const chat = useChat();
+// Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
+const liveMetrics = useLiveMetrics();
+provide(LIVE_METRICS_KEY, liveMetrics);
 // A refusal lands on the board's notice strip, since a press with no visible effect reads as broken.
 const synthesize = async (): Promise<void> => {
     const result = await synthesizeSessions();
@@ -1182,6 +1187,8 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </Button>
             </div>
         </div>
+        <!-- Opt-in (Settings ▸ Appearance): absent, nothing was measured, not merely hidden. -->
+        <SandboxMetricsStrip v-if="liveMetrics !== undefined" :metrics="liveMetrics" />
         <!-- Failures only: the layout shift and dismissal this costs suit something the user must read, not a routine action's receipt (which floats instead). -->
         <p v-if="notice !== undefined" class="flex shrink-0 items-center gap-2 border-b border-line bg-danger/10 px-3 py-1.5 text-2xs text-danger">
             <Icon name="exclamation-triangle" class="shrink-0 text-2xs" />

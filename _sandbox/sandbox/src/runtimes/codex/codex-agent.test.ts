@@ -5,6 +5,7 @@ import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
+import { WORKLOAD_ENV } from "../../platform/boot/leftovers.js";
 import { fakeCodexRunner } from "../../testing.js";
 import type { CodexEvent, CodexRunner } from "./codex-app-server.js";
 import { createCodexAgent } from "./codex-agent.js";
@@ -133,6 +134,17 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
     });
     expect(turn.env["CODEX_HOME"]).toBe("/work/.intentic/secrets/auth/codex");
     expect(turn.env["DISCORD_BOT_TOKEN"]).toBe("tok");
+});
+
+// The stamp is what the leftovers sweep reclaims by and what the Agents board attributes CPU and memory by. A turn with no
+// conversation invents none, so it keeps whatever this process was started with: nothing for a daemon, the running
+// turn's own stamp when the suite runs inside one.
+test("app-server carries the owner stamp of the conversation it works for, over any it inherited", async () => {
+    const { runner, calls } = fakeCodexRunner([]);
+    const agent = createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`);
+    await collect(agent, { ...request, conversationId: "conv-7" });
+    await collect(agent, request);
+    expect(calls.map((turn) => turn.env[WORKLOAD_ENV])).toEqual(["conv-7", process.env[WORKLOAD_ENV]]);
 });
 
 test("a subscription turn uses the translator bearer and the actor marker that unlocks image generation", async () => {

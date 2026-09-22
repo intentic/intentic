@@ -22,6 +22,7 @@ import {
     REPO_CHECKS_FILE,
     type RepoChecksList,
     SANDBOX_ROUTE_NAMES,
+    type SandboxMetrics,
     type SavingsReport,
     type SubagentsList,
     type SystemEvent,
@@ -35,6 +36,7 @@ import { BROWSER_SESSIONS } from "./browser";
 import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/access";
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoDevices } from "./fixture/devices";
+import { demoMetrics } from "./fixture/metrics";
 import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
@@ -325,6 +327,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     // A WebSocket can't carry a bearer header, so this ticket stands in for one per upgrade.
     [`POST`, `/system/ws-ticket`, () => json({ ticket: `demo-ticket` })],
     [`GET`, `/system/usage`, () => json({ accounts: [] })],
+    // Asked only while the board is open with geek metrics on; it drifts per request, so the polling is visible.
+    [`GET`, `/system/metrics`, () => json(demoMetrics(Date.now(), roster.agents) satisfies SandboxMetrics)],
     [
         `GET`,
         `/system/terminals`,

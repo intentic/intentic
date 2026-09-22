@@ -126,6 +126,8 @@ export const SANDBOX_MEMBERS = family(`members`);
 export const SKILLS = family(`skills`);
 export const SYNC_HEALTH = family(`sync-health`);
 export const TERMINALS = family(`terminals`);
+// The Agents board's opt-in CPU and memory readout; polled while shown, never pushed.
+export const LIVE_METRICS = family(`live-metrics`);
 export const USAGE_ROLLUP = family(`usage-rollup`);
 export const VPN = family(`vpn`);
 export const NETDISK = family(`netdisk`);

@@ -147,6 +147,18 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   this daemon read the live one's processes as a dead life's leavings and killed four agent turns mid-answer,
   and no amount of care in this file would have helped, because the file doing the killing was a checkout from
   a branch that predated the care.
+- What the sandbox is using right now is measured only when somebody asks.
+  [src/platform/resources/live-metrics.ts](../src/platform/resources/live-metrics.ts) answers `GET /system/metrics`,
+  which the Agents board polls every three seconds while it is open, visible, and its reader has turned Geek metrics
+  on (Settings ▸ Appearance), and at no other time: no timer and no background sample, and nothing held between
+  requests but the counters the next CPU figure is measured from and what each live process was found to be. A
+  conversation's figures are its processes by the same stamp the reaper reads, and its CPU is the growth of their
+  `utime+stime+cutime+cstime`, so a command a stamped shell ran and reaped between two polls still counts; the
+  sandbox's CPU is the cgroup's own `usage_usec`, and its memory the working set (`memory.current` less
+  `inactive_file`). Requests under a second apart share one scan, `/proc` is read eight files at a time, and a
+  process's `environ`, `cmdline` and `cgroup` are read once in its life, which puts a scan of ~160 processes at
+  2–5 ms. It is not the per-minute resource sample (`resource-metrics.ts`): that one is durable and always on,
+  this one exists only while watched.
 - Memory nobody is using is given back, on four clocks that do not share a mechanism because the things they
   watch do not. `memory.high` is set to 90% of `memory.max` in
   [docker-entrypoint.sh](../docker-entrypoint.sh), from inside, where cgroup2 is delegated rw and docker has no flag
