@@ -46,8 +46,10 @@ const fakeChrome = (options: { tabs: FakeTab[]; origins: string[] }) => {
     };
 };
 
-const install = (options: { tabs: FakeTab[]; origins: string[] }): void => {
-    Object.assign(globalThis, { chrome: fakeChrome(options), navigator: { userAgent: "Mozilla/5.0 Chrome/141.0.0.0 Windows" } });
+const install = (options: { tabs: FakeTab[]; origins: string[]; brave?: boolean }): void => {
+    // Brave's user agent IS Chrome's, verbatim: the flag is the whole difference between the two installs.
+    const navigator = { userAgent: "Mozilla/5.0 Chrome/141.0.0.0 Windows", ...(options.brave === true ? { brave: { isBrave: async () => true } } : {}) };
+    Object.assign(globalThis, { chrome: fakeChrome(options), navigator });
 };
 
 const call = async (name: string, args: Record<string, unknown> = {}): Promise<{ text: string; isError: boolean }> => {
@@ -94,6 +96,14 @@ test("describe tells the agent which sites it may work on before it tries one", 
     expect(result.isError).toBe(false);
     expect(result.text).toContain("github.com — read only");
     expect(result.text).toContain("Chrome 141 on Windows");
+});
+
+// A browser the person calls Brave must not introduce itself as Chrome: the card, this answer and the turn's prompt
+// all carry this string, and an agent that cannot match it to the browser in front of them reaches somewhere else.
+test("Brave says Brave, though its user agent says Chrome", async () => {
+    install({ tabs: [{ id: 7, windowId: 1, active: true, url: "https://github.com/x" }], origins: [], brave: true });
+    const result = await call("describe");
+    expect(result.text).toContain("Brave 141 on Windows");
 });
 
 test("a tool this browser does not have is an answer, not a transport error", async () => {

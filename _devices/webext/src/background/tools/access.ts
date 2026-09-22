@@ -27,26 +27,47 @@ export const refreshBadge = async (): Promise<void> => {
 
 // A browser's own account of itself, the answer to `describe` on the socket and the substance of its card.
 export const browserFacts = async (): Promise<WebExtFacts> => {
-    const [tabs, grants, paused] = await Promise.all([chrome.tabs.query({}), currentGrants(), store.paused()]);
-    return { browser: browserName(), tabs: tabs.length, grants, paused };
+    const [tabs, grants, paused, browser] = await Promise.all([chrome.tabs.query({}), currentGrants(), store.paused(), browserName()]);
+    return { browser, tabs: tabs.length, grants, paused };
 };
 
-// "Chrome 141 on Windows", parsed from the user-agent string since `navigator.userAgentData` isn't available in
+// Brave ships Chrome's user agent on purpose, so asking it is the only way to tell; any browser without the hook reads
+// as what its user agent says rather than failing. The person calls this browser Brave, and everything downstream —
+// their card, `describe`, the turn's own prompt — has to call it what they do.
+const isBrave = async (): Promise<boolean> => {
+    try {
+        return (await navigator.brave?.isBrave()) === true;
+    } catch {
+        return false;
+    }
+};
+
+// What a user agent claims to be, and the token its version follows. Chrome's token is in every Chromium UA, so it
+// reads last; Brave is absent because it claims Chrome's, and `isBrave` is the only thing that knows otherwise.
+const CLAIMS: readonly (readonly [token: string, name: string])[] = [
+    ["Edg/", "Edge"],
+    ["OPR/", "Opera"],
+    ["Firefox/", "Firefox"],
+    ["Chrome/", "Chrome"],
+];
+
+// ChromeOS before Linux: its user agent says both, and the more specific one is the machine a person is sitting at.
+const PLATFORMS: readonly (readonly [pattern: RegExp, name: string])[] = [
+    [/Windows/, "Windows"],
+    [/Mac OS X/, "macOS"],
+    [/CrOS/, "ChromeOS"],
+    [/Linux/, "Linux"],
+];
+
+// "Brave 141 on Windows", parsed from the user-agent string since `navigator.userAgentData` isn't available in
 // a service worker on every supported build; only has to be recognisable, not exact.
-const browserName = (): string => {
+const browserName = async (): Promise<string> => {
     const ua = navigator.userAgent;
-    const family = /Edg\/(\d+)/.exec(ua) ?? /OPR\/(\d+)/.exec(ua) ?? /Chrome\/(\d+)/.exec(ua) ?? /Firefox\/(\d+)/.exec(ua);
-    const name = ua.includes("Edg/") ? "Edge" : ua.includes("OPR/") ? "Opera" : ua.includes("Firefox/") ? "Firefox" : "Chrome";
-    const os = /Windows/.test(ua)
-        ? "Windows"
-        : /Mac OS X/.test(ua)
-          ? "macOS"
-          : /CrOS/.test(ua)
-            ? "ChromeOS"
-            : /Linux/.test(ua)
-              ? "Linux"
-              : "an unknown OS";
-    return `${name} ${family?.[1] ?? "?"} on ${os}`;
+    const [token, claimed] = CLAIMS.find(([candidate]) => ua.includes(candidate)) ?? ["Chrome/", "Chrome"];
+    const name = claimed === "Chrome" && (await isBrave()) ? "Brave" : claimed;
+    const version = new RegExp(`${token}(\\d+)`).exec(ua)?.[1] ?? "?";
+    const os = PLATFORMS.find(([pattern]) => pattern.test(ua))?.[1] ?? "an unknown OS";
+    return `${name} ${version} on ${os}`;
 };
 
 // What the agent is told when it asks what it may touch; reads as a list of sites, not match patterns, since a

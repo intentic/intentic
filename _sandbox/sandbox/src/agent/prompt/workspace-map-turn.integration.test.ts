@@ -86,6 +86,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
         // No device connected in these arms, which is what the daemon answers with none granted; a turn asks on
         // every plan, so every arm needs it.
         hostReach: async () => undefined,
+        webextReach: async () => undefined,
         async *codexAgent() {},
         async *grokAgent() {},
         async *agent() {},

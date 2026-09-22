@@ -273,6 +273,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         // No connected device, which is what the daemon answers with no host card granted; every planned turn asks,
         // so every route running a turn needs it.
         hostReach: async () => undefined,
+        // Same for the owner's own browsers: none connected, asked by every planned turn.
+        webextReach: async () => undefined,
         // Both composed exactly as composition.ts composes them, over this harness's own history root and stores, so a
         // suite exercises the real reader and the real queue rather than a second description of them.
         syncFleet: () => enrolledFleet((rest.config ?? testConfig).historyRoot),

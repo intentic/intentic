@@ -72,6 +72,10 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
         portability: "derived",
         note: "Each conversation records what it was told again on its next turn.",
     },
+    // What each connected machine and browser publishes as its tools, so one that is asleep still appears in a turn
+    // (peers/peer-tool-memory.ts). Re-asked of every peer the moment it reconnects, and about software that stayed
+    // behind on somebody else's computer, so it is not worth carrying.
+    { path: "peer-tools.json", portability: "derived" },
     { path: "overlays/", portability: "derived" },
     { path: "logs/", portability: "derived" },
     { path: "trash/", portability: "derived" },

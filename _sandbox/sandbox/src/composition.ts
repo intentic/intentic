@@ -132,11 +132,20 @@ import { fileIssuesStore, type IssuesStore } from "./issues/issues-store.js";
 import { fileInstallsStore, type InstallsStore } from "./store/installs.js";
 import { HOST_PEER, type HostAnnounced, type HostClient, type HostHub, type HostStore } from "./hosts/host-peer.js";
 import { hostDeviceReach, type HostDeviceReach } from "./hosts/self-host.js";
-import { WEBEXT_PEER, type WebExtAnnounced, type WebExtClient, type WebExtHub, type WebExtStore } from "./webext/webext-peer.js";
+import {
+    ownBrowserReach,
+    type OwnBrowserReach,
+    WEBEXT_PEER,
+    type WebExtAnnounced,
+    type WebExtClient,
+    type WebExtHub,
+    type WebExtStore,
+} from "./webext/webext-peer.js";
 import { RUNNER_PEER, type RunnerAnnounced, type RunnerClient, type RunnerHub, type RunnerStore } from "./runners/runner-peer.js";
 import type { ParentCredentials } from "./runners/runner-credentials.js";
 import { createPeerHub } from "./peers/peer-hub.js";
 import { filePeerStore } from "./peers/peer-store.js";
+import { filePeerTools } from "./peers/peer-tool-memory.js";
 import { fetchPresentation, type SandboxPresentation } from "./platform/platform-client.js";
 import { enrolledFleet, type SyncFleet, syncPairBurnPath, type SyncMode } from "./platform/sync.js";
 import { pairings, type Pairings } from "./store/enrollment.js";
@@ -343,6 +352,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     readonly webextBridgeToken: string;
     readonly webexts: WebExtStore;
     readonly webextHub: WebExtHub;
+    // Which of the owner's own browsers a turn may work in, and what each of them is, for the same reason hostReach
+    // exists: the prompt names the browser in front of the person without the agent importing the webext subsystem.
+    readonly webextReach: (granted: readonly Capability[]) => Promise<OwnBrowserReach | undefined>;
     // This sandbox's own runner containers on other machines: same enrollment and hub, no grant, no MCP bridge.
     readonly runners: RunnerStore;
     readonly runnerHub: RunnerHub;
@@ -1086,6 +1098,10 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Named once at boot: from outside the engine is one more node child, and this answers which holds the memory.
     logger.info({ enginePid: iq.pid() }, "iq search engine running in its own process");
 
+    // One tool table per connected peer, shared by every door: what a turn lists for a machine or a browser that is
+    // asleep right now, and the reason a restart doesn't make one vanish from the next turn's tools.
+    const peerTools = filePeerTools(config.historyRoot, logger);
+
     // The backend supervisor enumerates extensions through the finished services object, so it needs a thunk after.
     const servicesHolder: { current?: Services } = {};
     const services: Services = {
@@ -1144,13 +1160,15 @@ export const createServices = (config: Config, logger: Logger): Services => {
         // Reads only readings already held (hosts/self-host.ts), so composing a turn never waits on a laptop.
         hostReach: (granted) => hostDeviceReach(services, granted),
         syncFleet: () => enrolledFleet(config.historyRoot),
-        hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger),
+        hostHub: createPeerHub<HostClient, HostAnnounced, DeviceFacts, DeviceScopes>(HOST_PEER.hub, logger, peerTools),
         browserBridgeToken: randomBytes(32).toString("hex"),
         webextBridgeToken: randomBytes(32).toString("hex"),
         webexts: filePeerStore(config.historyRoot, WEBEXT_PEER.store),
-        webextHub: createPeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>(WEBEXT_PEER.hub, logger),
+        webextHub: createPeerHub<WebExtClient, WebExtAnnounced, WebExtFacts, WebExtScopes>(WEBEXT_PEER.hub, logger, peerTools),
+        // Held readings only (webext/webext-peer.ts), like hostReach: a browser that is closed costs the turn nothing.
+        webextReach: (granted) => ownBrowserReach(services, granted),
         runners: filePeerStore(config.historyRoot, RUNNER_PEER.store),
-        runnerHub: createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, logger),
+        runnerHub: createPeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>(RUNNER_PEER.hub, logger, peerTools),
         syncPairings: pairings<SyncMode>(syncPairBurnPath(config.historyRoot)),
         runnerParent: {},
         info,

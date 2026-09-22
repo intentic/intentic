@@ -1,5 +1,14 @@
+import { join } from "node:path";
 import { expect, test } from "vitest";
-import { browserCandidates, executableFromCommand, executableFromDesktopEntry, isChromiumFamily, registryValue } from "./launch.js";
+import {
+    browserCandidates,
+    executableFromCommand,
+    executableFromDesktopEntry,
+    isChromiumFamily,
+    pickBrowser,
+    profileDir,
+    registryValue,
+} from "./launch.js";
 import { refIndex, renderPage, toPageState } from "./page.js";
 import { SNAPSHOT_SCRIPT } from "./snapshot.js";
 
@@ -116,6 +125,39 @@ test("a desktop entry yields its Exec without the field codes the launcher subst
     const entry = ["[Desktop Entry]", "Name=Brave Web Browser", "Exec=/usr/bin/brave-browser-stable %U", "Type=Application"].join("\n");
     expect(executableFromDesktopEntry(entry)).toBe("/usr/bin/brave-browser-stable");
     expect(executableFromDesktopEntry("[Desktop Entry]\nName=No Exec Here")).toBeUndefined();
+});
+
+// The case this rule exists for, from a real machine: Windows answers "MSEdgeHTM" for https on a PC whose owner
+// installed Brave and lives in it, and the automation profile carries nothing of theirs either way.
+test("an installed browser beats the one the OS shipped and claimed the association for", () => {
+    const brave = "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe";
+    const edge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+    expect(pickBrowser(edge, [brave, edge])).toBe(brave);
+    expect(pickBrowser("/usr/bin/microsoft-edge", ["/usr/bin/brave-browser", "/usr/bin/microsoft-edge"])).toBe("/usr/bin/brave-browser");
+    // Edge is all there is: the fallback is still a working browser, not a refusal.
+    expect(pickBrowser(edge, [edge])).toBe(edge);
+});
+
+// Found on a real machine mid-switch: ~/.intentic/browser held "Last Version 153.0.4234.48" from Edge, and Chromium
+// refuses a profile from a build newer than its own — so a shared directory turns "open Brave instead" into a dialog.
+test("each browser automates on a profile of its own", () => {
+    const brave = profileDir("C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe");
+    const edge = profileDir("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe");
+    expect(brave).not.toBe(edge);
+    expect(brave.endsWith(join(".intentic", "browser", "brave"))).toBe(true);
+    expect(edge.endsWith(join(".intentic", "browser", "msedge"))).toBe(true);
+    // The same browser, whichever path it was found at, keeps the profile it signed in on.
+    expect(profileDir("/usr/bin/brave-browser")).toBe(profileDir("/snap/bin/brave-browser"));
+});
+
+test("a default the owner actually chose is the one that opens", () => {
+    const chrome = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+    const brave = "C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe";
+    // Chrome is the OS's answer while Brave outranks it in the guesses; the answer wins, since it is a choice.
+    expect(pickBrowser(chrome, [brave, chrome])).toBe(chrome);
+    // No answer at all (a Firefox default, an OS that would not say): the best-ranked install.
+    expect(pickBrowser(undefined, [brave, chrome])).toBe(brave);
+    expect(pickBrowser(undefined, [])).toBeUndefined();
 });
 
 // A default that cannot be driven over CDP is a reason to fall back to the guesses, not to refuse to start.

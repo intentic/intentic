@@ -113,3 +113,8 @@ declare namespace chrome {
         function setTitle(details: { title: string }): Promise<void>;
     }
 }
+
+/* Brave's one addition to the platform, and the only way to tell it apart: its user agent is Chrome's, deliberately. */
+interface Navigator {
+    readonly brave?: { isBrave: () => Promise<boolean> };
+}

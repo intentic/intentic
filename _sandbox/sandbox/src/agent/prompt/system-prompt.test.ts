@@ -357,6 +357,36 @@ test("a connected device is named, with the machine running this sandbox called 
     expect(preset.append).toContain("`ada-laptop`");
 });
 
+// The failure this paragraph exists for: with their own browser connected, a turn still opened a fresh automation
+// profile on their laptop for a page that needed their login. It names the browser as they know it, and says which of
+// the two to reach for.
+test("the owner's own browser is named, as the browser they see, and preferred over one on a machine", () => {
+    const prompt = sdkSystemPrompt({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        hostDevices: { ids: ["rog"] },
+        ownBrowsers: { browsers: [{ id: "chrome", what: "Brave 141 on Windows" }] },
+    }) as string;
+    expect(prompt).toContain("`chrome` (Brave 141 on Windows)");
+    expect(prompt).toContain("ToolSearch (`+mcp__chrome__`)");
+    expect(prompt).toContain("BEFORE a browser on a connected machine");
+    // A closed browser is an answer to relay, which is what stops the turn from going looking for another way in.
+    expect(prompt).toContain("shut laptop");
+    // The devices paragraph comes first, so the sentence choosing between them reads last.
+    expect(prompt.indexOf("The owner's own computers are connected")).toBeLessThan(prompt.indexOf("The owner's OWN browser is connected"));
+
+    // A browser that has never said what it is is still named; only the parenthesis goes.
+    const unread = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [{ id: "chrome" }] } }) as string;
+    expect(unread).toContain("this turn: `chrome`, behind deferred tools");
+
+    // No browser connected, or a card with none granted: no sentence at all rather than one about absent tools.
+    const none = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined }) as string;
+    expect(none).not.toContain("The owner's OWN browser");
+    const empty = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [] } }) as string;
+    expect(empty).not.toContain("The owner's OWN browser");
+});
+
 // ONE CARD, SEVERAL OS INSTALLS. A turn told only the machine's id would look for a second device that does not
 // exist, or run a Linux path through PowerShell. The sentence names the sides, how `in` picks one, and the two names
 // every folder has.

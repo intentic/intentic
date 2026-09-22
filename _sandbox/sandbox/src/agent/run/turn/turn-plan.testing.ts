@@ -79,6 +79,8 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
         // No device connected, which is what the daemon answers with no host card granted; every planned turn asks,
         // so it belongs in the shared fixture rather than in each arm.
         hostReach: async () => undefined,
+        // Same for the owner's own browsers: none connected, which every planned turn asks about too.
+        webextReach: async () => undefined,
         // Read on every planned turn that mounts a browser stack, to point that turn's routers back at this daemon.
         browserBridgeToken: "test-browser-bridge-token",
         // No translator and no api key: the state both Codex gates refuse from, where most cases here start.

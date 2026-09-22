@@ -2,6 +2,7 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { type AgentCapabilities, type SystemPromptMode, type TurnNote, windowsPathOf, wslPathOf } from "@intentic/sandbox-contract";
 import type { EnvironmentReach, HostDeviceReach, MachineReach } from "../../hosts/self-host.js";
+import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
@@ -228,6 +229,24 @@ const hostDeviceGuidance = ({ ids, self, slug, machines }: HostDeviceReach): str
     );
 };
 
+// THE PERSON'S OWN BROWSER IS NOT A LAST RESORT. Without this paragraph a connected browser exists only as a skill
+// file, and a turn that wants a signed-in page starts a fresh automation profile on one of their machines instead —
+// signed into nothing, in whichever browser that machine's OS hands back. Says what each one IS, since the owner's
+// word for it ("my Brave") has to match something here.
+const ownBrowserGuidance = ({ browsers }: OwnBrowserReach): string => {
+    const named = browsers.map((browser) => `\`${browser.id}\`${browser.what === undefined ? `` : ` (${browser.what})`}`).join(", ");
+    return (
+        `The owner's OWN browser is connected to this turn: ${named}, behind deferred tools you load with ToolSearch ` +
+        `(\`+mcp__${browsers[0]?.id ?? "browser"}__\`). It runs on their computer with their sessions in it, and they ` +
+        `are watching the tab as you work. It is the way to do anything that has to be THEM — a site behind their ` +
+        `login, a passkey, a page a datacentre IP cannot load — and its skill holds the rules for acting in one. ` +
+        `Reach for it BEFORE a browser on a connected machine: a machine's \`browser_*\` tools open a separate ` +
+        `automation profile signed into nothing, so using one for a page that needs the owner ends in asking them to ` +
+        `sign in again somewhere they are already signed in. When a call answers that the browser is closed, that is ` +
+        `a shut laptop and an honest answer: say so, rather than opening a browser somewhere else.`
+    );
+};
+
 // Names the situation, not just the tool: pinning the schema alone didn't stop the model from writing commands out in
 // prose for the owner to run by hand. Gated on the server actually being mounted (attended turn, tmux wrapper on).
 const TERMINAL_GUIDANCE =
@@ -408,6 +427,8 @@ export interface SdkSystemPromptInput {
     readonly terminal?: boolean;
     // The devices this turn can act on; absent or `ids: []` ⇒ no sentence about running things out there at all.
     readonly hostDevices?: HostDeviceReach | undefined;
+    // The owner's own browsers this turn can work in; absent or empty ⇒ no sentence about theirs at all.
+    readonly ownBrowsers?: OwnBrowserReach | undefined;
     // What the model's window will not pay for; carried this far so the composed prompt and the disclosed one shed the
     // same pieces.
     readonly trim?: PromptTrim;
@@ -424,6 +445,7 @@ export interface PromptRequest {
     readonly browserAccounts?: Record<string, string>;
     readonly diagnostics?: boolean;
     readonly hostDevices?: HostDeviceReach | undefined;
+    readonly ownBrowsers?: OwnBrowserReach | undefined;
     readonly contextTrim?: PromptTrim;
 }
 
@@ -447,6 +469,7 @@ export const promptInputOf = (request: PromptRequest, terminal: boolean): SdkSys
     diagnostics: request.diagnostics === true,
     terminal,
     hostDevices: request.hostDevices,
+    ownBrowsers: request.ownBrowsers,
     ...(request.contextTrim === undefined ? {} : { trim: request.contextTrim }),
 });
 
@@ -470,6 +493,7 @@ const untrimmedGuidance = ({
     diagnostics,
     terminal,
     hostDevices,
+    ownBrowsers,
 }: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
     // First and unconditional: under the Claude preset, this is the only place the product gets named.
     SELF_GUIDANCE,
@@ -490,6 +514,8 @@ const untrimmedGuidance = ({
     ...(terminal === true ? [TERMINAL_GUIDANCE] : []),
     // Only with a device actually mounted: the whole sentence is about tools this turn can load.
     ...(hostDevices === undefined || hostDevices.ids.length === 0 ? [] : [hostDeviceGuidance(hostDevices)]),
+    // After the devices, on purpose: the sentence that says which of the two to reach for reads last.
+    ...(ownBrowsers === undefined || ownBrowsers.browsers.length === 0 ? [] : [ownBrowserGuidance(ownBrowsers)]),
 ];
 
 // A string replaces Claude Code's preset outright (the SDK's documented behaviour): how both `intentic` and `custom`

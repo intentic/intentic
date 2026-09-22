@@ -81,6 +81,7 @@ import { checklistCloseHooks } from "./checklist-close.js";
 import { checklistSeedOf } from "./task-store.js";
 import { type PromptTrim, promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
 import type { HostDeviceReach } from "../../hosts/self-host.js";
+import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
 import { ASK_TOOL_NAMES, formatAnswers } from "../tools/question-answers.js";
@@ -185,6 +186,9 @@ export interface AgentRequest {
     // The connected devices this turn carries servers for, which of them runs this sandbox (when the daemon's held
     // readings name it) and this container's slug out there: what the prompt needs to say "run it there yourself".
     readonly hostDevices?: HostDeviceReach | undefined;
+    // The owner's own browsers this turn carries servers for, and what each of them is: what the prompt needs to say
+    // the browser they are watching is right here.
+    readonly ownBrowsers?: OwnBrowserReach | undefined;
     // Whether the iq plugin is actually loaded, so the empty-search notice can name it only where it's real.
     readonly iqAvailable?: boolean;
     // Each browser profile owner's CDP debugging port, so the first browser call can register a watchable session.

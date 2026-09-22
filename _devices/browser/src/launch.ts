@@ -6,14 +6,21 @@ import { probe, waitForPort } from "./cdp.js";
 import { BrowserError } from "./types.js";
 
 // Gets a browser that speaks CDP; only one started with --remote-debugging-port qualifies, so an existing endpoint
-// is reused if present, else a separate instance launches with its own profile at ~/.intentic/browser. The
-// user's own browser, cookies and session are never opened or automated.
+// is reused if present, else a separate instance launches with its own profile under ~/.intentic/browser, one
+// directory per browser. The user's own browser, cookies and session are never opened or automated.
 
 // Fixed rather than random, so a user can find it and a restart can reconnect to the browser it left running.
 export const DEFAULT_PORT = 9222;
 
-// Beside the agents' homes, never inside one: this package is standalone, and the profile outlives any agent.
-export const profileDir = (): string => join(homedir(), ".intentic", "browser");
+// The directory name a binary's profile gets: its own filename, so two browsers never share one. Both separators, not
+// node's `basename`: a Windows path is parsed here whenever it is read off a Windows registry on a non-Windows build.
+export const browserFamily = (binary: string): string => (binary.split(/[/\\]/).pop() ?? "").replace(/\.exe$/i, "").toLowerCase() || "browser";
+
+// Beside the agents' homes, never inside one: this package is standalone, and the profile outlives any agent. One per
+// browser, not one shared: a user-data-dir records the version that wrote it, and Chromium refuses a profile from a
+// newer build than its own — so a machine that ran Edge once would answer a later Brave with a dialog nobody is there
+// to dismiss.
+export const profileDir = (binary: string): string => join(homedir(), ".intentic", "browser", browserFamily(binary));
 
 // Only a Chromium-family binary speaks CDP, so a default of Firefox or Safari is a reason to fall back to the
 // guesses rather than to fail. Matches the name Edge, Brave, Opera and Vivaldi each ship under.
@@ -137,21 +144,38 @@ const linuxDefault = async (): Promise<string | undefined> => {
     return exec === undefined ? undefined : resolveBin(exec);
 };
 
-// The user's own choice first, asked of the OS rather than guessed: the browser they set as default is the one
-// their extensions, and the logins they will be asked to perform, are in. Only a Chromium-family answer is usable.
+// The user's own choice, asked of the OS rather than guessed: which app their machine opens a link with. Only a
+// Chromium-family answer is usable, since nothing else speaks CDP.
 export const defaultBrowser = async (platform: NodeJS.Platform = process.platform): Promise<string | undefined> => {
     const path = platform === "win32" ? await windowsDefault() : platform === "linux" ? await linuxDefault() : undefined;
     return path !== undefined && isChromiumFamily(path) && existsSync(path) ? path : undefined;
 };
 
-const findBrowser = async (): Promise<string | undefined> =>
-    (await defaultBrowser()) ?? browserCandidates(process.platform).find((path) => existsSync(path));
+// The browser an OS installs and points its https association at on its own. Windows does this with Edge, so "the
+// default browser is Edge" is as true of a PC whose owner chose it as of one whose owner never chose anything.
+export const shippedWithOs = (path: string): boolean => /(msedge|microsoft-edge)/i.test(path);
+
+// Which browser to open, from the OS's answer and what is actually installed (candidate order, most-preferred first).
+// The OS default wins, EXCEPT when it is the browser the OS shipped and something else was installed on purpose:
+// nobody installs Brave by accident, and an owner who never opened Windows' default-apps pane has not chosen Edge.
+// Nothing of theirs rides on the choice either way — this runs on its own profile at profileDir(), never their own, so
+// it carries none of their extensions or logins whichever binary starts.
+export const pickBrowser = (chosen: string | undefined, installed: readonly string[]): string | undefined => {
+    const deliberate = installed.find((path) => !shippedWithOs(path));
+    return chosen !== undefined && !(shippedWithOs(chosen) && deliberate !== undefined) ? chosen : (deliberate ?? installed[0]);
+};
+
+const findBrowser = async (platform: NodeJS.Platform = process.platform): Promise<string | undefined> =>
+    pickBrowser(
+        await defaultBrowser(platform),
+        browserCandidates(platform).filter((path) => existsSync(path)),
+    );
 
 // `--remote-debugging-port` is the point; the rest suppress a person-like UI (crash-restore prompt, first-run
 // tour, default-browser check).
-const flags = (port: number, url: string | undefined): string[] => [
+const flags = (binary: string, port: number, url: string | undefined): string[] => [
     `--remote-debugging-port=${port}`,
-    `--user-data-dir=${profileDir()}`,
+    `--user-data-dir=${profileDir(binary)}`,
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-session-crashed-bubble",
@@ -176,7 +200,7 @@ export const ensureBrowser = async (port: number = DEFAULT_PORT, url?: string): 
         );
     }
     // Detached with streams discarded: the browser must outlive this call and not block on an undrained pipe.
-    const child = spawn(binary, flags(port, url), { detached: true, stdio: "ignore" });
+    const child = spawn(binary, flags(binary, port, url), { detached: true, stdio: "ignore" });
     child.unref();
     await waitForPort(port, START_TIMEOUT_MS);
     return { started: true };

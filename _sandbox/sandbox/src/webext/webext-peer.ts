@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { type webextContract,WEBEXT_HEARTBEAT_MS,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
+import { type Capability,type webextContract,WEBEXT_HEARTBEAT_MS,type WebExtFacts,type WebExtHello,WebExtHelloSchema,type WebExtScopes,type WebExtSummary } from "@intentic/sandbox-contract";
 import type { ContractRouterClient } from "@orpc/contract";
 import type { Services } from "../composition.js";
 import { PEER_BRIDGES, type PeerDoor } from "../peers/peer.js";
@@ -96,6 +96,33 @@ export const webextSummaries = async (services: Services): Promise<WebExtSummary
                   ],
         ),
     );
+
+// One of the owner's own browsers as a turn needs to know it: the name its tools are prefixed with, and what the
+// person sitting in front of it calls it ("Brave 141 on Windows", from its last `describe`).
+export interface OwnBrowser {
+    readonly id: string;
+    readonly what?: string | undefined;
+}
+
+// One entry per granted browser card, which is exactly the set `peerToolsOf("webext", …)` mounts for the turn;
+// undefined with no card at all, so a prompt composed from it says nothing rather than promising tools that aren't
+// there. Liveness is deliberately absent: a browser is named whether or not it holds a socket this second, and whether
+// it is reachable right now is what a call to it answers.
+export interface OwnBrowserReach {
+    readonly browsers: readonly OwnBrowser[];
+}
+
+// Reads only what the hub already holds — no `describe` round trip — so composing a turn never waits on a laptop.
+export const ownBrowserReach = async (services: Services, granted: readonly Capability[]): Promise<OwnBrowserReach | undefined> => {
+    const browsers = granted.flatMap((capability): OwnBrowser[] => {
+        if (capability.kind !== "webext") {
+            return [];
+        }
+        const what = services.webextHub.state(capability.id).facts?.browser;
+        return [{ id: capability.id, ...(what === undefined ? {} : { what }) }];
+    });
+    return browsers.length === 0 ? undefined : { browsers };
+};
 
 export const webextPeerRoutes = (services: Services) =>
     createPeerRoutes(services, WEBEXT_PEER, {

@@ -1,9 +1,13 @@
+import { converterReadable } from "@intentic/sandbox-contract/peer-mcp-server";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
 import type { PeerHubSpec } from "./peer.js";
+import { memoryPeerTools, type PeerToolMemory } from "./peer-tool-memory.js";
 
 // Live half of a peer door: who holds a socket, and the typed client for each; correlating request/response is the
-// link's job. In-memory only: online is a socket fact that doesn't survive a restart, and persisting it would let the
-// UI claim a reach the daemon doesn't have.
+// link's job. Liveness is in-memory only: online is a socket fact that doesn't survive a restart, and persisting it
+// would let the UI claim a reach the daemon doesn't have. What a peer PUBLISHES is the opposite case and does persist
+// (peer-tool-memory.ts): a turn must be able to list an asleep browser's tools and be told it is asleep, rather than
+// not see it at all.
 
 // What every peer's contract answers; method-typed so an oRPC client satisfies it structurally. Optional where only
 // some doors have the procedure (a runner has no MCP pipe or grant).
@@ -61,13 +65,36 @@ export interface PeerHub<Client extends PeerClient<Facts, Scopes>, Announced, Fa
     readonly state: (id: string) => PeerState<Announced, Facts>;
 }
 
+// How long a peer has to answer for its tool table at connect; past that, whatever was remembered stands.
+const TOOLS_TIMEOUT_MS = 10_000;
+
 export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes>(
     spec: PeerHubSpec,
     logger: { warn: (data: object, message: string) => void },
+    // Where tool tables outlive this process; in-memory when a caller has no durable one (tests, the bench).
+    memory: PeerToolMemory = memoryPeerTools(),
 ): PeerHub<Client, Announced, Facts, Scopes> => {
     const live = new Map<string, LivePeer<Client, Announced, Facts>>();
     const seen = new Map<string, { announced: Announced; facts: Facts | undefined; lastSeen: number }>();
-    const tools = new Map<string, unknown>();
+    // One file serves every door, so a peer's tools are keyed by the door they came through as well as its own name.
+    const toolKey = (id: string): string => `${spec.domain}:${id}`;
+
+    // Asked for the moment a peer connects rather than whenever a turn first happens to list them: a browser paired
+    // between turns, or one whose laptop shut since, must still publish its tools rather than dropping out of the turn.
+    const learnTools = async (id: string, client: Client): Promise<void> => {
+        if (client.mcp === undefined) {
+            return;
+        }
+        const answer = (await client.mcp(
+            { jsonrpc: "2.0", id: `${spec.domain}-tools`, method: "tools/list", params: {} },
+            { signal: AbortSignal.timeout(TOOLS_TIMEOUT_MS) },
+        )) as { readonly result?: unknown };
+        if (answer.result !== undefined) {
+            // Converted here as the bridge converts a turn's own listing, so what an asleep peer publishes is byte-for
+            // byte what a live one does.
+            memory.set(toolKey(id), converterReadable(answer.result));
+        }
+    };
 
     // Only signal for this hub's state; never call from `refresh`, or a reader path would refetch itself forever.
     const said = (): void => publishRuntimeChange(spec.domain);
@@ -108,6 +135,11 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             };
             live.set(id, peer);
             said();
+            // Not awaited: a socket must be usable the moment it attaches, and a peer too slow to answer keeps
+            // whatever tool table it last published.
+            void learnTools(id, connection.client).catch((err: unknown) =>
+                logger.warn({ err, id }, `${spec.domain}: could not read this peer's tool list on connect`),
+            );
             return () => {
                 const current = live.get(id);
                 if (current === peer) {
@@ -163,8 +195,8 @@ export const createPeerHub = <Client extends PeerClient<Facts, Scopes>, Announce
             await peer.client.setScopes(scopes);
             return true;
         },
-        rememberTools: (id, result) => void tools.set(id, result),
-        knownTools: (id) => tools.get(id),
+        rememberTools: (id, result) => memory.set(toolKey(id), result),
+        knownTools: (id) => memory.get(toolKey(id)),
         disconnect: (id, reason) => {
             const peer = live.get(id);
             if (peer === undefined) {

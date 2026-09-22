@@ -829,6 +829,9 @@ export const planHarnessTurn = async (
     // this sandbox when the held readings already name it. Through Services, since the hosts subsystem reaches back
     // into this one (host-command-guard.ts) and two subsystems must not import each other's values.
     const hostDevices = await services.hostReach(granted);
+    // The same for the owner's own browsers: the cards peerToolsOf mounted, so a turn knows the browser they are
+    // sitting in front of is one of its tools rather than driving a machine's automation profile instead.
+    const ownBrowsers = await services.webextReach(granted);
     const { hashlineEdits, iqSearch, outputCleaners, outputHoldout, rules, subagentsAtOnce, subagentsPerTurn, subagentDepth, actionRules } = settings;
     // Standing, not matching: conditions are read at Stop, once the turn has actually edited something to narrow on.
     const turnEndingRules = standing(rules, "turn.ending");
@@ -1034,6 +1037,9 @@ export const planHarnessTurn = async (
             // The machines this turn can act on, so the prompt tells it to run things there instead of writing out a
             // command for the owner to paste on a box we can reach.
             hostDevices,
+            // The owner's own browsers, for the other half of that: the browser they are watching beats one this turn
+            // would have to start on a machine, and nothing else in the prompt says it is there.
+            ownBrowsers,
             // Whether this turn actually carries the iq plugin, so the empty-`rg` notice names iq only where it's real.
             iqAvailable: iqLoaded,
             // Debugging ports for those Chromiums, so the first browser call can register a session the owner can

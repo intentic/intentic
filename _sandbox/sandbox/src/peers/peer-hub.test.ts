@@ -144,6 +144,49 @@ test("the tool list survives a peer going offline, so an asleep laptop stays usa
     expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "run_command" }] });
 });
 
+// Waiting for a turn to list them is what left a browser connected between turns publishing nothing: it went to sleep
+// before anything asked, and the turn that followed could not see it at all.
+test("a peer is asked for its tools the moment it connects, not when a turn first wants them", async () => {
+    const live = hub();
+    const peer = fakePeer();
+    peer.client.mcp.mockResolvedValueOnce({ jsonrpc: "2.0", id: "hosts-tools", result: { tools: [{ name: "screenshot" }] } });
+    const detach = live.attach("laptop", peer.connection);
+    await vi.waitFor(() => expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "screenshot" }] }));
+    expect(peer.client.mcp).toHaveBeenCalledWith(
+        { jsonrpc: "2.0", id: "hosts-tools", method: "tools/list", params: {} },
+        expect.objectContaining({ signal: expect.anything() }),
+    );
+    detach();
+    expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "screenshot" }] });
+});
+
+// A peer that cannot answer at connect is the ordinary case of a dying socket, not a reason to forget what it published
+// last time; nor may it take the attach down with it.
+test("a peer that will not answer for its tools keeps the ones it published before", async () => {
+    const live = hub();
+    live.rememberTools("laptop", { tools: [{ name: "run_command" }] });
+    const peer = fakePeer();
+    peer.client.mcp.mockRejectedValueOnce(new Error("gone"));
+    live.attach("laptop", peer.connection);
+    expect(live.online("laptop")).toBe(true);
+    await vi.waitFor(() => expect(peer.client.mcp).toHaveBeenCalledTimes(1));
+    expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "run_command" }] });
+});
+
+// The memory outlives the process, which is the half a restart used to lose: a browser shut overnight would come back
+// with no tools at all, and a turn reading its skill would find nothing to call.
+test("a hub built over a memory that already holds a peer lists its tools before it ever connects", () => {
+    const stored = new Map<string, unknown>([["hosts:laptop", { tools: [{ name: "run_command" }] }]]);
+    const live = createPeerHub<Client, { version: string }, Facts, Scopes>(spec, logger, {
+        get: (key) => stored.get(key),
+        set: (key, tools) => void stored.set(key, tools),
+    });
+    expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "run_command" }] });
+    live.rememberTools("laptop", { tools: [{ name: "run_command" }, { name: "screenshot" }] });
+    // Keyed by door as well as name, since one memory serves every door.
+    expect(stored.get("hosts:laptop")).toEqual({ tools: [{ name: "run_command" }, { name: "screenshot" }] });
+});
+
 /* A lid closing does not always produce a close frame: the socket can simply stop answering. */
 test("a peer that stops answering the heartbeat is dropped", async () => {
     vi.useFakeTimers();
