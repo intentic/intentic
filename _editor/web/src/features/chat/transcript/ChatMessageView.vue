@@ -362,11 +362,27 @@ watch(
         const host = element.closest<HTMLElement>(`.chat-pin-host`);
         // `top: -1px` is the pin's own offset: the row's last pixel sits that far above the scroller's edge.
         const publish = (): void => host?.style.setProperty(`--chat-pin`, `${element.offsetHeight - 1}px`);
+        // Read off the row rather than off `pinned`, which leads the DOM by a render: what the next measurement has to
+        // account for is the geometry on screen, not the intent.
+        const collapsed = (): boolean => element.classList.contains(`chat-prompt-pinned`);
+        // This row's height in px while it wraps, remembered because a collapsed row cannot be asked what it would grow
+        // back to.
+        let loose = 0;
         // Compares against the midpoint of the row's 1px sticky offset, robust to fractional scroll position or display
         // scaling.
+        // PINNING SHORTENS THE TRANSCRIPT BY WHAT THE ONE-LINE TITLE FREES, so the pin cannot be measured without
+        // hysteresis worth that much: parked at the foot of the scroller there is no scroll left below to absorb the
+        // loss, the browser clamps scrollTop to the smaller maximum, and this row's own flow position drops by the
+        // freed px — past the edge, which unpins it, which restores the height, which pins it again, at frame rate, for
+        // as long as the reader stays at the foot of a turn whose remaining content is within one collapse of filling
+        // the pane. Below the edge by less than its own collapse freed, this row is still the pinned one.
         const sync = (): void => {
             const edge = scroller.getBoundingClientRect().top + scroller.clientTop;
-            pinned.value = element.getBoundingClientRect().top < edge - 0.5;
+            if (!collapsed()) {
+                loose = element.offsetHeight;
+            }
+            const freed = collapsed() ? Math.max(0, loose - element.offsetHeight) : 0;
+            pinned.value = element.getBoundingClientRect().top < edge - 0.5 + freed;
         };
         let listening = false;
         const listen = (on: boolean): void => {

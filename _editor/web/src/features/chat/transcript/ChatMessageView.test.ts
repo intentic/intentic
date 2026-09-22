@@ -833,6 +833,56 @@ describe(`ChatMessageView pinned band`, () => {
 
         expect(row.className).not.toContain(`chat-prompt-pinned`);
     });
+
+    // A TURN WHOSE REMAINING CONTENT IS WITHIN ONE COLLAPSE OF FILLING THE PANE, read from the foot of the scroller:
+    // the band's own one-line title frees the px it saves, there is no scroll left below to absorb them, so the clamped
+    // scroll hands them back and the row's flow position drops by that much — below the edge, where the same
+    // measurement says unpin. Measured without hysteresis the two states chased each other at frame rate (~180 class
+    // flips a second in the popped-out chat). Both boxes answer from the class actually on the row, which is the loop.
+    const feedback = (row: HTMLElement, wrapped: { top: number; height: number }, titled: { top: number; height: number }): void => {
+        const collapsed = (): boolean => row.className.includes(`chat-prompt-pinned`);
+        row.getBoundingClientRect = (): DOMRect => rectAt(collapsed() ? titled.top : wrapped.top);
+        Object.defineProperty(row, `offsetHeight`, { configurable: true, get: () => (collapsed() ? titled.height : wrapped.height) });
+    };
+
+    // Each round is the browser observing the height the round before changed, which is how the loop ran.
+    const rounds = async (row: HTMLElement, fire: () => void): Promise<number> => {
+        let flips = 0;
+        let previous = row.className;
+        for (let round = 0; round < 10; round += 1) {
+            fire();
+            await nextTick();
+            if (row.className === previous) {
+                break;
+            }
+            previous = row.className;
+            flips += 1;
+        }
+        return flips;
+    };
+
+    it(`settles pinned when its own collapse is what drops the row back past the edge`, async () => {
+        const { row } = await mountInTranscript();
+        // Stuck 44px above the edge while the prompt wraps, 12px below it as a one-line title: 56px of collapse.
+        feedback(row, { top: -44, height: 96 }, { top: 12, height: 40 });
+
+        expect(await rounds(row, () => resize(row))).toBe(1);
+        expect(row.className).toContain(`chat-prompt-pinned`);
+    });
+
+    it(`releases the band once the row sits below the edge by more than its collapse freed`, async () => {
+        const { row, scroller } = await mountInTranscript();
+        feedback(row, { top: -44, height: 96 }, { top: 12, height: 40 });
+        await rounds(row, () => resize(row));
+        expect(row.className).toContain(`chat-prompt-pinned`);
+
+        // Scrolled back by more than the 56px the collapse freed: this is the reader moving the row, not the band.
+        row.getBoundingClientRect = (): DOMRect => rectAt(60);
+        scroller.dispatchEvent(new Event(`scroll`));
+        await nextTick();
+
+        expect(row.className).not.toContain(`chat-prompt-pinned`);
+    });
 });
 
 // A watch is the one thing in a conversation that acts while nobody is looking: it is armed inside one turn and fires
