@@ -1369,7 +1369,8 @@
             "notResponding": "nie odpowiada",
             "rateLimiting": "ogranicza tempo",
             "retrying": "ponawia",
-            "retryingIn": "ponawia za {seconds} s",
+            "retryingAt": "ponawia {when}",
+            "retryingIn": "ponawia za {wait}",
             "waitingOnSubagents": "Czeka na {count} podagenta | Czeka na {count} podagenty | Czeka na {count} podagentów"
         },
         "composerIntent": {

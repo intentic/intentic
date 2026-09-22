@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useNow } from "@intentic/ui/async";
 import { computed } from "vue";
-import { formatElapsed } from "../../agents/fleet/agentStatus";
+import { formatWhen } from "@intentic/ui/format";
+import { CLOCK_FROM_MS, formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { usePaneView } from "../panel/useChat-view";
 import ThinkingRosette from "./ThinkingRosette.vue";
@@ -60,12 +61,16 @@ const loaderWord = computed(() => {
 
 // Replaces the loader word during a provider outage, so a silent turn reads as waiting, not hung.
 const providerRetry = computed(() => conversation.value.providerRetry.value);
-// Countdown only when the harness reports nextAttemptAt; Codex reports just the attempt number, not a time.
+// Countdown only when the harness reports nextAttemptAt; Codex reports just the attempt number, not a time. Past
+// CLOCK_FROM_MS the instant replaces the countdown, since "165h 22m" is arithmetic and "Tue 15:45" is not.
 const retryWait = computed(() => {
     const nextAttemptAt = providerRetry.value?.nextAttemptAt;
-    return nextAttemptAt === undefined
-        ? t(`chat.chatTurnStatus.retrying`)
-        : t(`chat.chatTurnStatus.retryingIn`, { seconds: Math.max(0, Math.round((nextAttemptAt - now.value) / 1000)) });
+    if (nextAttemptAt === undefined) {
+        return t(`chat.chatTurnStatus.retrying`);
+    }
+    return nextAttemptAt - now.value >= CLOCK_FROM_MS
+        ? t(`chat.chatTurnStatus.retryingAt`, { when: formatWhen(nextAttemptAt, now.value) })
+        : t(`chat.chatTurnStatus.retryingIn`, { wait: formatElapsed(now.value, nextAttemptAt) });
 });
 // 529 is capacity, 429 is the account's rate limit, anything else is a fault; each implies a different fix.
 const retryReason = computed(() =>

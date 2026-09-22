@@ -1369,7 +1369,8 @@
             "notResponding": "sin responder",
             "rateLimiting": "limitando la tasa",
             "retrying": "reintentando",
-            "retryingIn": "reintentando en {seconds} s",
+            "retryingAt": "reintentando el {when}",
+            "retryingIn": "reintentando en {wait}",
             "waitingOnSubagents": "Esperando a {count} subagente | Esperando a {count} subagentes"
         },
         "composerIntent": {

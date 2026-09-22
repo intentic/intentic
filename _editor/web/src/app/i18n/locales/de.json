@@ -1369,7 +1369,8 @@
             "notResponding": "antwortet nicht",
             "rateLimiting": "drosselt",
             "retrying": "versucht es erneut",
-            "retryingIn": "versucht es erneut in {seconds} s",
+            "retryingAt": "versucht es am {when} erneut",
+            "retryingIn": "versucht es erneut in {wait}",
             "waitingOnSubagents": "Wartet auf {count} Subagenten | Wartet auf {count} Subagenten"
         },
         "composerIntent": {

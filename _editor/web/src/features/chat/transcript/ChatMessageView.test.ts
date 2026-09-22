@@ -16,7 +16,7 @@ import {
 import { errandOf, errands, errandPrompt } from "../run/errands";
 import { changedNothing, type ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
-import { formatElapsed } from "../../agents/fleet/agentStatus";
+import { CLOCK_FROM_MS, formatElapsed } from "../../agents/fleet/agentStatus";
 
 const clock = hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
 const roster = hoisted(() => ({ running: 0, watches: undefined as AgentWatch[] | undefined, jobs: undefined as AgentJob[] | undefined }));
@@ -132,7 +132,7 @@ mock.module("@intentic/ui/markdown", () => ({
 }));
 mock.module("../drafts/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
 // formatElapsed stays real, since the loader's readout is exactly that format.
-mock.module("../../agents/fleet/agentStatus", () => ({ effectiveAutoLand: () => false, effectiveOutageResume: () => false, formatElapsed }));
+mock.module("../../agents/fleet/agentStatus", () => ({ CLOCK_FROM_MS, effectiveAutoLand: () => false, effectiveOutageResume: () => false, formatElapsed }));
 // changedNothing stays real: it decides whether a checklist is drawn at all, which is a card's own reading.
 mock.module("./transcript", () => ({ foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined, changedNothing }));
 mock.module("../../../lib/markdown/useMarkdown", () => {

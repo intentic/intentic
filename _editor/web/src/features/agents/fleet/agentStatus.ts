@@ -646,7 +646,7 @@ export const loopMeta = (loop: NonNullable<AgentSummary["loop"]>): { readonly te
 // Threshold between showing an hour-count ("4h 11m", readable at a glance) and a day+hour ("74h 12m" would be
 // arithmetic); same threshold as the chat strip's own switch (chat/pickUp.ts). Undefined for a card with no
 // published reset instant (Grok, Cursor).
-const CLOCK_FROM_MS = 90 * 60 * 1_000;
+export const CLOCK_FROM_MS = 90 * 60 * 1_000;
 
 export const limitCountdown = (agent: AgentStanding, now: number): string | undefined => {
     const reopensAt = agent.limitResetsAt;

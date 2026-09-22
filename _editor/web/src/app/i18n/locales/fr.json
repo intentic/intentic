@@ -1369,7 +1369,8 @@
             "notResponding": "ne répond pas",
             "rateLimiting": "limite le débit",
             "retrying": "nouvelle tentative",
-            "retryingIn": "nouvelle tentative dans {seconds} s",
+            "retryingAt": "nouvelle tentative le {when}",
+            "retryingIn": "nouvelle tentative dans {wait}",
             "waitingOnSubagents": "En attente de {count} sous-agent | En attente de {count} sous-agents"
         },
         "composerIntent": {

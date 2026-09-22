@@ -1369,7 +1369,8 @@
             "notResponding": "not responding",
             "rateLimiting": "rate-limiting",
             "retrying": "retrying",
-            "retryingIn": "retrying in {seconds}s",
+            "retryingAt": "retrying at {when}",
+            "retryingIn": "retrying in {wait}",
             "waitingOnSubagents": "Waiting on {count} subagent | Waiting on {count} subagents"
         },
         "composerIntent": {
