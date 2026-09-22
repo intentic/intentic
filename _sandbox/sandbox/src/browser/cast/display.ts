@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { pollUntil } from "@intentic/base/async";
 
@@ -48,7 +48,11 @@ const starting = new Map<string, Promise<Display>>();
 let allocating: Promise<unknown> = Promise.resolve();
 
 const socketPath = (number: number): string => `/tmp/.X11-unix/X${number}`;
+// The second socket an X server binds on Linux: abstract-namespace, unlinkable, released only when the process exits.
+const abstractPath = (number: number): string => `\0${socketPath(number)}`;
 const lockPath = (number: number): string => `/tmp/.X${number}-lock`;
+
+const XVFB_BINARY = "/usr/bin/Xvfb";
 
 // A claim file beside the X socket names which key owns it, so a restarted daemon adopts its own display (browsers and
 // all) instead of leaking one per restart; an exit handler can't cover a SIGKILL or a container stop.
@@ -62,25 +66,50 @@ const claimedBy = (number: number): string | undefined => {
     }
 };
 
-// Liveness is probed, not inferred from the socket file: /tmp can survive a restart with a dead server's socket still
-// on disk, which once made every browser tool fail until a human deleted the stale files.
-const answers = (number: number): Promise<boolean> =>
+// "usable": a client can connect. "free": safe to claim. "held": neither — nothing to launch against, nothing to clobber.
+type Presence = "usable" | "held" | "free";
+
+// ENOENT (no file) and ECONNREFUSED (nothing bound) are the only answers that prove a socket is nobody's; every other
+// outcome, silence included, leaves an owner possible.
+const reach = (path: string): Promise<"connected" | "absent" | "busy"> =>
     new Promise((resolve) => {
-        const socket = connect(socketPath(number));
-        const settle = (answer: boolean): void => {
+        const socket = connect({ path });
+        const settle = (answer: "connected" | "absent" | "busy"): void => {
             socket.destroy();
             resolve(answer);
         };
-        socket.once("connect", () => settle(true));
-        socket.once("error", () => settle(false));
-        // A socket that neither connects nor refuses is not a display anything should be launched against.
-        socket.setTimeout(500, () => settle(false));
+        socket.once("connect", () => settle("connected"));
+        socket.once("error", (error: NodeJS.ErrnoException) =>
+            settle(error.code === "ENOENT" || error.code === "ECONNREFUSED" ? "absent" : "busy"),
+        );
+        socket.setTimeout(500, () => settle("busy"));
     });
 
-const waitForDisplay = async (number: number): Promise<void> => {
-    if (!(await pollUntil(() => answers(number), { intervalMs: 50, timeoutMs: 5_000 }))) {
-        throw new Error(`Xvfb did not come up on :${number} (nothing answering on ${socketPath(number)}): rebuild the sandbox to install it`);
+// Liveness is probed, not inferred from the socket file: /tmp can survive a restart with a dead server's socket still
+// on disk, which once made every browser tool fail until a human deleted the stale files.
+// Both sockets are probed, since a server whose file was unlinked still owns the number through the abstract one:
+// claiming it unlinks nothing Xvfb will rebind, and the respawn dies on "server already running" forever after.
+export const presenceOf = async (number: number): Promise<Presence> => {
+    const [file, abstract] = await Promise.all([reach(socketPath(number)), reach(abstractPath(number))]);
+    if (file === "connected" || abstract === "connected") {
+        return "usable";
     }
+    return file === "absent" && abstract === "absent" ? "free" : "held";
+};
+
+const answers = async (number: number): Promise<boolean> => (await presenceOf(number)) === "usable";
+
+const waitForDisplay = async (number: number): Promise<void> => {
+    if (await pollUntil(() => answers(number), { intervalMs: 50, timeoutMs: 5_000 })) {
+        return;
+    }
+    // A missing Xvfb and an unusable display number wear one symptom; naming the wrong one sends owners to rebuild a
+    // sandbox whose browser pack was never the problem.
+    throw new Error(
+        existsSync(XVFB_BINARY)
+            ? `Xvfb did not come up on :${number} (nothing answering on ${socketPath(number)})`
+            : `Xvfb is not installed (no ${XVFB_BINARY}): rebuild the sandbox to install the browser pack`,
+    );
 };
 
 const displayAt = (number: number): Display => ({ name: `:${number}`, width: DISPLAY_WIDTH, height: DISPLAY_HEIGHT });
@@ -94,13 +123,15 @@ const placeFor = async (key: string): Promise<{ readonly number: number; readonl
         if (held.has(number)) {
             continue;
         }
-        if (await answers(number)) {
-            if (claimedBy(number) === key) {
-                return { number, adopt: true };
-            }
-            continue;
+        const presence = await presenceOf(number);
+        if (presence === "usable" && claimedBy(number) === key) {
+            return { number, adopt: true };
         }
-        free.push(number);
+        // Only a number proved to be nobody's is claimable; "held" is skipped rather than taken, since taking it
+        // unlinks a live server's socket and leaves the display unreachable to everyone.
+        if (presence === "free") {
+            free.push(number);
+        }
     }
     const number = free[0];
     if (number === undefined) {
