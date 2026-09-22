@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeAll, describe, expect, test } from "vitest";
 import { presenceOf } from "./display.js";
 
 // Which display numbers the allocator may claim. Getting this wrong is silent: claiming a number a live server still
@@ -14,7 +14,15 @@ const ABSTRACT_ONLY = 902;
 const STALE = 903;
 const NOBODY = 904;
 
-const socketPath = (number: number): string => `/tmp/.X11-unix/X${number}`;
+const SOCKET_DIR = "/tmp/.X11-unix";
+
+const socketPath = (number: number): string => `${SOCKET_DIR}/X${number}`;
+
+// The directory an X server creates on its first start, mode 1777; a machine that has never run one — every CI
+// container — has none, and a bind under a missing parent is reported by node as EACCES, not ENOENT.
+beforeAll(() => {
+    mkdirSync(SOCKET_DIR, { recursive: true, mode: 0o1777 });
+});
 
 const listeners: Server[] = [];
 
@@ -56,7 +64,14 @@ describe("presenceOf", () => {
     test("a socket file with nothing behind it is free", async () => {
         const path = socketPath(STALE);
         const child = spawn(process.execPath, ["-e", `require("node:net").createServer().listen(${JSON.stringify(path)},()=>console.log("up"))`]);
-        await new Promise<void>((resolve) => child.stdout.once("data", () => resolve()));
+        const refused: string[] = [];
+        child.stderr.on("data", (chunk: Buffer) => refused.push(chunk.toString()));
+        // Exit is raced with the greeting: a holder that dies before it listens would otherwise be waited on until the
+        // test timeout, two silent minutes in place of the reason it died.
+        await new Promise<void>((resolve, reject) => {
+            child.stdout.once("data", () => resolve());
+            child.once("exit", (code) => reject(new Error(`the socket holder exited (${code}) without listening on ${path}: ${refused.join("").trim()}`)));
+        });
         child.kill("SIGKILL");
         await new Promise<void>((resolve) => child.once("exit", () => resolve()));
         expect(existsSync(path)).toBe(true);

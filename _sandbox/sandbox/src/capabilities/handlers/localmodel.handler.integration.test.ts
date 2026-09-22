@@ -35,6 +35,15 @@ const workspace = async (): Promise<string> => {
 
 const modelPath = (root: string): string => join(root, ".intentic/local/cache/models/tiny.gguf");
 
+// Byte-compared rather than deep-equalled: `expect(buffer).toEqual(WEIGHTS)` walks two million elements one by one,
+// ~4s of CPU per call and the bulk of this file's runtime, which is what tips these tests over the suite timeout on a
+// machine running several jobs at once. The length rides along so a truncated file is told apart from a corrupt one.
+const landed = async (root: string): Promise<{ bytes: number; same: boolean }> => {
+    const file = await readFile(modelPath(root));
+    return { bytes: file.byteLength, same: file.equals(WEIGHTS) };
+};
+const whole = { bytes: WEIGHTS.byteLength, same: true };
+
 interface Panels {
     readonly start: ReturnType<typeof vi.fn>;
     readonly stop: ReturnType<typeof vi.fn>;
@@ -142,7 +151,7 @@ test("apply returns while the weights are still arriving, and the entry reports 
 
     release();
     await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
-    expect(await readFile(modelPath(root))).toEqual(WEIGHTS);
+    expect(await landed(root)).toEqual(whole);
     expect(existsSync(`${modelPath(root)}.part`)).toBe(false);
     vi.unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
@@ -176,7 +185,7 @@ test("an interrupted download resumes from the part file rather than fetching it
 
     expect(ranges).toEqual([`bytes=${already}-`]);
     // Full equality only holds if the on-disk prefix was kept and appended to, not overwritten.
-    expect(await readFile(modelPath(root))).toEqual(WEIGHTS);
+    expect(await landed(root)).toEqual(whole);
     vi.unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
