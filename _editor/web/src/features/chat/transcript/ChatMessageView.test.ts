@@ -31,6 +31,8 @@ const pane = hoisted(() => ({
 }));
 // The conversation's own release of a held queue, which is all a notice's send press asks of it.
 const resume = hoisted(() => mock(async () => undefined));
+// The conversation's ask that the sandbox run a turn it kept, which is what a press on a sandbox-kept refusal is.
+const resendKept = hoisted(() => mock(async () => undefined));
 const beginEdit = hoisted(() => mock());
 // Hoisted rather than fresh per call, so a card's answer can be read back from the one the pane actually holds.
 const answerQuestion = hoisted(() => mock());
@@ -149,6 +151,7 @@ mock.module("../panel/useChat-view", () => {
         conversationId: `agent-1`,
         providerRetry: ref(undefined),
         resume,
+        resendKept,
         turnStartedAt: {
             get value(): number | undefined {
                 return clock.turnStartedAt;
@@ -237,6 +240,7 @@ beforeEach(() => {
     pane.messages = [];
     pane.queued = [];
     resume.mockClear();
+    resendKept.mockClear();
     beginEdit.mockClear();
     resizers.length = 0;
 });
@@ -1139,6 +1143,42 @@ describe(`a low-memory hold`, () => {
 
         expect(sendAnyway(element)).toBeUndefined();
         expect(raise(element)).toBeUndefined();
+    });
+
+    // The bug this exists for: a fix press the sandbox started was turned away, and with no composer ever holding its
+    // prompt the press never showed. The sandbox keeps those words, so the press stands with nothing queued here.
+    it(`offers the send on a turn the sandbox kept, with nothing queued, and asks the sandbox to run it`, () => {
+        const opener: ChatMessage = { id: 20, role: `user`, text: `The CI pipeline failed. Investigate and fix it.`, run: `run-1` };
+        const row: ChatMessage = { ...hold(`sandboxMemory`), sandboxHeld: true, run: `run-1` };
+        pane.messages = [opener, row];
+        pane.queued = [];
+        const element = mount(row);
+
+        expect(raise(element)?.textContent?.trim()).toBe(`Raise its memory to 20 GiB`);
+        sendAnyway(element)!.click();
+
+        expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [] });
+        expect(resume).not.toHaveBeenCalled();
+    });
+
+    it(`offers to send again a turn the sandbox kept past a refusal no raise would clear`, () => {
+        const opener: ChatMessage = { id: 20, role: `user`, text: `Carry the parser fix`, attachments: [`notes/plan.md`], run: `run-2` };
+        const row: ChatMessage = {
+            id: 21,
+            role: `notice`,
+            text: `Claude sign-in was revoked. Nothing has run yet: the message above is kept here to send again once that is sorted.`,
+            noticeAction: `sendAgain`,
+            sandboxHeld: true,
+            run: `run-2`,
+        };
+        pane.messages = [opener, row];
+        pane.queued = [];
+        const element = mount(row);
+
+        expect(sendAnyway(element)).toBeUndefined();
+        buttons(element).find((button) => button.textContent?.trim() === `Send again`)!.click();
+
+        expect(resendKept).toHaveBeenCalledWith({ text: opener.text, attachments: [{ name: `plan.md`, path: `notes/plan.md` }] });
     });
 
     it(`withdraws both presses with nothing held to send, or a turn already running`, () => {

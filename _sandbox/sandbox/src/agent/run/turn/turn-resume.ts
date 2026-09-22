@@ -108,9 +108,12 @@ export const pendingOutageFailure = (conversationId: string): OutageFailure | un
 // reopen instant for a spent allowance, on a bounded ladder for one that stopped short. No staleness sweep: a press is
 // a deliberate pick-up regardless of how long it's been.
 export interface HeldTurn {
-    readonly input: AgentTurn & { conversationId: string };
-    // What killed it: a spent allowance, or anything else that left nothing to repair (a hung runtime, a crash).
-    readonly reason: "limit" | "stopped";
+    readonly input: TurnInput & { conversationId: string };
+    // What killed it: a spent allowance, anything else that left nothing to repair (a hung runtime, a crash), or a
+    // refusal at the door of a turn no sender keeps the words of (turn-runs.ts holdTurnedAway), which only a press sends.
+    readonly reason: "limit" | "stopped" | "door";
+    // The run a door refusal ended, whose recorded rows are no history: the model never saw them.
+    readonly run?: string;
     // The session the failed turn last reported; kept even when unused, so the fire can decide via `ran`.
     readonly sessionId?: string;
     // Epoch seconds the allowance reopens. Absent (Grok, Cursor publish none) means press-only, never guessed.
@@ -158,7 +161,7 @@ export const heldTurn = (conversationId: string): HeldTurn | undefined => pendin
 
 // The turn's own fields come from the held copy; routing (agent/harness/account/model) comes from the press when named.
 // Destructure-then-add so a press can unset a field instead of leaving the old value standing.
-const reroutedInput = (input: AgentTurn & { conversationId: string }, routing: ResumeRouting | undefined): AgentTurn & { conversationId: string } => {
+const reroutedInput = (input: TurnInput & { conversationId: string }, routing: ResumeRouting | undefined): TurnInput & { conversationId: string } => {
     if (routing === undefined) {
         return input;
     }
@@ -189,6 +192,37 @@ const movesAccount = (input: AgentTurn, routing: ResumeRouting | undefined): boo
     routing.harness === (input.harness ?? "native") &&
     routing.account !== input.account;
 
+// A turn the door turned away, sent again: its own session (if any) never saw it, and stays unless the press moved
+// runtimes. Not restated: a resume the door turned away keeps the note that says where its work stands. Every run
+// turned away on the way here is named, since each recorded the same words the model is about to be sent.
+const doorRerun = (held: HeldTurn, routing: ResumeRouting | undefined): TurnInput & { conversationId: string } => {
+    const unseenRuns = [...(held.input.unseenRuns ?? []), ...(held.run === undefined ? [] : [held.run])];
+    const turn = resumedTurn({ input: reroutedInput(held.input, routing) }, RESUME_NOTES.door, { fresh: retiresSession(held.input, routing) });
+    return { ...turn, unseenRuns };
+};
+
+// The turn a press on a held one runs: its own fields from the held copy, routing from the press when named.
+const heldRerun = (held: HeldTurn, routing: ResumeRouting | undefined): TurnInput & { conversationId: string } => {
+    if (held.reason === "door") {
+        return doorRerun(held, routing);
+    }
+    const failure = { input: reroutedInput(held.input, routing), ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}) };
+    // restate applies on every arm: the note must describe this attempt's own starting point, not the last one's.
+    if (held.ran && held.carryRefused !== true && !retiresSession(held.input, routing)) {
+        // Same session either way; the note says only what the model cannot see: which wall it hit, and whether the
+        // account changed under it.
+        const note =
+            held.reason === "stopped" ? RESUME_NOTES.stopped : movesAccount(held.input, routing) ? RESUME_NOTES.carried : RESUME_NOTES.limit;
+        return resumedTurn(failure, note, { restate: true });
+    }
+    // A stopped turn that never got the provider to answer has nothing to carry: it opens fresh and says so.
+    if (held.reason === "stopped") {
+        return resumedTurn(failure, RESUME_NOTES.stopped, { fresh: true, restate: true });
+    }
+    // Fresh otherwise: a turn that never ran has a session not worth reusing; one that did is moving without it.
+    return resumedTurn(failure, held.ran ? RESUME_NOTES.switched : RESUME_NOTES.refused, { fresh: true, restate: true });
+};
+
 // Undefined when nothing is held or a turn already runs (a repeat press is free). Not consumed here: the started turn's
 // own clearPendingResume does that, and its exit re-arms it if refused again. `routing` overrides the held turn's own.
 export const fireHeldResume = async (
@@ -198,28 +232,7 @@ export const fireHeldResume = async (
     routing?: ResumeRouting,
 ): Promise<TurnRun | undefined> => {
     const held = pendingHeld.get(conversationId);
-    if (held === undefined) {
-        return undefined;
-    }
-    const failure = { input: reroutedInput(held.input, routing), ...(held.sessionId !== undefined ? { sessionId: held.sessionId } : {}) };
-    // restate applies on every arm: the note must describe this attempt's own starting point, not the last one's.
-    if (held.ran && held.carryRefused !== true && !retiresSession(held.input, routing)) {
-        // Same session either way; the note says only what the model cannot see: which wall it hit, and whether the
-        // account changed under it.
-        const note =
-            held.reason === "stopped" ? RESUME_NOTES.stopped : movesAccount(held.input, routing) ? RESUME_NOTES.carried : RESUME_NOTES.limit;
-        return startConversationTurn(services, wake, resumedTurn(failure, note, { restate: true }));
-    }
-    // A stopped turn that never got the provider to answer has nothing to carry: it opens fresh and says so.
-    if (held.reason === "stopped") {
-        return startConversationTurn(services, wake, resumedTurn(failure, RESUME_NOTES.stopped, { fresh: true, restate: true }));
-    }
-    // Fresh otherwise: a turn that never ran has a session not worth reusing; one that did is moving without it.
-    return startConversationTurn(
-        services,
-        wake,
-        resumedTurn(failure, held.ran ? RESUME_NOTES.switched : RESUME_NOTES.refused, { fresh: true, restate: true }),
-    );
+    return held === undefined ? undefined : startConversationTurn(services, wake, heldRerun(held, routing));
 };
 
 // The one reader for every ending's question. Two callers must agree about the same turn — the failure frame promises
@@ -245,10 +258,10 @@ export const breakPolicyFor = async (
 // provider filler. `restate` replaces an existing resume note rather than stacking one, since the reason can change
 // between attempts.
 const resumedTurn = (
-    failure: { readonly input: AgentTurn & { conversationId: string }; readonly sessionId?: string },
+    failure: { readonly input: TurnInput & { conversationId: string }; readonly sessionId?: string },
     note: string,
     options: { readonly fresh?: boolean; readonly restate?: boolean } = {},
-): AgentTurn & { conversationId: string } => {
+): TurnInput & { conversationId: string } => {
     // Destructured out first so `fresh` can unset it, rather than leaving the carried session in place via a spread.
     const { sessionId: _carried, ...rest } = failure.input;
     const sessionId = options.fresh === true ? undefined : (failure.sessionId ?? _carried);
@@ -288,13 +301,21 @@ const withRoleModel = async <T extends AgentTurn>(services: Services, turn: T): 
     return { ...turn, agent: pinned.provider, model: pinned.model, ...pinnedKnobs(turn, pinned) };
 };
 
+export interface ConversationTurnStart {
+    // How many boots already re-ran this turn; set only by the boot pass.
+    readonly attempts?: number;
+    // The words came through POST /agent, whose composer keeps them for another press. Every other start is the
+    // sandbox's own (a fix press, a peer's message, a re-run), so the sandbox is the only keeper a refusal leaves.
+    readonly senderKeeps?: boolean;
+}
+
 // The one path every detached turn starts through, so push notification and the journal entry live here once, not at
-// each call site. Undefined means a live turn already owns the conversation; `attempts` is set only by the boot pass.
+// each call site. Undefined means a live turn already owns the conversation.
 export const startConversationTurn = async (
     services: Services,
     wake: WakeFn,
     started: TurnInput & { conversationId: string },
-    attempts = 0,
+    { attempts = 0, senderKeeps = false }: ConversationTurnStart = {},
 ): Promise<TurnRun | undefined> => {
     const turn = await withRoleModel(services, started);
     const { conversationId, prompt } = turn;
@@ -310,6 +331,7 @@ export const startConversationTurn = async (
             awaiting: (kind) => void services.pushSender.notifyIfAway(turnAwaiting(conversationId, kind)),
             settled: (outcome) => void services.pushSender.notifyIfAway(turnFinished(conversationId, prompt, outcome)),
         },
+        ...(senderKeeps ? {} : { holdTurnedAway: ({ input, run }) => recordHeldTurn({ input, reason: "door", ran: false, run }) }),
     });
 };
 
@@ -509,8 +531,9 @@ const runLimitRung = async (services: Services, wake: WakeFn, held: PendingHeld,
 // Every hold lives in one map, whichever wall put it there, so the two shapes of wait are routed by reason rather than
 // by one of them quietly falling through the other's gates.
 const runHeldPass = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
-    // Snapshotted, not iterated live: every branch below stamps or deletes the very map this walks.
-    const stranded = [...pendingHeld.values()];
+    // Snapshotted, not iterated live: every branch below stamps or deletes the very map this walks. A door hold is left
+    // out: whether a turn goes past the wall that stopped it is a person's call, not a clock's.
+    const stranded = [...pendingHeld.values()].filter((held) => held.reason !== "door");
     for (const held of stranded) {
         await (held.reason === "stopped" ? runStopRung(services, wake, held, now) : runLimitRung(services, wake, held, now));
     }
@@ -677,7 +700,7 @@ const rehydrateParkedTurn = async (services: Services, wake: WakeFn, entry: Jour
         }
     };
     // Rehydration spends nothing; attempts pass through unchanged so the journal stays honest about what ran.
-    const run = await startConversationTurn(services, placeholder, entry.turn, entry.attempts);
+    const run = await startConversationTurn(services, placeholder, entry.turn, { attempts: entry.attempts });
     if (run === undefined) {
         // A live turn already owns the conversation; it supersedes the park, as a hand retry would.
         return;
@@ -755,7 +778,7 @@ export const resumeInterruptedTurns = async (services: Services, wake: WakeFn, n
             // against.
             await bumpAttempt(services, entry);
             const { conversationId } = entry.turn;
-            if ((await startConversationTurn(services, wake, restartTurnOf(entry), entry.attempts + 1)) !== undefined) {
+            if ((await startConversationTurn(services, wake, restartTurnOf(entry), { attempts: entry.attempts + 1 })) !== undefined) {
                 services.logger.info({ conversationId }, "restart auto-resume fired");
             }
             continue;

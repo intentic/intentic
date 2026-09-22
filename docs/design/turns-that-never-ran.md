@@ -3,7 +3,8 @@
 What the transcript does with a turn the daemon refused before the model saw it, and why such a turn leaves no
 trace at all.
 
-Read this before touching `HELD_FOR_RESEND`, `TranscriptFold.retract`, or the settle in `startTurnRun`.
+Read this before touching `turnedAwayCode` (`policy/turned-away.ts`), `TranscriptFold.retract`, or the settle in
+`startTurnRun`.
 
 ## The bug this answers
 
@@ -24,8 +25,8 @@ It read as a rendering fault. It was not: all eight rows were in `/history/trans
 records on the machine this was found on held 24 such rows between them.
 
 Memory no longer refuses the second press: a person is held once and the next send runs
-(`low-memory-hold.md`). That one hold is still a refusal that ran nothing, and every other code on
-`HELD_FOR_RESEND` can still repeat the way this one did.
+(`low-memory-hold.md`). That one hold is still a refusal that ran nothing, and every other code
+`turnedAwayCode` names can still repeat the way this one did.
 
 **The mechanism.** A refusal is a value returned by `planTurn` and yielded as an `error` frame
 (`agent.routes.ts` `refusalFrame`). By then the run already exists: `startTurnRun` opened its fold on the
@@ -41,8 +42,9 @@ splice also renumbered rows the daemon addresses by index.
 
 ## The rule
 
-**A turn refused before it ran did not happen.** Nothing about it is recorded: not the message, not the
-refusal, not the rebase notice it collected on the way.
+**A turn refused before it ran did not happen** — when its sender still holds the words. Nothing about it is
+recorded: not the message, not the refusal, not the rebase notice it collected on the way. The one sender that
+holds them is the composer behind `POST /agent`; every turn the sandbox starts itself is the other case, below.
 
 The refusal is still drawn, live, on the run that produced it — otherwise a press that changes nothing looks
 like a press that did nothing. It lives as long as the run does (`RETAIN_MS`) and is gone on reopen.
@@ -58,10 +60,10 @@ Three consequences follow, and they are the whole implementation:
 
 ## Which refusals count
 
-`HELD_FOR_RESEND` in `transcript-fold.ts` is the list, and its meaning is exactly **the composer still holds
-the message**. A code missing from it gets a notice that does not promise a resend and a bubble that stands —
-which is the bug above, wearing a different code. `model-unavailable` and `engine-version-floor` were missing
-and are now on it.
+`turnedAwayCode` in `policy/turned-away.ts` is the list, and its meaning is exactly **nothing ran, so the
+message is still owed to somebody**. A code missing from it gets a notice that does not promise a resend and a
+bubble that stands — which is the bug above, wearing a different code. `model-unavailable` and
+`engine-version-floor` were missing and are now on it.
 
 Two boundaries this list must keep:
 
@@ -73,6 +75,32 @@ Two boundaries this list must keep:
 
 A refusal that spent tokens is not on this list and must not be: `provider-outage` and `rate_limit` reach the
 provider, and `errorRow` answers both before the list is consulted.
+
+## Turns the sandbox started itself
+
+Pipelines' **Fix with agent** (`POST /ci/fix`), a peer's `agents message`, a verify nudge and every re-run of a
+held or interrupted turn start through `startConversationTurn` with no composer behind them. The rule above,
+applied to them, lost the only copy: a fix press turned away for memory opened a conversation with no prompt in
+it, a notice claiming "Your message is held", and no **Send anyway**, since the chat offers that press only while
+its own queue holds something. The next thing typed became the agent's whole brief.
+
+So the keeper is decided where the turn starts. `POST /agent` passes `senderKeeps`; every other start leaves the
+sandbox as the keeper, and `startTurnRun`'s `holdTurnedAway` does three things with a refusal `turnedAway`
+recognises, before it is folded:
+
+1. The frame goes out with `held: { ran: false }`, so `retract` leaves the message where it was and the run is
+   recorded like any other: the prompt survives a reload and a restart.
+2. `heldRow` says the message above is kept here, marks the row `sandboxHeld`, and offers **Send anyway** (memory)
+   or **Send again** (any other code). The press is `Conversation.resendKept`: `POST /agent/resume` with no
+   routing, so the turn runs as it was started, pinned model and all. A sandbox that no longer keeps it (a restart)
+   gets the message's own words as an ordinary send instead.
+3. The turn is held as a `door` hold (`recordHeldTurn`). The resume pass never fires one: going past the wall is
+   a person's call. The re-run carries `RESUME_NOTES.door`, opens on a notice rather than a second copy of the
+   message, and names every refused run in `unseenRuns`, which a session seeded from the record skips.
+
+A fix attempt turned away this way reads **Didn't start**, and its next press is a `resend` (`planFixAttempt`):
+the kept turn again, or the whole prompt when nothing is kept, never the "carry on" nudge, which points at
+evidence the attempt never received.
 
 ## The records already written
 

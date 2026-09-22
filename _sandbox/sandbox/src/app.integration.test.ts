@@ -29,6 +29,7 @@ import { fakeFiles, fakeHistory } from "./harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
 import { automationRecord, memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
 import { runAgentTurn } from "./harness/route-turns.testing.js";
+import { clearPendingResume, recordHeldTurn } from "./agent/run/turn/turn-resume.js";
 import { toolChildrenOf, transcriptPageOf } from "./sessions/agent-transcript.js";
 
 test("GET /health reports ok, and names the sandbox so a loopback probe can tell WHICH daemon answered", async () => {
@@ -1064,6 +1065,47 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
     expect(seen?.prompt).toContain("Assistant: 4");
     // The user's actual message closes the prompt, after the preamble.
     expect(seen?.prompt?.endsWith("and now?")).toBe(true);
+});
+
+// A fix press the door turned away left its prompt in the record under the refusal. The press that sends it again
+// carries those words itself, so a session seeded from the record must not be handed the refused copy as history too.
+test("agent.resume sends a turn the door turned away without seeding its refused copy as history", async () => {
+    let seen: { prompt?: string } | undefined;
+    const recorded: TranscriptRow[] = [
+        { role: "user", text: "what is 2+2?", run: "run-earlier" },
+        { role: "assistant", text: "4", run: "run-earlier" },
+        { role: "user", text: "fix the pipeline", run: "run-refused" },
+        { role: "notice", text: "Sandbox memory is low.", noticeAction: "sendAnyway", sandboxHeld: true, run: "run-refused" },
+    ];
+    const client = clientFor(
+        createApp(
+            services({
+                async *agent(request) {
+                    seen = request;
+                    yield { kind: "done" };
+                },
+                transcripts: {
+                    read: async () => recorded,
+                    fork: async () => {},
+                    append: async () => {},
+                    page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
+                    toolChildren: async (_agent, toolId) => toolChildrenOf(recorded, toolId),
+                    count: async () => recorded.length,
+                    truncate: async () => 0,
+                },
+            }),
+        ),
+    );
+    recordHeldTurn({ reason: "door", input: { prompt: "fix the pipeline", conversationId: "conv-door" }, ran: false, run: "run-refused" });
+
+    await client.agent.resume({ conversationId: "conv-door" });
+    expect((await collect(await client.agent.attach({ conversationId: "conv-door" }))).at(-1)).toEqual({ kind: "end" });
+
+    expect(seen?.prompt).toContain("User: what is 2+2?");
+    expect(seen?.prompt).not.toContain("User: fix the pipeline");
+    expect(seen?.prompt).not.toContain("Sandbox memory is low.");
+    expect(seen?.prompt?.endsWith("fix the pipeline")).toBe(true);
+    clearPendingResume("conv-door");
 });
 
 test("agent.run folds attachments into the claude prompt as absolute paths, allowing an attachment-only turn", async () => {

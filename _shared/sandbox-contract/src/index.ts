@@ -111,6 +111,7 @@ export * from "./events/transcript.js";
 export * from "./events/verify-nudge.js";
 export * from "./events/watch-wake.js";
 export * from "./policy/request-status.js";
+export * from "./policy/turned-away.js";
 export * from "./text/mentions.js";
 export * from "./protocol/sse.js";
 export * from "./protocol/routes.js";

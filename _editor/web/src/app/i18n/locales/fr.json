@@ -989,6 +989,7 @@
             "releasingCoversRestConversation": "Le libérer couvre le reste de cette conversation.",
             "requestedBecause": "Demandé parce que : {reason}",
             "sandboxRestartsMessageWaits": "(le sandbox redémarre, et votre message attend ici)",
+            "sendAgain": "Renvoyer",
             "sendAnyway": "Envoyer quand même",
             "setupDidntFinishWhile": "L'installation n'a pas abouti pendant que l'agent attendait : il a continué sans.",
             "showCheck": "Afficher la vérification",

@@ -97,3 +97,12 @@ test("an unknown ending still produces a stance", () => {
     expect(stance.label).toBe(`Agent stopped`);
     expect(stance.retry).toBe(true);
 });
+
+// Refused before the model saw a word, so there is no work to carry on: the chip says it never started, and the press
+// sends the whole task rather than a nudge that points at evidence the attempt never received.
+test("an attempt turned away at the door says it never started, with the refusal's own sentence", () => {
+    const stance = fixStance(agent({ status: `error`, failureCode: `sandbox-memory-low`, failure: `Sandbox memory is low` }));
+    expect(stance).toMatchObject({ kind: `ended`, ongoing: false, retry: true, label: `Didn't start` });
+    expect(stance.hint).toContain(`turned away before it started: Sandbox memory is low.`);
+    expect(stance.hint).toContain(`sends it the whole task again`);
+});

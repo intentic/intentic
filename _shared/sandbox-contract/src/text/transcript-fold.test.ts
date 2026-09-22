@@ -592,4 +592,55 @@ describe(`a refusal that ran nothing`, () => {
         expect(fold.rows.map((row) => row.role)).toEqual([`user`, `assistant`, `notice`]);
         expect(fold.ranNothing).toBe(false);
     });
+
+    // The sandbox, not a composer, keeps a turn it started itself (a fix press, a peer's message): the frame says so
+    // with `held`. The bug this exists for: such a refusal took the fix prompt out, and no queue anywhere held a copy.
+    describe(`of a turn the sandbox keeps`, () => {
+        const kept = { ...REFUSED, held: { ran: false } } as const satisfies AgentEvent;
+
+        it(`leaves the message where it was, and is recorded like any turn`, () => {
+            const fold = new TranscriptFold(openingOf(`land it`));
+            const patches = fold.apply(kept);
+
+            expect(fold.rows[0]).toEqual(expect.objectContaining({ role: `user`, text: `land it` }));
+            expect(fold.ranNothing).toBe(false);
+            expect(patches).toEqual([{ op: `append`, row: expect.objectContaining({ role: `notice` }) }]);
+        });
+
+        it(`offers to send it again, as the sandbox's to run rather than the composer's`, () => {
+            const row = foldOf(`land it`, [kept]).at(-1);
+            expect(row?.text).toBe(`${REFUSED.message} Nothing has run yet: the message above is kept here to send again once that is sorted.`);
+            expect(row).toMatchObject({ noticeAction: `sendAgain`, sandboxHeld: true });
+        });
+
+        it(`offers the memory hold's own presses, anyway and the raise`, () => {
+            const GIB = 1024 ** 3;
+            const lowMemory = {
+                kind: `error`,
+                code: `sandbox-memory-low`,
+                message: `Sandbox memory is low: 15.9 GiB of 16.0 GiB used.`,
+                memory: { limitBytes: 16 * GIB, residentBytes: 15.9 * GIB, swapBytes: 0 },
+                held: { ran: false },
+            } as const satisfies AgentEvent;
+            const row = foldOf(`land it`, [lowMemory]).at(-1);
+            expect(row?.text).toBe(`${lowMemory.message} Nothing has run yet: the message above is kept here, and sending it anyway starts it.`);
+            expect(row).toMatchObject({ noticeAction: `sandboxMemory`, sandboxHeld: true });
+        });
+    });
+
+    // Asked by whoever keeps the words before the frame is folded, so it has to agree with the fold's own reading.
+    describe(`turned away at the door`, () => {
+        it(`is a refusal before anything was said, with somebody watching`, () => {
+            const fold = new TranscriptFold(openingOf(`land it`));
+            expect(fold.turnedAway(REFUSED)).toBe(true);
+            expect(fold.turnedAway({ ...REFUSED, unattended: true })).toBe(false);
+            expect(fold.turnedAway({ kind: `error`, code: `rate_limit`, message: `Usage limit reached.` })).toBe(false);
+        });
+
+        it(`is not a refusal that ended a turn which had already spoken`, () => {
+            const fold = new TranscriptFold(openingOf(`land it`));
+            fold.apply({ kind: `delta`, text: `on it` });
+            expect(fold.turnedAway(REFUSED)).toBe(false);
+        });
+    });
 });

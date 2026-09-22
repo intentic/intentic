@@ -20,6 +20,9 @@ export const RESUME_NOTES = {
     carried: `The model provider's usage allowance ran out while this turn was running, which stopped it, and it has been sent again on a different account of the same provider, in this same session: everything you knew is still here. ${REPEATED}`,
     refused:
         "The model provider refused the previous attempt at this request outright, because its usage allowance was spent: no part of the request below was read or acted on, and nothing has been done towards it. It has been sent again, and starts from the beginning. Where the sandbox has measured earlier work on this branch, it is in the note headed 'Where the work stands'.",
+    // Turned away before the model saw a word (a memory hold, a dead credential, a model the plan lacks), with the
+    // sandbox keeping the turn: nothing to continue from, so the request starts at its beginning.
+    door: "The previous attempt at this request was turned away before any of it reached you: no part of the request below was read or acted on. It has now been sent, and starts from the beginning.",
     // A turn parked on the user when the daemon died; what follows the note is their actual answer, not a repeat.
     answered:
         "The sandbox restarted while this conversation was waiting for the user to respond; it is back, and their response follows below: continue from where the session left off.",
@@ -52,6 +55,7 @@ const RESUME_DISCLOSURES: Record<ResumeReason, ResumeDisclosure> = {
     switched: { kind: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, in a fresh session." },
     carried: { kind: "notice", text: "Sent again on the switched account after the allowance ran out mid-turn, carrying the session with it." },
     refused: { kind: "notice", text: "Sent again after the allowance refused it: nothing had run." },
+    door: { kind: "notice", text: "Sent again: the first attempt was turned away before anything ran." },
     answered: { kind: "note", note: { title: "Picked back up after a sandbox restart", text: RESUME_NOTES.answered } },
 };
 

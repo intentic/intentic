@@ -989,6 +989,7 @@
             "releasingCoversRestConversation": "Die Freigabe deckt den Rest dieser Unterhaltung ab.",
             "requestedBecause": "Angefragt, weil: {reason}",
             "sandboxRestartsMessageWaits": "(die Sandbox startet neu, und Ihre Nachricht wartet hier)",
+            "sendAgain": "Erneut senden",
             "sendAnyway": "Trotzdem senden",
             "setupDidntFinishWhile": "Die Einrichtung wurde nicht fertig, während der Agent gewartet hat: er hat ohne sie weitergemacht.",
             "showCheck": "Die Prüfung anzeigen",

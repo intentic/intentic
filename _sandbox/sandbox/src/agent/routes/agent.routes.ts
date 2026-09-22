@@ -14,6 +14,7 @@ import {
     RESUME_NOTES,
     type SnapshotTurn,
     type TodoItem,
+    type TranscriptRow,
     type TurnNote,
     type UsageWindow,
     type WorkspaceEvent,
@@ -820,6 +821,14 @@ const stoppedFrame = async (
 const heldTurnOf = (conversationId: string | undefined): HeldTurn | undefined =>
     conversationId === undefined ? undefined : heldTurn(conversationId);
 
+// The record a fresh session is seeded from, less the runs the door turned away before this turn sent their words
+// again: the model never saw those rows, and this turn carries the words itself.
+const seedHistory = async (services: Services, input: TurnInput & { readonly conversationId: string }): Promise<readonly TranscriptRow[]> => {
+    const rows = await handoffHistory(services, input);
+    const unseen = new Set(input.unseenRuns ?? []);
+    return unseen.size === 0 ? rows : rows.filter((row) => row.run === undefined || !unseen.has(row.run));
+};
+
 // The frame's verdict on who brings the turn back: a booked move, the armed appointment, or an offer.
 const autoResumeOf = (moving: boolean, schedulable: boolean, armed: boolean): "scheduled" | "available" | undefined => {
     if (moving) {
@@ -1145,7 +1154,7 @@ async function* runTurn(
     // Resuming no session with history behind it is a runtime handoff, read before this turn appends its own.
     const history =
         resumed === undefined && input.conversationId !== undefined
-            ? await handoffHistory(services, { ...input, conversationId: input.conversationId })
+            ? await seedHistory(services, { ...input, conversationId: input.conversationId })
             : [];
     // What is TRUE beside what was said, measured by the sandbox; rides the request as one more note.
     const handoffNote = await handoffNoteFor(services, input, history, heldBefore);
@@ -1662,14 +1671,20 @@ export const createAgentRoutes = (services: Services) => {
             own(context, conversationId);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const actor = actorOf(context.identity, context.principal);
-            // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
-            const run = await startConversationTurn(services, streamAgent, {
-                ...input,
-                conversationId,
-                ...opt("actor", actor),
-                ...opt("owner", ownerOf(context.identity)),
-                ...opt("areas", areasOf(context.identity)),
-            });
+            // Push rides the run's own lifecycle, not this request, since a tab may be asleep. The caller holds these
+            // words, so a refusal at the door hands them back rather than the sandbox keeping a second copy.
+            const run = await startConversationTurn(
+                services,
+                streamAgent,
+                {
+                    ...input,
+                    conversationId,
+                    ...opt("actor", actor),
+                    ...opt("owner", ownerOf(context.identity)),
+                    ...opt("areas", areasOf(context.identity)),
+                },
+                { senderKeeps: true },
+            );
             if (run === undefined) {
                 throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
             }

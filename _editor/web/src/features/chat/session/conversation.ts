@@ -1315,6 +1315,26 @@ export class Conversation {
         return true;
     }
 
+    // Send a turn the sandbox kept after turning it away at the door (a fix press, a peer's message): its words were
+    // never this window's, so the press asks the sandbox to run that turn as it was started, routing and all. A sandbox
+    // that no longer keeps it (a restart since) gets the kept message's words as an ordinary send instead.
+    async resendKept(kept: { readonly text: string; readonly attachments: readonly ChatAttachment[] }): Promise<void> {
+        if (this.streaming.value) {
+            return;
+        }
+        this.error.value = null;
+        const response = await sandboxRequestVia(this.at, `/agent/resume`, {
+            method: `POST`,
+            headers: { "content-type": `application/json` },
+            body: JSON.stringify({ conversationId: this.conversationId }),
+        }).catch(() => undefined);
+        if (response?.ok === true) {
+            await this.reattach();
+            return;
+        }
+        await this.enqueue(kept.text, kept.attachments);
+    }
+
     // Adopt the session as the daemon has it. Pins the account only when this tab has none, is local, matches provider.
     // A real user pick, a remote box's foreign id, or another provider's session is never overwritten.
     bindSession(session: SessionRef): void {

@@ -160,18 +160,30 @@ const stopThisWatch = async (): Promise<void> => {
     await stopWatching(conversation.value.conversationId, props.message.noticeWaitId).catch(() => undefined);
 };
 
-// The message a low-memory hold turned away is still waiting behind it: queued, nothing running, no row since. Both
-// presses on the hold act on that message, so both go once it has gone or a turn has started under them.
+// The message a refusal at the door turned away is still waiting behind it: nothing running, no row since, and its
+// words still kept — in this window's queue when the composer sent them, or by the sandbox, message still above, when
+// the sandbox started the turn itself. Every press on the notice acts on that message, so all go once it has.
 const heldHere = computed(
     () =>
-        (props.message.noticeAction === `sendAnyway` || props.message.noticeAction === `sandboxMemory`) &&
+        (props.message.noticeAction === `sendAnyway` || props.message.noticeAction === `sandboxMemory` || props.message.noticeAction === `sendAgain`) &&
         !conversationStreaming.value &&
-        queued.value.length > 0 &&
+        (props.message.sandboxHeld === true || queued.value.length > 0) &&
         paneMessages.value.at(-1)?.id === props.message.id,
 );
-// The daemon lets this person's next send through once it has warned them, so the press only releases the queue.
+// The words the sandbox kept: the message its own run opened with, just above this notice.
+const keptMessage = computed(() => paneMessages.value.findLast((row) => row.run === props.message.run && row.role === `user`));
+// The daemon lets this person's next send through once it has warned them, so a queued message only needs releasing;
+// a kept one is the sandbox's to run again, as it was started.
 const sendAnyway = (): void => {
-    void conversation.value.resume();
+    if (props.message.sandboxHeld !== true) {
+        void conversation.value.resume();
+        return;
+    }
+    const kept = keptMessage.value;
+    void conversation.value.resendKept({
+        text: kept?.text ?? ``,
+        attachments: (kept?.attachments ?? []).map((path) => ({ name: basename(path), path })),
+    });
 };
 
 // THE RAISE OFFERED ON A LOW-MEMORY HOLD. The daemon says the box is short; this says whether anything can be done
@@ -672,9 +684,9 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     {{ t(`chat.chatMessageView.watchInstall`) }}
                 </button>
             </template>
-            <!-- Low memory is a warning, not a wall: the held message goes out as it is. -->
+            <!-- Low memory is a warning, not a wall: the held message goes out as it is. Any other refusal is sent again once its cause is sorted. -->
             <button v-if="heldHere" type="button" class="shrink-0 font-medium text-link hover:underline" @click="sendAnyway">
-                {{ t(`chat.chatMessageView.sendAnyway`) }}
+                {{ message.noticeAction === `sendAgain` ? t(`chat.chatMessageView.sendAgain`) : t(`chat.chatMessageView.sendAnyway`) }}
             </button>
             <!-- The hold named a ceiling; this is the press that moves it. Absent when nothing here could. -->
             <template v-if="memoryOffer">

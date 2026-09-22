@@ -3,7 +3,9 @@ import { ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "
 import { implement, ORPCError } from "@orpc/server";
 import { stopTurn } from "../agent/checkpoints/agent-steering.js";
 import { streamAgent } from "../agent/routes/agent.routes.js";
-import { startConversationTurn } from "../agent/run/turn/turn-resume.js";
+import { fireHeldResume, heldTurn, startConversationTurn } from "../agent/run/turn/turn-resume.js";
+import { actorOf, areasOf, ownerOf } from "../agent/run/turn/turn-actor.js";
+import { opt } from "../agent/run/opt.js";
 import { turnRunOf } from "../agent/run/turn/turn-runs.js";
 import { archiveAgents } from "../agents/registry/archive.js";
 import { startFixAttempt } from "./fix-attempts.js";
@@ -115,7 +117,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
             const jobs = await upstream(ciClientFor(project.account.provider, fetchFn).allJobs(project, input.runId));
             return { jobs };
         }),
-        fix: i.fix.handler(async ({ input }) => {
+        fix: i.fix.handler(async ({ input, context }) => {
             const project = await resolve(input.repo);
             const client = ciClientFor(project.account.provider, fetchFn);
             // Usually already in the cache, from the view the click came from; a cold daemon re-lists instead.
@@ -157,8 +159,14 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                             throw new ORPCError("CONFLICT", { message: `The earlier attempt could not be set aside: ${refused.reason}` });
                         }
                     },
-                    // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired.
+                    // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired;
+                    // no composer holds these words, so a refusal at the door leaves the sandbox keeping the turn.
                     start: (turn) => startConversationTurn(services, wake, turn),
+                    // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.
+                    rerun: async (conversationId) =>
+                        input.pick === undefined && heldTurn(conversationId)?.reason === "door"
+                            ? fireHeldResume(services, wake, conversationId)
+                            : undefined,
                 },
                 {
                     base: ciFixConversationId(input.repo, input.runId),
@@ -174,6 +182,11 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                         // Spread verbatim: AgentRunPick's fields ARE the turn's (agent, model, account, harness,
                         // effort, thinking, fast), so there is nothing to translate and nothing that can be forgotten.
                         ...input.pick,
+                        // Whoever pressed Fix, verified as POST /agent verifies it: the conversation is theirs, and a
+                        // memory hold warns that person once rather than nobody.
+                        ...opt("actor", actorOf(context.identity, context.principal)),
+                        ...opt("owner", ownerOf(context.identity)),
+                        ...opt("areas", areasOf(context.identity)),
                     },
                     resume: input.mode,
                 },

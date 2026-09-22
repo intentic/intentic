@@ -1,3 +1,4 @@
+import { turnedAwayCode } from "../policy/turned-away.js";
 import type { AgentSummary } from "../schemas/agents.js";
 
 /* WHAT BECAME OF THE AGENT A SURFACE SENT AFTER A FAILURE — a red pipeline row, a refused push. */
@@ -87,7 +88,19 @@ const ENDINGS: Partial<Record<AgentSummary["status"], { readonly label: string; 
     idle: { label: "Nothing changed", why: "The fix agent finished without changing any files" },
 };
 
+// A failed turn the refusal stopped before the model saw a word: it never started, so there is nothing to carry on.
+export const turnedAwayAttempt = (agent: AgentSummary): boolean => agent.status === "error" && turnedAwayCode(agent.failureCode);
+
 const ended = (agent: AgentSummary): FixStance => {
+    if (turnedAwayAttempt(agent)) {
+        return {
+            kind: "ended",
+            ongoing: false,
+            retry: true,
+            label: "Didn't start",
+            hint: `The fix agent was turned away before it started${agent.failure === undefined ? "" : `: ${agent.failure}`}. Continuing sends it the whole task again; starting over opens a fresh conversation.`,
+        };
+    }
     const ending = ENDINGS[agent.status] ?? { label: "Agent stopped", why: "The fix agent's turn ended" };
     // File count left behind by a turn that died mid-edit; not a fix, but worth surfacing.
     const files = agent.diff?.files ?? 0;

@@ -1,6 +1,6 @@
 import { fixAttemptOf, latestFixAttempt, nextFixAttemptId } from "../ids/conversation-ids.js";
 import type { AgentSummary } from "../schemas/agents.js";
-import { type FixStance, fixStance } from "./fix-stance.js";
+import { type FixStance, fixStance, turnedAwayAttempt } from "./fix-stance.js";
 
 /* WHAT A PRESS ON A FAILURE'S FIX CONTROL DOES, decided once for every surface that has one — the push question in the shell, the pipelines board's rows. */
 
@@ -12,6 +12,8 @@ export type FixAttemptPlan =
     | { readonly kind: "new"; readonly conversationId: string; readonly attempt: number }
     // The latest attempt ended without a fix: carry on in it, with a nudge rather than the whole opening prompt.
     | { readonly kind: "continue"; readonly conversationId: string; readonly attempt: number }
+    // The latest attempt was turned away before it started, so it never saw the task: the whole prompt again, in it.
+    | { readonly kind: "resend"; readonly conversationId: string; readonly attempt: number }
     // Set the latest attempt aside (stopped first if still running) and open the next one on a clean worktree.
     | {
           readonly kind: "start-over";
@@ -40,7 +42,9 @@ export const planFixAttempt = (base: string, roster: readonly AgentSummary[], kn
         return { kind: "start-over", retire: latest.agent.id, stopFirst: stance.kind === "working", ...next() };
     }
     if (stance.retry) {
-        return { kind: "continue", conversationId: latest.agent.id, attempt: latest.attempt };
+        // A nudge to carry on names evidence earlier in the conversation, which an attempt turned away never received.
+        const kind = turnedAwayAttempt(latest.agent) ? "resend" : "continue";
+        return { kind, conversationId: latest.agent.id, attempt: latest.attempt };
     }
     return { kind: "busy", conversationId: latest.agent.id, stance };
 };

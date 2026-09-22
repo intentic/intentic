@@ -36,6 +36,15 @@ test("an attempt that ended is continued by a plain press, and by an explicit Co
     expect(planFixAttempt(BASE, roster, [], `continue`)).toEqual({ kind: `continue`, conversationId: BASE, attempt: 1 });
 });
 
+// A nudge to carry on names evidence earlier in the conversation, which an attempt turned away never received.
+test("an attempt turned away at the door is sent the whole task again, in the same conversation", () => {
+    const roster = [agent(BASE, { status: `error`, failureCode: `sandbox-memory-low`, failure: `Sandbox memory is low.` })];
+    expect(planFixAttempt(BASE, roster, [])).toEqual({ kind: `resend`, conversationId: BASE, attempt: 1 });
+    expect(planFixAttempt(BASE, roster, [], `continue`)).toEqual({ kind: `resend`, conversationId: BASE, attempt: 1 });
+    // Starting over is still the reader's to ask for.
+    expect(planFixAttempt(BASE, roster, [], `start-over`)).toMatchObject({ kind: `start-over`, retire: BASE });
+});
+
 test("start over retires the latest attempt and numbers the next past it", () => {
     const second = fixAttemptId(BASE, 2);
     const plan = planFixAttempt(BASE, [agent(BASE, { status: `stopped` }), agent(second, { status: `error` })], [], `start-over`);

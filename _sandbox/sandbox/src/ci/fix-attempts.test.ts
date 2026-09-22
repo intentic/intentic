@@ -1,5 +1,5 @@
 import { type AgentSummary, type AgentTurn, ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract";
-import { test, expect, mock } from "bun:test";
+import { describe, test, expect, mock } from "bun:test";
 import { type FixAttemptDeps, startFixAttempt } from "./fix-attempts.js";
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -16,8 +16,9 @@ const agent = (id: string, over: Partial<AgentSummary> = {}): AgentSummary => ({
 });
 
 // The doors, faked in order: every call is logged so a case can assert not just what happened but in what sequence.
-// `taken` is a conversation a live turn already owns, which `start` reports as undefined.
-const fakes = (roster: AgentSummary[] = [], archived: string[] = [], options: { readonly taken?: boolean } = {}) => {
+// `taken` is a conversation a live turn already owns, which `start` reports as undefined; `kept` is a conversation whose
+// turn the sandbox kept after turning it away at the door, which `rerun` runs again.
+const fakes = (roster: AgentSummary[] = [], archived: string[] = [], options: { readonly taken?: boolean; readonly kept?: string } = {}) => {
     const calls: string[] = [];
     const started: (AgentTurn & { conversationId: string })[] = [];
     const deps: FixAttemptDeps = {
@@ -29,6 +30,10 @@ const fakes = (roster: AgentSummary[] = [], archived: string[] = [], options: { 
             calls.push(`start ${turn.conversationId}`);
             started.push(turn);
             return options.taken === true ? undefined : { run: true };
+        }),
+        rerun: mock(async (id: string) => {
+            calls.push(`rerun ${id}`);
+            return id === options.kept ? { run: true } : undefined;
         }),
     };
     return { deps, calls, started };
@@ -103,4 +108,27 @@ test("a title that would overrun the registry's cap is cut, number and all", asy
     const { deps, started } = fakes([agent(BASE, { status: "stopped" })]);
     await startFixAttempt(deps, { ...ASK, title: `Fix CI: ${"x".repeat(90)}`, resume: "start-over" });
     expect((started[0]?.title ?? "").length).toBeLessThanOrEqual(80);
+});
+
+// The complaint this exists for: a press over an attempt the sandbox turned away sent "carry on" to a conversation that
+// had never been told what to carry on with.
+describe("an attempt turned away before it started", () => {
+    const turnedAway = agent(BASE, { status: "error", failureCode: "sandbox-memory-low", failure: "Sandbox memory is low." });
+
+    test("runs again the turn the sandbox kept, exactly as it was first sent", async () => {
+        const { deps, calls } = fakes([turnedAway], [], { kept: BASE });
+        const outcome = await startFixAttempt(deps, ASK);
+        expect(outcome).toEqual({ kind: "started", conversationId: BASE, attempt: 1, continued: true });
+        expect(calls).toEqual([`rerun ${BASE}`]);
+    });
+
+    // Nothing kept: the composer held it, or a restart dropped the sandbox's copy. The task goes whole, never the nudge.
+    test("with nothing kept, gets the whole opening prompt again, under the title it already has", async () => {
+        const { deps, started, calls } = fakes([turnedAway]);
+        const outcome = await startFixAttempt(deps, ASK);
+        expect(outcome).toEqual({ kind: "started", conversationId: BASE, attempt: 1, continued: true });
+        expect(calls).toEqual([`rerun ${BASE}`, `start ${BASE}`]);
+        expect(started[0]).toMatchObject({ conversationId: BASE, prompt: ASK.prompt, runRole: "pipeline-fix" });
+        expect(started[0]).not.toHaveProperty("title");
+    });
 });

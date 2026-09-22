@@ -313,6 +313,48 @@ describe(`turn runs`, () => {
         expect(run.rows.map((row) => row.role)).toEqual([`notice`]);
     });
 
+    // The bug this exists for: a fix press the sandbox started itself was turned away for memory, and its prompt went
+    // with the refusal, because no composer anywhere held a copy to hand back. Whoever keeps the turn keeps the words.
+    describe(`a turn turned away at the door that no sender keeps`, () => {
+        const REFUSAL = { kind: `error`, code: `sandbox-memory-low`, message: `Sandbox memory is low.` } as const satisfies AgentEvent;
+
+        it(`keeps its message, records it, and hands the turn over to be held`, async () => {
+            const { turnFn, push, close } = crankedTurn();
+            const transcript = mock(async () => true);
+            const held: { conversationId: string; run: string }[] = [];
+            const run = startTurnRun(turnFn, turn(`c-kept`), {
+                opening,
+                transcript,
+                holdTurnedAway: ({ input, run: refused }) => void held.push({ conversationId: input.conversationId, run: refused }),
+            })!;
+            const followed = collect(`c-kept`);
+            push(REFUSAL);
+            close();
+
+            const { entries } = await followed;
+            expect(held).toEqual([{ conversationId: `c-kept`, run: run.id }]);
+            // Said on the fact itself, so an attached window knows the sandbox, not its composer, has the words.
+            expect(entries).toContainEqual(expect.objectContaining({ kind: `fact`, fact: { ...REFUSAL, held: { ran: false } } }));
+            await waitFor(() => expect(transcript).toHaveBeenCalledTimes(1));
+            expect(run.rows).toEqual([
+                { role: `user`, text: `do the thing`, sentAt: 1, run: run.id },
+                expect.objectContaining({ role: `notice`, noticeAction: `sendAnyway`, sandboxHeld: true, run: run.id }),
+            ]);
+
+            // A refusal after the turn had spoken ended a turn that happened: there is nothing to hold for a press.
+            const spoke = crankedTurn();
+            const late = startTurnRun(spoke.turnFn, turn(`c-spoke`), {
+                opening,
+                holdTurnedAway: ({ input }) => void held.push({ conversationId: input.conversationId, run: `` }),
+            })!;
+            spoke.push({ kind: `delta`, text: `on it` });
+            spoke.push(REFUSAL);
+            spoke.close();
+            await waitFor(() => expect(late.done).toBe(true));
+            expect(held.map((entry) => entry.conversationId)).toEqual([`c-kept`]);
+        });
+    });
+
     // Fake journal with slow, ordered writes, to prove recordTurn/clearTurn never race however slow the writes are.
     // writeMs > clearMs mirrors a real disk: an unserialized clear would otherwise outrun a slower write.
     const fakeJournal = (writeMs = 20, clearMs = 1) => {

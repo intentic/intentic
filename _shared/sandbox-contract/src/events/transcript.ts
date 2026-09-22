@@ -236,11 +236,19 @@ export const TranscriptRowSchema = z.object({
             "A person wrote this in the agent's voice, with no turn behind it. Marked for the human re-reading the conversation months later, so their own words do not pass as the agent's. The agent itself never sees the mark.",
         ),
     // The follow-up this notice offers, by name; the chat decides what it does, and whether it stands. `sendAnyway` sends
-    // the held message; `sandboxMemory` offers that and a raise of the sandbox's memory.
+    // the held message; `sandboxMemory` offers that and a raise of the sandbox's memory; `sendAgain` sends a turn the
+    // sandbox kept after a refusal no raise would clear.
     noticeAction: z
-        .enum(["landHold", "depsInstall", "watchStop", "sandboxMemory", "sendAnyway"])
+        .enum(["landHold", "depsInstall", "watchStop", "sandboxMemory", "sendAnyway", "sendAgain"])
         .optional()
         .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
+    // Where a refused turn's words wait decides what the notice's press does: the composer's queue, or the sandbox.
+    sandboxHeld: z
+        .boolean()
+        .optional()
+        .describe(
+            "The sandbox kept this refused turn whole, its message still above, so the notice's press runs that turn again instead of sending anything from the composer, which never held these words.",
+        ),
     // An unfinished wait this notice describes, by name; whether it's still running is live state, not stored here.
     noticeWait: z
         .enum(["credentialRenewal", "chatRoute", "watch"])

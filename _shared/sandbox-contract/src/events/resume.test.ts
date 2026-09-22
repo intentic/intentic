@@ -44,6 +44,13 @@ test("the spent-allowance notes do not disclose as each other", () => {
     expect(new Set(lines).size).toBe(3);
 });
 
+test("a turn the door turned away discloses as its own notice, apart from the allowance's refusal", () => {
+    const door = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.door));
+    const refused = resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.refused));
+    expect(door).toEqual({ kind: "notice", text: expect.stringContaining("turned away") });
+    expect(door).not.toEqual(refused);
+});
+
 test("a prompt that is not a resume discloses nothing", () => {
     expect(resumeDisclosure("just a question")).toBeUndefined();
     expect(resumeDisclosure("")).toBeUndefined();

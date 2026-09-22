@@ -2116,6 +2116,38 @@ describe(`Conversation`, () => {
         expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
     });
 
+    // A turn the sandbox started itself (a fix press, a peer's message) and kept after the door turned it away: its
+    // words were never in this window, so the press asks the sandbox to run that turn and sends nothing of its own.
+    it(`runs a turn the sandbox kept on a press, as it was started, sending nothing of its own`, async () => {
+        const conversation = new Conversation(`c1`);
+        sandboxRequestMock.mockImplementation(
+            sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+                head: () => ({ prompt: withResumeNote(`fix the pipeline`, RESUME_NOTES.door), startedAt: Date.now() }),
+            }),
+        );
+        await conversation.resendKept({ text: `fix the pipeline`, attachments: [] });
+
+        const press = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent/resume`)!;
+        // No routing: whatever this window's composer holds is not what the sandbox started the turn on.
+        expect(JSON.parse(press[1]!.body as string)).toEqual({ conversationId: `c1` });
+        expect(turnBodies()).toHaveLength(0);
+        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
+    });
+
+    // A restart since the refusal drops the sandbox's copy; the words are still on screen, so the press sends those.
+    it(`sends the kept message's own words when the sandbox no longer keeps the turn`, async () => {
+        const conversation = new Conversation(`c1`);
+        const run = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
+        sandboxRequestMock.mockImplementation((path, init) =>
+            path === `/agent/resume`
+                ? Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ message: `no held turn` }) } as Response)
+                : run(path, init),
+        );
+        await conversation.resendKept({ text: `fix the pipeline`, attachments: [] });
+
+        expect(turnBodies().map((body) => body[`prompt`])).toEqual([`fix the pipeline`]);
+    });
+
     // A held re-run uses the composer's current account selection, not the account that got refused, since a spent
     // allowance is one account's problem and the switcher is how the user moves off it.
     it(`re-runs the held turn on the account the composer has switched to`, async () => {

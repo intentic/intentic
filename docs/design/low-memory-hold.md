@@ -31,15 +31,18 @@ first reading with room for a person's turn, so a shortage that comes back later
 
 ## The presses
 
-The hold leaves the words in the composer's queue, as every code on `HELD_FOR_RESEND` does. Sending them again
-is the composer's own Send or the notice's **Send anyway**, which releases that queue (`Conversation.resume`).
-Either one runs, because the daemon has already warned this person.
+The hold leaves the words with whoever keeps them (`turns-that-never-ran.md`). A message the composer sent goes
+back to its queue, and sending it again is the composer's own Send or the notice's **Send anyway**, which
+releases that queue (`Conversation.resume`). A turn the sandbox started itself, a pipeline fix press among them,
+stays in the conversation with the sandbox holding it, and **Send anyway** asks the sandbox to run that turn
+(`Conversation.resendKept`). Either way it runs, because the daemon has already warned this person: the fix route
+carries the presser as its actor, as `POST /agent` does.
 
 A hold that carried a reading also offers **Raise its memory to N GiB** when a connected device can reshape
 this sandbox. A stall carries none: pressure says the box is grinding, not that its ceiling is what to move.
 
-Both presses belong to the held message. They show while it is still queued, no turn is running, and the
-notice is the conversation's last row, and they go as soon as any of that stops being true. The raise
+Both presses belong to the held message. They show while it is still queued or kept by the sandbox, no turn
+is running, and the notice is the conversation's last row, and they go as soon as any of that stops being true. The raise
 recreates the container, so offering it next to a running turn would be offering to kill that turn.
 
 ## Background work still waits

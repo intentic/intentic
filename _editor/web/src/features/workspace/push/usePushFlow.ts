@@ -591,6 +591,7 @@ export function usePushFlow() {
             }
             await retireBefore(plan);
             const conversation = composeSession({
+                // Only an attempt that ran is nudged; one the door turned away (`resend`) never saw the task at all.
                 prompt: plan.kind === `continue` ? fix.nudge : fix.prompt,
                 ...fixWith,
                 // Isolated, like any fleet agent: the fix belongs in its own worktree, arriving as a diff to review.

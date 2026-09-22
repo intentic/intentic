@@ -989,6 +989,7 @@
             "releasingCoversRestConversation": "Releasing it covers the rest of this conversation.",
             "requestedBecause": "Requested because: {reason}",
             "sandboxRestartsMessageWaits": "(the sandbox restarts, and your message waits here)",
+            "sendAgain": "Send again",
             "sendAnyway": "Send anyway",
             "setupDidntFinishWhile": "The setup didn't finish while the agent waited: it continued without it.",
             "showCheck": "Show the check",

@@ -11,6 +11,7 @@ import {
     type TranscriptTool,
 } from "../events/transcript.js";
 import { contextTrimLine } from "../schemas/context-trim.js";
+import { turnedAwayCode } from "../policy/turned-away.js";
 import { mentionedPathTokens } from "./mentions.js";
 import { unspokenPromptRow } from "../events/agent-words.js";
 
@@ -114,32 +115,34 @@ const undelivered = (unattended: boolean): string =>
         ? `Nothing ran, and nothing is held: this run started on its own, so there is no message waiting to be sent again.`
         : `Your message was not delivered: it is held for you to send again.`;
 
-// Refused before the model saw it, so the composer still holds the message. A set rather than a run of case labels:
-// each one costs the switch below a branch, and what they share is a fact about the turn, not a shape.
-const HELD_FOR_RESEND: ReadonlySet<string> = new Set([
-    "claude-reauth",
-    "unknown-command",
-    "context-window-too-small",
-    "sandbox-memory-low",
-    "trial-unavailable",
-    "trial-model-unavailable",
-    "trial-exhausted",
-    // Both refuse at the door leaving the words in the composer, which is the whole of what this set means.
-    "model-unavailable",
-    "engine-version-floor",
-]);
+// The press a memory hold offers: the raise rides along only when the hold carried a ceiling to size it by, since a
+// stall names none and raising one would not clear it.
+const memoryPress = (event: Extract<AgentEvent, { kind: "error" }>): "sendAnyway" | "sandboxMemory" =>
+    event.memory === undefined ? "sendAnyway" : "sandboxMemory";
 
-// A memory hold is asked once and never again that spell (memory-admission.ts), so the next send always runs. The raise
-// rides along only when the hold carried a ceiling to size it by: a stall names none, and raising one would not clear it.
+// A memory hold is asked once and never again that spell (memory-admission.ts), so the next send always runs. A turn the
+// sandbox started itself (a fix press, a peer's message, a re-run) was never in a composer: its message stays above, and
+// the press asks the sandbox to run the turn it kept rather than sending a queue that holds nothing.
 const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
     const unattended = event.unattended === true;
-    if (event.code !== "sandbox-memory-low" || unattended) {
+    const memory = event.code === "sandbox-memory-low";
+    if (event.held !== undefined && !unattended) {
+        return {
+            role: "notice",
+            text: memory
+                ? `${event.message} Nothing has run yet: the message above is kept here, and sending it anyway starts it.`
+                : `${event.message} Nothing has run yet: the message above is kept here to send again once that is sorted.`,
+            noticeAction: memory ? memoryPress(event) : "sendAgain",
+            sandboxHeld: true,
+        };
+    }
+    if (!memory || unattended) {
         return { role: "notice", text: `${event.message} ${undelivered(unattended)}` };
     }
     return {
         role: "notice",
         text: `${event.message} Your message is held: send it again to start anyway.`,
-        noticeAction: event.memory === undefined ? "sendAnyway" : "sandboxMemory",
+        noticeAction: memoryPress(event),
     };
 };
 
@@ -165,7 +168,7 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
         default:
             break;
     }
-    if (code === undefined || !HELD_FOR_RESEND.has(code)) {
+    if (!turnedAwayCode(code)) {
         return { role: "notice", text: message };
     }
     return heldRow(event);
@@ -444,14 +447,25 @@ export class TranscriptFold {
         return this.unrun && !this.rows.some((row) => row.role === "assistant");
     }
 
+    /**
+     * Whether this frame turns the whole turn away at the door: a refusal before the model saw a word, with somebody
+     * watching and nothing yet said or steered in. Asked before the frame is applied, by whoever keeps the words.
+     */
+    turnedAway(event: AgentEvent): boolean {
+        return (
+            event.kind === "error" &&
+            turnedAwayCode(event.code) &&
+            event.unattended !== true &&
+            !this.rows.some((row) => row.role === "assistant") &&
+            !this.steeredIn
+        );
+    }
+
     // Attended refusals only: the composer holds those words for another press, so a bubble left standing repeats them
-    // once per press. Splicing is safe because nothing ran — no open bubble, no parked card, no steer above it.
+    // once per press. Splicing is safe because nothing ran — no open bubble, no parked card, no steer above it. A turn
+    // the sandbox kept (`held`) keeps its message and is recorded: no composer anywhere holds a copy of it.
     private retract(event: Extract<AgentEvent, { kind: "error" }>): TranscriptPatch[] {
-        const { code } = event;
-        if (code === undefined || !HELD_FOR_RESEND.has(code) || event.unattended === true) {
-            return [];
-        }
-        if (this.rows.some((row) => row.role === "assistant") || this.steeredIn) {
+        if (!this.turnedAway(event) || event.held !== undefined) {
             return [];
         }
         this.unrun = true;

@@ -127,6 +127,11 @@ export class TurnRun {
         return this.fold.ranNothing;
     }
 
+    // Whether this frame turns the whole turn away at the door, asked before it is pushed (TranscriptFold.turnedAway).
+    turnedAway(event: AgentEvent): boolean {
+        return this.fold.turnedAway(event);
+    }
+
     // One helper's transcript, by the id of the call that spawned it; empty if this run heard nothing from it.
     rowsOf(tag: string): readonly TranscriptRow[] {
         return this.children.get(tag)?.rows ?? [];
@@ -273,6 +278,9 @@ const notifySettled = (settled: TurnSettled): void => {
 const closingOf = (rows: readonly TranscriptRow[]): string =>
     rows.findLast((row) => row.role === "assistant" && row.text.trim() !== "")?.text.trim() ?? "";
 
+// A refusal whose turn the daemon keeps whole: `ran: false`, since a door refusal is decided before any request.
+const heldWhole = (event: AgentEvent): AgentEvent => (event.kind === "error" ? { ...event, held: { ran: false } } : event);
+
 const sweep = (): void => {
     const now = Date.now();
     for (const [conversationId, run] of runs) {
@@ -295,6 +303,10 @@ export interface RunOptions {
     readonly before?: Promise<unknown>;
     // How many boots already re-ran this turn, so a resume that dies again isn't resumed a third time; starts at 0.
     readonly attempts?: number;
+    // Keeps a turn turned away at the door when no sender keeps its words: the refusal goes out marked held, so its
+    // message stays in the record, and this is handed the turn to hold for a press. Absent, the sender keeps them (the
+    // composer behind POST /agent), and the refusal hands them back instead.
+    readonly holdTurnedAway?: (turnedAway: { readonly input: AgentTurn & { conversationId: string }; readonly run: string }) => void;
 }
 
 // Starts a detached run for the conversation's turn, or undefined if one is already live (caller 409s). Owns the
@@ -302,7 +314,7 @@ export interface RunOptions {
 export function startTurnRun(
     turnFn: TurnFn,
     input: AgentTurn & { conversationId: string },
-    { observer, journal, opening, transcript, before, attempts = 0 }: RunOptions = {},
+    { observer, journal, opening, transcript, before, attempts = 0, holdTurnedAway }: RunOptions = {},
 ): TurnRun | undefined {
     sweep();
     const existing = runs.get(input.conversationId);
@@ -347,13 +359,22 @@ export function startTurnRun(
             // Nothing to do and nowhere to report it.
         }
     };
+    // Held before it is folded, so the fold keeps the message a refusal at the door would otherwise take back.
+    const kept = (frame: AgentEvent): AgentEvent => {
+        if (holdTurnedAway === undefined || !run.turnedAway(frame)) {
+            return frame;
+        }
+        holdTurnedAway({ input, run: run.id });
+        return heldWhole(frame);
+    };
     void (async () => {
         // Set by the error frame below (or a provider emitting one mid-stream), read once at settle.
         let failure: string | undefined;
         let stopped = false;
         try {
             await before;
-            for await (const event of turnFn(input, undefined)) {
+            for await (const frame of turnFn(input, undefined)) {
+                const event = kept(frame);
                 // Every provider republishes its slash commands each turn; cache the latest (agent-commands.ts).
                 if (event.kind === "commands") {
                     recordCommands(provider, event.items);

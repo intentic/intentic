@@ -10,6 +10,9 @@ export type TurnInput = AgentTurn & {
     // The fence its starter holds, as area ids, if this turn is its first; latched there and never re-read, or an
     // unfenced person replying in a fenced conversation would widen it mid-thread.
     readonly areas?: readonly string[];
+    // Runs the door turned away before this turn sent the same words again: recorded, never seen by the model, so no
+    // history for a session seeded from the record.
+    readonly unseenRuns?: readonly string[];
 };
 
 export const actorOf = (identity: Caller | undefined, principal: Principal | undefined): string | undefined =>

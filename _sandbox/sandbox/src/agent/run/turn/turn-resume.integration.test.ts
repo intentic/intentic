@@ -37,6 +37,7 @@ import {
     clearStopLadder,
     createTurnResumeScheduler,
     fireHeldResume,
+    heldTurn,
     pendingOutageFailure,
     recordAuthFailure,
     recordHeldTurn,
@@ -1299,6 +1300,85 @@ test("nothing held answers with nothing, so the press falls back to saying carry
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     expect(await fireHeldResume(services, heldWake([]), "lim-none")).toBeUndefined();
 });
+
+// A turn the sandbox started itself (a fix press, a peer's message, a re-run) has no composer holding its words. The
+// bug this exists for: a fix press turned away for memory lost its whole prompt, and nothing offered to send it.
+const TURNED_AWAY: AgentEvent[] = [{ kind: "error", code: "sandbox-memory-low", message: "Sandbox memory is low." }, { kind: "done" }];
+
+test("a turn the sandbox started is kept when the door turns it away, its message recorded under the refusal", async () => {
+    const root = mkdtempSync(join(tmpdir(), "door-"));
+    const record = fileTranscriptRecord(join(root, "transcripts"));
+    const started = await startConversationTurn(fakeServices(root), fakeWake([], TURNED_AWAY), {
+        prompt: "fix the pipeline",
+        conversationId: "door-kept",
+        isolated: true,
+    });
+    await settle("door-kept");
+
+    expect(heldTurn("door-kept")).toMatchObject({ reason: "door", ran: false, run: started!.id, input: { prompt: "fix the pipeline", isolated: true } });
+    await waitFor(async () => expect(await record.read("door-kept")).toHaveLength(2), SETTLES);
+    expect(await record.read("door-kept")).toEqual([
+        { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), run: started!.id },
+        expect.objectContaining({ role: "notice", noticeAction: "sendAnyway", sandboxHeld: true, run: started!.id }),
+    ]);
+
+    // POST /agent's composer holds its own words and hands them back: a second copy kept here would be sent twice.
+    await startConversationTurn(fakeServices(root), fakeWake([], TURNED_AWAY), { prompt: "fix the pipeline", conversationId: "door-sent" }, { senderKeeps: true });
+    await settle("door-sent");
+    expect(heldTurn("door-sent")).toBeUndefined();
+    expect(await record.read("door-sent")).toEqual([]);
+
+    clearPendingResume("door-kept");
+});
+
+// Whether to go past a memory hold, a dead credential or a missing model is a person's call, never a clock's: the
+// resume pass leaves the turn alone however long it waits, and only the press sends it.
+test("a turn the door turned away waits for a press, which sends it whole, on the session it already had", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "door-")));
+    const turns: AgentTurn[] = [];
+    recordHeldTurn({
+        reason: "door",
+        input: { prompt: "fix the pipeline", conversationId: "door-press", isolated: true, sessionId: "s-live", runRole: "pipeline-fix" },
+        ran: false,
+        run: "run-refused",
+    });
+
+    await createTurnResumeScheduler(services, heldWake(turns)).tick(Date.now() + 24 * 60 * 60_000);
+    expect(turns).toEqual([]);
+
+    await fireHeldResume(services, heldWake(turns), "door-press");
+    await settle("door-press");
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]).toMatchObject({ isolated: true, sessionId: "s-live", runRole: "pipeline-fix" });
+    expect(turns[0]!.prompt).toBe(withResumeNote("fix the pipeline", RESUME_NOTES.door));
+    // The refused run recorded these same words; a session seeded from the record must not read them twice.
+    expect(turns[0]).toMatchObject({ unseenRuns: ["run-refused"] });
+
+    clearPendingResume("door-press");
+});
+
+// Pressed before its cause was fixed, the re-run is turned away too: every refused copy of the words stays unseen.
+test("a turn turned away again names every refused run before it, not only the last", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "door-")));
+    const turns: AgentTurn[] = [];
+    recordHeldTurn({
+        reason: "door",
+        input: { prompt: withResumeNote("fix the pipeline", RESUME_NOTES.door), conversationId: "door-again", unseenRuns: ["run-first"] },
+        ran: false,
+        run: "run-second",
+    });
+
+    await fireHeldResume(services, heldWake(turns), "door-again");
+    await settle("door-again");
+
+    expect(turns[0]).toMatchObject({ unseenRuns: ["run-first", "run-second"] });
+    // One note however many presses it took.
+    expect(turns[0]!.prompt).toBe(withResumeNote("fix the pipeline", RESUME_NOTES.door));
+
+    clearPendingResume("door-again");
+});
+
 
 test("a turn a dead runtime cut short is sent again on its own session, with no allowance in the note", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
