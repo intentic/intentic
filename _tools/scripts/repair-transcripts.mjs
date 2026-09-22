@@ -7,6 +7,7 @@
 
 import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { HISTORY_ROOT } from "@intentic/constants";
 
 // The clause errorRow appends to an attended refusal that ran nothing; the only form whose message can repeat.
 const HELD_FOR_RESEND = "Your message was not delivered: it is held for you to send again.";
@@ -100,7 +101,7 @@ const repairCheckpoints = (file, shifts) => {
 const main = async () => {
     const args = process.argv.slice(2);
     const apply = args.includes("--apply");
-    const dir = args.find((arg) => !arg.startsWith("--")) ?? "/history/transcripts";
+    const dir = args.find((arg) => !arg.startsWith("--")) ?? join(HISTORY_ROOT, "transcripts");
     const names = (await readdir(dir).catch(() => [])).filter((name) => name.endsWith(".jsonl"));
     if (names.length === 0) {
         console.log(`no records in ${dir}`);
