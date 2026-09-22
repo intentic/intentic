@@ -12,6 +12,7 @@ const PRESET = [
     "IMPORTANT: Assist with authorized security testing.",
     "# Environment\n - The most recent Claude models are the Claude 5 family.",
     "# Context management\nWhen the conversation grows long, the context is summarized.",
+    "For actions that are hard to reverse, confirm first.",
 ].join("\n\n");
 const INTENTIC = intenticPromptOf(PRESET);
 const asked: (string | undefined)[] = [];

@@ -6,7 +6,7 @@ import { runAgent } from "./agent.js";
 import type { QueryFn } from "./sdk-stream.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
-mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "You are an interactive agent.", version: "2.1.0" }) }));
+mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }) }));
 
 // Task verbs fold into one live checklist instead of tool cards; a subagent's verbs (marked by parent_tool_use_id) are
 // excluded from the parent's list. Stream-level: the fold is only reached through the message loop.

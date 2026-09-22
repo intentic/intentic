@@ -22,7 +22,6 @@ const PRESET = [
 test("the preset loses exactly what Intentic replaces, and keeps the rest word for word", () => {
     expect(intenticPromptOf(PRESET)).toBe(
         [
-            "You are an interactive agent that helps users with software engineering tasks.",
             // The security line goes; the rule it shares a paragraph with is a different one and stays.
             "IMPORTANT: You must NEVER generate or guess URLs.",
             "# Harness\n - Text you output outside of tool use is displayed as markdown.\n - Reference code as `file_path:line_number`.",

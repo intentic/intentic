@@ -10,7 +10,7 @@ import type { QueryFn } from "./sdk-stream.js";
 import { taskStoreDir } from "./task-store.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
-mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "You are an interactive agent.", version: "2.1.0" }) }));
+mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }) }));
 
 // A resumed turn's checklist fold must seed from the id-keyed list the previous turn left on disk (task-store.ts),
 // adopted at the first frame naming the session. Integration suite: reads a real store on disk.
