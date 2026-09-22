@@ -126,7 +126,7 @@ const syncOne = async (
     const commits = Number((await git(worktree, ["rev-list", "--count", `${tip}..${head}`])).stdout.trim());
     const behind = { repo, onto: head, commits, moved, overlap };
     // Commits the dirty remainder first; `git rebase` refuses to start on a dirty tree.
-    await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, git);
+    await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, worktrees.mainDir("root"), git);
     if ((await rebaseOnto(worktree, head, AGENT_GIT_AUTHOR, git)).ok) {
         return behind;
     }

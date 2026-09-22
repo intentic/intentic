@@ -10,13 +10,14 @@ import { defaultGit } from "@intentic/scaffold";
 import { test, expect, afterEach } from "bun:test";
 import { isolatedAgent, noIsolation } from "../../testing.js";
 import { changesAgainstBase } from "../../git/changes/changes.js";
+import { stagePaths } from "../../git/changes/changes-index.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../platform/resources/perf.js";
 import { workspacePaths } from "../../workspace/workspace.js";
-import { checkpointOf } from "./agent-changes.js";
+import { agentRepoReview, checkpointOf } from "./agent-changes.js";
 
-import { landAgent, outstandingConflicts, pruneEmptiedDirs } from "./land.js";
+import { landAgent, outstandingConflicts } from "./land.js";
 import { createAgentWorktrees, type AgentWorktrees, type ConversationWorktree } from "../worktrees/worktrees.js";
 
 const exec = promisify(execFile);
@@ -844,19 +845,6 @@ test("a binary file both sides changed conflicts as `binary`, not `workspace`", 
     expect(result.conflicts?.[0]?.paths).toEqual([{ path: "logo.png", reason: "binary" }]);
 });
 
-test("pruneEmptiedDirs stops at the first level that still holds anything, and at the repo root", async () => {
-    const base = await mkdtemp(join(tmpdir(), "intentic-prune-"));
-    tempDirs.push(base);
-    await mkdir(join(base, "a/b/c"), { recursive: true });
-    await writeFile(join(base, "a/keep.txt"), "kept\n");
-
-    await pruneEmptiedDirs(base, ["a/b/c/removed.txt", "top-level-removed.txt"]);
-
-    expect(existsSync(join(base, "a/b"))).toBe(false);
-    expect(existsSync(join(base, "a/keep.txt"))).toBe(true);
-    expect(existsSync(base)).toBe(true);
-});
-
 // The blocked set is read off one whole-patch refusal, not probed per file, so a delta of any size classifies in a
 // handful of git runs. Sixty files, refused and clean by turns, cost the per-file road three runs each.
 test("a delta with many refusing paths classifies in fewer git runs than it has files", async () => {
@@ -913,4 +901,39 @@ test("a write the tree refuses after a clean preflight reports the path as a con
     expect(existsSync(join(work, "pkg", "vendor", "dep", "index.js"))).toBe(true);
     // Refused before any tip moved: the next land carries the same delta.
     expect(result.repos.find((repo) => repo.repo === "root")?.landedTip).toBeUndefined();
+});
+
+// What reached main once as `.trun/` and `.bench/`: scratch never rides a land, and the review names it apart instead.
+test("a land leaves the checkout's scratch behind, and the review lists it apart from the work", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await mkdir(join(conversation.cwd, ".bench", "out"), { recursive: true });
+    await writeFile(join(conversation.cwd, ".bench", "out", "run.out"), "12 passed\n");
+    await writeFile(join(conversation.cwd, "debug.log"), "trace\n");
+    await writeFile(join(conversation.cwd, "feature.ts"), "export {};\n");
+    const agent = isolatedAgent(conversation.repos);
+
+    const result = await landAgent(worktrees, agent);
+
+    expect(result.landed).toBe(true);
+    expect(result.diff).toEqual({ files: 1, insertions: 1, deletions: 0 });
+    expect(existsSync(join(work, "feature.ts"))).toBe(true);
+    expect(existsSync(join(work, ".bench"))).toBe(false);
+    expect(existsSync(join(work, "debug.log"))).toBe(false);
+    const review = await agentRepoReview(worktrees, agent, agent.repos[0]!);
+    expect(review.changes.map((change) => change.path)).toEqual(["feature.ts"]);
+    expect(review.scratch).toEqual([
+        { path: ".bench/", reason: "hidden", files: 1, bytes: 10 },
+        { path: "debug.log", reason: "byproduct", files: 1, bytes: 6 },
+    ]);
+});
+
+// Including scratch is staging it: the index is somebody's decision, and the next capture carries it as it stands.
+test("scratch staged in the checkout rides the next land like any other file", async () => {
+    const { work, worktrees, conversation } = await setup();
+    await writeFile(join(conversation.cwd, "fixture.log"), "a log the tests read\n");
+    await stagePaths(conversation.cwd, ["fixture.log"]);
+
+    await landAgent(worktrees, isolatedAgent(conversation.repos));
+
+    expect(await readFile(join(work, "fixture.log"), "utf8")).toBe("a log the tests read\n");
 });

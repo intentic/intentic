@@ -1,11 +1,16 @@
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import {
     agentsContract,
     type AgentChange,
+    type AgentChanges,
+    type AgentScratch,
     type AgentHistoryCommit,
     type AgentRepoChanges,
     type AgentRepoHistory,
     type AgentSummary,
+    type ScratchPath,
     capabilitiesOf,
     type TurnEnding,
 } from "@intentic/sandbox-contract";
@@ -22,6 +27,8 @@ import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
 import { conversationLines, matchLines } from "../sessions/transcript-search.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { headSha } from "../git/changes/changes.js";
+import { pruneEmptiedDirs } from "../git/changes/changes-index.js";
+import { scratchScopeOf } from "../git/changes/scratch.js";
 import { agentRepoReview, agentRepoModules, checkpointOf, presentInMain } from "./land/agent-changes.js";
 import { commitsCarrying, historySpanStart } from "./land/landed-history.js";
 import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
@@ -64,6 +71,35 @@ export const createAgentsRoutes = (services: Services) => {
         if (services.agents.running(id)) {
             throw new ORPCError("CONFLICT", { message: "the agent's turn is running, wait for it to finish" });
         }
+    };
+    // The review's `scratch`: repos with none left out, and the field absent when no repo has any.
+    const scratchField = (scratch: NonNullable<AgentChanges["scratch"]>): Pick<AgentChanges, "scratch"> => {
+        const some = scratch.filter((repo) => repo.paths.length > 0);
+        return some.length > 0 ? { scratch: some } : {};
+    };
+    // Scratch of a resting conversation's live copy, as it stands now and exactly as named: a list the review drew
+    // earlier must not reach a file that has since stopped looking like scratch.
+    const scratchNamed = async (input: AgentScratch): Promise<{ dir: string; named: ScratchPath[] }> => {
+        const entry = isolatedEntryOf(input.id);
+        notRunning(input.id);
+        // Refused like a second land press, not queued behind the lease: a land reads this very index.
+        if (services.agents.landing(input.id)) {
+            throw new ORPCError("CONFLICT", { message: "this agent is landing, wait for it to finish" });
+        }
+        if (!entry.repos.some((composed) => composed.repo === input.repo)) {
+            throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
+        }
+        if (!(await services.agentWorktrees.attached(entry.id, input.repo))) {
+            throw new ORPCError("CONFLICT", { message: "this conversation's copy is gone, and its scratch went with it" });
+        }
+        const dir = services.agentWorktrees.worktreeDir(entry.id, input.repo);
+        const scratch = await services.git.scratchOf(dir, await scratchScopeOf(input.repo, services.agentWorktrees.mainDir("root")));
+        const named = scratch.filter((candidate) => input.paths.includes(candidate.path));
+        const stale = input.paths.filter((path) => !named.some((candidate) => candidate.path === path));
+        if (stale.length > 0) {
+            throw new ORPCError("CONFLICT", { message: `no longer scratch: ${stale.join(", ")}` });
+        }
+        return { dir, named };
     };
     // Softer than notRunning: a land only reads the checkout, so it asks whether anyone is mid-sentence, not whether
     // the turn is alive. Parked on a question passes; genuine mid-write needs an explicit `force`.
@@ -414,11 +450,15 @@ export const createAgentsRoutes = (services: Services) => {
         diff: i.diff.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
             const repos: AgentRepoChanges[] = [];
+            const scratch: NonNullable<AgentChanges["scratch"]> = [];
             let absorbed = 0;
             for (const composed of entry.repos) {
                 try {
                     // Same reading agent-changes.ts uses for the land's totals, so the two cannot disagree.
-                    const changes = await agentRepoReview(services.agentWorktrees, entry, composed);
+                    const review = await agentRepoReview(services.agentWorktrees, entry, composed);
+                    // Before the empty check: a conversation that wrote nothing but scratch still has something to show.
+                    scratch.push({ repo: composed.repo, paths: review.scratch });
+                    const { changes } = review;
                     if (changes.length === 0) {
                         continue;
                     }
@@ -459,6 +499,7 @@ export const createAgentsRoutes = (services: Services) => {
             return {
                 repos,
                 absorbed,
+                ...scratchField(scratch),
                 ...(conflicts.length > 0 ? { conflicts } : {}),
                 ...(elsewhere.length > 0 ? { elsewhere: elsewhere.map(({ repo, branch }) => ({ repo, ...(branch === undefined ? {} : { branch }) })) } : {}),
             };
@@ -471,7 +512,7 @@ export const createAgentsRoutes = (services: Services) => {
             let unaccounted = 0;
             for (const composed of entry.repos) {
                 try {
-                    const changes = await agentRepoReview(services.agentWorktrees, entry, composed);
+                    const { changes } = await agentRepoReview(services.agentWorktrees, entry, composed);
                     if (changes.length === 0) {
                         continue;
                     }
@@ -557,6 +598,29 @@ export const createAgentsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
             return services.git.fileDiff(dir, input.path, await checkpointOf(dir, main, entry.branch, undefined, composed.base));
+        }),
+        includeScratch: i.includeScratch.handler(async ({ input }) => {
+            const { dir, named } = await scratchNamed(input);
+            if (named.some((entry) => entry.reason === "checkout")) {
+                throw new ORPCError("BAD_REQUEST", { message: "a checkout of its own cannot ride a merge; add it to the workspace as a repository" });
+            }
+            // Staged, not committed: the next capture commits it with the rest of the work.
+            await services.git.stagePaths(
+                dir,
+                named.map((entry) => entry.path),
+            );
+            return { ok: true } as const;
+        }),
+        deleteScratch: i.deleteScratch.handler(async ({ input }) => {
+            const { dir, named } = await scratchNamed(input);
+            for (const entry of named) {
+                await rm(join(dir, entry.path), { recursive: true, force: true });
+            }
+            await pruneEmptiedDirs(
+                dir,
+                named.map((entry) => entry.path.replace(/\/$/, "")),
+            );
+            return { ok: true } as const;
         }),
         // Manual land, the recovery path after a conflicted or aborted auto-land; same patch-apply mechanics.
         land: i.land.handler(async ({ input }) => {

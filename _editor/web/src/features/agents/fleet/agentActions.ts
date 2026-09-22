@@ -263,6 +263,16 @@ export const discardAgent = (id: string, at: AgentReach = undefined): Promise<vo
         await agentJson(at, `/agents/${encodeURIComponent(id)}/discard`, { method: `POST` });
     });
 
+// Scratch is what a land leaves in the conversation's copy (AgentChanges.scratch). Including stages it there, so the
+// next land carries it; deleting removes it from the copy. Both name paths exactly as the review listed them.
+export const includeAgentScratch = async (id: string, repo: string, paths: readonly string[], at: AgentReach = undefined): Promise<void> => {
+    await agentJson(at, `/agents/${encodeURIComponent(id)}/scratch/include`, jsonBody(`POST`, { repo, paths }));
+};
+
+export const deleteAgentScratch = async (id: string, repo: string, paths: readonly string[], at: AgentReach = undefined): Promise<void> => {
+    await agentJson(at, `/agents/${encodeURIComponent(id)}/scratch/delete`, jsonBody(`POST`, { repo, paths }));
+};
+
 // True cancel for an in-flight turn, the card reading `stopping` from the press: an open streaming tab runs its own
 // stop(), else the daemon is told; another box's card never takes the tab branch, since an id repeats across boxes.
 export const stopAgent = (id: string, at: AgentReach = undefined): Promise<void> =>

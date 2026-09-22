@@ -3,11 +3,12 @@ import { isAbsolute, join } from "node:path";
 import { pathExists } from "../../path-exists.js";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
-import { defaultGit, gitCommitAll, gitInit, gitStageAll, type GitRunner } from "@intentic/scaffold";
+import { defaultGit, gitInit, gitStageAll, type GitRunner } from "@intentic/scaffold";
 import { repoGitDir, rootExcludes, syncRootExcludes } from "../../history/history.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
-import { commitIndex } from "../changes/changes-index.js";
+import { commitIndex, stageAll } from "../changes/changes-index.js";
+import { scratchOf, scratchScopeOf } from "../changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 
 // The whole /work workspace under version control, not just nested repos, so root files commit/discard like any repo's.
@@ -102,19 +103,33 @@ const untrackNestedRepos = async (root: string, gitDir: string, git: GitRunner):
     await git(root, drop);
 };
 
-// Runs the same stray-gitlink drop inside a conversation's own worktree, between staging and commit, before it lands on
-// the branch. Uses gitStageAll rather than `add -A`, since an unborn nested repo would otherwise abort the whole stage.
-export const commitWorktreeRemainder = async (repo: string, dir: string, message: string, git: GitRunner = defaultGit): Promise<boolean> => {
-    if (repo !== "root") {
-        return gitCommitAll(dir, message, AGENT_GIT_AUTHOR, git);
+// `--ignore-errors` exits 1 having staged everything it could: a path it could not stage (an unborn nested repo) was
+// skipped, and that alone must not abort the capture.
+const skippedPaths = (error: unknown): void => {
+    if ((error as { code?: unknown }).code !== 1) {
+        throw error;
     }
-    await gitStageAll(dir, git);
-    const gitlinks = await strayGitlinks(dir, git);
-    if (gitlinks.length > 0) {
-        await git(dir, ["update-index", "--force-remove", "--", ...gitlinks]);
+};
+
+// Every capture of a checkout's remainder, the main tree's included: all but its scratch (scratch.ts), the root's stray
+// gitlinks dropped between staging and commit, no commit hook consulted. `workspaceRoot` is the main tree's root.
+export const commitWorktreeRemainder = async (
+    repo: string,
+    dir: string,
+    message: string,
+    workspaceRoot: string,
+    git: GitRunner = defaultGit,
+): Promise<boolean> => {
+    const scratch = await scratchOf(dir, await scratchScopeOf(repo, workspaceRoot), git);
+    await stageAll(dir, scratch, git).catch(skippedPaths);
+    if (repo === "root") {
+        const gitlinks = await strayGitlinks(dir, git);
+        if (gitlinks.length > 0) {
+            await git(dir, ["update-index", "--force-remove", "--", ...gitlinks]);
+        }
     }
     // commitIndex: the index already holds the removal staging alone wouldn't commit.
-    return commitIndex(dir, message, AGENT_GIT_AUTHOR, git);
+    return commitIndex(dir, message, AGENT_GIT_AUTHOR, git, "skip");
 };
 
 // Returns true only when this boot freshly `gitInit`ed the repo; the caller then takes the baseline commit only after

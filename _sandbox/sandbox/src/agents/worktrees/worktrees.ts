@@ -439,7 +439,7 @@ export const createAgentWorktrees = (
         if (stdout === "") {
             return;
         }
-        await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, git);
+        await commitWorktreeRemainder(repo, worktree, `Agent: ${title ?? id}`, workspace.root, git);
     };
 
     // Drops one checkout and parks its branch (retire pass 2 / a leaving repo's second half); under the repo lock,

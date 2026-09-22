@@ -11,7 +11,7 @@ import type { TurnCheckpoint } from "./turn-checkpoints.js";
 // work. A failing repo drops out without failing the others; an checkpoint covering some repos beats none.
 
 export interface CheckpointDeps {
-    readonly agentWorktrees: Pick<AgentWorktrees, "worktreeDir">;
+    readonly agentWorktrees: Pick<AgentWorktrees, "worktreeDir" | "mainDir">;
     readonly logger: Logger;
 }
 
@@ -46,7 +46,7 @@ export const checkpointWorktree = async (
             if (stdout !== "") {
                 // Titled as the turn boundary, so `git log` shows where each turn began instead of identical commit
                 // names.
-                await commitWorktreeRemainder(repo, dir, title, git);
+                await commitWorktreeRemainder(repo, dir, title, services.agentWorktrees.mainDir("root"), git);
             }
             const base = await headSha(dir, git);
             if (base !== undefined) {

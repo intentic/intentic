@@ -67,7 +67,7 @@ const placed = async (
     if (composed === undefined) {
         throw new Error("no repo in the composition");
     }
-    const changes = await agentRepoReview(worktrees, entry, composed);
+    const { changes } = await agentRepoReview(worktrees, entry, composed);
     const present = await presentInMain(
         worktrees,
         entry,

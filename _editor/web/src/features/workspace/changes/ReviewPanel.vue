@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { GitChange, GitDiffSide, LandedMessage, LandedMessageDraft, RepoChanges, RepoTarget } from "@intentic/api-contract";
+import { isScratch } from "@intentic/sandbox-contract";
 import { Button, ChangeStatusMark, growTextarea, ui, Modal, timeAgo, useDevice, type IconName, vAction } from "@intentic/ui";
 import { useNow } from "@intentic/ui/async";
 import { useWorkspaceTabs } from "../tabs/useWorkspaceTabs";
@@ -1418,6 +1419,18 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     </Button>
                 </div>
 
+                <!-- Untracked paths shaped like scratch: every stage-everything leaves them out, so Commit all does too. -->
+                <div v-if="group.scratch !== undefined" :class="[NOTICE, 'mb-1.5 mt-0.5 border-border bg-overlay']">
+                    <Icon name="filter" class="mt-0.5 shrink-0 text-2xs text-subtle" />
+                    <div class="min-w-0 flex-1">
+                        <p class="text-2xs font-medium text-content">
+                            {{ t(`workspace.reviewPanel.scratchLeftOut`, { count: group.scratch.length }, group.scratch.length) }}
+                        </p>
+                        <p class="break-all font-mono text-2xs text-muted">{{ group.scratch.map((entry) => entry.path).join(`, `) }}</p>
+                        <p class="text-2xs text-subtle">{{ t(`workspace.reviewPanel.scratchLeftOutHint`) }}</p>
+                    </div>
+                </div>
+
                 <!-- No empty-repo guard needed here — `dirty` is the list, and a repo with no rows isn't in it. -->
                 <div v-if="!collapsed.has(group.repo)" class="pb-1 pl-1">
                     <!-- One block per git side (conflicts, staged, unstaged); the header's action is whole-side, ignoring selection. -->
@@ -1483,6 +1496,9 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                                             :label="changeLabel(group.repo, change)"
                                             :named="viewOf(group.repo, section.side).named"
                                         />
+                                        <span v-if="isScratch(change.path, group.scratch ?? [])" class="shrink-0 text-2xs text-subtle">{{
+                                            t(`workspace.reviewPanel.scratchTag`)
+                                        }}</span>
                                         <!-- Provider chips show before the file name when the panel has room. -->
                                         <span
                                             v-if="showRowOrigins(group, change.path)"

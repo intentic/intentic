@@ -9,6 +9,8 @@ import {
     type GitDiffSide,
     type GitScope,
     type GitTarget,
+    isScratch,
+    type ScratchPath,
     type OriginAgent,
     type RepoChanges,
 } from "@intentic/sandbox-contract";
@@ -23,6 +25,7 @@ import { isControlPlanePath, isReviewableStatePath, resolveWithin } from "../wor
 import type { ActionResult } from "./changes/changes-commits.js";
 import { DISCARDABLE_SIDES, isWholeRepo, scopedPaths, STAGEABLE_SIDES, UNSTAGEABLE_SIDES } from "./changes/changes-target.js";
 import { conflictedSides, stagedSides, unstagedSides, withCodeCounts } from "./changes/code-counts.js";
+import { scratchScopeOf } from "./changes/scratch.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { gitFailureReason } from "./git.js";
 import { parsableMessage } from "./ops/commit-message.js";
@@ -148,17 +151,29 @@ export const createGitRoutes = (services: Services) => {
 
     // Stage-all/discard-all use single-command spellings that never enumerate paths; unstage has none (a bare `reset`
     // also clears MERGE_HEAD) so it always resolves to paths. Callers must hold the repo lock.
+    // What a stage-everything leaves out of this repo right now (scratch.ts): the scan shows it, the stage honors it.
+    const scratchIn = async (repo: string, dir: string): Promise<ScratchPath[]> => services.git.scratchOf(dir, await scratchScopeOf(repo, services.workspace.root));
+    // A repo row's `scratch`, read only when something is untracked: a scan runs about once a second while files land.
+    const scratchRow = async (repo: string, dir: string, worktree: readonly GitChange[]): Promise<Pick<RepoChanges, "scratch">> => {
+        if (!worktree.some((change) => change.status === "added")) {
+            return {};
+        }
+        const scratch = await scratchIn(repo, dir);
+        return scratch.length > 0 ? { scratch } : {};
+    };
     const stageTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
         if (target.paths !== undefined) {
             await services.git.stagePaths(dir, target.paths);
             return;
         }
         const scope = target.scope ?? {};
+        // A described target means "everything" of some kind, and what looks like scratch joins one only when picked by path.
+        const scratch = await scratchIn(repo, dir);
         if (isWholeRepo(scope)) {
-            await services.git.stageAll(dir);
+            await services.git.stageAll(dir, scratch);
             return;
         }
-        await services.git.stagePaths(dir, await scopeToPaths(repo, dir, scope, STAGEABLE_SIDES));
+        await services.git.stagePaths(dir, (await scopeToPaths(repo, dir, scope, STAGEABLE_SIDES)).filter((path) => !isScratch(path, scratch)));
     };
     const unstageTarget = async (repo: string, dir: string, target: GitTarget): Promise<void> => {
         await services.git.unstagePaths(
@@ -225,6 +240,7 @@ export const createGitRoutes = (services: Services) => {
                     services.git.operationInProgress(dir),
                 ]);
                 const worktree = ownWork(repo, unstaged);
+                const scratch = await scratchRow(repo, dir, worktree);
                 // `remote` feeds the sync bar; `landed` is which agent touched each path, independently of it.
                 const [remote, landed] = await Promise.all([
                     services.git.remoteState(dir, { branch }),
@@ -272,6 +288,7 @@ export const createGitRoutes = (services: Services) => {
                         staged: countedStaged,
                         unstaged: countedUnstaged,
                         ...(capped.truncated.staged + capped.truncated.unstaged > 0 ? { truncated: capped.truncated } : {}),
+                        ...scratch,
                         remote,
                         ...(Object.keys(origins).length > 0 ? { origins } : {}),
                     };

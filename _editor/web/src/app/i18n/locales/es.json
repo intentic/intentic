@@ -134,6 +134,19 @@
             "tests": "Pruebas {files}",
             "unaccounted": "Hay {count} archivo más en tu historial sin un commit aquí que lo explique: ese contenido llegó a tu línea principal por otra vía. | Hay {count} archivos más en tu historial sin un commit aquí que los explique: ese contenido llegó a tu línea principal por otra vía."
         },
+        "agentScratchReport": {
+            "byproduct": "un registro, un volcado o una copia de seguridad",
+            "checkout": "un repositorio git propio, que ninguna integración puede llevar",
+            "delete": "Eliminar",
+            "hidden": "una carpeta oculta nueva",
+            "hint": "Se quedan en la copia de esta conversación y se van con ella. Incluye lo que forme parte del trabajo y elimina el resto.",
+            "include": "Incluir",
+            "includeHint": "Añadirlo al trabajo de esta conversación, para que la próxima integración lo lleve",
+            "oversized": "más grande de lo que llega a ser el código fuente",
+            "root": "un archivo oculto nuevo en la raíz de un espacio de trabajo de repositorios",
+            "size": "{count} archivo, {size} | {count} archivos, {size}",
+            "title": "{count} ruta quedó fuera de la integración por parecer temporal | {count} rutas quedaron fuera de la integración por parecer temporales"
+        },
         "agentSessionMenu": {
             "agentStillWritingYoull": "El agente sigue escribiendo: se te pedirá que confirmes",
             "agentStillWritingYoull2": "El agente sigue escribiendo, se te pedirá que confirmes",
@@ -4759,6 +4772,9 @@
             "resolveConflictsStageTo": "Resuelve los conflictos y prepáralos para continuar, o aborta para devolver este repositorio a donde empezó el {operation}.",
             "restorePointSavedFirst": "Primero se guarda un punto de restauración, así que esto es reversible desde Puntos de restauración",
             "restorePointSavedFirst2": "Primero se guarda un punto de restauración, así que esto es reversible desde Puntos de restauración.",
+            "scratchLeftOut": "Preparar todo y hacer commit de todo dejan fuera {count} ruta que parece temporal | Preparar todo y hacer commit de todo dejan fuera {count} rutas que parecen temporales",
+            "scratchLeftOutHint": "Prepárala desde su propia fila para incluirla en el commit.",
+            "scratchTag": "temporal",
             "staged": "preparado",
             "staged2": "Preparado",
             "stagesEveryChangeCommits": "Prepara todos los cambios y luego hace commit",

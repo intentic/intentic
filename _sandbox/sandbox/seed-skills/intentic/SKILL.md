@@ -18,6 +18,8 @@ What the daemon does around you:
   turn ends cleanly its delta is **landed**: applied to the owner's main tree as UNCOMMITTED changes, so their
   own commit is the review boundary. That is why you commit only when asked. A patch that will not apply
   refuses the whole land and raises a conflict card naming the paths; every worktree keeps everything.
+  Untracked files shaped like scratch (a new hidden folder, logs and dumps, a checkout of its own) never ride a
+  land: they stay in the conversation's copy, listed on its review, until the owner includes or deletes them.
 - **Runtimes.** A turn runs on Claude Code (this loop), native Codex, OpenCode (Grok, Gemini), Pi, Cursor or
   an ACP agent, chosen per conversation. Which model actually ran is recorded (`mcp__diagnostics__turns`).
 - **Capabilities** are the connections the owner made: connectors (GitHub, Notion, databases…), browser

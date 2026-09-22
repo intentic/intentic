@@ -233,6 +233,23 @@ export const GitOperationStateSchema = z.object({
     ),
 });
 export type GitOperationState = z.infer<typeof GitOperationStateSchema>;
+// Judged by shape alone: the names scratch arrives under are made up fresh every time, so no list of names could hold.
+export const ScratchReasonSchema = z
+    .enum(["hidden", "byproduct", "checkout", "oversized", "root"])
+    .describe(
+        "Why it looks like scratch. A new hidden directory that is not one a project keeps on purpose (like `.github`). A log, dump, backup or editor leftover. A git checkout of its own. A new file past the size source code reaches. Or a new dotfile at the top of a workspace whose projects are the repositories inside it.",
+    );
+export type ScratchReason = z.infer<typeof ScratchReasonSchema>;
+export const ScratchPathSchema = z.object({
+    path: z.string().describe("Relative to its repository. A directory ends in a slash and stands for everything inside it."),
+    reason: ScratchReasonSchema,
+    files: z.number().optional().describe("How many files it holds. Absent for a checkout of its own, whose contents are not walked."),
+    bytes: z.number().optional().describe("Their total size in bytes. Absent exactly when `files` is."),
+});
+export type ScratchPath = z.infer<typeof ScratchPathSchema>;
+// Whether a scratch entry covers `path`: a directory entry everything under it, a file entry only itself.
+export const isScratch = (path: string, scratch: readonly Pick<ScratchPath, "path">[]): boolean =>
+    scratch.some((entry) => (entry.path.endsWith("/") ? path.startsWith(entry.path) : path === entry.path));
 export const RepoChangesSchema = z.object({
     // The {repo} param the per-repo git routes accept: "root" or a repo id (its root-relative dir).
     repo: z.string(),
@@ -266,6 +283,14 @@ export const RepoChangesSchema = z.object({
         .optional()
         .describe(
             "How many changes were cut from each of the two lists above. A freshly cloned monorepo or a mass delete runs to six figures, which no screen can draw, so past a budget the lists arrive short and this says by how much on each side. Absent means they are complete.",
+        ),
+    // A subset of `unstaged`'s untracked rows, restated by the entry that covers them rather than flagged per row, since
+    // one scratch directory can stand for thousands of files.
+    scratch: z
+        .array(ScratchPathSchema)
+        .optional()
+        .describe(
+            "Untracked paths that look like scratch. Staging or committing everything leaves them out, while staging one by its own path takes it like any other file. Absent when there are none.",
         ),
     // 0 for `ahead`/`behind` with no remote or no upstream.
     remote: GitRemoteStateSchema.optional().describe("Where this repository stands against its remote."),
@@ -410,8 +435,33 @@ export const AgentChangesSchema = z.object({
         .describe(
             "Repositories whose copy the conversation left standing on a different branch of its own. What is listed for them is this conversation's branch as it was last left, not what its copy holds now, and anything it has written since went to the other branch.",
         ),
+    // Read off the live copy, so a retired one has none: its scratch went with it.
+    scratch: z
+        .array(
+            z.object({
+                repo: z.string().describe("Which repository."),
+                paths: z.array(ScratchPathSchema).describe("What it keeps out there."),
+            }),
+        )
+        .optional()
+        .describe(
+            "Untracked files the conversation left in its copy that look like scratch: logs, probe scripts, dumps, a checkout of its own. They are not in the list above and no merge carries them. They stay in its copy until they are included or deleted, and go with the copy when it is archived or retired. Absent when there are none.",
+        ),
 });
 export type AgentChanges = z.infer<typeof AgentChangesSchema>;
+
+// Names scratch exactly as `AgentChanges.scratch` lists it; anything else is refused, so a stale list cannot reach a
+// file that was never scratch.
+export const AgentScratchSchema = z.object({
+    id: z.string().min(1).describe("Which conversation."),
+    repo: z.string().min(1).describe("Which repository of its composition."),
+    paths: z
+        .array(z.string().min(1))
+        .min(1)
+        .max(MAX_ACTION_PATHS)
+        .describe("Paths exactly as the review lists them under scratch, a directory with its trailing slash."),
+});
+export type AgentScratch = z.infer<typeof AgentScratchSchema>;
 
 // Own read (a `git log` per repo), not folded into the review, whose rows are differences against main and these are
 // not. A commit CARRIES the work without authoring it: a path is attributed to the newest commit that left it there.

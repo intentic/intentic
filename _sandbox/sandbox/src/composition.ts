@@ -18,6 +18,7 @@ import type {
     GitPublishFileResult,
     GitRemoteBranch,
     GitRemoteState,
+    ScratchPath,
     IntenticLine,
     NativeProvider,
     TranscriptRow,
@@ -182,6 +183,7 @@ import {
 } from "./git/changes/changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./git/changes/changes-diff.js";
 import { commitIndex, discardPaths, stageAll, stagePaths, unstagePaths } from "./git/changes/changes-index.js";
+import { scratchOf, type ScratchScope } from "./git/changes/scratch.js";
 import { collectRepoDiff, type CommitScope, type RepoDiff } from "./git/ops/commit-message.js";
 import { createBranch, deleteBranch, listBranches, listRemoteBranches } from "./git/ops/branches.js";
 import { abortOperation, type GitOperation, operationInProgress } from "./git/ops/operation.js";
@@ -559,7 +561,9 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
         }>;
         readonly stagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         // The whole repository in one spawn, nothing built or chunked; why staging everything has no size limit.
-        readonly stageAll: (dir: string) => Promise<void>;
+        readonly stageAll: (dir: string, scratch?: readonly ScratchPath[]) => Promise<void>;
+        // What a stage-everything leaves out of the checkout at `dir` because it looks like scratch.
+        readonly scratchOf: (dir: string, scope: ScratchScope) => Promise<ScratchPath[]>;
         readonly unstagePaths: (dir: string, paths: readonly string[]) => Promise<void>;
         readonly commitIndex: (dir: string, message: string, author: { name: string; email: string }) => Promise<boolean>;
         readonly discardPaths: (dir: string, paths?: readonly string[]) => Promise<void>;
@@ -1320,6 +1324,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             changedFiles,
             stagePaths,
             stageAll,
+            scratchOf,
             unstagePaths,
             commitIndex,
             discardPaths,

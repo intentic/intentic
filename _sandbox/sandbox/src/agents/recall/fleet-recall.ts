@@ -194,7 +194,7 @@ const repoStates = async (deps: FleetRecallDeps, entry: PersistedAgent, diff: bo
                 return landed;
             }
             try {
-                return { ...landed, ...statOf(await agentRepoReview(deps.agentWorktrees, entry, composed)) };
+                return { ...landed, ...statOf((await agentRepoReview(deps.agentWorktrees, entry, composed)).changes) };
             } catch (error) {
                 return { ...landed, unavailable: error instanceof Error ? error.message : String(error) };
             }

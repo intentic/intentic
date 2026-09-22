@@ -1,10 +1,11 @@
-import { mkdtemp, rm, rmdir, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join } from "node:path";
 import { pathExists } from "../../path-exists.js";
 import type { AgentSpan, GitChange, LandConflict, LandConflictReason, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
+import { pruneEmptiedDirs } from "../../git/changes/changes-index.js";
 import { parseNameStatusZ, parseNumstatZ, parseStatusV2 } from "../../git/changes/changes-porcelain.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { agentRepoChanges, checkpointOf } from "./agent-changes.js";
@@ -155,21 +156,6 @@ export const dirtyPaths = async (main: string, git: GitRunner): Promise<Readonly
     return dirty;
 };
 
-// Git tracks no directories, so a removal's emptied parents are debris `git apply` doesn't already prune (it prunes
-// when the patch itself expresses the removal). Scoped to this delta's own removals only.
-export const pruneEmptiedDirs = async (main: string, removed: readonly string[]): Promise<void> => {
-    const root = resolve(main);
-    for (const path of removed) {
-        for (let dir = dirname(resolve(root, path)); dir !== root && dir.startsWith(root); dir = dirname(dir)) {
-            try {
-                await rmdir(dir);
-            } catch {
-                break;
-            }
-        }
-    }
-};
-
 // The refusal names every file patch that failed, so the blocked set costs one read rather than a probe per change; a
 // second, reversed check over that set alone drops content that reached main by another road. Two git runs for a delta
 // of any size, where probing each change cost three per change.
@@ -269,6 +255,7 @@ const applyChanges = async (
         return;
     }
     const removes = changes.flatMap((change) => change.removes);
+    // `git apply` prunes what a patch removes itself; an explicit `rm` below leaves its parents for this.
     await git(main, ["apply", patchPath]);
     await Promise.all(
         // `force`: the path is already gone whenever the patch expressed its own removal.
@@ -462,7 +449,7 @@ const tipOf = async ({ worktrees, entry, git }: LandRun, repo: string, main: str
         return tip === undefined ? undefined : { tip, refDir: main };
     }
     // Stages staged/unstaged/untracked alike; a no-op when the only change is a nested repo's gitlink.
-    await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.title ?? entry.id}`, git);
+    await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.title ?? entry.id}`, worktrees.mainDir("root"), git);
     return { tip: (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim(), refDir: worktree };
 };
 

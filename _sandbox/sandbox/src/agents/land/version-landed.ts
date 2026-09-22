@@ -91,7 +91,7 @@ export const versionMainTree = async (services: Services, repos: readonly string
     for (const repo of repos) {
         try {
             const did = await services.agentWorktrees.withRepoLock(repo, () =>
-                commitWorktreeRemainder(repo, services.agentWorktrees.mainDir(repo), REMAINDER_SUBJECT),
+                commitWorktreeRemainder(repo, services.agentWorktrees.mainDir(repo), REMAINDER_SUBJECT, services.agentWorktrees.mainDir("root")),
             );
             if (did) {
                 committed.push(repo);

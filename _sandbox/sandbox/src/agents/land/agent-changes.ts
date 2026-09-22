@@ -1,7 +1,8 @@
-import type { AgentSpan, GitChange, WorkspaceModule } from "@intentic/sandbox-contract";
+import type { AgentSpan, GitChange, ScratchPath, WorkspaceModule } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { changesAgainstBase, changesBetweenRefs, headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
+import { scratchOf, scratchScopeOf } from "../../git/changes/scratch.js";
 import { refAgainstRef, withCodeCounts, worktreeAgainstRef } from "../../git/changes/code-counts.js";
 import { readModules } from "../../workspace/deps/modules.js";
 import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
@@ -57,7 +58,7 @@ export const carriesContent = async (dir: string, from: string, tip: string, git
 };
 
 // One repo's changes in the shape the Changes panel renders, from the checkout when attached or the two main-repo refs
-// otherwise, decided by attachment rather than archivedAt.
+// otherwise, decided by attachment rather than archivedAt. Held scratch is no change: no capture will commit it.
 export const agentRepoChanges = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
@@ -65,18 +66,19 @@ export const agentRepoChanges = async (
     span: AgentSpan,
     git: GitRunner = defaultGit,
 ): Promise<GitChange[]> => {
-    const { dir, attached, from } = await agentRepoScope(worktrees, entry, composed, span, git);
-    return attached ? changesAgainstBase(dir, from, git) : changesBetweenRefs(worktrees.mainDir(composed.repo), from, entry.branch, git);
+    const { dir, attached, from, scratch } = await agentRepoScope(worktrees, entry, composed, span, git);
+    return attached ? changesAgainstBase(dir, from, scratch, git) : changesBetweenRefs(worktrees.mainDir(composed.repo), from, entry.branch, git);
 };
 
-// Resolves the checkout/main repo and delta anchor together, so the two answers cannot diverge.
+// Resolves the checkout/main repo, delta anchor and scratch together, so the answers cannot diverge. Only a live copy
+// has scratch: a retired one's went with it.
 const agentRepoScope = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
     composed: PersistedAgent["repos"][number],
     span: AgentSpan,
     git: GitRunner,
-): Promise<{ dir: string; attached: boolean; from: string }> => {
+): Promise<{ dir: string; attached: boolean; from: string; scratch: ScratchPath[] }> => {
     const main = worktrees.mainDir(composed.repo);
     const attached = await worktrees.attached(entry.id, composed.repo);
     const dir = attached ? worktrees.worktreeDir(entry.id, composed.repo) : main;
@@ -84,8 +86,15 @@ const agentRepoScope = async (
         dir,
         attached,
         from: await checkpointOf(dir, main, entry.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git),
+        scratch: attached ? await scratchOf(dir, await scratchScopeOf(composed.repo, worktrees.mainDir("root")), git) : [],
     };
 };
+
+// A repo's review: its rows, plus the scratch its live copy keeps out of every land.
+export interface AgentRepoReview {
+    readonly changes: GitChange[];
+    readonly scratch: ScratchPath[];
+}
 
 // Same cumulative rows as the review, each carrying the code-only +/- count from git/code-counts.ts.
 // Only the review pays for this; the fleet card sums git's own totals instead of walking every file's tokens.
@@ -94,11 +103,13 @@ export const agentRepoReview = async (
     entry: IsolatedAgent,
     composed: PersistedAgent["repos"][number],
     git: GitRunner = defaultGit,
-): Promise<GitChange[]> => {
-    const { dir, attached, from } = await agentRepoScope(worktrees, entry, composed, "cumulative", git);
+): Promise<AgentRepoReview> => {
+    const { dir, attached, from, scratch } = await agentRepoScope(worktrees, entry, composed, "cumulative", git);
     const main = worktrees.mainDir(composed.repo);
-    const changes = attached ? await changesAgainstBase(dir, from, git) : await changesBetweenRefs(main, from, entry.branch, git);
-    return attached ? withCodeCounts(dir, changes, worktreeAgainstRef(dir, from)) : withCodeCounts(main, changes, refAgainstRef(from, entry.branch));
+    if (!attached) {
+        return { changes: await withCodeCounts(main, await changesBetweenRefs(main, from, entry.branch, git), refAgainstRef(from, entry.branch)), scratch };
+    }
+    return { changes: await withCodeCounts(dir, await changesAgainstBase(dir, from, scratch, git), worktreeAgainstRef(dir, from)), scratch };
 };
 
 // What the main tree currently holds for each path, not a diff between two shas: a land copies content into the main

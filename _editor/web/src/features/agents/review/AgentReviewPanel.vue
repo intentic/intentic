@@ -41,6 +41,7 @@ import { addedIn, sumCode, sumShown, useChangeWeight, type ShownStat } from "../
 import ChangeRowName from "../../../components/ChangeRowName.vue";
 import ModuleLabel from "../../../components/ModuleLabel.vue";
 import AgentConflictReport from "./AgentConflictReport.vue";
+import AgentScratchReport from "./AgentScratchReport.vue";
 import AgentReviewOutline from "./AgentReviewOutline.vue";
 import DiffSkeleton from "../../workspace/viewers/DiffSkeleton.vue";
 import ReviewGroupCheck from "./ReviewGroupCheck.vue";
@@ -637,6 +638,17 @@ const seamWidth = computed<number>({
             @cross="cross"
             @chat="emit('chat')"
             @select="jumpTo"
+        />
+
+        <!-- What no land carries: files that look like scratch, left in the conversation's copy until included or deleted. -->
+        <AgentScratchReport
+            v-if="changes.scratch.value.length > 0"
+            class="mx-2 mt-2"
+            :scratch="changes.scratch.value"
+            :busy="changes.actionBusy.value"
+            :streaming="streaming"
+            @include="changes.includeScratch"
+            @delete="changes.deleteScratch"
         />
 
         <!-- Where the committed work went, shown only while `history` is the active filter, since it isn't what the reader is doing otherwise. -->

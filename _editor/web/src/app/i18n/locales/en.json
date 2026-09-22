@@ -134,6 +134,19 @@
             "tests": "Tests {files}",
             "unaccounted": "{count} more file is in your history without a commit here accounting for it: that content reached your main line some other way. | {count} more files are in your history without a commit here accounting for them: that content reached your main line some other way."
         },
+        "agentScratchReport": {
+            "byproduct": "a log, dump or backup",
+            "checkout": "a checkout of its own, which no land can carry",
+            "delete": "Delete",
+            "hidden": "a new hidden folder",
+            "hint": "They stay in this conversation's copy and go with it. Include what belongs to the work; delete the rest.",
+            "include": "Include",
+            "includeHint": "Add it to this conversation's work, so the next land carries it",
+            "oversized": "larger than source code gets",
+            "root": "a new dotfile at the top of a workspace of repositories",
+            "size": "{count} file, {size} | {count} files, {size}",
+            "title": "{count} path left out of the land as scratch | {count} paths left out of the land as scratch"
+        },
         "agentSessionMenu": {
             "agentStillWritingYoull": "The agent is still writing: you'll be asked to confirm",
             "agentStillWritingYoull2": "The agent is still writing, you'll be asked to confirm",
@@ -4751,6 +4764,9 @@
             "resolveConflictsStageTo": "Resolve the conflicts and stage them to continue, or abort to return this repository to where the {operation} began.",
             "restorePointSavedFirst": "A restore point is saved first, so this is reversible from Restore points",
             "restorePointSavedFirst2": "A restore point is saved first, so this is reversible from Restore points.",
+            "scratchLeftOut": "Stage all and Commit all leave out {count} path that looks like scratch | Stage all and Commit all leave out {count} paths that look like scratch",
+            "scratchLeftOutHint": "Stage one from its own row to commit it.",
+            "scratchTag": "scratch",
             "staged": "staged",
             "staged2": "Staged",
             "stagesEveryChangeCommits": "Stages every change, then commits",

@@ -134,6 +134,19 @@
             "tests": "Tests {files}",
             "unaccounted": "{count} fichier de plus est dans votre historique sans qu'un commit ici en rende compte : ce contenu a atteint votre ligne principale autrement. | {count} fichiers de plus sont dans votre historique sans qu'un commit ici en rende compte : ce contenu a atteint votre ligne principale autrement."
         },
+        "agentScratchReport": {
+            "byproduct": "un journal, un vidage ou une sauvegarde",
+            "checkout": "un dépôt git à part, qu'aucune intégration ne peut emporter",
+            "delete": "Supprimer",
+            "hidden": "un nouveau dossier caché",
+            "hint": "Ils restent dans la copie de cette conversation et partent avec elle. Incluez ce qui fait partie du travail, supprimez le reste.",
+            "include": "Inclure",
+            "includeHint": "L'ajouter au travail de cette conversation, pour que la prochaine intégration l'emporte",
+            "oversized": "plus gros que ne l'est du code source",
+            "root": "un nouveau fichier caché à la racine d'un espace de travail fait de dépôts",
+            "size": "{count} fichier, {size} | {count} fichiers, {size}",
+            "title": "{count} chemin laissé hors de l'intégration, car il semble temporaire | {count} chemins laissés hors de l'intégration, car ils semblent temporaires"
+        },
         "agentSessionMenu": {
             "agentStillWritingYoull": "L'agent écrit encore : une confirmation vous sera demandée",
             "agentStillWritingYoull2": "L'agent écrit encore, une confirmation vous sera demandée",
@@ -4759,6 +4772,9 @@
             "resolveConflictsStageTo": "Résolvez les conflits et indexez-les pour continuer, ou abandonnez pour ramener ce dépôt là où le {operation} a commencé.",
             "restorePointSavedFirst": "Un point de restauration est enregistré d'abord : ceci est donc réversible depuis Points de restauration",
             "restorePointSavedFirst2": "Un point de restauration est enregistré d'abord : ceci est donc réversible depuis Points de restauration.",
+            "scratchLeftOut": "Tout indexer et tout committer laissent de côté {count} chemin qui semble temporaire | Tout indexer et tout committer laissent de côté {count} chemins qui semblent temporaires",
+            "scratchLeftOutHint": "Indexez-le depuis sa propre ligne pour le committer.",
+            "scratchTag": "temporaire",
             "staged": "indexé",
             "staged2": "Indexé",
             "stagesEveryChangeCommits": "Indexe chaque changement, puis committe",

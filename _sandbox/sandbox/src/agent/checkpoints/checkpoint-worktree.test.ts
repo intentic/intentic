@@ -11,7 +11,7 @@ const REPOS = [
 const TITLE = "Agent: before this turn";
 
 const services = {
-    agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` },
+    agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}`, mainDir: (repo: string) => `/main/${repo}` },
     logger: { warn: mock() },
 } as unknown as CheckpointDeps;
 

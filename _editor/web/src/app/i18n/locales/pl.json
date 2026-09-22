@@ -134,6 +134,19 @@
             "tests": "Testy {files}",
             "unaccounted": "W Twojej historii jest {count} plik więcej, którego żaden tutejszy commit nie tłumaczy: ta treść dotarła do Twojej głównej linii inną drogą. | W Twojej historii są {count} pliki więcej, których żaden tutejszy commit nie tłumaczy: ta treść dotarła do Twojej głównej linii inną drogą. | W Twojej historii jest {count} plików więcej, których żaden tutejszy commit nie tłumaczy: ta treść dotarła do Twojej głównej linii inną drogą."
         },
+        "agentScratchReport": {
+            "byproduct": "log, zrzut albo kopia zapasowa",
+            "checkout": "osobne repozytorium git, którego żadne scalenie nie przeniesie",
+            "delete": "Usuń",
+            "hidden": "nowy ukryty folder",
+            "hint": "Zostają w kopii tej rozmowy i znikają razem z nią. Dołącz to, co należy do pracy, a resztę usuń.",
+            "include": "Dołącz",
+            "includeHint": "Dodaj to do pracy tej rozmowy, żeby następne scalenie to przeniosło",
+            "oversized": "większy, niż bywa kod źródłowy",
+            "root": "nowy ukryty plik w katalogu głównym przestrzeni złożonej z repozytoriów",
+            "size": "{count} plik, {size} | {count} pliki, {size} | {count} plików, {size}",
+            "title": "{count} ścieżka pominięta przy scalaniu jako plik roboczy | {count} ścieżki pominięte przy scalaniu jako pliki robocze | {count} ścieżek pominiętych przy scalaniu jako pliki robocze"
+        },
         "agentSessionMenu": {
             "agentStillWritingYoull": "Agent wciąż pisze: poprosimy Cię o potwierdzenie",
             "agentStillWritingYoull2": "Agent wciąż pisze, poprosimy Cię o potwierdzenie",
@@ -4759,6 +4772,9 @@
             "resolveConflictsStageTo": "Rozwiąż konflikty i dodaj je do indeksu, żeby kontynuować, albo przerwij, żeby cofnąć to repozytorium tam, gdzie {operation} się zaczął.",
             "restorePointSavedFirst": "Najpierw zapisujemy punkt przywracania, więc to da się cofnąć z Punktów przywracania",
             "restorePointSavedFirst2": "Najpierw zapisujemy punkt przywracania, więc to da się cofnąć z Punktów przywracania.",
+            "scratchLeftOut": "Dodanie wszystkiego i commit wszystkiego pomijają {count} ścieżkę, która wygląda na roboczą | Dodanie wszystkiego i commit wszystkiego pomijają {count} ścieżki, które wyglądają na robocze | Dodanie wszystkiego i commit wszystkiego pomijają {count} ścieżek, które wyglądają na robocze",
+            "scratchLeftOutHint": "Dodaj ją do indeksu z jej własnego wiersza, żeby ją zacommitować.",
+            "scratchTag": "roboczy",
             "staged": "w indeksie",
             "staged2": "W indeksie",
             "stagesEveryChangeCommits": "Dodaje każdą zmianę do indeksu, a potem commituje",

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { GitChange } from "@intentic/sandbox-contract";
+import { type GitChange, isScratch, type ScratchPath } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { EMPTY_TREE } from "../../history/history.js";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";
@@ -111,14 +111,15 @@ export const changedFiles = async (
 
 // Cumulative delta vs a fixed base sha: committed work since base, plus staged/unstaged, merged with untracked files.
 // The agents review reads a conversation worktree with this; `base` is where the worktree branched from.
-export const changesAgainstBase = async (dir: string, base: string, git: GitRunner = defaultGit): Promise<GitChange[]> => {
+// `scratch` (scratch.ts) is untracked and no capture will commit it, so it is no change of this checkout's.
+export const changesAgainstBase = async (dir: string, base: string, scratch: readonly ScratchPath[] = [], git: GitRunner = defaultGit): Promise<GitChange[]> => {
     // --find-renames on both passes, or a rename splits into delete+add that numstat can only answer half of.
     const { stdout } = await git(dir, ["diff", "--name-status", "-z", "--find-renames", base]);
     const changes = new Map(parseNameStatusZ(stdout).map((change) => [change.path, change]));
     const untrackedOut = (await git(dir, ["ls-files", "--others", "--exclude-standard", "-z"])).stdout.split("\0");
     const untracked: string[] = [];
     for (const path of untrackedOut) {
-        if (path !== "" && !changes.has(path)) {
+        if (path !== "" && !changes.has(path) && !isScratch(path, scratch)) {
             changes.set(path, { path, status: "added" });
             untracked.push(path);
         }

@@ -197,7 +197,7 @@ test("a conversation's root worktree stages a nested repo but never commits one"
     await nestedRepo(worktree, "intent");
     await writeFile(join(worktree, "notes.md"), "agent work\n");
 
-    expect(await commitWorktreeRemainder("root", worktree, "Agent: one")).toBe(true);
+    expect(await commitWorktreeRemainder("root", worktree, "Agent: one", work)).toBe(true);
 
     expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("A\tnotes.md");
     expect(await sh(worktree, "ls-files")).toBe("notes.md");
@@ -212,7 +212,7 @@ test("an unborn nested repo costs its own gitlink and nothing else: the rest of 
     await unbornRepo(worktree, "intent");
     await writeFile(join(worktree, "notes.md"), "agent work\n");
 
-    expect(await commitWorktreeRemainder("root", worktree, "Agent: one")).toBe(true);
+    expect(await commitWorktreeRemainder("root", worktree, "Agent: one", work)).toBe(true);
 
     expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("A\tnotes.md");
     expect(await sh(worktree, "ls-files")).toBe("notes.md");
@@ -227,7 +227,7 @@ test("a NESTED repo of the composition survives an unborn repo inside it too", a
     await unbornRepo(app, "vendor");
     await writeFile(join(app, "feature.ts"), "v1\n");
 
-    expect(await commitWorktreeRemainder("app", app, "Agent: one")).toBe(true);
+    expect(await commitWorktreeRemainder("app", app, "Agent: one", work)).toBe(true);
 
     expect(await sh(app, "ls-files")).toBe("app.ts\nfeature.ts");
 });
@@ -243,10 +243,32 @@ test("a nested repo a past turn committed is dropped, and the review's span come
     expect(await sh(worktree, "diff", "--name-only", "main")).toBe("intent");
 
     await writeFile(join(worktree, "notes.md"), "agent work\n");
-    expect(await commitWorktreeRemainder("root", worktree, "Agent: one")).toBe(true);
+    expect(await commitWorktreeRemainder("root", worktree, "Agent: one", work)).toBe(true);
 
     expect(await sh(worktree, "diff", "--name-only", "main")).toBe("notes.md");
     expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("D\tintent\nA\tnotes.md");
+});
+
+// What reached main once as `.trun/`, `.htw8/` and `.agent-htw8/`: the capture itself leaves scratch off the branch.
+test("a capture of a root holding repositories leaves scratch untracked and commits only the work", async () => {
+    const { work, historyRoot } = await tempBase();
+    await nestedRepo(work, "intentic");
+    await mkdir(join(work, "docs"), { recursive: true });
+    await writeFile(join(work, "docs", "guide.md"), "# guide\n");
+    await ensureRootRepo(workspacePaths(work), historyRoot);
+    await commitRootBaseline(workspacePaths(work));
+    const worktree = await agentWorktree(work, "agent-one");
+    await mkdir(join(worktree, ".trun"), { recursive: true });
+    await writeFile(join(worktree, ".trun", "final.log"), "log\n");
+    await writeFile(join(worktree, ".trun", "run.sh"), "bun test\n");
+    await writeFile(join(worktree, "repro-display.log"), "log\n");
+    await writeFile(join(worktree, ".task-ps.txt"), "scratch\n");
+    await writeFile(join(worktree, "docs", "new.md"), "# the work\n");
+
+    expect(await commitWorktreeRemainder("root", worktree, "Agent: one", work)).toBe(true);
+
+    expect(await sh(worktree, "show", "--format=", "--name-status", "HEAD")).toBe("A\tdocs/new.md");
+    expect(await sh(worktree, "status", "--porcelain")).toBe(["?? .task-ps.txt", "?? .trun/", "?? repro-display.log"].join("\n"));
 });
 
 test("a NESTED repo of the composition keeps a gitlink of its own: that one is the user's submodule", async () => {
@@ -255,7 +277,7 @@ test("a NESTED repo of the composition keeps a gitlink of its own: that one is t
     const app = await nestedRepo(work, "app");
     await nestedRepo(app, "vendor");
 
-    expect(await commitWorktreeRemainder("app", app, "Agent: one")).toBe(true);
+    expect(await commitWorktreeRemainder("app", app, "Agent: one", work)).toBe(true);
 
     expect(await sh(app, "ls-files")).toBe("app.ts\nvendor");
 });
@@ -304,7 +326,7 @@ test("a conversation's root worktree commit spares declared submodules too", asy
     await nestedRepo(work, "stray");
     await writeFile(join(work, "notes.md"), "the turn's own work\n");
 
-    expect(await commitWorktreeRemainder("root", work, "Agent: one")).toBe(true);
+    expect(await commitWorktreeRemainder("root", work, "Agent: one", work)).toBe(true);
 
     const listed = await sh(work, "ls-files");
     expect(listed).toContain("lib");

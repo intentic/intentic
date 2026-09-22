@@ -209,6 +209,19 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   and never the land — and a repo that will not move lands from where it was, which is the old behaviour in
   full. The composition it hands back carries the moved `base` per repo, because landing from the pre-sync
   record would hand `checkpointOf` a sha the rebase has just orphaned.
+- **A capture never stages scratch, whatever it is called** (`src/git/changes/scratch.ts`, applied by
+  `commitWorktreeRemainder` in `src/git/remote/root-repo.ts` to every land, checkpoint, sync, retirement and "Your
+  edits" commit, and by the Changes panel's stage-everything in `src/git/git.routes.ts`). Every capture used to be
+  `git add -A`, so whatever a turn left in its checkout rode the next land: one conversation's `.trun/`, `.htw8/`,
+  `.agent-htw8/` and `.bench/` (484 test logs and probe scripts) reached main that way and went in with Commit all.
+  No list of names could have stopped them, since each name was invented for that task and one was the
+  conversation's own id, so the judgement is by shape: a new hidden directory outside the ones projects keep, a
+  log, dump or backup, a file past GitHub's warning size, a checkout of its own in the workspace's root repo, and a
+  new dotfile at the top of a root that holds repositories. A visible file at that top is work, because a report
+  written there is often the thing that was asked for. Only untracked paths are judged: the index is somebody's
+  decision, so staging a path carries it, which is all the review's Include does. Scratch stays in the
+  conversation's copy, listed on its review, and goes with the copy when it is archived; git never reads it, so a
+  gigabyte of it costs a capture nothing.
 - **`landedTip` records that a land happened, never that it is still there** (`src/agents/land/sync.ts`
   `mainAccountsForPrefix`). A land copies content into the main working tree and moves no ref, so discarding
   every one of those files in the Changes panel leaves the rung pointing at a delivery that no longer exists —

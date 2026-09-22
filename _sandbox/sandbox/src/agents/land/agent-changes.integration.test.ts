@@ -65,7 +65,7 @@ const review = async (
     if (composed === undefined) {
         throw new Error("no repo in the composition");
     }
-    const changes = await agentRepoReview(worktrees, entry, composed);
+    const { changes } = await agentRepoReview(worktrees, entry, composed);
     const paths = changes.map((change) => change.path);
     const present = await presentInMain(worktrees, entry, composed, paths);
     return {

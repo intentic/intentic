@@ -14,7 +14,16 @@ import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
 import { AGENT_DIFF } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded, type ResolveAsk } from "../fleet/agentActions";
+import {
+    askAgentToResolve,
+    deleteAgentScratch,
+    discardAgent,
+    includeAgentScratch,
+    invalidateAgentAction,
+    landAgent,
+    nothingLanded,
+    type ResolveAsk,
+} from "../fleet/agentActions";
 import { landedAway, turnInFlight } from "../fleet/agentStatus";
 import { blockersOf } from "./conflictResolution";
 import { useAgents } from "../fleet/useAgents";
@@ -132,6 +141,9 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     // Repos whose checkout the conversation left on a branch of its own. What the rows below are read from is then this
     // conversation's branch as it was last left, not the live checkout, and nothing here says so on its own.
     const elsewhere = computed(() => query.data.value?.elsewhere ?? []);
+
+    // What this conversation's copy keeps out of every land because it looks like scratch, per repo; never a row above.
+    const scratch = computed(() => query.data.value?.scratch ?? []);
 
     // Per-repo package layout from the diff, not /workspace/modules: a new package may exist only in the worktree.
     const modulesByRepo = computed<ReadonlyMap<string, readonly WorkspaceModule[]>>(
@@ -264,6 +276,18 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
             await invalidateAgentAction(agentId.value, reach.value);
         }, `Discard failed.`);
 
+    // Scratch the review named: carried with the work from the next land on, or deleted from the copy.
+    const includeScratch = (repo: string, paths: readonly string[]): Promise<void> =>
+        run(async () => {
+            await includeAgentScratch(agentId.value, repo, paths, reach.value);
+            await invalidateAgentAction(agentId.value, reach.value);
+        }, `Couldn't add it to the work.`);
+    const deleteScratch = (repo: string, paths: readonly string[]): Promise<void> =>
+        run(async () => {
+            await deleteAgentScratch(agentId.value, repo, paths, reach.value);
+            await invalidateAgentAction(agentId.value, reach.value);
+        }, `Couldn't delete it.`);
+
     // Finishing with an agent rather than its work, the panel's counterpart to the board's archive action; the diff
     // still renders after archiving (re-read from the branch).
     const archive = (): Promise<void> => run(() => useAgents().archive([agentId.value]), `Archive failed.`);
@@ -275,6 +299,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         count,
         absorbed,
         elsewhere,
+        scratch,
         pending,
         blocked,
         additions,
@@ -298,6 +323,8 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
         setAutoLand,
         askResolve,
         discard,
+        includeScratch,
+        deleteScratch,
         archive,
         conflicts,
         resolving,

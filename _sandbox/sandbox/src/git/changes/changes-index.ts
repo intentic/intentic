@@ -1,6 +1,10 @@
+import { rmdir } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import type { ScratchPath } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { EMPTY_TREE } from "../../history/history.js";
 import { changedFiles, headSha } from "./changes.js";
+import { withScratchExcluded } from "./scratch.js";
 import { identity } from "../git.js";
 
 // Index moves of the Changes panel: stage, unstage, commit staged, discard; these write to the repo, unlike changes.ts.
@@ -42,11 +46,11 @@ export const stagePaths = async (dir: string, paths: readonly string[], git: Git
     await overPaths(dir, paths, (chunk) => ["add", "-A", "--", ...chunk], git);
 };
 
-// Stages the whole repo in one spawn, with no ceiling to chunk under; what a whole-repo commit resolves to.
+// Stages the whole repo but `scratch` in one spawn, with no ceiling to chunk under; what a whole-repo commit resolves to.
 // - --ignore-errors: one unreadable file doesn't abandon the rest (an agent may be writing while you stage).
 // - advice.addEmbeddedRepo=false: a nested repo is scanned here, not warned about as a gitlink.
-export const stageAll = async (dir: string, git: GitRunner = defaultGit): Promise<void> => {
-    await git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors"]);
+export const stageAll = async (dir: string, scratch: readonly ScratchPath[] = [], git: GitRunner = defaultGit): Promise<void> => {
+    await withScratchExcluded(scratch, (pathspecArgs) => git(dir, ["-c", "advice.addEmbeddedRepo=false", "add", "-A", "--ignore-errors", ...pathspecArgs]));
 };
 
 // Unstages exactly `paths`, worktree untouched; on an unborn HEAD the entry is dropped instead (`rm --cached`).
@@ -70,11 +74,13 @@ export const unstagePaths = async (dir: string, paths: readonly string[], git: G
 // False means the index is already clean; a whole-index commit also works mid-merge, unlike `commit --only`.
 // `--no-textconv`/`--no-ext-diff` on the emptiness check: this image reads every binary extension through fileq, and
 // two different documents whose readings match would otherwise answer "nothing changed" and go uncommitted.
+// `hooks: "skip"` is for a capture: provenance, not authorship, so a repo's commit hooks must not refuse it.
 export const commitIndex = async (
     dir: string,
     message: string,
     author: { readonly name: string; readonly email: string },
     git: GitRunner = defaultGit,
+    hooks: "run" | "skip" = "run",
 ): Promise<boolean> => {
     const head = await headSha(dir, git);
     try {
@@ -83,7 +89,7 @@ export const commitIndex = async (
     } catch {
         // The index differs from HEAD, fall through to commit.
     }
-    await git(dir, [...identity(author), "commit", "-q", "-m", message]);
+    await git(dir, [...identity(author), "commit", "-q", ...(hooks === "skip" ? ["--no-verify"] : []), "-m", message]);
     return true;
 };
 
@@ -153,4 +159,21 @@ export const discardPaths = async (dir: string, paths: readonly string[] | undef
     const untracked = after.filter((change) => change.status === "added").map((change) => change.path);
     await overPaths(dir, tracked, (chunk) => ["checkout", "-q", "-f", "HEAD", "--", ...chunk], git);
     await overPaths(dir, untracked, (chunk) => ["clean", "-q", "-f", "-f", "-d", "--", ...chunk], git);
+    // A path-scoped clean deletes files and leaves the directories they emptied, which git then cannot see at all.
+    await pruneEmptiedDirs(dir, untracked);
+};
+
+// Git tracks no directories, so a removal's emptied parents are debris nothing else would ever report. Scoped to
+// `removed`'s own parents, bottom up, stopping at the first that still holds anything and at `root` itself.
+export const pruneEmptiedDirs = async (root: string, removed: readonly string[]): Promise<void> => {
+    const top = resolve(root);
+    for (const path of removed) {
+        for (let dir = dirname(resolve(top, path)); dir !== top && dir.startsWith(top); dir = dirname(dir)) {
+            try {
+                await rmdir(dir);
+            } catch {
+                break;
+            }
+        }
+    }
 };

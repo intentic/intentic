@@ -134,6 +134,19 @@
             "tests": "Tests {files}",
             "unaccounted": "{count} weitere Datei liegt in Ihrer Historie, ohne dass ein Commit hier sie erklärt: dieser Inhalt hat Ihre Hauptlinie auf anderem Weg erreicht. | {count} weitere Dateien liegen in Ihrer Historie, ohne dass ein Commit hier sie erklärt: dieser Inhalt hat Ihre Hauptlinie auf anderem Weg erreicht."
         },
+        "agentScratchReport": {
+            "byproduct": "ein Log, ein Dump oder eine Sicherung",
+            "checkout": "ein eigenes Git-Repository, das kein Landen mitnehmen kann",
+            "delete": "Löschen",
+            "hidden": "ein neuer versteckter Ordner",
+            "hint": "Sie bleiben in der Kopie dieser Unterhaltung und verschwinden mit ihr. Nehmen Sie auf, was zur Arbeit gehört, und löschen Sie den Rest.",
+            "include": "Aufnehmen",
+            "includeHint": "Zur Arbeit dieser Unterhaltung hinzufügen, damit das nächste Landen es mitnimmt",
+            "oversized": "größer, als Quellcode wird",
+            "root": "eine neue versteckte Datei auf oberster Ebene eines Workspace aus Repositories",
+            "size": "{count} Datei, {size} | {count} Dateien, {size}",
+            "title": "{count} Pfad bleibt als Arbeitsrest beim Landen außen vor | {count} Pfade bleiben als Arbeitsreste beim Landen außen vor"
+        },
         "agentSessionMenu": {
             "agentStillWritingYoull": "Der Agent schreibt noch: Sie werden um Bestätigung gebeten",
             "agentStillWritingYoull2": "Der Agent schreibt noch, Sie werden um Bestätigung gebeten",
@@ -4759,6 +4772,9 @@
             "resolveConflictsStageTo": "Lösen Sie die Konflikte und stagen Sie sie, um fortzufahren, oder brechen Sie ab, um dieses Repository dorthin zurückzubringen, wo der {operation} begann.",
             "restorePointSavedFirst": "Zuerst wird ein Wiederherstellungspunkt gesichert, das hier ist also über „Wiederherstellungspunkte“ umkehrbar",
             "restorePointSavedFirst2": "Zuerst wird ein Wiederherstellungspunkt gesichert, das hier ist also über „Wiederherstellungspunkte“ umkehrbar.",
+            "scratchLeftOut": "Alles stagen und alles committen lassen {count} Pfad aus, der nach Arbeitsrest aussieht | Alles stagen und alles committen lassen {count} Pfade aus, die nach Arbeitsresten aussehen",
+            "scratchLeftOutHint": "Stagen Sie ihn über seine eigene Zeile, um ihn zu committen.",
+            "scratchTag": "Arbeitsrest",
             "staged": "gestaged",
             "staged2": "Gestaged",
             "stagesEveryChangeCommits": "Staged jede Änderung und committet dann",

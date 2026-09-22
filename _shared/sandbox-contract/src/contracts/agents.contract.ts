@@ -24,7 +24,7 @@ import {
     LandResultSchema,
 } from "../schemas/agents.js";
 import { AgentsListSchema } from "../schemas/automations.js";
-import { AgentChangesSchema, AgentHistorySchema } from "../schemas/git/git.js";
+import { AgentChangesSchema, AgentScratchSchema, AgentHistorySchema } from "../schemas/git/git.js";
 import { FileDiffSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 import { ConversationPromptSchema } from "../schemas/system-prompt.js";
@@ -205,6 +205,28 @@ export const agentsContract = {
         })
         .input(AgentFileDiffQuerySchema)
         .output(FileDiffSchema),
+    // Stages rather than commits: the next capture commits it like the rest of the work, with nothing to unwind if the
+    // conversation's next turn moves it.
+    includeScratch: oc
+        .route({
+            method: "POST",
+            path: "/agents/{id}/scratch/include",
+            summary: "Carry files set aside as scratch with a conversation's work",
+            description:
+                "Takes files the review lists as scratch and adds them to the conversation's work, so the next merge carries them like any other file. For the file that only looked like scratch. Refused for a checkout of its own, which no merge can carry, while a turn is running, and for a path that is not scratch right now.",
+        })
+        .input(AgentScratchSchema)
+        .output(OkSchema),
+    deleteScratch: oc
+        .route({
+            method: "POST",
+            path: "/agents/{id}/scratch/delete",
+            summary: "Delete a conversation's scratch",
+            description:
+                "Removes files the review lists as scratch from the conversation's copy. Nothing else is touched, and nothing of it was ever merged. Refused while a turn is running, and for a path that is not scratch right now.",
+        })
+        .input(AgentScratchSchema)
+        .output(OkSchema),
     land: oc
         .route({
             method: "POST",
@@ -266,7 +288,7 @@ export const agentsContract = {
             path: "/agents/archive",
             summary: "Put conversations away",
             description:
-                "The gentle counterpart to discarding. Commits whatever the conversation still has in progress onto its own branch, releases its working copy, and keeps the entry and the record. It leaves the live fleet and joins the archive. Refused for a conversation that is running.",
+                "The gentle counterpart to discarding. Commits whatever the conversation still has in progress onto its own branch, releases its working copy, and keeps the entry and the record. Its scratch is not committed and goes with the copy. It leaves the live fleet and joins the archive. Refused for a conversation that is running.",
         })
         .input(AgentArchiveSchema)
         .output(AgentsArchivedSchema),

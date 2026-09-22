@@ -96,6 +96,41 @@ test("a workspace turn follows the same registry lifecycle without inventing a b
     expect(await errorCode(client.agents.autoLand({ id: "workspace-conv", autoLand: false }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.agents.land({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.agents.discard({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.agents.includeScratch({ id: "workspace-conv", repo: "root", paths: [".trun/"] }))).toBe("BAD_REQUEST");
+    expect(await errorCode(client.agents.deleteScratch({ id: "workspace-conv", repo: "root", paths: [".trun/"] }))).toBe("BAD_REQUEST");
+});
+
+// Scratch is named exactly as the review listed it: a repo outside the composition or a path that is no longer scratch
+// never reaches a file.
+test("scratch include and delete refuse a foreign repo and a path that is not scratch now", async () => {
+    const client = clientFor(createApp(services()));
+    await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
+
+    expect(await errorCode(client.agents.includeScratch({ id: "conv1", repo: "elsewhere", paths: [".trun/"] }))).toBe("NOT_FOUND");
+    expect(await errorCode(client.agents.includeScratch({ id: "conv1", repo: "root", paths: [".trun/"] }))).toBe("CONFLICT");
+    expect(await errorCode(client.agents.deleteScratch({ id: "conv1", repo: "root", paths: [".trun/"] }))).toBe("CONFLICT");
+});
+
+test("including scratch stages it in the conversation's copy, and a checkout of its own is refused", async () => {
+    const staged: string[] = [];
+    const daemon = services({
+        git: {
+            ...services().git,
+            scratchOf: async () => [
+                { path: ".trun/", reason: "hidden", files: 2, bytes: 40 },
+                { path: "vendor/lib/", reason: "checkout" },
+            ],
+            stagePaths: async (dir, paths) => {
+                staged.push(`${dir} ${paths.join(",")}`);
+            },
+        },
+    });
+    const client = clientFor(createApp(daemon));
+    await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
+
+    expect(await client.agents.includeScratch({ id: "conv1", repo: "root", paths: [".trun/"] })).toEqual({ ok: true });
+    expect(await errorCode(client.agents.includeScratch({ id: "conv1", repo: "root", paths: ["vendor/lib/"] }))).toBe("BAD_REQUEST");
+    expect(staged).toEqual([`${daemon.agentWorktrees.worktreeDir("conv1", "root")} .trun/`]);
 });
 
 test("a thrown workspace turn settles its surfaced card as an error", async () => {

@@ -398,6 +398,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             changedFiles: async () => ({ conflicted: [], staged: [], unstaged: [], blobs: new Map() }),
             stagePaths: async () => {},
             stageAll: async () => {},
+            scratchOf: async () => [],
             unstagePaths: async () => {},
             commitIndex: async () => false,
             discardPaths: async () => {},

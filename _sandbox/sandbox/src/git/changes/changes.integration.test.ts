@@ -19,7 +19,7 @@ import {
     revertCommit,
 } from "./changes-commits.js";
 import { commitFileDiff, conflictedFileDiff, refFileDiff, stagedFileDiff, unstagedFileDiff, workingFileDiff } from "./changes-diff.js";
-import { commitIndex, commitOnly, discardPaths, stageAll, stagePaths, unstagePaths } from "./changes-index.js";
+import { commitIndex, commitOnly, discardPaths, pruneEmptiedDirs, stageAll, stagePaths, unstagePaths } from "./changes-index.js";
 
 const exec = promisify(execFile);
 const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
@@ -547,6 +547,62 @@ test("a path with glob characters acts on that file only, never on the sibling i
     expect(await readFile(join(dir, "report1.txt"), "utf8")).toBe("sibling edited\n");
     expect(existsSync(join(dir, "fresh[1].txt"))).toBe(false);
     expect(existsSync(join(dir, "fresh1.txt"))).toBe(true);
+});
+
+// Git cannot see an empty directory, so a skeleton a discard left behind is never listed anywhere again.
+test("discardPaths removes the directories its deletions emptied, and none that still hold anything", async () => {
+    const dir = await tempRepo();
+    await mkdir(join(dir, ".bench/out"), { recursive: true });
+    await writeFile(join(dir, ".bench/out/run.out"), "result\n");
+    await writeFile(join(dir, ".bench/bench.py"), "print()\n");
+    await mkdir(join(dir, "notes"), { recursive: true });
+    await writeFile(join(dir, "notes/drop.md"), "drop\n");
+    await writeFile(join(dir, "notes/keep.md"), "keep\n");
+
+    await discardPaths(dir, [".bench/out/run.out", ".bench/bench.py", "notes/drop.md"]);
+
+    expect(existsSync(join(dir, ".bench"))).toBe(false);
+    expect(existsSync(join(dir, "notes/keep.md"))).toBe(true);
+});
+
+test("pruneEmptiedDirs stops at the first level that still holds anything, and at the repo root", async () => {
+    const base = await mkdtemp(join(tmpdir(), "intentic-prune-"));
+    tempDirs.push(base);
+    await mkdir(join(base, "a/b/c"), { recursive: true });
+    await writeFile(join(base, "a/keep.txt"), "kept\n");
+
+    await pruneEmptiedDirs(base, ["a/b/c/removed.txt", "top-level-removed.txt"]);
+
+    expect(existsSync(join(base, "a/b"))).toBe(false);
+    expect(existsSync(join(base, "a/keep.txt"))).toBe(true);
+    expect(existsSync(base)).toBe(true);
+});
+
+test("stageAll leaves the scratch it is handed untracked and stages everything else", async () => {
+    const dir = await tempRepo();
+    await mkdir(join(dir, ".trun"), { recursive: true });
+    await writeFile(join(dir, ".trun/final.log"), "log\n");
+    await writeFile(join(dir, "b.txt"), "bee\n");
+
+    await stageAll(dir, [{ path: ".trun/", reason: "hidden" }]);
+
+    const { staged, unstaged } = await changedFiles(dir);
+    expect(staged.map((change) => change.path)).toEqual(["b.txt"]);
+    expect(unstaged.map((change) => change.path)).toEqual([".trun/final.log"]);
+});
+
+// A capture records provenance, not authorship: a repository's own pre-commit hook judges people's commits, not it.
+test("commitIndex skips the repository's commit hooks only when asked to", async () => {
+    const dir = await tempRepo();
+    const hooks = join(dir, ".git", "hooks");
+    await mkdir(hooks, { recursive: true });
+    await writeFile(join(hooks, "pre-commit"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+    await writeFile(join(dir, "a.txt"), "two\n");
+    await stagePaths(dir, ["a.txt"]);
+
+    await expect(commitIndex(dir, "refused", author)).rejects.toThrow();
+    expect(await commitIndex(dir, "captured", author, defaultGit, "skip")).toBe(true);
+    expect(await sh(dir, "log", "-1", "--format=%s")).toBe("captured");
 });
 
 test("discardPaths undoes both legs of a staged rename from either path", async () => {
