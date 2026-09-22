@@ -45,8 +45,7 @@ import { conversationView, PANE_VIEW } from "./useChat-view";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import { workspaceSurface } from "./workspaceSurface";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
-import { usePersonaRoute } from "../personas/personaRoute";
-import { useModelRoute } from "../models/modelRoute";
+import { useChatRoute } from "../routing/chatRoute";
 import { roleSources } from "../accounts/roleModel";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { attachmentPeek } from "../drafts/attachmentPeeks";
@@ -671,7 +670,7 @@ const pickPersona = (id: string | undefined): void => {
     personaOpen.value = false;
     props.conversation.actsAs.value = id;
     // A pick by hand, "Anyone" included, overrules whatever the router had read into this chat.
-    personaRoute.byHand();
+    chatRoute.byHand();
     // The persona's own model goes on with it, when it has one (Conversation.wearModel).
     const picked = personas.value.find((persona) => persona.id === id);
     const head = picked === undefined ? undefined : personaModels(picked, roleSources.value)[0];
@@ -680,10 +679,10 @@ const pickPersona = (id: string | undefined): void => {
     }
 };
 
-// Which persona the daemon reads the sent message as belonging to, asked once on a turnless, personaless chat
-// (personaRoute.ts). `beforeSend` is the wait the send holds for, so the card is on for the turn that decides the
-// conversation's tree; the chat says in its own transcript that the reading is happening.
-const personaRoute = usePersonaRoute(() => props.conversation);
+// What the daemon reads the sent message as opening this chat on — its persona, its model, or both — asked once on a
+// turnless chat in ONE call (chatRoute.ts). `beforeSend` is the wait the send holds for, so both are on for the turn
+// that decides the conversation's tree; the chat says in its own transcript that the reading is happening.
+const chatRoute = useChatRoute(() => props.conversation);
 
 // A guest's chat wears one of its cards from the first word, since the daemon refuses it a turn that names none; the
 // list it is shown is already only its own cards.
@@ -697,10 +696,6 @@ watch(
     },
     { immediate: true },
 );
-
-// Which model an Auto chat runs on, asked once on the sent message (modelRoute.ts). Its own wait, chained after the
-// persona's, because the two answer different questions and the card's answer outranks this one.
-const modelRoute = useModelRoute(() => props.conversation);
 
 // Snaps the box back to one line and refocuses the cursor — what every path that spends the draft ends with.
 const settleComposer = (): void => {
@@ -754,15 +749,9 @@ const sendDraft = (): void => {
     } else {
         const snapshot = staging.snapshot();
         const editorContext = editorContextForSend();
-        // A routed chat's opening message waits for its readings, so the card and the model are on before the turn
+        // A routed chat's opening message waits for its one reading, so the card and the model are on before the turn
         // that decides the tree; every other send goes now.
-        // Persona first, and not merely for ordering: a card that wears its own model has already answered which
-        // model this chat runs on, and Auto (which `wearModel` disarms) stands down rather than overruling it.
-        const persona = personaRoute.beforeSend(text);
-        const readings =
-            persona === undefined
-                ? modelRoute.beforeSend(text, includeEditorContext.value)
-                : persona.then(() => modelRoute.beforeSend(text, includeEditorContext.value));
+        const readings = chatRoute.beforeSend(text, includeEditorContext.value);
         if (readings === undefined) {
             void send(text, snapshot, editorContext);
         } else {

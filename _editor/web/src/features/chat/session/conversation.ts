@@ -268,7 +268,7 @@ export class Conversation {
     // Ask for fast speed on this chat's turns; not seeded from turnDefaults, since fast mode costs more.
     readonly fast = ref<boolean>(false);
     // The chat is on Auto and its model is still to be chosen: a model reads the opening message and wears the answer
-    // (modelRoute.ts), which clears this. `provider`/`model` keep their remembered values underneath, because that is
+    // (chatRoute.ts), which clears this. `provider`/`model` keep their remembered values underneath, because that is
     // what the chat runs on if the reading never lands.
     readonly auto = ref<boolean>(false);
     // The next turn's model was chosen by Auto's reading rather than picked by hand. Describes ONE turn, not the

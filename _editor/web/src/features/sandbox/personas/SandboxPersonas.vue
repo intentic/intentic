@@ -226,8 +226,9 @@ const renameOf =
         }
     };
 
-// Whether a new chat is matched to a persona from its first message (settings.personaRouting; daemon's
-// persona-router.ts reads it). Lives here, not with the model lists, since a decision about it needs the personas it would
+// Whether a new chat is matched to a persona from its first message (settings.personaRouting). Read in the same one
+// call that chooses what the chat runs on (daemon's chat-router.ts); this switch decides only whether that call is
+// asked the persona half. Lives here, not with the model lists, since a decision about it needs the personas it would
 // choose between.
 const { settings, patch } = useSandboxSettings();
 const personaRouting = computed(() => settings.value?.personaRouting ?? true);

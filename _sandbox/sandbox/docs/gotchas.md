@@ -253,9 +253,11 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   bad-model-pick branch in each: the sentence ends in "on this model", so the older branch would have thrown away
   a pinned model that was never at fault.
 - **A model is chosen for a chat in exactly one place, once, and the user owns it from turn two.** The Auto row in
-  the model picker is the whole mechanism: on the first message a chat sends, `src/agent/prompt/model-router.ts`
+  the model picker is the whole mechanism: on the first message a chat sends, `src/agent/prompt/chat-router.ts`
   asks the `model-router` job's model to pick a provider, model, effort and account from an offered list
-  (`src/agent/models/auto-offer.ts`), and the chat wears the answer like a hand-made pick. Nothing else in the
+  (`src/agent/models/auto-offer.ts`), and the chat wears the answer like a hand-made pick. That same call also
+  names the chat's persona when persona matching is on — two halves of one reading, each asked for only when
+  its own switch left the question open, never two calls on the same sentence. Nothing else in the
   daemon substitutes a model the user asked for, and three properties make that safe to leave on. It is a
   classification over an OFFERED list, so a reply naming a model no provider has is unusable and the role ladder
   steps to its next rung rather than running an invented id. Allowances are a hard filter as well as context: a

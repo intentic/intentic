@@ -225,14 +225,15 @@ export const SandboxSettingsSchema = z.object({
             "Keep the instructions identical between turns so the provider can cache them, moving anything that varies into the message instead. Cheaper, at the cost of some flexibility.",
         ),
     skills: z.array(z.string()).default(["lsp", "fileq"]).describe("Which built-in tools are switched on. A skill of your own is not listed here: it is on while the agent's copy of it exists."),
-    // Router reads the sent message and one line per card, once per chat, between send and the first turn
-    // (persona-router.ts / model-roles.ts). Never asked of a draft: only a sent message is a finished one.
-    // Attended chats only: routing onto a card would grant an unwatched wake accounts nobody named for it.
+    // One half of the reading a new chat gets between send and its first turn (chat-router.ts): with this on, the
+    // message and one line per card are put to the same model that chooses what the chat runs on, in the same call.
+    // Never asked of a draft: only a sent message is a finished one. Attended chats only: routing onto a card would
+    // grant an unwatched wake accounts nobody named for it.
     personaRouting: z
         .boolean()
         .default(true)
         .describe(
-            "Whether a new chat is matched to one of your personas from its first message. The message is read once it is sent, by the model on the persona-routing list, and the chat says in its own transcript what was asked and which persona it landed on. Never applies to unwatched runs, which name their persona themselves.",
+            "Whether a new chat is matched to one of your personas from its first message. It is read once the message is sent, in the same single call that chooses what the chat runs on (the New chat routing job under Models), and the chat says in its own transcript which persona it landed on. Never applies to unwatched runs, which name their persona themselves.",
         ),
     hashlineEdits: z
         .boolean()
@@ -349,7 +350,7 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Which models do which job, one ordered list per job: commit messages, session titles, the safety judge, pipeline fixes, and every other place this sandbox picks a model for you. Tried in order, so one spent account does not take a job down. Nothing is chosen for you: a one-shot job with no list does not run, and a whole session with no list opens on whatever your own chat is set to.",
         ),
-    // Folded into the Auto router's prompt (agent/prompt/model-router.ts), never into a turn's own. Capped small on
+    // Folded into the router's prompt (agent/prompt/chat-router.ts), never into a turn's own. Capped small on
     // purpose: the reading runs under a 5s deadline, and this text is paid for on every chat that opens on Auto.
     autoModelGuidance: z
         .string()

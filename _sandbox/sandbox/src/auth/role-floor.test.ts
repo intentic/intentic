@@ -129,7 +129,7 @@ describe("guestReach", () => {
         expect(guestReach("POST", "/workspace/upload")).toBe(false);
         expect(guestReach("GET", "/sessions")).toBe(false);
         expect(guestReach("GET", "/agents/search")).toBe(false);
-        expect(guestReach("POST", "/personas/route")).toBe(false);
+        expect(guestReach("POST", "/agent/route-chat")).toBe(false);
         expect(guestReach("POST", "/personas")).toBe(false);
         expect(guestReach("GET", "/secrets")).toBe(false);
         expect(guestReach("POST", "/agents/abc/land")).toBe(false);

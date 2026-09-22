@@ -484,8 +484,8 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   turn and after a compaction: the repositories carried, and the live ones not, counted out loud, because a
   directory that is not there reads like one that was deleted. Static by design: a card is the sandbox's one
   description of a working posture, so every conversation on it opens on the same tree with the same prefix,
-  and the only per-chat decision is WHICH card, which [src/agent/prompt/persona-router.ts](../src/agent/prompt/persona-router.ts)
-  answers from the first message (`docs/context-composition-plan.md` at the workspace root says why not a
+  and the only per-chat decision is WHICH card, which [src/agent/prompt/chat-router.ts](../src/agent/prompt/chat-router.ts)
+  answers from the first message, in the same one call that chooses what the chat runs on (`docs/context-composition-plan.md` at the workspace root says why not a
   per-session pick).
 - [src/agent/prompt/system-prompt.ts](../src/agent/prompt/system-prompt.ts): what the model is told before the conversation
   starts, composed once per turn for whichever runtime is about to serve it. Its header carries the split that

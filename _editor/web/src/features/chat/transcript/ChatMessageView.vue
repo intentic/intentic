@@ -14,8 +14,7 @@ import { attachmentPreview } from "../drafts/attachmentPreviews";
 import { effectiveAutoLand, formatElapsed } from "../../agents/fleet/agentStatus";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
-import { personaRouteWait } from "../personas/personaRoute";
-import { modelRouteWait } from "../models/modelRoute";
+import { chatRouteWait } from "../routing/chatRoute";
 import { changedNothing, type ChatMessage, type ChecklistView, foldsIntoTurn } from "./transcript";
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
@@ -252,10 +251,8 @@ const pendingWait = computed<PendingWait>(() => {
     switch (props.message.noticeWait) {
         case `credentialRenewal`:
             return clock(conversation.value.failures.credentialRenewal.value?.since, `up`);
-        case `personaRoute`:
-            return clock(personaRouteWait(conversation.value)?.since, `up`);
-        case `modelRoute`:
-            return clock(modelRouteWait(conversation.value)?.since, `up`);
+        case `chatRoute`:
+            return clock(chatRouteWait(conversation.value)?.since, `up`);
         case `watch`:
             // Counts down, like the board's own watch clock: the deadline is the next moment this conversation
             // definitely moves, and how long it has already waited says nothing about that.

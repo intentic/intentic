@@ -112,7 +112,7 @@ const SURFACE: readonly { readonly does: string; readonly method: string; readon
     { does: `start a turn`, method: `POST`, url: `/agent`, needs: `collaborator` },
     // Part of sending the first message, and priced like one: a POST because it costs a model call, not because it
     // changes anything.
-    { does: `have a first message read for a persona`, method: `POST`, url: `/personas/route`, needs: `collaborator` },
+    { does: `have a first message read for what the chat opens on`, method: `POST`, url: `/agent/route-chat`, needs: `collaborator` },
     // Dictating one. The status read beside it is a viewer's, so refusing this tier would arm a model it may not use.
     { does: `speak a message instead of typing it`, method: `POST`, url: `/speech/transcribe`, needs: `collaborator` },
     { does: `steer a running turn`, method: `POST`, url: `/agent/steer`, needs: `collaborator` },
@@ -178,7 +178,7 @@ test("a guest reaches its chat and its own folders, and nothing of the past or t
         [`GET`, `/agents/search?query=x`],
         [`GET`, `/secrets`],
         [`GET`, `/capabilities`],
-        [`POST`, `/personas/route`],
+        [`POST`, `/agent/route-chat`],
         [`POST`, `/agents/abc/request-land`],
         [`POST`, `/agents/abc/land`],
         [`POST`, `/system/ws-ticket`],

@@ -3,8 +3,8 @@ import { streamOf } from "../protocol/routes.js";
 import { AgentCommandsQuerySchema, AgentCommandsSchema } from "../events/requests.js";
 import { AttachFrameSchema } from "../events/agent-events.js";
 import { AgentTurnSchema, AttachTurnSchema, StartedTurnSchema } from "../schemas/agent.js";
+import { ChatRouteAskSchema, ChatRouteSchema } from "../schemas/chat-route.js";
 import { RewindResultSchema, RewindTurnSchema } from "../schemas/history.js";
-import { ModelRouteAskSchema, ModelRouteSchema } from "../schemas/model-route.js";
 import { AgentReplySchema, ProviderRefusalsSchema, ResumeTurnSchema, SteerSchema, StopTurnSchema } from "../schemas/providers/plan-limits.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -93,17 +93,18 @@ export const agentContract = {
         })
         .input(AgentCommandsQuerySchema)
         .output(AgentCommandsSchema),
-    // Never throws: no offer, no model, or a deadline are all "nothing chosen" with a reason; the composer is waiting.
-    routeModel: oc
+    // Never throws: no offer, no personas, no model, or a deadline are all "nothing chosen" with a reason; the composer
+    // is waiting.
+    routeChat: oc
         .route({
             method: "POST",
-            path: "/agent/route-model",
-            summary: "Choose the model a new chat runs on",
+            path: "/agent/route-chat",
+            summary: "Choose what a new chat opens on",
             description:
-                "Reads a new chat's opening message and picks the model, effort and account that conversation should run on, from what is connected and still has allowance left. Asked once per chat, on the message actually sent, and never again: every turn after it runs on the pick the chat is wearing, which you are free to change. Answers with nothing, and a reason, whenever it cannot choose — a chat is never held up by this.",
+                "Reads a new chat's opening message once and answers whichever of two questions it still has: the model, effort and account that conversation should run on, from what is connected and still has allowance left, and which of this sandbox's personas should handle it. `model` and `persona` on the ask say which halves to answer, and only those are put to the model. Asked once per chat, on the message actually sent, and never again: every turn after it runs on what the chat is wearing, which you are free to change. Answers with nothing, and a reason, whenever it cannot choose — a chat is never held up by this.",
         })
-        .input(ModelRouteAskSchema)
-        .output(ModelRouteSchema),
+        .input(ChatRouteAskSchema)
+        .output(ChatRouteSchema),
     refusals: oc
         .route({
             method: "GET",

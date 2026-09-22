@@ -25,8 +25,8 @@ const { provider, harness, model, thinking, fast, effort, fastMode, streaming, g
 
 // Gated by no setting: which model a chat runs on is a per-chat question, and a mode that only appears once you have
 // found a switch on a settings page is a mode nobody finds. Which model does the reading IS a setting (the
-// `model-router` job under Models), and that is the only part a sandbox configures.
-// Offered exactly where the reading can happen, which is modelRoute.ts's own rule: a chat of this sandbox's with
+// New chat routing job under Models), and that is the only part a sandbox configures.
+// Offered exactly where the reading can happen, which is chatRoute.ts's own rule: a chat of this sandbox's with
 // nothing sent yet. A chat already under way has a model, and it is running — an Auto row there would disarm itself at
 // the next send, which is a control that lies.
 const autoOffered = computed(() => messages.value.length === 0 && box.value === undefined);

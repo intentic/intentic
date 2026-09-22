@@ -58,19 +58,13 @@ export const MODEL_ROLES = [
         icon: "check-square",
     },
     {
-        // Picks one persona id or none from a fixed list; a classification, not free text.
-        id: "persona-router",
-        label: "Persona routing",
-        blurb: "Which model reads a new chat's first message and picks the persona for it.",
-        kind: "helper",
-        icon: "users",
-    },
-    {
-        // Picks one offered `provider:model` line, an effort and an account from a fixed list; a classification, not
-        // free text. Prompt carries live account headroom, so it must not be a model whose own allowance it is reading.
+        // One reading answering both halves of "what does this chat open on": an offered `provider:model` line with an
+        // effort and an account, and a persona id, each a classification over a fixed list rather than free text. The
+        // id predates the persona half and stays as it is, since it is what a settings file already carries.
+        // Prompt carries live account headroom, so it must not be a model whose own allowance it is reading.
         id: "model-router",
-        label: "Auto model choice",
-        blurb: "Which model reads a new chat's first message and picks the model, effort and account it runs on.",
+        label: "New chat routing",
+        blurb: "Which model reads a new chat's first message and picks what it opens on: the model, effort and account, and the persona.",
         kind: "helper",
         icon: "sparkles",
     },

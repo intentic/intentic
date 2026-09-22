@@ -302,7 +302,7 @@ Every helper did cap its prompt. The caps were each chosen against a large windo
 
 | Role | Cap | ≈ tokens |
 | --- | --- | --- |
-| Auto model choice, Persona routing | 600 chars | 0.15k |
+| New chat routing | 600 chars | 0.15k |
 | Session titles | 4,000 | 1k |
 | Loop verdicts | 8,000 | 2k |
 | Safety judge | 4,000 program + 8,000 policy | 3k |

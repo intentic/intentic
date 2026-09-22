@@ -177,9 +177,16 @@ asked to compose a context per session instead either picks badly and the sessio
 or picks well at the price of a second strong run (`docs/context-composition-plan.md` at the workspace root
 has the whole argument).
 
-**How a new chat finds its card.** The one per-chat decision is *which* card, and it is a classification: the
-`persona-router` helper role reads the first message and one line per card and names one card or `none`,
-once. It is a switch, **Match new chats to a persona** on the Personas page, and on by default.
+**How a new chat finds its card.** The one per-chat decision is *which* card, and it is a classification: one
+line per card goes to a model with the first message, and it names one card or `none`, once. It is a switch,
+**Match new chats to a persona** on the Personas page, and on by default.
+
+It is not a reading of its own. *Which model a chat runs on* is the same kind of question about the same
+message at the same moment, so there is one call for both (`chat-router.ts`, the **New chat routing** helper
+role), and the two switches — this one, and the composer's Auto row — decide which halves that call is asked.
+With both on, one reply names a card and a model; with one on, the prompt never mentions the other and the
+reply has no line for it. The design of the model half, and why the question is asked at the conversation
+rather than at the turn, is `docs/design/model-routing-design.md`.
 
 The reading happens *at send*, never while the draft is being typed. A draft says nothing about whether the
 person is finished with it, so reading one either spends a model call on half a sentence or spends several on
@@ -190,12 +197,15 @@ accounts and the model of the very turn being sent.
 Because the send waits on a model nobody asked for by hand, the chat says so in its own transcript: a muted
 row that spins while the reading runs, rewritten in place when it lands with the card it chose, why, and which
 model was paid for it ("Acting as Backend. The message reads like Backend's work. Read by Claude Haiku 4.5.").
-`none` gets the same row, since the call cost the same. A background model call the owner cannot see is a bill
+`none` gets the same row, since the call cost the same, and so does whatever the model half of the same call
+decided. A background model call the owner cannot see is a bill
 they cannot question, and that is the whole reason the row exists.
 
-Nothing is asked at all when the switch is off, when the sandbox has no persona cards, when the chat already
-has turns or a card, or when the message is under twelve characters. Putting the card on means its model too,
-whichever door it came through. A pick made by hand at the persona pill, "Anyone" included, overrules routing
+Nothing is asked about the card when the switch is off, when the sandbox has no persona cards, when the chat
+already has turns or a card, or when the message is under twelve characters — and when nothing is asked about
+the model either, there is no call. Putting the card on means its model too, whichever door it came through:
+a card naming a ladder has already answered the model question, so the same reading's own model pick stands
+down rather than overruling it, and the row says which one the chat is on. A pick made by hand at the persona pill, "Anyone" included, overrules routing
 for that chat. Unattended wakes are never routed: a wake names its persona on its own form, and routing one
 onto a card would grant it accounts the owner never named for it.
 
@@ -273,7 +283,7 @@ accounts spelled out.
 | The agent signing itself in | [accounts-tools.ts](../../_sandbox/sandbox/src/browser/tools/accounts-tools.ts) |
 | Where the rule is applied to a turn | [turn-plan.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-plan.ts) |
 | What a session's tree holds | [conversation-context.ts](../../_sandbox/sandbox/src/agent/context/conversation-context.ts) (the card's `context` becomes the conversation's composition, once) · [worktrees.ts](../../_sandbox/sandbox/src/agents/worktrees/worktrees.ts) (`selection`: the checkout brought to it) · [context-note.ts](../../_sandbox/sandbox/src/agent/context/context-note.ts) (what the session is told) |
-| Which persona a new chat belongs to | [persona-router.ts](../../_sandbox/sandbox/src/agent/prompt/persona-router.ts) (the reading, on the `persona-router` role) · [personaRoute.ts](../../_editor/web/src/features/chat/personas/personaRoute.ts) (the send that waits for it, and the row that says so) |
+| Which persona a new chat belongs to | [chat-router.ts](../../_sandbox/sandbox/src/agent/prompt/chat-router.ts) (the one reading, on the `model-router` role, which also picks the model) · [chatRoute.ts](../../_editor/web/src/features/chat/routing/chatRoute.ts) (the send that waits for it, and the row that says so) |
 | The card's model ladder | [personas.ts (contract)](../../_shared/sandbox-contract/src/schemas/personas.ts) (`personaModels`) · [run-role-model.ts](../../_sandbox/sandbox/src/agent/models/run-role-model.ts) (`personaRunModel`, an unattended turn's fill) · [conversation.ts](../../_editor/web/src/features/chat/session/conversation.ts) (`wearModel`, the composer's pill following the card) |
 | The screens | [SandboxPersonas.vue](../../_editor/web/src/features/sandbox/personas/SandboxPersonas.vue) (who this box is, the whole card) · [DirectoryPersonas.vue](../../_editor/web/src/features/workspace/directory-ui/DirectoryPersonas.vue) (the Workspace tree's per-folder panel: a name, and permissions under Advanced) · [Capabilities.vue](../../_editor/web/src/features/capabilities/Capabilities.vue) (what it is signed into) |
 | The card's own fields | [PersonaForm.vue](../../_editor/web/src/features/sandbox/personas/PersonaForm.vue) (the editor) · [PersonaPowersFields.vue](../../_editor/web/src/features/sandbox/personas/PersonaPowersFields.vue) (what it may do, grouped by blast radius: shared with the tree's quick panel) · [FolderPicker.vue](../../_editor/web/src/features/sandbox/devices/FolderPicker.vue) (both location answers, picked from the workspace tree) |

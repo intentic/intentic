@@ -5,7 +5,6 @@ import { createAgentsRoutes } from "./agents/agents.routes.js";
 import { createTranslatorRoutes } from "./agent/routes/translator.routes.js";
 import { createAutomationsRoutes } from "./automations/automations.routes.js";
 import { createCapabilitiesRoutes } from "./capabilities/capabilities.routes.js";
-import { routePersona } from "./agent/prompt/persona-router.js";
 import { createPersonasRoutes } from "./personas/personas.routes.js";
 import { createChoresRoutes } from "./chores/chores.routes.js";
 import { createCiRoutes } from "./ci/ci.routes.js";
@@ -57,7 +56,7 @@ export const createRouter = (services: Services) => ({
     diff: createDiffRoutes(services),
     approvals: createApprovalsRoutes(services),
     extensions: createExtensionsRoutes(services),
-    personas: createPersonasRoutes(services, (ask, held, signal) => routePersona(services, ask, held, signal)),
+    personas: createPersonasRoutes(services),
     safety: createSafetyRoutes(services),
     sessions: createSessionsRoutes(services),
     settings: createSettingsRoutes(services),

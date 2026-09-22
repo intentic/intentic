@@ -206,7 +206,7 @@ it(`offers Auto on a chat with nothing sent, gated by no setting of the sandbox'
     expect(leadLabels()).toEqual([`Auto`]);
 });
 
-// modelRoute.ts reads the OPENING message and never asks again, so on a chat already under way the row would arm a
+// chatRoute.ts reads the OPENING message and never asks again, so on a chat already under way the row would arm a
 // question nothing will answer and disarm itself at the next send.
 it(`withdraws Auto once the chat has a turn behind it`, () => {
     mount(CEILING, { sent: 1 });

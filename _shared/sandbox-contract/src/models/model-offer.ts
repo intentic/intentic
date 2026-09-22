@@ -1,6 +1,6 @@
 import { modelPinKey } from "./model-pins.js";
 import type { AgentProvider } from "../schemas/agent.js";
-import type { ModelPick } from "../schemas/model-route.js";
+import type { ModelPick } from "../schemas/chat-route.js";
 
 // What the Auto judge is allowed to choose from, and how its reply is read back. Pure: the daemon gathers the facts
 // (catalogs, connected accounts, headroom readings) and this turns them into the lines the model sees and the
@@ -100,19 +100,22 @@ export const offerLines = (offer: ModelOffer, now: number): readonly string[] =>
 // Wrapper words a model reaches for anyway: a fence, a bullet, quotes, a trailing period.
 const FENCE_LINE = /^```/u;
 const BULLET_LINE = /^[-*•]\s+/u;
-const FIELD = /^(model|effort|account)\s*:\s*(.+)$/iu;
+const FIELD = /^([a-z][\w-]*)\s*:\s*(.+)$/iu;
 
 const bare = (value: string): string => value.trim().replace(/^[`'"]+/u, ``).replace(/[.`'"]+$/u, ``).trim();
 
-// The reply's `key: value` lines, lowercased keys, bullets and fences stripped. First wins: a model that answers twice
-// meant its first answer, and a later line is commentary on it.
-const fieldsOf = (reply: string): ReadonlyMap<string, string> => {
+// The reply's `key: value` lines for the keys asked about, lowercased, bullets and fences stripped. First wins: a model
+// that answers twice meant its first answer, and a later line is commentary on it. Keys are passed in rather than
+// fixed here, since one reply can carry the answers to several questions (chat-route.ts asks two at once), and an
+// empty map is the honest way to tell a keyed reply from a bare one-word one.
+export const replyFields = (reply: string, keys: readonly string[]): ReadonlyMap<string, string> => {
+    const wanted = new Set(keys.map((key) => key.toLowerCase()));
     const fields = new Map<string, string>();
     for (const line of reply.split(`\n`)) {
         const trimmed = line.trim().replace(BULLET_LINE, ``);
         const found = FENCE_LINE.test(trimmed) ? null : FIELD.exec(trimmed);
         const key = found?.[1]?.toLowerCase();
-        if (key !== undefined && found?.[2] !== undefined && !fields.has(key)) {
+        if (key !== undefined && wanted.has(key) && found?.[2] !== undefined && !fields.has(key)) {
             fields.set(key, bare(found[2]));
         }
     }
@@ -130,7 +133,7 @@ export interface ParsedPick {
 // provider has. An unrecognised effort or account is dropped instead, keeping the model it came with — those are
 // refinements, and the turn's own defaults answer for them correctly.
 export const parseModelPick = (reply: string, offer: ModelOffer): ParsedPick => {
-    const fields = fieldsOf(reply);
+    const fields = replyFields(reply, [`model`, `effort`, `account`]);
     const token = fields.get(`model`) ?? ``;
     const chosen = offer.models.find((model) => modelPinKey(model).toLowerCase() === token.toLowerCase());
     if (chosen === undefined) {

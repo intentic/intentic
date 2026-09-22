@@ -43,10 +43,10 @@ const NAME_FLOORS: Readonly<Record<string, MemberRole>> = {
     "agent.steer": "collaborator",
     "agent.stop": "collaborator",
     "agent.rewind": "collaborator",
-    // Which card a first message belongs to: a read shaped as a POST because it costs one model call, which the tier
-    // about to spend a whole turn may certainly spend. Refused, every new chat a collaborator opens reports that the
-    // reading could not be made in time, which is not what happened.
-    "personas.route": "collaborator",
+    // What a first message opens the chat on, card and model: a read shaped as a POST because it costs one model call,
+    // which the tier about to spend a whole turn may certainly spend. Refused, every new chat a collaborator opens
+    // reports that the reading could not be made in time, which is not what happened.
+    "agent.routeChat": "collaborator",
     // Resuming is starting the same turn again (a spent allowance, an outage) with everything it originally carried;
     // without it a collaborator-driven automation gets stuck on the first refusal.
     // Auto-land is deliberately not here: arming it is a landing decision, and a collaborator's landings are only

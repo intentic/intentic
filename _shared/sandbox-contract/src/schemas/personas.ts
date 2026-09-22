@@ -229,30 +229,7 @@ export type Persona = z.infer<typeof PersonaSchema>;
 // has no opinion — the caller decides, not "run nothing".
 export const personaModels = (card: Pick<Persona, "models">, sources: readonly ModelSource[]): readonly ModelPin[] =>
     readyChain(sources, card.models ?? []);
-// Asked once per chat, on the message it was sent with; answers with the one card the message belongs to, or none.
-// `folder`/`paths` are the facts a card's `context`/`startIn` can be matched against that words alone can't supply.
-export const PersonaRouteAskSchema = z.object({
-    prompt: z.string().min(1).max(20000).describe("The message a new chat is about to open with."),
-    folder: z.string().max(200).optional().describe("The workspace folder the chat was opened in, when it was opened in one."),
-    paths: z
-        .array(z.string().min(1).max(500))
-        .max(50)
-        .default([])
-        .describe("Workspace paths the message names: uploads, @-mentions, the editor's own file."),
-});
-export type PersonaRouteAsk = z.infer<typeof PersonaRouteAskSchema>;
-export const PersonaRouteSchema = z.object({
-    persona: entryId.optional().describe("The card this message belongs to, or absent when none does and the chat should stay open to everything."),
-    reason: z.string().describe("Why, in the one line a chat can show. Present whether or not a card was named."),
-    // Absent means nothing was spent: matched on the folder, or answered before any model was reached.
-    model: z
-        .string()
-        .optional()
-        .describe(
-            "Which model answered, as `provider:model`, so the chat can name what the reading cost. Absent when no model was asked at all, which a folder match and an empty persona list both are.",
-        ),
-});
-export type PersonaRoute = z.infer<typeof PersonaRouteSchema>;
+// Which persona a new chat belongs to is asked with what it runs on, in one reading: chat-route.ts.
 // The one stock persona id; lives here because the daemon and the automations form are separate packages that must
 // agree on it exactly, or a Visitor chat pins to a card nobody creates.
 export const VISITOR_CHAT_PERSONA = "visitor-chat";
