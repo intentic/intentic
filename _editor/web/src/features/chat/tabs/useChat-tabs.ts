@@ -8,7 +8,7 @@ import { Conversation } from "../session/conversation";
 import { rememberedAccountFor } from "../accounts/providerAccounts";
 import { rememberedModelFor, startingMode } from "../run/turnDefaults";
 import { scopeAccountPreference } from "../accounts/accountPreference";
-import { tabFacts, untouched } from "./tabFacts";
+import { untouchedDraft } from "./tabFacts";
 import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "../transcript/transcriptCache";
 import { useSandbox } from "../../sandbox/client/useSandbox";
@@ -22,15 +22,12 @@ const { activeSandboxId } = useSandbox();
 export const conversations = shallowRef<Conversation[]>([]);
 export const activeId = ref<string>(``);
 
-// An untouched draft only exists while focused (else it's swept): the tab and the board's draft card are one
-// conversation, so an abandoned one squats in Active looking like real work. Read off this window's own
-// conversation, not the echo.
-export const untouchedDraft = (conversation: Conversation): boolean => untouched(tabFacts(conversation));
-
-// Tabs that exist only while focused: an untouched draft, or a peeked chat with nothing unsent. A sweep
-// destroys nothing (card and History survive, a running turn just detaches). Words in the composer spare a
-// peek regardless of its flag. The peek flag arrives two ways: a card or History row opening a chat for a look,
-// and the roster releasing one it has finished with (`releaseDone`).
+// Tabs that exist only while focused: an untouched draft, or a peeked chat with nothing unsent. An untouched draft
+// only exists while focused (else it's swept): the tab and the board's draft card are one conversation, so an
+// abandoned one squats in Active looking like real work. A sweep destroys nothing (card and History survive, a
+// running turn just detaches). Words in the composer spare a peek regardless of its flag. The peek flag arrives two
+// ways: a card or History row opening a chat for a look, and the roster releasing one it has finished with
+// (`releaseDone`).
 const transient = (conversation: Conversation): boolean => untouchedDraft(conversation) || (conversation.peek.value && !conversation.unsent.value);
 
 // The blank a window shows with nothing open (Conversation.standIn), minted here so both call sites (no tabs

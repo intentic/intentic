@@ -5,7 +5,7 @@ import { type FleetLane, laneOf, NO_ATTENTION } from "../../agents/fleet/agentSt
 import type { Conversation } from "../session/conversation";
 import { draftPreview } from "../drafts/draftPreview";
 import { useChat } from "../run/useChat";
-import { standingOf, tabFacts, untouched } from "./tabFacts";
+import { standingOf, untouchedDraft } from "./tabFacts";
 
 // Facts the open-chat list and header both need, kept as projections rather than component state, so the two
 // surfaces (and the close-set menus) read the same thing instead of duplicating it.
@@ -68,7 +68,7 @@ export const tabsInLane = (lane: FleetLane): ReadonlySet<string> => {
         useChat()
             .conversations.value.filter(
                 (conversation) =>
-                    !untouched(tabFacts(conversation)) && laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
+                    !untouchedDraft(conversation) && laneOfTab(conversation, agentById(conversation.conversationId)) === lane,
             )
             .map((conversation) => conversation.conversationId),
     );

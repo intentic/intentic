@@ -10,6 +10,7 @@ import { recentCommandIds, rememberCommand } from "./recentCommands";
 import { commandLabel, commands, executeCommand, type RegisteredCommand } from "./useCommands";
 import { effectiveKeybinding } from "./useKeymap";
 import { agentDisplayTitle, agentStatusMeta } from "../../features/agents/fleet/agentStatus";
+import { previewOf } from "../../features/chat/panel/useChat-strip";
 import { sessionIdFrom } from "../../features/agents/fleet/sessionRef";
 import { useAgents } from "../../features/agents/fleet/useAgents";
 import { useRole } from "../../features/sandbox/secrets/useRole";
@@ -105,7 +106,7 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
         }
         return fleet.value
             .flatMap((agent): PaletteRow[] => {
-                const title = agentDisplayTitle(agent);
+                const title = agentDisplayTitle(agent, previewOf(agent.id));
                 // The branch stands in for the id: it is the spelling a reader has actually seen (`agent/<id>`).
                 const score = nameScore(title, agent.branch ?? agent.id, text.value);
                 if (score === undefined) {
@@ -251,7 +252,7 @@ export function useJumpRows(query: Ref<string>, isOpen: Ref<boolean>) {
                             kind: `agent`,
                             key: `agent:${id}`,
                             score: 1,
-                            title: agent === undefined ? t(`shell.quickOpen.openAgent`) : agentDisplayTitle(agent),
+                            title: agent === undefined ? t(`shell.quickOpen.openAgent`) : agentDisplayTitle(agent, previewOf(agent.id)),
                             detail: id,
                             icon: `robot`,
                             tone: undefined,

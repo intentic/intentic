@@ -52,6 +52,7 @@
                     "__intentic",
                     "__INTENTIC_DESKTOP__",
                     "__termFrames",
+                    "__name",
                     "_core",
                     "_renderService"
                 ]
@@ -491,6 +492,7 @@
                 "_sandbox/acp-bridge/**",
                 "_sandbox/sandbox/src/extensions/backend/**",
                 "_editor/web/src/app/perf.ts",
+                "_editor/web/src/app/renderTrace.ts",
                 "_editor/web/src/features/chat/run/focusTrace.ts"
             ],
             "rules": {

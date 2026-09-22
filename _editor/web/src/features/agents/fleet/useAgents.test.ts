@@ -18,6 +18,7 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
 import { nextTick } from "vue";
 import { forgetClosedDraft, keepClosedDraft } from "../../chat/drafts/closedDrafts";
+import { previewOf } from "../../chat/panel/useChat-strip";
 import { Conversation } from "../../chat/session/conversation";
 import type { Strip, TabFacts } from "../../chat/tabs/tabFacts";
 import { useChat } from "../../chat/run/useChat";
@@ -460,7 +461,8 @@ describe("draft cards", () => {
     // The lane the phantom card landed in, by id, so a case can say which agent rather than merely how many.
     const activeIds = (): string[] => useAgents().lanes.value.active.map((entry) => entry.id);
 
-    // One tab of a popped-out chat's strip, as the drawing window would publish it (tabFacts).
+    // One tab of a popped-out chat's strip, as the drawing window would publish it (tabFacts). The words themselves
+    // ride their own note (`previews`), so a case that wants them posts both.
     const draftTab = (id: string, words?: string, at?: number): TabFacts => ({
         id,
         registered: false,
@@ -472,7 +474,6 @@ describe("draft cards", () => {
         harness: `native`,
         model: ``,
         unsent: words !== undefined,
-        ...(words === undefined ? {} : { preview: words }),
         ...(at === undefined ? {} : { draftAt: at }),
     });
     let stripRevision = 0;
@@ -550,7 +551,7 @@ describe("draft cards", () => {
                 status: card.status,
                 open: card.open,
                 unsent: card.unsent,
-                preview: card.preview,
+                preview: previewOf(card.id),
                 draftAt: card.draftAt,
                 model: card.model,
                 updatedAt: card.updatedAt,
@@ -604,7 +605,7 @@ describe("draft cards", () => {
         conversation.draft.value = `fix the login redirect`;
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
-        expect(useAgents().lanes.value.active.map((card) => ({ id: card.id, preview: card.preview, unsent: card.unsent }))).toEqual([
+        expect(useAgents().lanes.value.active.map((card) => ({ id: card.id, preview: previewOf(card.id), unsent: card.unsent }))).toEqual([
             { id: `fresh`, preview: `fix the login redirect`, unsent: true },
         ]);
     });
@@ -657,12 +658,13 @@ describe("draft cards", () => {
             sandbox: undefined,
             note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) },
         });
+        receiveChatNote({ sandbox: undefined, note: { kind: `previews`, previews: { fresh: `fix the login redirect` } } });
 
         // The age comes off the strip too; guessing here would report this window's own boot time instead.
         expect(
             useAgents().lanes.value.active.map((card) => ({
                 id: card.id,
-                preview: card.preview,
+                preview: previewOf(card.id),
                 unsent: card.unsent,
                 draftAt: card.draftAt,
                 open: card.open,
@@ -721,12 +723,13 @@ describe("draft cards", () => {
             sandbox: undefined,
             note: { kind: `strip`, owner: `w1`, revision: ++stripRevision, strip: strip(draftTab(`fresh`, `fix the login redirect`, 1_700)) },
         });
+        receiveChatNote({ sandbox: undefined, note: { kind: `previews`, previews: { fresh: `fix the login redirect` } } });
         const card = (): { id: string; open: boolean; unsent: boolean; preview: string | undefined; updatedAt: number }[] =>
             useAgents().lanes.value.active.map((entry) => ({
                 id: entry.id,
                 open: entry.open,
                 unsent: entry.unsent,
-                preview: entry.preview,
+                preview: previewOf(entry.id),
                 updatedAt: entry.updatedAt,
             }));
         expect(card()).toEqual([{ id: `fresh`, open: true, unsent: true, preview: `fix the login redirect`, updatedAt: 0 }]);
@@ -761,8 +764,8 @@ describe("draft cards", () => {
         receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
     });
 
-    // `preview`/`draftAt` are not confined to nameless cards: a titled agent's half-written follow-up needs the same
-    // mark tooltip (UnsentMark), naming which message and how old.
+    // The words and `draftAt` are not confined to nameless cards: a titled agent's half-written follow-up needs the
+    // same mark tooltip (UnsentMark), naming which message and how old.
     it("carries the message's words and its age on a card that has a title of its own", () => {
         setAgents([registered(`a1`)], 0);
         const conversation = new Conversation(`a1`);
@@ -771,7 +774,7 @@ describe("draft cards", () => {
         conversation.draftAt.value = 1_700;
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
-        expect(useAgents().lanes.value.finished.map((card) => ({ preview: card.preview, draftAt: card.draftAt }))).toEqual([
+        expect(useAgents().lanes.value.finished.map((card) => ({ preview: previewOf(card.id), draftAt: card.draftAt }))).toEqual([
             { preview: `and one more thing`, draftAt: 1_700 },
         ]);
     });

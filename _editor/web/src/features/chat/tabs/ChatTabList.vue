@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Button, ui, ContextMenu, type IconName, SearchBar, SegmentedControl, vMiddleclick } from "@intentic/ui";
+import { Button, ui, ContextMenu, type IconName, SearchBar, SegmentedControl } from "@intentic/ui";
 import { createInlineRename } from "@intentic/ui/inline-rename";
 import { useNow } from "@intentic/ui/async";
 import type { MenuItem } from "primevue/menuitem";
@@ -7,41 +7,24 @@ import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { type ChatGrouping, useChatGrouping } from "../transcript/chatGrouping";
 import ChatPersonaRail from "../personas/ChatPersonaRail.vue";
-import {
-    activityIcon,
-    activityLine,
-    agentDisplayTitle,
-    agentStatusMeta,
-    type FleetLane,
-    type StandingChip,
-    standingChip,
-    type TileRim,
-    tileRim,
-    turnInFlight,
-} from "../../agents/fleet/agentStatus";
-import { sessionCategory } from "../../../app/sessionCategory";
+import { agentDisplayTitle, type FleetLane } from "../../agents/fleet/agentStatus";
 import { useAgentFilter } from "../../agents/board/useAgentFilter";
-import { boxNameOf } from "../../agents/fleet/fleetScope";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { snapshotFingerprint } from "../../agents/fleet/useAgents-registry";
 import { FINISHED_WINDOW, type FleetAgent, finishedLaneOrder, windowFinished } from "../../agents/fleet/useAgents-fleet";
-import { type CacheCooling, cacheCooling, cacheWarm } from "../../agents/fleet/promptCache";
+import { cacheWarm } from "../../agents/fleet/promptCache";
 import HoverCard from "../../../components/HoverCard.vue";
-import OriginMark from "../../../components/OriginMark.vue";
 import RailCard from "../../../components/RailCard.vue";
 import RailLane from "../../../components/RailLane.vue";
-import UnsentMark from "../../../components/UnsentMark.vue";
-import WorkflowMark from "../../../components/WorkflowMark.vue";
-import { relativeTime, statusIcon, statusLabel } from "../models/catalog";
-import type { Conversation } from "../session/conversation";
-import { draftPreview } from "../drafts/draftPreview";
-import { modelLabelFor } from "../accounts/providerCatalog";
-import { allTabs, isArchived, laneOfTab, originOf, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
+import { relativeTime } from "../models/catalog";
+import { type CardView, createCardViews, type OpenChat } from "./cardView";
+import ChatTabRow from "./ChatTabRow.vue";
+import { allTabs, laneOfTab, othersOf, tabLabel, tabsInLane, toRightOf } from "./tabs";
 import ChatShareDialog from "../panel/ChatShareDialog.vue";
 import { relaySummons } from "../run/summon";
 import { useChat } from "../run/useChat";
 import type { RevealVerb } from "../panel/useChat-reveal";
 import { useChatFloating } from "../panel/chatFloating";
+import { previewOf } from "../panel/useChat-strip";
 import { chatWide, toggleChatFloating } from "../panel/chatPanelLayout";
 import { chatRun, showingRunGraph } from "../run/chatRun";
 import { openRunInChat } from "../run/openRun";
@@ -55,9 +38,7 @@ import {
     useWorkflowRuns,
 } from "../../agents/fleet/useWorkflowRuns";
 import { commandShortcut } from "../../../shell/commands/useCommands";
-import { viewersOfSession } from "../../../shell/presence/usePresence";
-import PresenceAvatars from "../../../shell/presence/PresenceAvatars.vue";
-import { type MatchSnippet, providerLabel, type WorkflowRun } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { useT } from "@intentic/ui/i18n";
 
 // Switcher for every open conversation, hosted by both the docked ChatTabs sheet and the floating rail. Card and
@@ -100,10 +81,6 @@ watch(grouping, (next, previous) => {
     parked = undefined;
 });
 
-interface OpenChat {
-    readonly conversation: Conversation;
-    readonly agent: FleetAgent | undefined;
-}
 const lastActive = (entry: OpenChat): number => entry.agent?.updatedAt ?? 0;
 
 // Same match rule as the board's filter (useAgentFilter); state is per-window, not shared.
@@ -239,107 +216,9 @@ const heldIn = (lane: FleetLane): number =>
 const countIn = (lane: FleetLane): string =>
     filtering.value ? `${cardsIn(lane).length + runsIn(lane).length} of ${heldIn(lane)}` : String(heldIn(lane));
 
-// Status glyph for the trailing slot: agent status when fleet-carded, else the conversation's own status.
-// Returned pre-bound as one object so the template computes it once, not per-field.
-const statusOf = (entry: OpenChat): { name: IconName; spin?: boolean; class: string; "aria-label": string } => {
-    if (entry.agent !== undefined) {
-        const meta = agentStatusMeta(entry.agent.status);
-        return { name: meta.icon, spin: meta.spin, class: `text-xs ${meta.class}`, "aria-label": meta.label };
-    }
-    const status = entry.conversation.status.value;
-    const icon = statusIcon(status);
-    return { name: icon.name, spin: icon.spin, class: `text-xs ${icon.class}`, "aria-label": statusLabel(status) };
-};
-
-// The corner's word, from the board's own projection: why this chat needs you, else that it worked since you last
-// looked. A conversation the roster hasn't filed has no standing to report, so its corner keeps the status glyph.
-const chipOf = (entry: OpenChat): StandingChip | undefined => (entry.agent === undefined ? undefined : standingChip(entry.agent));
-
-// What the mark's rim draws: the chat's own checklist, or how much of the context window it has spent. Only the fleet
-// agent knows either, so a conversation this window holds but the roster has not filed wears the empty rim rather than
-// a guess. Not `quiet`: every row here is an open session, not a destination.
-const rimOf = (entry: OpenChat): TileRim | undefined => (entry.agent === undefined ? undefined : tileRim(entry.agent, { quiet: false }));
-
-// The board's cooling chip at rail width: the glyph and its sentence, without the countdown, since a second clock
-// beside the title would read as the turn's own. Absent for a conversation the roster has not filed, like the rim above.
-const coolingOf = (agent: FleetAgent | undefined): CacheCooling | undefined => (agent === undefined ? undefined : cacheCooling(agent, now.value));
-
-// Prefers the fleet agent, falls back to the conversation: an unresolved agent (archived, unregistered) still
-// has a conversation with real facts. Omits spend, diff and turn count on purpose; those belong to the board.
-
-// Model label as the pickers show it; falls back to the provider name when no model is recorded yet.
-// `activeModel` is what last ran; `model` is what the composer would send next.
-const modelOf = (entry: OpenChat): string | undefined => {
-    const { agent, conversation } = entry;
-    const provider = agent?.provider ?? conversation.provider.value;
-    const model = agent?.model ?? conversation.activeModel.value ?? conversation.model.value;
-    if (model !== null && model !== ``) {
-        return modelLabelFor(provider, model);
-    }
-    return sessionCategory(tabLabel(conversation), agent?.titleAction) === undefined ? undefined : providerLabel(provider);
-};
-
-// Live-line text prefers the registry's activity frames (richer); falls back to the conversation's own
-// streaming state so a working card stays findable even when the fleet join is cold.
-const liveOf = (entry: OpenChat): { icon: IconName; text: string; since: number | undefined } | undefined => {
-    const { agent, conversation } = entry;
-    if (agent !== undefined && turnInFlight(agent)) {
-        return {
-            icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
-            text: activityLine(agent) ?? `Working…`,
-            since: agent.startedAt,
-        };
-    }
-    if (conversation.streaming.value) {
-        return { icon: activityIcon(undefined), text: `Working…`, since: conversation.turnStartedAt.value };
-    }
-    return undefined;
-};
-
-// Whether the second line has anything to show; a fresh draft has no numbers, marks or model, so it's asked per
-// card rather than assumed. The standing is not counted here: it wears the card's corner, not this line.
-const hasMeta = (entry: OpenChat): boolean =>
-    (entry.agent !== undefined && entry.agent.updatedAt > 0) ||
-    entry.conversation.unsent.value ||
-    originOf(entry.conversation) !== undefined ||
-    isArchived(entry.conversation) ||
-    modelOf(entry) !== undefined;
-
-// Everything a card is handed that isn't a primitive, derived in one place per card.
-interface CardView {
-    readonly status: { name: IconName; spin?: boolean; class: string; "aria-label": string };
-    readonly chip: StandingChip | undefined;
-    readonly rim: TileRim | undefined;
-    readonly live: { icon: IconName; text: string; since: number | undefined } | undefined;
-    readonly snippet: MatchSnippet | undefined;
-    readonly model: string | undefined;
-    readonly meta: boolean;
-}
-
-// A card's view model is held while its fields are value-equal, since a card compares its props by identity: a
-// fresh object for unchanged facts redraws every row in the lane on any pass, and a pass is as cheap as a keystroke.
-const viewCache = new Map<string, { print: string; view: CardView }>();
-const viewOf = (entry: OpenChat): CardView => {
-    const view: CardView = {
-        status: statusOf(entry),
-        chip: chipOf(entry),
-        rim: rimOf(entry),
-        live: liveOf(entry),
-        snippet: entry.agent === undefined ? undefined : snippetOf(entry.agent),
-        model: modelOf(entry),
-        meta: hasMeta(entry),
-    };
-    const print = snapshotFingerprint(view);
-    const held = viewCache.get(entry.conversation.conversationId);
-    if (held?.print === print) {
-        return held.view;
-    }
-    viewCache.set(entry.conversation.conversationId, { print, view });
-    return view;
-};
-
 // The drawn cards of every lane, built once a pass rather than per `cardsIn` call, and the only place the view
 // cache is written — so a card that leaves the list takes its entry with it.
+const views = createCardViews();
 const laneCards = computed<Record<FleetLane, (OpenChat & { view: CardView })[]>>(() => {
     const next: Record<FleetLane, (OpenChat & { view: CardView })[]> = { attention: [], active: [], finished: [] };
     const alive = new Set<string>();
@@ -350,14 +229,10 @@ const laneCards = computed<Record<FleetLane, (OpenChat & { view: CardView })[]>>
                 continue;
             }
             alive.add(entry.conversation.conversationId);
-            next[lane].push({ ...entry, view: viewOf(entry) });
+            next[lane].push({ ...entry, view: views.of(entry, entry.agent === undefined ? undefined : snippetOf(entry.agent), now.value) });
         }
     }
-    for (const id of viewCache.keys()) {
-        if (!alive.has(id)) {
-            viewCache.delete(id);
-        }
-    }
+    views.prune(alive);
     return next;
 });
 // A lane's visible chats. The `n of m` denominator is the lane's total, not the windowed count; the row below
@@ -615,12 +490,6 @@ const openTabMenu = (id: string, event: Event): void => {
     tabMenu.value?.show(event);
 };
 
-// The × sits inside the card's click target; stop propagation or it also selects the row.
-const closeTab = (event: Event, id: string): void => {
-    event.stopPropagation();
-    emit(`close`, new Set([id]));
-};
-
 // Middle-click closes the card under the pointer, the tab gesture these cards stand in for. Held to the same rule
 // as the ×: the last open chat keeps no close affordance, so the press has nothing to act on either. A peeked card
 // closes too — its × is missing because the pin took that slot, not because it can't be closed.
@@ -628,13 +497,6 @@ const middleCloseTab = (id: string): void => {
     if (conversations.value.length > 1) {
         emit(`close`, new Set([id]));
     }
-};
-
-// Keeps a peeked chat open (Conversation.peek); local only, since other windows read the peek mark off the
-// published strip.
-const keepTab = (event: Event, id: string): void => {
-    event.stopPropagation();
-    keepChat(id);
 };
 </script>
 
@@ -724,98 +586,27 @@ const keepTab = (event: Event, id: string): void => {
                             @blur="edit.blurCommit()"
                             @vue:mounted="edit.focusInput"
                         />
-                        <RailCard
+                        <!-- Its own component so the composer's draft, which names an unnamed card, is read inside the row
+                             rather than in this list's render — where it would redraw the whole lane per keystroke. -->
+                        <ChatTabRow
                             v-else
-                            :data-chat-tab="c.conversationId"
-                            :title="tabLabel(c)"
-                            :title-action="agent?.titleAction"
+                            :conversation="c"
+                            :agent="agent"
+                            :view="view"
                             :needle="needle"
                             :match-case="matchCase"
-                            :provider="agent?.provider ?? c.provider.value"
-                            :status="view.status"
-                            :chip="view.chip"
-                            :rim="view.rim"
-                            :live="view.live"
-                            tight
                             :selected="activeId === c.conversationId || showing(c.conversationId)"
-                            :peek="c.peek.value"
                             :attention="lane.key === 'attention'"
-                            :snippet="view.snippet"
-                            v-middleclick="() => middleCloseTab(c.conversationId)"
-                            @click="onRowClick($event, c.conversationId)"
-                            @dblclick.prevent.stop="beginRename(c.conversationId)"
-                            @contextmenu.prevent.stop="openTabMenu(c.conversationId, $event)"
-                            @mouseenter="showPreview($event, { conversation: c, agent })"
-                            @mouseleave="hidePreview"
-                        >
-                            <template #trailing>
-                                <PresenceAvatars
-                                    v-if="c.session.value !== undefined"
-                                    :members="viewersOfSession(c.session.value.id)"
-                                    :label="t(`chat.chatTabList.inChat`)"
-                                />
-                                <!-- The × is a hit target around an 11px glyph; a miss lands on the card and re-selects it. -->
-                                <!-- The peeked card keeps its pin action in the trailing slot. -->
-                                <span
-                                    v-if="c.peek.value"
-                                    role="button"
-                                    :aria-label="t(`chat.chatTabList.keepChatOpen`)"
-                                    v-tooltip.top="t(`chat.chatTabList.keepOpenOtherwiseChat`)"
-                                    class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
-                                    @click="keepTab($event, c.conversationId)"
-                                >
-                                    <Icon name="pin" class="text-2xs" />
-                                </span>
-                                <span
-                                    v-else-if="conversations.length > 1"
-                                    role="button"
-                                    :aria-label="t(`chat.chatTabList.closeChat`)"
-                                    class="-my-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted opacity-0 transition hover:bg-overlay hover:text-content focus-visible:opacity-100 group-hover:opacity-100"
-                                    @click="closeTab($event, c.conversationId)"
-                                >
-                                    <Icon name="times" class="text-2xs" />
-                                </span>
-                            </template>
-                            <!-- One line: where it came from, the model, and (settled only) its age, right-aligned. Why it needs you is the card's corner (see `chipOf`), where the board puts it too. -->
-                            <template v-if="view.meta" #meta>
-                                <UnsentMark v-if="c.unsent.value" :preview="draftPreview(c.draft.value)" :at="c.draftAt.value" />
-                                <!-- One glyph, no countdown: the rail says which chat is about to stop being cheap to answer, the board says for how long. -->
-                                <Icon
-                                    v-if="coolingOf(agent) !== undefined"
-                                    name="bolt"
-                                    class="shrink-0 text-2xs"
-                                    :class="coolingOf(agent)!.near ? 'text-link' : 'text-muted'"
-                                    v-tooltip.top="coolingOf(agent)!.hint"
-                                />
-                                <!-- Provenance marks (external origin, workflow), same as the board's OriginMark in the card body. -->
-                                <OriginMark :origin="originOf(c)" compact />
-                                <WorkflowMark :workflow="agent?.workflow" compact />
-                                <!-- Chats in another sandbox identify that sandbox in metadata. -->
-                                <span
-                                    v-if="c.box.value !== undefined"
-                                    v-tooltip.top="
-                                        t(`chat.chatTabList.runsInQuoted`, {
-                                            sandbox: boxNameOf.get(c.box.value!) ?? t(`chat.chatTabList.anotherSandbox`),
-                                        })
-                                    "
-                                    class="flex shrink-0 items-center"
-                                    :aria-label="
-                                        t(`chat.chatTabList.runsIn`, { sandbox: boxNameOf.get(c.box.value!) ?? t(`chat.chatTabList.anotherSandbox`) })
-                                    "
-                                >
-                                    <Icon name="boxes" class="text-2xs text-subtle" />
-                                </span>
-                                <span v-if="isArchived(c)" class="flex shrink-0 items-center" :aria-label="t(`chat.chatTabList.archived`)">
-                                    <Icon name="box" class="text-2xs text-subtle" />
-                                </span>
-                                <!-- Spend, diff and turn count are deliberately absent here; they live on the board and Usage tab. -->
-                                <span v-if="view.model !== undefined" class="max-w-24 truncate">{{ view.model }}</span>
-                                <!-- Age is shown only when settled; a running card's clock is the live line's elapsed readout instead. -->
-                                <span v-if="agent !== undefined && !turnInFlight(agent) && agent.updatedAt > 0" class="ml-auto shrink-0">{{
-                                    relativeTime(agent.updatedAt)
-                                }}</span>
-                            </template>
-                        </RailCard>
+                            :closable="conversations.length > 1"
+                            @select="onRowClick($event, c.conversationId)"
+                            @rename="beginRename(c.conversationId)"
+                            @menu="openTabMenu(c.conversationId, $event)"
+                            @hover="showPreview($event, { conversation: c, agent })"
+                            @leave="hidePreview"
+                            @close="emit('close', new Set([c.conversationId]))"
+                            @keep="keepChat(c.conversationId)"
+                            @middle-close="middleCloseTab(c.conversationId)"
+                        />
                     </template>
                 </div>
                 <!-- Not a pager — the count itself is the point ("12 more open"), one press away rather than gone. -->
@@ -834,10 +625,12 @@ const keepTab = (event: Event, id: string): void => {
             <RailLane v-if="filtering && notOpenCount > 0" :label="t(`chat.chatTabList.notOpen`)" icon="search" :count="notOpenCount">
                 <div class="flex min-w-0 flex-col gap-2.5">
                     <!-- Same identity tile as the lanes above; the category tint still signals what kind of work this is. -->
+                    <!-- The only place this list reads composer words, and it is inside `filtering`: a lane the reader
+                         opened by typing here already redraws per character. Open chats name themselves in ChatTabRow. -->
                     <RailCard
                         v-for="agent in notOpen"
                         :key="agent.id"
-                        :title="agentDisplayTitle(agent)"
+                        :title="agentDisplayTitle(agent, previewOf(agent.id))"
                         :title-action="agent.titleAction"
                         :needle="needle"
                         :match-case="matchCase"

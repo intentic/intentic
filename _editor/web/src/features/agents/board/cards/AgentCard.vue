@@ -53,6 +53,7 @@ import MatchLine from "../../../../components/MatchLine.vue";
 import SessionChip from "../session/SessionChip.vue";
 import { boxImageOf, boxNameOf } from "../../fleet/fleetScope";
 import { accountBadge } from "../session/accountChip";
+import { previewOf } from "../../../chat/panel/useChat-strip";
 import { providerAccounts } from "../../../chat/accounts/providerAccounts";
 import { markSegments } from "../../review/markSegments";
 import { useAgents } from "../../fleet/useAgents";
@@ -333,7 +334,10 @@ const model = computed(() => {
 // The summary carries only a UUID; read against the window's account list, so an unresolvable id (disconnected login)
 // draws nothing.
 const account = computed(() => accountBadge(providerAccounts.value[props.agent.provider] ?? [], props.agent.account));
-const displayTitle = computed(() => agentDisplayTitle(props.agent));
+// A computed of its own, not a call in the template: `previewOf` reads every composer's words, and wrapping it here
+// leaves Vue comparing one string, so only the card being typed into redraws.
+const unsentWords = computed(() => previewOf(props.agent.id));
+const displayTitle = computed(() => agentDisplayTitle(props.agent, unsentWords.value));
 // Marks the filter term in the title; the matched line (via MatchLine, which also names the speaker) is never shown
 // apart from it.
 // Term is case-folded to match the filter's own rule, unless `Aa` (matchCase) is on.
@@ -602,7 +606,7 @@ const grab = (event: PointerEvent): void => {
                 class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-2xs text-subtle"
             >
                 <!-- Shape, wording and hover live in UnsentMark, shared with the rail row. -->
-                <UnsentMark v-if="agent.unsent" :preview="agent.preview" :at="agent.draftAt" />
+                <UnsentMark v-if="agent.unsent" :preview="unsentWords" :at="agent.draftAt" />
                 <!-- Which sandbox this agent is in, shown only when it isn't the reader's own; leads the line since it changes what every other number means. -->
                 <span
                     v-if="box !== undefined"

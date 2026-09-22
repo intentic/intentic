@@ -11,6 +11,7 @@ import { dropOutdatedMirrors } from "./app/buildEpoch";
 import { describeError, installClientDiagnostics, reportClient } from "./app/clientDiagnostics";
 import { installDesktopLinks } from "./app/environments/desktop";
 import { installPerfConsole, installPerfReporter } from "./app/perf";
+import { installRenderTrace } from "./app/renderTrace";
 import { queryClient } from "./lib/queryPersistence";
 import { installSelfHeal, purgeIfMarked, reportStartupError } from "./app/selfHeal";
 import { installDocumentAppearance } from "./features/settings/documentAppearance";
@@ -65,6 +66,11 @@ app.config.errorHandler = (err, _instance, info) => {
     reportClient(`vue.${info.replace(/\s+/g, `-`)}`, message, { fields });
     reportStartupError(err);
 };
+// Dev-only and idle until armed from the console; `import.meta.env.DEV` is compile-time, so the hook and the module
+// behind it leave a production build entirely.
+if (import.meta.env.DEV) {
+    installRenderTrace(app);
+}
 app.use(router);
 // Our own client so requireAuth can hydrate it from IndexedDB (per-user) before any route mounts.
 app.use(VueQueryPlugin, { queryClient });

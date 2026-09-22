@@ -16,8 +16,8 @@ import {
     setActive,
     setConversations,
     setPanes,
-    untouchedDraft,
 } from "../tabs/useChat-tabs";
+import { untouchedDraft } from "../tabs/tabFacts";
 import { fetchTranscript, hydrateOnce, sessions } from "../run/useChat-sessions";
 import { uuid } from "../../../lib/uuid";
 

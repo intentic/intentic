@@ -11,6 +11,15 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Import chain reads browser globals at import time; setup keeps the device desktop for the drill-in affordance.
 
+// The words in a composer reach a card through this lookup, never through the card's own fields; stubbed so the
+// naming case below needs no tab store.
+const UNSENT_WORDS = `rename the landing page hero`;
+vi.mock("../../../chat/panel/useChat-strip", () => ({
+    chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
+    chatPreviews: { value: { a4: `rename the landing page hero` } },
+    previewOf: (id: string) => (id === `a4` ? `rename the landing page hero` : undefined),
+}));
+
 const { default: AgentCard } = await import("./AgentCard.vue");
 const { router } = await import("../../../../router/index");
 // Connected accounts module state; the card reads it to turn a session's account id into a name.
@@ -464,4 +473,25 @@ it(`keeps the agent's press while any cause is still one a rebase reaches`, () =
         app?.unmount();
         app = undefined;
     }
+});
+
+// The card carries `unsent` and nothing else about the message, so that typing rebuilds no card list; both places the
+// words appear resolve them by id instead. Breaking that link would leave an untitled card reading "New agent" with a
+// mark that says nothing, and no test would have noticed.
+it(`names an untitled draft by the words waiting in its composer, and marks them unsent`, () => {
+    const el = mount({
+        id: `a4`,
+        status: `draft`,
+        provider: `claude`,
+        harness: `native`,
+        updatedAt: 0,
+        attention: NO_ATTENTION,
+        open: true,
+        unread: false,
+        unsent: true,
+        draftAt: Date.now(),
+    });
+
+    expect(el.textContent ?? ``).toContain(UNSENT_WORDS);
+    expect(el.querySelector(`[aria-label^="Not sent"]`)?.getAttribute(`aria-label`)).toContain(UNSENT_WORDS);
 });

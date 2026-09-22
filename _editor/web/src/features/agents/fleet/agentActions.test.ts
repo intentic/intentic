@@ -38,7 +38,11 @@ vi.mock("../../chat/run/useChat", () => ({
     }),
 }));
 // The strip the fleet reads at module load; empty so no draft card competes with the registry rows under test.
-vi.mock("../../chat/panel/useChat-strip", () => ({ chatStrip: { value: { active: undefined, panes: [], tabs: [] } } }));
+vi.mock("../../chat/panel/useChat-strip", () => ({
+    chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
+    chatPreviews: { value: {} },
+    previewOf: () => undefined,
+}));
 // The draft startAgent pins and summons, one per test so its pins can be read back.
 const draft = vi.hoisted(() => ({
     value: { conversationId: `c1`, actsAs: { value: undefined as string | undefined }, startIn: { value: undefined as string | undefined } },

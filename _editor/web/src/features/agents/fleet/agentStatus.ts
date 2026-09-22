@@ -127,12 +127,14 @@ export const agentStatusMeta = (status: AgentStatus | ClientAgentStatus): { icon
 
 // What to call a conversation whose title the first turn has not minted yet (a new tab, an untitled history entry).
 // The composer's own unsent words beat any placeholder: they are what the reader wrote, and what they will recognise.
-export const agentDisplayTitle = (agent: { readonly title?: string; readonly preview?: string; readonly status: AgentStatus | ClientAgentStatus }): string => {
+// Those words are passed in rather than read off the card: they live in `chatPreviews`, keyed by id, so that typing
+// rebuilds nothing but the one thing drawing them (useAgents-fleet.FleetAgent.unsent).
+export const agentDisplayTitle = (agent: { readonly title?: string; readonly status: AgentStatus | ClientAgentStatus }, preview?: string): string => {
     if (agent.title !== undefined) {
         return agent.title;
     }
-    if (agent.preview !== undefined) {
-        return agent.preview;
+    if (preview !== undefined) {
+        return preview;
     }
     if (agent.status === `draft`) {
         return t(`agents.agentStatus.newAgent`);

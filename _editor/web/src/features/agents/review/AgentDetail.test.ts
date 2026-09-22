@@ -97,7 +97,11 @@ vi.mock("../../chat/run/useChat", async () => {
     };
 });
 // Stubbed strip (nothing open) so this mount skips standing up the whole tab store for a header test.
-vi.mock("../../chat/panel/useChat-strip", () => ({ chatStrip: { value: { active: undefined, panes: [], tabs: [] } } }));
+vi.mock("../../chat/panel/useChat-strip", () => ({
+    chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
+    chatPreviews: { value: {} },
+    previewOf: () => undefined,
+}));
 
 vi.mock("./useAgentChanges", async () => {
     const { ref } = await import("vue");

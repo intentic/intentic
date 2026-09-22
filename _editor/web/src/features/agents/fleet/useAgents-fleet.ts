@@ -2,7 +2,6 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, NO_ATTENTION, turnInFlight, unregistered } from "./agentStatus";
 import { closedDrafts } from "../../chat/drafts/closedDrafts";
-import { draftPreview } from "../../chat/drafts/draftPreview";
 import { type TabFacts, unasked } from "../../chat/tabs/tabFacts";
 import type { StoredTab } from "../../chat/tabs/tabSnapshot";
 import { rememberedProviderFor } from "../../chat/run/turnDefaults";
@@ -23,9 +22,9 @@ export interface FleetAgent extends Omit<AgentSummary, "status"> {
     readonly open: boolean;
     readonly unread: boolean;
     // Unsent words in this open tab (any window of this browser); false for a draft written on another device.
+    // Says only THAT there are words. The words themselves are `chatPreviews`, looked up by id where they are
+    // drawn: a field here would rebuild this whole list on every character typed anywhere.
     readonly unsent: boolean;
-    // Opening words of the unsent message; names the card and backs the unsent mark's tooltip.
-    readonly preview?: string;
     // When the composer first held something unsent, so the mark can show how long it's been standing.
     readonly draftAt?: number;
 }
@@ -82,7 +81,7 @@ export const windowFinished = <T>(
 
 // Built from the stored tab alone, since no daemon row or open tab exists for it; carries its origin sandbox so
 // actions address the right daemon. `updatedAt` is 0, since being set aside isn't activity.
-const closedCard = (tab: StoredTab, unsent: UnsentTab | undefined): FleetAgent => ({
+const closedCard = (tab: StoredTab): FleetAgent => ({
     id: tab.conversationId,
     status: tab.session === undefined ? `draft` : `resumed`,
     // Falls back the same as a fresh conversation, so a tab persisted before picking anything can still open.
@@ -94,7 +93,6 @@ const closedCard = (tab: StoredTab, unsent: UnsentTab | undefined): FleetAgent =
     open: false,
     unread: false,
     unsent: true,
-    preview: unsent?.preview,
     draftAt: tab.draftAt,
     // Model the composer held when closed: queued work whose spend is already decided.
     ...(tab.model === undefined ? {} : { model: tab.model }),
@@ -103,10 +101,9 @@ const closedCard = (tab: StoredTab, unsent: UnsentTab | undefined): FleetAgent =
     ...(tab.box === undefined ? {} : { sandboxId: tab.box }),
 });
 
-// One composer's unsent contents: opening words and the instant it first held something. Both optional (no words
-// for an attachment/queued message, no instant on a pre-stamp snapshot restore).
+// That one composer holds something unsent, and when it first did; the instant is optional (a pre-stamp snapshot
+// restore has none). The words are not here — see FleetAgent.unsent.
 interface UnsentTab {
-    readonly preview?: string;
     readonly at?: number;
 }
 
@@ -122,7 +119,6 @@ const draftCard = (tab: TabFacts, held: UnsentTab | undefined): FleetAgent => ({
     open: true,
     unread: false,
     unsent: held !== undefined,
-    preview: held?.preview,
     draftAt: held?.at,
     ...(tab.box === undefined ? {} : { sandboxId: tab.box }),
     ...(tab.title === undefined ? {} : { title: tab.title }),
@@ -178,8 +174,8 @@ export const fleet = computed<FleetAgent[]>(() => {
     const carded = new Set(registry.value.map((agent) => agent.id));
     // Unsent words: open composers plus chats closed with the message still in them; composers win any race.
     const unsent: ReadonlyMap<string, UnsentTab> = new Map([
-        ...closedDrafts.value.map((tab): [string, UnsentTab] => [tab.conversationId, { preview: draftPreview(tab.draft), at: tab.draftAt }]),
-        ...strip.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { preview: tab.preview, at: tab.draftAt }]),
+        ...closedDrafts.value.map((tab): [string, UnsentTab] => [tab.conversationId, { at: tab.draftAt }]),
+        ...strip.tabs.filter((tab) => tab.unsent).map((tab): [string, UnsentTab] => [tab.id, { at: tab.draftAt }]),
     ]);
     // Every open tab by conversation, for what only this browser knows about a registered agent: that a turn just went
     // (`sendingNow`).
@@ -196,16 +192,15 @@ export const fleet = computed<FleetAgent[]>(() => {
     for (const agent of archived.value) {
         const tab = unsent.get(agent.id);
         if (tab !== undefined && !carded.has(agent.id)) {
-            // A copy, not the archive's own entry: unsent/preview/draftAt describe the composer, not the filed-away
-            // agent.
-            held.push({ ...agent, open: openIds.has(agent.id), unsent: true, preview: tab.preview, draftAt: tab.at });
+            // A copy, not the archive's own entry: unsent/draftAt describe the composer, not the filed-away agent.
+            held.push({ ...agent, open: openIds.has(agent.id), unsent: true, draftAt: tab.at });
         }
     }
     // Chats closed with nothing but their unsent message: no roster row, archive entry, or open tab draws them
     // otherwise. Stands as `draft` unless the closed chat had a session, in which case reopening resumes it.
     const setAside = closedDrafts.value
         .filter((tab) => !openIds.has(tab.conversationId) && !carded.has(tab.conversationId) && !archivedIds.has(tab.conversationId))
-        .map((tab): FleetAgent => closedCard(tab, unsent.get(tab.conversationId)));
+        .map((tab): FleetAgent => closedCard(tab));
     const built = [
         ...registry.value.map((agent): FleetAgent => {
             const tab = unsent.get(agent.id);
@@ -219,7 +214,6 @@ export const fleet = computed<FleetAgent[]>(() => {
                 open: openIds.has(agent.id),
                 unread: startedAt === undefined && !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
                 unsent: tab !== undefined,
-                preview: tab?.preview,
                 draftAt: tab?.at,
             };
         }),

@@ -90,8 +90,8 @@ const newChat = () => {
 };
 
 const { closedDrafts } = await import("../drafts/closedDrafts");
-// Asserts what tabFacts (the strip's own reading) reports, not an internal flag.
-const { tabFacts, unasked } = await import("../tabs/tabFacts");
+// Asserts the projection the board reads (tabFacts.unasked, over a live conversation), not an internal flag.
+const { unaskedDraft } = await import("../tabs/tabFacts");
 const { selectedAccountId, usageByAccount } = await import("../accounts/providerAccounts");
 const { Conversation } = await import("../session/conversation");
 const { endpointProviders, endpointsLoaded, trialStatus } = await import("../accounts/providerCatalog");
@@ -1062,7 +1062,7 @@ describe(`abandoned drafts`, () => {
     // chatStrip answers from whichever window draws the chat: this window's own state while docked, the popped-out
     // window's echo while it isn't, never a blend.
     it(`answers for the strip from whichever window draws the chat`, async () => {
-        const { chatStrip } = await import("../panel/useChat-strip");
+        const { chatStrip, previewOf } = await import("../panel/useChat-strip");
         const { receiveChatNote } = await import("./chatChannel");
         const { receiveFloatingNote } = await import("../../../shell/window/floating");
         const chat = useChat();
@@ -1071,9 +1071,9 @@ describe(`abandoned drafts`, () => {
         await nextTick();
 
         expect(chatStrip.value.active).toBe(own);
-        expect(chatStrip.value.tabs.map((tab) => ({ id: tab.id, unsent: tab.unsent, preview: tab.preview }))).toEqual([
-            { id: own, unsent: true, preview: `real work` },
-        ]);
+        expect(chatStrip.value.tabs.map((tab) => ({ id: tab.id, unsent: tab.unsent }))).toEqual([{ id: own, unsent: true }]);
+        // The words follow the same window, on the channel of their own that keeps typing out of the strip.
+        expect(previewOf(own)).toBe(`real work`);
 
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
         receiveChatNote({
@@ -1096,7 +1096,6 @@ describe(`abandoned drafts`, () => {
                             harness: `native`,
                             model: ``,
                             unsent: true,
-                            preview: `half a thought`,
                         },
                     ],
                 },
@@ -1376,7 +1375,7 @@ describe(`the blank left when the last chat closes`, () => {
     });
 
     it(`is what a window with no tabs to restore opens on`, () => {
-        expect(unasked(tabFacts(useChat().active.value))).toBe(true);
+        expect(unaskedDraft(useChat().active.value)).toBe(true);
     });
 
     it(`is what a close that takes the last card leaves behind`, () => {
@@ -1389,7 +1388,7 @@ describe(`the blank left when the last chat closes`, () => {
         const left = chat.active.value;
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([left.conversationId]);
         expect(left.conversationId).not.toBe(kept.conversationId);
-        expect(unasked(tabFacts(left))).toBe(true);
+        expect(unaskedDraft(left)).toBe(true);
     });
 
     it(`stops being one the moment something is typed in it`, async () => {
@@ -1398,14 +1397,14 @@ describe(`the blank left when the last chat closes`, () => {
         blank.draft.value = `fix the login redirect`;
         await nextTick();
 
-        expect(unasked(tabFacts(blank))).toBe(false);
+        expect(unaskedDraft(blank)).toBe(false);
     });
 
     it(`becomes a chat the user started when New agent is pressed on it`, () => {
         const blank = useChat().active.value;
 
         expect(draftConversation().conversationId).toBe(blank.conversationId);
-        expect(unasked(tabFacts(blank))).toBe(false);
+        expect(unaskedDraft(blank)).toBe(false);
     });
 
     it(`comes back a blank through the snapshot the panel is handed off with`, async () => {
@@ -1416,7 +1415,7 @@ describe(`the blank left when the last chat closes`, () => {
         resetChat();
 
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([blank]);
-        expect(unasked(tabFacts(chat.active.value))).toBe(true);
+        expect(unaskedDraft(chat.active.value)).toBe(true);
     });
 });
 

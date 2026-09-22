@@ -30,7 +30,7 @@ class FakeChannel {
 vi.stubGlobal(`BroadcastChannel`, FakeChannel);
 vi.useFakeTimers();
 
-const { drawsChat, elsewhereStrip, publishStrip } = await import("./chatEcho");
+const { drawsChat, elsewherePreviews, elsewhereStrip, publishPreviews, publishStrip } = await import("./chatEcho");
 const { receiveChatNote } = await import("./chatChannel");
 const { EMPTY_STRIP } = await import("../tabs/tabFacts");
 const { claimFloating, receiveFloatingNote } = await import("../../../shell/window/floating");
@@ -41,8 +41,9 @@ const { useSandbox } = await import("../../sandbox/client/useSandbox");
 const popOut = (): void => receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w1`, since: 1 });
 const dock = (): void => receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
 
-// A draft tab holding the given words, as the drawing window's tabFacts would describe it.
-const draftTab = (id: string, preview?: string): TabFacts => ({
+// A draft tab holding the given words, as the drawing window's tabFacts would describe it. The strip says only that
+// words are waiting; the words themselves travel as a `previews` note.
+const draftTab = (id: string, words?: string): TabFacts => ({
     id,
     registered: false,
     standing: `draft`,
@@ -51,8 +52,7 @@ const draftTab = (id: string, preview?: string): TabFacts => ({
     provider: `claude`,
     harness: `native`,
     model: ``,
-    unsent: preview !== undefined,
-    ...(preview === undefined ? {} : { preview }),
+    unsent: words !== undefined,
 });
 const strip = (...tabs: TabFacts[]): Strip => ({ active: tabs[0]?.id, panes: tabs.slice(0, 1).map((tab) => tab.id), tabs });
 
@@ -150,9 +150,9 @@ describe(`elsewhereStrip`, () => {
         expect(drawsChat.value).toBe(false);
         expect(elsewhereStrip.value.active).toBe(`c2`);
         expect(elsewhereStrip.value.panes).toEqual([`c1`, `c2`]);
-        expect(elsewhereStrip.value.tabs.map((tab) => ({ id: tab.id, unsent: tab.unsent, preview: tab.preview }))).toEqual([
-            { id: `c1`, unsent: true, preview: `fix the login redirect` },
-            { id: `c2`, unsent: false, preview: undefined },
+        expect(elsewhereStrip.value.tabs.map((tab) => ({ id: tab.id, unsent: tab.unsent }))).toEqual([
+            { id: `c1`, unsent: true },
+            { id: `c2`, unsent: false },
         ]);
     });
 
@@ -237,6 +237,48 @@ describe(`strip publisher ownership`, () => {
         receiveChatNote({ sandbox: `sb1`, note: { kind: `roll` } });
 
         expect(postedStrips()).toEqual([strip(draftTab(`c1`, `what the holder shows`))]);
+        scope.stop();
+    });
+});
+
+// The composer's words, which move per character, kept off the strip the board rebuilds its cards from.
+describe(`elsewherePreviews`, () => {
+    it(`takes the words on their own note, leaving the strip the board reads identical`, () => {
+        popOut();
+        hear(strip(draftTab(`c1`, `fix the`)));
+        const before = elsewhereStrip.value;
+
+        receiveChatNote({ sandbox: `sb1`, note: { kind: `previews`, previews: { c1: `fix the login redirect` } } });
+
+        expect(elsewherePreviews.value).toEqual({ c1: `fix the login redirect` });
+        // Identity, not equality: this is the whole point. `useAgents-fleet.fleet` reads the strip, and every surface
+        // that asks `agentById` anything reads `fleet`, so a strip that moved per keystroke rebuilt all of it.
+        expect(elsewhereStrip.value).toBe(before);
+    });
+
+    it(`forgets another owner's words rather than lending them to its replacement`, async () => {
+        popOut();
+        receiveChatNote({ sandbox: `sb1`, note: { kind: `previews`, previews: { c1: `half a thought` } } });
+        expect(elsewherePreviews.value).toEqual({ c1: `half a thought` });
+
+        receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
+        receiveFloatingNote({ kind: `here`, panel: `chat`, id: `w2`, since: 2 });
+        await nextTick();
+
+        expect(elsewherePreviews.value).toEqual({});
+    });
+
+    it(`answers a roll-call with its words as well as its strip`, async () => {
+        const scope = effectScope();
+        scope.run(() => claimFloating(`chat`, vi.fn()));
+        await nextTick();
+        publishStrip(strip(draftTab(`c1`, `what the holder shows`)), `sb1`);
+        publishPreviews({ c1: `what the holder shows` }, `sb1`);
+        posted.length = 0;
+
+        receiveChatNote({ sandbox: `sb1`, note: { kind: `roll` } });
+
+        expect(posted.map((envelope) => envelope.note.kind)).toEqual([`strip`, `previews`]);
         scope.stop();
     });
 });

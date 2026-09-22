@@ -1,6 +1,7 @@
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import type { Summons } from "./summon";
+import type { DraftPreviews } from "../drafts/draftPreview";
 import type { Strip } from "../tabs/tabFacts";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
@@ -11,6 +12,9 @@ export type ChatNote =
     | { readonly kind: `summons`; readonly summons: Summons }
     // What the drawing window is showing, for windows that aren't; a full snapshot, never a patch.
     | { readonly kind: `strip`; readonly owner: string; readonly revision: number; readonly strip: Strip }
+    // The words standing in those composers, on their own note because they change per character while the strip
+    // does not. Needs no owner or revision: it is a lookup the strip's `unsent` decides whether to draw from.
+    | { readonly kind: `previews`; readonly previews: DraftPreviews }
     // Asks "what are you showing" on boot or sandbox switch, since asking is cheaper than waiting for the next change.
     | { readonly kind: `roll` }
     // The whole set of chats closed with a message still in them.

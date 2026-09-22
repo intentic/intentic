@@ -2,10 +2,14 @@ import type { AgentHarness, AgentProvider } from "@intentic/sandbox-contract";
 import type { ClientAgentStatus } from "../../agents/fleet/agentStatus";
 import type { Conversation } from "../session/conversation";
 import type { ChatRunView } from "../run/chatRun";
-import { draftPreview } from "../drafts/draftPreview";
 
 // What a card needs to draw a tab, computed by the window drawing the chat and published as `chatStrip`
-// (chatEcho.ts) for every other window. Carries a message's first line only, never the message itself.
+// (chatEcho.ts) for every other window.
+//
+// Deliberately carries no composer text. Everything here changes at the rate a tab opens, sends or is named; the
+// words being typed change per character, and a field of them here would rebuild `useAgents-fleet.fleet` — which
+// `agentById` answers from — on every keystroke. They travel on their own channel instead (chatPreviews), read
+// only by the components that draw them. `unsent` is the low-frequency half and stays: it says a card HAS words.
 export interface TabFacts {
     readonly id: string;
     // Whether the fleet has registered this conversation; unregistered means a draft card, drawn from this alone.
@@ -26,8 +30,6 @@ export interface TabFacts {
     readonly model: string;
     // Words in the composer, a staged attachment, or a queued message.
     readonly unsent: boolean;
-    // First line of those words, when present: a card's name until something else names it.
-    readonly preview?: string;
     // When the composer first held something (Conversation.draftAt), for an age readout.
     readonly draftAt?: number;
     // What this browser knows about an unfiled turn; present only while `starting`.
@@ -98,16 +100,32 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         sessionId: conversation.session.value?.id,
         model: conversation.model.value,
         unsent: conversation.unsent.value,
-        preview: draftPreview(conversation.draft.value),
         draftAt: conversation.draftAt.value,
         turn: standing === `starting` ? turnFacts(conversation) : undefined,
     };
 };
 
 // An untouched "New agent" tab: nothing sent, typed or named. draftConversation and setConversations both use
-// this to reuse rather than duplicate it.
-export const untouched = (tab: TabFacts): boolean => !tab.registered && tab.standing === `draft` && !tab.unsent && tab.title === undefined;
+// this to reuse rather than duplicate it. Takes the four fields it reads rather than a whole TabFacts, so a
+// conversation can answer without building one (see untouchedDraft).
+export const untouched = (tab: Pick<TabFacts, "registered" | "standing" | "unsent" | "title">): boolean =>
+    !tab.registered && tab.standing === `draft` && !tab.unsent && tab.title === undefined;
+
+// The same question asked of a live conversation. Deliberately not `untouched(tabFacts(conversation))`: the whole
+// projection reads a streaming turn's token and cost counters, so building one here would make every reader of the
+// answer — the lane counts, the close sets, the tab sweep — wake on each usage frame of any open turn.
+export const untouchedDraft = (conversation: Conversation): boolean =>
+    untouched({
+        registered: conversation.registered.value,
+        standing: standingOf(conversation),
+        unsent: conversation.unsent.value,
+        title: conversation.title.value ?? undefined,
+    });
 
 // A panel's fallback blank (Conversation.standIn) that is still untouched; the board must not draw a card for
 // it. Either half changing (a word typed, a turn sent, a name given) turns it into an ordinary draft.
-export const unasked = (tab: TabFacts): boolean => tab.standIn && untouched(tab);
+export const unasked = (tab: Pick<TabFacts, "standIn" | "registered" | "standing" | "unsent" | "title">): boolean =>
+    tab.standIn && untouched(tab);
+
+// The same question asked of a live conversation, for the same reason as untouchedDraft.
+export const unaskedDraft = (conversation: Conversation): boolean => conversation.standIn.value && untouchedDraft(conversation);
