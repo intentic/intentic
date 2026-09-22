@@ -8,7 +8,7 @@ import { type Log, spawnDetached } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract";
 import { agentLogPath, binDir } from "./config.js";
 import { adoptRunningDistros } from "./environments/commands.js";
-import { machineTarget, siblingVersions, UPGRADE_ENV, upgradeHere } from "./environments/upgrade.js";
+import { machineTarget, siblingVersions, UPGRADE_ENV, upgradeHere } from "./environments/machine-upgrade.js";
 import { runningAsInstalledAgent } from "./installed.js";
 import { agentPath, download, launcherAssetUrl, launcherPath, publishedVersion, setAside } from "./release.js";
 import { machineLauncher } from "./supervision.js";

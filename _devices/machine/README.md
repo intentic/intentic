@@ -144,7 +144,7 @@ but it is one computer, so it has one version and one supervisor tree
   (the hidden `environment attach <distro>`), removes its own systemd entry and is restarted by the root from then on.
   A Windows `setup` adopts distros already running an agent. A distro whose Windows side has no agent looks after
   itself, and is the root of its own machine.
-- **One upgrade path** ([src/environments/upgrade.ts](src/environments/upgrade.ts)). `intentic-machine upgrade`, from
+- **One upgrade path** ([src/environments/machine-upgrade.ts](src/environments/machine-upgrade.ts)). `intentic-machine upgrade`, from
   any side, moves the whole PC to one exact release: the newest of the published one and every side's installed one,
   never backwards. A distro hands the job to its Windows side; the root upgrades its distros first and itself last,
   since its own restart ends the stream a sandbox is reading. Each side still downloads the tagged asset, probes it,
@@ -200,7 +200,7 @@ said so in a log nobody had been pointed at.
 - [src/install.ts](src/install.ts) — what every `setup` runs first and last: move onto the machine's newest agent (then re-exec), PATH repair, the Windows launcher stub; once enrolled, adopt running distros and level the rest of the PC.
 - [src/release.ts](src/release.ts) — the release channel: tagged asset URLs, what `releases/latest` points at, resumable downloads, the `version` probe, and the sweep of what a finished swap leaves in `bin/`.
 - [src/upgrade.ts](src/upgrade.ts) — one environment to one exact release: download → probe → swap → restart through the supervisor → check, rolling back a build that will not start, and a restart when the file is current but the agent is not.
-- [src/environments/upgrade.ts](src/environments/upgrade.ts) — the machine-wide upgrade: the target rule, the order (distros first, the root last), and the lock.
+- [src/environments/machine-upgrade.ts](src/environments/machine-upgrade.ts) — the machine-wide upgrade: the target rule, the order (distros first, the root last), and the lock.
 - [src/environments/children.ts](src/environments/children.ts) — the root keeping each distro's agent running through a held `wsl.exe` session.
 - [src/environments/auto-upgrade.ts](src/environments/auto-upgrade.ts) — the root's update tick and its backoff.
 - [src/environments/machine.ts](src/environments/machine.ts) — `machine.json` (kept distros, the two update switches, the last failed target) and reaching the Windows side from a distro.

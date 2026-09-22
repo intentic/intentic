@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { DAEMON_OWNER, ONE_SHOT_OWNER, WORKLOAD_ENV } from "../boot/leftovers.js";
 import {
     createLiveMetrics,
@@ -265,7 +266,7 @@ describe("a reading", () => {
 
     test("the first one has memory and no CPU: there is nothing earlier to measure from", async () => {
         const host = stamped();
-        const metrics = await createLiveMetrics({ workspaceRoot: "/work", source: host.source }).read();
+        const metrics = await createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source }).read();
         expect(metrics.windowMs).toBeUndefined();
         expect(metrics.sandbox.cpuPercent).toBeUndefined();
         expect(metrics.daemon).toEqual({ rssBytes: 300 * 2 ** 20, heapUsedBytes: 120 * 2 ** 20 });
@@ -282,7 +283,7 @@ describe("a reading", () => {
 
     test("the next one measures CPU since the first, a command that finished and was reaped included", async () => {
         const host = stamped();
-        const live = createLiveMetrics({ workspaceRoot: "/work", source: host.source });
+        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source });
         await live.read();
 
         host.clock += 2_000;
@@ -302,7 +303,7 @@ describe("a reading", () => {
 
     test("a process is identified once in its life, and again only when its pid now names someone else", async () => {
         const host = stamped();
-        const live = createLiveMetrics({ workspaceRoot: "/work", source: host.source });
+        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source });
         await live.read();
         host.clock += 2_000;
         await live.read();
@@ -318,7 +319,7 @@ describe("a reading", () => {
 
     test("boards asking together cost one scan, and one asking again within a second is answered from it", async () => {
         const host = stamped();
-        const live = createLiveMetrics({ workspaceRoot: "/work", source: host.source });
+        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source });
         const [first, second] = await Promise.all([live.read(), live.read()]);
         expect(second).toBe(first);
         host.clock += 500;
@@ -332,7 +333,7 @@ describe("a reading", () => {
 
     test("after a quiet spell the reading carries no CPU rather than an average over it", async () => {
         const host = stamped();
-        const live = createLiveMetrics({ workspaceRoot: "/work", source: host.source });
+        const live = createLiveMetrics({ workspaceRoot: WORKSPACE_ROOT, source: host.source });
         await live.read();
         host.clock += 60_000;
         const late = await live.read();
@@ -348,7 +349,7 @@ describe("a reading", () => {
         const host = stamped();
         const listed = host.source.listPids;
         const live = createLiveMetrics({
-            workspaceRoot: "/work",
+            workspaceRoot: WORKSPACE_ROOT,
             source: { ...host.source, listPids: async () => [...(await listed()), 4_242] },
         });
         expect((await live.read()).sandbox.processes).toBe(5);

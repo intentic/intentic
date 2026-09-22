@@ -1,7 +1,7 @@
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { deviceCommands, deviceUninstall } from "./device/commands.js";
 import { environmentRoutes, updates } from "./environments/commands.js";
-import { realMachineIo, upgradeMachine } from "./environments/upgrade.js";
+import { realMachineIo, upgradeMachine } from "./environments/machine-upgrade.js";
 import { runForeground } from "./resident.js";
 import { readResident, restartResident, stopResident } from "./supervision.js";
 import { status } from "./status.js";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { UpgradeOutcome } from "../upgrade.js";
-import { machineTarget, type MachineIo, upgradeMachine } from "./upgrade.js";
+import { machineTarget, type MachineIo, upgradeMachine } from "./machine-upgrade.js";
 
 describe("machineTarget", () => {
     // The newest thing this PC or the channel has: a side already ahead pulls the rest of the machine up to it.

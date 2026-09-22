@@ -6,7 +6,7 @@ import { installedBuild } from "../installed.js";
 import { publishedVersion } from "../release.js";
 import { machineLauncher } from "../supervision.js";
 import { childrenOf, type MachineConfig, readMachineConfig } from "./machine.js";
-import { installedIn, machineTarget } from "./upgrade.js";
+import { installedIn, machineTarget } from "./machine-upgrade.js";
 
 // The root's own update tick: the machine brought level every hour, and onto a new release every few hours.
 

@@ -13,7 +13,7 @@ import { connect } from "./device/connection.js";
 import { type Children, superviseChildren } from "./environments/children.js";
 import { type AutoUpgrade, startAutoUpgrade } from "./environments/auto-upgrade.js";
 import { childrenOf, readMachineConfig, SUPERVISOR_ENV, supervisedByWindows, updateMachineConfig, withoutChild } from "./environments/machine.js";
-import { UPGRADE_ENV } from "./environments/upgrade.js";
+import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
 import { sweepBin } from "./release.js";
 import { assertSupervisor, machineLauncher, readResident, retireResident, startResident } from "./supervision.js";
 import { mirrorHeartbeatPath, readState } from "./sync/config.js";

@@ -2,6 +2,7 @@ import { lstat, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import type { ScratchPath, ScratchReason } from "@intentic/sandbox-contract";
+import { STATE_DIR } from "@intentic/constants";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { currentRepos } from "../../workspace/watch/repo-watch.js";
 import { materializedPaths } from "./changes-porcelain.js";
@@ -29,7 +30,7 @@ const KEPT_HIDDEN_DIRS = new Set([
     ".github",
     ".gitlab",
     ".husky",
-    ".intentic",
+    STATE_DIR,
     ".mvn",
     ".opencode",
     ".storybook",

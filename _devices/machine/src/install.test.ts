@@ -1,5 +1,5 @@
 import { describe, it, expect, mock } from "bun:test";
-import { UPGRADE_ENV } from "./environments/upgrade.js";
+import { UPGRADE_ENV } from "./environments/machine-upgrade.js";
 import { addToWindowsPathValue, selfUpdateBeforeSetup, type SelfUpdateIo } from "./install.js";
 import type { UpgradeOutcome } from "./upgrade.js";
 

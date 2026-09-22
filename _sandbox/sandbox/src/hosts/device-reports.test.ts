@@ -389,7 +389,12 @@ test("asks for the report and the fleet in one go, and bounds the pair with one 
 test("a machine whose connection is gone by the time it is asked reads as offline", async () => {
     const { services, calls } = fakeServices("gone-pc", async () => answer("[]"));
     (services.hostHub as { client: (id: string) => undefined }).client = () => undefined;
-    expect((await devices(services))[0]).toMatchObject({ hostId: "gone-pc", gap: "offline" });
+    const row = (await devices(services))[0];
+    expect(row?.hostId).toBe("gone-pc");
+    expect(row?.gap).toBe("offline");
+    expect(row?.online).toBe(false);
+    expect(row?.report).toBeUndefined();
+    expect(row?.sandboxes).toBeUndefined();
     expect(calls).toEqual([]);
 });
 
