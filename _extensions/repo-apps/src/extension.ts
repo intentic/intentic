@@ -15,7 +15,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
                     if (repo.monorepo && !(repo.deployConfig || repo.role === `intent`)) {
                         return [{ key: repo.repo, title: repo.repo, repo: repo.repo, props: { monorepo: true } }];
                     }
-                    if (repo.vitest) {
+                    if (repo.tests) {
                         return [{ key: repo.repo, title: repo.repo, icon: `bolt`, props: { repo: repo.repo, monorepo: false } }];
                     }
                     return [];

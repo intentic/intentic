@@ -30,7 +30,7 @@ const panel = (over: Partial<PanelSummary>): PanelSummary => ({
     desiredState: false,
     directoryUi: false,
     monorepo: false,
-    vitest: false,
+    tests: false,
     userStories: false,
     docs: false,
     ...over,

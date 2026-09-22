@@ -1,17 +1,19 @@
 #!/usr/bin/env node
 // How many workers each `bun test` in a repo-wide run may fork, sized to this cgroup's memory rather than its cpus:
-// turbo runs four tasks at once, a bun worker on the web package (jsdom + Vue) sits between 0.5 and 1 GiB after a few
-// hundred files, and the fan-out may take half the box. Prints the number when run; a `TEST_WORKERS` already set wins, so a caller's own value is never
+// turbo runs four tasks at once, a bun worker on the web package (jsdom + Vue) settles near 2 GiB and one on the daemon
+// near 1.4 GiB, the other packages stay far below, and the fan-out may take half the box. Prints the number when run; a `TEST_WORKERS` already set wins, so a caller's own value is never
 // second-guessed.
 import { readFileSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { availableParallelism, totalmem } from "node:os";
 import { pathToFileURL } from "node:url";
 
 // turbo.json `concurrency`: tasks running at once, each forking its own workers.
 const TURBO_CONCURRENCY = 4;
-// Working set of one bun worker on the web package, the repo's heaviest per worker; its peak is twice this, which
-// FAN_OUT_SHARE covers.
-const WORKER_BYTES = 512 * 1024 ** 2;
+// One bun worker's share in the fan-out: two of the four concurrent tasks are the heavy packages, so this is between
+// the web worker's 2 GiB and the rest.
+const WORKER_BYTES = 1024 ** 3;
+// One bun worker on the web package, the ceiling a lone `suites` run sizes to.
+const STANDALONE_WORKER_BYTES = 2 * 1024 ** 3;
 const FAN_OUT_SHARE = 0.5;
 
 // Workers per task for a box of `limitBytes` and `cores` cpus. A worker past a core buys nothing, so cores are the
@@ -38,6 +40,10 @@ export const cgroupMemoryLimit = (path = "/sys/fs/cgroup/memory.max") => {
         return undefined;
     }
 };
+
+// Workers for one package run on its own (no fan-out): half the box at the web worker's size, never past the cores.
+export const standaloneWorkers = (limitBytes = cgroupMemoryLimit() ?? totalmem(), cores = availableParallelism()) =>
+    Math.min(cores, Math.max(1, Math.floor((limitBytes * FAN_OUT_SHARE) / STANDALONE_WORKER_BYTES)));
 
 // The value to hand `suites`, as a string for an env block. An empty variable counts as unset, as `${VAR:-}` reads it.
 export const testWorkers = (env = process.env, limitBytes = cgroupMemoryLimit()) => {

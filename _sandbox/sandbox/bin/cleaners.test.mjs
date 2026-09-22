@@ -262,6 +262,12 @@ test("cleaner: drops per-test pass lines on green, keeps the summary", () => {
     expect(out).toEqual(["Test Files  2 passed (2)", "Tests  5 passed (5)"]);
 });
 
+test("cleaner: drops bun's per-test pass lines on green, keeps its summary", () => {
+    const lines = ["(pass) parses a row [0.12ms]", "(pass) refuses a blank one", " 2 pass", " 0 fail", "Ran 2 tests across 1 file. [12.00ms]"];
+    const out = cleanLines(lines, { command: "bun test src/rows.test.ts", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
+    expect(out).toEqual([" 2 pass", " 0 fail", "Ran 2 tests across 1 file. [12.00ms]"]);
+});
+
 test("a stripper claims the command, not a filename that contains its name", () => {
     const enabled = new Set(CLEANERS);
     for (const command of [

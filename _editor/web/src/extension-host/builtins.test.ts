@@ -91,7 +91,7 @@ const richRepo: RepoFacts = {
     desiredState: true,
     directoryUi: true,
     monorepo: true,
-    vitest: true,
+    tests: true,
     userStories: true,
     docs: true,
 };

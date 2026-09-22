@@ -85,14 +85,14 @@ const VALUED_FLAGS = new Set(["-C", "--dir", "--filter", "-w", "--workspace"]);
 
 // What a bare token proves, by the binary's basename; not exhaustive, an unmatched command is not evidence.
 const KINDS: ReadonlyArray<readonly [VerificationKind, ReadonlySet<string>]> = [
-    ["test", new Set(["test", "vitest", "jest", "pytest", "mocha", "ava", "tap", "phpunit", "rspec"])],
+    ["test", new Set(["test", "suites", "vitest", "jest", "pytest", "mocha", "ava", "tap", "phpunit", "rspec"])],
     ["typecheck", new Set(["typecheck", "type-check", "tsc", "tsgo", "vue-tsc", "mypy", "pyright", "flow"])],
     ["lint", new Set(["lint", "check", "oxlint", "eslint", "biome", "ruff", "clippy", "flake8", "golangci-lint"])],
     ["build", new Set(["build", "compile", "make", "tsup", "rollup", "vite", "webpack"])],
 ];
 
-// `go test ./...` / `cargo test` / `dotnet test`: the subcommand carries the meaning, not the binary.
-const SUBCOMMAND_TOOLS = new Set(["go", "cargo", "dotnet", "mvn", "gradle", "swift", "mix", "rake"]);
+// `go test ./...` / `cargo test` / `bun test`: the subcommand carries the meaning, not the binary.
+const SUBCOMMAND_TOOLS = new Set(["go", "cargo", "dotnet", "mvn", "gradle", "swift", "mix", "rake", "bun"]);
 
 const basename = (token: string): string => token.split("/").pop() ?? token;
 
@@ -188,9 +188,7 @@ export const createVerificationLedger = (): VerificationLedger => {
                 return { state: "verified", paths, check: passed.command };
             }
             const failed = after.findLast((item) => !item.passed);
-            return failed === undefined
-                ? { state: "unproven", paths, check: undefined }
-                : { state: "failing", paths, check: failed.command };
+            return failed === undefined ? { state: "unproven", paths, check: undefined } : { state: "failing", paths, check: failed.command };
         },
     };
 };
@@ -307,7 +305,7 @@ const pythonChecks = async (dir: string): Promise<readonly string[] | undefined>
 };
 
 export const projectChecks: ChecksProbe = async (fromPath) => {
-    for (let dir = dirname(resolve(fromPath)); ; ) {
+    for (let dir = dirname(resolve(fromPath)); ;) {
         // Node first: a python project keeping a package.json is described by whichever manifest says something.
         const checks = (await nodeChecks(dir)) ?? (await pythonChecks(dir));
         if (checks !== undefined) {

@@ -9,6 +9,8 @@ describe("command classification", () => {
         ["pnpm -C _shared/workspace-ignore test", "test"],
         ["./node_modules/.bin/vitest run src/a.test.ts", "test"],
         ["CI=1 npx vitest run", "test"],
+        ["bun test src/a.test.ts", "test"],
+        ["./node_modules/.bin/suites", "test"],
         ["./node_modules/.bin/tsgo --noEmit -p tsconfig.json", "typecheck"],
         ["pnpm oxlint --deny-warnings", "lint"],
         ["cargo test", "test"],

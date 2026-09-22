@@ -15,7 +15,7 @@ const repo = (name: string, facts: Partial<Omit<PanelSummary, `repo`>>): PanelSu
     desiredState: false,
     directoryUi: false,
     monorepo: false,
-    vitest: false,
+    tests: false,
     userStories: false,
     docs: false,
     ...facts,
@@ -27,13 +27,13 @@ export const FIXTURE_PANELS: PanelSummary[] = [
     // → `live-status`.
     repo(`desired-state`, { role: `desired-state`, desiredState: true }),
     // → apps (monorepo branch), dependencies, and acceptance (userStories).
-    repo(`platform`, { monorepo: true, vitest: true, userStories: true }),
+    repo(`platform`, { monorepo: true, tests: true, userStories: true }),
     // → preview (fallback view): kept unclaimed elsewhere, and not running, to avoid usePanels' 4s poll loop.
     repo(`site`, { hasPanel: true }),
     // → directory-ui (ships .intentic/ui/index.html).
     repo(`designer`, { directoryUi: true }),
-    // → apps, via its other branch (vitest without monorepo); that activation carries no repo field.
-    repo(`tools`, { vitest: true }),
+    // → apps, via its other branch (tests without monorepo); that activation carries no repo field.
+    repo(`tools`, { tests: true }),
 ];
 
 const capability = (id: string, provider: string): CapabilitySummary => ({
@@ -83,7 +83,7 @@ export const EXPECTED_ACTIVATIONS: readonly ExpectedActivation[] = [
 
     // directory extensions (per repo, the Workspace tree's panels, not the rail)
     { id: `apps`, key: `platform`, surface: `directory`, why: `platform is a pnpm+turbo monorepo` },
-    { id: `apps`, key: `tools`, surface: `directory`, why: `tools has vitest but is not a monorepo` },
+    { id: `apps`, key: `tools`, surface: `directory`, why: `tools has tests but is not a monorepo` },
     { id: `dependencies`, key: `platform`, surface: `directory`, why: `platform is a monorepo` },
     { id: `preview`, key: `site`, surface: `directory`, why: `site runs a dev server and nothing claims it` },
     // Auxiliary, activates for every repo; one entry proves the mount, the rail-inventory check covers the rest.

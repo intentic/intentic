@@ -17,9 +17,22 @@ import { panelSession } from "../processes/managed-processes.js";
 // (role, marker files, evidence, not identity); `start`/`stop` drive the repo's dev server, whose tmux session shows on
 // GET /system/terminals. Panels authenticate to the daemon via the injected INTENTIC_PANEL_TOKEN.
 
-// Vitest evidence when a repo has no root config: the workspace catalog or root manifest names it (substring match, not
-// a parse). If a stray mention ever false-positives, parse catalog/devDependencies instead.
-const mentionsVitest = (file: string): boolean => existsSync(file) && readFileSync(file, "utf8").includes("vitest");
+// A manifest that does not parse names no test script.
+const hasTestScript = (manifest: string): boolean => {
+    try {
+        return typeof (JSON.parse(readFileSync(manifest, "utf8")) as { scripts?: Record<string, unknown> }).scripts?.["test"] === "string";
+    } catch {
+        return false;
+    }
+};
+
+// Runnable tests: a root `test` script or a runner's own config file, or a workspace catalog naming vitest (substring
+// match, not a parse) for a monorepo whose root runs nothing itself.
+const hasTests = (dir: string): boolean =>
+    existsSync(join(dir, "vitest.config.ts")) ||
+    existsSync(join(dir, "bunfig.toml")) ||
+    hasTestScript(join(dir, "package.json")) ||
+    (existsSync(join(dir, "pnpm-workspace.yaml")) && readFileSync(join(dir, "pnpm-workspace.yaml"), "utf8").includes("vitest"));
 
 // Acceptance evidence: one user-story file per feature; a directory since the stories are the evidence.
 const USER_STORIES_DIR = join("docs", "user-stories");
@@ -126,10 +139,7 @@ export const createPanelsRoutes = (services: PanelsRoutesDeps) => {
                         desiredState: existsSync(join(dir, ARTIFACT_FILE)),
                         directoryUi: existsSync(join(dir, STATE_DIR, "ui", "index.html")),
                         monorepo: existsSync(join(dir, "pnpm-workspace.yaml")) && existsSync(join(dir, "turbo.json")),
-                        vitest:
-                            existsSync(join(dir, "vitest.config.ts")) ||
-                            mentionsVitest(join(dir, "pnpm-workspace.yaml")) ||
-                            mentionsVitest(join(dir, "package.json")),
+                        tests: hasTests(dir),
                         userStories: existsSync(join(dir, USER_STORIES_DIR)),
                         docs: existsSync(join(dir, ARCHITECTURE_DIR)),
                     };

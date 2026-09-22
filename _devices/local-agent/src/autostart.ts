@@ -114,8 +114,7 @@ const windowsAccount = (): string => {
 };
 
 // Paths and command lines land in XML text nodes, and a Windows path may legally hold `&`.
-const xmlText = (value: string): string =>
-    value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+const xmlText = (value: string): string => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 // The task, in the element order Windows itself writes when it exports one: Task Scheduler's parser is positional
 // within <Settings>, so matching its own output is the only ordering that is not a guess. Schema 1.2, which is also a
@@ -213,7 +212,9 @@ const registerWindowsTask = async (spec: AutostartSpec, launcher: CliLauncher, s
     }
     // Both would start an agent at logon, and the second would find the pidfile held and leave. Tidier to have one.
     clearWindowsRunValue(spec.windowsRunValue);
-    log(`registered the "${spec.windowsRunValue}" logon task: it starts at sign-in, restarts on failure, and is re-checked every ${WINDOWS_WATCHDOG_MINUTES} minutes.`);
+    log(
+        `registered the "${spec.windowsRunValue}" logon task: it starts at sign-in, restarts on failure, and is re-checked every ${WINDOWS_WATCHDOG_MINUTES} minutes.`,
+    );
 };
 
 // Throws with what reg.exe actually said.
@@ -236,6 +237,9 @@ const systemdUserAvailable = (): boolean => {
     return SYSTEMD_LIVE_STATES.has(result.stdout.trim());
 };
 
+// A systemd unit argument: double quotes with C escapes, the quoting systemd's own command-line parser reads.
+const systemdQuoted = (value: string): string => `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+
 // Restart=on-failure keeps a deliberate stop stopped, but needs the agent to exit non-zero on a signal;
 // RestartForceExitStatus forces a restart anyway for SIGHUP/INT/TERM/PIPE, which systemd otherwise treats as clean.
 export const systemdUserUnit = (spec: AutostartSpec, launcher: CliLauncher): string => {
@@ -245,7 +249,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=-/bin/sh -c '[ -f "${spec.logPath}" ] && [ "$(wc -c < "${spec.logPath}")" -ge ${LOG_ROTATE_BYTES} ] && mv -f "${spec.logPath}" "${spec.logPath}.1"'
+ExecStartPre=-/bin/sh -c '[ -f "$1" ] && [ "$(wc -c < "$1")" -ge "$2" ] && mv -f "$1" "$1.1"' rotate ${systemdQuoted(spec.logPath)} ${LOG_ROTATE_BYTES}
 ExecStart=${quotedCommandLine([...launcher, ...spec.foregroundArgs])}
 StandardOutput=append:${spec.logPath}
 StandardError=append:${spec.logPath}
@@ -381,7 +385,9 @@ export const registerAutostart = async (
                     await registerWindowsTask(spec, launcher, stub, log);
                     return false;
                 } catch (error) {
-                    log(`note: couldn't register a logon task for ${spec.id} (${reason(error)}); falling back to a login entry that starts it once and is not supervised.`);
+                    log(
+                        `note: couldn't register a logon task for ${spec.id} (${reason(error)}); falling back to a login entry that starts it once and is not supervised.`,
+                    );
                 }
             } else {
                 log(

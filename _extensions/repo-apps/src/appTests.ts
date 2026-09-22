@@ -1,4 +1,4 @@
-/* Split a repo's vitest project dirs into three buckets for the merged AppsView: • byApp. */
+/* Split a repo's test project dirs into three buckets for the merged AppsView: • byApp. */
 
 export interface GroupedTests {
     readonly byApp: Map<string, string[]>;

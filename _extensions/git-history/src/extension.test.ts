@@ -20,7 +20,7 @@ const facts = (repo: string): RepoFacts => ({
     desiredState: false,
     directoryUi: false,
     monorepo: false,
-    vitest: false,
+    tests: false,
     userStories: false,
     docs: false,
 });

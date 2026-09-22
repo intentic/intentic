@@ -5,19 +5,26 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { cgroupMemoryLimit, testWorkers, workersFor } from "./test-workers.mjs";
+import { cgroupMemoryLimit, standaloneWorkers, testWorkers, workersFor } from "./test-workers.mjs";
 
 const GIB = 1024 ** 3;
 const CORES = 16;
 
 test("workers follow the memory ceiling, capped by the cpus, one at least", () => {
-    assert.equal(workersFor(16 * GIB, CORES), 4);
-    assert.equal(workersFor(8 * GIB, CORES), 2);
+    assert.equal(workersFor(16 * GIB, CORES), 2);
+    assert.equal(workersFor(8 * GIB, CORES), 1);
     assert.equal(workersFor(2 * GIB, CORES), 1);
     assert.equal(workersFor(1 * GIB, CORES), 1);
-    assert.equal(workersFor(64 * GIB, CORES), CORES);
-    assert.equal(workersFor(16 * GIB, 4), 4);
+    assert.equal(workersFor(128 * GIB, CORES), CORES);
+    assert.equal(workersFor(16 * GIB, 4), 2);
     assert.equal(workersFor(undefined, CORES), CORES);
+});
+
+test("a lone package run takes half the box at a web worker's size, capped by the cpus", () => {
+    assert.equal(standaloneWorkers(16 * GIB, CORES), 4);
+    assert.equal(standaloneWorkers(8 * GIB, CORES), 2);
+    assert.equal(standaloneWorkers(2 * GIB, CORES), 1);
+    assert.equal(standaloneWorkers(64 * GIB, 8), 8);
 });
 
 test("the cgroup ceiling is read as bytes; `max`, a missing file or a bad number are no ceiling", () => {

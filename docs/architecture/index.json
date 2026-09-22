@@ -3233,7 +3233,7 @@
         },
         {
           "path": "_extensions/repo-apps/src/appTests.ts",
-          "what": "/ src/useVitest.ts: finding suites and running them."
+          "what": "/ src/useTests.ts: finding suites and running them."
         },
         {
           "path": "_extensions/repo-apps/src/terminals.ts",

@@ -70,14 +70,14 @@ export const PanelSummarySchema = z.object({
     // desiredState: desired-state.json (present after the first resolve).
     // directoryUi: .intentic/ui/index.html.
     // monorepo: pnpm-workspace.yaml + turbo.json.
-    // vitest: a root vitest config file, or "vitest" in the inspected repo's manifest/workspace catalog.
+    // tests: a root `test` script or runner config (vitest.config.ts, bunfig.toml), or "vitest" in the workspace catalog.
     // userStories: docs/user-stories.
     // docs: docs/architecture.
     deployConfig: z.boolean().describe("It declares infrastructure."),
     desiredState: z.boolean().describe("That declaration has been resolved at least once."),
     directoryUi: z.boolean().describe("It carries a small interface of its own."),
     monorepo: z.boolean().describe("It holds several packages."),
-    vitest: z.boolean().describe("It has tests that can be run."),
+    tests: z.boolean().describe("It has tests that can be run."),
     userStories: z
         .boolean()
         .describe("It carries stories an agent could test the running app against. The one fact here that says nothing about the language."),

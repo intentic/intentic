@@ -61,7 +61,7 @@ export const activate = (api: IntenticApi, context: ExtensionContext): void => {
             label: \`Incidents\`,
             surface: \`rail\`,
             // Evidence, not identity: activate wherever there is something to show.
-            detect: (repos) => repos.filter((repo) => repo.vitest).map((repo) => ({
+            detect: (repos) => repos.filter((repo) => repo.tests).map((repo) => ({
                 key: repo.repo,
                 title: repo.repo,
                 icon: \`exclamation-triangle\`,
@@ -153,7 +153,7 @@ const workspace = `.intentic/config/workspace-extensions/
     </p>
     <DocsCodeBlock code={activate} lang="typescript" title="src/extension.ts" />
     <p>
-        <code>detect()</code> decides when your view appears, and it runs against <strong>facts, not names</strong>: it receives the repos found in the workspace and the capabilities the owner connected, and returns one activation per sidebar element. Activating on "the repo contains a vitest config" survives a rename; "the repo is called api" does not.
+        <code>detect()</code> decides when your view appears, and it runs against <strong>facts, not names</strong>: it receives the repos found in the workspace and the capabilities the owner connected, and returns one activation per sidebar element. Activating on "the repo contains a test runner config" survives a rename; "the repo is called api" does not.
     </p>
     <p>
         A <code>badge</code> is the one thing your tile can say without being opened, so treat it as a claim on attention: it must mean

@@ -123,8 +123,8 @@ describe("systemdUserUnit", () => {
     // never be the reason the agent does not start.
     it("rolls an oversized log before systemd opens it, and starts anyway if it cannot", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
-        expect(unit).toContain(`ExecStartPre=-/bin/sh -c '[ -f "${LOG}" ]`);
-        expect(unit).toContain(`-ge ${LOG_ROTATE_BYTES} ] && mv -f "${LOG}" "${LOG}.1"'`);
+        expect(unit).toContain(`ExecStartPre=-/bin/sh -c '[ -f "$1" ]`);
+        expect(unit).toContain(`-ge "$2" ] && mv -f "$1" "$1.1"' rotate "${LOG}" ${LOG_ROTATE_BYTES}`);
     });
 });
 

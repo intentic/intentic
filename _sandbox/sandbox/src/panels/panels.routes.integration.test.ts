@@ -42,7 +42,7 @@ test("panels.list enumerates every repo with its operator panel + runtime status
         // "app" answers on a dead port (unhealthy); neither repo gets a previewUrl since neither is routable.
         processes: fakeProcesses({ app: 1 }),
     });
-    const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, vitest: false, userStories: false, docs: false };
+    const facts = { deployConfig: false, desiredState: false, directoryUi: false, monorepo: false, tests: false, userStories: false, docs: false };
     expect(await client.list()).toEqual({
         panels: [
             { repo: "app", hasPanel: true, installed: false, running: true, healthy: false, servers: [], port: 1, role: "app", ...facts },
@@ -110,7 +110,7 @@ test("panels.list reports the content facts extensions detect on", async () => {
                 desiredState: true,
                 directoryUi: true,
                 monorepo: true,
-                vitest: false,
+                tests: false,
                 userStories: true,
                 docs: true,
             },
@@ -137,7 +137,7 @@ test("panels.list advertises no previewUrl without a connect token (loopback: no
                 desiredState: false,
                 directoryUi: false,
                 monorepo: false,
-                vitest: false,
+                tests: false,
                 userStories: false,
                 docs: false,
             },

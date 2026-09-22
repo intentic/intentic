@@ -18,18 +18,18 @@ import { groupTests } from "./appTests";
 import { host } from "./host";
 import { listTerminals, useTerminals } from "./terminals";
 import { useApps } from "./useApps";
-import { useVitest } from "./useVitest";
+import { useTests } from "./useTests";
 import { t } from "./i18n.js";
 
 // One tile per repo. A monorepo shows Apps (status, preview, start/stop, Run-tests), Packages (tests-only dirs), and
-// Library tests; a vitest-only repo shows one flat Tests list. Every run is its own tmux session in the one global
+// Library tests; a tests-only repo shows one flat Tests list. Every run is its own tmux session in the one global
 // terminal, so a second Run never no-ops against a running one.
 
 const props = defineProps<{ repo: string; monorepo: boolean }>();
 const { apps, templates, error, isLoading, addApps, refresh, startApp, stopApp } = useApps(toRef(props, `repo`));
 // Drawn only once the wait has earned it, keyed on the repo so switching starts a fresh wait.
 const outline = useLoadingReveal(isLoading, toRef(props, `repo`));
-const { projects, error: testsError, isLoading: testsLoading, runTests: postRunTests } = useVitest(toRef(props, `repo`));
+const { projects, error: testsError, isLoading: testsLoading, runTests: postRunTests } = useTests(toRef(props, `repo`));
 const openFocused = (session: string): void => host().terminal.open(session);
 
 const busy = ref(false);
@@ -78,7 +78,7 @@ const appRows = computed(() => apps.value.map((app) => ({ ...app, badge: kindOf(
 
 const headerTitle = computed(() => (props.monorepo ? `Apps` : `Tests`));
 
-// Vitest projects split into this repo's startable apps' own tests, non-app _apps/<x> packages, and libraries.
+// Test projects split into this repo's startable apps' own tests, non-app _apps/<x> packages, and libraries.
 const grouped = computed(() =>
     groupTests(
         projects.value,
@@ -111,7 +111,7 @@ const act = async (action: () => Promise<void>): Promise<void> => {
     }
 };
 
-// Runs `pnpm vitest run` for these repo-relative dirs in a one-shot session (panel-<repo>--<suffix>), then focuses it
+// Runs the tests of these repo-relative dirs in a one-shot session (panel-<repo>--<suffix>), then focuses it
 // in the global terminal.
 const runTests = (suffix: string, dirs: readonly string[]): Promise<void> =>
     act(async () => {
@@ -375,7 +375,7 @@ onMounted(async () => {
                     </div>
                 </section>
 
-                <!-- A vitest-only (non-monorepo) repo: a single flat Tests list over every project (Run-all lives in the header). -->
+                <!-- A tests-only (non-monorepo) repo: a single flat Tests list over every project (Run-all lives in the header). -->
                 <section v-if="!monorepo">
                     <div v-if="projects.length === 0 && !testsLoading" :class="ui.emptyState()">
                         {{ t(`appsView.noVitestProjectsFound`) }}

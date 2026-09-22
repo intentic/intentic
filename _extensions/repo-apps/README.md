@@ -5,7 +5,7 @@ A repository's own apps and its workspace package graph, as the panel you open t
 ## Responsibilities
 
 - Show a monorepo's apps: what they are, how to run each, and where its terminal went.
-- Run and report that repo's vitest suites.
+- Run and report that repo's test suites.
 - Draw the workspace package graph: which package depends on which.
 - Scaffold a new app into the repo.
 
@@ -13,14 +13,14 @@ A repository's own apps and its workspace package graph, as the panel you open t
 
 - [src/useApps.ts](src/useApps.ts): the apps a repo has, and the shape it was recognised by.
 - [src/useWorkspaceGraph.ts](src/useWorkspaceGraph.ts): the package graph behind the Dependencies tab.
-- [src/appTests.ts](src/appTests.ts) / [src/useVitest.ts](src/useVitest.ts): finding suites and running them.
+- [src/appTests.ts](src/appTests.ts) / [src/useTests.ts](src/useTests.ts): finding suites and running them.
 - [src/terminals.ts](src/terminals.ts): the join from an app to the terminal it runs in.
 - [src/extension.ts](src/extension.ts): activation, and the two shapes a repo can qualify under.
 
 ## How it fits
 
 Two directory views on two predicates. **Apps** claims a repo when it is a pnpm+turbo monorepo: except the
-intent/infrastructure repo, which surfaces as Infrastructure instead. Any other repo with vitest evidence gets a
+intent/infrastructure repo, which surfaces as Infrastructure instead. Any other repo with test evidence gets a
 tests-only tile whose `repo` rides in props, so it stays auxiliary and never claims the repo away from the
 preview fallback. **Dependencies** rides the same monorepo predicate and surfaces as the tab beside Apps.
 

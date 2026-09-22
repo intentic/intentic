@@ -1,3 +1,4 @@
+import { afterAll } from "bun:test";
 import { JSDOM } from "./jsdom.js";
 
 // A DOM for the suite that imports this first, or the package that preloads it first: a jsdom window's members become globals with the same override rule
@@ -349,5 +350,11 @@ for (const name of [`fetch`, `Response`, `Headers`, `AbortController`, `AbortSig
 
 catchWindowErrors(dom.window as unknown as Window);
 populateGlobal(global, win);
+
+// Closed once the suite is done: a window kept alive by its own timers (pretendToBeVisual's frame clock) would stay
+// resident in the worker for every file that follows.
+afterAll(() => {
+    dom.window.close();
+});
 
 export { dom };

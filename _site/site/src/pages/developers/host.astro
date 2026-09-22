@@ -48,7 +48,7 @@ api.views.register({
     id: \`incidents\`,
     label: \`Incidents\`,
     surface: \`rail\`,
-    detect: (repos) => repos.filter((repo) => repo.vitest).map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
+    detect: (repos) => repos.filter((repo) => repo.tests).map((repo) => ({ key: repo.repo, title: repo.repo, repo: repo.repo })),
     badge: () => (openCount > 0 ? { count: openCount, tone: \`warning\`, tooltip: \`${"$"}{openCount} need triage\` } : undefined),
     view: async () => (await import(\`./IncidentsView.vue\`)).default,
 });`;
@@ -153,7 +153,7 @@ const packages = [
     <h2>api.views: the sidebar surfaces</h2>
     <p>
         A view registers once and produces one <strong>activation</strong> per sidebar element, decided by <code>detect()</code> against the
-        facts. Activate on evidence, not names: "this repo has a vitest config" survives a rename, "this repo is called api" does not.
+        facts. Activate on evidence, not names: "this repo has a test runner config" survives a rename, "this repo is called api" does not.
     </p>
     <table>
         <thead>

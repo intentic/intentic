@@ -77,7 +77,7 @@ const panel = (over: Partial<PanelSummary> & { repo: string }): PanelSummary => 
     desiredState: false,
     directoryUi: false,
     monorepo: false,
-    vitest: false,
+    tests: false,
     userStories: false,
     docs: false,
     ...over,
@@ -102,30 +102,30 @@ describe(`apps extension`, () => {
 });
 
 // The `apps` extension's tile for a repo, whether it claims it (monorepo) or just rides in props
-// (vitest-only), keyed by the tile key (always the repo name). `idsFor` above only sees claiming tiles.
+// (tests-only), keyed by the tile key (always the repo name). `idsFor` above only sees claiming tiles.
 const appsTile = (key: string, panels: PanelSummary[]) =>
     detectActivations(panels, []).find(({ extension, activation }) => extension.id === `apps` && activation.key === key)?.activation;
 const contributes = (id: string, key: string, panels: PanelSummary[]): boolean =>
     detectActivations(panels, []).some(({ extension, activation }) => extension.id === id && activation.key === key);
 
 describe(`apps extension, merged tests view`, () => {
-    it(`a monorepo-with-vitest gets ONE claiming tile (props.monorepo): no duplicate ⚡ tile`, () => {
-        const panels = [panel({ repo: `mono`, monorepo: true, vitest: true, hasPanel: true })];
+    it(`a monorepo-with-tests gets ONE claiming tile (props.monorepo): no duplicate ⚡ tile`, () => {
+        const panels = [panel({ repo: `mono`, monorepo: true, tests: true, hasPanel: true })];
         const tile = appsTile(`mono`, panels);
         expect(tile?.repo).toBe(`mono`);
         expect(tile?.props).toEqual({ monorepo: true });
     });
 
-    it(`a vitest-only non-monorepo repo gets a non-claiming ⚡ tile`, () => {
-        const panels = [panel({ repo: `lib`, vitest: true, hasPanel: true })];
+    it(`a tests-only non-monorepo repo gets a non-claiming ⚡ tile`, () => {
+        const panels = [panel({ repo: `lib`, tests: true, hasPanel: true })];
         const tile = appsTile(`lib`, panels);
         expect(tile?.repo).toBeUndefined();
         expect(tile?.icon).toBe(`bolt`);
         expect(tile?.props).toEqual({ repo: `lib`, monorepo: false });
     });
 
-    it(`the intent monorepo's vitest surfaces as a tests-only tile beside Infrastructure, never a browsable app monorepo`, () => {
-        const panels = [panel({ repo: `intent`, monorepo: true, vitest: true, deployConfig: true })];
+    it(`the intent monorepo's tests surface as a tests-only tile beside Infrastructure, never a browsable app monorepo`, () => {
+        const panels = [panel({ repo: `intent`, monorepo: true, tests: true, deployConfig: true })];
         const tile = appsTile(`intent`, panels);
         expect(tile?.repo).toBeUndefined();
         expect(tile?.props).toEqual({ repo: `intent`, monorepo: false });
@@ -133,7 +133,7 @@ describe(`apps extension, merged tests view`, () => {
     });
 
     it(`the old vitest extension id is gone`, () => {
-        const acts = detectActivations([panel({ repo: `mono`, monorepo: true, vitest: true })], []);
+        const acts = detectActivations([panel({ repo: `mono`, monorepo: true, tests: true })], []);
         expect(acts.some(({ extension }) => extension.id === `vitest`)).toBe(false);
     });
 });

@@ -14,7 +14,7 @@ export interface RepoFacts {
     readonly desiredState: boolean;
     readonly directoryUi: boolean;
     readonly monorepo: boolean;
-    readonly vitest: boolean;
+    readonly tests: boolean;
     // Whether the repo has a docs/user-stories directory; what an acceptance-testing surface activates on.
     readonly userStories: boolean;
     // Whether the repo has a docs/architecture directory.

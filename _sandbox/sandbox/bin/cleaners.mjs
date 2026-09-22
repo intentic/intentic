@@ -192,7 +192,7 @@ const parseHit = (line) => {
 // is uniform, so no need to re-check for a non-hit.
 const foldHitRun = (run) => {
     const folded = [];
-    for (let start = 0; start < run.length; ) {
+    for (let start = 0; start < run.length;) {
         const file = parseHit(run[start])[1];
         folded.push(run[start]);
         let next = start + 1;
@@ -209,7 +209,7 @@ const foldHitRun = (run) => {
 
 const foldHitRuns = (lines) => {
     const out = [];
-    for (let i = 0; i < lines.length; ) {
+    for (let i = 0; i < lines.length;) {
         let end = i;
         while (end < lines.length && parseHit(lines[end]) !== undefined) {
             end++;
@@ -286,8 +286,9 @@ const COMMAND_CLEANERS = [
     ]),
     // Test runners: on a green run (exit 0) per-test PASS lines are noise, dropped, keeping the summary. Failures skip
     // all command cleaners, so failing tests survive verbatim.
-    strip("test", invocation(String.raw`vitest|jest|pytest|rspec|mocha|phpunit|go\s+test|cargo\s+test`), [
+    strip("test", invocation(String.raw`bun\s+test|suites|vitest|jest|pytest|rspec|mocha|phpunit|go\s+test|cargo\s+test`), [
         /^\s*[✓√]\s/, // per-test pass (vitest/jest/mocha)
+        /^\(pass\)\s/, // bun test per-test pass
         /^--- PASS:/, // go test per-test
         /^\s*test .+\.\.\. ok$/, // cargo test per-test
         /^PASS\s+\S/, // jest per-file PASS header

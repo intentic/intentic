@@ -12,15 +12,15 @@ export interface TreeEntry {
     readonly children?: readonly TreeEntry[];
 }
 
-// One repo's vitest projects, derived from the shared /workspace/tree cache. A project is the nearest package.json dir
-// with vitest evidence (a vitest.config.* or *.test.* file; config-less is real). Shares the editor file tree's cache
-// key, so both dedupe to one fetch.
+// One repo's test projects, derived from the shared /workspace/tree cache. A project is the nearest package.json dir
+// with test evidence (a vitest.config.*, a bunfig.toml or a *.test.* file; config-less is real). Shares the editor file
+// tree's cache key, so both dedupe to one fetch.
 
-const isEvidence = (name: string): boolean => name.startsWith(`vitest.config.`) || name.includes(`.test.`);
+const isEvidence = (name: string): boolean => name.startsWith(`vitest.config.`) || name === `bunfig.toml` || name.includes(`.test.`);
 
 // Root-relative project dirs, sorted (repo root itself if evidence sits above any nested package.json). The repo id is
 // a root-relative path, so its tree node is found by descending one segment per path component.
-export const vitestProjects = (tree: readonly TreeEntry[], repo: string): string[] => {
+export const testProjects = (tree: readonly TreeEntry[], repo: string): string[] => {
     let repoDir: TreeEntry | undefined;
     let level: readonly TreeEntry[] = tree;
     for (const segment of repo.split(`/`)) {
@@ -46,15 +46,15 @@ export const vitestProjects = (tree: readonly TreeEntry[], repo: string): string
     return [...projects].toSorted();
 };
 
-export function useVitest(repo: Ref<string>) {
+export function useTests(repo: Ref<string>) {
     const api = host();
     const treeQuery = useQuery({
         queryKey: api.sandbox.key(`workspace`, `tree`),
         queryFn: async () => WorkspaceTreeSchema.parse(await api.sandbox.json(`/workspace/tree`)),
         enabled: computed(() => api.sandbox.reachable()),
     });
-    const projects = computed(() => vitestProjects((treeQuery.data.value?.tree ?? []) as readonly TreeEntry[], repo.value));
-    // Kicks off `pnpm vitest run` for these dirs in a one-shot tmux session (panel-<repo>--<session>); pair with
+    const projects = computed(() => testProjects((treeQuery.data.value?.tree ?? []) as readonly TreeEntry[], repo.value));
+    // Kicks off each dir's test run in a one-shot tmux session (panel-<repo>--<session>); pair with
     // terminal.open to attach, since the terminal is the result surface.
     const runTests = async (session: string, dirs: readonly string[]): Promise<void> => {
         await api.sandbox.json(`/workspace/repos/${encodeURIComponent(repo.value)}/tests`, {

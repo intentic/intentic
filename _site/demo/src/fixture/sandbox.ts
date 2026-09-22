@@ -1,6 +1,13 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { builtinModules } from "@intentic/web/builtins";
-import type { Environment, EnvironmentContents, ExtensionSummary, LocalModelFitResponse, PanelSummary, UsageRollupRow } from "@intentic/sandbox-contract";
+import type {
+    Environment,
+    EnvironmentContents,
+    ExtensionSummary,
+    LocalModelFitResponse,
+    PanelSummary,
+    UsageRollupRow,
+} from "@intentic/sandbox-contract";
 import { LOCAL_MODEL_KV_BYTES_PER_TOKEN, LOCAL_MODEL_WINDOWS, LOCAL_MODELS } from "@intentic/sandbox-contract";
 import { makerEdition, enabledExtensions } from "../mode";
 import pins from "../../vendor/extensions.json";
@@ -14,8 +21,7 @@ const day = (now: number, back: number): string => new Date(now - back * 86_400_
 
 // Facts every extension's `detect()` runs over, deciding which rail tiles show. `running` is false for both: nothing
 // runs in a recording.
-export const demoPanels = (): PanelSummary[] =>
-    makerEdition ? MAKER_REPOS.map((repo) => ({ ...NO_PANEL, repo })) : CODE_PANELS;
+export const demoPanels = (): PanelSummary[] => (makerEdition ? MAKER_REPOS.map((repo) => ({ ...NO_PANEL, repo })) : CODE_PANELS);
 
 // A folder of documents: nothing to run, nothing to publish, no stories and no docs set. Every tile that keys on these
 // stays off the maker's rail.
@@ -29,7 +35,7 @@ const NO_PANEL: Omit<PanelSummary, "repo"> = {
     desiredState: false,
     directoryUi: false,
     monorepo: false,
-    vitest: false,
+    tests: false,
     userStories: false,
     docs: false,
 };
@@ -47,7 +53,7 @@ const CODE_PANELS: PanelSummary[] = [
         desiredState: false,
         directoryUi: false,
         monorepo: false,
-        vitest: false,
+        tests: false,
         userStories: true,
         // Set is published (fixture/docs.ts); `api`'s below is only staged.
         docs: true,
@@ -63,7 +69,7 @@ const CODE_PANELS: PanelSummary[] = [
         desiredState: false,
         directoryUi: false,
         monorepo: false,
-        vitest: false,
+        tests: false,
         userStories: true,
         docs: false,
     },
