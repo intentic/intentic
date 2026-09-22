@@ -1117,6 +1117,19 @@
             "updateStopSharingAny": "Vous pouvez le mettre à jour ou cesser de le partager à tout moment depuis Sandbox ▸ Public.",
             "whatToInclude": "Ce qu'il faut inclure"
         },
+        "chatShotViewer": {
+            "actualSize": "Taille réelle",
+            "close": "Fermer",
+            "download": "Télécharger",
+            "filmstrip": "Toutes les images de cette conversation",
+            "fitToWindow": "Ajuster à la fenêtre",
+            "gone": "N'est plus disponible",
+            "next": "Image suivante",
+            "openInWorkspace": "Ouvrir dans l'espace de travail",
+            "position": "{index} sur {total}",
+            "previous": "Image précédente",
+            "show": "Afficher {name}"
+        },
         "chatSideRail": {
             "chatWhatRun": "Ce chat et ce que vous pouvez lancer"
         },
@@ -1236,6 +1249,7 @@
             "needsInput": "attend une saisie",
             "openAgentsTranscript": "Ouvrir la transcription de cet agent",
             "openInWorkspace": "Ouvrir dans l'espace de travail",
+            "viewLarger": "Agrandir",
             "watchAgent": "Suivre cet agent",
             "watchBrowser": "Suivre le navigateur",
             "watchInTerminal": "Suivre dans le terminal"
@@ -1253,6 +1267,13 @@
         },
         "chatTurnAsides": {
             "thinking": "Réflexion"
+        },
+        "chatTurnShots": {
+            "gone": "N'est plus disponible",
+            "more": "+{count}",
+            "open": "Ouvrir {name}",
+            "openAll": "Ouvrir les {count} images",
+            "region": "Images de ce tour"
         },
         "chatTurnStatus": {
             "atCapacity": "à pleine capacité",

@@ -148,7 +148,9 @@ core surface: a composable exposing a module-level `ref`.
 - [src/features/chat](src/features/chat): the conversation panel, its tabs and tool cards. A tool card draws an ACT (a file
   written, a command run); the one exception is a DOCUMENT the turn wrote for the reader, which
   `ChatDocumentBody.vue` draws as prose, and which the question and plan cards carry as the subject they are
-  asking about.
+  asking about. The pictures a turn's tools showed the agent (a screenshot, an image it read back) also stand at
+  that turn's end while its run is folded (`transcript/shots/`), and open one viewer that walks the whole
+  conversation's pictures.
 - [../../_sandbox/sandbox/bin/agents](../../_sandbox/sandbox/bin/agents), the fleet board: cards, detail, review.
 - [src/extension-host](src/extension-host): how an extension's views reach the app.
 - [src/router/index.ts](src/router/index.ts): the full route table.

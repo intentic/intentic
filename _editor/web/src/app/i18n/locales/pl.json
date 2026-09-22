@@ -1117,6 +1117,19 @@
             "updateStopSharingAny": "Możesz to w każdej chwili zaktualizować albo przestać udostępniać w Sandbox ▸ Publiczne.",
             "whatToInclude": "Co dołączyć"
         },
+        "chatShotViewer": {
+            "actualSize": "Rzeczywisty rozmiar",
+            "close": "Zamknij",
+            "download": "Pobierz",
+            "filmstrip": "Wszystkie obrazy w tej rozmowie",
+            "fitToWindow": "Dopasuj do okna",
+            "gone": "Już niedostępny",
+            "next": "Następny obraz",
+            "openInWorkspace": "Otwórz w przestrzeni roboczej",
+            "position": "{index} z {total}",
+            "previous": "Poprzedni obraz",
+            "show": "Pokaż {name}"
+        },
         "chatSideRail": {
             "chatWhatRun": "Ten czat i to, co możesz uruchomić"
         },
@@ -1236,6 +1249,7 @@
             "needsInput": "czeka na wejście",
             "openAgentsTranscript": "Otwórz zapis rozmowy tego agenta",
             "openInWorkspace": "Otwórz w przestrzeni roboczej",
+            "viewLarger": "Powiększ",
             "watchAgent": "Obserwuj tego agenta",
             "watchBrowser": "Obserwuj przeglądarkę",
             "watchInTerminal": "Obserwuj w terminalu"
@@ -1253,6 +1267,13 @@
         },
         "chatTurnAsides": {
             "thinking": "Myśli"
+        },
+        "chatTurnShots": {
+            "gone": "Już niedostępny",
+            "more": "+{count}",
+            "open": "Otwórz {name}",
+            "openAll": "Otwórz wszystkie obrazy ({count})",
+            "region": "Obrazy z tej tury"
         },
         "chatTurnStatus": {
             "atCapacity": "na granicy przepustowości",

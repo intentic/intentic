@@ -201,6 +201,27 @@ test("rebuilds the turn's tool cards, settled by their results", async () => {
     expect(messages[2]?.tools?.[1]?.content).toEqual([{ type: "text", text: "boom" }]);
 });
 
+// Restore reads a result by the same rule as the live stream, so a reopened card shows the picture it showed live.
+test("a restored Read that answered with an image carries the file it read", async () => {
+    getSessionMessages.mockResolvedValue([
+        { type: "user", message: { content: "check the page" } },
+        {
+            type: "assistant",
+            message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: `${WORKSPACE_ROOT}/shots/after.png` } }] },
+        },
+        {
+            type: "user",
+            message: {
+                content: [{ type: "tool_result", tool_use_id: "r1", content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } }] }],
+            },
+        },
+    ]);
+
+    const messages = await readWorkspaceSession(WORKSPACE_ROOT, "s-picture");
+
+    expect(messages[1]?.tools?.[0]?.content).toEqual([{ type: "image", path: "shots/after.png" }]);
+});
+
 test("rebuilds task checklist from TaskCreate and TaskUpdate tool calls rather than emitting tool cards", async () => {
     getSessionMessages.mockResolvedValue([
         { type: "user", message: { content: "refactor the code" } },

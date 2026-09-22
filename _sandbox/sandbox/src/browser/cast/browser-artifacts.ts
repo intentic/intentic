@@ -1,6 +1,7 @@
-import { basename, join, relative, resolve, sep } from "node:path";
+import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { ToolCallContent } from "@intentic/sandbox-contract";
+import { pathExists } from "../../path-exists.js";
 import { stateRelPath } from "../../workspace/layout/state-paths.js";
 
 // Directory every artifact belongs in, outside every repo, so it never reaches the Changes panel or a commit.
@@ -15,8 +16,11 @@ const rootOf = (outputDir: string): string => resolve(outputDir, ...BROWSER_OUTP
 // `--output-dir` only covers playwright's own auto-named files; once the model passes `filename`, the tool resolves it
 // against the agent's cwd and writes straight into the repo instead.
 
+// @playwright/mcp's own name for the tool, whatever server prefix a runtime puts in front of it.
+export const SCREENSHOT_VERB = "browser_take_screenshot";
+
 // Matches both browser kinds: the always-on `web` server and the routed logged-in one; segment unconstrained.
-const SCREENSHOT_TOOL = "mcp__.+__browser_take_screenshot";
+const SCREENSHOT_TOOL = `mcp__.+__${SCREENSHOT_VERB}`;
 
 // Keeps the agent's chosen name, deciding only location: a name resolving outside the output dir keeps just its
 // basename, anything already inside (including a subdirectory) is left as asked.
@@ -24,6 +28,24 @@ const inOutputDir = (outputDir: string, filename: string): string => {
     const resolved = resolve(outputDir, filename);
     const rel = relative(outputDir, resolved);
     return rel !== "" && !rel.startsWith("..") ? resolved : join(outputDir, basename(filename));
+};
+
+// Past this many numbered names the shot takes a clock suffix instead, so a `taken` that always answers yes can't hang
+// the call.
+const MAX_NUMBERED = 1000;
+
+// A shot already on disk is some transcript's picture: a later one with the same name takes the next free number
+// (`after-2.png`), never its place.
+const freeName = async (target: string, taken: (path: string) => Promise<boolean>): Promise<string> => {
+    const ext = extname(target);
+    const stem = target.slice(0, target.length - ext.length);
+    for (let n = 1; n <= MAX_NUMBERED; n += 1) {
+        const candidate = n === 1 ? target : `${stem}-${n}${ext}`;
+        if (!(await taken(candidate))) {
+            return candidate;
+        }
+    }
+    return `${stem}-${Date.now()}${ext}`;
 };
 
 // @playwright/mcp's answer (a markdown link relative to the agent's cwd, or a bare image block) renders as nothing.
@@ -46,7 +68,10 @@ export const screenshotImage = (resultText: string, cwd: string, outputDir: stri
     return undefined;
 };
 
-export const browserArtifactHooks = (outputDir: string): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
+export const browserArtifactHooks = (
+    outputDir: string,
+    taken: (path: string) => Promise<boolean> = pathExists,
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     PreToolUse: [
         {
             matcher: SCREENSHOT_TOOL,
@@ -61,7 +86,8 @@ export const browserArtifactHooks = (outputDir: string): Partial<Record<HookEven
                     if (typeof filename !== "string" || filename === "") {
                         return {};
                     }
-                    const target = inOutputDir(outputDir, filename);
+                    const placed = inOutputDir(outputDir, filename);
+                    const target = await freeName(placed, taken);
                     if (target === filename) {
                         return {};
                     }
@@ -71,7 +97,9 @@ export const browserArtifactHooks = (outputDir: string): Partial<Record<HookEven
                             updatedInput: { ...toolInput, filename: target },
                             // Tool's answer is relative to the agent's cwd, a climb out and back; say the absolute path
                             // instead.
-                            additionalContext: `Screenshot saved to ${target}, Read it from that absolute path.`,
+                            additionalContext: `Screenshot saved to ${target}${
+                                target === placed ? "" : " (an earlier screenshot already has that name)"
+                            }, Read it from that absolute path.`,
                         },
                     };
                 },

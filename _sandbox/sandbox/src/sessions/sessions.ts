@@ -5,6 +5,7 @@ import {
     type MatchSnippet,
     settledRequests,
     type TodoItem,
+    type ToolCallContent,
     type TranscriptQuestion,
     type TranscriptRow,
     type TranscriptTool,
@@ -15,7 +16,18 @@ import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
 import { ASK_TOOL_NAMES, parseAnswers } from "../agent/tools/question-answers.js";
 import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { TaskChecklist } from "../agent/run/task-checklist.js";
-import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../agent/tools/tool-calls.js";
+import {
+    type CalledTool,
+    displayNameOf,
+    editDiffContent,
+    mayShowPicture,
+    resultContent,
+    resultText,
+    toolCategoryOf,
+    toolLocations,
+    toolTarget,
+} from "../agent/tools/tool-calls.js";
+import { browserOutputDir } from "../browser/cast/browser-artifacts.js";
 import { unwrapStoredPrompt } from "../agent/prompt/turn-preamble.js";
 import { rootRelative } from "./turn-transcript.js";
 import type { SearchIndex } from "./search-index.js";
@@ -251,6 +263,15 @@ export const restoredSessionMessages = (
     const asked = new Map<string, TranscriptQuestion>();
     // Cards with a call-time diff; a successful result is a redundant confirmation, an error replaces it instead.
     const diffed = new Set<string>();
+    // Calls whose answer can be a picture, read against their result exactly as the live stream reads them.
+    const pictureCalls = new Map<string, CalledTool>();
+    const remember = (id: string, name: string, input: unknown): void => {
+        if (mayShowPicture(name)) {
+            pictureCalls.set(id, { name, input });
+        }
+    };
+    const answerOf = (id: string, content: unknown, failed: boolean): ToolCallContent[] =>
+        resultContent(content, dir, browserOutputDir(dir), failed ? undefined : pictureCalls.get(id));
 
     for (const message of messages) {
         if (message.type !== "user" && message.type !== "assistant") {
@@ -282,7 +303,7 @@ export const restoredSessionMessages = (
                 const failed = block.is_error === true;
                 tool.status = failed ? "failed" : "completed";
                 if (failed || !diffed.has(tool.id)) {
-                    tool.content = [{ type: "text", text: resultText(block.content) }];
+                    tool.content = answerOf(tool.id, block.content, failed);
                 }
                 // The ask's result is the user's answer; unparsed text leaves the card unanswered, not wearing a
                 // decision.
@@ -334,6 +355,7 @@ export const restoredSessionMessages = (
                 if (diff !== undefined) {
                     diffed.add(block.id);
                 }
+                remember(block.id, block.name, block.input);
                 const tool: TranscriptTool = {
                     id: block.id,
                     // Same normalization the live stream applies, so a restored card doesn't revert to the raw MCP tool

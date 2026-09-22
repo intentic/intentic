@@ -1,12 +1,21 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { test, expect } from "bun:test";
+import { join } from "node:path";
+import { afterEach, test, expect } from "bun:test";
 import { syncHookOutput } from "../../testing.js";
 import { browserArtifactHooks, browserOutputDir, screenshotImage } from "./browser-artifacts.js";
 
 const OUTPUT = browserOutputDir(WORKSPACE_ROOT);
 
-const hooks = browserArtifactHooks(OUTPUT);
+// Where the hook places a name inside the output dir, built the way the hook builds it.
+const inOutput = (name: string): string => join(OUTPUT, name);
+
+// The shots already on disk, as the hook's existence check sees them; empty unless a case says otherwise.
+const onDisk = new Set<string>();
+
+const hooks = browserArtifactHooks(OUTPUT, async (path) => onDisk.has(path));
+
+afterEach(() => onDisk.clear());
 
 const fire = async (toolName: string, toolInput: Record<string, unknown>) => {
     const [matcher] = hooks.PreToolUse!;
@@ -65,6 +74,32 @@ test("a subdirectory the agent asked for is honoured inside the output dir", asy
 
 test("a name already resolved into the output dir is left as it is", async () => {
     expect(await fire("mcp__web__browser_take_screenshot", { filename: "/work/.intentic/records/artifacts/browser/shot.png" })).toEqual({});
+});
+
+// A reused name used to overwrite the earlier shot, so an older transcript showed a newer, unrelated picture.
+test("a name an earlier shot already holds takes the next free number, and the agent is told why", async () => {
+    onDisk.add(inOutput("after.png"));
+    const result = await fire("mcp__web__browser_take_screenshot", { filename: "after.png" });
+    expect(rewritten(result)).toBe(inOutput("after-2.png"));
+    expect((syncHookOutput(result).hookSpecificOutput as { additionalContext?: string }).additionalContext).toBe(
+        `Screenshot saved to ${inOutput("after-2.png")} (an earlier screenshot already has that name), Read it from that absolute path.`,
+    );
+});
+
+test("numbering skips every name already taken", async () => {
+    onDisk.add(inOutput("after.png"));
+    onDisk.add(inOutput("after-2.png"));
+    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: "after.png" }))).toBe(inOutput("after-3.png"));
+});
+
+test("a taken name already inside the output dir is numbered too, subdirectory kept", async () => {
+    onDisk.add(inOutput("before/nav.png"));
+    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: inOutput("before/nav.png") }))).toBe(inOutput("before/nav-2.png"));
+});
+
+test("a name with no extension is numbered at its end", async () => {
+    onDisk.add(inOutput("shot"));
+    expect(rewritten(await fire("mcp__web__browser_take_screenshot", { filename: "shot" }))).toBe(inOutput("shot-2"));
 });
 
 test("an unnamed screenshot is not touched", async () => {

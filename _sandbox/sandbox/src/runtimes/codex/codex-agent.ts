@@ -1,13 +1,14 @@
-import type { AgentEvent, AgentReply, AskQuestion, ToolCallLocation } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentReply, AskQuestion, ToolCallContent, ToolCallLocation } from "@intentic/sandbox-contract";
 import { createRequest } from "../../agent/tools/agent-requests.js";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
 import { unsentParameterFrame } from "../../agent/run/error-frames.js";
+import { opt } from "../../agent/run/opt.js";
 import { isUnsentParameterRefusalText, mentionsSpentAllowance } from "../../agent/providers/failure-sentences.js";
 import { EXECUTE_PROMPT, type ExecutePhase, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
-import { toolCategoryOf, workspacePath } from "../../agent/tools/tool-calls.js";
+import { resultContent, toolCategoryOf, workspacePath } from "../../agent/tools/tool-calls.js";
 import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
 import { ROUTED_BROWSER_SERVER } from "../../browser/tools/browser-tools.js";
 import { type CommandGuard, vendorSubject } from "../../guard/command-guard.js";
@@ -153,17 +154,11 @@ const threadOptions = (request: AgentRequest, sandboxMode: CodexSandboxMode, gat
     };
 };
 
-// Flattens an MCP result's content blocks to plain text, like agent.ts's resultText.
-const mcpResultText = (item: Extract<CodexItem, { type: "mcp_tool_call" }>): string => {
-    if (item.error !== undefined) {
-        return item.error.message;
-    }
-    const content = item.result?.content;
-    if (!Array.isArray(content)) {
-        return "";
-    }
-    return content.map((block) => (block.type === "text" ? block.text : `[${block.type}]`)).join("");
-};
+// An MCP result read by the Claude stream's own rule (resultContent), so a Codex screenshot carries its picture too.
+const mcpResultContent = (item: Extract<CodexItem, { type: "mcp_tool_call" }>, name: string, context: CodexStreamContext): ToolCallContent[] =>
+    item.error === undefined
+        ? resultContent(item.result?.content, context.cwd, context.browserOutputDir, item.status === "failed" ? undefined : { name, input: undefined })
+        : [{ type: "text", text: item.error.message }];
 
 // Matches Codex's in-turn stream-retry notice; not a real failure, and no backoff instant is reported.
 const CODEX_STREAM_RETRY = /^Reconnecting\.\.\.\s*(\d+)\s*\/\s*(\d+)/;
@@ -377,6 +372,8 @@ const attachBrowserSession = (
 interface CodexStreamContext {
     readonly cwd: string;
     readonly imageArtifacts: ImageArtifactContext;
+    // Where this turn's screenshots land; absent on a turn with no browser tools.
+    readonly browserOutputDir?: string;
     readonly signal: AbortSignal;
     readonly conversationId?: string;
     readonly holdMessages?: boolean;
@@ -497,7 +494,7 @@ async function* streamTurn(events: AsyncIterable<CodexEvent>, context: CodexStre
                         kind: "tool_call_update",
                         id: item.id,
                         status: item.status === "failed" ? "failed" : "completed",
-                        content: [{ type: "text", text: mcpResultText(item) }],
+                        content: mcpResultContent(item, name, context),
                     };
                 }
             } else if (item.type === "web_search") {
@@ -692,6 +689,7 @@ export const createCodexAgent = (options: CodexAgentOptions) => {
         const context: Omit<CodexStreamContext, "holdMessages" | "browser"> = {
             cwd: request.cwd,
             imageArtifacts,
+            ...opt("browserOutputDir", request.browserOutputDir),
             signal: request.signal,
             gate,
             ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),

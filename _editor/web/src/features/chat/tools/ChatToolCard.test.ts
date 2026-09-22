@@ -3,6 +3,7 @@
 import "@intentic/testing/dom";
 import { describe, it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
+import { STATE_DIR } from "@intentic/constants";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatSurface } from "./chatToolSurface";
 import { IconStub } from "@intentic/ui/testing";
@@ -133,6 +134,35 @@ describe(`ChatToolCard`, () => {
         await nextTick();
 
         expect(element.textContent).toContain(`Agent`);
+    });
+
+    // A screenshot is looked at, not edited: its picture opens the conversation's viewer, and a surface with no viewer
+    // (a subagent's page) opens it as the file it is.
+    const screenshot: TranscriptTool = {
+        id: `s1`,
+        name: `Browser screenshot`,
+        category: `read`,
+        status: `completed`,
+        content: [{ type: `image`, path: `${STATE_DIR}/records/artifacts/browser/after.png` }],
+    };
+
+    it(`opens a call's picture in the viewer the surface offers`, () => {
+        const viewed: [string, string][] = [];
+        const opened: string[] = [];
+        const element = mount(screenshot, false, {
+            imageUrl: () => `blob:after`,
+            openFile: (path) => opened.push(path),
+            viewPicture: (toolId, path) => viewed.push([toolId, path]),
+        });
+        element.querySelector<HTMLButtonElement>(`button:has(img[src="blob:after"])`)?.click();
+        expect([viewed, opened]).toEqual([[[`s1`, `${STATE_DIR}/records/artifacts/browser/after.png`]], []]);
+    });
+
+    it(`opens a call's picture as its file where the surface has no viewer`, () => {
+        const opened: string[] = [];
+        const element = mount(screenshot, false, { imageUrl: () => `blob:after`, openFile: (path) => opened.push(path) });
+        element.querySelector<HTMLButtonElement>(`button:has(img[src="blob:after"])`)?.click();
+        expect(opened).toEqual([`${STATE_DIR}/records/artifacts/browser/after.png`]);
     });
 
     it(`freezes a sub-agent's nested calls with the delegation that holds them`, () => {

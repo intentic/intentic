@@ -385,6 +385,8 @@ const ROUTES: readonly (readonly [string, string, Handler])[] = [
     [`GET`, `/workspace/file`, ({ url }) => workspaceRead(url.searchParams.get(`path`) ?? ``)],
     // Screenshot bytes for an <img>, served here rather than from /public.
     [`GET`, `/workspace/raw`, ({ url }) => workspaceRaw(url.searchParams.get(`path`) ?? ``)],
+    // A picture at tile size, answered as the daemon answers it: SVG is refused (415) for the client to draw the file.
+    [`GET`, `/workspace/thumb`, ({ url }) => workspaceThumb(url.searchParams.get(`path`) ?? ``)],
     // Pre-flight for the upload queue; nothing here is ever a re-drop, so it always reports none to skip.
     [`POST`, `/workspace/upload-diff`, () => json({ skip: [] })],
     [`POST`, `/workspace/upload`, workspaceUpload],
@@ -1099,6 +1101,9 @@ const workspaceRaw = (path: string): Response => {
     }
     return new Response(body, { status: 200, headers: { "content-type": path.endsWith(`.svg`) ? `image/svg+xml` : `text/plain; charset=utf-8` } });
 };
+
+// Every picture in this fixture is already small, so a tile is the file itself; only SVG is refused, as the daemon does.
+const workspaceThumb = (path: string): Response => (path.endsWith(`.svg`) ? refuse(`not a picture this can draw`, 415) : workspaceRaw(path));
 
 function workspaceUpload({ request, url }: RouteContext): Promise<Response> {
     const path = url.searchParams.get(`path`) ?? ``;

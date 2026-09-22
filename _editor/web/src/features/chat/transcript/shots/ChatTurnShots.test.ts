@@ -1,0 +1,84 @@
+// The strip a finished turn ends on: up to four tiles, the rest counted on the first, a press handing the viewer the
+// shot to open at, and a picture that is gone saying so rather than drawing a broken image.
+import "@intentic/testing/dom";
+import { describe, it, expect, afterEach, beforeEach, mock } from "bun:test";
+import { type App, createApp, h } from "vue";
+import { STATE_DIR } from "@intentic/constants";
+import { IconStub } from "@intentic/ui/testing";
+import { type ChatShot, shotKey } from "./shots";
+
+// What the tile cache answers per path: a URL, `{ url: undefined }` for nothing there, unset for still on its way.
+const tiles = new Map<string, { url: string | undefined }>();
+mock.module("./shotPictures", () => ({ tileOf: (_agent: string | undefined, path: string) => tiles.get(path), pictureAt: () => undefined }));
+
+const { default: ChatTurnShots } = await import("./ChatTurnShots.vue");
+
+const SHOTS = `${STATE_DIR}/records/artifacts/browser`;
+
+const shotsOf = (...names: string[]): ChatShot[] =>
+    names.map((name, index) => ({ key: shotKey(`s${index}`, `${SHOTS}/${name}.png`), path: `${SHOTS}/${name}.png`, toolId: `s${index}`, turnId: 1 }));
+
+let app: App | undefined;
+const view = mock<(shot: ChatShot) => void>();
+
+const mount = (shots: readonly ChatShot[]): HTMLElement => {
+    const element = document.createElement(`div`);
+    document.body.append(element);
+    app = createApp({ render: () => h(ChatTurnShots, { shots, agent: undefined, onView: view }) });
+    app.component(`Icon`, IconStub);
+    app.directive(`tooltip`, {});
+    app.mount(element);
+    return element;
+};
+
+const buttons = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`button`)];
+
+beforeEach(() => {
+    view.mockClear();
+    tiles.clear();
+});
+
+afterEach(() => {
+    app?.unmount();
+    app = undefined;
+    document.body.innerHTML = ``;
+});
+
+describe(`ChatTurnShots`, () => {
+    it(`draws a tile per shot, named for its file, with no count while four or fewer`, () => {
+        const shots = shotsOf(`before`, `after`);
+        for (const shot of shots) {
+            tiles.set(shot.path, { url: `blob:${shot.path}` });
+        }
+        const element = mount(shots);
+        expect(buttons(element).map((button) => button.getAttribute(`aria-label`))).toEqual([`Open before`, `Open after`]);
+        expect([...element.querySelectorAll(`img`)].map((image) => image.getAttribute(`src`))).toEqual([`blob:${SHOTS}/before.png`, `blob:${SHOTS}/after.png`]);
+        expect(element.textContent).not.toContain(`+`);
+    });
+
+    it(`past four, draws the last four and counts the rest on the first, which opens the turn's first shot`, () => {
+        const shots = shotsOf(`a`, `b`, `c`, `d`, `e`, `f`);
+        const drawn = buttons(mount(shots));
+        expect(drawn.map((button) => button.getAttribute(`aria-label`))).toEqual([`Open all 6 pictures`, `Open d`, `Open e`, `Open f`]);
+        // The counted tile stands for itself and the two before it.
+        expect(drawn[0]?.textContent?.trim()).toBe(`+3`);
+        drawn[0]?.click();
+        expect(view.mock.calls).toEqual([[shots[0]!]]);
+    });
+
+    it(`a press hands the viewer the shot that tile shows`, () => {
+        const shots = shotsOf(`one`, `two`, `three`);
+        buttons(mount(shots))[1]?.click();
+        expect(view.mock.calls).toEqual([[shots[1]!]]);
+    });
+
+    it(`a picture with nothing on disk says so, and one still coming draws neither`, () => {
+        const shots = shotsOf(`expired`, `coming`);
+        tiles.set(shots[0]!.path, { url: undefined });
+        const [gone, coming] = buttons(mount(shots));
+        expect(gone?.textContent?.trim()).toBe(`No longer available`);
+        expect(gone?.querySelector(`img`)).toBeNull();
+        expect(coming?.textContent?.trim()).toBe(``);
+        expect(coming?.querySelector(`img`)).toBeNull();
+    });
+});

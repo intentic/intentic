@@ -127,6 +127,38 @@ test("a turn surfaces session, text deltas, tool actions, and done", async () =>
     ]);
 });
 
+// Agents check a script-made screenshot by Reading it; the answer is the picture itself, recorded as the file it read.
+test("a Read that answers with an image settles its card with the picture, not `[image]`", async () => {
+    withoutTmux();
+    const events = await collect(
+        request,
+        fakeQuery(
+            {
+                type: "assistant",
+                session_id: "s1",
+                message: { content: [{ type: "tool_use", id: "r1", name: "Read", input: { file_path: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser/after.png` } }] },
+            },
+            {
+                type: "user",
+                session_id: "s1",
+                message: {
+                    content: [
+                        {
+                            type: "tool_result",
+                            tool_use_id: "r1",
+                            content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } }],
+                        },
+                    ],
+                },
+            },
+            { type: "result", subtype: "success", result: "done" },
+        ),
+    );
+    expect(events.filter((event) => event.kind === "tool_call_update")).toEqual([
+        { kind: "tool_call_update", id: "r1", status: "completed", content: [{ type: "image", path: `${STATE_DIR}/records/artifacts/browser/after.png` }] },
+    ]);
+});
+
 test("each prose block closes with text_end, before the tool calls that block introduced", async () => {
     withoutTmux();
     const events = await collect(

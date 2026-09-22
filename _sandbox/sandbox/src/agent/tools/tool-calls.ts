@@ -1,5 +1,6 @@
 import { isAbsolute, relative } from "node:path";
 import type { ToolCallContent, ToolCallLocation, ToolKind } from "@intentic/sandbox-contract";
+import { SCREENSHOT_VERB, screenshotImage } from "../../browser/cast/browser-artifacts.js";
 import { claudeStatePath } from "../../sessions/session-store.js";
 
 // Cross-provider tool-call vocabulary: derives display name, category, target, locations and diff content from any
@@ -20,6 +21,53 @@ export const resultText = (content: unknown): string => {
             return b.type === "text" && typeof b.text === "string" ? b.text : `[${b.type ?? "block"}]`;
         })
         .join("");
+};
+
+// A call as its native stream named it, which is what a finished answer is read against.
+export interface CalledTool {
+    readonly name: string;
+    readonly input: unknown;
+}
+
+// @playwright/mcp's screenshot under either server spelling a runtime uses (`mcp__web__…`, `web.…`).
+const isScreenshotCall = (name: string): boolean => name.endsWith(`__${SCREENSHOT_VERB}`) || name.endsWith(`.${SCREENSHOT_VERB}`);
+
+// The two calls whose answer can be a picture, so a stream remembers only those inputs until their result.
+export const mayShowPicture = (name: string): boolean => name === "Read" || isScreenshotCall(name);
+
+// Words only: once the picture itself is carried, an `[image]` placeholder stands in for nothing.
+const wordsOf = (content: unknown): string =>
+    Array.isArray(content)
+        ? content
+              .map((block) => {
+                  const b = block as { type?: string; text?: string };
+                  return b.type === "text" && typeof b.text === "string" ? b.text : "";
+              })
+              .join("")
+        : resultText(content);
+
+// The file a successful answer shows, as a workspace path: a screenshot names the file it wrote, and a Read that
+// answered with an image block read the file it was given.
+const pictureOf = (call: CalledTool, content: unknown, cwd: string, outputDir: string | undefined): ToolCallContent | undefined => {
+    if (isScreenshotCall(call.name)) {
+        return outputDir === undefined ? undefined : screenshotImage(resultText(content), cwd, outputDir);
+    }
+    if (call.name !== "Read" || !Array.isArray(content) || !content.some((block) => (block as { type?: unknown }).type === "image")) {
+        return undefined;
+    }
+    const path = toolLocations(call.input, cwd)?.[0]?.path;
+    return path === undefined ? undefined : { type: "image", path };
+};
+
+// What an answer puts on its card; `call` is the remembered call (mayShowPicture) of a SUCCESSFUL result, absent
+// otherwise. Shared by the live stream and session restore so a replayed card matches the original.
+export const resultContent = (content: unknown, cwd: string, outputDir: string | undefined, call: CalledTool | undefined): ToolCallContent[] => {
+    const picture = call === undefined ? undefined : pictureOf(call, content, cwd, outputDir);
+    if (picture === undefined) {
+        return [{ type: "text", text: resultText(content) }];
+    }
+    const words = wordsOf(content);
+    return words === "" ? [picture] : [{ type: "text", text: words }, picture];
 };
 
 // Native tool ids to display names; OpenCode's lowercase ids map over, Claude SDK names pass through.

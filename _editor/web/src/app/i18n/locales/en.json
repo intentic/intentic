@@ -1117,6 +1117,19 @@
             "updateStopSharingAny": "You can update or stop sharing it any time from Sandbox ▸ Public.",
             "whatToInclude": "What to include"
         },
+        "chatShotViewer": {
+            "actualSize": "Actual size",
+            "close": "Close",
+            "download": "Download",
+            "filmstrip": "Every picture in this conversation",
+            "fitToWindow": "Fit to window",
+            "gone": "No longer available",
+            "next": "Next picture",
+            "openInWorkspace": "Open in workspace",
+            "position": "{index} of {total}",
+            "previous": "Previous picture",
+            "show": "Show {name}"
+        },
         "chatSideRail": {
             "chatWhatRun": "This chat and what you can run"
         },
@@ -1236,6 +1249,7 @@
             "needsInput": "needs input",
             "openAgentsTranscript": "Open this agent's transcript",
             "openInWorkspace": "Open in workspace",
+            "viewLarger": "View larger",
             "watchAgent": "Watch this agent",
             "watchBrowser": "Watch the browser",
             "watchInTerminal": "Watch in terminal"
@@ -1253,6 +1267,13 @@
         },
         "chatTurnAsides": {
             "thinking": "Thinking"
+        },
+        "chatTurnShots": {
+            "gone": "No longer available",
+            "more": "+{count}",
+            "open": "Open {name}",
+            "openAll": "Open all {count} pictures",
+            "region": "Pictures from this turn"
         },
         "chatTurnStatus": {
             "atCapacity": "at capacity",

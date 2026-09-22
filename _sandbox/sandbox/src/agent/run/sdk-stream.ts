@@ -5,7 +5,6 @@ import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCom
 import { sdk } from "../../runtimes/claude/claude-sdk.js";
 import { type AgentEvent, type FastModeState, type PermissionMode, PermissionModeSchema, type TodoItem, type UsageWindow } from "@intentic/sandbox-contract";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
-import { screenshotImage } from "../../browser/cast/browser-artifacts.js";
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
@@ -18,7 +17,16 @@ import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type Sub
 import { noteJobNotice, noteJobShell, noteModelRequest } from "../tools/background-jobs.js";
 import { TaskChecklist } from "./task-checklist.js";
 import type { ChecklistSeed } from "./task-store.js";
-import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../tools/tool-calls.js";
+import {
+    type CalledTool,
+    displayNameOf,
+    editDiffContent,
+    mayShowPicture,
+    resultContent,
+    toolCategoryOf,
+    toolLocations,
+    toolTarget,
+} from "../tools/tool-calls.js";
 
 // What a turn needs from the SDK: the message stream and the session's slash-command list. `supportedCommands` is
 // optional since a fake stream used in tests has none.
@@ -276,8 +284,8 @@ class TurnFold {
     // Named once at the first browser call so the client can offer to watch; PreToolUse registers the session.
     private browserSent = false;
     private readonly bashToolIds = new Set<string>();
-    // tool_use ids of browser screenshots, turned into a picture instead of the literal '[image]' text.
-    private readonly screenshotToolIds = new Set<string>();
+    // Calls whose answer can be a picture (mayShowPicture), by tool_use id, read against their result.
+    private readonly pictureCalls = new Map<string, CalledTool>();
     // tool_use ids whose call already carried the diff; a redundant 'file updated' result must not replace it.
     private readonly diffToolIds = new Set<string>();
     // The agent's working checklist, rebuilt from the Task tool family; the list itself is their render.
@@ -524,9 +532,6 @@ class TurnFold {
     }
 
     private *onBrowserCall(block: ToolUseBlock, sessionId: unknown): Generator<AgentEvent> {
-        if (block.name.endsWith("__browser_take_screenshot")) {
-            this.screenshotToolIds.add(block.id);
-        }
         if (this.browserSent || typeof sessionId !== "string") {
             return;
         }
@@ -542,6 +547,9 @@ class TurnFold {
         const diff = editDiffContent(block.name, block.input, this.args.cwd);
         if (diff !== undefined) {
             this.diffToolIds.add(block.id);
+        }
+        if (mayShowPicture(block.name)) {
+            this.pictureCalls.set(block.id, { name: block.name, input: block.input });
         }
         return {
             kind: "tool_call",
@@ -586,20 +594,14 @@ class TurnFold {
             }
             return;
         }
-        const text = resultText(content);
-        // A screenshot's answer names the file it wrote; carry the picture too, not just the text that it looked.
-        const image =
-            !failed && this.screenshotToolIds.has(toolUseId) && this.args.browserOutputDir !== undefined
-                ? screenshotImage(text, this.args.cwd, this.args.browserOutputDir)
-                : undefined;
+        // A screenshot's answer names the file it wrote and a Read of an image answers with it; either carries the picture.
+        const call = failed ? undefined : this.pictureCalls.get(toolUseId);
         // A successful Edit/Write result is just 'file updated', so the call-time diff stays; errors do replace it.
         yield {
             kind: "tool_call_update",
             id: toolUseId,
             status: failed ? "failed" : "completed",
-            ...(this.diffToolIds.has(toolUseId) && !failed
-                ? {}
-                : { content: [{ type: "text" as const, text }, ...(image !== undefined ? [image] : [])] }),
+            ...(this.diffToolIds.has(toolUseId) && !failed ? {} : { content: resultContent(content, this.args.cwd, this.args.browserOutputDir, call) }),
         };
     }
 

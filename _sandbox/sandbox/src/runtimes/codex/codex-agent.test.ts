@@ -78,6 +78,38 @@ test("a turn maps thread events onto session, deltas, thinking, tools, todos, us
     ]);
 });
 
+// Codex runs the same @playwright/mcp server, whose answer names the file; the card carries that picture, as Claude's does.
+test("a Codex browser screenshot settles its card with the picture its answer names", async () => {
+    const answer = "### Result\n- [Screenshot of viewport](.intentic/records/artifacts/browser/page-1.png)";
+    const { runner } = fakeCodexRunner([
+        { type: "item.started", item: { id: "s1", type: "mcp_tool_call", server: "web", tool: "browser_take_screenshot", status: "in_progress" } },
+        {
+            type: "item.completed",
+            item: {
+                id: "s1",
+                type: "mcp_tool_call",
+                server: "web",
+                tool: "browser_take_screenshot",
+                status: "completed",
+                // The normalized item keeps a block's type and text only; the picture block arrives as a bare `image`.
+                result: { content: [{ type: "text", text: answer }, { type: "image" }] },
+            },
+        },
+    ]);
+    const events = await collect(createTestAgent(runner), { ...request, browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser` });
+    expect(events.filter((event) => event.kind === "tool_call_update")).toEqual([
+        {
+            kind: "tool_call_update",
+            id: "s1",
+            status: "completed",
+            content: [
+                { type: "text", text: answer },
+                { type: "image", path: `${STATE_DIR}/records/artifacts/browser/page-1.png` },
+            ],
+        },
+    ]);
+});
+
 test("the turn runs full-access with approvals off, resumes the session, and pins CODEX_HOME", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), {

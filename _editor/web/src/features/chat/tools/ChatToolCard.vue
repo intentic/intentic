@@ -75,6 +75,11 @@ const location = computed(() => props.tool.locations?.[0]);
 // shell/browser; on a published conversation, nothing.
 const surface = useChatSurface();
 const openFile = surface.openFile;
+// A picture opens in the conversation's viewer where there is one, else as a file.
+const viewPicture = surface.viewPicture ?? (openFile === undefined ? undefined : (_toolId: string, path: string) => openFile(path));
+const pictureHint = computed(() =>
+    surface.viewPicture !== undefined ? t(`chat.chatToolCard.viewLarger`) : openFile === undefined ? undefined : t(`chat.chatToolCard.openInWorkspace`),
+);
 
 // A delegation's own calls, when the page counted them (`nested`) instead of carrying them. Read on the press that
 // would draw them, so reopening a conversation full of delegations costs the cards and not their runs; a record that
@@ -258,13 +263,13 @@ const openSubagent = (event: MouseEvent, toolId: string): void => {
             </div>
             <!-- Agent output is re-minted from the workspace in-app when needed. -->
             <component
-                :is="openFile ? 'button' : 'div'"
+                :is="viewPicture ? 'button' : 'div'"
                 v-for="image in view.images"
                 :key="image.path"
-                :type="openFile ? 'button' : undefined"
+                :type="viewPicture ? 'button' : undefined"
                 class="chat-inset ml-4 overflow-hidden text-left"
-                v-tooltip.top="openFile ? t(`chat.chatToolCard.openInWorkspace`) : undefined"
-                @click="openFile?.(image.path)"
+                v-tooltip.top="pictureHint"
+                @click="viewPicture?.(tool.id, image.path)"
             >
                 <img
                     v-if="surface.imageUrl(image.path)"

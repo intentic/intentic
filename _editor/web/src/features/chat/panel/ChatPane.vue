@@ -27,6 +27,7 @@ import { providerDisplayLabel } from "../accounts/providerCatalog";
 import { pickUpReady } from "../run/pickUp";
 import {
     type ChatMessage,
+    type ChatTurn,
     checklistViewsOf,
     cutsAboveOf,
     dayMarksOf,
@@ -35,6 +36,11 @@ import {
     repeatedChecklistIds,
     turnsOf,
 } from "../transcript/transcript";
+import { attachedPaths, type ChatShot, shotsByTurn } from "../transcript/shots/shots";
+import { useShotViewer } from "../transcript/shots/useShotViewer";
+import ChatShotViewer from "../transcript/shots/ChatShotViewer.vue";
+import ChatTurnShots from "../transcript/shots/ChatTurnShots.vue";
+import { useToolCalls } from "../tools/useToolCalls";
 import { withShortcut } from "../../../shell/commands/useCommands";
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { invalidateAgentTranscript } from "../transcript/agentTranscript";
@@ -179,19 +185,27 @@ const { composerFocus } = useChat();
 const router = useRouter();
 // What this pane's tool cards can lead to; per-pane like the view above, so two chats side by side each offer
 // their own shell/browser, not the focused chat's.
-provide(
-    CHAT_SURFACE,
-    workspaceSurface({
-        agent: () => (props.conversation.isolated.value ? props.conversation.conversationId : undefined),
-        terminal: () => props.conversation.agentTerminal.value,
-        browser: () => props.conversation.agentBrowser.value,
-        conversation: () => ({ id: props.conversation.conversationId, at: props.conversation.box.value }),
-        // Every destination is an app view; a popped-out chat has no app in it, so navigation there goes to the app's
-        // own
-        // window (mainWindow.ts) instead of replacing this chat.
-        navigate: (route) => navigateInApp(router, route),
-    }),
-);
+// Whose checkout this chat's files and pictures are read in; undefined for a chat working in the shared tree.
+const scope = (): string | undefined => (props.conversation.isolated.value ? props.conversation.conversationId : undefined);
+const workspace = workspaceSurface({
+    agent: scope,
+    terminal: () => props.conversation.agentTerminal.value,
+    browser: () => props.conversation.agentBrowser.value,
+    conversation: () => ({ id: props.conversation.conversationId, at: props.conversation.box.value }),
+    // Every destination is an app view; a popped-out chat has no app in it, so navigation there goes to the app's
+    // own
+    // window (mainWindow.ts) instead of replacing this chat.
+    navigate: (route) => navigateInApp(router, route),
+});
+provide(CHAT_SURFACE, {
+    ...workspace,
+    // A card's picture opens in this pane's viewer, or as the file when no turn's strip holds it (an attachment read back).
+    viewPicture: (toolId, path) => {
+        if (!shotViewer.viewCall(toolId, path)) {
+            workspace.openFile?.(path);
+        }
+    },
+});
 const { activeSandboxId, reachable, connection } = useSandbox();
 // The daemon refused this account outright, unlike "not connected yet": waiting won't fix it.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
@@ -297,6 +311,23 @@ const showTurnStatus = computed(() => streaming.value && !awaitingDecision.value
 
 // The transcript as prompt-headed groups, each the box its prompt stays pinned within; recomputed shallowly.
 const turns = computed(() => turnsOf(messages.value));
+
+// What each turn's tools showed the agent, for the strip at its end and this pane's one viewer. A turn whose pictures
+// didn't change keeps its array (shotsByTurn), so a settled strip isn't redrawn on every streaming paint.
+const attached = computed(() => attachedPaths(messages.value));
+const turnShots = computed<ReadonlyMap<number, readonly ChatShot[]>>((previous) => shotsByTurn(turns.value, attached.value, previous));
+const shotViewer = useShotViewer(turns, turnShots);
+const { open: shotViewerOpen, start: shotViewerStart, shots: shotViewerShots, prompts: shotViewerPrompts } = shotViewer;
+const pictureScope = computed(scope);
+const { showToolCalls } = useToolCalls();
+// The turn still being written, if any; a card it parked on is the reader's move, so that turn's pictures show.
+const writingTurn = computed(() => (streaming.value && !awaitingDecision.value ? turns.value.at(-1)?.id : undefined));
+// A turn's strip, once the turn has stopped writing and only while runs are folded: shown inline, its cards already
+// draw every picture it holds.
+const stripOf = (turn: ChatTurn): readonly ChatShot[] | undefined => {
+    const shots = turnShots.value.get(turn.id);
+    return showToolCalls.value || turn.id === writingTurn.value || shots === undefined || shots.length === 0 ? undefined : shots;
+};
 const repeatedChecklists = computed(() => repeatedChecklistIds(messages.value));
 
 // How each surviving checklist snapshot draws: the list once per turn, then only what moved.
@@ -1319,6 +1350,8 @@ watch(
                                         :checklist-view="checklistViews.get(message.id)"
                                     />
                                 </div>
+                                <!-- The pictures the turn's tools showed the agent, where its answer is read (ChatTurnShots). -->
+                                <ChatTurnShots v-if="stripOf(turn)" :shots="stripOf(turn)!" :agent="pictureScope" @view="shotViewer.view" />
                                 <!-- The fork point sits after the answer and inside its hover region. -->
                                 <ChatForkCut :cut="forkCuts.get(turn.id) ?? messages.length" />
                             </section>
@@ -1773,5 +1806,14 @@ watch(
         <ResponsiveOverlay v-model="moreOpen" :anchor="morePill" cross="end" :header="t(`chat.chatPane.message`)" panel-class="w-80 p-1">
             <ComposerMoreMenu :rows="moreRows" @pick="openFromMore($event)" />
         </ResponsiveOverlay>
+        <!-- Mounted only while open, so a chat nobody is looking through pictures in computes none of its filmstrip. -->
+        <ChatShotViewer
+            v-if="shotViewerOpen"
+            v-model:open="shotViewerOpen"
+            :shots="shotViewerShots"
+            :start="shotViewerStart"
+            :agent="pictureScope"
+            :prompts="shotViewerPrompts"
+        />
     </div>
 </template>

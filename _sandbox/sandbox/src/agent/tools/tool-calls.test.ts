@@ -1,12 +1,15 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { homedir } from "node:os";
 import { test, expect } from "bun:test";
+import { browserOutputDir } from "../../browser/cast/browser-artifacts.js";
 import {
     displayNameOf,
     editDiffContent,
     isFileWorkCall,
     isRootListing,
     isSearchCall,
+    mayShowPicture,
+    resultContent,
     searchPrecedesFileWork,
     toolCategoryOf,
     toolLocations,
@@ -14,6 +17,7 @@ import {
 } from "./tool-calls.js";
 
 const CWD = WORKSPACE_ROOT;
+const OUTPUT = browserOutputDir(WORKSPACE_ROOT);
 
 test("displayNameOf maps OpenCode's lowercase ids and passes Claude names through", () => {
     expect(displayNameOf("bash")).toBe("Bash");
@@ -207,4 +211,44 @@ test("editDiffContent keeps a workspace-escaping path for display (locations enf
         path: "/tmp/out.txt",
         newText: "x",
     });
+});
+
+// A Read of an image answers with the picture as a block, which the text flattening can only call `[image]`.
+const IMAGE_BLOCK = { type: "image", source: { type: "base64", media_type: "image/png", data: "iVBOR" } };
+
+test("mayShowPicture names the two calls whose answer can be a picture", () => {
+    expect(["Read", "mcp__web__browser_take_screenshot", "mcp__reddit-main__browser_take_screenshot", "Bash", "mcp__web__browser_snapshot"].map(mayShowPicture)).toEqual([
+        true,
+        true,
+        true,
+        false,
+        false,
+    ]);
+});
+
+test("a Read that answered with an image carries the file it read, and no `[image]` placeholder", () => {
+    const call = { name: "Read", input: { file_path: `${WORKSPACE_ROOT}/.intentic/records/artifacts/browser/after.png` } };
+    expect(resultContent([IMAGE_BLOCK], CWD, OUTPUT, call)).toEqual([{ type: "image", path: ".intentic/records/artifacts/browser/after.png" }]);
+});
+
+test("a Read that answered with text stays text, whatever the file is called", () => {
+    const call = { name: "Read", input: { file_path: `${WORKSPACE_ROOT}/logo.svg` } };
+    expect(resultContent("<svg/>", CWD, OUTPUT, call)).toEqual([{ type: "text", text: "<svg/>" }]);
+});
+
+test("a Read of an image outside the workspace has no path the chat could fetch, so it stays text", () => {
+    const call = { name: "Read", input: { file_path: "/tmp/shots/after.png" } };
+    expect(resultContent([IMAGE_BLOCK], CWD, OUTPUT, call)).toEqual([{ type: "text", text: "[image]" }]);
+});
+
+test("a screenshot's answer keeps its words and gains the file they name", () => {
+    const answer = "### Result\n- [Screenshot of viewport](.intentic/records/artifacts/browser/shot.png)";
+    expect(resultContent([{ type: "text", text: answer }, IMAGE_BLOCK], CWD, OUTPUT, { name: "mcp__web__browser_take_screenshot", input: {} })).toEqual([
+        { type: "text", text: answer },
+        { type: "image", path: ".intentic/records/artifacts/browser/shot.png" },
+    ]);
+});
+
+test("with no remembered call (a failure, or a call that cannot show a picture) the answer is its flattened text", () => {
+    expect(resultContent([IMAGE_BLOCK], CWD, OUTPUT, undefined)).toEqual([{ type: "text", text: "[image]" }]);
 });

@@ -9,6 +9,8 @@ export interface ChatSurface {
     readonly imageUrl: (path: string) => string | undefined;
     // Open a workspace file, at a line where known; absent means paths render as text, not buttons.
     readonly openFile?: (path: string, line?: number) => void;
+    // Show a call's picture in the conversation's viewer (ChatShotViewer); absent means a picture opens as a file.
+    readonly viewPicture?: (toolId: string, path: string) => void;
     // Decorates a document's prose with workspace links; keeps the query client out of a published page's bundle.
     readonly decorate?: MarkdownDecorator;
     // The live shell behind a command card, and the door onto it; both or neither.
