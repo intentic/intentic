@@ -299,13 +299,18 @@ test("an owner is prepared once, on its first call, however many calls name it",
     ]);
     expect((first["result"] as ToolResult).isError).toBeUndefined();
     expect((second["result"] as ToolResult).isError).toBeUndefined();
-    await rpc(harness.router, { jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "browser_probe", arguments: { account: "identity-1" } } });
+    await rpc(harness.router, {
+        jsonrpc: "2.0",
+        id: 10,
+        method: "tools/call",
+        params: { name: "browser_probe", arguments: { account: "identity-1" } },
+    });
     expect(harness.prepares).toEqual(["identity-1"]);
 });
 
 test("an owner the daemon refuses comes back as a tool error naming why, and nothing is spawned", async () => {
     const harness = await startRouter();
-    harness.refusals.set("standalone", "standalone browses through the exit \"berlin\", which is down.");
+    harness.refusals.set("standalone", 'standalone browses through the exit "berlin", which is down.');
     await handshake(harness);
     const denied = await rpc(harness.router, {
         jsonrpc: "2.0",

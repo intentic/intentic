@@ -65,7 +65,11 @@ const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof m
             findUnique: mock(() => Promise.resolve({ tokenDigest: mintedDigest })),
         },
         user: { findUniqueOrThrow: mock().mockResolvedValue({ email: `owner@example.com` }), ...overrides[`user`] },
-        hostedMachine: { create: mock().mockResolvedValue({ region: `iad`, warm: false }), count: mock().mockResolvedValue(0), ...overrides[`hostedMachine`] },
+        hostedMachine: {
+            create: mock().mockResolvedValue({ region: `iad`, warm: false }),
+            count: mock().mockResolvedValue(0),
+            ...overrides[`hostedMachine`],
+        },
         hostedPlan: { findUnique: mock().mockResolvedValue(null), ...overrides[`hostedPlan`] },
         hostedCleanup: { upsert: mock().mockResolvedValue({}), deleteMany: mock().mockResolvedValue({ count: 0 }), ...overrides[`hostedCleanup`] },
         sandboxTrash: {
@@ -99,9 +103,7 @@ describe(`listTrash`, () => {
         const findMany = mock().mockResolvedValue([trashRow]);
         const prisma = fakePrisma({ sandboxTrash: { findMany } });
         const rows = await listTrash(prisma, `u1`);
-        expect(rows).toEqual([
-            { id: `t1`, name: `dev`, image: null, deletedAt: trashRow.deletedAt, purgeAfter: trashRow.purgeAfter, hosted: true },
-        ]);
+        expect(rows).toEqual([{ id: `t1`, name: `dev`, image: null, deletedAt: trashRow.deletedAt, purgeAfter: trashRow.purgeAfter, hosted: true }]);
         const [[query]] = findMany.mock.calls as [[{ where: { ownerId: string; purgeAfter: { gt: Date } } }]];
         expect(query.where.ownerId).toBe(`u1`);
         expect(query.where.purgeAfter.gt).toBeInstanceOf(Date);
@@ -148,7 +150,9 @@ describe(`restoreSandbox`, () => {
     it(`mints a fresh identity: the deleted sandbox's connect token died with its row`, async () => {
         stubFly();
         const create = mock().mockResolvedValue({ id: `s2`, name: `dev`, image: null, hosted: null });
-        const prisma = fakePrisma({ sandbox: { create, update: mock().mockResolvedValue({}), findUniqueOrThrow: mock().mockResolvedValue({ ownerId: `u1` }) } });
+        const prisma = fakePrisma({
+            sandbox: { create, update: mock().mockResolvedValue({}), findUniqueOrThrow: mock().mockResolvedValue({ ownerId: `u1` }) },
+        });
         await restoreSandbox(prisma, config(), `u1`, `t1`);
         const [[minted]] = create.mock.calls as [[{ data: { name: string; ownerId: string; tokenDigest: string; tunnelId: string } }]];
         expect(minted.data).toMatchObject({ name: `dev`, ownerId: `u1` });

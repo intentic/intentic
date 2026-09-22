@@ -85,7 +85,8 @@ it(`names an environment by its distro as well as its OS`, () => {
     expect(labels[1]).toContain(`archlinux`);
 });
 
-const syncButtons = (): HTMLButtonElement[] => [...document.querySelectorAll(`button`)].filter((button) => button.textContent?.includes(`Sync files here`));
+const syncButtons = (): HTMLButtonElement[] =>
+    [...document.querySelectorAll(`button`)].filter((button) => button.textContent?.includes(`Sync files here`));
 
 // THE CASE THIS EXISTS FOR: the folder is in the distro, the only card is the Windows side. Nothing here picks a
 // side — the line goes through the door that is open and the daemon crosses by the folder's own dialect.

@@ -28,7 +28,7 @@ describe(`setupRedirect`, () => {
         expect(setupRedirect([sandbox({ id: `a`, ...CONNECTED })])).toBeUndefined();
     });
 
-/* The regression this file exists for. */
+    /* The regression this file exists for. */
     it(`sends a named-but-never-started sandbox back to its own unfinished setup`, () => {
         expect(setupRedirect([sandbox({ id: `pending` })])).toEqual({ path: `/setup`, query: { sandbox: `pending` } });
     });

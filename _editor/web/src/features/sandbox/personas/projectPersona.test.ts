@@ -31,7 +31,11 @@ describe(`the project's own persona`, () => {
         expect(projectPersonaId(`tools/cli.v2`)).toBe(`project-tools-cli-v2`);
         const persona = projectPersonaPersona(`tools/cli`);
         expect(PersonaSchema.safeParse(persona).success).toBe(true);
-        expect(persona).toMatchObject({ label: `cli`, workspace: { startIn: `tools/cli`, folders: [`tools/cli`] }, context: { repos: [`tools/cli`] } });
+        expect(persona).toMatchObject({
+            label: `cli`,
+            workspace: { startIn: `tools/cli`, folders: [`tools/cli`] },
+            context: { repos: [`tools/cli`] },
+        });
     });
 
     it(`is written once, the first time it is needed`, async () => {

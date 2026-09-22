@@ -39,7 +39,15 @@ describe(`container answers`, () => {
                 NetworkSettings: { Ports: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `41231` }], "443/tcp": null } },
             }),
         );
-        expect(state).toEqual({ running: true, hostPort: 41231, image: `onlyoffice/documentserver:9.4.0.1`, env: [`JWT_SECRET=abc`, `PATH=/usr/bin`], labels: {}, restart: `no`, startedAt: 0 });
+        expect(state).toEqual({
+            running: true,
+            hostPort: 41231,
+            image: `onlyoffice/documentserver:9.4.0.1`,
+            env: [`JWT_SECRET=abc`, `PATH=/usr/bin`],
+            labels: {},
+            restart: `no`,
+            startedAt: 0,
+        });
     });
 
     it(`reads a stopped container's port from what it was created with, since its live bindings are empty`, () => {
@@ -51,11 +59,27 @@ describe(`container answers`, () => {
                 HostConfig: { PortBindings: { "80/tcp": [{ HostIp: `127.0.0.1`, HostPort: `43657` }] }, RestartPolicy: { Name: `unless-stopped` } },
             }),
         );
-        expect(state).toEqual({ running: false, hostPort: 43657, image: `x`, env: [], labels: {}, restart: `unless-stopped`, startedAt: Math.floor(Date.parse(`2026-09-17T13:17:20.5Z`) / 1000) });
+        expect(state).toEqual({
+            running: false,
+            hostPort: 43657,
+            image: `x`,
+            env: [],
+            labels: {},
+            restart: `unless-stopped`,
+            startedAt: Math.floor(Date.parse(`2026-09-17T13:17:20.5Z`) / 1000),
+        });
     });
 
     it(`reports no port for a container created without one, and the engine's zero time as never started`, () => {
-        expect(parseInspect(JSON.stringify({ State: { Running: false, StartedAt: `0001-01-01T00:00:00Z` }, Config: { Image: `x` }, NetworkSettings: { Ports: {} } }))).toEqual({
+        expect(
+            parseInspect(
+                JSON.stringify({
+                    State: { Running: false, StartedAt: `0001-01-01T00:00:00Z` },
+                    Config: { Image: `x` },
+                    NetworkSettings: { Ports: {} },
+                }),
+            ),
+        ).toEqual({
             running: false,
             hostPort: undefined,
             image: `x`,

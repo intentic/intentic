@@ -7,7 +7,10 @@ import { textOfBlock, type Block } from "../odf/document-model";
 const EMPTY: Block = { kind: `paragraph`, level: 0, css: {}, inlines: [] };
 
 const rtf = (body: string, images: (bytes: Uint8Array, type: string) => string | undefined = (bytes, type) => `blob:${type}/${bytes.length}`) =>
-    parseRtf(new TextEncoder().encode(`{\\rtf1\\ansi\\ansicpg1252\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}{\\f1\\fswiss Arial;}}${body}}`), images);
+    parseRtf(
+        new TextEncoder().encode(`{\\rtf1\\ansi\\ansicpg1252\\deff0{\\fonttbl{\\f0\\froman Times New Roman;}{\\f1\\fswiss Arial;}}${body}}`),
+        images,
+    );
 
 const texts = (parsed: ReturnType<typeof parseRtf>): string[] => parsed.blocks.map((block) => textOfBlock(block));
 
@@ -65,8 +68,7 @@ describe(`parseRtf`, () => {
     });
 
     it(`reads a table's rows, cells and column widths`, () => {
-        const row = (first: string, second: string): string =>
-            `\\trowd\\cellx1440\\cellx4320 ${first}\\cell ${second}\\cell\\row`;
+        const row = (first: string, second: string): string => `\\trowd\\cellx1440\\cellx4320 ${first}\\cell ${second}\\cell\\row`;
         const parsed = rtf(`\\pard${row(`Item`, `Count`)}${row(`Pens`, `3`)}\\pard After\\par`);
         const table = parsed.blocks[0];
         expect(table?.kind).toBe(`table`);

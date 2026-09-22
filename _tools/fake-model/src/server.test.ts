@@ -1,11 +1,25 @@
 import { test, expect } from "bun:test";
-import { baseInstructions, developerMessages, hasTool, type ResponsesRequest, systemInstructions, toolNames, toolOutputs, userMessages } from "./responses.js";
+import {
+    baseInstructions,
+    developerMessages,
+    hasTool,
+    type ResponsesRequest,
+    systemInstructions,
+    toolNames,
+    toolOutputs,
+    userMessages,
+} from "./responses.js";
 import { startFakeModel } from "./server.js";
 
 // A seam server: held to the bar of the CLI it stands in for. Covers the script machine and readers only; real-CLI
 // conformance lives in _sandbox/sandbox/src/codex/codex-wire.e2e.test.ts.
 
-const post = async (baseUrl: string, path: string, body: unknown, headers: Record<string, string> = {}): Promise<{ status: number; text: string }> => {
+const post = async (
+    baseUrl: string,
+    path: string,
+    body: unknown,
+    headers: Record<string, string> = {},
+): Promise<{ status: number; text: string }> => {
     const response = await fetch(`${baseUrl}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json", ...headers },
@@ -30,7 +44,11 @@ const sentItems = (text: string): readonly Record<string, unknown>[] =>
 test("a scripted turn answers in Responses SSE and records the body it was sent", async () => {
     const model = await startFakeModel({ script: [{ text: "hello from the script" }] });
     try {
-        const { status, text } = await post(model.baseUrl, "/v1/responses", body([{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }]));
+        const { status, text } = await post(
+            model.baseUrl,
+            "/v1/responses",
+            body([{ type: "message", role: "user", content: [{ type: "input_text", text: "hi" }] }]),
+        );
         expect(status).toBe(200);
         expect(text).toContain("event: response.created");
         expect(text).toContain("event: response.completed");
@@ -107,7 +125,8 @@ test("respond answers by what was asked, repeatably, and falls through to the sc
         respond: (request) => (userMessages(request).join(" ").includes("banana") ? { text: "matched banana" } : undefined),
     });
     try {
-        const ask = (text: string) => post(model.baseUrl, "/v1/responses", body([{ type: "message", role: "user", content: [{ type: "input_text", text }] }]));
+        const ask = (text: string) =>
+            post(model.baseUrl, "/v1/responses", body([{ type: "message", role: "user", content: [{ type: "input_text", text }] }]));
         expect((await ask("about banana please")).text).toContain("matched banana");
         // Called twice: a retry must get the same match, not consume the next step.
         expect((await ask("about banana please")).text).toContain("matched banana");
@@ -234,7 +253,10 @@ test("systemInstructions and hasTool answer the same question on both model surf
     const namespaced: ResponsesRequest = {
         model: "gpt-5.6-sol",
         input: [
-            { type: "additional_tools", tools: [{ type: "namespace", name: "functions", tools: [{ type: "function", name: "request_user_input" }] }] },
+            {
+                type: "additional_tools",
+                tools: [{ type: "namespace", name: "functions", tools: [{ type: "function", name: "request_user_input" }] }],
+            },
             { type: "message", role: "developer", content: [{ type: "input_text", text: "You are Codex, an agent based on GPT-5" }] },
         ],
     };
@@ -256,7 +278,16 @@ test("the tool reader also sees the namespaced additional_tools item that `codex
             {
                 type: "additional_tools",
                 role: "developer",
-                tools: [{ type: "namespace", name: "functions", tools: [{ type: "custom", name: "exec" }, { type: "function", name: "request_user_input" }] }],
+                tools: [
+                    {
+                        type: "namespace",
+                        name: "functions",
+                        tools: [
+                            { type: "custom", name: "exec" },
+                            { type: "function", name: "request_user_input" },
+                        ],
+                    },
+                ],
             },
             { type: "message", role: "developer", content: [{ type: "input_text", text: "You are Codex, an agent based on GPT-5" }] },
         ],

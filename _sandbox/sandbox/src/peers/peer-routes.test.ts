@@ -27,7 +27,10 @@ const door: PeerDoor<{ type: "hello"; token: string; version: string }, { versio
     listKey: "hosts",
     store: { files: peerFiles("host"), key: "hosts", prefix: "iht_", extra: {} },
     hub: { domain: "hosts", heartbeatMs: 30_000, callTimeoutMs: 60_000, offline: (id) => `"${id}" is not connected right now` },
-    hello: { schema: z.object({ type: z.literal("hello"), token: z.string(), version: z.string() }), announced: (hello) => ({ version: hello.version }) },
+    hello: {
+        schema: z.object({ type: z.literal("hello"), token: z.string(), version: z.string() }),
+        announced: (hello) => ({ version: hello.version }),
+    },
     scopesKind: "device",
     mcp: { serverName: (id) => `intentic-machine:${id}` },
     expired: "pairing expired",
@@ -142,13 +145,27 @@ test("a live tools/list is remembered, which is what makes the offline answer po
 
 test("a tuple a peer publishes as a boolean-closed array is repaired on the way to the model, and stays repaired offline", async () => {
     const published = {
-        tools: [{ name: "device", inputSchema: { type: "object", properties: { at: { type: "array", prefixItems: [{ type: "number" }, { type: "number" }], items: false } } } }],
+        tools: [
+            {
+                name: "device",
+                inputSchema: {
+                    type: "object",
+                    properties: { at: { type: "array", prefixItems: [{ type: "number" }, { type: "number" }], items: false } },
+                },
+            },
+        ],
     };
     const app = routeFor({ mcp: async () => ({ jsonrpc: "2.0", id: 3, result: published }) });
     const answered = (await (await post(app, { jsonrpc: "2.0", id: 3, method: "tools/list" })).json()) as { result: unknown };
     const repaired = {
         tools: [
-            { name: "device", inputSchema: { type: "object", properties: { at: { type: "array", prefixItems: [{ type: "number" }, { type: "number" }], maxItems: 2 } } } },
+            {
+                name: "device",
+                inputSchema: {
+                    type: "object",
+                    properties: { at: { type: "array", prefixItems: [{ type: "number" }, { type: "number" }], maxItems: 2 } },
+                },
+            },
         ],
     };
     expect(answered.result).toEqual(repaired);
@@ -165,9 +182,16 @@ test("a tool call on an asleep peer is not answered locally", async () => {
 
 test("a call the door's judgement stops is answered as a refusing tool result and never forwarded", async () => {
     const mcp = mock();
-    const app = routeFor({ mcp, beforeCall: async (payload) => ((payload as { id?: number }).id === 7 ? { refusal: "Held for the owner." } : undefined) });
+    const app = routeFor({
+        mcp,
+        beforeCall: async (payload) => ((payload as { id?: number }).id === 7 ? { refusal: "Held for the owner." } : undefined),
+    });
     const response = await post(app, { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "run_command" } });
-    expect(await response.json()).toEqual({ jsonrpc: "2.0", id: 7, result: { content: [{ type: "text", text: "Held for the owner." }], isError: true } });
+    expect(await response.json()).toEqual({
+        jsonrpc: "2.0",
+        id: 7,
+        result: { content: [{ type: "text", text: "Held for the owner." }], isError: true },
+    });
     expect(mcp).not.toHaveBeenCalled();
 });
 
@@ -205,7 +229,7 @@ test("a door without a bridge has no mcp route", () => {
 // config IS the grant pushed over the socket.
 const laptopCard = { id: "laptop", kind: "device", config: { platform: "linux", shell: "on" } };
 
-const admission = async (presented: Presented, cards: readonly typeof laptopCard[]) =>
+const admission = async (presented: Presented, cards: readonly (typeof laptopCard)[]) =>
     admitPeer<{ platform: string }>(
         { capabilities: { list: async () => cards } } as unknown as Services,
         door,

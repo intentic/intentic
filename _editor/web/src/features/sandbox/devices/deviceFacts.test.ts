@@ -322,9 +322,7 @@ test(`says nothing about a machine that is syncing and answering`, () => {
 });
 
 test(`warns about a machine whose agent has stopped`, () => {
-    expect(machineWarnings(device({ sync: enrolled(`sync`, NOW), report: watching({ agent: { running: false } }) }), NOW)).toEqual([
-        `agent stopped`,
-    ]);
+    expect(machineWarnings(device({ sync: enrolled(`sync`, NOW), report: watching({ agent: { running: false } }) }), NOW)).toEqual([`agent stopped`]);
 });
 
 test(`warns about an enrollment that has gone quiet, in the same words it reads when live`, () => {

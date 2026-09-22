@@ -23,10 +23,17 @@ const fakeServices = (root: string): Services =>
 
 const context: OrpcContext = { headers: new Headers(), method: "POST", url: "/automations" };
 
-const automation = (id: string, trigger: Automation["trigger"]): Automation => ({ id, trigger, prompt: `wake:${id}`, models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+const automation = (id: string, trigger: Automation["trigger"]): Automation => ({
+    id,
+    trigger,
+    prompt: `wake:${id}`,
+    models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
+    enabled: true,
+});
 
 // A schedule's promise is a wall clock, not an epoch: the epoch moves with the date, "20:43 in Warsaw" does not.
-const wallClockIn = (tz: string, at: number): string => new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
+const wallClockIn = (tz: string, at: number): string =>
+    new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
 
 test("run now refuses a chat listener: by hand there is no message, which is the whole thing it handles", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "routes-")));
@@ -170,7 +177,9 @@ test("upsert refuses a cron that parses but can never come round", async () => {
     const routes = createAutomationsRoutes(services);
     // A real date croner accepts as a pattern, and one that is simply not a date: both parse, neither ever fires, and
     // both used to store as an automation that reads armed and never runs.
-    await expect(call(routes.upsert, automation("past", { kind: "schedule", cron: "2020-01-01T00:00:00" }), { context })).rejects.toThrow(/no next run/);
+    await expect(call(routes.upsert, automation("past", { kind: "schedule", cron: "2020-01-01T00:00:00" }), { context })).rejects.toThrow(
+        /no next run/,
+    );
     await expect(call(routes.upsert, automation("nonsense", { kind: "schedule", cron: "2026-02-30T10:00:00" }), { context })).rejects.toThrow(
         /no next run/,
     );

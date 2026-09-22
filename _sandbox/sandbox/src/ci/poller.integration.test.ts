@@ -52,7 +52,13 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         join(root, `${STATE_DIR}`, "config", "automations.json"),
         join(root, `${STATE_DIR}`, "records", "automation-runs.json"),
     );
-    await automations.upsert({ id: "poll-ci", trigger: { kind: "listener", provider: "ci", ...narrow }, prompt: "handle ci", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+    await automations.upsert({
+        id: "poll-ci",
+        trigger: { kind: "listener", provider: "ci", ...narrow },
+        prompt: "handle ci",
+        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
+        enabled: true,
+    });
     const services = unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         capabilities,

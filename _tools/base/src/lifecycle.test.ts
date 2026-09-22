@@ -14,7 +14,7 @@ describe(`DisposableStore`, () => {
         expect(stopped).toEqual([`first`, `second`]);
     });
 
-/* The property the daemon's shutdown depends on. */
+    /* The property the daemon's shutdown depends on. */
     it(`keeps disposing after a member throws, then reports the failures`, () => {
         const store = new DisposableStore();
         const stopped: string[] = [];
@@ -40,7 +40,7 @@ describe(`DisposableStore`, () => {
         expect(() => store.dispose()).toThrow(AggregateError);
     });
 
-/* An async boot step landing after shutdown began is a real race, not a caller error. */
+    /* An async boot step landing after shutdown began is a real race, not a caller error. */
     it(`disposes a late arrival immediately instead of holding it`, () => {
         const store = new DisposableStore();
         store.dispose();

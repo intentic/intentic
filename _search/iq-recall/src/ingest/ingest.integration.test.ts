@@ -169,7 +169,14 @@ const writeSession = async (sessionId: string, prompt: string): Promise<void> =>
     await writeFile(
         join(projectsDir, `${sessionId}.jsonl`),
         `${[
-            JSON.stringify({ parentUuid: null, type: "user", message: { role: "user", content: prompt }, uuid: `${sessionId}-1`, timestamp: ts, sessionId }),
+            JSON.stringify({
+                parentUuid: null,
+                type: "user",
+                message: { role: "user", content: prompt },
+                uuid: `${sessionId}-1`,
+                timestamp: ts,
+                sessionId,
+            }),
             JSON.stringify({
                 parentUuid: `${sessionId}-1`,
                 type: "assistant",

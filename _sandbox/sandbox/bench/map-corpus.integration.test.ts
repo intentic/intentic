@@ -111,7 +111,15 @@ const corpusOf = (sessions: string[][]): string => {
     return projects;
 };
 
-const NOTE = ["## Map of this project", "", "You are at the top of the workspace.", "", "the workspace, 2 areas", "  api     9 files · ts", "  web     4 files · ts"].join("\n");
+const NOTE = [
+    "## Map of this project",
+    "",
+    "You are at the top of the workspace.",
+    "",
+    "the workspace, 2 areas",
+    "  api     9 files · ts",
+    "  web     4 files · ts",
+].join("\n");
 
 test("scores the opening turn's listings by arm, and the map's lines by whether anyone used them", () => {
     const root = corpusOf([
@@ -158,7 +166,9 @@ test("an area of a project inside the workspace is matched against workspace-rel
         "  _editor     9 files · ts",
         "  _sandbox    4 files · ts",
     ].join("\n");
-    const root = corpusOf([[prompt(`${note}\n\nfix it`), ...asks([{ name: "Read", input: { file_path: `${WORKSPACE_ROOT}/intentic/_editor/app.ts` } }])]]);
+    const root = corpusOf([
+        [prompt(`${note}\n\nfix it`), ...asks([{ name: "Read", input: { file_path: `${WORKSPACE_ROOT}/intentic/_editor/app.ts` } }])],
+    ]);
     const stats = mapStats(root, { agentRoot: WORKSPACE_ROOT });
     expect(stats.payload.firstFileInsideAListedArea).toBe("100.0%");
     expect(stats.payload.perArea[0]).toEqual({ area: "intentic/_editor", listed: 1, used: 1, share: "100.0%" });

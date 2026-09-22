@@ -294,7 +294,10 @@ test("a persona on a built-in base takes the base and none of the sandbox's text
 
 // Custom with nothing written yet is mid-edit, not a decision to run on a blank prompt.
 test("custom with nothing written yet falls back to the sandbox", () => {
-    expect(personaPrompt(personaOf("guest", [], { systemPromptMode: "custom" }), undefined, SETTINGS)).toEqual({ mode: "intentic", systemPrompt: "" });
+    expect(personaPrompt(personaOf("guest", [], { systemPromptMode: "custom" }), undefined, SETTINGS)).toEqual({
+        mode: "intentic",
+        systemPrompt: "",
+    });
 });
 
 // The persona is a static context

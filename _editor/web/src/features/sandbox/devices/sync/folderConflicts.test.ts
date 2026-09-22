@@ -61,9 +61,7 @@ describe(`folderConflicts`, () => {
 
     it(`names each path in the words of what happened to it`, () => {
         const read = folderConflicts(folder(DERIVED.slice(0, 1)));
-        expect(read?.rows).toEqual([
-            { path: `intentic/_extensions/acceptance`, note: `build output left on this device · deleted in the sandbox` },
-        ]);
+        expect(read?.rows).toEqual([{ path: `intentic/_extensions/acceptance`, note: `build output left on this device · deleted in the sandbox` }]);
     });
 
     it(`counts what it could not show against Mutagen's own total, not against the rows`, () => {

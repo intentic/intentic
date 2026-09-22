@@ -58,9 +58,7 @@ test("b", () => { expect(out.logged).toMatchObject([{ outcome: "refused" }]); })
     });
 
     test(`text that leaves with its tests is a deletion, not a narrowing`, () => {
-        const before = measure(
-            `test("x", () => { expect(t).toBe("Start your first agent"); });\ntest("y", () => { expect(u).toBe("gone"); });`,
-        );
+        const before = measure(`test("x", () => { expect(t).toBe("Start your first agent"); });\ntest("y", () => { expect(u).toBe("gone"); });`);
         const after = measure(`test("x", () => { expect(t).toBe("Start your first agent"); });`);
         expect(weakened(before, after)).toBeUndefined();
     });

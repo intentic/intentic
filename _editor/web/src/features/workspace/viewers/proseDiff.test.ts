@@ -38,13 +38,9 @@ describe(`folding the unchanged`, () => {
 
     it(`keeps one paragraph of context each side of a change and folds the rest`, () => {
         const runs = foldUnchanged([same(`a`), same(`b`), same(`c`), same(`d`), changed, same(`e`), same(`f`), same(`g`), same(`h`)]);
-        expect(runs.map((run) => (run.kind === `fold` ? `fold:${run.count}` : run.block.kind === `same` ? run.block.segments[0]!.text : `changed`))).toEqual([
-            `fold:3`,
-            `d`,
-            `changed`,
-            `e`,
-            `fold:3`,
-        ]);
+        expect(
+            runs.map((run) => (run.kind === `fold` ? `fold:${run.count}` : run.block.kind === `same` ? run.block.segments[0]!.text : `changed`)),
+        ).toEqual([`fold:3`, `d`, `changed`, `e`, `fold:3`]);
     });
 
     it(`never folds a run so short the fold line would be longer than what it hides`, () => {

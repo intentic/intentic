@@ -19,7 +19,14 @@ const SLIDE_STYLES = stylesXml(
 
 const deckOf = (pages: string, automatic = GRAPHICS, files?: Parameters<typeof odfBytes>[0][`files`]) =>
     readPresentation(
-        openOdf(odfBytes({ mimetype: SLIDES_MIME, content: contentXml(`<office:presentation>${pages}</office:presentation>`, automatic), styles: SLIDE_STYLES, files })),
+        openOdf(
+            odfBytes({
+                mimetype: SLIDES_MIME,
+                content: contentXml(`<office:presentation>${pages}</office:presentation>`, automatic),
+                styles: SLIDE_STYLES,
+                files,
+            }),
+        ),
     );
 
 describe(`readPresentation`, () => {
@@ -37,7 +44,14 @@ describe(`readPresentation`, () => {
                 `<draw:text-box><text:p>Hello</text:p></draw:text-box></draw:frame></draw:page>`,
         );
         const shape = deck.slides[0]?.shapes[0];
-        expect(shape?.css).toMatchObject({ position: `absolute`, left: `2cm`, top: `3cm`, width: `10cm`, height: `4cm`, "background-color": `#204060` });
+        expect(shape?.css).toMatchObject({
+            position: `absolute`,
+            left: `2cm`,
+            top: `3cm`,
+            width: `10cm`,
+            height: `4cm`,
+            "background-color": `#204060`,
+        });
         expect(shape?.css[`--odf-anchor`]).toBe(`center`);
         expect(textOfBlock(shape?.blocks[0] ?? { kind: `paragraph`, level: 0, css: {}, inlines: [] })).toBe(`Hello`);
     });

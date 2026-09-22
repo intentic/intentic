@@ -24,7 +24,11 @@ export const clientFor = (app: Hono<AppEnv>, options?: { readonly bearer?: strin
         new OpenAPILink(sandboxContract, {
             url: "http://sandbox",
             fetch: async (request) =>
-                app.request(options?.bearer === undefined ? request : new Request(request, { headers: { ...Object.fromEntries(request.headers), authorization: `Bearer ${options.bearer}` } })),
+                app.request(
+                    options?.bearer === undefined
+                        ? request
+                        : new Request(request, { headers: { ...Object.fromEntries(request.headers), authorization: `Bearer ${options.bearer}` } }),
+                ),
         }),
     );
 

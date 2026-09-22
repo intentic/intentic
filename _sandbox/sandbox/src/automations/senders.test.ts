@@ -24,10 +24,7 @@ test("the first rule naming the sender decides, and an absent actsAs is no perso
     const guest = automation({
         actsAs: "customer-service",
         senders: {
-            rules: [
-                { ids: [mark.id] },
-                { ids: [martha.id, mark.id], actsAs: "customer-service" },
-            ],
+            rules: [{ ids: [mark.id] }, { ids: [martha.id, mark.id], actsAs: "customer-service" }],
             others: "ignore",
         },
     });
@@ -47,7 +44,10 @@ test("everyone else gets what `others` says", () => {
     const rules = [{ ids: [mark.id] }];
     expect(senderLane(automation({ actsAs: "guest", senders: { rules, others: "ignore" } }), bob)).toBeUndefined();
     expect(senderLane(automation({ actsAs: "guest", senders: { rules, others: "hold" } }), bob)).toEqual({ actsAs: "guest", requireApproval: true });
-    expect(senderLane(automation({ actsAs: "guest", senders: { rules, others: "allow" } }), bob)).toEqual({ actsAs: "guest", requireApproval: false });
+    expect(senderLane(automation({ actsAs: "guest", senders: { rules, others: "allow" } }), bob)).toEqual({
+        actsAs: "guest",
+        requireApproval: false,
+    });
 });
 
 test("a rule can hold its own people for a person", () => {

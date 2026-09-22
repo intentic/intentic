@@ -198,7 +198,11 @@ describe(`currentChecklist`, () => {
     });
 
     it(`clears once a later prompt has worked without one, rather than pinning a stale list`, () => {
-        const after: ChatMessage[] = [...TURN, { id: 6, role: `user`, text: `what is in this file?` }, { id: 7, role: `assistant`, text: `A stylesheet.` }];
+        const after: ChatMessage[] = [
+            ...TURN,
+            { id: 6, role: `user`, text: `what is in this file?` },
+            { id: 7, role: `assistant`, text: `A stylesheet.` },
+        ];
         expect(currentChecklist(after)).toBeUndefined();
     });
 

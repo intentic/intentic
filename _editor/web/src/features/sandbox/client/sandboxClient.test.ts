@@ -1,7 +1,9 @@
 import { it, expect, afterEach, mock, spyOn } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 
-mock.module("../session/sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }) }));
+mock.module("../session/sandboxSession", () => ({
+    useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
+}));
 // The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls through to daemonUrl.
 mock.module("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),

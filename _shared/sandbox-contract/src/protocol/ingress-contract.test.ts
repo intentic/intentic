@@ -58,7 +58,13 @@ describe("hostOwnerId", () => {
 
     it("owns nothing that does not end in a 12-hex tail", () => {
         // The ingress's own door, the zone apex, the loopback name's bare-id label, and a near-miss tail.
-        for (const host of ["ingress.sbx.example.dev", "sbx.example.dev", `${SANDBOX_ID}.local.sbx.example.dev`, "sandbox-abc123def45.sbx.example.dev", ""]) {
+        for (const host of [
+            "ingress.sbx.example.dev",
+            "sbx.example.dev",
+            `${SANDBOX_ID}.local.sbx.example.dev`,
+            "sandbox-abc123def45.sbx.example.dev",
+            "",
+        ]) {
             expect(hostOwnerId(host)).toBeUndefined();
         }
     });

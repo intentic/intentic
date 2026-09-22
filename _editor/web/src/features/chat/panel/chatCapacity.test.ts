@@ -112,7 +112,13 @@ describe(`what the rail offers`, () => {
         const families = (gemini: number, thirdParty: number): AccountUsage => ({
             measuredAt: NOW - 60_000,
             windows: [
-                { kind: `google:gemini-weekly`, label: `Gemini Models · Weekly`, utilization: gemini, resetsAt: 1_700_400_000, gates: { models: [`gemini`] } },
+                {
+                    kind: `google:gemini-weekly`,
+                    label: `Gemini Models · Weekly`,
+                    utilization: gemini,
+                    resetsAt: 1_700_400_000,
+                    gates: { models: [`gemini`] },
+                },
                 {
                     kind: `google:3p-weekly`,
                     label: `Claude and GPT Models · Weekly`,

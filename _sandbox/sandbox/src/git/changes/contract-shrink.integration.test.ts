@@ -39,7 +39,9 @@ test("a whole schema gone is one removal, not one per leaf", () => {
 test("re-worded prose is not a shrink: a description that changed, or went entirely, passes in silence", () => {
     expect(shrunkSurfaces({ A: { description: `old wording`, type: `string` } }, { A: { description: `new wording`, type: `string` } })).toEqual([]);
     expect(shrunkSurfaces({ A: { description: `gone`, type: `string` } }, { A: { type: `string` } })).toEqual([]);
-    expect(shrunkSurfaces({ A: { properties: { body: { description: `old` } } } }, { A: { properties: { body: { description: `new` } } } })).toEqual([]);
+    expect(shrunkSurfaces({ A: { properties: { body: { description: `old` } } } }, { A: { properties: { body: { description: `new` } } } })).toEqual(
+        [],
+    );
 });
 
 test("a FIELD named description is still a surface: prose is skipped only where a key is a keyword", () => {

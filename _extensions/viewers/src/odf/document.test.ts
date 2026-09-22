@@ -17,7 +17,9 @@ const AUTOMATIC = [
 ].join(``);
 
 const documentOf = (body: string, automatic = AUTOMATIC, styles?: string) =>
-    readTextDocument(openOdf(odfBytes({ mimetype: TEXT_MIME, content: contentXml(`<office:text>${body}</office:text>`, automatic), styles, title: `Report` })));
+    readTextDocument(
+        openOdf(odfBytes({ mimetype: TEXT_MIME, content: contentXml(`<office:text>${body}</office:text>`, automatic), styles, title: `Report` })),
+    );
 
 describe(`readTextDocument`, () => {
     it(`reads headings, paragraphs and the document's title`, () => {
@@ -35,7 +37,11 @@ describe(`readTextDocument`, () => {
         const block = doc.pages[0]?.[0];
         expect(block?.kind === `paragraph` ? block.css : {}).toMatchObject({ "text-align": `center`, "margin-bottom": `0.5cm` });
         const span = block?.kind === `paragraph` ? block.inlines[1] : undefined;
-        expect(span).toMatchObject({ kind: `text`, text: `important`, css: { "font-weight": `bold`, color: `#cc0000`, "text-decoration-line": `underline` } });
+        expect(span).toMatchObject({
+            kind: `text`,
+            text: `important`,
+            css: { "font-weight": `bold`, color: `#cc0000`, "text-decoration-line": `underline` },
+        });
     });
 
     it(`inherits from a parent style`, () => {
@@ -74,7 +80,11 @@ describe(`readTextDocument`, () => {
         const styles = stylesXml(
             `<text:list-style style:name="L1"><text:list-level-style-number text:level="1" style:num-format="i" text:start-value="3"/></text:list-style>`,
         );
-        const doc = documentOf(`<text:list text:style-name="L1"><text:list-item><text:p>One</text:p></text:list-item></text:list>`, AUTOMATIC, styles);
+        const doc = documentOf(
+            `<text:list text:style-name="L1"><text:list-item><text:p>One</text:p></text:list-item></text:list>`,
+            AUTOMATIC,
+            styles,
+        );
         expect(doc.pages[0]?.[0]).toMatchObject({ kind: `list`, ordered: true, type: `lower-roman`, start: 3 });
     });
 
@@ -85,9 +95,17 @@ describe(`readTextDocument`, () => {
             `<text:list-style style:name="L0"><text:list-level-style-number text:level="1" style:num-format=""/></text:list-style>` +
                 `<text:list-style style:name="L2"><text:list-level-style-bullet text:level="1" text:bullet-char=""/></text:list-style>`,
         );
-        const unnumbered = documentOf(`<text:list text:style-name="L0"><text:list-item><text:p>Line</text:p></text:list-item></text:list>`, AUTOMATIC, styles);
+        const unnumbered = documentOf(
+            `<text:list text:style-name="L0"><text:list-item><text:p>Line</text:p></text:list-item></text:list>`,
+            AUTOMATIC,
+            styles,
+        );
         expect(unnumbered.pages[0]?.[0]).toMatchObject({ kind: `list`, type: `none` });
-        const unbulleted = documentOf(`<text:list text:style-name="L2"><text:list-item><text:p>Line</text:p></text:list-item></text:list>`, AUTOMATIC, styles);
+        const unbulleted = documentOf(
+            `<text:list text:style-name="L2"><text:list-item><text:p>Line</text:p></text:list-item></text:list>`,
+            AUTOMATIC,
+            styles,
+        );
         expect(unbulleted.pages[0]?.[0]).toMatchObject({ kind: `list`, type: `none` });
     });
 
@@ -107,7 +125,10 @@ describe(`readTextDocument`, () => {
 
     it(`splits pages where the file says a printed copy would break`, () => {
         const automatic = `${AUTOMATIC}<style:style style:name="P9" style:family="paragraph"><style:paragraph-properties fo:break-before="page"/></style:style>`;
-        const doc = documentOf(`<text:p>One</text:p><text:soft-page-break/><text:p>Two</text:p><text:p text:style-name="P9">Three</text:p>`, automatic);
+        const doc = documentOf(
+            `<text:p>One</text:p><text:soft-page-break/><text:p>Two</text:p><text:p text:style-name="P9">Three</text:p>`,
+            automatic,
+        );
         expect(doc.pages.map((page) => page.map((block) => textOfBlock(block)))).toEqual([[`One`], [`Two`], [`Three`]]);
     });
 

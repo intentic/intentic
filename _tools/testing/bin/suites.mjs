@@ -29,7 +29,9 @@ const filters = args.filter((arg) => arg !== "--watch");
 
 // `--isolate`: a fresh module registry per file, so a `mock.module` one suite installs never reaches the next.
 const run = (extra) => {
-    const result = spawnSync("bun", ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...extra, ...filters], { stdio: "inherit" });
+    const result = spawnSync("bun", ["test", `--conditions=${SOURCE_CONDITION}`, "--isolate", "--pass-with-no-tests", ...extra, ...filters], {
+        stdio: "inherit",
+    });
     return result.status ?? 1;
 };
 

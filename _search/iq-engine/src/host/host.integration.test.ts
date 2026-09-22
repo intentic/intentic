@@ -72,9 +72,12 @@ test("markDirty crosses the wire: a new file becomes findable without a restart"
     await writeFile(join(root, "alpha/src/gadget_host.ts"), "export const hostGadget = 1;\n");
     engine.markDirty();
 
-    await waitFor(async () => {
-        expect((await engine.run(request({ verb: "files", query: "gadget_host" }))).result.groups.length).toBeGreaterThan(0);
-    }, { timeout: 30_000 });
+    await waitFor(
+        async () => {
+            expect((await engine.run(request({ verb: "files", query: "gadget_host" }))).result.groups.length).toBeGreaterThan(0);
+        },
+        { timeout: 30_000 },
+    );
 });
 
 // The signal itself can't cross the boundary; forwarded as a message the child raises on its own controller.

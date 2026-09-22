@@ -17,7 +17,11 @@ const harness = () => {
 
 test("a Visitor chat origin queues the reply for its own visitor and reports it delivered", async () => {
     const { outbox, services } = harness();
-    const outcome = await deliverToListenerChannel(services, { automationId: "guest", provider: "webchat", channelId: "visitor-1" }, "answered by a person");
+    const outcome = await deliverToListenerChannel(
+        services,
+        { automationId: "guest", provider: "webchat", channelId: "visitor-1" },
+        "answered by a person",
+    );
 
     expect(outcome).toBe("delivered");
     expect((await outbox.since("webchat:guest:visitor-1", 0, Date.now())).replies).toMatchObject([{ text: "answered by a person" }]);

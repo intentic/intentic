@@ -293,12 +293,7 @@ describe("mutagenCreateArgs: the state backup", () => {
     // Rebuildable bulk and credentials stay in the sandbox; everything a person wrote or that happened comes down.
     // Whole groups are excluded by folder, not an inventory of files.
     it("leaves credentials and rebuildable bulk behind, a folder at a time", () => {
-        expect([...BACKUP_IGNORES].toSorted()).toEqual([
-            "/identity/control-tokens.json",
-            "/local",
-            "/records/artifacts/browser",
-            "/secrets",
-        ]);
+        expect([...BACKUP_IGNORES].toSorted()).toEqual(["/identity/control-tokens.json", "/local", "/records/artifacts/browser", "/secrets"]);
     });
 
     // `identity` is split: ownership records come down, control tokens don't; collapsing it to a whole-folder

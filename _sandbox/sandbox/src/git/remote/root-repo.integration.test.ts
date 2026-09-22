@@ -69,7 +69,10 @@ test("the baseline commits the config slice and still refuses every credential a
     await writeFile(join(work, `${STATE_DIR}`, "config", "environment.custom.Dockerfile"), "RUN echo hi\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "environment.d", "rust.Dockerfile"), "RUN rustup\n");
     // Agent-authored files: also expected to end up tracked.
-    await writeFile(join(work, `${STATE_DIR}`, "config", "approvals", "reddit-launch.json"), `{"kind":"post","platform":"reddit","status":"proposed"}\n`);
+    await writeFile(
+        join(work, `${STATE_DIR}`, "config", "approvals", "reddit-launch.json"),
+        `{"kind":"post","platform":"reddit","status":"proposed"}\n`,
+    );
     await writeFile(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo", "extension.js"), "export const activate = () => {};\n");
     await writeFile(join(work, `${STATE_DIR}`, "config", "workspace-extensions", "rail-demo", "intentic-extension.json"), `{"name":"rail-demo"}\n`);
     // Consumed queue entry: expected to stay untracked.

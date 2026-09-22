@@ -12,7 +12,7 @@ describe("newMessageIds", () => {
         ).toEqual(["m1", "m2"]);
     });
 
-/* A message appears once per history record it touched, and Gmail emits several for one arrival (added, then labelled). */
+    /* A message appears once per history record it touched, and Gmail emits several for one arrival (added, then labelled). */
     it("counts a message once however many history records mention it", () => {
         expect(
             newMessageIds([

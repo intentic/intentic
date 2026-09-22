@@ -35,17 +35,13 @@ describe(`the power verbs docker can do alone`, () => {
 describe(`a reshape`, () => {
     test(`carries the values that were just asked for, spelled the way ic takes them`, () => {
         expect(sandboxFallback(`resources`, `work`, { memoryGib: 12, cpus: 4 })).toBe(`ic sandbox reshape work --memory 12g --cpus 4`);
-        expect(sandboxFallback(`resources`, `work`, { privileged: true, gpu: false })).toBe(
-            `ic sandbox reshape work --privileged on --gpus off`,
-        );
+        expect(sandboxFallback(`resources`, `work`, { privileged: true, gpu: false })).toBe(`ic sandbox reshape work --privileged on --gpus off`);
     });
 
     // null is the form's "back to what this machine derives", which ic spells `default`; dropping it would print a
     // line that sets nothing where the user asked for a reset.
     test(`spells a cleared cap as ic's own default`, () => {
-        expect(sandboxFallback(`resources`, `work`, { memoryGib: null, cpus: null })).toBe(
-            `ic sandbox reshape work --memory default --cpus default`,
-        );
+        expect(sandboxFallback(`resources`, `work`, { memoryGib: null, cpus: null })).toBe(`ic sandbox reshape work --memory default --cpus default`);
     });
 
     // ic refuses a reshape that changes nothing, so a line carrying one would only fail a second way.

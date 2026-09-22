@@ -76,7 +76,15 @@ const mount = (
     app = createApp({ render: () => h(ChatModelPicker, { conversation: held }) });
     app.component(`Icon`, IconStub);
     // The Auto footer links to the settings job; no router is mounted here, so the link renders as its words.
-    app.component(`RouterLink`, defineComponent({ setup: (_props, { slots }) => () => h(`a`, slots[`default`]?.()) }));
+    app.component(
+        `RouterLink`,
+        defineComponent({
+            setup:
+                (_props, { slots }) =>
+                () =>
+                    h(`a`, slots[`default`]?.()),
+        }),
+    );
     app.directive(`tooltip`, {});
     app.mount(element);
     return { element, conversation: held };

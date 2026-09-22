@@ -313,7 +313,9 @@ test("a name leading the subject keeps its spelling instead of being mangled to 
     expect(cleanCommitSubject("feat: OAuth callback handles a state mismatch")).toBe("feat: `OAuth` callback handles a state mismatch");
     expect(cleanCommitSubject("refactor: ESLint config moves to oxlint")).toBe("refactor: `ESLint` config moves to oxlint");
     // A dotted name; the trailing comma stays outside the backticks.
-    expect(cleanCommitSubject("style(ui): Ui.inputSm, applied to the invite controls")).toBe("style(ui): `Ui.inputSm`, applied to the invite controls");
+    expect(cleanCommitSubject("style(ui): Ui.inputSm, applied to the invite controls")).toBe(
+        "style(ui): `Ui.inputSm`, applied to the invite controls",
+    );
     // `a11y` only looks capitalised; it's spelled that way regardless, so it's lowered like any word.
     expect(cleanCommitSubject("fix(ui): A11y labels on the roster")).toBe("fix(ui): a11y labels on the roster");
     // Already lowercase-first: `subject-case` only reads the first character, so nothing here needed quoting.

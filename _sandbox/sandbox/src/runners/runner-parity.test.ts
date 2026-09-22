@@ -60,7 +60,14 @@ const summaryServices = (input: {
             state: () =>
                 input.state?.["image"] === undefined
                     ? { online: false }
-                    : { online: true, announced: { version: "0.0.0", ...input.state, ...(input.runnerToml === undefined ? {} : { definitionToml: input.runnerToml }) } },
+                    : {
+                          online: true,
+                          announced: {
+                              version: "0.0.0",
+                              ...input.state,
+                              ...(input.runnerToml === undefined ? {} : { definitionToml: input.runnerToml }),
+                          },
+                      },
         },
     }) as unknown as Services;
 

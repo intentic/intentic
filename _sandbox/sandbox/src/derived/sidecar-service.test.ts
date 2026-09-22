@@ -24,15 +24,12 @@ const harness = (options: { enabled?: () => Promise<boolean>; exec?: ExecFn } = 
             return { stdout: "{}" };
         });
     let listener: ((paths: string[]) => void) | undefined;
-    const service = startSidecarService(
-        { enabled: options.enabled ?? (async () => true), logger, exec },
-        (l) => {
-            listener = l;
-            return () => {
-                listener = undefined;
-            };
-        },
-    );
+    const service = startSidecarService({ enabled: options.enabled ?? (async () => true), logger, exec }, (l) => {
+        listener = l;
+        return () => {
+            listener = undefined;
+        };
+    });
     return {
         emit: (paths) => listener?.(paths),
         calls,

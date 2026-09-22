@@ -12,7 +12,7 @@ describe("bytesOf", () => {
         expect(bytesOf(bytes.buffer)?.toString()).toBe("hello");
     });
 
-/* The case that matters. */
+    /* The case that matters. */
     it("takes exactly a view's own window, never its backing buffer", () => {
         const backing = new TextEncoder().encode("XXXpayloadXXX");
         const view = new Uint8Array(backing.buffer, 3, 7);

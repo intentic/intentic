@@ -9,7 +9,12 @@ const openFocused = mock();
 mock.module(`../../terminal/useTerminalPanel`, () => ({ useTerminalPanel: () => ({ openFocused }) }));
 
 const IDLE: CommandRun = { status: `idle`, command: ``, output: `` };
-const running = (session?: string): CommandRun => ({ status: `running`, command: `pnpm check`, output: ``, ...(session === undefined ? {} : { session }) });
+const running = (session?: string): CommandRun => ({
+    status: `running`,
+    command: `pnpm check`,
+    output: ``,
+    ...(session === undefined ? {} : { session }),
+});
 const passed: CommandRun = { status: `passed`, command: `pnpm check`, output: ``, exitCode: 0, session: `job-checks` };
 
 // A source that answers `state` from a script of states (or throws where the script says `throw`), and counts
@@ -49,7 +54,7 @@ afterEach(() => {
 });
 
 // Every poll after the first sits behind the interval; this walks the clock past as many as a script needs.
-const settle = async <T,>(pending: Promise<T>, polls: number): Promise<T> => {
+const settle = async <T>(pending: Promise<T>, polls: number): Promise<T> => {
     for (let i = 0; i < polls; i += 1) {
         await advanceTimersByTimeAsync(700);
     }

@@ -46,7 +46,10 @@ describe(`parseRemoteRefs`, () => {
     });
 });
 
-const refusing = (stderr: string): GitRunner => () => Promise.reject(Object.assign(new Error("git failed"), { stderr }));
+const refusing =
+    (stderr: string): GitRunner =>
+    () =>
+        Promise.reject(Object.assign(new Error("git failed"), { stderr }));
 
 describe(`readRemoteRefs`, () => {
     test(`refuses a non-http remote rather than letting git stop on a host-key prompt`, async () => {
@@ -98,7 +101,9 @@ describe(`readRemoteRefs`, () => {
 
     test(`the same refusal with a token given blames the token instead`, async () => {
         const stderr = "fatal: Authentication failed for 'https://github.com/owner/repo.git/'";
-        await expect(readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/repo.git", "ghp_x", refusing(stderr))).rejects.toThrow(/refused the access token/);
+        await expect(readRemoteRefs(WORKSPACE_ROOT, "https://github.com/owner/repo.git", "ghp_x", refusing(stderr))).rejects.toThrow(
+            /refused the access token/,
+        );
     });
 
     test(`a missing repository is not reported as a credential problem`, async () => {

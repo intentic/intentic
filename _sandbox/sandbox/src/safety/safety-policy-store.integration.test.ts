@@ -66,7 +66,20 @@ test("a second line joins the first instead of starting a second section", async
 // Placed by section, not simply appended: sections address different subjects (the disposable container vs. the owner's
 // own laptop), so a sandbox line landing under "On my devices" would read as a rule about the laptop, not a mistake.
 test("a line lands in its own section even when another section was written after it", () => {
-    const policy = [`## In this sandbox`, ``, `Ordinary work is fine.`, ``, `## Added from permission cards`, ``, `- First.`, ``, `## On my devices`, ``, `Ask before anything.`, ``].join(`\n`);
+    const policy = [
+        `## In this sandbox`,
+        ``,
+        `Ordinary work is fine.`,
+        ``,
+        `## Added from permission cards`,
+        ``,
+        `- First.`,
+        ``,
+        `## On my devices`,
+        ``,
+        `Ask before anything.`,
+        ``,
+    ].join(`\n`);
     const next = withAddedLine(policy, `Second.`);
     expect(next.indexOf(`- Second.`)).toBeGreaterThan(next.indexOf(`- First.`));
     expect(next.indexOf(`- Second.`)).toBeLessThan(next.indexOf(`## On my devices`));

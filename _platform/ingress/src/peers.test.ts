@@ -78,7 +78,7 @@ describe(`createFlyPeers`, () => {
         expect(changes).toEqual([[`fdaa::2`], [`fdaa::2`, `fdaa::3`], [`fdaa::3`]]);
     });
 
-/* A DNS blip is not an empty app. */
+    /* A DNS blip is not an empty app. */
     test(`keeps the last answer through a failed lookup`, async () => {
         const { peers, log, changes } = world([[`fdaa::2`], new Error(`ENOTFOUND`), [`fdaa::2`]]);
         await peers.refresh();

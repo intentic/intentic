@@ -181,7 +181,7 @@ test("starts the checkout's rebuild in the background, logging where ic's own lo
     const line = DEVICE_COMMANDS["dev-rebuild"].line(facts({ devRoot: "/home/ada/intentic", sandboxId: "someone-else" }));
     expect(line).toBe(
         'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; ' +
-            'detach=$(command -v setsid 2>/dev/null || true); ' +
+            "detach=$(command -v setsid 2>/dev/null || true); " +
             'mkdir -p "$HOME/.intentic/logs" && cd "/home/ada/intentic" && ' +
             `$detach nohup sh -c 'pnpm rebuild:sandbox work-abc; printf "\\n${DEV_REBUILD_EXIT_MARK} %s\\n" "$?"' ` +
             '> "$HOME/.intentic/logs/dev-rebuild-work-abc.log" 2>&1 & sleep 1',
@@ -264,10 +264,19 @@ test("crosses a checkout's command into the distro of the Windows PC that holds 
         devRoot: "/home/radarsu/intentic",
         hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux", "docker-desktop"] },
     });
-    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild"], windowsSide, asked("dev-rebuild"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
-    expect(doorRoute(DEVICE_COMMANDS["dev-restart"], windowsSide, asked("dev-restart"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
+    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild"], windowsSide, asked("dev-rebuild"))).toEqual({
+        environment: "wsl:archlinux",
+        in: "wsl:archlinux",
+    });
+    expect(doorRoute(DEVICE_COMMANDS["dev-restart"], windowsSide, asked("dev-restart"))).toEqual({
+        environment: "wsl:archlinux",
+        in: "wsl:archlinux",
+    });
     // Reading the log is the same question: it sits in the home of whichever environment ran the build.
-    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild-log"], windowsSide, asked("dev-rebuild-log"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
+    expect(doorRoute(DEVICE_COMMANDS["dev-rebuild-log"], windowsSide, asked("dev-rebuild-log"))).toEqual({
+        environment: "wsl:archlinux",
+        in: "wsl:archlinux",
+    });
     // The distro's own door needs no crossing, and no crossing is ever sent to it.
     const distroSide = facts({ platform: "linux", devRoot: "/home/radarsu/intentic" });
     for (const command of ["dev-rebuild", "dev-restart", "dev-rebuild-log"] as const) {
@@ -346,10 +355,12 @@ test("sends a sync switch to the environment whose folder the pairing names", ()
     const pc = { platform: "windows", hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux"] }, sandboxId: "work-abc" };
     const distro = facts({ ...pc, pairedDir: "/home/radarsu/intentic/work" });
     for (const command of ["sync-pause", "sync-resume", "sync-unpair", "mirror-off", "mirror-on"] as const) {
-            expect(doorRoute(DEVICE_COMMANDS[command], distro, asked(command))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
+        expect(doorRoute(DEVICE_COMMANDS[command], distro, asked(command))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
     }
     // The same pairing held on the Windows side needs no crossing.
-    expect(doorRoute(DEVICE_COMMANDS["sync-pause"], facts({ ...pc, pairedDir: "C:\\Users\\radar\\intentic" }), asked("sync-pause"))).toEqual({ environment: HOST_NATIVE_ENVIRONMENT });
+    expect(doorRoute(DEVICE_COMMANDS["sync-pause"], facts({ ...pc, pairedDir: "C:\\Users\\radar\\intentic" }), asked("sync-pause"))).toEqual({
+        environment: HOST_NATIVE_ENVIRONMENT,
+    });
     // Ports-only: no folder anywhere, so the switch goes to the side the card is named after, where its forwarder is.
     expect(doorRoute(DEVICE_COMMANDS["mirror-on"], facts(pc), asked("mirror-on"))).toEqual({});
 });

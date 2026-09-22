@@ -33,7 +33,12 @@ const entry = (provider: AgentProvider, value: string, label: string): PickerEnt
 const SOURCES: QuickPickSources = {
     persona: { personas: [{ id: `intentic`, label: `Intentic`, capabilities: [] }], picked: undefined },
     sandbox: { runners: [{ id: `omen` }], boxes: [], box: undefined, runner: undefined },
-    model: { entries: [entry(`claude`, `claude-opus-5`, `Claude Opus 5`), entry(`claude`, `claude-sonnet-4-5`, `Claude Sonnet 4.5`)], provider: `claude`, model: `claude-opus-5`, isReady: () => true },
+    model: {
+        entries: [entry(`claude`, `claude-opus-5`, `Claude Opus 5`), entry(`claude`, `claude-sonnet-4-5`, `Claude Sonnet 4.5`)],
+        provider: `claude`,
+        model: `claude-opus-5`,
+        isReady: () => true,
+    },
     effort: { options: [{ label: `High`, value: `high` }], picked: `high` },
 };
 const NONE: QuickPickSources = { persona: undefined, sandbox: undefined, model: undefined, effort: undefined };
@@ -49,7 +54,8 @@ const mount = (sources: QuickPickSources, filesOffered = true): HTMLElement => {
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
-        setup: () => () => h(ChatMentionPopover, { ref: instance, query: query.value, sources, filesOffered, onPick: (pick: QuickPick) => picks.push(pick) }),
+        setup: () => () =>
+            h(ChatMentionPopover, { ref: instance, query: query.value, sources, filesOffered, onPick: (pick: QuickPick) => picks.push(pick) }),
     });
     app.component(`Icon`, IconStub);
     app.mount(element);

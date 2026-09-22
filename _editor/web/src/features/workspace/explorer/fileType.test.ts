@@ -102,7 +102,6 @@ describe(`resolveFile leaves extension-owned formats binary`, () => {
     });
 });
 
-
 // Which diffs the byte viewer takes over: the daemon's `binary` flag decides for extension-less files; the path decides
 // when that flag misses, e.g. an oversized image flagged `truncated`, not `binary`.
 describe(`rendersAsBytes`, () => {
@@ -152,7 +151,22 @@ describe(`resolveFile large text`, () => {
 // Which diffs open as tracked changes over rendered text: the formats fileq reads, minus the ones that are looked at.
 describe(`isDocumentPath`, () => {
     it(`claims documents, spreadsheets, decks, books, notebooks and archives`, () => {
-        for (const name of [`Brief.DOCX`, `a/b.pdf`, `deck.pptx`, `book.epub`, `sheet.xlsx`, `sheet.ods`, `notes.odt`, `notes.rtf`, `nb.ipynb`, `dist.zip`, `lib.jar`, `pkg.whl`, `dump.tar`, `dump.tgz`]) {
+        for (const name of [
+            `Brief.DOCX`,
+            `a/b.pdf`,
+            `deck.pptx`,
+            `book.epub`,
+            `sheet.xlsx`,
+            `sheet.ods`,
+            `notes.odt`,
+            `notes.rtf`,
+            `nb.ipynb`,
+            `dist.zip`,
+            `lib.jar`,
+            `pkg.whl`,
+            `dump.tar`,
+            `dump.tgz`,
+        ]) {
             expect(isDocumentPath(name), name).toBe(true);
         }
     });

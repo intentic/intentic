@@ -159,9 +159,7 @@ test("control-token mint/list/revoke are owner-gated plain routes; mint returns 
 });
 
 test("minting without a usable scope is refused rather than defaulted", async () => {
-    const app = createApp(
-        services({ auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: async () => {} } }),
-    );
+    const app = createApp(services({ auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: async () => {} } }));
     const mintWith = (body: unknown) =>
         app.request("/system/control/tokens", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     // Absent, misspelled, and non-string scopes all land as a 400 naming valid scopes; no default exists here.
@@ -423,16 +421,12 @@ test("POST /system/sync/pair: the operating tier may mint sync, lower roles are 
     const owner = createApp(services());
     expect(await (await owner.request("/system/sync/pair", { method: "POST" })).json()).toMatchObject({ mode: "sync" });
     expect(await (await owner.request("/system/sync/pair?mode=mirror", { method: "POST" })).json()).toMatchObject({ mode: "mirror" });
-    const maintainer = createApp(
-        services({ auth: { authorize: async () => proven("m@x.com", "maintainer"), authorizeOwner: rejectForbidden } }),
-    );
+    const maintainer = createApp(services({ auth: { authorize: async () => proven("m@x.com", "maintainer"), authorizeOwner: rejectForbidden } }));
     expect(
         await (await maintainer.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer m" } })).json(),
     ).toMatchObject({ mode: "sync" });
 
-    const collaborator = createApp(
-        services({ auth: { authorize: async () => proven("c@x.com", "collaborator"), authorizeOwner: rejectForbidden } }),
-    );
+    const collaborator = createApp(services({ auth: { authorize: async () => proven("c@x.com", "collaborator"), authorizeOwner: rejectForbidden } }));
     expect(
         await (await collaborator.request("/system/sync/pair?mode=sync", { method: "POST", headers: { authorization: "Bearer c" } })).json(),
     ).toMatchObject({ mode: "mirror" });

@@ -86,9 +86,7 @@ test("holds the pool to its limit, and every queued command still runs", async (
     const queue = await dir();
     const log = join(queue, "marks");
     // Five requests against two slots: the sixth must never run third, and two must run together.
-    const runs = await Promise.all(
-        Array.from({ length: 5 }, () => queueRun(queue, ["--pool", "p", "--limit", "2"], body(log, { together: 2 }))),
-    );
+    const runs = await Promise.all(Array.from({ length: 5 }, () => queueRun(queue, ["--pool", "p", "--limit", "2"], body(log, { together: 2 }))));
     expect(runs.every((run) => run.code === 0)).toBe(true);
     expect(await peakConcurrency(log)).toBe(2);
 });

@@ -57,7 +57,9 @@ test.each(["latest", "*", "", "vNext"])("something that is not a version reads a
 const npmStub = (latest: string, deprecated?: string, calls: { count: number } = { count: 0 }) => {
     const fetcher = mock(async (url: string | URL) => {
         calls.count += 1;
-        const text = String(url).includes("/-/package/") ? JSON.stringify({ latest }) : JSON.stringify(deprecated === undefined ? {} : { deprecated });
+        const text = String(url).includes("/-/package/")
+            ? JSON.stringify({ latest })
+            : JSON.stringify(deprecated === undefined ? {} : { deprecated });
         return { ok: true, text: async () => text } as unknown as Response;
     });
     return { fetcher, calls };
@@ -141,7 +143,10 @@ test("a lookup that overruns the caller's grace still answers the next caller", 
         "fetch",
         mock(async (url: string | URL) => {
             await gate;
-            return { ok: true, text: async () => (String(url).includes("/-/package/") ? JSON.stringify({ latest: "2.0.0" }) : "{}") } as unknown as Response;
+            return {
+                ok: true,
+                text: async () => (String(url).includes("/-/package/") ? JSON.stringify({ latest: "2.0.0" }) : "{}"),
+            } as unknown as Response;
         }),
     );
     const resolve = createFreshnessResolver({ graceMs: 5 });

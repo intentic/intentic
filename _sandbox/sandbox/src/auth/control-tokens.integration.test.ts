@@ -53,7 +53,9 @@ test("list echoes every field but the hash; revoke takes effect immediately", as
     const store = fileControlTokens(await storePath());
     const { id, token } = await store.mint("zed", "editor", { createdBy: "owner@example.com", expiresAt: 4_102_444_800_000 });
     const listed = await store.list();
-    expect(listed).toEqual([{ id, label: "zed", scope: "editor", createdAt: expect.any(Number), createdBy: "owner@example.com", expiresAt: 4_102_444_800_000 }]);
+    expect(listed).toEqual([
+        { id, label: "zed", scope: "editor", createdAt: expect.any(Number), createdBy: "owner@example.com", expiresAt: 4_102_444_800_000 },
+    ]);
     expect(await store.revoke(id)).toBe(true);
     expect(await store.resolve(token)).toBeUndefined();
     expect(await store.revoke(id)).toBe(false);

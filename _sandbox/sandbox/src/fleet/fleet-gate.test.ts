@@ -23,7 +23,10 @@ interface Fake {
     readonly flows: DeviceSandboxFlow[];
 }
 
-const fake = (over: Partial<FleetGateDeps> = {}, lines: DeviceFlowLine[] = [{ kind: "result", message: `Created sandbox "sandbox-abc123def456".` }]): Fake => {
+const fake = (
+    over: Partial<FleetGateDeps> = {},
+    lines: DeviceFlowLine[] = [{ kind: "result", message: `Created sandbox "sandbox-abc123def456".` }],
+): Fake => {
     const frames: AgentEvent[] = [];
     const flows: DeviceSandboxFlow[] = [];
     const provision = mock(async () => ok(PROVISIONED));
@@ -32,7 +35,7 @@ const fake = (over: Partial<FleetGateDeps> = {}, lines: DeviceFlowLine[] = [{ ki
         list: async () => ok({ sandboxes: [] }),
         provision,
         devices: async () => ({ ids: ["radarsu-rog"], self: "radarsu-rog" }),
-        async *runFlow (id, flow) {
+        async *runFlow(id, flow) {
             flows.push(flow);
             void id;
             yield* lines;
@@ -81,7 +84,12 @@ it("asks first, then provisions and builds, reporting where it landed", async ()
     await answerCard(frames, "Create it");
     const answer = await pending;
     expect(answer.status).toBe(200);
-    expect(JSON.parse(answer.body)).toMatchObject({ sandboxId: "sbx-new", name: "reviewer", on: "radarsu-rog", url: "https://sandbox-abc123def456.sbx.test" });
+    expect(JSON.parse(answer.body)).toMatchObject({
+        sandboxId: "sbx-new",
+        name: "reviewer",
+        on: "radarsu-rog",
+        url: "https://sandbox-abc123def456.sbx.test",
+    });
     // The claim reached the machine as a `create`, under the slug the hostname names.
     expect(flows[0]).toEqual({ op: "create", slug: "sandbox-abc123def456", setupCode: "CODE123" });
     expect(provision).toHaveBeenCalledTimes(1);

@@ -27,7 +27,19 @@ const hook = process.argv.includes("--hook");
 const suiteForced = process.argv.includes("--suite");
 
 // Clears inherited GIT_* vars (e.g. GIT_DIR in a worktree), overriding `cwd: root` toward the wrong repo.
-for (const variable of ["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_PREFIX", "GIT_GRAFT_FILE", "GIT_CEILING_DIRECTORIES", "GIT_INDEX_VERSION"]) {
+for (const variable of [
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_NAMESPACE",
+    "GIT_PREFIX",
+    "GIT_GRAFT_FILE",
+    "GIT_CEILING_DIRECTORIES",
+    "GIT_INDEX_VERSION",
+]) {
     delete process.env[variable];
 }
 // Refuses a tree measured red already, instead of letting `Push anyway` stand.
@@ -152,7 +164,10 @@ const lockfileRewriteOnly = () => {
         hunks.every(([, oldAt, oldCount, newAt, newCount]) => {
             const old = Number(oldAt);
             const fresh = Number(newAt);
-            return within(atHead, old, oldCount === undefined ? 1 : Number(oldCount)) && within(inTree, fresh, newCount === undefined ? 1 : Number(newCount));
+            return (
+                within(atHead, old, oldCount === undefined ? 1 : Number(oldCount)) &&
+                within(inTree, fresh, newCount === undefined ? 1 : Number(newCount))
+            );
         })
     );
 };
@@ -181,7 +196,9 @@ const lockfileRewriteOnly = () => {
     } else {
         const unmeasured = verdicts.filter((verdict) => !verdict.measured);
         if (unmeasured.length > 0) {
-            say(`${unmeasured.map(({ id }) => id).join(", ")}: could not measure, so nothing there is vouched for — the check needs a look, the tree is not accused`);
+            say(
+                `${unmeasured.map(({ id }) => id).join(", ")}: could not measure, so nothing there is vouched for — the check needs a look, the tree is not accused`,
+            );
         }
         const failed = verdicts.filter((verdict) => !verdict.ok && verdict.measured);
         const show = (mark, verdict, body) => process.stderr.write(`\n${mark} ${verdict.id} (${verdict.file})\n${body}\n`);
@@ -204,22 +221,38 @@ const lockfileRewriteOnly = () => {
             }
             say(`${untidy.map(({ id }) => id).join(", ")}: no upstream to measure the range against, so these are reported and not refused`);
         } else if (untidy.length > 0) {
-            const judged = judgeAgainstBase(untidy, reportsAt(root, base, untidy.map(({ id }) => id)));
+            const judged = judgeAgainstBase(
+                untidy,
+                reportsAt(
+                    root,
+                    base,
+                    untidy.map(({ id }) => id),
+                ),
+            );
             const mine = judged.filter(({ added }) => added.length > 0);
             const unsure = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length > 0);
             const theirs = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length === 0);
             if (theirs.length > 0) {
-                say(`${theirs.map(({ verdict }) => verdict.id).join(", ")}: already failing at ${base.slice(0, 9)} and no worse for this push, so not this push's to fix`);
+                say(
+                    `${theirs.map(({ verdict }) => verdict.id).join(", ")}: already failing at ${base.slice(0, 9)} and no worse for this push, so not this push's to fix`,
+                );
             }
             for (const { verdict, unsure: lines } of unsure) {
-                show("?", verdict, `${lines.length} problem(s) ${base.slice(0, 9)} could not be asked about — reported, not laid at this push's door\n${lines.join("\n")}`);
+                show(
+                    "?",
+                    verdict,
+                    `${lines.length} problem(s) ${base.slice(0, 9)} could not be asked about — reported, not laid at this push's door\n${lines.join("\n")}`,
+                );
             }
             for (const { verdict, added } of mine) {
                 show("✗", verdict, `${added.length} problem(s) this push introduces\n${added.join("\n")}`);
             }
             if (mine.length > 0) {
                 const ids = mine.map(({ verdict }) => verdict.id);
-                fail("tidiness", `${ids.length} tidy check(s) this push breaks: ${ids.join(", ")} · node _tools/checks/run.mjs --only ${ids.join(",")}`);
+                fail(
+                    "tidiness",
+                    `${ids.length} tidy check(s) this push breaks: ${ids.join(", ")} · node _tools/checks/run.mjs --only ${ids.join(",")}`,
+                );
             }
         }
         if (broken.length === 0 && untidy.length === 0) {

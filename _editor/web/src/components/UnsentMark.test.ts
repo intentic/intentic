@@ -29,8 +29,7 @@ const render = (props: { preview?: string; at?: number }): HTMLElement => {
 };
 
 // Read off aria-label, which mirrors the tooltip text since a tooltip itself isn't announced.
-const hintOf = (props: { preview?: string; at?: number }): string | null =>
-    render(props).querySelector(`span`)!.getAttribute(`aria-label`);
+const hintOf = (props: { preview?: string; at?: number }): string | null => render(props).querySelector(`span`)!.getAttribute(`aria-label`);
 
 describe(`<UnsentMark>`, () => {
     // A chip with the send glyph, not a lone icon, so it doesn't blend in while skimming the rail.

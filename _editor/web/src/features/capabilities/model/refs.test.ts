@@ -51,7 +51,13 @@ describe(`refGroups`, () => {
 
     test(`a branch and a tag on the same commit stay two rows`, () => {
         const sameSha = sha(`a`);
-        const refs: RemoteRefs = { defaultBranch: `main`, refs: [{ name: `main`, kind: `branch`, sha: sameSha }, { name: `v1.0.0`, kind: `tag`, sha: sameSha }] };
+        const refs: RemoteRefs = {
+            defaultBranch: `main`,
+            refs: [
+                { name: `main`, kind: `branch`, sha: sameSha },
+                { name: `v1.0.0`, kind: `tag`, sha: sameSha },
+            ],
+        };
         const values = refGroups(refs).flatMap((group) => group.options.map((option) => option.value));
         expect(new Set(values).size).toBe(values.length);
     });

@@ -113,7 +113,9 @@ test("a provider CLI present on this machine reports the version its pack pins",
 
     const codexVersion = reported("codex");
     if (codexVersion !== undefined) {
-        expect(codexVersion, "the codex on PATH is not the version image-packs/codex.Dockerfile pins").toBe(await pinOf("codex", /@openai\/codex@(\S+) /));
+        expect(codexVersion, "the codex on PATH is not the version image-packs/codex.Dockerfile pins").toBe(
+            await pinOf("codex", /@openai\/codex@(\S+) /),
+        );
     }
 
     const opencodeVersion = reported("opencode");
@@ -128,9 +130,10 @@ test("a provider CLI present on this machine reports the version its pack pins",
     const cursorDir = process.env["INTENTIC_CURSOR_SDK_DIR"] ?? "/opt/cursor-sdk";
     const cursorManifest = join(cursorDir, "node_modules/@cursor/sdk/package.json");
     if (existsSync(cursorManifest)) {
-        expect(JSON.parse(readFileSync(cursorManifest, "utf8")).version, `the @cursor/sdk in ${cursorDir} is not the version image-packs/cursor.Dockerfile pins`).toBe(
-            await pinOf("cursor", /@cursor\/sdk@(\S+) /),
-        );
+        expect(
+            JSON.parse(readFileSync(cursorManifest, "utf8")).version,
+            `the @cursor/sdk in ${cursorDir} is not the version image-packs/cursor.Dockerfile pins`,
+        ).toBe(await pinOf("cursor", /@cursor\/sdk@(\S+) /));
     }
 });
 

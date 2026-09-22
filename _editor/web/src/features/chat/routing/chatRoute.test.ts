@@ -15,7 +15,14 @@ mock.module(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSett
 // `backend` names its own model, `social` names none: the two cases that decide whether a routed persona answers the
 // model question itself.
 const personas = ref<Persona[]>([
-    { id: `backend`, label: `Backend`, capabilities: [], brief: `Backend work.`, context: { repos: [`api`] }, models: [{ provider: `claude`, model: `claude-opus-5`, effort: `max` }] },
+    {
+        id: `backend`,
+        label: `Backend`,
+        capabilities: [],
+        brief: `Backend work.`,
+        context: { repos: [`api`] },
+        models: [{ provider: `claude`, model: `claude-opus-5`, effort: `max` }],
+    },
     { id: `social`, capabilities: [] },
 ]);
 mock.module(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
@@ -97,7 +104,10 @@ test("both questions open: one call asks for both, and nothing is read until the
     expect(settings.value.personaRouting).toBe(true);
     const chat = chatWith({ attachments: ref([{ path: `docs/spec.md` }]) });
     const text = `the invoice totals are off in @api/src/totals.ts`;
-    answer({ persona: { id: `social`, reason: `The message reads like social's work.` }, model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
+    answer({
+        persona: { id: `social`, reason: `The message reads like social's work.` },
+        model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` },
+    });
     const routing = route(chat);
 
     // A whole session of typing, and nothing has been asked of any model.
@@ -120,7 +130,10 @@ test("both questions open: one call asks for both, and nothing is read until the
 
 test("a persona that brings its own model answers the model question itself, and the line says so", async () => {
     const chat = chatWith();
-    answer({ persona: { id: `backend`, reason: `The message reads like Backend's work.` }, model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
+    answer({
+        persona: { id: `backend`, reason: `The message reads like Backend's work.` },
+        model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` },
+    });
     await route(chat).beforeSend(WORK, false);
     expect(chat.actsAs.value).toBe(`backend`);
     expect(wearModel).toHaveBeenCalledTimes(1);
@@ -128,7 +141,9 @@ test("a persona that brings its own model answers the model question itself, and
     // The pick the same reading made stands down, so nothing claims a model the chat is not running.
     expect(chat.account.value).toBeUndefined();
     expect(chat.autoPicked.value).toBe(false);
-    expect(verdict()).toBe(`Acting as Backend. The message reads like Backend's work. Backend brings its own model, so this chat runs on that instead. Read by ${JUDGE_LABEL}.`);
+    expect(verdict()).toBe(
+        `Acting as Backend. The message reads like Backend's work. Backend brings its own model, so this chat runs on that instead. Read by ${JUDGE_LABEL}.`,
+    );
 });
 
 test("auto model on, persona matching off: only the model is asked for", async () => {
@@ -139,7 +154,9 @@ test("auto model on, persona matching off: only the model is asked for", async (
     expect(sent()).toMatchObject({ model: true, persona: false });
     expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Choosing which model this chat runs on`), { noticeWait: `chatRoute` });
     expect(chat.actsAs.value).toBeUndefined();
-    expect(verdict()).toBe(`Read the opening message as work for Opus 5. Every turn after this one stays on it until you change it. Read by ${JUDGE_LABEL}.`);
+    expect(verdict()).toBe(
+        `Read the opening message as work for Opus 5. Every turn after this one stays on it until you change it. Read by ${JUDGE_LABEL}.`,
+    );
 });
 
 test("persona matching on, auto model off: only the persona is asked for, and Auto is left as the owner set it", async () => {
@@ -170,7 +187,11 @@ test("the chat says the reading is running, and the row settles in place", async
     expect(notice).toHaveBeenCalledWith(expect.stringContaining(`Reading what this chat opens on`), { noticeWait: `chatRoute` });
     expect(chatRouteWait(chat)).toMatchObject({ since: expect.any(Number) });
 
-    resolve({ persona: { id: `social`, reason: `The message reads like social's work.` }, model: { reason: `Couldn't choose a model for this chat, so it keeps the one it had.` }, judge: JUDGE });
+    resolve({
+        persona: { id: `social`, reason: `The message reads like social's work.` },
+        model: { reason: `Couldn't choose a model for this chat, so it keeps the one it had.` },
+        judge: JUDGE,
+    });
     await wait;
     expect(chatRouteWait(chat)).toBeUndefined();
     expect(reword).toHaveBeenCalledWith(7, expect.any(String), { noticeWait: undefined });
@@ -236,7 +257,10 @@ test("a chat pointed at a persona by hand asks only about the model, and a pick 
 
 test("a hand on either control while the reading ran is the last word", async () => {
     const chat = chatWith();
-    answer({ persona: { id: `social`, reason: `The message reads like social's work.` }, model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` } });
+    answer({
+        persona: { id: `social`, reason: `The message reads like social's work.` },
+        model: { pick: PICK, reason: `Read the opening message as work for Opus 5.` },
+    });
     const routing = route(chat);
     const pending = routing.beforeSend(WORK, false);
     // Exactly what selectModel and the persona pill do while the call is out.
@@ -245,7 +269,9 @@ test("a hand on either control while the reading ran is the last word", async ()
     await pending;
     expect(wearModel).not.toHaveBeenCalled();
     expect(chat.actsAs.value).toBeUndefined();
-    expect(verdict()).toBe(`social matched, but this chat was pointed somewhere by hand first, so nothing moved. Read the opening message as work for Opus 5. Read by ${JUDGE_LABEL}.`);
+    expect(verdict()).toBe(
+        `social matched, but this chat was pointed somewhere by hand first, so nothing moved. Read the opening message as work for Opus 5. Read by ${JUDGE_LABEL}.`,
+    );
 });
 
 test("a second message never buys another reading", async () => {

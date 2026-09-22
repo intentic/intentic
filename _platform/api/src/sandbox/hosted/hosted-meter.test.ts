@@ -20,7 +20,15 @@ const config = (over: Record<string, unknown> = {}): Config =>
     ({
         // The lane needs both the credential and the edge (hostedEnabled), like the idle sweep's fixture.
         ingress: { url: `https://ingress.sbx.test`, signingKey: `k`, zone: `sbx.test` },
-        hosted: { flyApiToken: `fly`, flyOrg: `intentic`, monthlyHours: 40, overBudgetGraceMinutes: 60, newAccountDays: 0, newAccountHours: 0, ...over },
+        hosted: {
+            flyApiToken: `fly`,
+            flyOrg: `intentic`,
+            monthlyHours: 40,
+            overBudgetGraceMinutes: 60,
+            newAccountDays: 0,
+            newAccountHours: 0,
+            ...over,
+        },
         hostedPlan: { compEmails: `` },
     }) as unknown as Config;
 

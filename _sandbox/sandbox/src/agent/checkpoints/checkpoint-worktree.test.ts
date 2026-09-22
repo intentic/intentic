@@ -10,7 +10,10 @@ const REPOS = [
 // Commit title where there is something to keep; only ever read by a human, so tests assert nothing about it.
 const TITLE = "Agent: before this turn";
 
-const services = { agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` }, logger: { warn: mock() } } as unknown as CheckpointDeps;
+const services = {
+    agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` },
+    logger: { warn: mock() },
+} as unknown as CheckpointDeps;
 
 // Finds the git verb the way git does: `-c key=value` pairs come before the subcommand, so the first token isn't it.
 const subcommandOf = (args: readonly string[]): string => {
@@ -86,7 +89,9 @@ const checkpoints = (checkpoint: TurnCheckpoint | undefined) => ({ of: async () 
 test("a fork asking for the files as they were starts at the source's commits for that message", async () => {
     const checkpoint: TurnCheckpoint = { kind: "worktree", repos: [{ repo: "root", base: "sha-root" }] };
 
-    expect(await forkWorktreeBase(checkpoints(checkpoint), { conversationId: "src", keep: 4, files: "then" })).toEqual([{ repo: "root", base: "sha-root" }]);
+    expect(await forkWorktreeBase(checkpoints(checkpoint), { conversationId: "src", keep: 4, files: "then" })).toEqual([
+        { repo: "root", base: "sha-root" },
+    ]);
 });
 
 test("a fork that wants today's files names no base at all", async () => {
@@ -99,6 +104,8 @@ test("a fork that wants today's files names no base at all", async () => {
 // A main-tree checkpoint is a workspace checkpoint, not a commit a checkout can be created at, so the fork starts on
 // today's files anyway.
 test("a main-tree source, and a message with no checkpoint, both fall through to today's files", async () => {
-    expect(await forkWorktreeBase(checkpoints({ kind: "tree", snapshot: "snap-1" }), { conversationId: "src", keep: 4, files: "then" })).toBeUndefined();
+    expect(
+        await forkWorktreeBase(checkpoints({ kind: "tree", snapshot: "snap-1" }), { conversationId: "src", keep: 4, files: "then" }),
+    ).toBeUndefined();
     expect(await forkWorktreeBase(checkpoints(undefined), { conversationId: "src", keep: 4, files: "then" })).toBeUndefined();
 });

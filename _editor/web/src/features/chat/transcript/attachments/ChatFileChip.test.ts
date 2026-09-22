@@ -28,7 +28,8 @@ const mount = (props: Record<string, unknown> = {}, surface: ChatSurface = { ima
     const element = document.createElement(`div`);
     document.body.append(element);
     app = createApp({
-        render: () => h(ChatFileChip, { name: `desktop-setup-20260912-212645.log`, path: `${STATE_DIR}/x/desktop-setup-20260912-212645.log`, ...props }),
+        render: () =>
+            h(ChatFileChip, { name: `desktop-setup-20260912-212645.log`, path: `${STATE_DIR}/x/desktop-setup-20260912-212645.log`, ...props }),
     });
     app.provide(CHAT_SURFACE, surface);
     app.component(`Icon`, IconStub);

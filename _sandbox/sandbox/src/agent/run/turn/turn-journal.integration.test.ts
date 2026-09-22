@@ -64,7 +64,7 @@ test("an unreadable entry is skipped and LEFT, never deleted; a foreign filename
 
     expect((await journal.list()).map((entry) => entry.kind)).toEqual(["automation"]);
 
-/* Reading is not the moment to destroy a record. */
+    /* Reading is not the moment to destroy a record. */
     const { readdirSync } = await import("node:fs");
     expect(readdirSync(dir).toSorted()).toEqual(["..evil.json", "a-fine.json", "notes.txt", "t-broken.json", "t-wrong-shape.json"]);
 });

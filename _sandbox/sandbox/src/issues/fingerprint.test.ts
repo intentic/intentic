@@ -16,10 +16,7 @@ test("one crash groups across builds, line numbers, hosts and stack dialects", (
         ].join("\n"),
     });
     const firefoxNextDeployBehindACdn = crash({
-        stack: [
-            "doThing@https://cdn.example/assets/index-Bq91xLm2.js:7:220",
-            "onClick@https://cdn.example/assets/index-Bq91xLm2.js:7:88",
-        ].join("\n"),
+        stack: ["doThing@https://cdn.example/assets/index-Bq91xLm2.js:7:220", "onClick@https://cdn.example/assets/index-Bq91xLm2.js:7:88"].join("\n"),
     });
     expect(fingerprintOf("bugs", chrome, "a")).toBe(fingerprintOf("bugs", firefoxNextDeployBehindACdn, "b"));
 });

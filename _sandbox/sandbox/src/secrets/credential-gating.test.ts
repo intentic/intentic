@@ -61,7 +61,14 @@ it("strips every variable carrying a gated connector's suffix, and leaves the re
         GITHUB_TOKEN_GITHUB: "g",
         PATH: "/usr/local/bin",
     };
-    const { cliEnv, withheld } = gatedCliEnv(env, [capability("komodo", "cli"), capability("github", "cli")], [gate({ subject: "komodo" })], grants, "conv-1", envSuffix);
+    const { cliEnv, withheld } = gatedCliEnv(
+        env,
+        [capability("komodo", "cli"), capability("github", "cli")],
+        [gate({ subject: "komodo" })],
+        grants,
+        "conv-1",
+        envSuffix,
+    );
     expect(cliEnv).toEqual({ GITHUB_TOKEN_GITHUB: "g", PATH: "/usr/local/bin" });
     expect(withheld.map((entry) => entry.subject)).toEqual(["komodo"]);
     grants.grant("conv-1", "komodo", { approvedBy: "bob@corp.com", at: 1 });

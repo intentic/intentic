@@ -14,7 +14,9 @@ import {
 // What the per-tick reconcile cannot learn from its own baseline: which ports this device is actually holding.
 describe("parseForwardPorts", () => {
     it("reads one sandbox's bound ports off its session names, ignoring another's", () => {
-        const listed = [forwardSessionName("sandbox-a", 5173), forwardSessionName("sandbox-a", 38_043), forwardSessionName("sandbox-b", 6480)].join(" ");
+        const listed = [forwardSessionName("sandbox-a", 5173), forwardSessionName("sandbox-a", 38_043), forwardSessionName("sandbox-b", 6480)].join(
+            " ",
+        );
         expect(parseForwardPorts(listed, "sandbox-a")).toEqual([5173, 38_043]);
     });
 
@@ -148,7 +150,10 @@ describe("conflictsFrom", () => {
             conflicts: [
                 {
                     root: "src",
-                    alphaChanges: [{ path: "src/late.ts", new: entry }, { path: "src", old: entry, new: entry }],
+                    alphaChanges: [
+                        { path: "src/late.ts", new: entry },
+                        { path: "src", old: entry, new: entry },
+                    ],
                     betaChanges: [{ path: "src/other.ts", old: entry }],
                 },
             ],

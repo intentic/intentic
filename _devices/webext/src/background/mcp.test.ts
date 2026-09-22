@@ -48,7 +48,10 @@ const fakeChrome = (options: { tabs: FakeTab[]; origins: string[] }) => {
 
 const install = (options: { tabs: FakeTab[]; origins: string[]; brave?: boolean }): void => {
     // Brave's user agent IS Chrome's, verbatim: the flag is the whole difference between the two installs.
-    const navigator = { userAgent: "Mozilla/5.0 Chrome/141.0.0.0 Windows", ...(options.brave === true ? { brave: { isBrave: async () => true } } : {}) };
+    const navigator = {
+        userAgent: "Mozilla/5.0 Chrome/141.0.0.0 Windows",
+        ...(options.brave === true ? { brave: { isBrave: async () => true } } : {}),
+    };
     Object.assign(globalThis, { chrome: fakeChrome(options), navigator });
 };
 

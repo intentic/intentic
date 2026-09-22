@@ -419,8 +419,23 @@ test("asks for the status and the fleet in one go, and bounds the pair with one 
 test("gives every environment of one machine its own door, read through its own connection", async () => {
     const distro = hostConnectionKey("pc-rog", "wsl:Arch");
     const asked: string[] = [];
-    const windowsFacts = { os: "Microsoft Windows 11 Home", arch: "x64", shell: "PowerShell 7", home: "C:\\Users\\radar", roots: [], hostname: "pc-rog" };
-    const archFacts = { os: "Arch Linux", arch: "x64", shell: "/usr/bin/zsh", home: "/home/radarsu", roots: [], hostname: "pc-rog", wsl: { distro: "Arch" } };
+    const windowsFacts = {
+        os: "Microsoft Windows 11 Home",
+        arch: "x64",
+        shell: "PowerShell 7",
+        home: "C:\\Users\\radar",
+        roots: [],
+        hostname: "pc-rog",
+    };
+    const archFacts = {
+        os: "Arch Linux",
+        arch: "x64",
+        shell: "/usr/bin/zsh",
+        home: "/home/radarsu",
+        roots: [],
+        hostname: "pc-rog",
+        wsl: { distro: "Arch" },
+    };
     const services = {
         config: { historyRoot: NO_HISTORY },
         syncFleet: () => enrolledFleet(NO_HISTORY),
@@ -648,7 +663,15 @@ test("keeps a silent distro off the row of the distro beside it, on its facts al
         [
             {
                 host: host("radarsu-rog", {
-                    facts: { os: "Ubuntu", arch: "x64", shell: "/bin/bash", home: "/home/r", roots: [], hostname: "radarsu-rog", wsl: { distro: "Ubuntu-22.04" } },
+                    facts: {
+                        os: "Ubuntu",
+                        arch: "x64",
+                        shell: "/bin/bash",
+                        home: "/home/r",
+                        roots: [],
+                        hostname: "radarsu-rog",
+                        wsl: { distro: "Ubuntu-22.04" },
+                    },
                 }),
                 result: { gap: "scope-off" },
             },

@@ -56,10 +56,12 @@ const OPTIONS: Parameters<typeof request>[1] = [
     { optionId: "no", kind: "reject_once" },
 ];
 
-const judging = (decision: "allow" | "ask" | "refuse"): Parameters<typeof createCommandGuard>[0]["judge"] => async () => ({
-    decision,
-    sentence: "It does the thing.",
-});
+const judging =
+    (decision: "allow" | "ask" | "refuse"): Parameters<typeof createCommandGuard>[0]["judge"] =>
+    async () => ({
+        decision,
+        sentence: "It does the thing.",
+    });
 
 const gateWith = (
     decision: "allow" | "ask" | "refuse",

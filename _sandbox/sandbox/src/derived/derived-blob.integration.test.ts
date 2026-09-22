@@ -35,7 +35,13 @@ const reader = (markdown: string, calls: string[][]): ExecFn => {
 test("renders bytes through a temporary copy named like the file, and answers with fileq's text and notes", async () => {
     const calls: string[][] = [];
     const side = await deriveBytes(root, Buffer.from("PK..."), { name: "brief.docx" }, reader("# Brief\n\nHello.", calls));
-    expect(side).toEqual({ present: true, content: "# Brief\n\nHello.\n", deriver: "docx v1", notes: ["docx conversion: one style dropped"], truncated: false });
+    expect(side).toEqual({
+        present: true,
+        content: "# Brief\n\nHello.\n",
+        deriver: "docx v1",
+        notes: ["docx conversion: one style dropped"],
+        truncated: false,
+    });
     expect(calls).toHaveLength(1);
     expect(calls[0]?.slice(0, 5)).toEqual(["fileq", "read", "--json", "--budget", "0"]);
     expect(calls[0]?.at(-1)?.endsWith("/brief.docx")).toBe(true);
@@ -98,8 +104,13 @@ test("a sandbox without the binary blames the sandbox, not the file", async () =
 test("two asks for one version in flight share a single render", async () => {
     const calls: string[][] = [];
     const exec = reader("shared", calls);
-    const [a, b] = await Promise.all([deriveBytes(root, Buffer.from("twin"), { name: "t.docx" }, exec), deriveBytes(root, Buffer.from("twin"), { name: "t.docx" }, exec)]);
+    const [a, b] = await Promise.all([
+        deriveBytes(root, Buffer.from("twin"), { name: "t.docx" }, exec),
+        deriveBytes(root, Buffer.from("twin"), { name: "t.docx" }, exec),
+    ]);
     expect(a).toEqual(b);
     expect(calls).toHaveLength(1);
-    expect((await readFile(join(root, DERIVED_BLOBS_DIR, (await readdir(join(root, DERIVED_BLOBS_DIR)))[0] ?? ""), "utf8")).startsWith("---\n")).toBe(true);
+    expect((await readFile(join(root, DERIVED_BLOBS_DIR, (await readdir(join(root, DERIVED_BLOBS_DIR)))[0] ?? ""), "utf8")).startsWith("---\n")).toBe(
+        true,
+    );
 });

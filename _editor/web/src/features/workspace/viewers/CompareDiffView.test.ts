@@ -19,7 +19,13 @@ const { default: CompareDiffView } = await import("./CompareDiffView.vue");
 const Redline = defineComponent({
     props: { path: String, before: Blob, after: Blob },
     emits: [`failed`],
-    setup: (props, { emit }) => () => h(`div`, [h(`span`, `REDLINE ${props.path} ${props.before?.size}/${props.after?.size}`), h(`button`, { id: `fail`, onClick: () => emit(`failed`, `Not a Word document.`) }, `fail`)]),
+    setup:
+        (props, { emit }) =>
+        () =>
+            h(`div`, [
+                h(`span`, `REDLINE ${props.path} ${props.before?.size}/${props.after?.size}`),
+                h(`button`, { id: `fail`, onClick: () => emit(`failed`, `Not a Word document.`) }, `fail`),
+            ]),
 });
 
 let app: App | undefined;

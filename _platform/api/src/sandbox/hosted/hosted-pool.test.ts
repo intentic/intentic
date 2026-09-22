@@ -185,8 +185,10 @@ describe(`reconcileHostedPool`, () => {
         ]);
         const prisma = fakePrisma({
             hostedPoolMachine: {
-                findMany: mock()
-                    .mockResolvedValue([poolRow({ state: `building` }), poolRow({ id: `p2`, appName: `intentic-sbx-pool-arn`, region: `arn` })]),
+                findMany: mock().mockResolvedValue([
+                    poolRow({ state: `building` }),
+                    poolRow({ id: `p2`, appName: `intentic-sbx-pool-arn`, region: `arn` }),
+                ]),
                 update,
             },
         });

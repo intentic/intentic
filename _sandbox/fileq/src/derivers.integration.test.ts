@@ -19,7 +19,22 @@ import { pptxDeriver } from "./lib/derivers/pptx.js";
 import { rtfDeriver, rtfParagraphs } from "./lib/derivers/rtf.js";
 import { xlsxDeriver } from "./lib/derivers/xlsx.js";
 import { detectFormat } from "./lib/formats.js";
-import { docxBytes, epubBytes, gzipBytes, ipynbText, odpBytes, odsBytes, odtBytes, pdfBytes, pngBytes, pptxBytes, rtfBytes, tarBytes, wavBytes, zipBytes } from "./testing.js";
+import {
+    docxBytes,
+    epubBytes,
+    gzipBytes,
+    ipynbText,
+    odpBytes,
+    odsBytes,
+    odtBytes,
+    pdfBytes,
+    pngBytes,
+    pptxBytes,
+    rtfBytes,
+    tarBytes,
+    wavBytes,
+    zipBytes,
+} from "./testing.js";
 
 let root: string;
 const fixture = (name: string, bytes: Uint8Array | string): string => {
@@ -98,7 +113,7 @@ describe("pdf", () => {
         }
     });
 
-/* The OCR tier, exercised for real where the image carries tesseract + poppler (an extension's layer). */
+    /* The OCR tier, exercised for real where the image carries tesseract + poppler (an extension's layer). */
     const DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
     test.skipIf(!ocrAvailable() || !existsSync(DEJAVU))("a scan is recognised by tesseract when the image carries it, and says so", async () => {
         const path = join(root, "receipt.pdf");
@@ -180,7 +195,13 @@ describe("ods", () => {
         const path = fixture(
             "budget.ods",
             odsBytes([
-                { name: "Q1", rows: [["Item", "Cost"], ["Paper", "12"]] },
+                {
+                    name: "Q1",
+                    rows: [
+                        ["Item", "Cost"],
+                        ["Paper", "12"],
+                    ],
+                },
                 { name: "Q2", rows: [["Item", "Cost"]] },
             ]),
         );

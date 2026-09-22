@@ -43,7 +43,15 @@ test("an account refused one model still has room for another", () => {
 
 // The whole fix: one account's spent model must not read as the fleet's, or a chain benches a rung it could still run.
 test("a sibling with nothing on file is headroom, measured now, so a benched rung can be asked again", () => {
-    const limit = observedTurnLimit([{ account: `a`, spent: spent(`composer-2.5`) }, { account: `b`, spent: {} }], COMPOSER, labels, NOW);
+    const limit = observedTurnLimit(
+        [
+            { account: `a`, spent: spent(`composer-2.5`) },
+            { account: `b`, spent: {} },
+        ],
+        COMPOSER,
+        labels,
+        NOW,
+    );
 
     expect(limit).toEqual({ pool: `Composer 2.5`, spent: 1, withHeadroom: 1, roomMeasuredAt: NOW });
 });
@@ -71,7 +79,15 @@ test("the account that still has the model serves, whichever order the fleet is 
 });
 
 test("a fleet with nothing on file runs where it always did", () => {
-    expect(pickObservedAccount([{ account: `a`, spent: {} }, { account: `b`, spent: {} }], COMPOSER)?.account).toBe(`a`);
+    expect(
+        pickObservedAccount(
+            [
+                { account: `a`, spent: {} },
+                { account: `b`, spent: {} },
+            ],
+            COMPOSER,
+        )?.account,
+    ).toBe(`a`);
 });
 
 // Refused longest ago is the one likeliest to have reopened; it also stops a fleet hammering one row.

@@ -70,7 +70,15 @@ const fakePrisma = (seed: Seed = {}) => {
             ]),
             create: mock(async ({ data }: { data: Record<string, unknown> }) => {
                 created.push(data);
-                return { id: `sbx-new`, name: data[`name`], token: data[`token`], setupCode: null, setupCodeExpiresAt: null, setupPayload: null, hosted: null };
+                return {
+                    id: `sbx-new`,
+                    name: data[`name`],
+                    token: data[`token`],
+                    setupCode: null,
+                    setupCodeExpiresAt: null,
+                    setupPayload: null,
+                    hosted: null,
+                };
             }),
             update: mock(async ({ data }: { data: Record<string, unknown> }) => {
                 updates.push(data);
@@ -134,7 +142,10 @@ it(`lists the account's sandboxes, and says nothing about a box that never annou
 
 it(`provisions a row and a claim, seeding the definition it was handed`, async () => {
     const { prisma, created, updates } = fakePrisma();
-    const response = await app(prisma)(`/provision`, { method: `POST`, body: { name: `  reviewer  `, definition: `[workspace]\nremote = "git@x:y.git"\n` } });
+    const response = await app(prisma)(`/provision`, {
+        method: `POST`,
+        body: { name: `  reviewer  `, definition: `[workspace]\nremote = "git@x:y.git"\n` },
+    });
     expect(response.status).toBe(200);
     const body = (await response.json()) as { sandboxId: string; name: string; setupCode: string };
     expect(body).toMatchObject({ sandboxId: `sbx-new`, name: `reviewer` });
@@ -156,7 +167,10 @@ it(`refuses an eleventh sandbox in an hour rather than letting a loop fill the a
 it(`takes the row back out when no claim can be minted for it`, async () => {
     const { prisma, deleted } = fakePrisma();
     // No reachability fabric: the row would exist under a name nothing could ever connect to.
-    const response = await app(prisma, { ingress: { ...config.ingress, signingKey: `` } })(`/provision`, { method: `POST`, body: { name: `orphan` } });
+    const response = await app(prisma, { ingress: { ...config.ingress, signingKey: `` } })(`/provision`, {
+        method: `POST`,
+        body: { name: `orphan` },
+    });
     expect(response.status).toBe(503);
     expect(deleted).toEqual([`sbx-new`]);
 });

@@ -225,7 +225,11 @@ it(`mints an API token as the owner and shows it once with its snippet`, async (
             return { id: `ct-1`, token: `ict_shown-once` };
         }
         if (path === `/system/control/tokens`) {
-            return { tokens: [{ id: `ct-1`, label: `nightly CI`, scope: `read`, createdAt: Date.parse(`2026-09-01T00:00:00Z`), createdBy: `owner@example.com` }] };
+            return {
+                tokens: [
+                    { id: `ct-1`, label: `nightly CI`, scope: `read`, createdAt: Date.parse(`2026-09-01T00:00:00Z`), createdBy: `owner@example.com` },
+                ],
+            };
         }
         return { members: [], automations: [], workflows: [], repos: [] };
     });

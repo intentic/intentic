@@ -478,7 +478,12 @@ describe(`tileRim`, () => {
     const context = { contextTokens: 122_000, contextWindow: 200_000 };
 
     it(`draws the context arc for a session that kept no list`, () => {
-        expect(tileRim(at(context), { quiet: false })).toEqual({ kind: `context`, percent: 61, tone: `text-primary-500`, hint: `61% of context used` });
+        expect(tileRim(at(context), { quiet: false })).toEqual({
+            kind: `context`,
+            percent: 61,
+            tone: `text-primary-500`,
+            hint: `61% of context used`,
+        });
     });
 
     it(`draws nothing at all when neither reading exists`, () => {
@@ -528,6 +533,10 @@ describe(`tileRim`, () => {
 
     // The daemon promises done <= total; a frame that broke it would otherwise light more segments than exist.
     it(`cannot light more segments than the list has`, () => {
-        expect(tileRim(at({ checklist: { done: 9, total: 3 } }), { quiet: false })).toMatchObject({ segments: 4, filled: 4, hint: `3 of 3 steps done` });
+        expect(tileRim(at({ checklist: { done: 9, total: 3 } }), { quiet: false })).toMatchObject({
+            segments: 4,
+            filled: 4,
+            hint: `3 of 3 steps done`,
+        });
     });
 });

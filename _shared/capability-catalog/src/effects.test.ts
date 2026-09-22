@@ -76,7 +76,10 @@ describe("capabilityEffects", () => {
             { kind: "skill", name: "netdisk" },
             { kind: "image" },
         ]);
-        expect(capabilityEffects({ kind: "netdisk", config: { server: "nas", share: "s", hasPassword: true } })).toContainEqual({ kind: "secret", exposure: "disk" });
+        expect(capabilityEffects({ kind: "netdisk", config: { server: "nas", share: "s", hasPassword: true } })).toContainEqual({
+            kind: "secret",
+            exposure: "disk",
+        });
     });
 
     it("always stores an ssh credential on disk, for both auth modes", () => {

@@ -24,7 +24,16 @@ const tempCtx = (remaining: Capability[] = []): { ctx: CapabilityCtx; root: stri
 const archive: Capability = {
     id: "archive",
     kind: "netdisk",
-    config: { provider: "smb", server: "nas.local", share: "archive", username: "agent", password: "s3cret", access: "read", version: "auto", autoMount: "off" },
+    config: {
+        provider: "smb",
+        server: "nas.local",
+        share: "archive",
+        username: "agent",
+        password: "s3cret",
+        access: "read",
+        version: "auto",
+        autoMount: "off",
+    },
 };
 const credPath = (home: string, id: string): string => join(home, ".intentic-netdisk", `${id}.cred`);
 const skillPath = (root: string): string => join(root, ".agents", "skills", "netdisk", "SKILL.md");

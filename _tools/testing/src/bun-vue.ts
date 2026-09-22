@@ -28,7 +28,9 @@ const compileSfc = (path: string): string => {
     const script = hasScript ? compileScript(descriptor, { id, inlineTemplate: descriptor.scriptSetup !== null }) : undefined;
     const code = script?.content ?? `export default {};`;
     const render = renderFunction(descriptor, script, id, path);
-    return render === undefined ? code : `${code.replace(/export\s+default/, `const __sfc__ =`)}\n${render}\n__sfc__.render = render;\nexport default __sfc__;`;
+    return render === undefined
+        ? code
+        : `${code.replace(/export\s+default/, `const __sfc__ =`)}\n${render}\n__sfc__.render = render;\nexport default __sfc__;`;
 };
 
 plugin({

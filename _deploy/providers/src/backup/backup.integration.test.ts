@@ -110,7 +110,10 @@ test("diff is update when the timezone drifts, even with the same cron", () => {
 });
 
 test("diff is update when the image drifts", () => {
-    const observed = { outputs: {}, detail: { image: "restic/restic:0.18.0@sha256:old", schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket", timezone: "UTC" } };
+    const observed = {
+        outputs: {},
+        detail: { image: "restic/restic:0.18.0@sha256:old", schedule: "0 3 * * *", repo: "s3:s3.example.com/bucket", timezone: "UTC" },
+    };
     expect(createBackupProvider(fakeSsh().executor).diff(inputs, observed).action).toBe("update");
 });
 

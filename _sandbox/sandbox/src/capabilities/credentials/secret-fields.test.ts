@@ -71,10 +71,31 @@ const SAMPLES: Record<CapabilityKind, readonly Capability[]> = {
         {
             id: "archive",
             kind: "netdisk",
-            config: { provider: "smb", server: "nas.local", share: "archive", username: "agent", password: "pw", access: "read", version: "auto", autoMount: "on" },
+            config: {
+                provider: "smb",
+                server: "nas.local",
+                share: "archive",
+                username: "agent",
+                password: "pw",
+                access: "read",
+                version: "auto",
+                autoMount: "on",
+            },
         },
         // A guest share: no secret field at all, so vaulting must leave the entry untouched.
-        { id: "public", kind: "netdisk", config: { provider: "smb", server: "nas.local", share: "public", username: "guest", access: "readwrite", version: "1.0", autoMount: "off" } },
+        {
+            id: "public",
+            kind: "netdisk",
+            config: {
+                provider: "smb",
+                server: "nas.local",
+                share: "public",
+                username: "guest",
+                access: "readwrite",
+                version: "1.0",
+                autoMount: "off",
+            },
+        },
     ],
     exit: [
         { id: "tor-exit", kind: "exit", config: { provider: "tor", country: "DE", autoStart: "on" } },

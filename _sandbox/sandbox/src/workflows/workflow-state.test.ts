@@ -15,7 +15,7 @@ describe("runConversations", () => {
         expect(runConversations(runOf(step(`a`, `done`, `c1`), step(`b`, `failed`, `c2`), step(`c`, `stopped`, `c3`)))).toEqual([`c1`, `c2`, `c3`]);
     });
 
-/* The ids that are STRINGS AND NOTHING ELSE. */
+    /* The ids that are STRINGS AND NOTHING ELSE. */
     it("leaves out the steps that never ran", () => {
         expect(runConversations(runOf(step(`a`, `done`, `c1`), step(`b`, `pending`, `c2`), step(`c`, `skipped`, `c3`)))).toEqual([`c1`]);
     });

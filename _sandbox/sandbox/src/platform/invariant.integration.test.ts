@@ -40,9 +40,9 @@ test("the holder still naming this process reports nothing", () => {
 });
 
 test("the claim taken by another daemon is reported, with the pid that took it", () => {
-    expect(() =>
-        run({ container: true, roots: true }, homeWith({ pid: 9001, startTimeTicks: 20 }), { pid: 4242, startTimeTicks: 10 }),
-    ).toThrow(/claim now names process 9001:20/);
+    expect(() => run({ container: true, roots: true }, homeWith({ pid: 9001, startTimeTicks: 20 }), { pid: 4242, startTimeTicks: 10 })).toThrow(
+        /claim now names process 9001:20/,
+    );
 });
 
 test("the claim file disappearing under a container owner is reported too", () => {
@@ -50,9 +50,9 @@ test("the claim file disappearing under a container owner is reported too", () =
 });
 
 test("a guest holding the claim is the finding that locks the real sandbox out of its own box", () => {
-    expect(() =>
-        run({ container: false, roots: true }, homeWith({ pid: 4242, startTimeTicks: 10 }), { pid: 4242, startTimeTicks: 10 }),
-    ).toThrow(/running as a guest but holds the container claim/);
+    expect(() => run({ container: false, roots: true }, homeWith({ pid: 4242, startTimeTicks: 10 }), { pid: 4242, startTimeTicks: 10 })).toThrow(
+        /running as a guest but holds the container claim/,
+    );
 });
 
 test("a guest beside the daemon that does hold it is ordinary and silent", () => {
@@ -66,7 +66,5 @@ test("a guest with no claim file at all is silent: there is nothing for it to be
 });
 
 test("a guest with the holder's recycled pid is not itself the holder", () => {
-    expect(() =>
-        run({ container: false, roots: true }, homeWith({ pid: 4242, startTimeTicks: 9 }), { pid: 4242, startTimeTicks: 10 }),
-    ).not.toThrow();
+    expect(() => run({ container: false, roots: true }, homeWith({ pid: 4242, startTimeTicks: 9 }), { pid: 4242, startTimeTicks: 10 })).not.toThrow();
 });

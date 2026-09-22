@@ -5,7 +5,17 @@ import { dirname, join } from "node:path";
 import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { LSP_SKILL, listOwnSkills, ownSkillDir, ownSkillOn, readOwnSkill, reconcileBakedSkills, removeOwnSkill, switchOwnSkill, writeOwnSkill } from "./skills.js";
+import {
+    LSP_SKILL,
+    listOwnSkills,
+    ownSkillDir,
+    ownSkillOn,
+    readOwnSkill,
+    reconcileBakedSkills,
+    removeOwnSkill,
+    switchOwnSkill,
+    writeOwnSkill,
+} from "./skills.js";
 
 // Minimal services stub with real on-disk IO, so assertions match what the agent's loader would actually find.
 const stubServices = (root: string): Services =>

@@ -66,10 +66,12 @@ test("an event names a resource by id, adding its type only when the two differ"
 });
 
 test("columns pads every cell but the last, so equal-width cells share a start column", () => {
-    expect(columns([["noop", "app-dns", "cloudflare-record"], ["create", "host-1", "host"]])).toEqual([
-        "noop    app-dns  cloudflare-record",
-        "create  host-1   host",
-    ]);
+    expect(
+        columns([
+            ["noop", "app-dns", "cloudflare-record"],
+            ["create", "host-1", "host"],
+        ]),
+    ).toEqual(["noop    app-dns  cloudflare-record", "create  host-1   host"]);
 });
 
 test("columns leaves no trailing space when the last cell is empty", () => {

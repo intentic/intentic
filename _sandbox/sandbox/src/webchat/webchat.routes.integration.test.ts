@@ -146,7 +146,10 @@ test("a held Visitor chat wake snapshots the conversation the visitor's thread a
 
 test("an approved wake's reply reaches the visitor's next poll, not just the fleet", async () => {
     const { services } = await setup(webchat("wc-approved", { requireApproval: true }));
-    const app = appFor(services, fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }]));
+    const app = appFor(
+        services,
+        fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }]),
+    );
     await (await post(app, "wc-approved", { conversationId: "visitor-9", content: "is this broken?" })).text();
 
     // Nothing is owed yet: the wake is held, and the visitor was told a human would look.
@@ -154,7 +157,12 @@ test("an approved wake's reply reaches the visitor's next poll, not just the fle
 
     const [held] = await services.heldWakes.list();
     const automation = await services.automations.get("wc-approved");
-    await runHeldWake(services, automation as NonNullable<typeof automation>, held as NonNullable<typeof held>, fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }]));
+    await runHeldWake(
+        services,
+        automation as NonNullable<typeof automation>,
+        held as NonNullable<typeof held>,
+        fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }]),
+    );
 
     const collected = (await (await collect(app, "wc-approved", "visitor-9")).json()) as { replies: { seq: number; text: string }[]; cursor: number };
     expect(collected.replies).toMatchObject([{ text: "we had a look: it is fixed" }]);

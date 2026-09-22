@@ -290,7 +290,8 @@ const startBigModel = async (vendor: ReturnType<typeof fakeVendor>) => {
 const bigModelVendor = (exchange?: (call: Call) => unknown) =>
     fakeVendor({
         [`${ZAI_HOSTS.oauthBase}/oauth/token`]:
-            exchange ?? (() => envelope({ token: "bm-token", user: { email: "mainland@example.com", name: "" }, bigmodel: { access_token: "bm-access" } })),
+            exchange ??
+            (() => envelope({ token: "bm-token", user: { email: "mainland@example.com", name: "" }, bigmodel: { access_token: "bm-access" } })),
         ...zaiBusinessRoutes(ZAI_HOSTS.bigModelBiz),
     });
 

@@ -5,7 +5,11 @@ import { DETACHED_AFTER_MS, SANDBOX_BUSY_AFTER_MS, sandboxAvailability, sandboxR
 const drive = (...signals: readonly ConnectionSignal[]): ConnectionState => signals.reduce(applyConnectionSignal, initialConnection);
 const failed = (at: number): ConnectionSignal => ({ kind: "failed", failure: classifyFailure({ message: "tunnel down" }), at });
 // The same break, but with the edge's word on it: nothing is dialled in for this sandbox.
-const detached = (at: number): ConnectionSignal => ({ kind: "failed", failure: classifyFailure({ edge: "no-tunnel", message: "not connected" }), at });
+const detached = (at: number): ConnectionSignal => ({
+    kind: "failed",
+    failure: classifyFailure({ edge: "no-tunnel", message: "not connected" }),
+    at,
+});
 
 describe(`sandboxAvailability`, () => {
     it(`keeps an established workspace quietly stale through transient retries`, () => {

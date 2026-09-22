@@ -188,7 +188,19 @@ test("the anchor announces readiness only after the mounts, then becomes the nam
 test("entrants join the anchor's namespace by pid and start at the workspace root AS THE NAMESPACE SEES IT", () => {
     const { command, args } = nsenterArgv(4321, WORKSPACE_ROOT, "/usr/bin/claude", ["--flag", "value"]);
     expect(command).toBe("nsenter");
-    expect(args).toEqual(["--mount=/proc/4321/ns/mnt", "--wdns=/work", "--", "env", "-u", "PWD", "-u", "OLDPWD", "/usr/bin/claude", "--flag", "value"]);
+    expect(args).toEqual([
+        "--mount=/proc/4321/ns/mnt",
+        "--wdns=/work",
+        "--",
+        "env",
+        "-u",
+        "PWD",
+        "-u",
+        "OLDPWD",
+        "/usr/bin/claude",
+        "--flag",
+        "value",
+    ]);
     expect(args).not.toContain(`--wd=${WORKSPACE_ROOT}`);
 });
 

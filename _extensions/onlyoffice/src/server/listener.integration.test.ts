@@ -65,7 +65,8 @@ afterAll(async () => {
 });
 
 const call = (path: string, init?: RequestInit): Promise<Response> => fetch(`http://127.0.0.1:${port}${path}`, init);
-const open = (path: string): ReturnType<Sessions[`open`]> => sessions.open({ path, agent: undefined, mode: `edit`, theme: `light`, stat: { size: 1, mtimeMs: 1 } });
+const open = (path: string): ReturnType<Sessions[`open`]> =>
+    sessions.open({ path, agent: undefined, mode: `edit`, theme: `light`, stat: { size: 1, mtimeMs: 1 } });
 
 describe(`the editor page`, () => {
     it(`answers a live session token and ends politely for an unknown one`, async () => {
@@ -106,7 +107,11 @@ describe(`the save callback`, () => {
         const inBody = await post(session.key, { ...claims, token: signJwt(claims, secret) });
         expect(await inBody.json()).toEqual({ error: 0 });
         // Header-signed, with the tampered raw body ignored in favour of the signed copy.
-        const inHeader = await post(session.key, { status: 4, url: `http://evil/` }, { authorization: `Bearer ${signJwt({ payload: { ...claims, status: 6 } }, secret)}` });
+        const inHeader = await post(
+            session.key,
+            { status: 4, url: `http://evil/` },
+            { authorization: `Bearer ${signJwt({ payload: { ...claims, status: 6 } }, secret)}` },
+        );
         expect(await inHeader.json()).toEqual({ error: 0 });
         expect(saved).toEqual([
             { key: session.key, path: `brief.docx`, url: claims.url },

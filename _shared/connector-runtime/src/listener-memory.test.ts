@@ -42,12 +42,20 @@ afterEach(() => {
 test("the typing heartbeat re-sends on its cadence, stops with a closing word, and never outlives its cap", () => {
     const heartbeat = typingHeartbeat({ intervalMs: 1_000, maxMs: 3_500 });
     const sent: string[] = [];
-    heartbeat.start("room", () => sent.push("typing"), () => sent.push("paused"));
+    heartbeat.start(
+        "room",
+        () => sent.push("typing"),
+        () => sent.push("paused"),
+    );
     expect(sent).toEqual(["typing"]);
     jest.advanceTimersByTime(2_000);
     expect(sent).toEqual(["typing", "typing", "typing"]);
     // Restarting is a continuation: no "paused" fires in between.
-    heartbeat.start("room", () => sent.push("typing"), () => sent.push("paused"));
+    heartbeat.start(
+        "room",
+        () => sent.push("typing"),
+        () => sent.push("paused"),
+    );
     expect(sent.at(-1)).toBe("typing");
     expect(sent).not.toContain("paused");
     heartbeat.stop("room");
@@ -58,13 +66,25 @@ test("the typing heartbeat re-sends on its cadence, stops with a closing word, a
     jest.advanceTimersByTime(5_000);
     expect(sent.length).toBe(before);
     // maxMs cap: an indicator with no reply stops itself, closing word included.
-    heartbeat.start("late", () => sent.push("late"), () => sent.push("late-paused"));
+    heartbeat.start(
+        "late",
+        () => sent.push("late"),
+        () => sent.push("late-paused"),
+    );
     jest.advanceTimersByTime(10_000);
     expect(sent.filter((entry) => entry === "late").length).toBeLessThanOrEqual(5);
     expect(sent.at(-1)).toBe("late-paused");
     // stopAll drops every heartbeat without a closing word.
-    heartbeat.start("a", () => sent.push("a"), () => sent.push("a-paused"));
-    heartbeat.start("b", () => sent.push("b"), () => sent.push("b-paused"));
+    heartbeat.start(
+        "a",
+        () => sent.push("a"),
+        () => sent.push("a-paused"),
+    );
+    heartbeat.start(
+        "b",
+        () => sent.push("b"),
+        () => sent.push("b-paused"),
+    );
     heartbeat.stopAll();
     const after = sent.length;
     jest.advanceTimersByTime(5_000);

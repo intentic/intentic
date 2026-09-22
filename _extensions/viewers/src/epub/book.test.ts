@@ -60,7 +60,12 @@ describe(`resolveHref`, () => {
 
 describe(`openEpub`, () => {
     it(`reads the book's metadata and reading order, skipping what the spine marks non-linear`, () => {
-        const book = openEpub(epub({ "OEBPS/content.opf": opf(`<item id="nav" href="nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>`, ``), "OEBPS/nav.xhtml": NAV }));
+        const book = openEpub(
+            epub({
+                "OEBPS/content.opf": opf(`<item id="nav" href="nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>`, ``),
+                "OEBPS/nav.xhtml": NAV,
+            }),
+        );
         expect(book.title).toBe(`The Book`);
         expect(book.author).toBe(`A Writer`);
         // Spine order, not manifest order; the cover is `linear="no"` and is not part of the reading order.
@@ -68,12 +73,22 @@ describe(`openEpub`, () => {
     });
 
     it(`titles chapters from an EPUB 3 navigation document`, () => {
-        const book = openEpub(epub({ "OEBPS/content.opf": opf(`<item id="nav" href="text/nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>`, ``), "OEBPS/text/nav.xhtml": NAV }));
+        const book = openEpub(
+            epub({
+                "OEBPS/content.opf": opf(`<item id="nav" href="text/nav.xhtml" properties="nav" media-type="application/xhtml+xml"/>`, ``),
+                "OEBPS/text/nav.xhtml": NAV,
+            }),
+        );
         expect(book.chapters.map((chapter) => chapter.title)).toEqual([`Chapter Two`, `Chapter One`]);
     });
 
     it(`titles chapters from an EPUB 2 NCX, each with its own label rather than its children's`, () => {
-        const book = openEpub(epub({ "OEBPS/content.opf": opf(`<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`, `toc="ncx"`), "OEBPS/toc.ncx": NCX }));
+        const book = openEpub(
+            epub({
+                "OEBPS/content.opf": opf(`<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>`, `toc="ncx"`),
+                "OEBPS/toc.ncx": NCX,
+            }),
+        );
         expect(book.chapters.map((chapter) => chapter.title)).toEqual([`A section of it`, `Part One`]);
     });
 

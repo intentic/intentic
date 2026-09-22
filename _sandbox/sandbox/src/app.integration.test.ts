@@ -171,9 +171,7 @@ test("system.session in loopback mode (no auth, no identity) answers 401: there 
 // instead.
 // It still has to be gated like any authenticated route: by the middleware, on a header.
 test("POST /system/ws-ticket mints a one-shot ticket for the verified caller, and 401s an unauthenticated one", async () => {
-    const app = createApp(
-        services({ auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: rejectForbidden } }),
-    );
+    const app = createApp(services({ auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: rejectForbidden } }));
     const response = await postJson(app, "/system/ws-ticket");
     expect(response.status).toBe(200);
     const { ticket } = (await response.json()) as { ticket: string };
@@ -587,9 +585,7 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
     // The session frame carries the account the daemon resolved (here, "default"), since a session resumes only under
     // the credential that minted it.
     // Everything else arrives exactly as the adapter streamed it.
-    expect(facts).toEqual(
-        events.filter(isTurnFact).map((event) => (event.kind === "session" ? { ...event, account: "default" } : event)),
-    );
+    expect(facts).toEqual(events.filter(isTurnFact).map((event) => (event.kind === "session" ? { ...event, account: "default" } : event)));
     expect(rows).toMatchObject([
         { role: "user", text: "do it" },
         { role: "assistant", text: "hi" },

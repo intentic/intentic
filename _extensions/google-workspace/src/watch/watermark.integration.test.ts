@@ -25,7 +25,7 @@ describe("readWatermark", () => {
         expect(await readWatermark(path)).toEqual({ historyId: "998877", announced: { evt1: "2026-08-09T12:00:00Z" } });
     });
 
-/* A missing mark means "start from now", which dispatches nothing. */
+    /* A missing mark means "start from now", which dispatches nothing. */
     it("reads a first run as no cursor at all", async () => {
         expect(await readWatermark(watermarkPath(root, "never-run"))).toEqual({});
     });

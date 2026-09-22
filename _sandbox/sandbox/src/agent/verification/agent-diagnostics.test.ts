@@ -190,7 +190,21 @@ test("an anchored turn is checked in its own names, by a compiler entered into i
         command: "nsenter",
         // `env -u PWD -u OLDPWD` rides between the hop and the compiler: the daemon's inherited logical cwd
         // names the worktree by its /history path, where no dependency mirror is mounted (agents/isolation.ts).
-        args: ["--mount=/proc/4321/ns/mnt", "--wdns=/work", "--", "env", "-u", "PWD", "-u", "OLDPWD", "/usr/bin/env", "-C", "/work", "tsgo", "--noEmit"],
+        args: [
+            "--mount=/proc/4321/ns/mnt",
+            "--wdns=/work",
+            "--",
+            "env",
+            "-u",
+            "PWD",
+            "-u",
+            "OLDPWD",
+            "/usr/bin/env",
+            "-C",
+            "/work",
+            "tsgo",
+            "--noEmit",
+        ],
     });
 });
 

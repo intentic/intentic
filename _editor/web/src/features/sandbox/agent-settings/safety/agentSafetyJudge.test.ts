@@ -134,9 +134,7 @@ test("offers no way to edit the model, only the address of the one that does", (
     const host = mount();
 
     expect(host.querySelector(`ol li`)).toBeNull();
-    expect([...host.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).not.toContain(
-        `Add a model for the safety judge`,
-    );
+    expect([...host.querySelectorAll(`button`)].map((button) => button.getAttribute(`aria-label`))).not.toContain(`Add a model for the safety judge`);
 
     const link = host.querySelector<HTMLAnchorElement>(`a[href]`);
     expect(link?.textContent?.trim()).toBe(`Change in Models`);

@@ -63,7 +63,7 @@ describe(`hostedWaitView`, () => {
         expect(view.failure?.action).toBe(`reboot`);
     });
 
-/* THE FIVE MINUTES OF BARE SPINNER THIS CARD USED TO KEEP. */
+    /* THE FIVE MINUTES OF BARE SPINNER THIS CARD USED TO KEEP. */
     it(`quotes the sandbox's own reason while the probe is still running`, () => {
         const detail = `https://sandbox-abc.sbx.test answered 502 instead of this sandbox: the platform's edge is not routing to this machine.`;
         const probing = wait({ machine: `started`, announced: true, boot: boot(`unreachable`, detail, true), waitedMs: 90_000 });
@@ -108,7 +108,7 @@ describe(`hostedWaitView`, () => {
         expect(hostedWaitView(wait({ machine: `stopped` })).failure?.action).toBe(`reboot`);
     });
 
-/* THE LOOP THIS CARD USED TO PUT PEOPLE IN. */
+    /* THE LOOP THIS CARD USED TO PUT PEOPLE IN. */
     it(`waits out a stopped machine before calling it one, since a boot passes through one`, () => {
         const stopping = wait({ machine: `stopped`, downForMs: 6_000 });
         expect(hostedWaitView(stopping).failure).toBeUndefined();

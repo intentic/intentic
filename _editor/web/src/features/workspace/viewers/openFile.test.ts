@@ -12,7 +12,12 @@ const component = async (): Promise<never> => {
 };
 
 const disposables: { dispose: () => void }[] = [];
-const register = (id: string, extensions: readonly string[], fetch: "text" | "blob" | "url" | "path", options: { owner?: string; edit?: boolean } = {}): void => {
+const register = (
+    id: string,
+    extensions: readonly string[],
+    fetch: "text" | "blob" | "url" | "path",
+    options: { owner?: string; edit?: boolean } = {},
+): void => {
     disposables.push(
         registerViewer({
             owner: options.owner ?? `intentic.viewers`,

@@ -4,16 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
-import {
-    isProcessAlive,
-    livePid,
-    livePidRecord,
-    LOG_ROTATE_BYTES,
-    pidFileBody,
-    rotateIfLarge,
-    spawnDetached,
-    spawnThroughStub,
-} from "./detached.js";
+import { isProcessAlive, livePid, livePidRecord, LOG_ROTATE_BYTES, pidFileBody, rotateIfLarge, spawnDetached, spawnThroughStub } from "./detached.js";
 
 // Tests that a returned pid means something is actually running under it, not which spawn flags were used (the
 // runtime's job).

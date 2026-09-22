@@ -42,7 +42,9 @@ if (verdicts === undefined) {
     // to fix at random.
     const unmeasured = verdicts.filter((verdict) => !verdict.measured);
     if (unmeasured.length > 0) {
-        say(`${unmeasured.map(({ id }) => id).join(", ")}: could not measure, so nothing here is vouched for — the check needs a look, the tree is not accused`);
+        say(
+            `${unmeasured.map(({ id }) => id).join(", ")}: could not measure, so nothing here is vouched for — the check needs a look, the tree is not accused`,
+        );
     }
     const failed = verdicts.filter((verdict) => !verdict.ok && verdict.measured);
     if (failed.length === 0) {
@@ -59,7 +61,11 @@ if (verdicts === undefined) {
         // directory of thirty are each green here and over the limit once they land together. verify-push asks this same
         // question of the push RANGE, which is the first tree that does become main, and docs/audits/tidy-job.md is the
         // measurement that put it there.
-        const before = reportsAt(root, "HEAD", failed.map(({ id }) => id));
+        const before = reportsAt(
+            root,
+            "HEAD",
+            failed.map(({ id }) => id),
+        );
         const judged = judgeAgainstBase(failed, before);
         const mine = judged.filter(({ added }) => added.length > 0);
         const unsure = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length > 0);
@@ -78,7 +84,9 @@ if (verdicts === undefined) {
             );
         }
         for (const { verdict, added } of mine) {
-            process.stderr.write(`\n✗ ${verdict.id} (${verdict.file}), ${added.length} problem${added.length === 1 ? "" : "s"} this turn introduced\n${added.join("\n")}\n`);
+            process.stderr.write(
+                `\n✗ ${verdict.id} (${verdict.file}), ${added.length} problem${added.length === 1 ? "" : "s"} this turn introduced\n${added.join("\n")}\n`,
+            );
         }
         if (mine.length > 0) {
             const ids = mine.map(({ verdict }) => verdict.id);
@@ -105,7 +113,12 @@ if (changed === undefined || lintable.length > LINT_FILE_CEILING) {
     // paths it's handed, and exits 1 with "No files found to lint" when all of them are ignored, the one non-zero exit
     // here that means success.
     const label = `lint (${lintable.length} changed file${lintable.length === 1 ? "" : "s"})`;
-    const lint = spawnSync("pnpm", ["lint", ...lintable], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, shell: process.platform === "win32" });
+    const lint = spawnSync("pnpm", ["lint", ...lintable], {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+        shell: process.platform === "win32",
+    });
     const output = `${lint.stdout ?? ""}${lint.stderr ?? ""}`;
     if (lint.error !== undefined) {
         say(`lint skipped: ${lint.error.message}`);

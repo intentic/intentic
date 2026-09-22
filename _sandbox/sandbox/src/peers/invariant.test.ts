@@ -57,7 +57,9 @@ test("every live socket belonging to an enrolled peer reports nothing, and an of
 });
 
 test("a socket the store no longer vouches for is named, with the door's own stakes", async () => {
-    await expect(run("live-browsers-are-enrolled", ["my-chrome"], ["old-chrome", "my-chrome"])).rejects.toThrow(/does not hold \(old-chrome\).*browser the owner disconnected/);
+    await expect(run("live-browsers-are-enrolled", ["my-chrome"], ["old-chrome", "my-chrome"])).rejects.toThrow(
+        /does not hold \(old-chrome\).*browser the owner disconnected/,
+    );
     await expect(run("live-runners-are-enrolled", ["laptop"], ["rig", "laptop"])).rejects.toThrow(/does not hold \(rig\).*revoked runner/);
     await expect(run("live-hosts-are-enrolled", [], ["ghost"])).rejects.toThrow(/does not hold \(ghost\).*device the owner disconnected/);
 });

@@ -11,8 +11,7 @@ const STRANGER: Peer = { host: `stranger`, port: 8080, internalPort: 8081 };
 const X = `aaaaaaaaaaaa`;
 const Y = `bbbbbbbbbbbb`;
 
-const session = (): IngressSession =>
-    ({ forwardRequest: mock(), forwardUpgrade: mock(), close: mock() }) as unknown as IngressSession;
+const session = (): IngressSession => ({ forwardRequest: mock(), forwardUpgrade: mock(), close: mock() }) as unknown as IngressSession;
 
 const from = (peer: Peer, op: HoldsMessage[`op`], ids: string[]): HoldsMessage => ({ from: peer, instance: peer.host, op, ids });
 

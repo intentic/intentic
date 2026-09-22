@@ -15,7 +15,9 @@ describe(`derivedDiffSource`, () => {
 
     it(`survives a path with characters the query string has to escape`, () => {
         const source = { source: `working`, repo: `root`, side: `staged` } as const;
-        expect(derivedDiffSource(diffRawUrls(source, `Specyfikacja Warunków & Zamówienia.docx`, `modified`))?.path).toBe(`Specyfikacja Warunków & Zamówienia.docx`);
+        expect(derivedDiffSource(diffRawUrls(source, `Specyfikacja Warunków & Zamówienia.docx`, `modified`))?.path).toBe(
+            `Specyfikacja Warunków & Zamówienia.docx`,
+        );
     });
 
     it(`answers nothing for a diff with no sides, or one built by something else`, () => {

@@ -10,9 +10,9 @@ describe("files that hold a credential", () => {
     });
 
     test("an aws credentials ini", () => {
-        expect(
-            holdsCredentialMaterial("[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG\n"),
-        ).toBe(true);
+        expect(holdsCredentialMaterial("[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI/K7MDENG\n")).toBe(
+            true,
+        );
     });
 
     test("a private key file, whatever generated it", () => {
@@ -53,9 +53,7 @@ describe("files that hold a credential", () => {
 
 describe("files that do not", () => {
     test("an npmrc with only registry config", () => {
-        expect(holdsCredentialMaterial("registry=https://registry.npmjs.org/\nengine-strict=true\nstore-dir=/root/.pnpm-store\n")).toBe(
-            false,
-        );
+        expect(holdsCredentialMaterial("registry=https://registry.npmjs.org/\nengine-strict=true\nstore-dir=/root/.pnpm-store\n")).toBe(false);
     });
 
     test("a dotenv of ports and flags", () => {
@@ -87,9 +85,7 @@ describe("files that do not", () => {
     });
 
     test("a key whose name only looks like one", () => {
-        expect(holdsCredentialMaterial("TOKEN_EXPIRY=3600\nREFRESH_TOKEN_URL=https://auth.example.com/refresh\nMAX_TOKENS=8192\n")).toBe(
-            false,
-        );
+        expect(holdsCredentialMaterial("TOKEN_EXPIRY=3600\nREFRESH_TOKEN_URL=https://auth.example.com/refresh\nMAX_TOKENS=8192\n")).toBe(false);
     });
 
     test("a dev-compose default is not what the card is for", () => {

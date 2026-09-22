@@ -31,7 +31,7 @@ describe(`markWorkspaceChanged`, () => {
         expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
     });
 
-/* The package layout the review lists group under. */
+    /* The package layout the review lists group under. */
     it(`re-reads the package layout when a manifest lands`, () => {
         markWorkspaceChanged([`_libs/new-pkg/package.json`]);
         expect(queryClient.getQueryState(modulesKey)?.isInvalidated).toBe(true);

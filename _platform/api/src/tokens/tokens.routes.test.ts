@@ -46,7 +46,7 @@ it(`refuses to mint without a session, so a token can never mint its successor`,
 
 it(`stores the digest and returns the raw value exactly once`, async () => {
     const { prisma, create } = fakePrisma();
-    const minted = await call(tokenRoutes.create, { label: ` fleet ` , scope: `provision` as const }, { context: context(prisma) });
+    const minted = await call(tokenRoutes.create, { label: ` fleet `, scope: `provision` as const }, { context: context(prisma) });
     expect(minted.token.startsWith(API_TOKEN_PREFIX)).toBe(true);
     const written = create.mock.calls[0]?.[0].data as unknown as Record<string, string>;
     // The value itself is nowhere in the write, and the digest is what the lookup key will be.

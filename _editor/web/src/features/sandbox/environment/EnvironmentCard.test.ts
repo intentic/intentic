@@ -65,7 +65,9 @@ mock.module(`../../agents/fleet/agentActions`, () => ({ startAgent: () => `` }))
 mock.module(`../../workspace/viewers/DiffView.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 mock.module(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // Marks each executor with data-executor, so a test can tell which one rendered without mounting it.
-mock.module(`../../capabilities/connect/HostRecreate.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `host` }) }) }));
+mock.module(`../../capabilities/connect/HostRecreate.vue`, () => ({
+    default: defineComponent({ render: () => h(`div`, { "data-executor": `host` }) }),
+}));
 mock.module(`./HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
 // Carries `recipePending` out with it: whether the checkout's rebuild knows a recipe is waiting is what makes it
 // describe itself as applying that recipe rather than as a second, unrelated rebuild.

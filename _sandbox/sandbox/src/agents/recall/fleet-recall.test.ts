@@ -124,7 +124,13 @@ test("a conversation with no record digests to nothing rather than failing", asy
 
 test("the transcript answers the last messages, and grep narrows before the limit does", async () => {
     const deps = depsOver(ROSTER, {
-        "fair-sage-ey2r": [row("user", "one autoopen"), row("assistant", "two"), row("user", "three autoopen"), row("assistant", "four"), row("user", "five")],
+        "fair-sage-ey2r": [
+            row("user", "one autoopen"),
+            row("assistant", "two"),
+            row("user", "three autoopen"),
+            row("assistant", "four"),
+            row("user", "five"),
+        ],
     });
     const tail = await fleetMessages(deps, ROSTER[0] as PersistedAgent, { last: 2 });
     expect(tail.total).toBe(5);

@@ -41,13 +41,7 @@ it(`answers nothing when a term appears in no command`, () => {
 it(`reads an empty query as the whole registry: destinations first, then alphabetically, so families sit together`, () => {
     // Destinations lead because a palette opened to be read is a menu of places — and because the row a bare Enter
     // lands on is then a navigation, never something that acts.
-    expect(found(``)).toEqual([
-        `view.sandbox.secrets`,
-        `view.settings.keybindings`,
-        `workspace.commandPalette`,
-        `terminal.killAll`,
-        `terminal.new`,
-    ]);
+    expect(found(``)).toEqual([`view.sandbox.secrets`, `view.settings.keybindings`, `workspace.commandPalette`, `terminal.killAll`, `terminal.new`]);
 });
 
 it(`scores a family-only match, so typing a family lists all of it`, () => {
@@ -59,6 +53,8 @@ it(`scores a family-only match, so typing a family lists all of it`, () => {
 // tier has to answer on the same 0..1 axis a path scores on. A tier above 1 would let one kind outrank another by
 // arithmetic rather than by evidence.
 it(`scores name matches between zero and one, the axis paths are scored on`, () => {
-    const scores = [`Sandbox: Secrets`, `sandbox`, `secrets`, `view.sandbox`].map((query) => nameScore(`Sandbox: Secrets`, `view.sandbox.secrets`, query));
+    const scores = [`Sandbox: Secrets`, `sandbox`, `secrets`, `view.sandbox`].map((query) =>
+        nameScore(`Sandbox: Secrets`, `view.sandbox.secrets`, query),
+    );
     expect(scores).toEqual([0.95, 0.95, 0.8, 0.3]);
 });

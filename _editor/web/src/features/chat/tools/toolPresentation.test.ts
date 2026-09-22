@@ -11,7 +11,8 @@ const tool = (over: Partial<TranscriptTool> & Pick<TranscriptTool, "name">): Tra
     ...over,
 });
 
-const withText = (name: string, text: string, over: Partial<TranscriptTool> = {}): TranscriptTool => tool({ name, content: [{ type: `text`, text }], ...over });
+const withText = (name: string, text: string, over: Partial<TranscriptTool> = {}): TranscriptTool =>
+    tool({ name, content: [{ type: `text`, text }], ...over });
 
 // The SDK's numbered file view a Read returns: a right-padded line number, an arrow (or tab), then the content.
 const numbered = (lines: string[], start = 1, sep = `→`): string =>

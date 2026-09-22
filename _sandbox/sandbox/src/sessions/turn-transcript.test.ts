@@ -14,7 +14,9 @@ const SENT_AT = 1_767_225_600_000;
 describe("openingRows", () => {
     it("opens with the user's own words, with the daemon's injections taken back out", () => {
         const prompt = "fix the build\n\nThe user attached these files: read them with the Read tool as needed:\n- /work/shot.png";
-        expect(openingRows({ prompt }, "/work", SENT_AT)).toEqual([{ role: "user", text: "fix the build", sentAt: SENT_AT, attachments: ["shot.png"] }]);
+        expect(openingRows({ prompt }, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "fix the build", sentAt: SENT_AT, attachments: ["shot.png"] },
+        ]);
     });
 
     // Nothing in the frame log timestamps an individual assistant block, so only the user row can be.
@@ -75,7 +77,11 @@ describe("openingRows", () => {
             output: "completed",
         });
         expect(openingRows({ prompt }, "/work", SENT_AT)).toEqual([
-            { role: "notice", text: "CI run 316 — the watch fired after 43m.", watchWake: { outcome: "met", note: "CI run 316", elapsed: "43m", sent: prompt } },
+            {
+                role: "notice",
+                text: "CI run 316 — the watch fired after 43m.",
+                watchWake: { outcome: "met", note: "CI run 316", elapsed: "43m", sent: prompt },
+            },
         ]);
     });
 
@@ -147,7 +153,9 @@ describe("a prompt nobody typed", () => {
 
     it("reads the same whichever path it arrives by", () => {
         const [recorded, steered, restored] = byEachReader(WAKE);
-        expect(recorded).toEqual([{ role: "notice", text: "CI run 316 — the watch fired after 43m.", watchWake: expect.objectContaining({ outcome: "met" }) }]);
+        expect(recorded).toEqual([
+            { role: "notice", text: "CI run 316 — the watch fired after 43m.", watchWake: expect.objectContaining({ outcome: "met" }) },
+        ]);
         expect(steered).toEqual(recorded);
         expect(restored).toEqual(recorded);
     });

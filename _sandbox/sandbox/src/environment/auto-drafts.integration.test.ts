@@ -109,13 +109,12 @@ test("a playwright browser drafts a step, and does not mount the cache the downl
     expect(step).not.toContain("target=/root/.cache/ms-playwright");
 });
 
-test.each<[Parameters<typeof stepFor>[0]]>([
-    [{ kind: "pip", tool: "pillow" }],
-    [{ kind: "other", tool: "bun.sh" }],
-    [{ kind: "go", tool: "gopls" }],
-])("no mechanical step for %o — surfaced, not drafted", (install) => {
-    expect(stepFor(install)).toBeUndefined();
-});
+test.each<[Parameters<typeof stepFor>[0]]>([[{ kind: "pip", tool: "pillow" }], [{ kind: "other", tool: "bun.sh" }], [{ kind: "go", tool: "gopls" }]])(
+    "no mechanical step for %o — surfaced, not drafted",
+    (install) => {
+        expect(stepFor(install)).toBeUndefined();
+    },
+);
 
 test("draft file names are deterministic and filesystem-boring", () => {
     expect(draftFileName("p7zip-full")).toBe("p7zip-full.Dockerfile");

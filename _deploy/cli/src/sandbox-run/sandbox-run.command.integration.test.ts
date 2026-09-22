@@ -17,7 +17,11 @@ const runProbes = async (args: string[]): Promise<{ stdout: string }> => exec(TS
 
 // `env` is the probe's own environment (how a runner seeds a standing ask), merged over the test runner's so tsx still
 // finds node.
-const runVerb = async (args: string[], stdin: string, env: Record<string, string> = {}): Promise<{ stdout: string; stderr: string; code: number }> => {
+const runVerb = async (
+    args: string[],
+    stdin: string,
+    env: Record<string, string> = {},
+): Promise<{ stdout: string; stderr: string; code: number }> => {
     const child = exec(TSX, [CLI, "sandbox", "run-command", ...args], { env: { ...process.env, ...env } });
     child.child.stdin?.end(stdin);
     try {

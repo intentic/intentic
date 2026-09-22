@@ -46,9 +46,7 @@ describe(`facetsOf`, () => {
     /* The property the old counts line was written for and this one has to keep: a contribution point added. */
     it(`still surfaces a contribution kind it has never been taught`, () => {
         const probes = [{ probe: `latency` }, { probe: `errors` }];
-        const facets = facetsOf(
-            manifest({ telemetry: probes } as unknown as ExtensionManifest["contributes"]),
-        );
+        const facets = facetsOf(manifest({ telemetry: probes } as unknown as ExtensionManifest["contributes"]));
         expect(facets[0]?.kind).toBe(`telemetry`);
         expect(facets[0]?.label).toMatch(new RegExp(`^${probes.length} `));
     });

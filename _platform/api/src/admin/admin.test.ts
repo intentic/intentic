@@ -485,7 +485,16 @@ describe(`adminUserDetail`, () => {
                 ],
             },
             hostedStrike: {
-                findMany: async () => [{ appName: `intentic-sbx-1`, kind: `cpu`, measure: 0.97, windowMinutes: 90, action: `stopped`, createdAt: new Date(`2026-08-24T10:00:00Z`) }],
+                findMany: async () => [
+                    {
+                        appName: `intentic-sbx-1`,
+                        kind: `cpu`,
+                        measure: 0.97,
+                        windowMinutes: 90,
+                        action: `stopped`,
+                        createdAt: new Date(`2026-08-24T10:00:00Z`),
+                    },
+                ],
             },
         } as unknown as PrismaClient;
 
@@ -511,7 +520,9 @@ describe(`adminUserDetail`, () => {
         expect(detail?.memberOf).toEqual([{ sandboxName: `team box`, ownerEmail: `boss@example.com`, role: `viewer`, accepted: true }]);
         // Standing and the watch's verdicts ride along, the strike in the page's own units.
         expect(detail?.hostedSuspended).toBeNull();
-        expect(detail?.strikes).toEqual([{ appName: `intentic-sbx-1`, kind: `cpu`, measure: 0.97, windowMinutes: 90, action: `stopped`, at: `2026-08-24T10:00:00.000Z` }]);
+        expect(detail?.strikes).toEqual([
+            { appName: `intentic-sbx-1`, kind: `cpu`, measure: 0.97, windowMinutes: 90, action: `stopped`, at: `2026-08-24T10:00:00.000Z` },
+        ]);
     });
 });
 
@@ -716,7 +727,10 @@ describe(`admin over the OpenAPI wire`, () => {
             body: { userId: `u2`, confirmEmail: `victim@example.com` },
         });
         expect(lift.status).toBe(200);
-        expect((await lift.json()) as { ok: boolean; message: string }).toMatchObject({ ok: false, message: expect.stringContaining(`not suspended`) });
+        expect((await lift.json()) as { ok: boolean; message: string }).toMatchObject({
+            ok: false,
+            message: expect.stringContaining(`not suspended`),
+        });
     });
 
     it(`erasure demands the account's email retyped and refuses the admin's own account`, async () => {
@@ -803,15 +817,24 @@ describe(`adminTrends`, () => {
 });
 
 describe(`sendAdminDigest`, () => {
-    const logged: { info: { fields?: Record<string, unknown>; message?: string }[]; warn: { fields?: Record<string, unknown>; message?: string }[] } = {
-        info: [],
-        warn: [],
-    };
+    const logged: { info: { fields?: Record<string, unknown>; message?: string }[]; warn: { fields?: Record<string, unknown>; message?: string }[] } =
+        {
+            info: [],
+            warn: [],
+        };
     const logger = {
         info: (fields: unknown, message?: string) =>
-            logged.info.push(typeof fields === `object` && fields !== null && message !== undefined ? { fields: fields as Record<string, unknown>, message } : { message: String(fields) }),
+            logged.info.push(
+                typeof fields === `object` && fields !== null && message !== undefined
+                    ? { fields: fields as Record<string, unknown>, message }
+                    : { message: String(fields) },
+            ),
         warn: (fields: unknown, message?: string) =>
-            logged.warn.push(typeof fields === `object` && fields !== null && message !== undefined ? { fields: fields as Record<string, unknown>, message } : { message: String(fields) }),
+            logged.warn.push(
+                typeof fields === `object` && fields !== null && message !== undefined
+                    ? { fields: fields as Record<string, unknown>, message }
+                    : { message: String(fields) },
+            ),
         error: () => {},
         debug: () => {},
     } as unknown as Logger;
@@ -889,7 +912,10 @@ describe(`admin actions`, () => {
             }
             return Promise.resolve(new Response(JSON.stringify({ id: `m1`, state: `started` })));
         });
-        let standing: { hostedSuspendedAt: Date | null; hostedSuspendedReason: string | null } = { hostedSuspendedAt: null, hostedSuspendedReason: null };
+        let standing: { hostedSuspendedAt: Date | null; hostedSuspendedReason: string | null } = {
+            hostedSuspendedAt: null,
+            hostedSuspendedReason: null,
+        };
         const prisma = {
             user: {
                 findUnique: async () => standing,

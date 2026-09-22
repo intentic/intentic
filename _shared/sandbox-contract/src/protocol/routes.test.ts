@@ -183,7 +183,9 @@ describe(`the real sandbox contract`, () => {
                 `system.manageDeviceSandbox`,
                 `system.runDeviceAgentFlow`,
                 `vpn.connect`,
-            ].filter((name) => name in SANDBOX_ROUTE_SHAPES).toSorted(),
+            ]
+                .filter((name) => name in SANDBOX_ROUTE_SHAPES)
+                .toSorted(),
         ).toEqual([
             `agent.attach`,
             `capabilities.add`,

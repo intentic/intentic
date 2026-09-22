@@ -30,7 +30,11 @@ const fakePeer = () => {
         ping: mock(async () => ({ ok: true }) as const),
         mcp: mock(async (payload: unknown) => ({ echoed: payload })),
     };
-    return { client, closed, connection: { client, close: (_code: number, reason: string) => void closed.push(reason), announced: { version: "0.1.0" } } };
+    return {
+        client,
+        closed,
+        connection: { client, close: (_code: number, reason: string) => void closed.push(reason), announced: { version: "0.1.0" } },
+    };
 };
 
 test("an mcp call reaches the peer that was asked for", async () => {

@@ -3,8 +3,7 @@ import { describe, test, expect, mock } from "bun:test";
 import { createTunnelRegistry, DISPLACED_CODE } from "./registry.js";
 
 // A session is opaque here: the registry only ever holds one and compares it by identity.
-const session = (): IngressSession =>
-    ({ forwardRequest: mock(), forwardUpgrade: mock(), close: mock() }) as unknown as IngressSession;
+const session = (): IngressSession => ({ forwardRequest: mock(), forwardUpgrade: mock(), close: mock() }) as unknown as IngressSession;
 
 describe(`createTunnelRegistry`, () => {
     test(`routes a sandbox to the tunnel that registered it`, () => {

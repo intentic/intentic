@@ -15,7 +15,14 @@ const OFFER: ModelOffer = {
     ],
     accounts: {
         claude: [
-            { id: "work", label: "work@studio", windows: [{ short: "5h", left: 38, resetsAt: IN_TWO_HOURS }, { short: "wk", left: 61 }] },
+            {
+                id: "work",
+                label: "work@studio",
+                windows: [
+                    { short: "5h", left: 38, resetsAt: IN_TWO_HOURS },
+                    { short: "wk", left: 61 },
+                ],
+            },
             { id: "personal", windows: [] },
         ],
         codex: [],

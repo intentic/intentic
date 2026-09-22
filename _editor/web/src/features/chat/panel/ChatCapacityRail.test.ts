@@ -89,8 +89,16 @@ it(`names a credential that can serve nothing, and leaves it out of the ratio`, 
     const el = mount([], {
         ...NO_ROUTED,
         gemini: [
-            { name: `g-1`, label: `one@gmail.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, gates: `all` }] } },
-            { name: `g-2`, label: `two@gmail.com`, usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, gates: `all` }] } },
+            {
+                name: `g-1`,
+                label: `one@gmail.com`,
+                usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 41, gates: `all` }] },
+            },
+            {
+                name: `g-2`,
+                label: `two@gmail.com`,
+                usage: { measuredAt: MEASURED_AT, windows: [{ kind: `seven_day`, utilization: 100, gates: `all` }] },
+            },
             // The daemon's own words for a Google account with no Antigravity project, benched with no instant to reopen.
             { name: `g-3`, label: `three@gmail.com`, cooling: { reason: `no Antigravity project on this Google account` } },
         ],
@@ -249,7 +257,6 @@ it(`does not render 'most room' row for pooled providers`, () => {
     expect(el.textContent).not.toContain(`most room`);
     expect(barWidths(el)).toEqual([`40%`]);
 });
-
 
 // The age beside the refresh control is the OLDEST reading on the rail, so one account the provider will not re-read
 // pins it however often the button is pressed: the press worked, every other account moved, and the one number a

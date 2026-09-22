@@ -13,7 +13,11 @@ const strip = (handler: (event: MouseEvent) => void, held = ref(true)) => {
     document.body.append(host);
     const app = createApp({
         render: () =>
-            h(`div`, { class: `strip` }, held.value ? [withDirectives(h(`div`, { class: `tab` }, [h(`span`, { class: `label` }, `tab`)]), [[vMiddleclick, handler]])] : []),
+            h(
+                `div`,
+                { class: `strip` },
+                held.value ? [withDirectives(h(`div`, { class: `tab` }, [h(`span`, { class: `label` }, `tab`)]), [[vMiddleclick, handler]])] : [],
+            ),
     });
     app.mount(host);
     const tab = host.querySelector<HTMLElement>(`.tab`)!;

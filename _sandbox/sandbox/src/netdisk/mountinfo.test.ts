@@ -12,7 +12,13 @@ const TABLE = `2857 2844 0:140 / / rw,relatime - overlay overlay rw,lowerdir=481
 
 test("parses mount point, fs type, source and both option layers off a real table", () => {
     const entries = parseMountinfo(TABLE);
-    expect(entries.map((entry) => entry.mountPoint)).toEqual(["/", "/proc", "/mnt/netdisk/archive", "/mnt/netdisk/scratch", "/mnt/netdisk/with space"]);
+    expect(entries.map((entry) => entry.mountPoint)).toEqual([
+        "/",
+        "/proc",
+        "/mnt/netdisk/archive",
+        "/mnt/netdisk/scratch",
+        "/mnt/netdisk/with space",
+    ]);
     const archive = mountAt(entries, "/mnt/netdisk/archive");
     expect(archive?.fsType).toBe("cifs");
     expect(archive?.source).toBe("//nas.local/archive");

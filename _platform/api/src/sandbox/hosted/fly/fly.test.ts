@@ -217,7 +217,10 @@ describe(`the volume calls a migration needs`, () => {
     // A volume mid-restore reports no blocks at all; answering 0 used would read as an empty disk, which it is not.
     it(`says it does not know how much is used, rather than guessing zero`, async () => {
         stubFetch([
-            { match: (method, url) => method === `GET` && url.includes(`/volumes/vol_1`), respond: () => json({ id: `vol_1`, size_gb: 10, state: `restoring` }) },
+            {
+                match: (method, url) => method === `GET` && url.includes(`/volumes/vol_1`),
+                respond: () => json({ id: `vol_1`, size_gb: 10, state: `restoring` }),
+            },
         ]);
         expect((await getVolume(`tok`, `app`, `vol_1`)).usedBytes).toBeUndefined();
     });

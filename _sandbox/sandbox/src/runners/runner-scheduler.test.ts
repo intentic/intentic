@@ -31,7 +31,10 @@ test("a sandbox with no runners keeps its work, and says why", () => {
 
 // A busy machine can show the same one-minute load average as an idle one, since that average lags behind.
 test("the machine with the most room wins, even when a busier one looks quieter", () => {
-    const placed = placeFanOut([runner("busy", { facts: { cpus: 8, memoryMb: 32_768, freeDiskMb: 0, load: 0.05 } }), runner("free")], load({ busy: 5 }));
+    const placed = placeFanOut(
+        [runner("busy", { facts: { cpus: 8, memoryMb: 32_768, freeDiskMb: 0, load: 0.05 } }), runner("free")],
+        load({ busy: 5 }),
+    );
     expect(placed).toEqual({ runner: "free", reason: "free-slot" });
 });
 

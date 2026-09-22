@@ -70,7 +70,9 @@ describe("presenceOf", () => {
         // test timeout, two silent minutes in place of the reason it died.
         await new Promise<void>((resolve, reject) => {
             child.stdout.once("data", () => resolve());
-            child.once("exit", (code) => reject(new Error(`the socket holder exited (${code}) without listening on ${path}: ${refused.join("").trim()}`)));
+            child.once("exit", (code) =>
+                reject(new Error(`the socket holder exited (${code}) without listening on ${path}: ${refused.join("").trim()}`)),
+            );
         });
         child.kill("SIGKILL");
         await new Promise<void>((resolve) => child.once("exit", () => resolve()));

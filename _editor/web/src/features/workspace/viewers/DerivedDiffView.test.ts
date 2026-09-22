@@ -18,7 +18,13 @@ mock.module("./derivedDiff", () => ({
 
 const { default: DerivedDiffView } = await import("./DerivedDiffView.vue");
 
-const side = (content: string, notes: string[] = []): DerivedDiff["after"] => ({ present: true, content, deriver: `docx v1`, notes, truncated: false });
+const side = (content: string, notes: string[] = []): DerivedDiff["after"] => ({
+    present: true,
+    content,
+    deriver: `docx v1`,
+    notes,
+    truncated: false,
+});
 
 let app: App | undefined;
 const sidesRequested: number[] = [];
@@ -59,7 +65,10 @@ afterEach(() => {
 
 describe(`DerivedDiffView`, () => {
     it(`draws the two renderings as tracked changes and counts the paragraphs that moved`, async () => {
-        answers.set(`brief.docx`, { before: side(`# Brief\n\nWe open at nine.\n\nClosed Monday.`), after: side(`# Brief\n\nWe open at eight.\n\nClosed Monday.`) });
+        answers.set(`brief.docx`, {
+            before: side(`# Brief\n\nWe open at nine.\n\nClosed Monday.`),
+            after: side(`# Brief\n\nWe open at eight.\n\nClosed Monday.`),
+        });
         const element = mount(`brief.docx`);
         await settle();
 
@@ -74,8 +83,14 @@ describe(`DerivedDiffView`, () => {
 
     it(`folds the conversions' caveats to a count, and opens them tagged with the side that hit each`, async () => {
         answers.set(`styled.docx`, {
-            before: side(`Hello.`, [`docx conversion: a picture was left out`, `docx conversion: 3 Word styles without a markdown equivalent, read as plain text`]),
-            after: side(`Hello there.`, [`docx conversion: a picture was left out`, `docx conversion: 2 Word styles without a markdown equivalent, read as plain text`]),
+            before: side(`Hello.`, [
+                `docx conversion: a picture was left out`,
+                `docx conversion: 3 Word styles without a markdown equivalent, read as plain text`,
+            ]),
+            after: side(`Hello there.`, [
+                `docx conversion: a picture was left out`,
+                `docx conversion: 2 Word styles without a markdown equivalent, read as plain text`,
+            ]),
         });
         const element = mount(`styled.docx`);
         await settle();

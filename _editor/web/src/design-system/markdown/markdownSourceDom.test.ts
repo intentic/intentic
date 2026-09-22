@@ -198,29 +198,25 @@ describe(`what it draws`, () => {
 });
 
 describe(`colour`, () => {
-    const SOURCE = "```json\n{\n    \"name\": \"acme.incidents\"\n}\n```";
+    const SOURCE = '```json\n{\n    "name": "acme.incidents"\n}\n```';
 
     // Real Shiki, because what is under test is whether its markup reassembles the source line for line; a stub
     // would only restate the shape this file already assumes. The grammar is loaded first so a cold import is not
     // charged to the wait, and both budgets below bound a hang rather than measure the highlight.
-    test(
-        `the body wears the highlighter's colours once they land, and still reads back as the file`,
-        async () => {
-            // Highlighting is async while building is not: the first draw of a block is always the plain one.
-            expect(buildBlockElement(SOURCE).dataset[`mdColoured`]).toBeUndefined();
-            await useHighlighter().ensureLang(`json`);
-            await waitFor(() => expect(buildBlockElement(SOURCE).dataset[`mdColoured`]).toBe(``), { timeout: 10_000, interval: 10 });
+    test(`the body wears the highlighter's colours once they land, and still reads back as the file`, async () => {
+        // Highlighting is async while building is not: the first draw of a block is always the plain one.
+        expect(buildBlockElement(SOURCE).dataset[`mdColoured`]).toBeUndefined();
+        await useHighlighter().ensureLang(`json`);
+        await waitFor(() => expect(buildBlockElement(SOURCE).dataset[`mdColoured`]).toBe(``), { timeout: 10_000, interval: 10 });
 
-            const element = buildBlockElement(SOURCE);
-            const lines = [...element.querySelectorAll(`.md-code-line`)];
-            const code = [`{`, `    "name": "acme.incidents"`, `}`];
-            expect(lines.map((line) => line.textContent)).toEqual(code);
-            // Colour is spans inside the line, and every character of the line is inside one of them.
-            expect(lines.map((line) => [...line.querySelectorAll(`span[style]`)].map((span) => span.textContent).join(``))).toEqual(code);
-            expect(blockBody(element)).toBe(SOURCE);
-        },
-        30_000,
-    );
+        const element = buildBlockElement(SOURCE);
+        const lines = [...element.querySelectorAll(`.md-code-line`)];
+        const code = [`{`, `    "name": "acme.incidents"`, `}`];
+        expect(lines.map((line) => line.textContent)).toEqual(code);
+        // Colour is spans inside the line, and every character of the line is inside one of them.
+        expect(lines.map((line) => [...line.querySelectorAll(`span[style]`)].map((span) => span.textContent).join(``))).toEqual(code);
+        expect(blockBody(element)).toBe(SOURCE);
+    }, 30_000);
 });
 
 describe(`caret offsets`, () => {

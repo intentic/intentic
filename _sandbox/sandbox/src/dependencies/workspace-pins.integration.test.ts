@@ -65,14 +65,20 @@ test("two packages on different versions of one dependency are both remembered",
     );
 });
 
-test.each(["workspace:*", "catalog:", "file:../thing", "*", "latest"])("a specifier naming no concrete version is not a pin: %s", async (specifier) => {
-    await withWorkspace(
-        { "pnpm-workspace.yaml": `packages:\n  - "app"\n`, "app/package.json": JSON.stringify({ name: "app", dependencies: { thing: specifier } }) },
-        (root) => {
-            expect([...createWorkspacePins(root)("npm", "thing")]).toEqual([]);
-        },
-    );
-});
+test.each(["workspace:*", "catalog:", "file:../thing", "*", "latest"])(
+    "a specifier naming no concrete version is not a pin: %s",
+    async (specifier) => {
+        await withWorkspace(
+            {
+                "pnpm-workspace.yaml": `packages:\n  - "app"\n`,
+                "app/package.json": JSON.stringify({ name: "app", dependencies: { thing: specifier } }),
+            },
+            (root) => {
+                expect([...createWorkspacePins(root)("npm", "thing")]).toEqual([]);
+            },
+        );
+    },
+);
 
 /* npm only. */
 test("another ecosystem is never answered for out of npm's manifests", async () => {

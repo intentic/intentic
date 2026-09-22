@@ -10,7 +10,9 @@ describe(`splitFrontmatter`, () => {
     it(`takes the block and leaves the document after it`, () => {
         const split = splitFrontmatter(POST);
         expect(split?.rest).toBe(`\nThe first thing that breaks is the working tree.\n`);
-        expect(split?.matter.raw).toBe(`---\ntitle: "One worktree per agent"\ndescription: "A git worktree each is the boundary that fixes it."\ndate: 2026-09-04\ntags: ["engineering"]\n---\n`);
+        expect(split?.matter.raw).toBe(
+            `---\ntitle: "One worktree per agent"\ndescription: "A git worktree each is the boundary that fixes it."\ndate: 2026-09-04\ntags: ["engineering"]\n---\n`,
+        );
     });
 
     it(`reads scalars unquoted and sequences as items`, () => {
@@ -106,7 +108,7 @@ describe(`frontmatterHtml`, () => {
 describe(`metadata as an editable span`, () => {
     it(`is one block, ending where the closing fence ends`, () => {
         const blocks = splitMarkdownBlocks(POST).blocks;
-        expect(POST.slice(blocks[0]?.start, blocks[0]?.end)).toBe(`${splitFrontmatter(POST)?.matter.raw  }\n`);
+        expect(POST.slice(blocks[0]?.start, blocks[0]?.end)).toBe(`${splitFrontmatter(POST)?.matter.raw}\n`);
     });
 
     it(`still tiles the document`, () => {

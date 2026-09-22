@@ -248,7 +248,9 @@ describe(`a hosted machine whose owner's free hours are spent`, () => {
     });
 
     it(`outranks the stuck-machine door once the minute has passed`, () => {
-        expect(notice(asleep, { hostedMachine: true, hoursSpent: true, owner: true, outageMs: 60 * HOSTED_STUCK_AFTER_MS }).action?.kind).toBe(`billing`);
+        expect(notice(asleep, { hostedMachine: true, hoursSpent: true, owner: true, outageMs: 60 * HOSTED_STUCK_AFTER_MS }).action?.kind).toBe(
+            `billing`,
+        );
     });
 
     it(`sells a guest nothing, and names whose hours they are`, () => {

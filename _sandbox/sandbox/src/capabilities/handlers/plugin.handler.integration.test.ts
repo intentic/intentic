@@ -8,7 +8,13 @@ import type { Capability } from "@intentic/sandbox-contract";
 import { gitHead } from "@intentic/scaffold";
 import { test, expect } from "bun:test";
 import { createTerminalRunner } from "../../terminal/terminal-run.js";
-import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
+import {
+    makeWorkspaceDir,
+    moveWorkspacePath,
+    readWorkspaceFile,
+    removeWorkspacePath,
+    writeWorkspaceFile,
+} from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../summary.js";
 import { pluginDir, pluginDirsOf, pluginsRoot } from "../plugin-dirs.js";

@@ -90,8 +90,16 @@ describe(`adoption`, () => {
     test(`the fingerprint is over what the checks say, not how the file is written`, () => {
         // Re-ordering the list IS a change (it is the order they run in); the same list twice is not.
         expect(fingerprintOf(declaration.checks)).toBe(fingerprintOf([{ when: `push`, run: `pnpm verify:push` }]));
-        expect(fingerprintOf([{ when: `push`, run: `a` }, { when: `push`, run: `b` }])).not.toBe(
-            fingerprintOf([{ when: `push`, run: `b` }, { when: `push`, run: `a` }]),
+        expect(
+            fingerprintOf([
+                { when: `push`, run: `a` },
+                { when: `push`, run: `b` },
+            ]),
+        ).not.toBe(
+            fingerprintOf([
+                { when: `push`, run: `b` },
+                { when: `push`, run: `a` },
+            ]),
         );
     });
 });

@@ -18,7 +18,11 @@ const PROMPT: ConversationPrompt = {
         sections: [
             { source: `guidance`, title: `How this sandbox asks agents to work`, text: `Search code with rg.` },
             { source: `field-notes`, title: `Field notes for this sandbox`, text: `## Field notes for this sandbox\n\npnpm's exit code lies here.` },
-            { source: `memory`, title: `Standing instructions for this workspace`, text: `## Standing instructions for this workspace\n\nNo legacy support.` },
+            {
+                source: `memory`,
+                title: `Standing instructions for this workspace`,
+                text: `## Standing instructions for this workspace\n\nNo legacy support.`,
+            },
         ],
     },
 };
@@ -75,10 +79,7 @@ test("the base is the first row and the additions follow in the order they were 
     await new Promise((resolve) => setTimeout(resolve, 0));
     // The title alone: each row carries its size beside it, which is the subject of no assertion here.
     const rows = [...document.querySelectorAll(`[role="dialog"] button[aria-expanded] span:first-of-type`)].map((title) => title.textContent?.trim());
-    expect(rows).toEqual([
-        `Intentic's own prompt`,
-        ...(PROMPT.prompt?.sections ?? []).map((section) => section.title),
-    ]);
+    expect(rows).toEqual([`Intentic's own prompt`, ...(PROMPT.prompt?.sections ?? []).map((section) => section.title)]);
 });
 
 test("a section's own heading is dropped from the reading and kept in what is copied", async () => {

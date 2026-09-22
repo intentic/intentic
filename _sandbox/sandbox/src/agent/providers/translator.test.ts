@@ -256,9 +256,7 @@ test("names the account this sign-in wrote, not one benched for the same thing l
     await expect(failure).rejects.toThrow(/new@example\.com/);
     await expect(failure).rejects.not.toThrow(/old@example\.com/);
     // And benches only it: the other is already out, and a second PATCH would say nothing new.
-    expect(calls.filter((call) => call.url.endsWith("/auth-files/status")).map((call) => call.body)).toEqual([
-        { name: "new.json", disabled: true },
-    ]);
+    expect(calls.filter((call) => call.url.endsWith("/auth-files/status")).map((call) => call.body)).toEqual([{ name: "new.json", disabled: true }]);
 });
 
 test("reads Kimi's provider-scoped model definitions without owned_by inference", async () => {

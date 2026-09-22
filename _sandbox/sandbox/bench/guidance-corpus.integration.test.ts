@@ -80,7 +80,10 @@ test("a batch of three under one requestId is one response, not three", () => {
 });
 
 test("an orienting run is the consecutive single-call reads, and a write ends it", () => {
-    const read = (n: number): string[] => [...asks(`r${n}`, [{ id: `a${n}`, name: "Read", input: { file_path: `/f${n}.ts` } }]), answers([{ id: `a${n}`, text: "x" }])];
+    const read = (n: number): string[] => [
+        ...asks(`r${n}`, [{ id: `a${n}`, name: "Read", input: { file_path: `/f${n}.ts` } }]),
+        answers([{ id: `a${n}`, text: "x" }]),
+    ];
     const stats = guidanceStats(
         corpusOf([
             [

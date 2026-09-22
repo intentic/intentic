@@ -108,7 +108,13 @@ test("git.changes aggregates dirty repos across root + roles + clones, skipping 
                     ...services().git,
                     changedFiles: async (dir) => {
                         if (dir === workspace.root) {
-                            return { branch: "main", conflicted: [], staged: [], unstaged: [{ path: "notes.md", status: "added" as const }], blobs: new Map() };
+                            return {
+                                branch: "main",
+                                conflicted: [],
+                                staged: [],
+                                unstaged: [{ path: "notes.md", status: "added" as const }],
+                                blobs: new Map(),
+                            };
                         }
                         if (dir === join(workspace.root, "shop")) {
                             throw new Error("broken repo");
@@ -424,7 +430,13 @@ test("a running commit rides the changes response, and leaves it when it lands",
                 git: {
                     ...services().git,
                     // Non-empty status so `intent` still appears in the response across the commit.
-                    changedFiles: async () => ({ branch: "main", conflicted: [], staged: [{ path: "a.ts", status: "modified" }], unstaged: [], blobs: new Map() }),
+                    changedFiles: async () => ({
+                        branch: "main",
+                        conflicted: [],
+                        staged: [{ path: "a.ts", status: "modified" }],
+                        unstaged: [],
+                        blobs: new Map(),
+                    }),
                     commitIndex: async () => {
                         reached?.();
                         await held;

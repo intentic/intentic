@@ -9,7 +9,11 @@ import { parseMountinfo } from "./mountinfo.js";
 const store = (capabilities: Capability[]): CapabilitiesStore => ({ list: async () => capabilities }) as unknown as CapabilitiesStore;
 
 const disk = (id: string, access: "read" | "readwrite"): Capability =>
-    ({ id, kind: "netdisk", config: { provider: "smb", server: "nas", share: id, username: "u", access, version: "auto", autoMount: "on" } }) as Capability;
+    ({
+        id,
+        kind: "netdisk",
+        config: { provider: "smb", server: "nas", share: id, username: "u", access, version: "auto", autoMount: "on" },
+    }) as Capability;
 
 const line = (id: string, flag: "ro" | "rw", superFlag: "ro" | "rw" = flag): string =>
     `3001 2857 0:210 / /mnt/netdisk/${id} ${flag},relatime - cifs //nas/${id} ${superFlag},vers=3.1.1,soft`;

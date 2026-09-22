@@ -11,7 +11,14 @@ const ids = (list: readonly WorkspaceTab[]): string[] => list.map((tab) => tab.i
 const single = (active: string | null, preview: string | null = null): EditorStrip => ({ main: { tabs, active, preview }, side: emptyPane() });
 // The split this feature exists for: a document on the left, the diff it opened on the right.
 const split = (): EditorStrip => ({
-    main: { tabs: [file(`a.ts`), { kind: `document`, id: `doc:git`, extension: `git-history`, provider: `log`, path: ``, title: `History`, icon: `sitemap` }], active: `doc:git`, preview: null },
+    main: {
+        tabs: [
+            file(`a.ts`),
+            { kind: `document`, id: `doc:git`, extension: `git-history`, provider: `log`, path: ``, title: `History`, icon: `sitemap` },
+        ],
+        active: `doc:git`,
+        preview: null,
+    },
     side: { tabs: [diff(`diff:1:s/c.ts`, `c.ts`)], active: `diff:1:s/c.ts`, preview: `diff:1:s/c.ts` },
 });
 

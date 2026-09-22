@@ -35,7 +35,12 @@ const session = (utilization: number, resetsAt?: number): AccountUsage["windows"
     ...(resetsAt === undefined ? {} : { resetsAt }),
 });
 
-const account = (id: string, snapshot?: AccountUsage): OauthAccount => ({ id, label: id, connectedAt: NOW, ...(snapshot === undefined ? {} : { usage: snapshot }) });
+const account = (id: string, snapshot?: AccountUsage): OauthAccount => ({
+    id,
+    label: id,
+    connectedAt: NOW,
+    ...(snapshot === undefined ? {} : { usage: snapshot }),
+});
 
 const warn = mock();
 const catalogs = mock<(provider: NativeProvider) => Promise<{ models: Model[]; default: string }>>();
@@ -87,7 +92,9 @@ test("an unmeasured account keeps a model askable: silence is not evidence of a 
 test("an account's windows report what is LEFT, named by the pool's own length", async () => {
     accountLists.mockReturnValue({ claude: [account("work", usage([session(38, IN_TWO_HOURS)]))] });
     const offer = await autoOffer(services(), NOW);
-    expect(offer.accounts["claude"]).toEqual([{ id: "work", label: "work", windows: [{ short: "5h", label: "5 hours", left: 62, resetsAt: IN_TWO_HOURS }] }]);
+    expect(offer.accounts["claude"]).toEqual([
+        { id: "work", label: "work", windows: [{ short: "5h", label: "5 hours", left: 62, resetsAt: IN_TWO_HOURS }] },
+    ]);
 });
 
 test("a window already past its reset is gone, not shown as spent", async () => {
@@ -108,5 +115,8 @@ test("a catalog that will not load leaves its provider out rather than failing t
     catalogs.mockRejectedValue(new Error("upstream down"));
     const offer = await autoOffer(services(), NOW);
     expect(offer.models).toEqual([]);
-    expect(warn).toHaveBeenCalledWith({ err: expect.any(Error), provider: "claude" }, "auto model: catalog unreadable, leaving this provider out of the offer");
+    expect(warn).toHaveBeenCalledWith(
+        { err: expect.any(Error), provider: "claude" },
+        "auto model: catalog unreadable, leaving this provider out of the offer",
+    );
 });

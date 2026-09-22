@@ -104,7 +104,7 @@ describe("what the history defends", () => {
         expect(await defencesOf("/repo", "src/a.ts", [line], MAX_PROBES, NOW, git)).toEqual([]);
     });
 
-/* A git that cannot answer is not a turn that gets sent back to work. */
+    /* A git that cannot answer is not a turn that gets sent back to work. */
     test("a failing git reads as no history rather than propagating", async () => {
         const failing: GitRunner = async () => {
             throw new Error("fatal: not a git repository");

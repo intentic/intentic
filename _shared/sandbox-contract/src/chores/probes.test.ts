@@ -197,7 +197,10 @@ describe(`mutation`, () => {
     });
 
     test(`leaves mutants that never got a verdict out of the score entirely`, () => {
-        const facts = parse(`mutation`, report(mutant(`Killed`), mutant(`Survived`), mutant(`CompileError`), mutant(`RuntimeError`), mutant(`Ignored`)));
+        const facts = parse(
+            `mutation`,
+            report(mutant(`Killed`), mutant(`Survived`), mutant(`CompileError`), mutant(`RuntimeError`), mutant(`Ignored`)),
+        );
         expect(facts).toMatchObject({ id: `mutation`, mutation: { killed: 1, survived: 1, inconclusive: 3, score: 50 } });
     });
 

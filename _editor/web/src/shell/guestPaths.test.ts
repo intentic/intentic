@@ -5,13 +5,36 @@ import { guestAllowedPath } from "./guestPaths";
 // refused side by default.
 describe(`guestAllowedPath`, () => {
     it(`admits the chat, the board of its own conversations, its settings, and the access section`, () => {
-        for (const path of [`/chat`, `/chat/abc`, `/agents`, `/agents/abc`, `/agent/abc`, `/settings`, `/settings/appearance`, `/sandbox/access`, `/floating/chat`]) {
+        for (const path of [
+            `/chat`,
+            `/chat/abc`,
+            `/agents`,
+            `/agents/abc`,
+            `/agent/abc`,
+            `/settings`,
+            `/settings/appearance`,
+            `/sandbox/access`,
+            `/floating/chat`,
+        ]) {
             expect(guestAllowedPath(path), path).toBe(true);
         }
     });
 
     it(`refuses the tree, the box, the capabilities, the live surfaces, and anything unnamed`, () => {
-        for (const path of [`/`, `/workspace`, `/workspace/src/app.ts`, `/preview`, `/capabilities`, `/browsers`, `/subagents`, `/terminal`, `/sandbox`, `/sandbox/secrets`, `/sandbox/accessories`, `/ext/projects`]) {
+        for (const path of [
+            `/`,
+            `/workspace`,
+            `/workspace/src/app.ts`,
+            `/preview`,
+            `/capabilities`,
+            `/browsers`,
+            `/subagents`,
+            `/terminal`,
+            `/sandbox`,
+            `/sandbox/secrets`,
+            `/sandbox/accessories`,
+            `/ext/projects`,
+        ]) {
             expect(guestAllowedPath(path), path).toBe(false);
         }
     });

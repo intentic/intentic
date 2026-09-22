@@ -269,7 +269,9 @@ test("last time is the conversation the last fire opened, and the fleet's own wa
     await fireAutomation(services, (await services.automations.get("dream-2")) as AutomationRecord, fakeWake(prompts));
     expect((await services.automations.get("dream-2"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts).toHaveLength(1);
-    expect(prompts[0]).toContain(`45 sessions since ${new Date(dreamedAt - 2 * DAY).toISOString()}, the last time this automation woke an agent. Newest first:\nnew-session-4 · `);
+    expect(prompts[0]).toContain(
+        `45 sessions since ${new Date(dreamedAt - 2 * DAY).toISOString()}, the last time this automation woke an agent. Newest first:\nnew-session-4 · `,
+    );
 });
 
 test("a re-fire on the conversation a fire already minted is not measured against itself", async () => {

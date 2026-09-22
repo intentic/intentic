@@ -1,3 +1,6 @@
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { test, expect } from "bun:test";
@@ -6,6 +9,7 @@ import { syncHookOutput } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";
 import type { SecretAccess } from "./agent-secrets.js";
 import { bashTmuxHooks } from "./agent-terminals.js";
+import { adoptableBackgroundJobs, type BackgroundJob } from "./background-jobs.js";
 
 // Demotes a command via nice/ionice and runs it as one `bash -c` tree, before tmux-run sees it.
 const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 bash -c ${shellQuote(command)}`;
@@ -86,6 +90,30 @@ test("stamps the pane command with the conversation owner, and refuses one outsi
     expect(unsafe).toBe(wrap("echo hi", born(demoted("echo hi")), "run"));
 });
 
+// A background job is the one command whose pane must outlive the turn's CLI, so it carries `-b <dir>`: that flag is
+// what stops tmux-run killing the pane when the turn's exit SIGTERMs the wrapper, and the dir is where the daemon
+// reads the completion nobody is left to see.
+test("a background command carries a job dir, and is filed for the turn's ending to adopt", async () => {
+    const jobs = { conversationId: "conv-bg", turn: {} };
+    const command = await rewritten({ command: "pnpm build", run_in_background: true }, bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs));
+    const dir = /tmux-run -b (\S+) -c /.exec(command ?? "")?.[1];
+    expect(dir).toStartWith(join(tmpdir(), "intentic-run-job-"));
+    // The registry holds the same job, so the settle that follows can hand it to a watch.
+    const filed = adoptableBackgroundJobs("conv-bg");
+    expect(filed.map((job: BackgroundJob) => job.dir)).toEqual([dir as string]);
+    expect(filed[0]?.command).toBe("pnpm build");
+    rmSync(dir as string, { recursive: true, force: true });
+});
+
+test("an ordinary command, and a background one with nowhere to deliver a wake, carry no job dir", async () => {
+    const jobs = { conversationId: "conv-bg-none", turn: {} };
+    // Foreground: dies with the turn as everything else does, which is what its timeout semantics need.
+    expect(await rewritten({ command: "pnpm build" }, bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs))).not.toContain("-b ");
+    // No conversation: a job that outlived the turn would have nobody to report to.
+    expect(await rewritten({ command: "pnpm build", run_in_background: true })).not.toContain("-b ");
+    expect(adoptableBackgroundJobs("conv-bg-none")).toEqual([]);
+});
+
 test("forwards env key NAMES as sorted -e flags before the session: never values", async () => {
     const hooks = bashTmuxHooks(["IMAP_PASSWORD_IMAP", "DISCORD_BOT_TOKEN_DISCORD"]);
     const command = await rewritten({ command: "echo hi", description: "Say Hi!" }, hooks);
@@ -106,7 +134,13 @@ test("agentSessionName derives the same agent-* name the hook routes commands th
 });
 
 test("an isolated turn's Bash joins the turn's namespace, inside the tmux wrapper", async () => {
-    const plan = { worktree: `${HISTORY_ROOT}/worktrees/abc`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
+    const plan = {
+        worktree: `${HISTORY_ROOT}/worktrees/abc`,
+        root: WORKSPACE_ROOT,
+        mirrors: [],
+        overlays: `${HISTORY_ROOT}/overlays/abc`,
+        fence: undefined,
+    };
     const anchor = { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} };
     const command = await rewritten({ command: "sed -i s/a/b/ x.ts", description: "edit" }, bashTmuxHooks([], { plan, anchor }));
     // tmux-run stays outside the namespace; only the command the pane runs crosses in, already demoted.
@@ -134,7 +168,13 @@ test("-c carries the agent's own command, never the wrapper the pane runs", asyn
 // Unanchored isolation rewrites paths into the worktree; `-c` follows, since the redirected line is the one that
 // actually ran.
 test("-c carries the redirected command when an isolated turn has no namespace to join", async () => {
-    const plan = { worktree: `${HISTORY_ROOT}/worktrees/abc`, root: WORKSPACE_ROOT, mirrors: [], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
+    const plan = {
+        worktree: `${HISTORY_ROOT}/worktrees/abc`,
+        root: WORKSPACE_ROOT,
+        mirrors: [],
+        overlays: `${HISTORY_ROOT}/overlays/abc`,
+        fence: undefined,
+    };
     const command = await rewritten({ command: "wc -l /work/intentic/x.ts" }, bashTmuxHooks([], { plan }));
     expect(command?.startsWith("/usr/local/bin/tmux-run -c 'wc -l /history/worktrees/abc/intentic/x.ts' ")).toBe(true);
 });
@@ -157,7 +197,13 @@ test("without an anchor, an isolated turn's Bash has its main-tree paths rewritt
 });
 
 test("the Bash rewrite leaves the shared subtrees and any path that merely starts with the root alone", async () => {
-    const plan = { worktree: "/wt", root: WORKSPACE_ROOT, mirrors: ["intentic/node_modules"], overlays: `${HISTORY_ROOT}/overlays/abc`, fence: undefined };
+    const plan = {
+        worktree: "/wt",
+        root: WORKSPACE_ROOT,
+        mirrors: ["intentic/node_modules"],
+        overlays: `${HISTORY_ROOT}/overlays/abc`,
+        fence: undefined,
+    };
     const rewrite = async (command: string): Promise<string | undefined> => rewritten({ command }, bashTmuxHooks([], { plan }));
     // Dependency trees and the untracked state dir resolve to the main checkout, not the worktree.
     expect(await rewrite("/work/intentic/node_modules/.bin/tsgo")).toContain("/work/intentic/node_modules/.bin/tsgo");

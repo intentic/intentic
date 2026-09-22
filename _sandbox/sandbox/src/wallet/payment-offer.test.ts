@@ -240,7 +240,10 @@ it("refuses a denied host outright, whatever the price", async () => {
 });
 
 it("refuses a rail the wallet does not hold, naming what the endpoint accepts", async () => {
-    const { deps, signed } = fake({}, { challenge: challengeFor("100000", { network: "eip155:1", asset: "0xdac17f958d2ee523a2206206994597c13d831ec7" }) });
+    const { deps, signed } = fake(
+        {},
+        { challenge: challengeFor("100000", { network: "eip155:1", asset: "0xdac17f958d2ee523a2206206994597c13d831ec7" }) },
+    );
     const answer = await gatedPaidFetch(deps, asked());
     expect(answer.status).toBe(409);
     expect(answer.body).toContain("rails this wallet does not hold");
@@ -249,7 +252,8 @@ it("refuses a rail the wallet does not hold, naming what the endpoint accepts", 
 
 it("passes a free endpoint straight through without a card or a signature", async () => {
     const { deps, frames, signed } = fake({
-        fetchFn: (async () => new Response(`{"free":true}`, { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
+        fetchFn: (async () =>
+            new Response(`{"free":true}`, { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
     });
     const answer = await gatedPaidFetch(deps, asked());
     expect(answer.status).toBe(200);
@@ -287,7 +291,12 @@ it("refuses when the platform declines to sign, without retrying the endpoint", 
 it("refuses the payment when the ledger cannot be written: no spend without a record", async () => {
     const ledger = memoryLedger();
     const { deps, frames, signed } = fake({
-        ledger: { ...ledger, open: async () => { throw new Error("disk full"); } },
+        ledger: {
+            ...ledger,
+            open: async () => {
+                throw new Error("disk full");
+            },
+        },
     });
     const pending = gatedPaidFetch(deps, asked());
     await answerCard(frames, true);

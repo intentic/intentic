@@ -67,7 +67,8 @@ test("pushRefusal files a push that never reached the remote under transport", (
 test("pushRefusal files the pre-push hook's no under hook, even when the hook's own output says fatal", () => {
     const gate = "verify-push: typecheck failed; the push does not go\nerror: failed to push some refs to '/tmp/origin.git'\n";
     expect(pushRefusal(gate, 1)).toBe("hook");
-    const suite = "fatal: a test printed this word\nverify-push: tests failed; the push does not go\nerror: failed to push some refs to '/tmp/origin.git'\n";
+    const suite =
+        "fatal: a test printed this word\nverify-push: tests failed; the push does not go\nerror: failed to push some refs to '/tmp/origin.git'\n";
     expect(pushRefusal(suite, 1)).toBe("hook");
 });
 

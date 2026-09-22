@@ -115,14 +115,18 @@ test("a normal screen: reset, the lines CRLF-joined and unterminated, the cursor
 });
 
 test("the alternate screen: the saved normal screen goes under it, then 1049h, then the alternate's own rows", () => {
-    const bytes = synthesizeScreen(["$ vim", "$ "], ["~", "~", "-- INSERT --"], state({ alternate: true, savedX: 2, savedY: 1, cursorX: 0, cursorY: 0, mouseAll: true, mouseSgr: true, command: "vim" })).toString(
-        "latin1",
-    );
+    const bytes = synthesizeScreen(
+        ["$ vim", "$ "],
+        ["~", "~", "-- INSERT --"],
+        state({ alternate: true, savedX: 2, savedY: 1, cursorX: 0, cursorY: 0, mouseAll: true, mouseSgr: true, command: "vim" }),
+    ).toString("latin1");
     expect(bytes).toBe("\x1bc$ vim\r\n$ \x1b[2;3H\x1b[?1049h~\r\n~\r\n-- INSERT --\x1b[1;1H\x1b[?1h\x1b=\x1b[?1003h\x1b[?1006h");
 });
 
 test("a scroll region is stated before the cursor move, and origin mode makes the move region-relative", () => {
-    const bytes = synthesizeScreen(["x"], undefined, state({ scrollTop: 2, scrollBottom: 20, cursorY: 5, cursorX: 0, origin: true })).toString("latin1");
+    const bytes = synthesizeScreen(["x"], undefined, state({ scrollTop: 2, scrollBottom: 20, cursorY: 5, cursorX: 0, origin: true })).toString(
+        "latin1",
+    );
     expect(bytes).toContain("\x1b[3;21r\x1b[?6h\x1b[4;1H");
 });
 

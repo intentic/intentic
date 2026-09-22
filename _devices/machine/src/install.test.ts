@@ -2,7 +2,9 @@ import { describe, it, expect, mock } from "bun:test";
 import { addToWindowsPathValue, SELF_UPDATE_GUARD_ENV, selfUpdateBeforeSetup, type SelfUpdateIo } from "./install.js";
 import type { UpgradeOutcome } from "./upgrade.js";
 
-const io = (overrides: Partial<SelfUpdateIo> & { outcome?: UpgradeOutcome } = {}): { io: SelfUpdateIo; upgraded: () => boolean; reexeced: () => readonly string[] | undefined } => {
+const io = (
+    overrides: Partial<SelfUpdateIo> & { outcome?: UpgradeOutcome } = {},
+): { io: SelfUpdateIo; upgraded: () => boolean; reexeced: () => readonly string[] | undefined } => {
     let ran = false;
     let reexecArgs: readonly string[] | undefined;
     const built: SelfUpdateIo = {

@@ -78,7 +78,10 @@ test("an extension's background service is named after the extension, not after 
     expect(
         identifyPort(
             listener({ port: 40085, command: "node dist/gateway.js", cwd: "/opt/extensions/discord" }),
-            attribution({ "ext-intentic-discord-gateway": { extensionId: "intentic.discord", processName: "gateway" } }, { 40085: "ext-intentic-discord-gateway" }),
+            attribution(
+                { "ext-intentic-discord-gateway": { extensionId: "intentic.discord", processName: "gateway" } },
+                { 40085: "ext-intentic-discord-gateway" },
+            ),
         ),
     ).toEqual({
         title: "Discord gateway",

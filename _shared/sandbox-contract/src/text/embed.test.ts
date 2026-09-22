@@ -25,7 +25,9 @@ const leadingZeroBits = async (answer: string): Promise<number> => {
 };
 
 test("a door's route is spelled the daemon's way, with the automation id encoded", () => {
-    expect(embedUrl({ base: "https://sandbox.example", automationId: "a b" }, "webchat", "config")).toBe("https://sandbox.example/webchat/a%20b/config");
+    expect(embedUrl({ base: "https://sandbox.example", automationId: "a b" }, "webchat", "config")).toBe(
+        "https://sandbox.example/webchat/a%20b/config",
+    );
 });
 
 test("a refusal carries the server's own sentence and status, and a bodyless one says what it can", async () => {
@@ -36,9 +38,15 @@ test("a refusal carries the server's own sentence and status, and a bodyless one
 });
 
 test("a JSON fetch answers the body or throws the refusal", async () => {
-    stubGlobal("fetch", mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    stubGlobal(
+        "fetch",
+        mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })),
+    );
     expect(await fetchEmbedJson<{ ok: boolean }>("https://x/y")).toEqual({ ok: true });
-    stubGlobal("fetch", mock(async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 })));
+    stubGlobal(
+        "fetch",
+        mock(async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 })),
+    );
     await expect(fetchEmbedJson("https://x/y")).rejects.toMatchObject({ message: "rate limited", status: 429 });
     unstubAllGlobals();
 });
@@ -60,6 +68,8 @@ test("a different salt yields a different answer: a solution cannot be replayed 
 
 test("an http:// page is told the truth, in the embed's own words, instead of hanging on a missing SubtleCrypto", async () => {
     Object.defineProperty(globalThis, "crypto", { value: { randomUUID: webcrypto.randomUUID }, configurable: true });
-    await expect(solveProofOfWork({ salt: "abc", difficulty: 8 }, "This page must be served over HTTPS to start a chat.")).rejects.toThrow(/HTTPS to start a chat/);
+    await expect(solveProofOfWork({ salt: "abc", difficulty: 8 }, "This page must be served over HTTPS to start a chat.")).rejects.toThrow(
+        /HTTPS to start a chat/,
+    );
     Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: true });
 });

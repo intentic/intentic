@@ -9,7 +9,13 @@ const secretPath = async (): Promise<string> => join(await mkdtemp(join(tmpdir()
 
 test("mint → verify roundtrips the proof: identity, display claims, methods and the passkey behind it", async () => {
     const sessions = createSessions(await secretPath());
-    const { token, expiresAt } = await sessions.mint({ email: "a@x.com", name: "Ada", picture: "https://p/x.png", methods: ["google", "passkey"], credentialId: "cred-1" });
+    const { token, expiresAt } = await sessions.mint({
+        email: "a@x.com",
+        name: "Ada",
+        picture: "https://p/x.png",
+        methods: ["google", "passkey"],
+        credentialId: "cred-1",
+    });
     expect(expiresAt).toBeGreaterThan(Date.now() + 29 * 24 * 60 * 60 * 1000);
     await expect(sessions.verify(token)).resolves.toEqual({
         email: "a@x.com",

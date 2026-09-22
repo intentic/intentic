@@ -70,7 +70,12 @@ describe(`the order a folder reads in`, () => {
 
     it(`gives two names the collator calls equal one fixed order`, () => {
         const pair = [file(`readme.md`), file(`README.md`)];
-        expect(pair.toSorted(byNaturalName).map((entry) => entry.name)).toEqual(pair.toReversed().toSorted(byNaturalName).map((entry) => entry.name));
+        expect(pair.toSorted(byNaturalName).map((entry) => entry.name)).toEqual(
+            pair
+                .toReversed()
+                .toSorted(byNaturalName)
+                .map((entry) => entry.name),
+        );
     });
 });
 

@@ -73,9 +73,24 @@ describe(`pipelineStages`, () => {
     it(`reads a half-started stage as started, and a failure still dominates both`, () => {
         const worstOf = (jobs: PipelineJob[]): string | undefined => pipelineStages(jobs)[0]?.status;
         // One leg running while its siblings queue still counts as the stage running.
-        expect(worstOf([{ name: `a`, status: `running`, stage: `test` }, { name: `b`, status: `queued`, stage: `test` }])).toBe(`running`);
-        expect(worstOf([{ name: `a`, status: `queued`, stage: `test` }, { name: `b`, status: `success`, stage: `test` }])).toBe(`queued`);
-        expect(worstOf([{ name: `a`, status: `queued`, stage: `test` }, { name: `b`, status: `failed`, stage: `test` }])).toBe(`failed`);
+        expect(
+            worstOf([
+                { name: `a`, status: `running`, stage: `test` },
+                { name: `b`, status: `queued`, stage: `test` },
+            ]),
+        ).toBe(`running`);
+        expect(
+            worstOf([
+                { name: `a`, status: `queued`, stage: `test` },
+                { name: `b`, status: `success`, stage: `test` },
+            ]),
+        ).toBe(`queued`);
+        expect(
+            worstOf([
+                { name: `a`, status: `queued`, stage: `test` },
+                { name: `b`, status: `failed`, stage: `test` },
+            ]),
+        ).toBe(`failed`);
     });
 });
 

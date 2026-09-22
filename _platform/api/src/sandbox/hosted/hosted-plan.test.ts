@@ -39,7 +39,10 @@ const baseConfig = configSchema.parse({
     log: { level: `silent`, pretty: `false` },
 });
 
-const configWith = (hostedPlan: Partial<Config[`hostedPlan`]>): Config => ({ ...baseConfig, hostedPlan: { ...baseConfig.hostedPlan, ...hostedPlan } });
+const configWith = (hostedPlan: Partial<Config[`hostedPlan`]>): Config => ({
+    ...baseConfig,
+    hostedPlan: { ...baseConfig.hostedPlan, ...hostedPlan },
+});
 
 interface ItemRow {
     tier: string;
@@ -98,16 +101,26 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
             }),
         },
         hostedPlanItem: {
-            upsert: mock(async ({ where, create, update }: { where: { planId_tier: { planId: string; tier: string } }; create: ItemRow; update: Partial<ItemRow> }) => {
-                const plan = planById(where.planId_tier.planId);
-                const existing = plan?.items.find((item) => item.tier === where.planId_tier.tier);
-                if (existing === undefined) {
-                    plan?.items.push({ tier: create.tier, stripeItemId: create.stripeItemId, quantity: create.quantity });
-                    return create;
-                }
-                Object.assign(existing, update);
-                return existing;
-            }),
+            upsert: mock(
+                async ({
+                    where,
+                    create,
+                    update,
+                }: {
+                    where: { planId_tier: { planId: string; tier: string } };
+                    create: ItemRow;
+                    update: Partial<ItemRow>;
+                }) => {
+                    const plan = planById(where.planId_tier.planId);
+                    const existing = plan?.items.find((item) => item.tier === where.planId_tier.tier);
+                    if (existing === undefined) {
+                        plan?.items.push({ tier: create.tier, stripeItemId: create.stripeItemId, quantity: create.quantity });
+                        return create;
+                    }
+                    Object.assign(existing, update);
+                    return existing;
+                },
+            ),
             deleteMany: mock(async ({ where }: { where: { planId: string; tier: { notIn: string[] } } }) => {
                 const plan = planById(where.planId);
                 if (plan !== undefined) {
@@ -171,7 +184,9 @@ describe(`the hosted plan`, () => {
 
     it(`refuses an unsigned webhook and honours a signed subscription lapse, read fresh off Stripe`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`)] });
-        const gateway = { subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
+        const gateway = {
+            subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })),
+        } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
             type: `customer.subscription.deleted`,
@@ -262,16 +277,23 @@ describe(`the hosted plan`, () => {
 
     it(`never rolls the mirror back: the event's copy is not trusted, and a read older than the row is dropped`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`canceled`, { syncedAt: NOW })] });
-        const gateway = { subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
+        const gateway = {
+            subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })),
+        } as unknown as StripeGateway;
         // The late event still says active; what Stripe says now is what gets written.
-        const late = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `sub_1`, object: `subscription`, status: `active` } } });
+        const late = JSON.stringify({
+            type: `customer.subscription.updated`,
+            data: { object: { id: `sub_1`, object: `subscription`, status: `active` } },
+        });
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         expect((await app.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
         expect(plans[0]?.status).toBe(`canceled`);
 
         // A read two minutes older than the row's last write (a slower, racing handler): stale by construction,
         // dropped.
-        const active = { subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active` })) } as unknown as StripeGateway;
+        const active = {
+            subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active` })),
+        } as unknown as StripeGateway;
         const slower = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway: active, now: () => new Date(NOW.getTime() - 120_000) });
         expect((await slower.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
         expect(plans[0]?.status).toBe(`canceled`);
@@ -318,9 +340,19 @@ describe(`cancelling the plan with its account`, () => {
 
     // An erasure must not be held hostage by a payment API; the log line names the manual follow-up.
     it(`lets the deletion proceed when Stripe refuses, and says so at error level`, async () => {
-        const gateway = { cancelSubscription: mock(async () => { throw new Error(`Stripe refused: down`); }) } as unknown as StripeGateway;
+        const gateway = {
+            cancelSubscription: mock(async () => {
+                throw new Error(`Stripe refused: down`);
+            }),
+        } as unknown as StripeGateway;
         const errors = mock();
-        await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, baseConfig, { info: mock(), error: errors } as never, `user-1`, gateway);
+        await cancelHostedPlan(
+            fakePrisma({ plans: [row(`active`)] }).prisma,
+            baseConfig,
+            { info: mock(), error: errors } as never,
+            `user-1`,
+            gateway,
+        );
         expect(errors).toHaveBeenCalledWith(expect.objectContaining({ subscription: `sub_1` }), expect.stringContaining(`by hand`));
     });
 });
@@ -471,7 +503,11 @@ describe(`hosted slots`, () => {
     const item = (tier: string, quantity: number) => ({ tier, quantity, stripeItemId: `si_${tier}` });
 
     it(`adds each rung's bought slots to the free plan's own`, async () => {
-        const slots = await hostedSlotsOf(fakePrisma({ plans: [row(`active`, { items: [item(ENTRY.id, 2), item(`max`, 1)] })] }).prisma, config, `user-1`);
+        const slots = await hostedSlotsOf(
+            fakePrisma({ plans: [row(`active`, { items: [item(ENTRY.id, 2), item(`max`, 1)] })] }).prisma,
+            config,
+            `user-1`,
+        );
         expect(slots.free).toBe(1);
         expect(slotsAtTier(slots, ENTRY.id)).toBe(2);
         expect(slotsAtTier(slots, `max`)).toBe(1);

@@ -529,7 +529,12 @@ describe(`BACKED_UP_STATE_PATHS`, () => {
 
     // identity means never restoring into another sandbox; that doesn't stop the owner keeping their own copy.
     it(`copies the ownership records that may never travel`, () => {
-        for (const path of [`.intentic/identity/owner.json`, `.intentic/identity/members.json`, `.intentic/identity/workspace.json`, `.intentic/identity/passkeys.json`]) {
+        for (const path of [
+            `.intentic/identity/owner.json`,
+            `.intentic/identity/members.json`,
+            `.intentic/identity/workspace.json`,
+            `.intentic/identity/passkeys.json`,
+        ]) {
             expect([path, BACKED_UP_STATE_PATHS.includes(path)]).toEqual([path, true]);
         }
     });

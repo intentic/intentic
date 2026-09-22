@@ -10,7 +10,11 @@ import { taskStoreDir } from "../run/task-store.js";
 import { HANDOFF_STATE_NOTE_TITLE, type HandoffStateDeps, handoffStateNote } from "./handoff-state.js";
 
 const git = (cwd: string, ...args: string[]): void => {
-    execFileSync("git", args, { cwd, stdio: "ignore", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+    execFileSync("git", args, {
+        cwd,
+        stdio: "ignore",
+        env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" },
+    });
 };
 
 // A repository with one committed file and one change on top of it: the shape the note reads.
@@ -102,7 +106,9 @@ test("falls back to the fold's checklist and the registry's failed check", async
 
 test("says nothing when there is nothing to measure", async () => {
     const root = mkdtempSync(join(tmpdir(), "handoff-"));
-    expect(await handoffStateNote(fakeDeps(root, { id: "c4", repos: [] } as unknown as PersistedAgent, root), { conversationId: "c4" })).toBeUndefined();
+    expect(
+        await handoffStateNote(fakeDeps(root, { id: "c4", repos: [] } as unknown as PersistedAgent, root), { conversationId: "c4" }),
+    ).toBeUndefined();
 });
 
 test("drops paths before facts when the note would exceed its cap", async () => {

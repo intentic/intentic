@@ -9,8 +9,22 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Import chain touches a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
-const OWN = { id: `own-1`, email: `owner@example.com`, label: `work laptop`, rpId: `app.test`, createdAt: Date.parse(`2026-09-01T00:00:00Z`), backedUp: true };
-const THEIRS = { id: `member-1`, email: `member@example.com`, label: `phone`, rpId: `app.test`, createdAt: Date.parse(`2026-09-02T00:00:00Z`), backedUp: false };
+const OWN = {
+    id: `own-1`,
+    email: `owner@example.com`,
+    label: `work laptop`,
+    rpId: `app.test`,
+    createdAt: Date.parse(`2026-09-01T00:00:00Z`),
+    backedUp: true,
+};
+const THEIRS = {
+    id: `member-1`,
+    email: `member@example.com`,
+    label: `phone`,
+    rpId: `app.test`,
+    createdAt: Date.parse(`2026-09-02T00:00:00Z`),
+    backedUp: false,
+};
 
 const state = hoisted(() => ({
     list: { passkeys: [] as unknown[], required: false, recovery: undefined as { remaining: number } | undefined },
@@ -40,7 +54,12 @@ mock.module(`../client/sandboxClient`, () => ({
 }));
 mock.module(`../session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => state.supported,
-    createPasskey: async (options: { challenge: string }) => ({ id: `new`, rawId: `new`, type: `public-key`, response: { clientDataJSON: options.challenge, attestationObject: `AA` } }),
+    createPasskey: async (options: { challenge: string }) => ({
+        id: `new`,
+        rawId: `new`,
+        type: `public-key`,
+        response: { clientDataJSON: options.challenge, attestationObject: `AA` },
+    }),
 }));
 mock.module(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ adoptSession: (...args: unknown[]) => state.adopted.push(args) }) }));
 mock.module(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));

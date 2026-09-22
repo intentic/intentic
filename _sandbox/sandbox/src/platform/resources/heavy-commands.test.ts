@@ -108,7 +108,11 @@ test("a glob is a pattern, not a program: shell syntax naming a tool does not qu
 // that never ran. Measured before this: the awk line below waited in the heavy pool behind two repo-wide test runs.
 test("a separator inside quotes belongs to its argument, not to the command line", () => {
     const awk = `ps -eo args --no-headers | awk '{ if (x ~ /vitest/) role="vitest"; else if (x ~ /turbo/) role="turbo" }' | sort`;
-    expect(commandSegments(awk)).toEqual(["ps -eo args --no-headers ", ` awk '{ if (x ~ /vitest/) role="vitest"; else if (x ~ /turbo/) role="turbo" }' `, " sort"]);
+    expect(commandSegments(awk)).toEqual([
+        "ps -eo args --no-headers ",
+        ` awk '{ if (x ~ /vitest/) role="vitest"; else if (x ~ /turbo/) role="turbo" }' `,
+        " sort",
+    ]);
     expect(matched(awk)).toBeUndefined();
     // Single quotes are literal all the way through, double quotes hold their own separators too.
     expect(commandSegments(`echo 'a|b' && echo "c;d"`)).toEqual(["echo 'a|b' ", ` echo "c;d"`]);
@@ -137,8 +141,20 @@ test("first match wins, so a narrow rule above a broad one decides", () => {
         { id: "narrow", pattern: "vitest run src/one", pool: "solo", limit: 1 },
         { id: "broad", pattern: "\\bvitest\\b" },
     ];
-    expect(matchHeavyCommand("vitest run src/one.test.ts", config({ rules }))).toEqual({ id: "narrow", pool: "solo", limit: 1, maxHold: HOLD, onDeadline: "run" });
-    expect(matchHeavyCommand("vitest run src/two.test.ts", config({ rules }))).toEqual({ id: "broad", pool: "heavy", limit: 2, maxHold: HOLD, onDeadline: "run" });
+    expect(matchHeavyCommand("vitest run src/one.test.ts", config({ rules }))).toEqual({
+        id: "narrow",
+        pool: "solo",
+        limit: 1,
+        maxHold: HOLD,
+        onDeadline: "run",
+    });
+    expect(matchHeavyCommand("vitest run src/two.test.ts", config({ rules }))).toEqual({
+        id: "broad",
+        pool: "heavy",
+        limit: 2,
+        maxHold: HOLD,
+        onDeadline: "run",
+    });
 });
 
 test("a rule's own pool and limit override the file's, and absent ones inherit", () => {

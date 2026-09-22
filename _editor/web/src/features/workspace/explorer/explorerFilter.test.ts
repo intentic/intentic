@@ -63,7 +63,19 @@ describe(`the explorer's technical-files filter`, () => {
     });
 
     it(`takes out dot entries, lockfiles, manifests, compiler output and dependency folders`, () => {
-        for (const name of [`.gitignore`, STATE_DIR, `.github`, `pnpm-lock.yaml`, `tsconfig.json`, `tsconfig.app.json`, `vite.config.ts`, `index.d.ts`, `main.js.map`, `Dockerfile`, `LICENSE`]) {
+        for (const name of [
+            `.gitignore`,
+            STATE_DIR,
+            `.github`,
+            `pnpm-lock.yaml`,
+            `tsconfig.json`,
+            `tsconfig.app.json`,
+            `vite.config.ts`,
+            `index.d.ts`,
+            `main.js.map`,
+            `Dockerfile`,
+            `LICENSE`,
+        ]) {
             expect(isTechnicalEntry(name, `file`), name).toBe(true);
         }
         for (const name of [`.git`, `node_modules`, `dist`, `coverage`, `__pycache__`]) {
@@ -72,7 +84,18 @@ describe(`the explorer's technical-files filter`, () => {
     });
 
     it(`keeps what a maker came for: documents, media, pages, and the source that makes them`, () => {
-        for (const name of [`README.md`, `notes.md`, `hero.png`, `index.html`, `styles.css`, `main.ts`, `App.vue`, `AGENTS.md`, `config.ts`, `budget.xlsx`]) {
+        for (const name of [
+            `README.md`,
+            `notes.md`,
+            `hero.png`,
+            `index.html`,
+            `styles.css`,
+            `main.ts`,
+            `App.vue`,
+            `AGENTS.md`,
+            `config.ts`,
+            `budget.xlsx`,
+        ]) {
             expect(isTechnicalEntry(name, `file`), name).toBe(false);
         }
         for (const name of [`docs`, `src`, `public`, `images`, `configs`]) {

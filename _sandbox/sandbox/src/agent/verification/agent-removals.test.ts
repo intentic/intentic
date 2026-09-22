@@ -15,10 +15,12 @@ const treeReader =
     async (path) =>
         tree[path];
 
-const gitSaying = (rows: Record<string, readonly [string, number, string][]>): GitRunner => async (_dir, args) => {
-    const searched = args.find((arg) => arg.startsWith("-S"))?.slice(2) ?? "";
-    return { stdout: (rows[searched] ?? []).map(([hash, at, subject]) => [hash, String(at), subject].join(FIELD)).join("\n"), stderr: "" };
-};
+const gitSaying =
+    (rows: Record<string, readonly [string, number, string][]>): GitRunner =>
+    async (_dir, args) => {
+        const searched = args.find((arg) => arg.startsWith("-S"))?.slice(2) ?? "";
+        return { stdout: (rows[searched] ?? []).map(([hash, at, subject]) => [hash, String(at), subject].join(FIELD)).join("\n"), stderr: "" };
+    };
 
 // A git nothing should reach: every call is a subprocess this turn was not supposed to spend.
 const noGit: GitRunner = async () => {

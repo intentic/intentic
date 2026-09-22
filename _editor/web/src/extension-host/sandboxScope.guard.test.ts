@@ -67,11 +67,9 @@ const extensionSources = (): { path: string; text: string }[] => {
             reached.add(file);
         }
     }
-    return (
-        [...reached]
-            .filter((file) => file.endsWith(`.ts`))
-            .map((file) => ({ path: relative(EXTENSIONS, file).replaceAll(`\\`, `/`), text: readFileSync(file, `utf8`) }))
-    );
+    return [...reached]
+        .filter((file) => file.endsWith(`.ts`))
+        .map((file) => ({ path: relative(EXTENSIONS, file).replaceAll(`\\`, `/`), text: readFileSync(file, `utf8`) }));
 };
 
 // Set near the true count so a scan that silently shrinks fails loud, not passes green.

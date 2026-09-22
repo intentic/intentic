@@ -19,7 +19,7 @@ describe(`sessionIdFrom`, () => {
         expect(sessionIdFrom(ID.toUpperCase())).toBe(ID);
     });
 
-/* An id is whatever minted it. */
+    /* An id is whatever minted it. */
     it(`carries an id that is not a uuid, on the strength of its costume`, () => {
         expect(sessionIdFrom(`agent/${STEP}`)).toBe(STEP);
         expect(sessionIdFrom(`https://sandbox.example.com/agents/${STEP}`)).toBe(STEP);

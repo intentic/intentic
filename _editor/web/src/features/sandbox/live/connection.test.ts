@@ -125,17 +125,7 @@ describe(`applyConnectionSignal`, () => {
     it(`sends a stream that barely lived back to the top of the ladder, not past it`, () => {
         // A stream that opened and died almost at once resets the climb but still pays the first rung.
         const fail = failed();
-        const state = drive(
-            { kind: `connect` },
-            fail,
-            fail,
-            fail,
-            { kind: `connect` },
-            { kind: `opened` },
-            frame(),
-            { kind: `connect` },
-            fail,
-        );
+        const state = drive({ kind: `connect` }, fail, fail, fail, { kind: `connect` }, { kind: `opened` }, frame(), { kind: `connect` }, fail);
         expect(state.retryDelayMs).toBe(1000);
         expect(state.attempt).toBe(1);
     });
@@ -149,7 +139,14 @@ describe(`applyConnectionSignal`, () => {
 
     it(`walks the ladder from its top rung when the free reconnect fails too`, () => {
         // Nothing is proved twice: the repair spent no rung, so the failure after it is the ladder's first.
-        const state = drive({ kind: `connect` }, { kind: `opened` }, frame(0), failed(network(), 60_000), { kind: `connect` }, failed(network(), 61_000));
+        const state = drive(
+            { kind: `connect` },
+            { kind: `opened` },
+            frame(0),
+            failed(network(), 60_000),
+            { kind: `connect` },
+            failed(network(), 61_000),
+        );
         expect(state.retryDelayMs).toBe(1000);
         expect(state.attempt).toBe(1);
         // And the clock a person is shown still runs from the first failure, not from the retry.

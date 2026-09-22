@@ -73,7 +73,14 @@ test("carries a composite answer, judged on the field that matters", () => {
         what: `a commit subject`,
         read: (reply) => {
             const lines = reply.trim().split(`\n`);
-            return { subject: lines[0]?.trim() ?? ``, note: lines.find((line) => line.startsWith(`Release-Note:`))?.slice(14).trim() ?? `` };
+            return {
+                subject: lines[0]?.trim() ?? ``,
+                note:
+                    lines
+                        .find((line) => line.startsWith(`Release-Note:`))
+                        ?.slice(14)
+                        .trim() ?? ``,
+            };
         },
         unusable: ({ subject }) => sentenceReason(`a commit subject`, subject, 20),
     };

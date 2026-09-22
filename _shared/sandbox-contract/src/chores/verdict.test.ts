@@ -87,9 +87,7 @@ describe(`what "we have not measured this" means`, () => {
     test(`a probe the repository cannot run says so, and never badges`, () => {
         const knipReason = `knip is not a devDependency`;
         const input = report({
-            repos: [
-                { repo: `app`, probes: [probe({ id: `knip`, state: `unavailable`, reason: knipReason })], signals: signals() },
-            ],
+            repos: [{ repo: `app`, probes: [probe({ id: `knip`, state: `unavailable`, reason: knipReason })], signals: signals() }],
         });
         const verdict = verdictFor(input, `dead-code`);
         expect(verdict.state).toBe(`unavailable`);
@@ -749,7 +747,10 @@ describe(`whether a chore has already been answered`, () => {
     });
 
     test(`a row with no finding of its own has no answer`, () => {
-        const clear = verdictFor(report({ repos: [{ repo: `app`, probes: [auditProbe([])], signals: signals() }], ledger: [ledgerEntry()] }), `security-advisories`);
+        const clear = verdictFor(
+            report({ repos: [{ repo: `app`, probes: [auditProbe([])], signals: signals() }], ledger: [ledgerEntry()] }),
+            `security-advisories`,
+        );
         expect(clear.state).toBe(`clear`);
         expect(clear.digest).toBe(``);
         expect(choreAnswer(clear)).toBeUndefined();

@@ -34,7 +34,10 @@ const MAX_FILES_PER_DIR = 30;
 const INDEX_DIRS = new Map([
     ["_shared/sandbox-contract/src/contracts", "one *.contract.ts per wire group; the group list IS this directory"],
     ["_shared/sandbox-contract/src/schemas", "one module per wire group, named after it"],
-    ["_sandbox/sandbox/src/capabilities/handlers", "one *.handler.ts per CapabilityKind; registry.ts is the total map, so a missing one is a compile error"],
+    [
+        "_sandbox/sandbox/src/capabilities/handlers",
+        "one *.handler.ts per CapabilityKind; registry.ts is the total map, so a missing one is a compile error",
+    ],
 ]);
 
 // A file nobody reads to find their way around: an image, a font, a media clip. Both rules below exempt these, for one
@@ -86,10 +89,7 @@ const childDirs = (dir) => {
 const untracked = untrackedFiles();
 const hasContent = (dir) => tracked.some((path) => path.startsWith(`${dir}/`)) || untracked.some((path) => path.startsWith(`${dir}/`));
 
-const ghostCandidates = [
-    ...childDirs("").flatMap((part) => [part, ...childDirs(part)]),
-    ...packages.flatMap(({ name }) => childDirs(`${name}/src`)),
-];
+const ghostCandidates = [...childDirs("").flatMap((part) => [part, ...childDirs(part)]), ...packages.flatMap(({ name }) => childDirs(`${name}/src`))];
 const ghosts = [];
 const mirroredGhosts = [];
 for (const dir of ghostCandidates) {
@@ -112,7 +112,9 @@ if (swept.length > 0) {
     console.log(`layout: swept ${swept.length} ghost director${swept.length === 1 ? "y" : "ies"} a rename left behind: ${swept.join(", ")}`);
 }
 if (mirroredGhosts.length > 0) {
-    console.log(`layout: ${mirroredGhosts.length} ghost director${mirroredGhosts.length === 1 ? "y is" : "ies are"} mirror mounts of a tree this worktree cannot fix; the primary checkout sweeps them`);
+    console.log(
+        `layout: ${mirroredGhosts.length} ghost director${mirroredGhosts.length === 1 ? "y is" : "ies are"} mirror mounts of a tree this worktree cannot fix; the primary checkout sweeps them`,
+    );
 }
 if (prune) {
     process.exit(0);
@@ -151,9 +153,7 @@ const indexRetired = [...INDEX_DIRS.keys()].filter((dir) => existsSync(join(root
 // Twins. Wire groups are discovered from contract files rather than hardcoded, so a moved contract package doesn't
 // break this.
 const wireGroups = new Set(
-    tracked
-        .filter((path) => /\/contracts\/[^/]+\.contract\.ts$/.test(path))
-        .map((path) => basename(path).replace(/\.contract\.ts$/, "")),
+    tracked.filter((path) => /\/contracts\/[^/]+\.contract\.ts$/.test(path)).map((path) => basename(path).replace(/\.contract\.ts$/, "")),
 );
 // Pairs excluded for a reason other than the wire; each entry names a deliberate exception.
 const TOLERATED_TWINS = new Map();
@@ -195,7 +195,8 @@ const nameMismatches = packages.flatMap(({ name, pkg }) => {
 
 // Basename collisions within one package; exemptions are names whose job is to repeat (a barrel, invariant.ts, a
 // manifest, a route/handler file, a test).
-const COLLISION_OK = /^(index\.ts|invariant\.ts|README\.md|package\.json|tsconfig.*\.json|bunfig\.toml)$|\.(routes|contract|handler|test|spec)\.[cm]?tsx?$/;
+const COLLISION_OK =
+    /^(index\.ts|invariant\.ts|README\.md|package\.json|tsconfig.*\.json|bunfig\.toml)$|\.(routes|contract|handler|test|spec)\.[cm]?tsx?$/;
 const collisions = new Map();
 for (const { name } of packages) {
     const seen = new Map();
@@ -226,7 +227,11 @@ const DEAD_NAMES = [
     { pattern: /intentic\/_apps\//, why: "this repo's own _apps/ was removed on 2026-08-09" },
     { pattern: /intentic\/_libs\//, why: "this repo's own _libs/ was removed on 2026-08-09" },
     // Packages that moved to `_shared/`; names are unambiguous (no generated project uses them), so matched bare.
-    { pattern: /_sandbox\/(sandbox-contract|sandbox-openapi|sandbox-run|extension-api|extension-manifest|connector-runtime|registry|workspace-ignore)\b/, why: "moved to _shared/" },
+    {
+        pattern:
+            /_sandbox\/(sandbox-contract|sandbox-openapi|sandbox-run|extension-api|extension-manifest|connector-runtime|registry|workspace-ignore)\b/,
+        why: "moved to _shared/",
+    },
     { pattern: /_editor\/extension-ui\b/, why: "moved to _shared/extension-ui" },
     { pattern: /_platform\/(api-contract|capability-catalog)\b/, why: "moved to _shared/" },
     { pattern: /_sandbox\/issue-widget\b/, why: "the directory is _sandbox/issue-sdk, after its npm name" },
@@ -288,8 +293,13 @@ if (allow !== undefined) {
     const count = (found === "fanOut" ? fanOut : collisions).get(allow);
     const next = { fanOut: { ...baseline.fanOut }, collisions: { ...baseline.collisions } };
     next[found][allow] = count;
-    writeFileSync(BASELINE, `${JSON.stringify({ fanOut: asObject(new Map(Object.entries(next.fanOut))), collisions: asObject(new Map(Object.entries(next.collisions))) }, null, 4)}\n`);
-    console.log(`layout: recorded ${allow} at ${count}; the entry rides your next commit, and the ratchet lowers it again on its own once the tree beats it`);
+    writeFileSync(
+        BASELINE,
+        `${JSON.stringify({ fanOut: asObject(new Map(Object.entries(next.fanOut))), collisions: asObject(new Map(Object.entries(next.collisions))) }, null, 4)}\n`,
+    );
+    console.log(
+        `layout: recorded ${allow} at ${count}; the entry rides your next commit, and the ratchet lowers it again on its own once the tree beats it`,
+    );
     process.exit(0);
 }
 
@@ -315,22 +325,35 @@ const ratchet = (found, allowed, describe) => {
     return [grown, tightened, next];
 };
 const [fanOutGrown, fanOutTightened, fanOutNext] = ratchet(fanOut, baseline.fanOut ?? {}, (dir, count) => `${dir}: ${count} files`);
-const [collisionsGrown, collisionsTightened, collisionsNext] = ratchet(collisions, baseline.collisions ?? {}, (pkg, count) => `${pkg}: ${count} colliding basename(s)`);
+const [collisionsGrown, collisionsTightened, collisionsNext] = ratchet(
+    collisions,
+    baseline.collisions ?? {},
+    (pkg, count) => `${pkg}: ${count} colliding basename(s)`,
+);
 const tightened = [...fanOutTightened, ...collisionsTightened];
 if (tightened.length > 0) {
     if (writesBaselines()) {
-        writeFileSync(BASELINE, `${JSON.stringify({ fanOut: asObject(new Map(Object.entries(fanOutNext))), collisions: asObject(new Map(Object.entries(collisionsNext))) }, null, 4)}\n`);
+        writeFileSync(
+            BASELINE,
+            `${JSON.stringify({ fanOut: asObject(new Map(Object.entries(fanOutNext))), collisions: asObject(new Map(Object.entries(collisionsNext))) }, null, 4)}\n`,
+        );
         console.log(`layout: tightened _tools/checks/baselines/layout.json to what the tree has (${tightened.join(", ")}); it rides the next commit`);
     } else {
-        console.log(`layout: the tree beats its baseline (${tightened.join(", ")}); the checkout that commits tightens _tools/checks/baselines/layout.json on its next run`);
+        console.log(
+            `layout: the tree beats its baseline (${tightened.join(", ")}); the checkout that commits tightens _tools/checks/baselines/layout.json on its next run`,
+        );
     }
 }
 const twinsRetired = [...TOLERATED_TWINS.keys()].filter((key) => !seenTwins.has(key));
 if (twinsRetired.length > 0) {
-    console.log(`layout: TOLERATED_TWINS names ${twinsRetired.join(", ")}, no longer a pair: drop the entry when you next edit _tools/checks/layout.mjs`);
+    console.log(
+        `layout: TOLERATED_TWINS names ${twinsRetired.join(", ")}, no longer a pair: drop the entry when you next edit _tools/checks/layout.mjs`,
+    );
 }
 if (indexRetired.length > 0) {
-    console.log(`layout: INDEX_DIRS names ${indexRetired.join(", ")}, now under the limit on its own: drop the entry when you next edit _tools/checks/layout.mjs`);
+    console.log(
+        `layout: INDEX_DIRS names ${indexRetired.join(", ")}, now under the limit on its own: drop the entry when you next edit _tools/checks/layout.mjs`,
+    );
 }
 
 finish(
@@ -365,7 +388,8 @@ finish(
     ],
     [
         `${ghostCandidates.length} directories at part, package and module level: no ghosts${swept.length > 0 ? ` (${swept.length} swept)` : ""}${
-            mirroredGhosts.length > 0 ? ` (${mirroredGhosts.length} unjudgeable here: mirror mounts of a tree this worktree cannot fix)` : ""}`,
+            mirroredGhosts.length > 0 ? ` (${mirroredGhosts.length} unjudgeable here: mirror mounts of a tree this worktree cannot fix)` : ""
+        }`,
         `${packages.length} packages: every directory named after its package, no new over-full directory, no new colliding basename, no twin siblings outside the wire's own vocabulary`,
         `${INDEX_DIRS.size} index directories exempt from fan-out by name, every one of them present and still over the limit`,
         `${tracked.length} tracked files: no dead directory name`,

@@ -12,7 +12,8 @@ const NUMERIC = new Set([`float`, `percentage`, `currency`]);
 const cell = (type: string, value: string, shown: string): string =>
     `<table:table-cell office:value-type="${type}" ${NUMERIC.has(type) ? `office:value` : `office:${type}-value`}="${value}"><text:p>${shown}</text:p></table:table-cell>`;
 
-const sheetOf = (tables: string): Uint8Array => odfBytes({ mimetype: SHEET_MIME, content: contentXml(`<office:spreadsheet>${tables}</office:spreadsheet>`) });
+const sheetOf = (tables: string): Uint8Array =>
+    odfBytes({ mimetype: SHEET_MIME, content: contentXml(`<office:spreadsheet>${tables}</office:spreadsheet>`) });
 
 const rowsOf = (tables: string) => readOdsBook(sheetOf(tables)).map((sheet) => ({ name: sheet.name, rows: toRows(sheet.data) }));
 

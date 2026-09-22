@@ -9,9 +9,7 @@ test("defaultPinRunSettings offers effort and thinking only where the runtime ho
 
 test("carryPinKnobs keeps effort across effort-capable providers and drops it for Google", () => {
     expect(carryPinKnobs({ provider: `codex`, model: `gpt-5.6`, effort: `high` }, `claude`, `native`)).toEqual({ effort: `high` });
-    expect(carryPinKnobs({ provider: `claude`, model: `claude-haiku-4-5`, effort: `high`, thinking: false }, `gemini`, `native`)).toEqual(
-        {},
-    );
+    expect(carryPinKnobs({ provider: `claude`, model: `claude-haiku-4-5`, effort: `high`, thinking: false }, `gemini`, `native`)).toEqual({});
 });
 
 test("honoredPinKnobs and pinKnobSummary omit knobs Google cannot run", () => {

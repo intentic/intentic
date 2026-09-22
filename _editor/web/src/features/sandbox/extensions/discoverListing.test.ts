@@ -104,7 +104,14 @@ describe(`what last night's scan is allowed to claim`, () => {
 describe(`how the list is grouped and searched`, () => {
     const listings = [
         toListing(entry({ name: `intentic.saldeo`, description: `SaldeoSMART invoices and bank reconciliation.`, trust: `verified` }), []),
-        toListing(entry({ name: `intentic.logs`, description: `The sandbox debug log surface.`, install: { url: `https://github.com/intentic/extension-logs.git`, ref: SHA } }), []),
+        toListing(
+            entry({
+                name: `intentic.logs`,
+                description: `The sandbox debug log surface.`,
+                install: { url: `https://github.com/intentic/extension-logs.git`, ref: SHA },
+            }),
+            [],
+        ),
         toListing(entry({ name: `acme.standup`, description: `Yesterday, today, blockers.` }), []),
     ];
 

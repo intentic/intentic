@@ -230,7 +230,11 @@ describe(`DerivedTextView`, () => {
     it(`picks up text that landed in the background, without the file itself having changed`, async () => {
         // Queued, so the pane is waiting on the pass rather than reading the file itself: this is about the frame
         // that tells it the wait is over.
-        answers.read = nothing({ path: `bundle.zip`, state: `queued`, queue: { enabled: true, queued: 1, deriving: [], sweeping: false, broken: false } });
+        answers.read = nothing({
+            path: `bundle.zip`,
+            state: `queued`,
+            queue: { enabled: true, queued: 1, deriving: [], sweeping: false, broken: false },
+        });
         const element = mount({ path: `bundle.zip` });
         await settle();
         expect(element.textContent).toContain(`in line to be read`);

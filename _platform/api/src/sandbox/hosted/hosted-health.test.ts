@@ -35,8 +35,7 @@ const config = (over: Record<string, unknown> = {}): Config =>
 const EDGE_URL = `https://ingress.sbx.test/health`;
 const EDGE_OK = { status: `ok`, tunnels: 0, instance: `m1`, peers: 1, remote: 0, replay: true, build: `turbo-abc` };
 
-const edgeAnswer = (target: string, edge: unknown): Response | undefined =>
-    target === EDGE_URL ? new Response(JSON.stringify(edge)) : undefined;
+const edgeAnswer = (target: string, edge: unknown): Response | undefined => (target === EDGE_URL ? new Response(JSON.stringify(edge)) : undefined);
 
 const stubApps = (...names: string[]) => {
     stubGlobal(`fetch`, (url: URL | string) =>
@@ -54,12 +53,7 @@ const stubFly = (apps: string[], machines: Record<string, unknown[]> = {}, edge:
             return Promise.resolve(edgeResponse);
         }
         const app = /\/apps\/([^/]+)\/machines$/.exec(target)?.[1];
-        const body =
-            app !== undefined
-                ? (machines[app] ?? [])
-                : target.endsWith('/volumes')
-                  ? []
-                  : { apps: apps.map((name) => ({ name })) };
+        const body = app !== undefined ? (machines[app] ?? []) : target.endsWith("/volumes") ? [] : { apps: apps.map((name) => ({ name })) };
         return Promise.resolve(new Response(JSON.stringify(body)));
     });
 };
@@ -196,7 +190,7 @@ describe(`hosted health`, () => {
         expect(health?.healthy).toBe(false);
     });
 
-/* THE STALE EDGE THE TWO CHECKS AROUND IT BOTH LET THROUGH. */
+    /* THE STALE EDGE THE TWO CHECKS AROUND IT BOTH LET THROUGH. */
     it(`is unhealthy when the edge replays but carries no build stamp, so its machines never rolled`, async () => {
         const { status, tunnels, replay } = EDGE_OK;
         stubFly([`intentic-sbx-pool-1`], {}, { status, tunnels, replay });
@@ -233,14 +227,16 @@ describe(`hosted health`, () => {
     // The edge unreachable means nothing is reachable, tunnel lane included; it must not read as a fleet fault.
     it(`says so when the edge cannot be reached at all`, async () => {
         stubGlobal(`fetch`, (url: URL | string) =>
-            String(url) === EDGE_URL ? Promise.reject(new Error(`getaddrinfo ENOTFOUND`)) : Promise.resolve(new Response(JSON.stringify({ apps: [] }))),
+            String(url) === EDGE_URL
+                ? Promise.reject(new Error(`getaddrinfo ENOTFOUND`))
+                : Promise.resolve(new Response(JSON.stringify({ apps: [] }))),
         );
         const health = await sweepHostedHealth(prismaWith([], []), config({ poolSize: 0, regionEu: `` }), logger);
         expect(health?.edge?.fault).toContain(`could not be reached at all`);
         expect(health?.healthy).toBe(false);
     });
 
-/* THE OUTAGE EVERY OTHER READING HERE CALLS HEALTHY. */
+    /* THE OUTAGE EVERY OTHER READING HERE CALLS HEALTHY. */
     it(`is unhealthy when every sandbox that checked in says its own address does not answer`, async () => {
         stubFly([`intentic-sbx-a`, `intentic-sbx-pool-1`]);
         const prisma = prismaWith([taken(`intentic-sbx-a`)], [warm(`intentic-sbx-pool-1`)], { reachable: 0, unreachable: 3 });

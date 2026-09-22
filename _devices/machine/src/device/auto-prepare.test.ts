@@ -48,10 +48,7 @@ test("a tick prepares each eligible sandbox once and reports ic's own last sente
         new Set(),
     );
     expect(ran).toEqual(["one", "two"]);
-    expect(lines).toEqual([
-        "auto-prepare one: intentic: 1.2.3 is downloaded and built",
-        "auto-prepare two: intentic: 1.2.3 is downloaded and built",
-    ]);
+    expect(lines).toEqual(["auto-prepare one: intentic: 1.2.3 is downloaded and built", "auto-prepare two: intentic: 1.2.3 is downloaded and built"]);
 });
 
 test("a failing sandbox sits out doubling ticks, and its first success clears the history", async () => {
@@ -86,7 +83,13 @@ test("a failing sandbox sits out doubling ticks, and its first success clears th
 test("a prepare that THROWS (no ic on this machine) is a failure with backoff, not an unhandled rejection", async () => {
     const state = newState();
     const lines: string[] = [];
-    await runTick(state, [box("work")], () => Promise.reject(new Error("This device has no `ic` command")), (line) => lines.push(line), new Set());
+    await runTick(
+        state,
+        [box("work")],
+        () => Promise.reject(new Error("This device has no `ic` command")),
+        (line) => lines.push(line),
+        new Set(),
+    );
     expect(lines).toEqual(["auto-prepare work: failed (attempt 1, retrying after 1 tick) — This device has no `ic` command"]);
     // …and the sit-out is honoured on the next tick.
     const ran: string[] = [];

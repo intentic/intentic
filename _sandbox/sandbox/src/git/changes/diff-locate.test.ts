@@ -12,8 +12,18 @@ test("each source reads into its own shape, with only the fields that source has
         side: "unstaged",
         path: "a.docx",
     });
-    expect(parseDiffSourceQuery(query({ source: "agent", agent: "abc", repo: "web", path: "x.pdf" }))).toEqual({ source: "agent", agent: "abc", repo: "web", path: "x.pdf" });
-    expect(parseDiffSourceQuery(query({ source: "commit", repo: "root", sha: "deadbeef", path: "x.pdf" }))).toEqual({ source: "commit", repo: "root", sha: "deadbeef", path: "x.pdf" });
+    expect(parseDiffSourceQuery(query({ source: "agent", agent: "abc", repo: "web", path: "x.pdf" }))).toEqual({
+        source: "agent",
+        agent: "abc",
+        repo: "web",
+        path: "x.pdf",
+    });
+    expect(parseDiffSourceQuery(query({ source: "commit", repo: "root", sha: "deadbeef", path: "x.pdf" }))).toEqual({
+        source: "commit",
+        repo: "root",
+        sha: "deadbeef",
+        path: "x.pdf",
+    });
     expect(parseDiffSourceQuery(query({ source: "checkpoint", snapshot: "s1", scope: "root", path: "x.pdf" }))).toEqual({
         source: "checkpoint",
         snapshot: "s1",

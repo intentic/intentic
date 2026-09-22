@@ -131,10 +131,7 @@ test("a repair and a save cannot lose each other", async () => {
 
     // Settings writes rewrite the whole file on every switch; without the store's queue, a concurrent repair and save
     // would lose one or reinstate the removed key.
-    await Promise.all([
-        repairManifest({ root, path: REL, key: "contextShelf" }),
-        file.update((current) => ({ ...current, hashlineEdits: true })),
-    ]);
+    await Promise.all([repairManifest({ root, path: REL, key: "contextShelf" }), file.update((current) => ({ ...current, hashlineEdits: true }))]);
 
     const after = await contents(path);
     expect(after["hashlineEdits"]).toBe(true);

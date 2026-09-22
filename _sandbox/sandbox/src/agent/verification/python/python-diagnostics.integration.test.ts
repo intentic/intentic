@@ -48,7 +48,7 @@ test("the nearest .venv above a file is what the type check is pointed at, and a
     expect(await interpreterNear(file)).toBeUndefined();
 
     const interpreter = join(root, ".venv", "bin", "python");
-    await writeFile(interpreter, "#!/bin/sh\nexec python3 \"$@\"\n");
+    await writeFile(interpreter, '#!/bin/sh\nexec python3 "$@"\n');
     await chmod(interpreter, 0o755);
     // Found from a file several directories below it, which is where a project's modules actually live.
     expect(await interpreterNear(file)).toBe(interpreter);
@@ -66,7 +66,8 @@ test.skipIf(!hasRuff)("an undefined name is an error, and a file with nothing wr
     const dir = await project({
         "undefined.py": "def f():\n    return missing_helper(1)\n",
         // Every shape that breaks a naive undefined-name check: a star import, a late global, a type-only name.
-        "fine.py": 'from os.path import *\nimport typing\n\nif typing.TYPE_CHECKING:\n    from foo import Bar\n\ndef f(p, b: "Bar"):\n    return join(p, LATER)\n\nLATER = "x"\n',
+        "fine.py":
+            'from os.path import *\nimport typing\n\nif typing.TYPE_CHECKING:\n    from foo import Bar\n\ndef f(p, b: "Bar"):\n    return join(p, LATER)\n\nLATER = "x"\n',
     });
 
     const bad = await check(join(dir, "undefined.py"));
@@ -76,17 +77,21 @@ test.skipIf(!hasRuff)("an undefined name is an error, and a file with nothing wr
     expect(good.kind === "checked" ? good.lines : ["not checked"]).toEqual([]);
 });
 
-test.skipIf(!hasPyright)("with no environment, the file's own type errors are reported and its unresolved imports are not", async () => {
-    const dir = await project({
-        // `httpx` isn't installed near this file; `.upper()` on an int is wrong regardless.
-        "typed.py": "import httpx\n\ndef f() -> str:\n    return (1).upper()\n",
-    });
-    const answer = await check(join(dir, "typed.py"));
+test.skipIf(!hasPyright)(
+    "with no environment, the file's own type errors are reported and its unresolved imports are not",
+    async () => {
+        const dir = await project({
+            // `httpx` isn't installed near this file; `.upper()` on an int is wrong regardless.
+            "typed.py": "import httpx\n\ndef f() -> str:\n    return (1).upper()\n",
+        });
+        const answer = await check(join(dir, "typed.py"));
 
-    expect(answer.kind).toBe("checked");
-    const lines = answer.kind === "checked" ? answer.lines.join("\n") : "";
-    expect(lines).toContain("error report");
-    expect(lines).not.toContain("httpx");
-    // The claim is narrower than a clean report looks, and the answer says so rather than leaving it inferred.
-    expect(answer.kind === "checked" ? answer.note : undefined).toContain("no `.venv` was found");
-}, 60_000);
+        expect(answer.kind).toBe("checked");
+        const lines = answer.kind === "checked" ? answer.lines.join("\n") : "";
+        expect(lines).toContain("error report");
+        expect(lines).not.toContain("httpx");
+        // The claim is narrower than a clean report looks, and the answer says so rather than leaving it inferred.
+        expect(answer.kind === "checked" ? answer.note : undefined).toContain("no `.venv` was found");
+    },
+    60_000,
+);

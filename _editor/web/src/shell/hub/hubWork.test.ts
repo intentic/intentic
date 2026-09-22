@@ -40,9 +40,9 @@ it(`ends a tracked run whether the work resolves or throws`, async () => {
     });
     expect(hubWorkRunning(DEVICES)).toBeUndefined();
 
-    await expect(
-        trackHubWork(DEVICES, `Updating a container`, () => Promise.reject(new Error(`that device said no`))),
-    ).rejects.toThrow(`that device said no`);
+    await expect(trackHubWork(DEVICES, `Updating a container`, () => Promise.reject(new Error(`that device said no`)))).rejects.toThrow(
+        `that device said no`,
+    );
     expect(hubWorkRunning(DEVICES)).toBeUndefined();
 });
 

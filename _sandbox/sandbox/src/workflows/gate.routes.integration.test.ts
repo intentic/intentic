@@ -112,7 +112,12 @@ test("the request body reaches the step as the run's request", async () => {
     const services = fakeServices(root);
     const prompts: string[] = [];
     await services.workflows.save(gated("wf-body"), true);
-    await post(appFor(services, judging(root, "pass", prompts)), "wf-body", `token=${await token("wf-body")}`, "sha=deadbeef url=https://preview.example");
+    await post(
+        appFor(services, judging(root, "pass", prompts)),
+        "wf-body",
+        `token=${await token("wf-body")}`,
+        "sha=deadbeef url=https://preview.example",
+    );
 
     expect(prompts[0]).toContain("https://preview.example");
 });
@@ -143,10 +148,7 @@ test("a wrong token is refused before anything is spent", async () => {
 test("a gate past its daily ceiling refuses without starting a run", async () => {
     const root = tempRoot();
     const services = fakeServices(root);
-    await services.workflows.save(
-        gated("wf-ceiling", { gate: { step: "judge", field: "release", pass: ["pass"], dailyMax: 1 } }),
-        true,
-    );
+    await services.workflows.save(gated("wf-ceiling", { gate: { step: "judge", field: "release", pass: ["pass"], dailyMax: 1 } }), true);
     const app = appFor(services, judging(root, "pass"));
 
     expect((await post(app, "wf-ceiling")).status).toBe(200);

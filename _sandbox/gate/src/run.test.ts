@@ -22,12 +22,36 @@ test("a prompt and the env's address and token are a call with the defaults; the
     const parsed = parseRunArgs(["fix", "the", "flaky", "test"], env, random);
     expect(parsed).toEqual({
         kind: "call",
-        call: { origin: "https://box.example", token: "ict_t", prompt: "fix the flaky test", conversationId: "ci-abc-123", waitS: RUN_WAIT_DEFAULT_S, land: false },
+        call: {
+            origin: "https://box.example",
+            token: "ict_t",
+            prompt: "fix the flaky test",
+            conversationId: "ci-abc-123",
+            waitS: RUN_WAIT_DEFAULT_S,
+            land: false,
+        },
     });
 });
 
 test("options override the env; --land and --agent ride along; --conversation pins the conversation", () => {
-    const parsed = parseRunArgs(["--url", "https://other.example/some/path", "--token", "ict_x", "--agent", "codex", "--wait", "60", "--land", "--conversation", "pr-7", "go"], env, random);
+    const parsed = parseRunArgs(
+        [
+            "--url",
+            "https://other.example/some/path",
+            "--token",
+            "ict_x",
+            "--agent",
+            "codex",
+            "--wait",
+            "60",
+            "--land",
+            "--conversation",
+            "pr-7",
+            "go",
+        ],
+        env,
+        random,
+    );
     expect(parsed).toEqual({
         kind: "call",
         call: { origin: "https://other.example", token: "ict_x", prompt: "go", conversationId: "pr-7", agent: "codex", waitS: 60, land: true },
@@ -36,7 +60,10 @@ test("options override the env; --land and --agent ride along; --conversation pi
 
 test("a missing address, a missing token, a bad wait, a bad URL and an unknown option are each refused with their own sentence", () => {
     expect(parseRunArgs(["go"], {}, random)).toEqual({ kind: "error", message: "no sandbox URL: pass --url or set INTENTIC_URL" });
-    expect(parseRunArgs(["go"], { INTENTIC_URL: "https://box.example" }, random)).toMatchObject({ kind: "error", message: expect.stringContaining("no control token") });
+    expect(parseRunArgs(["go"], { INTENTIC_URL: "https://box.example" }, random)).toMatchObject({
+        kind: "error",
+        message: expect.stringContaining("no control token"),
+    });
     expect(parseRunArgs(["--wait", "soon"], env, random)).toEqual({ kind: "error", message: '--wait needs a whole number, not "soon"' });
     expect(parseRunArgs(["--url", "not a url"], env, random)).toEqual({ kind: "error", message: "the URL is not a sandbox address: not a url" });
     expect(parseRunArgs(["--nope"], env, random)).toEqual({ kind: "error", message: "unknown option --nope" });
@@ -54,7 +81,15 @@ test("the conversation is one per CI run and attempt, and random outside a runne
 
 // The body this sends is a legal turn as the contract spells it, held against the schema rather than an import.
 test("the request body is a valid isolated turn", () => {
-    const body = runRequestBody({ origin: "https://box.example", token: "t", prompt: "go", conversationId: "ci-1-1", agent: "codex", waitS: 10, land: false });
+    const body = runRequestBody({
+        origin: "https://box.example",
+        token: "t",
+        prompt: "go",
+        conversationId: "ci-1-1",
+        agent: "codex",
+        waitS: 10,
+        land: false,
+    });
     expect(AgentTurnSchema.safeParse(body).success).toBe(true);
     expect(body).toEqual({ prompt: "go", conversationId: "ci-1-1", isolated: true, agent: "codex" });
 });
@@ -104,7 +139,12 @@ const scripted = (answers: { readonly cards: readonly object[]; readonly land?: 
             calls.push({ url, method: init.method, headers: init.headers, ...(init.body === undefined ? {} : { body: init.body }) });
             if (url.endsWith("/agent")) {
                 const status = answers.startStatus ?? 200;
-                return { ok: status < 400, status, text: async () => (status < 400 ? JSON.stringify({ run: "r1" }) : JSON.stringify({ error: "control token not valid for this route" })) };
+                return {
+                    ok: status < 400,
+                    status,
+                    text: async () =>
+                        status < 400 ? JSON.stringify({ run: "r1" }) : JSON.stringify({ error: "control token not valid for this route" }),
+                };
             }
             if (url.endsWith("/land")) {
                 return answers.land === undefined
@@ -126,7 +166,9 @@ const scripted = (answers: { readonly cards: readonly object[]; readonly land?: 
 const call = { origin: "https://box.example", token: "ict_t", prompt: "go", conversationId: "ci-1-1", waitS: 60, land: false };
 
 test("the exchange starts the turn with the control token, polls the card until it settles, and lands only when asked", async () => {
-    const { deps, calls } = scripted({ cards: [{ status: "running" }, { status: "running" }, { status: "ready", title: "Fixed it", branch: "agent/ci-1-1" }] });
+    const { deps, calls } = scripted({
+        cards: [{ status: "running" }, { status: "running" }, { status: "ready", title: "Fixed it", branch: "agent/ci-1-1" }],
+    });
     const outcome = await runExchange(call, deps);
     expect(outcome).toEqual({ status: "completed", conversationId: "ci-1-1", branch: "agent/ci-1-1", summary: "Fixed it" });
     expect(calls[0]).toMatchObject({ url: "https://box.example/agent", method: "POST", headers: { "x-intentic-control": "ict_t" } });

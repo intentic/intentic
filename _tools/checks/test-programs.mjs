@@ -122,8 +122,7 @@ for (const { name, dir, pkg } of packages) {
 const BUNFIG = "bunfig.toml";
 // Loaded per file: the budget by suite name. Without it a bare `bun test` runs on bun's 5s hang detector.
 const PRELOAD = "_tools/testing/src/bun-preload.ts";
-const preloadsOf = (source) =>
-    [...(/preload\s*=\s*\[([^\]]*)\]/.exec(source)?.[1] ?? "").matchAll(/["']([^"']+)["']/g)].map((match) => match[1]);
+const preloadsOf = (source) => [...(/preload\s*=\s*\[([^\]]*)\]/.exec(source)?.[1] ?? "").matchAll(/["']([^"']+)["']/g)].map((match) => match[1]);
 const budgetless = [];
 for (const { name, dir, pkg } of packages) {
     if (!runsSuites(pkg) || walk(dir).length === 0) {

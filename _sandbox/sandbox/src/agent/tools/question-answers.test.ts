@@ -15,7 +15,7 @@ const questions = [
 ];
 
 describe("the ask tool's result", () => {
-/* One shape written, the same shape read: the recovery path (sessions.ts) has only the text the model was handed. */
+    /* One shape written, the same shape read: the recovery path (sessions.ts) has only the text the model was handed. */
     it("reads its own wording back as the reply that produced it", () => {
         const reply = {
             kind: "question" as const,

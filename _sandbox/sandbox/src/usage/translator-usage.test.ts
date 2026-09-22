@@ -1,5 +1,11 @@
 import { test, expect } from "bun:test";
-import { authFileCooling, codexUsageFromPayload, codexUsageFromRateLimits, geminiUsageFromPayload, kimiUsageFromPayload } from "./translator-usage.js";
+import {
+    authFileCooling,
+    codexUsageFromPayload,
+    codexUsageFromRateLimits,
+    geminiUsageFromPayload,
+    kimiUsageFromPayload,
+} from "./translator-usage.js";
 
 // Pins the mapping into AccountUsage: every named pool becomes its own window, utilization is always utilization, never
 // remaining, and a missing field costs only that window.
@@ -239,7 +245,9 @@ test("maps an app-server rate-limit snapshot onto the same windows as the pulled
 
 // The proxy's own bench of a credential, off its /auth-files listing: the one fact fresher than any reading.
 test("reads the translator's bench of a credential, and nothing for one it is routing to", () => {
-    expect(authFileCooling({ name: "a.json", unavailable: true, status_message: "quota exceeded", next_retry_after: "2027-01-15T08:10:00Z" })).toEqual({
+    expect(
+        authFileCooling({ name: "a.json", unavailable: true, status_message: "quota exceeded", next_retry_after: "2027-01-15T08:10:00Z" }),
+    ).toEqual({
         until: Date.parse("2027-01-15T08:10:00Z") / 1000,
         reason: "quota exceeded",
     });

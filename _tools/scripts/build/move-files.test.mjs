@@ -17,10 +17,11 @@ const tracked = new Set([
 
 test("a directory move means every tracked file under it", () => {
     const moves = expandMoves([{ from: "_sandbox/sandbox/src/agent", to: "_sandbox/sandbox/src/turn" }], tracked);
-    assert.deepEqual(
-        moves.map(({ to }) => to).toSorted(),
-        ["_sandbox/sandbox/src/turn/agent.ts", "_sandbox/sandbox/src/turn/prompt/system-prompt.ts", "_sandbox/sandbox/src/turn/turn-plan.ts"],
-    );
+    assert.deepEqual(moves.map(({ to }) => to).toSorted(), [
+        "_sandbox/sandbox/src/turn/agent.ts",
+        "_sandbox/sandbox/src/turn/prompt/system-prompt.ts",
+        "_sandbox/sandbox/src/turn/turn-plan.ts",
+    ]);
 });
 
 test("a specifier written with the emitted extension resolves to its source", () => {
@@ -29,34 +30,61 @@ test("a specifier written with the emitted extension resolves to its source", ()
 });
 
 test("an extensionless specifier resolves through the file and through a directory index", () => {
-    assert.equal(resolveRelative("_editor/web/src/chat/ChatSection.vue", "../composables/chat/useChat", tracked), "_editor/web/src/composables/chat/useChat.ts");
+    assert.equal(
+        resolveRelative("_editor/web/src/chat/ChatSection.vue", "../composables/chat/useChat", tracked),
+        "_editor/web/src/composables/chat/useChat.ts",
+    );
     assert.equal(resolveRelative("_editor/web/src/chat/ChatSection.vue", "../lib", tracked), "_editor/web/src/lib/index.ts");
 });
 
 test("each style survives the move it is written in", () => {
     // the daemon: keeps the emitted extension
-    assert.equal(specifierFor("_sandbox/sandbox/src/agent/run/agent.ts", "_sandbox/sandbox/src/agent/turn-plan.ts", "./turn-plan.js"), "../turn-plan.js");
+    assert.equal(
+        specifierFor("_sandbox/sandbox/src/agent/run/agent.ts", "_sandbox/sandbox/src/agent/turn-plan.ts", "./turn-plan.js"),
+        "../turn-plan.js",
+    );
     // the web: keeps no extension
-    assert.equal(specifierFor("_editor/web/src/features/chat/ChatSection.vue", "_editor/web/src/composables/chat/useChat.ts", "../composables/chat/useChat"), "../../composables/chat/useChat");
+    assert.equal(
+        specifierFor("_editor/web/src/features/chat/ChatSection.vue", "_editor/web/src/composables/chat/useChat.ts", "../composables/chat/useChat"),
+        "../../composables/chat/useChat",
+    );
     // a directory import stays a directory import
     assert.equal(specifierFor("_editor/web/src/features/chat/ChatSection.vue", "_editor/web/src/lib/index.ts", "../lib"), "../../lib");
     // a .vue target keeps its real extension
-    assert.equal(specifierFor("_editor/web/src/pages/Home.vue", "_editor/web/src/features/chat/ChatSection.vue", "../chat/ChatSection.vue"), "../features/chat/ChatSection.vue");
+    assert.equal(
+        specifierFor("_editor/web/src/pages/Home.vue", "_editor/web/src/features/chat/ChatSection.vue", "../chat/ChatSection.vue"),
+        "../features/chat/ChatSection.vue",
+    );
     // a sibling is written as a relative path, not bare.
-    assert.equal(specifierFor("_sandbox/sandbox/src/agent/run/agent.ts", "_sandbox/sandbox/src/agent/run/turn-plan.ts", "./turn-plan.js"), "./turn-plan.js");
+    assert.equal(
+        specifierFor("_sandbox/sandbox/src/agent/run/agent.ts", "_sandbox/sandbox/src/agent/run/turn-plan.ts", "./turn-plan.js"),
+        "./turn-plan.js",
+    );
     // unbuilt plumbing imports the .mjs that exists; not re-pointed at an emitted name.
     assert.equal(specifierFor("_tools/scripts/verify/verify.mjs", "_tools/scripts/lib/steps.mjs", "../lib/steps.mjs"), "../lib/steps.mjs");
-    assert.equal(specifierFor("_tools/scripts/verify/verify.mjs", "_tools/constants/src/node.mjs", "../../constants/src/node.mjs"), "../../constants/src/node.mjs");
+    assert.equal(
+        specifierFor("_tools/scripts/verify/verify.mjs", "_tools/constants/src/node.mjs", "../../constants/src/node.mjs"),
+        "../../constants/src/node.mjs",
+    );
     // a dot in the filename isn't an extension: `environment.default` keeps its spelling.
     assert.equal(
-        specifierFor("_editor/web/src/app/environments/environment.local.ts", "_editor/web/src/app/environments/environment.default.ts", "./environment.default"),
+        specifierFor(
+            "_editor/web/src/app/environments/environment.local.ts",
+            "_editor/web/src/app/environments/environment.default.ts",
+            "./environment.default",
+        ),
         "./environment.default",
     );
 });
 
 test("a specifier neither end of which moved is left alone, roundabout or not", () => {
     const source = `import { x } from "../chat/useChat";\nimport { y } from "./useChat";`;
-    const { text, changes } = rewriteSpecifiers(source, "_editor/web/src/composables/chat/other.ts", (path) => path, new Set([...tracked, "_editor/web/src/composables/chat/other.ts"]));
+    const { text, changes } = rewriteSpecifiers(
+        source,
+        "_editor/web/src/composables/chat/other.ts",
+        (path) => path,
+        new Set([...tracked, "_editor/web/src/composables/chat/other.ts"]),
+    );
     assert.deepEqual(changes, [], "normalising a path the move did not touch is a diff nobody asked for");
     assert.equal(text, source);
 });
@@ -98,7 +126,10 @@ test("a subpath export keeps its key and moves its target, in source and in dist
     const manifest = JSON.stringify(
         {
             exports: {
-                "./prompt": { types: "./dist/agent/system-prompt.d.ts", import: { "@intentic/src": "./src/agent/system-prompt.ts", default: "./dist/agent/system-prompt.js" } },
+                "./prompt": {
+                    types: "./dist/agent/system-prompt.d.ts",
+                    import: { "@intentic/src": "./src/agent/system-prompt.ts", default: "./dist/agent/system-prompt.js" },
+                },
             },
         },
         null,

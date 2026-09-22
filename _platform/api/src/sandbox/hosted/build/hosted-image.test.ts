@@ -65,7 +65,9 @@ describe(`resolveHostedImage`, () => {
                 return Promise.resolve(new Response(JSON.stringify({ token: `t0k3n` }), { status: 200 }));
             }
             if (seen.filter((entry) => entry.includes(`/manifests/`)).length === 1) {
-                return Promise.resolve(new Response(null, { status: 401, headers: { "www-authenticate": `Bearer realm="https://ghcr.io/token",service="ghcr.io"` } }));
+                return Promise.resolve(
+                    new Response(null, { status: 401, headers: { "www-authenticate": `Bearer realm="https://ghcr.io/token",service="ghcr.io"` } }),
+                );
             }
             return Promise.resolve(new Response(null, { status: 200, headers: { "docker-content-digest": DIGEST } }));
         });

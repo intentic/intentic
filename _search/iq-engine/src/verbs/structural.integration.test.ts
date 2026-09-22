@@ -99,9 +99,7 @@ test("read: path::name narrows to one file, and -C grows the body", async () => 
     expect(outcome.exitCode).toBe(0);
     expect(outcome.result.groups.map((group) => group.path)).toEqual(["alpha/src/widget.ts"]);
 
-    const grown = await engine.run(
-        request({ verb: "read", query: "alpha/src/widget.ts::createWidget", render: { budget: 1500, contextLines: 2 } }),
-    );
+    const grown = await engine.run(request({ verb: "read", query: "alpha/src/widget.ts::createWidget", render: { budget: 1500, contextLines: 2 } }));
     expect(grown.result.groups[0]!.hits.length).toBeGreaterThan(outcome.result.groups[0]!.hits.length);
 });
 

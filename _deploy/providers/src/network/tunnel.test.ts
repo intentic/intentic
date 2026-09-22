@@ -167,28 +167,32 @@ test("apply on an ingress-only change puts the config without restarting the run
     expect(ssh.commands.some((command) => command.includes("docker run") || command.includes("docker rm"))).toBe(false);
 });
 
-test("apply restarts the connector when its image drifted and waits until the edge reports serving", async () => {
-    const statuses = ["down", "healthy"];
-    let polls = 0;
-    const ssh = fakeSsh("intentic-tunnel-tunnel-abc");
-    const provider = createTunnelProvider(
-        api({
-            findTunnel: async () => ({ id: "tunnel-abc" }),
-            getTunnelToken: async () => "tok-123",
-            getTunnelStatus: async () => statuses[Math.min(polls++, statuses.length - 1)] ?? "healthy",
-            putTunnelIngress: async () => {},
-        }),
-        ssh.executor,
-    );
+test(
+    "apply restarts the connector when its image drifted and waits until the edge reports serving",
+    async () => {
+        const statuses = ["down", "healthy"];
+        let polls = 0;
+        const ssh = fakeSsh("intentic-tunnel-tunnel-abc");
+        const provider = createTunnelProvider(
+            api({
+                findTunnel: async () => ({ id: "tunnel-abc" }),
+                getTunnelToken: async () => "tok-123",
+                getTunnelStatus: async () => statuses[Math.min(polls++, statuses.length - 1)] ?? "healthy",
+                putTunnelIngress: async () => {},
+            }),
+            ssh.executor,
+        );
 
-    const observed = {
-        outputs: {},
-        detail: { ingress: [appRule, catchAll], connectorRunning: true, image: "cloudflare/cloudflared:old@sha256:bbbb" },
-    };
-    await provider.apply(inputs, observed, ctx());
-    expect(ssh.commands.some((command) => command.includes("docker run") && command.includes("--token tok-123"))).toBe(true);
-    expect(polls).toBe(2);
-}, { timeout: 10_000 });
+        const observed = {
+            outputs: {},
+            detail: { ingress: [appRule, catchAll], connectorRunning: true, image: "cloudflare/cloudflared:old@sha256:bbbb" },
+        };
+        await provider.apply(inputs, observed, ctx());
+        expect(ssh.commands.some((command) => command.includes("docker run") && command.includes("--token tok-123"))).toBe(true);
+        expect(polls).toBe(2);
+    },
+    { timeout: 10_000 },
+);
 
 test("apply restarts the connector when it is not running", async () => {
     const ssh = fakeSsh();

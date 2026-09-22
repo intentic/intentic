@@ -62,7 +62,11 @@ describe(`redline`, () => {
         const after = [p([run(`Kept.`)]), p([run(`The signup spec covers the happy path only.`)])];
         const { children, events } = redline(before, after, OPTIONS);
         expect(events.map((event) => event.kind)).toEqual([`removed`, `added`]);
-        expect(children.map(flat)).toEqual([`Kept.`, `Refunds are manual until the API supports them.`, `The signup spec covers the happy path only.`]);
+        expect(children.map(flat)).toEqual([
+            `Kept.`,
+            `Refunds are manual until the API supports them.`,
+            `The signup spec covers the happy path only.`,
+        ]);
     });
 
     it(`underlines an added paragraph whole, and leaves its page break at paragraph level where the renderer looks`, () => {

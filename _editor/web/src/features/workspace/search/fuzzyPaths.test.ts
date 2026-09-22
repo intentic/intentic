@@ -14,9 +14,5 @@ test(`rankPaths ranks best match first, deterministically on ties, capped at lim
 });
 
 test(`a repeated path is ranked once, so a duplicate cannot displace the next-best match under the cap`, () => {
-    expect(rankPaths(`a`, [...PATHS, `beta/app.py`, `beta/app.py`], 3)).toEqual([
-        `beta/app.py`,
-        `alpha/src/widget.ts`,
-        `alpha/src/registry.ts`,
-    ]);
+    expect(rankPaths(`a`, [...PATHS, `beta/app.py`, `beta/app.py`], 3)).toEqual([`beta/app.py`, `alpha/src/widget.ts`, `alpha/src/registry.ts`]);
 });

@@ -40,8 +40,25 @@ describe(`compareDocx`, () => {
     });
 
     it(`keeps a bold run bold on both sides of the split, and strikes a paragraph where it stood`, async () => {
-        const before = docxBytes([{ runs: [{ text: `Zakup `, bold: true }, { text: `systemu`, bold: true }] }, `Removed clause.`, `Kept.`]);
-        const after = docxBytes([{ runs: [{ text: `Zakup `, bold: true }, { text: `serwera`, bold: true }] }, `Kept.`]);
+        const before = docxBytes([
+            {
+                runs: [
+                    { text: `Zakup `, bold: true },
+                    { text: `systemu`, bold: true },
+                ],
+            },
+            `Removed clause.`,
+            `Kept.`,
+        ]);
+        const after = docxBytes([
+            {
+                runs: [
+                    { text: `Zakup `, bold: true },
+                    { text: `serwera`, bold: true },
+                ],
+            },
+            `Kept.`,
+        ]);
         const surface = mount();
         const compared = await compareDocx(before, after, surface, OPTIONS);
 

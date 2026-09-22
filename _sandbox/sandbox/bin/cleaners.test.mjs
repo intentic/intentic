@@ -2,7 +2,6 @@ import { test, expect } from "bun:test";
 import { filterOutput } from "./agent-output-filter.mjs";
 import { CACHE_MARKER, CLEANERS, cleanLines, collapseCached, matchedCleaners, parseCleaners, sessionKeyFromLog } from "./cleaners.mjs";
 
-
 // The cap's byte budgets are only reachable with blobs intact: `wide` cuts a 2 KB run down to ~340 bytes, so a fixture
 // built to trip the cap never gets there with it on. The cap tests below turn it off to probe the cap alone.
 const WITHOUT_WIDE = new Set(CLEANERS.filter((id) => id !== "wide"));
@@ -141,20 +140,11 @@ test("diff: a generated file's hunks fold to a count, the source file beside it 
         "+const connected = accounts();",
     ];
     const out = cleanLines(lines, { command: "git diff", exitCode: "0", enabled: new Set(CLEANERS) }).lines;
-    expect(out).toEqual([
-        lines[0],
-        "… 6 lines of generated-file diff elided (+1 −1) …",
-        ...lines.slice(7),
-    ]);
+    expect(out).toEqual([lines[0], "… 6 lines of generated-file diff elided (+1 −1) …", ...lines.slice(7)]);
 });
 
 test("diff: a diff of source files is handed back untouched", () => {
-    const lines = [
-        "diff --git a/src/app.ts b/src/app.ts",
-        "@@ -1,2 +1,2 @@",
-        "-const port = 3000;",
-        "+const port = 4000;",
-    ];
+    const lines = ["diff --git a/src/app.ts b/src/app.ts", "@@ -1,2 +1,2 @@", "-const port = 3000;", "+const port = 4000;"];
     expect(cleanLines(lines, { command: "git diff", exitCode: "0", enabled: new Set(CLEANERS) }).lines).toEqual(lines);
 });
 

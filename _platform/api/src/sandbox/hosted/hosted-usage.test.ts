@@ -18,8 +18,10 @@ const logger = { info: mock(), warn: mock(), error: mock() } as never;
 
 const STANDARD = hostedTier(`standard`);
 
-const config = (monthlyHours = FREE_TIER.monthlyHours, ramp: { newAccountDays: number; newAccountHours: number } = { newAccountDays: 0, newAccountHours: 0 }): Config =>
-    ({ hosted: { flyApiToken: `fly`, monthlyHours, ...ramp }, hostedPlan: { compEmails: `` } }) as unknown as Config;
+const config = (
+    monthlyHours = FREE_TIER.monthlyHours,
+    ramp: { newAccountDays: number; newAccountHours: number } = { newAccountDays: 0, newAccountHours: 0 },
+): Config => ({ hosted: { flyApiToken: `fly`, monthlyHours, ...ramp }, hostedPlan: { compEmails: `` } }) as unknown as Config;
 
 // One machine as every budget read names it: which sandbox, which rung, whose account.
 const onFree = { sandboxId: `s1`, tier: FREE_TIER.id, ownerId: `u1` };
@@ -153,7 +155,10 @@ describe(`the hosted hour meter`, () => {
                 hostedUsage: { aggregate: mock().mockResolvedValue({ _sum: { minutes: 10 } }) },
                 hostedMachine: {
                     update: mock(),
-                    findMany: mock().mockResolvedValue([{ wokeAt: new Date(`2026-08-13T11:00:00.000Z`) }, { wokeAt: new Date(`2026-08-13T11:30:00.000Z`) }]),
+                    findMany: mock().mockResolvedValue([
+                        { wokeAt: new Date(`2026-08-13T11:00:00.000Z`) },
+                        { wokeAt: new Date(`2026-08-13T11:30:00.000Z`) },
+                    ]),
                 },
             });
             expect(await hostedOwnerMinutes(prisma, `u1`, now)).toBe(10 + 60 + 30);
@@ -165,7 +170,9 @@ describe(`the hosted hour meter`, () => {
     describe(`the newcomer ramp`, () => {
         const now = new Date(`2026-08-13T12:00:00.000Z`);
         const ramp = { newAccountDays: 7, newAccountHours: 10 };
-        const born = (daysAgo: number) => ({ findUnique: mock().mockResolvedValue({ createdAt: new Date(now.getTime() - daysAgo * 24 * 60 * 60_000) }) });
+        const born = (daysAgo: number) => ({
+            findUnique: mock().mockResolvedValue({ createdAt: new Date(now.getTime() - daysAgo * 24 * 60 * 60_000) }),
+        });
 
         it(`holds a week-old account to the ramp and says when the full month applies`, async () => {
             const budget = await hostedBudgetOf(prismaWith({ user: born(2) }), config(40, ramp), onFree, now);

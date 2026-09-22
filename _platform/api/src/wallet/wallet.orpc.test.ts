@@ -17,7 +17,12 @@ const custody = (): CustodyGateway => ({ wallet: mock(async () => ({ id: `cw-1`,
 
 // A wallet delegate over one optional seeded row; `update` answers the caps it was handed.
 const fakePrisma = (seeded?: { id: string; address: string; perPaymentMaxUsd: string; dailyCapUsd: string }) => {
-    const create = mock(async ({ data }: { data: Record<string, string> }) => ({ id: `wallet-new`, address: data[`address`], perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` }));
+    const create = mock(async ({ data }: { data: Record<string, string> }) => ({
+        id: `wallet-new`,
+        address: data[`address`],
+        perPaymentMaxUsd: `1.00`,
+        dailyCapUsd: `5.00`,
+    }));
     const update = mock(async ({ data }: { data: { perPaymentMaxUsd: string; dailyCapUsd: string } }) => data);
     return {
         prisma: { wallet: { findUnique: mock().mockResolvedValue(seeded ?? null), create, update } } as unknown as PrismaClient,
@@ -33,12 +38,16 @@ const policy = { network: `eip155:8453` as const, perPaymentMaxUsd: `2.00`, dail
 
 it(`requires a session: a connect token is not a way in`, async () => {
     const { prisma } = fakePrisma();
-    await expect(call(walletRoutes(custody()).setPolicy, policy, { context: context(prisma, { user: null }) })).rejects.toMatchObject({ code: `UNAUTHORIZED` });
+    await expect(call(walletRoutes(custody()).setPolicy, policy, { context: context(prisma, { user: null }) })).rejects.toMatchObject({
+        code: `UNAUTHORIZED`,
+    });
 });
 
 it(`refuses on a platform with no custody provider, the routes' own 404`, async () => {
     const { prisma, create } = fakePrisma();
-    const refused = await call(walletRoutes(custody()).setPolicy, policy, { context: context(prisma, { config: off }) }).catch((error: unknown) => error);
+    const refused = await call(walletRoutes(custody()).setPolicy, policy, { context: context(prisma, { config: off }) }).catch(
+        (error: unknown) => error,
+    );
     expect(refused).toBeInstanceOf(ORPCError);
     expect((refused as ORPCError<string, unknown>).code).toBe(`NOT_FOUND`);
     expect(create).not.toHaveBeenCalled();
@@ -49,8 +58,12 @@ it(`creates the account's wallet on that network when there is none, and writes 
     const gateway = custody();
     expect(await call(walletRoutes(gateway).setPolicy, policy, { context: context(prisma) })).toEqual(policy);
     expect(gateway.wallet).toHaveBeenCalledWith(`user-1:eip155:8453`, `eip155:8453`);
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ userId: `user-1`, network: `eip155:8453`, address: ADDRESS }) }));
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: `wallet-new` }, data: { perPaymentMaxUsd: `2.00`, dailyCapUsd: `20.00` } }));
+    expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ userId: `user-1`, network: `eip155:8453`, address: ADDRESS }) }),
+    );
+    expect(update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: `wallet-new` }, data: { perPaymentMaxUsd: `2.00`, dailyCapUsd: `20.00` } }),
+    );
 });
 
 it(`updates a wallet the sandbox brought into being first, without asking custody for another`, async () => {

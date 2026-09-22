@@ -118,7 +118,13 @@ test("a 429 always carries a stay-away: the endpoint's own, or the park when it 
 // Claude half of the headroom service: one target per connected account that can still read, on its own token. Pinned
 // here is which accounts become targets and what a read answers; when they're asked is headroom.ts's own suite.
 
-const account = (id: string, over: Partial<StoredAccount> = {}): StoredAccount => ({ id, label: id, connectedAt: 0, accessToken: `tok-${id}`, ...over });
+const account = (id: string, over: Partial<StoredAccount> = {}): StoredAccount => ({
+    id,
+    label: id,
+    connectedAt: 0,
+    accessToken: `tok-${id}`,
+    ...over,
+});
 
 const memoryStore = (accounts: readonly StoredAccount[]): ClaudeStore => ({
     logger: silent,

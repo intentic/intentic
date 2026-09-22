@@ -125,7 +125,9 @@ test("Claude: an account its organization turned away says so without asking for
 });
 
 test("Claude: rename writes the label through, blank restores the derived name, and a gone account is undefined", async () => {
-    const accounts = new Map<string, StoredAccount>([["a", { id: "a", label: "Claude", connectedAt: 1, accessToken: "tok", email: "a@example.com" }]]);
+    const accounts = new Map<string, StoredAccount>([
+        ["a", { id: "a", label: "Claude", connectedAt: 1, accessToken: "tok", email: "a@example.com" }],
+    ]);
     const claude = door(memoryStore(accounts));
     expect(await claude.rename("a", " Work ")).toEqual({ id: "a", label: "Work", connectedAt: 1, email: "a@example.com" });
     // Rename must not touch the credential, only the label.

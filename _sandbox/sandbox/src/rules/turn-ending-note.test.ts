@@ -42,9 +42,7 @@ test("names the automatic command without inviting narration", () => {
 });
 
 test("includes a path condition", () => {
-    expect(turnEndingNote([command({ when: { paths: ["intentic/**", "docs/**"] } })])?.text).toContain(
-        "(after edits to `intentic/**` or `docs/**`)",
-    );
+    expect(turnEndingNote([command({ when: { paths: ["intentic/**", "docs/**"] } })])?.text).toContain("(after edits to `intentic/**` or `docs/**`)");
 });
 
 test("a repository is named once, as the place it runs", () => {

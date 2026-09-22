@@ -10,10 +10,10 @@ import { panelState } from "./system.routes.js";
  * once. Tmux cannot tell them apart, since both are a shell sitting at a prompt, so this asks the manager. */
 
 // Stands in for the process manager: `tracked` is what it still holds, `runs` is what it knows was a one-shot.
-const processes = (tracked: string[], runs: Record<string, { running: boolean; finishedAt?: number }> = {}): Pick<
-    ManagedProcesses,
-    "running" | "runOf"
-> => ({
+const processes = (
+    tracked: string[],
+    runs: Record<string, { running: boolean; finishedAt?: number }> = {},
+): Pick<ManagedProcesses, "running" | "runOf"> => ({
     running: (key) => tracked.includes(key),
     runOf: (key) => runs[key],
 });

@@ -34,15 +34,13 @@ const call = (turn: number, index: number): TranscriptTool => ({
 // calls. Sized like a real working turn, not a minimal one.
 const turnRows = (turn: number): TranscriptRow[] => [
     { role: "user", text: filler(180, `ask number ${turn}`), sentAt: 1_700_000_000_000 + turn * 60_000 },
-    ...[0, 1, 2].map(
-        (block): TranscriptRow => ({
-            role: "assistant",
-            text: filler(700, `answer block ${block} of turn ${turn}`),
-            thinking: filler(500, `reasoning ${block}/${turn}`),
-            tools: [call(turn, block)],
-            ...(block === 2 ? { usage: { costUsd: 0.03, inputTokens: 12_000, outputTokens: 900, durationMs: 21_000, numTurns: 1 } } : {}),
-        }),
-    ),
+    ...[0, 1, 2].map((block): TranscriptRow => ({
+        role: "assistant",
+        text: filler(700, `answer block ${block} of turn ${turn}`),
+        thinking: filler(500, `reasoning ${block}/${turn}`),
+        tools: [call(turn, block)],
+        ...(block === 2 ? { usage: { costUsd: 0.03, inputTokens: 12_000, outputTokens: 900, durationMs: 21_000, numTurns: 1 } } : {}),
+    })),
 ];
 
 const ROWS_PER_TURN = turnRows(0).length;
@@ -360,7 +358,11 @@ describe("a delegation's own calls", () => {
         const { deps } = await filled("c-deep", [
             [
                 { role: "user", text: "delegate deeply" },
-                { role: "assistant", text: "done", tools: [{ id: "call_outer", name: "Agent", category: "other", status: "completed", children: [inner] }] },
+                {
+                    role: "assistant",
+                    text: "done",
+                    tools: [{ id: "call_outer", name: "Agent", category: "other", status: "completed", children: [inner] }],
+                },
             ],
         ]);
 

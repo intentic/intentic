@@ -9,7 +9,10 @@ import { createApp, defineComponent, h, ref } from "vue";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
 mock.module("../client/sandboxClient", () => ({ sandboxJson: mock() }));
-mock.module("../client/useSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`], useSandbox: () => ({ reachable: ref(true) }) }));
+mock.module("../client/useSandbox", () => ({
+    sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
+    useSandbox: () => ({ reachable: ref(true) }),
+}));
 
 const { sandboxJson } = await import("../client/sandboxClient");
 const jsonMock = mocked(sandboxJson);

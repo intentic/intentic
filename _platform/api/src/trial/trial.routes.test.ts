@@ -239,10 +239,7 @@ describe("the free trial", () => {
     // impossible.
     it("publishes exactly one model, whatever the upstream lists", async () => {
         const { prisma } = fakePrisma();
-        stubGlobal(
-            `fetch`,
-            upstream([`antigravity-preview-05-2026`, `deep-research-pro-preview-12`, `gemma-4-26b-a4b-it`, `gemini-flash-latest`]),
-        );
+        stubGlobal(`fetch`, upstream([`antigravity-preview-05-2026`, `deep-research-pro-preview-12`, `gemma-4-26b-a4b-it`, `gemini-flash-latest`]));
 
         const response = await call(configWith({ models: `` }), prisma, `/trial/v1/models`);
 
@@ -313,7 +310,9 @@ describe("the free trial", () => {
         const sent = JSON.parse(String(fetchFn.mock.calls.find(([, init]) => init?.method === `POST`)?.[1]?.body)) as {
             messages: { role: string; content: unknown }[];
         };
-        const withImages = sent.messages.filter((message) => Array.isArray(message.content) && message.content.some((part) => part.type === `image_url`));
+        const withImages = sent.messages.filter(
+            (message) => Array.isArray(message.content) && message.content.some((part) => part.type === `image_url`),
+        );
         // The image still reaches the model, and only from the one role that may carry it.
         expect(withImages).toHaveLength(1);
         expect(withImages.every((message) => message.role === `user`)).toBe(true);

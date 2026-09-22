@@ -16,7 +16,13 @@ const SECOND = 1000;
 // Anchored once per file: two live reads of "an hour from now" could straddle a second and differ by one.
 const NOW = Date.now();
 const inAnHour = (): number => Math.floor((NOW + 3600 * SECOND) / SECOND);
-const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({ kind: "five_hour", utilization: 42, resetsAt: inAnHour(), gates: "all", ...over });
+const window = (over: Partial<UsageWindow> = {}): UsageWindow => ({
+    kind: "five_hour",
+    utilization: 42,
+    resetsAt: inAnHour(),
+    gates: "all",
+    ...over,
+});
 const snapshot = (over: Partial<AccountUsage> = {}): AccountUsage => ({ windows: [window()], measuredAt: Date.now(), ...over });
 
 test("read is empty when the file is absent", async () => {
@@ -70,7 +76,8 @@ test("an account left with no live window is absent, not reported as measured-an
 // breakfast still said 0% at midnight, under a provider that had been refusing re-reads all day.
 test("a window with no reset instant is retired by its own length", async () => {
     const { store } = tempStore();
-    const idle = (agoMs: number): AccountUsage => snapshot({ windows: [window({ utilization: 0, resetsAt: undefined })], measuredAt: Date.now() - agoMs });
+    const idle = (agoMs: number): AccountUsage =>
+        snapshot({ windows: [window({ utilization: 0, resetsAt: undefined })], measuredAt: Date.now() - agoMs });
 
     // Inside the five hours it describes, the reading can still be true, and measuredAt carries the staleness caveat.
     await store.record("acct-1", idle(4 * 3600 * SECOND));

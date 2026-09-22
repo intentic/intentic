@@ -52,7 +52,9 @@ describe(`a tile's summary`, () => {
     it(`does not mistake the dots in a hostname for the end of a sentence`, () => {
         const readme = `# proxy\n\nA strict HTTP proxy that only forwards POST requests to /v1/responses to the OpenAI API (https://api.openai.com) and refuses everything else.`;
 
-        expect(summaryOf(readme)).toBe(`A strict HTTP proxy that only forwards POST requests to /v1/responses to the OpenAI API (https://api.openai.com) and…`);
+        expect(summaryOf(readme)).toBe(
+            `A strict HTTP proxy that only forwards POST requests to /v1/responses to the OpenAI API (https://api.openai.com) and…`,
+        );
     });
 
     it(`decodes the entities a README writes instead of the characters`, () => {

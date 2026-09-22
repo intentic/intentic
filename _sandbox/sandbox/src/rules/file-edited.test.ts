@@ -95,9 +95,12 @@ describe("the file.edited moment", () => {
     });
 
     test("several rules standing here contribute to one message, in the owner's order", async () => {
-        const review = fileEditedReviewer([rule(), rule({ id: "bytes", label: "Bytes", action: { kind: "command", command: "bytes {file}", timeoutMs: 60_000 } })], {
-            run: async (command) => ({ status: "failed", output: command.startsWith("bytes") ? "NUL at 3" : "unused import" }),
-        });
+        const review = fileEditedReviewer(
+            [rule(), rule({ id: "bytes", label: "Bytes", action: { kind: "command", command: "bytes {file}", timeoutMs: 60_000 } })],
+            {
+                run: async (command) => ({ status: "failed", output: command.startsWith("bytes") ? "NUL at 3" : "unused import" }),
+            },
+        );
         const file = `${WORKSPACE_ROOT}/a.ts`;
         const message = await review?.(file, "this edit");
         expect(message).toBe(`"Lint the edit" on ${file} after this edit:\nunused import\n\n"Bytes" on ${file} after this edit:\nNUL at 3`);

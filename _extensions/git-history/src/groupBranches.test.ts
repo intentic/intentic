@@ -25,7 +25,7 @@ describe(`groupBranches`, () => {
         expect(groups[0]?.remotes.map((entry) => entry.remote)).toEqual([`origin`, `upstream`]);
     });
 
-/* A branch that exists only on a remote is the row "somebody pushed something you do not have": the one a checkout would be created from. */
+    /* A branch that exists only on a remote is the row "somebody pushed something you do not have": the one a checkout would be created from. */
     it(`keeps a remote-only branch as a group with no local`, () => {
         const groups = groupBranches([], [remote(`origin/feature/x`)]);
         expect(groups[0]?.name).toBe(`feature/x`);
@@ -39,7 +39,7 @@ describe(`groupBranches`, () => {
         expect(groups[0]?.remotes).toEqual([]);
     });
 
-/* PAIRED BY NAME, NOT BY THE CONFIGURED UPSTREAM. */
+    /* PAIRED BY NAME, NOT BY THE CONFIGURED UPSTREAM. */
     it(`groups a branch whose upstream is gone with the remote branch of the same name`, () => {
         const groups = groupBranches([local(`main`, { upstream: `origin/main`, gone: true })], [remote(`origin/main`)]);
         expect(groups).toHaveLength(1);

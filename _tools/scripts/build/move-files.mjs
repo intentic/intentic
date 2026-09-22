@@ -14,8 +14,7 @@ const EMITTED = { ".ts": ".js", ".tsx": ".js", ".mts": ".mjs", ".cts": ".cjs" };
 const CODE = /\.(ts|tsx|mts|cts|js|mjs|cjs|vue|astro)$/;
 
 // Matches real import syntax only, skipping a computed `${...}` specifier and matching typeof-import args too.
-const SPECIFIER =
-    /(?<=\bfrom\s*|\bimport\s*\(\s*|\brequire\(\s*|\bimport\s+|\bmock\.module\s*\(\s*)(["'`])([^"'`\n$]+)\1/g;
+const SPECIFIER = /(?<=\bfrom\s*|\bimport\s*\(\s*|\brequire\(\s*|\bimport\s+|\bmock\.module\s*\(\s*)(["'`])([^"'`\n$]+)\1/g;
 
 const posix = (path) => path.split("\\").join("/");
 const withoutExtension = (path) => path.replace(/\.[^./]+$/, "");
@@ -49,11 +48,12 @@ export const specifierFor = (fromFile, target, original) => {
     const wanted = directoryImport ? dirname(target) : target;
     const rel = posix(relative(dirname(fromFile), wanted));
     // Original's ending decides the spelling: a dotted name like `environment.default` isn't seen as an extension.
-    const styled = directoryImport || original.endsWith(extensionOf(target))
-        ? rel
-        : /\.[cm]?js$/.test(original)
-          ? `${withoutExtension(rel)}${EMITTED[extensionOf(target)] ?? extensionOf(target)}`
-          : withoutExtension(rel);
+    const styled =
+        directoryImport || original.endsWith(extensionOf(target))
+            ? rel
+            : /\.[cm]?js$/.test(original)
+              ? `${withoutExtension(rel)}${EMITTED[extensionOf(target)] ?? extensionOf(target)}`
+              : withoutExtension(rel);
     return styled.startsWith(".") ? styled : `./${styled}`;
 };
 
@@ -87,9 +87,16 @@ export const rewriteManifest = (text, packageDir, finalOf, tracked) => {
     const movedPackageDir = dirname(finalOf(`${packageDir}/package.json`));
     const rewritten = text.replaceAll(/"(\.\/(?:src|dist)\/[^"]+)"/g, (match, value) => {
         const asSource = value.startsWith("./dist/")
-            ? `src/${value.slice("./dist/".length).replace(/\.d\.ts$/, ".ts").replace(/\.([cm]?)js$/, ".$1ts")}`
+            ? `src/${value
+                  .slice("./dist/".length)
+                  .replace(/\.d\.ts$/, ".ts")
+                  .replace(/\.([cm]?)js$/, ".$1ts")}`
             : value.slice(2);
-        const candidates = [`${packageDir}/${asSource}`, `${packageDir}/${asSource.replace(/\.ts$/, ".tsx")}`, `${packageDir}/${asSource.replace(/\.ts$/, ".vue")}`];
+        const candidates = [
+            `${packageDir}/${asSource}`,
+            `${packageDir}/${asSource.replace(/\.ts$/, ".tsx")}`,
+            `${packageDir}/${asSource.replace(/\.ts$/, ".vue")}`,
+        ];
         const source = candidates.find((candidate) => tracked.has(candidate));
         if (source === undefined) {
             return match;
@@ -144,7 +151,11 @@ const main = () => {
     }
 
     const git = (...argv) => execFileSync("git", argv, { cwd: root, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
-    const tracked = new Set(git("ls-files", "-z").split("\0").filter((path) => path !== ""));
+    const tracked = new Set(
+        git("ls-files", "-z")
+            .split("\0")
+            .filter((path) => path !== ""),
+    );
     const moves = expandMoves(JSON.parse(readFileSync(mapPath, "utf8")), tracked);
     const missing = moves.filter(({ from }) => !tracked.has(from)).map(({ from }) => from);
     if (missing.length > 0) {
@@ -165,7 +176,9 @@ const main = () => {
             console.log(`${finalOf(path)}: ${from} → ${to}`);
         }
     }
-    console.log(`move-files: ${moves.length} file(s), ${edits.length} file(s) rewritten, ${edits.reduce((sum, edit) => sum + edit.changes.length, 0)} specifier(s)`);
+    console.log(
+        `move-files: ${moves.length} file(s), ${edits.length} file(s) rewritten, ${edits.reduce((sum, edit) => sum + edit.changes.length, 0)} specifier(s)`,
+    );
     if (args.includes("--dry-run")) {
         return;
     }

@@ -22,7 +22,7 @@ describe(`formatDuration`, () => {
         expect(formatDuration(59.9)).toBe(`0:59`);
     });
 
-/* A container that never declared its duration (a .webm with no cues) reads back Infinity, and a media element reports NaN before metadata lands. */
+    /* A container that never declared its duration (a .webm with no cues) reads back Infinity, and a media element reports NaN before metadata lands. */
     it(`shows a dash for a duration the container never declared`, () => {
         expect(formatDuration(Number.POSITIVE_INFINITY)).toBe(`--:--`);
         expect(formatDuration(Number.NaN)).toBe(`--:--`);

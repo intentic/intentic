@@ -31,7 +31,9 @@ interface Harness {
     readonly clock: { now: number };
 }
 
-const harness = (options: { readonly store?: PasskeyStore; readonly allowed?: (origin: string) => boolean; readonly sandboxId?: string } = {}): Harness => {
+const harness = (
+    options: { readonly store?: PasskeyStore; readonly allowed?: (origin: string) => boolean; readonly sandboxId?: string } = {},
+): Harness => {
     const store = options.store ?? memoryPasskeyStore();
     const clock = { now: Date.parse("2026-09-14T12:00:00Z") };
     const ceremonies = createPasskeyCeremonies({
@@ -56,7 +58,11 @@ const register = async (
     return ceremonies.register({ identity, origin: ORIGIN, response, label });
 };
 
-const signIn = async ({ ceremonies }: Harness, authenticator: ReturnType<typeof softwareAuthenticator>, counter?: number): Promise<StoredCredential> => {
+const signIn = async (
+    { ceremonies }: Harness,
+    authenticator: ReturnType<typeof softwareAuthenticator>,
+    counter?: number,
+): Promise<StoredCredential> => {
     const options = await ceremonies.authenticationOptions(ORIGIN);
     const response = authenticator.get({ challenge: options.challenge, origin: ORIGIN, rpId: RP_ID, ...(counter !== undefined ? { counter } : {}) });
     return ceremonies.authenticate({ origin: ORIGIN, response });
@@ -79,7 +85,15 @@ describe("registration and sign-in", () => {
         const h = harness();
         const authenticator = softwareAuthenticator();
         const stored = await register(h, authenticator, ADA, "Ada's laptop");
-        expect(stored).toMatchObject({ id: authenticator.credentialId, email: "ada@x.com", name: "Ada", label: "Ada's laptop", rpId: RP_ID, counter: 0, backedUp: false });
+        expect(stored).toMatchObject({
+            id: authenticator.credentialId,
+            email: "ada@x.com",
+            name: "Ada",
+            label: "Ada's laptop",
+            rpId: RP_ID,
+            counter: 0,
+            backedUp: false,
+        });
         expect(stored.publicKey).toEqual({ alg: -7, jwk: { kty: "EC", crv: "P-256", x: expect.any(String), y: expect.any(String) } });
 
         h.clock.now += 60_000;
@@ -153,7 +167,10 @@ describe("refusals", () => {
         const late = await h.ceremonies.authenticationOptions(ORIGIN);
         h.clock.now += 5 * 60 * 1000 + 1;
         const lateResponse = authenticator.get({ challenge: late.challenge, origin: ORIGIN, rpId: RP_ID });
-        expect(await refusal(h.ceremonies.authenticate({ origin: ORIGIN, response: lateResponse }))).toEqual({ status: 400, message: "the challenge expired; start again" });
+        expect(await refusal(h.ceremonies.authenticate({ origin: ORIGIN, response: lateResponse }))).toEqual({
+            status: 400,
+            message: "the challenge expired; start again",
+        });
     });
 
     test("a registration challenge answers only for the person it was issued to", async () => {
@@ -167,7 +184,10 @@ describe("refusals", () => {
 
     test("the origin must be one the daemon trusts, present, and the one the browser signed", async () => {
         const h = harness();
-        expect(await refusal(h.ceremonies.registrationOptions({ identity: ADA, origin: undefined }))).toEqual({ status: 400, message: "passkeys need a browser origin" });
+        expect(await refusal(h.ceremonies.registrationOptions({ identity: ADA, origin: undefined }))).toEqual({
+            status: 400,
+            message: "passkeys need a browser origin",
+        });
         expect(await refusal(h.ceremonies.authenticationOptions("https://evil.example"))).toEqual({
             status: 400,
             message: "passkeys cannot be bound to https://evil.example",
@@ -185,8 +205,16 @@ describe("refusals", () => {
         const authenticator = softwareAuthenticator();
         const scoped = await h.ceremonies.registrationOptions({ identity: ADA, origin: ORIGIN });
         expect(
-            (await refusal(h.ceremonies.register({ identity: ADA, origin: ORIGIN, response: authenticator.create({ challenge: scoped.challenge, origin: ORIGIN, rpId: "evil.example" }), label: undefined })))
-                ?.message,
+            (
+                await refusal(
+                    h.ceremonies.register({
+                        identity: ADA,
+                        origin: ORIGIN,
+                        response: authenticator.create({ challenge: scoped.challenge, origin: ORIGIN, rpId: "evil.example" }),
+                        label: undefined,
+                    }),
+                )
+            )?.message,
         ).toMatch(/scoped to another site/);
         const kind = await h.ceremonies.registrationOptions({ identity: ADA, origin: ORIGIN });
         expect(
@@ -221,7 +249,14 @@ describe("refusals", () => {
         const h = harness();
         const lax = softwareAuthenticator({ userVerified: false });
         const options = await h.ceremonies.registrationOptions({ identity: ADA, origin: ORIGIN });
-        const refused = await refusal(h.ceremonies.register({ identity: ADA, origin: ORIGIN, response: lax.create({ challenge: options.challenge, origin: ORIGIN, rpId: RP_ID }), label: undefined }));
+        const refused = await refusal(
+            h.ceremonies.register({
+                identity: ADA,
+                origin: ORIGIN,
+                response: lax.create({ challenge: options.challenge, origin: ORIGIN, rpId: RP_ID }),
+                label: undefined,
+            }),
+        );
         expect(refused?.message).toMatch(/did not verify the user/);
 
         const strict = softwareAuthenticator();
@@ -238,13 +273,21 @@ describe("refusals", () => {
         const impostor = softwareAuthenticator();
         const options = await h.ceremonies.authenticationOptions(ORIGIN);
         // The impostor signs with its own key but names the registered credential.
-        const forged = { ...impostor.get({ challenge: options.challenge, origin: ORIGIN, rpId: RP_ID }), id: registered.credentialId, rawId: registered.credentialId };
+        const forged = {
+            ...impostor.get({ challenge: options.challenge, origin: ORIGIN, rpId: RP_ID }),
+            id: registered.credentialId,
+            rawId: registered.credentialId,
+        };
         expect(await refusal(h.ceremonies.authenticate({ origin: ORIGIN, response: forged }))).toEqual({
             status: 400,
             message: "signature does not verify against the registered key",
         });
         const unknown = await h.ceremonies.authenticationOptions(ORIGIN);
-        expect(await refusal(h.ceremonies.authenticate({ origin: ORIGIN, response: impostor.get({ challenge: unknown.challenge, origin: ORIGIN, rpId: RP_ID }) }))).toEqual({
+        expect(
+            await refusal(
+                h.ceremonies.authenticate({ origin: ORIGIN, response: impostor.get({ challenge: unknown.challenge, origin: ORIGIN, rpId: RP_ID }) }),
+            ),
+        ).toEqual({
             status: 404,
             message: "no passkey registered with this sandbox answers that id",
         });
@@ -304,7 +347,10 @@ describe("recovery codes", () => {
             expect(await h.ceremonies.spendRecoveryCode("wrong")).toBe(false);
         }
         // The tenth wrong code (one was spent above) arms the lockout; a RIGHT code is refused while it holds.
-        expect(await refusal(h.ceremonies.spendRecoveryCode(codes[1]!))).toEqual({ status: 429, message: "too many wrong recovery codes; try again in 15 minutes" });
+        expect(await refusal(h.ceremonies.spendRecoveryCode(codes[1]!))).toEqual({
+            status: 429,
+            message: "too many wrong recovery codes; try again in 15 minutes",
+        });
         h.clock.now += 15 * 60 * 1000;
         expect(await h.ceremonies.spendRecoveryCode(codes[1]!)).toBe(true);
     });

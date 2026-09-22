@@ -57,7 +57,14 @@ describe(`linePieces`, () => {
 
     it(`marks every span on the line, not just the first`, () => {
         const two = { text: `cat .env .npmrc`, start: 0 };
-        const pieces = linePieces(two, [{ start: 4, end: 8 }, { start: 9, end: 15 }], undefined);
+        const pieces = linePieces(
+            two,
+            [
+                { start: 4, end: 8 },
+                { start: 9, end: 15 },
+            ],
+            undefined,
+        );
         expect(markedText(pieces)).toEqual([`.env`, `.npmrc`]);
         expect(texts(pieces).join(``)).toBe(two.text);
     });
@@ -77,7 +84,15 @@ describe(`linePieces`, () => {
     });
 
     it(`always reassembles into the original line`, () => {
-        for (const spans of [[], [{ start: 0, end: 12 }], [{ start: 4, end: 8 }], [{ start: 3, end: 5 }, { start: 7, end: 9 }]]) {
+        for (const spans of [
+            [],
+            [{ start: 0, end: 12 }],
+            [{ start: 4, end: 8 }],
+            [
+                { start: 3, end: 5 },
+                { start: 7, end: 9 },
+            ],
+        ]) {
             for (const cuts of [[], [4], [3, 8], [1, 4, 8, 11]]) {
                 expect(texts(linePieces(line, spans, tokensFor(line.text, cuts))).join(``), JSON.stringify({ spans, cuts })).toBe(line.text);
             }

@@ -236,10 +236,10 @@
             ]
         }
     },
-/* Remote caching stays inert until all three Turbo credentials are set. */
+    /* Remote caching stays inert until all three Turbo credentials are set. */
     "remoteCache": {
         "enabled": true
     },
-/* AN ABSOLUTE TASK COUNT, never a percentage: turbo resolves a percentage against the HOST's logical processor count, and a container bounds memory, not cpus. */
+    /* AN ABSOLUTE TASK COUNT, never a percentage: turbo resolves a percentage against the HOST's logical processor count, and a container bounds memory, not cpus. */
     "concurrency": "4"
 }

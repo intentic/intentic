@@ -14,7 +14,13 @@ import { extensionAgentDirsOf } from "../../extensions/installed-extensions.js";
 import { extensionDir, extensionsRoot } from "../extension-dirs.js";
 import { previousDir } from "../git-checkout.js";
 import { createTerminalRunner } from "../../terminal/terminal-run.js";
-import { makeWorkspaceDir, moveWorkspacePath, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
+import {
+    makeWorkspaceDir,
+    moveWorkspacePath,
+    readWorkspaceFile,
+    removeWorkspacePath,
+    writeWorkspaceFile,
+} from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { echoConfig } from "../summary.js";
 import { extensionHandler } from "./extension.handler.js";

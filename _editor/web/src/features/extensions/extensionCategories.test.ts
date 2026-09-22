@@ -48,9 +48,6 @@ describe(`sectionsOf`, () => {
     });
 
     it(`captions only the section whose heading doesn't say why a row is in it`, () => {
-        expect(sectionsOf([entry(`knowledge`, `knowledge`), entry(`mystery`)]).map((section) => section.caption)).toEqual([
-            undefined,
-            undefined,
-        ]);
+        expect(sectionsOf([entry(`knowledge`, `knowledge`), entry(`mystery`)]).map((section) => section.caption)).toEqual([undefined, undefined]);
     });
 });

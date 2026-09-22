@@ -73,7 +73,9 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
 
 // `items: false` at any depth: zod's closed-tuple form, the one schema llama.cpp's grammar converter refuses.
 const closedTuple = (value: unknown): boolean =>
-    typeof value === "object" && value !== null && Object.entries(value).some(([key, child]) => (key === "items" && child === false) || closedTuple(child));
+    typeof value === "object" &&
+    value !== null &&
+    Object.entries(value).some(([key, child]) => (key === "items" && child === false) || closedTuple(child));
 
 // Every tool publishes the schema its arguments are checked against. Asserted structurally so a tool added
 // without a schema fails here instead of being advertised as taking anything.

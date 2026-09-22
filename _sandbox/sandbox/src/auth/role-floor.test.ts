@@ -149,7 +149,10 @@ describe("memberRefusal", () => {
             floor: "viewer",
         });
         // A guest never clears a floor by rank: the list is the whole of its admission.
-        expect(memberRefusal({ role: "guest", areas: ["support"] }, "GET", "/no/such/route")).toEqual({ error: "not open to a guest member", floor: "viewer" });
+        expect(memberRefusal({ role: "guest", areas: ["support"] }, "GET", "/no/such/route")).toEqual({
+            error: "not open to a guest member",
+            floor: "viewer",
+        });
         expect(memberRefusal({ role: "viewer" }, "GET", "/no/such/route")).toBeUndefined();
     });
 

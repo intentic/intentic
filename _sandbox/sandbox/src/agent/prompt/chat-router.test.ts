@@ -42,7 +42,13 @@ const OFFER: ModelOffer = {
 };
 
 const CARDS: readonly Persona[] = [
-    { id: "backend", label: "Backend", capabilities: ["github"], brief: "Backend work on the api and billing services.", context: { repos: ["api", "billing"] } },
+    {
+        id: "backend",
+        label: "Backend",
+        capabilities: ["github"],
+        brief: "Backend work on the api and billing services.",
+        context: { repos: ["api", "billing"] },
+    },
     { id: "social", label: "Social", capabilities: ["reddit-work", "x-work"], brief: "Posting and replying as the studio." },
     { id: "docs", capabilities: [], workspace: { startIn: "docs" } },
 ];
@@ -88,7 +94,9 @@ beforeEach(() => {
 
 test("a persona is one line: its own sentence, then what it carries, where it starts, and the sites it speaks through", () => {
     const site = (id: string): string | undefined => ({ "reddit-work": "reddit", "x-work": "x" })[id];
-    expect(candidateLine(CARDS[0]!, site)).toBe("- backend (Backend): Backend work on the api and billing services. Carries: api, billing. Speaks through: github.");
+    expect(candidateLine(CARDS[0]!, site)).toBe(
+        "- backend (Backend): Backend work on the api and billing services. Carries: api, billing. Speaks through: github.",
+    );
     expect(candidateLine(CARDS[1]!, site)).toBe("- social (Social): Posting and replying as the studio. Speaks through: reddit, x.");
     // No brief, no context, no accounts: the line is the id and the one fact the persona has.
     expect(candidateLine(CARDS[2]!, site)).toBe("- docs: Starts in: docs.");
@@ -119,7 +127,9 @@ test("asked only about the persona, the prompt says nothing about models or allo
     expect(prompt).toContain("`none` is the right answer when the message is general");
     expect(prompt).not.toContain("Models you may choose:");
     expect(prompt).not.toContain("allowance");
-    expect(prompt.trimEnd().endsWith("Reply with exactly this line and nothing else:\npersona: <one persona id from the list above, or `none`>")).toBe(true);
+    expect(
+        prompt.trimEnd().endsWith("Reply with exactly this line and nothing else:\npersona: <one persona id from the list above, or `none`>"),
+    ).toBe(true);
 });
 
 test("each fact is shown only to the half that can use it, and only when the chat has it", () => {
@@ -233,7 +243,9 @@ test("nothing connected is answered plainly, with no model asked at all", async 
 test("one runnable model is not a choice, and no reading is spent confirming it", async () => {
     offer.mockReturnValue({ models: [OFFER.models[1]!], accounts: OFFER.accounts });
     const route = await routeChat(services(), MODEL_ONLY, undefined);
-    expect(route).toEqual({ model: { pick: { provider: "claude", model: "claude-haiku-4-5" }, reason: "Haiku 4.5 is the only model with allowance left." } });
+    expect(route).toEqual({
+        model: { pick: { provider: "claude", model: "claude-haiku-4-5" }, reason: "Haiku 4.5 is the only model with allowance left." },
+    });
     expect(roles).toEqual([]);
 });
 
@@ -254,7 +266,9 @@ test("a chat opened in a folder exactly one persona works in is that persona's, 
     expect(route.persona).toEqual({ id: "docs", reason: "Opened in docs, which docs works in." });
     expect(ask.mock.calls[0]?.[0]).not.toContain("Personas:");
     // With nothing else to ask, a folder match spends no reading at all.
-    expect(await routeChat(services(), { ...PERSONA_ONLY, folder: "api" }, undefined)).toEqual({ persona: { id: "backend", reason: "Opened in api, which Backend works in." } });
+    expect(await routeChat(services(), { ...PERSONA_ONLY, folder: "api" }, undefined)).toEqual({
+        persona: { id: "backend", reason: "Opened in api, which Backend works in." },
+    });
     expect(ask).toHaveBeenCalledTimes(1);
 });
 
@@ -281,7 +295,9 @@ test("no personas means nothing to route onto, and no call", async () => {
 // Routing a fenced asker onto a persona they cannot wear would open the chat on one that refuses every message, so the
 // candidates are cut to their own areas first — and a fence holding none ends the persona half before any model is asked.
 test("a fenced asker is routed only within their own areas, and none there means no call", async () => {
-    expect(await routeChat(services(), { ...PERSONA_ONLY, folder: "docs" }, ["docs"])).toEqual({ persona: { id: "docs", reason: "Opened in docs, which docs works in." } });
+    expect(await routeChat(services(), { ...PERSONA_ONLY, folder: "docs" }, ["docs"])).toEqual({
+        persona: { id: "docs", reason: "Opened in docs, which docs works in." },
+    });
     expect(await routeChat(services(), PERSONA_ONLY, ["finance"])).toEqual({ persona: { reason: "No personas to route onto." } });
     expect(ask).not.toHaveBeenCalled();
 });

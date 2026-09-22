@@ -139,7 +139,11 @@ test("a payload this cannot read is not a clean file", () => {
 
 test("a diagnostic missing the parts it should have is still reported, with what it has", () => {
     // Pyright omits `rule` on some errors and may omit range entirely; reporting at 1:1 beats dropping the error.
-    expect(pyrightErrors(JSON.stringify({ generalDiagnostics: [{ file: "/work/a.py", severity: "error", message: "Expected expression" }] }), asIs, WHOLE)).toEqual([
-        "/work/a.py:1:1: error error: Expected expression",
-    ]);
+    expect(
+        pyrightErrors(
+            JSON.stringify({ generalDiagnostics: [{ file: "/work/a.py", severity: "error", message: "Expected expression" }] }),
+            asIs,
+            WHOLE,
+        ),
+    ).toEqual(["/work/a.py:1:1: error error: Expected expression"]);
 });

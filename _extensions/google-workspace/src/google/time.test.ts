@@ -17,7 +17,7 @@ describe("parseWhen", () => {
         expect(parseWhen("+1w", NOW, BERLIN).dateTime).toBe("2026-08-16T22:30:00.000Z");
     });
 
-/* THE ONE THAT MATTERS. */
+    /* THE ONE THAT MATTERS. */
     it("reads `today` in the calendar's zone, not the container's", () => {
         expect(parseWhen("today", NOW, BERLIN)).toEqual({ date: "2026-08-10" });
         expect(parseWhen("today", NOW, "UTC")).toEqual({ date: "2026-08-09" });

@@ -24,7 +24,7 @@ describe("mergePasskey", () => {
     });
 
     test("an explicit undefined does not erase a good field", () => {
-/* `exactOptionalPropertyTypes` forbids writing this in typed code, which is exactly why the cast stays: the value under test comes off a CDP event. */
+        /* `exactOptionalPropertyTypes` forbids writing this in typed code, which is exactly why the cast stays: the value under test comes off a CDP event. */
         const wire = { ...stored, rpId: undefined, signCount: 7 } as unknown as PasskeyCredential;
         const merged = mergePasskey(stored, wire);
         expect(merged.rpId).toBe("www.npmjs.com");

@@ -39,7 +39,10 @@ describe(`which conversations a project shows`, () => {
 
 describe(`which held wakes a project shows`, () => {
     const cards = [persona(`writer`, { workspace: { startIn: `shop/content` } })];
-    const fleet = [{ id: `thread-1`, startIn: `shop` }, { id: `thread-2`, startIn: `api` }];
+    const fleet = [
+        { id: `thread-1`, startIn: `shop` },
+        { id: `thread-2`, startIn: `api` },
+    ];
 
     it(`follows the thread it would continue`, () => {
         expect(heldWakeInProject({ conversationId: `thread-1` }, `shop`, cards, fleet)).toBe(true);

@@ -30,7 +30,13 @@
         "import/no-unassigned-import": [
             "error",
             {
-                "allow": ["**/*.css", "@intentic/testing/dom", "**/sandbox/client/sandboxScope", "**/sandbox/client/sandboxScreen", "**/extension-host/hostModules"]
+                "allow": [
+                    "**/*.css",
+                    "@intentic/testing/dom",
+                    "**/sandbox/client/sandboxScope",
+                    "**/sandbox/client/sandboxScreen",
+                    "**/extension-host/hostModules"
+                ]
             }
         ],
         // `_` is this repo's throwaway binding, not a private-member sigil. `_all`/`_count`/`_sum` are Prisma's
@@ -165,7 +171,7 @@
         // `""`, `false` and every object ever constructed; it is what a model writes when it does not know
         // what the value should be. That is a shape, and a shape is something a linter can see.
         //
-/* THE BACKLOG WAS 328 AND IS NOW ZERO, so this is an ordinary rule rather than an authoring-side one. */
+        /* THE BACKLOG WAS 328 AND IS NOW ZERO, so this is an ordinary rule rather than an authoring-side one. */
         "bun-test/no-restricted-matchers": [
             "error",
             {

@@ -121,7 +121,11 @@ describe(`invite routes`, () => {
     it(`invite.create doesn't email a link that only resolves on this machine`, async () => {
         const prisma = fakePrisma({
             sandbox: { findFirst: mock().mockResolvedValue(sandboxRow) },
-            sandboxMember: { findUnique: mock().mockResolvedValue(null), upsert: mock().mockResolvedValue({}), findMany: mock().mockResolvedValue([]) },
+            sandboxMember: {
+                findUnique: mock().mockResolvedValue(null),
+                upsert: mock().mockResolvedValue({}),
+                findMany: mock().mockResolvedValue([]),
+            },
         });
         const fetchMock = mock();
         stubGlobal(`fetch`, fetchMock);

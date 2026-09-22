@@ -1,7 +1,18 @@
 import { GateVerdictSchema } from "@intentic/sandbox-contract";
 import { WAIT_DEFAULT_S } from "@intentic/gate";
 import { test, expect } from "bun:test";
-import { annotationOf, defaultRequest, outputLines, parseInputs, runAnnotationOf, runOutputLines, runStepExitOf, runSummaryOf, stepExitOf, summaryOf } from "./action.js";
+import {
+    annotationOf,
+    defaultRequest,
+    outputLines,
+    parseInputs,
+    runAnnotationOf,
+    runOutputLines,
+    runStepExitOf,
+    runSummaryOf,
+    stepExitOf,
+    summaryOf,
+} from "./action.js";
 
 const GATE_URL = "https://box.example/workflows/wf/gate?token=t";
 const FIRE_URL = "https://box.example/automations/nightly/fire?token=t";
@@ -15,20 +26,43 @@ test("a gate URL and nothing else is a call with the defaults", () => {
 });
 
 test("a token turns the sandbox's address into a run, with the prompt as the request", () => {
-    const parsed = parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t", INPUT_PROMPT: "review the change", INPUT_AGENT: "codex", INPUT_LAND: "true" });
+    const parsed = parseInputs({
+        INPUT_URL: "https://box.example",
+        INPUT_TOKEN: "ict_t",
+        INPUT_PROMPT: "review the change",
+        INPUT_AGENT: "codex",
+        INPUT_LAND: "true",
+    });
     expect(parsed).toEqual({
         kind: "inputs",
-        inputs: { url: "https://box.example", door: "run", request: "review the change", waitS: WAIT_DEFAULT_S, blockedAsFailure: false, token: "ict_t", agent: "codex", land: true },
+        inputs: {
+            url: "https://box.example",
+            door: "run",
+            request: "review the change",
+            waitS: WAIT_DEFAULT_S,
+            blockedAsFailure: false,
+            token: "ict_t",
+            agent: "codex",
+            land: true,
+        },
     });
-    expect(parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t" })).toMatchObject({ kind: "error", message: expect.stringContaining("prompt") });
+    expect(parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t" })).toMatchObject({
+        kind: "error",
+        message: expect.stringContaining("prompt"),
+    });
     expect(parseInputs({ INPUT_URL: "https://box.example", INPUT_TOKEN: "ict_t", INPUT_PROMPT: "go", INPUT_LAND: "yes" }).kind).toBe("error");
-    expect(parseInputs({ INPUT_URL: GATE_URL, INPUT_TOKEN: "ict_t", INPUT_PROMPT: "go" })).toMatchObject({ kind: "error", message: expect.stringContaining("door URL carries its own token") });
+    expect(parseInputs({ INPUT_URL: GATE_URL, INPUT_TOKEN: "ict_t", INPUT_PROMPT: "go" })).toMatchObject({
+        kind: "error",
+        message: expect.stringContaining("door URL carries its own token"),
+    });
     expect(parseInputs({ INPUT_URL: "https://box.example" })).toMatchObject({ kind: "error", message: expect.stringContaining("add `with: token`") });
 });
 
 test("a run's outputs, summary, annotation and exit follow its ending", () => {
     const done = { status: "completed" as const, conversationId: "ci-1-1", branch: "agent/ci-1-1", summary: "Fixed the flaky test" };
-    expect(runOutputLines(done, "D")).toBe("status<<D\ncompleted\nD\nconversation-id<<D\nci-1-1\nD\nbranch<<D\nagent/ci-1-1\nD\nsummary<<D\nFixed the flaky test\nD\n");
+    expect(runOutputLines(done, "D")).toBe(
+        "status<<D\ncompleted\nD\nconversation-id<<D\nci-1-1\nD\nbranch<<D\nagent/ci-1-1\nD\nsummary<<D\nFixed the flaky test\nD\n",
+    );
     expect(runOutputLines({ ...done, landed: true }, "D")).toContain("landed<<D\ntrue\nD\n");
     expect(runSummaryOf({ ...done, landed: false })).toContain("not landed");
     expect(runAnnotationOf(done)).toBeUndefined();

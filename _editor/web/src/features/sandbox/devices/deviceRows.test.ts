@@ -145,15 +145,38 @@ test(`puts the machines worth reading first, and breaks ties by name`, () => {
 // one PC, several doors
 
 // The Windows side and the distro on it: separate agents and separate doors, one hostname, one engine.
-const WINDOWS: Device[`facts`] = { os: `Microsoft Windows 11 Home`, arch: `x64`, shell: `PowerShell 7`, home: `C:\\Users\\radar`, roots: [], hostname: `rog`, wslDistros: [`Arch`, `Ubuntu`] };
-const ARCH: Device[`facts`] = { os: `Arch Linux`, arch: `x64`, shell: `/usr/bin/zsh`, home: `/home/radarsu`, roots: [], hostname: `rog`, wsl: { distro: `Arch` } };
+const WINDOWS: Device[`facts`] = {
+    os: `Microsoft Windows 11 Home`,
+    arch: `x64`,
+    shell: `PowerShell 7`,
+    home: `C:\\Users\\radar`,
+    roots: [],
+    hostname: `rog`,
+    wslDistros: [`Arch`, `Ubuntu`],
+};
+const ARCH: Device[`facts`] = {
+    os: `Arch Linux`,
+    arch: `x64`,
+    shell: `/usr/bin/zsh`,
+    home: `/home/radarsu`,
+    roots: [],
+    hostname: `rog`,
+    wsl: { distro: `Arch` },
+};
 
 const CONTAINERS: Device[`sandboxes`] = [{ slug: `work-abc`, container: `sandbox-work-abc`, running: true, image: `img:1` }];
 
 const pc = () =>
     machineRows(
         [
-            device({ key: `rog-wsl`, label: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, sandboxes: CONTAINERS, report: report({ os: `linux`, wsl: { distro: `Arch` }, pairings: PAIRED.pairings, ports: PAIRED.ports }) }),
+            device({
+                key: `rog-wsl`,
+                label: `rog-wsl`,
+                hostId: `rog-wsl`,
+                facts: ARCH,
+                sandboxes: CONTAINERS,
+                report: report({ os: `linux`, wsl: { distro: `Arch` }, pairings: PAIRED.pairings, ports: PAIRED.ports }),
+            }),
             device({ key: `rog`, label: `rog`, hostId: `rog`, facts: WINDOWS, sandboxes: CONTAINERS, report: report({ os: `win32` }) }),
         ],
         undefined,
@@ -179,7 +202,15 @@ test(`draws a many-sided machine's environments as lines of their own, and names
     // Either door onto the container serving this page marks the machine as the one in use.
     expect(body.lines[0]?.self).toBe(true);
     const stopped = machineRows(
-        [device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: report({ os: `linux`, wsl: { distro: `Arch` }, agent: { running: false } }) }), device({ key: `rog`, hostId: `rog`, facts: WINDOWS, report: report({ os: `win32` }) })],
+        [
+            device({
+                key: `rog-wsl`,
+                hostId: `rog-wsl`,
+                facts: ARCH,
+                report: report({ os: `linux`, wsl: { distro: `Arch` }, agent: { running: false } }),
+            }),
+            device({ key: `rog`, hostId: `rog`, facts: WINDOWS, report: report({ os: `win32` }) }),
+        ],
         undefined,
         NOW,
     );
@@ -192,7 +223,10 @@ test(`sends container verbs through the first open door and file-sync verbs thro
     expect(folderOwner(machine, machine.groups[0]!)?.device.key).toBe(`rog-wsl`);
     // A door that is shut is not the one to send through, whichever side it is on.
     const asleep = machineRows(
-        [device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: report({ os: `linux`, wsl: { distro: `Arch` } }) }), device({ key: `rog`, hostId: `rog`, online: false, facts: WINDOWS, gap: `offline`, report: undefined })],
+        [
+            device({ key: `rog-wsl`, hostId: `rog-wsl`, facts: ARCH, report: report({ os: `linux`, wsl: { distro: `Arch` } }) }),
+            device({ key: `rog`, hostId: `rog`, online: false, facts: WINDOWS, gap: `offline`, report: undefined }),
+        ],
         undefined,
         NOW,
     );
@@ -206,9 +240,24 @@ test(`folds a card's sleeping sides onto one computer and names each by its door
     const omen = `radarsu-omen`;
     const [machine, ...rest] = machineRows(
         [
-            device({ key: `${omen}::wsl:archlinux`, label: `${omen}::wsl:archlinux`, hostId: `${omen}::wsl:archlinux`, platform: `linux`, facts: { ...ARCH, hostname: omen, wsl: { distro: `archlinux` } }, report: report({ os: `linux`, wsl: { distro: `archlinux` } }) }),
+            device({
+                key: `${omen}::wsl:archlinux`,
+                label: `${omen}::wsl:archlinux`,
+                hostId: `${omen}::wsl:archlinux`,
+                platform: `linux`,
+                facts: { ...ARCH, hostname: omen, wsl: { distro: `archlinux` } },
+                report: report({ os: `linux`, wsl: { distro: `archlinux` } }),
+            }),
             device({ key: omen, label: omen, hostId: omen, platform: `windows`, online: false, gap: `offline`, report: undefined }),
-            device({ key: `${omen}::wsl:Ubuntu-22.04`, label: `${omen}::wsl:Ubuntu-22.04`, hostId: `${omen}::wsl:Ubuntu-22.04`, platform: `linux`, online: false, gap: `offline`, report: undefined }),
+            device({
+                key: `${omen}::wsl:Ubuntu-22.04`,
+                label: `${omen}::wsl:Ubuntu-22.04`,
+                hostId: `${omen}::wsl:Ubuntu-22.04`,
+                platform: `linux`,
+                online: false,
+                gap: `offline`,
+                report: undefined,
+            }),
         ],
         undefined,
         NOW,
@@ -415,7 +464,12 @@ test(`drops the machine-wide switches over a single pairing, where a row's own b
 });
 
 test(`draws no file-sync switch on a machine that only mirrors ports`, () => {
-    const mirrors: Partial<Report> = { pairings: [{ sandboxId: `a`, mode: `mirror` }, { sandboxId: `b`, mode: `mirror` }] };
+    const mirrors: Partial<Report> = {
+        pairings: [
+            { sandboxId: `a`, mode: `mirror` },
+            { sandboxId: `b`, mode: `mirror` },
+        ],
+    };
     expect(deviceSwitches(row({}, mirrors)).map((half) => half.label)).toEqual([`Port mirroring`]);
 });
 
@@ -430,13 +484,7 @@ const GRANTED = { sandboxes: `on` };
 
 // `canPair` is the reader's own standing (owner, by default here): the daemon refuses a member's mint, so it
 // decides whether a machine that isn't answering is offered a fresh pairing at all.
-const concernsOf = (
-    overrides: Partial<Device> = {},
-    held: Held = {},
-    latest?: string,
-    scopes?: Record<string, string>,
-    canPair = true,
-) => {
+const concernsOf = (overrides: Partial<Device> = {}, held: Held = {}, latest?: string, scopes?: Record<string, string>, canPair = true) => {
     const entry = row(overrides, held, latest);
     return deviceAttention(entry, { block: manageBlock(entry.device, scopes), readAt: NOW, canPair });
 };

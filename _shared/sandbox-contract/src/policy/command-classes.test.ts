@@ -475,7 +475,7 @@ describe("live", () => {
 
     test("a command substitution inside an echo is not text", () => {
         expect(live(`echo "$(rm -rf /)"`, "files.destructive")).toBe(true);
-        expect(live("echo \"`rm -rf /`\"", "files.destructive")).toBe(true);
+        expect(live('echo "`rm -rf /`"', "files.destructive")).toBe(true);
         expect(live(`echo '$(rm -rf /)'`, "files.destructive")).toBe(false);
     });
 

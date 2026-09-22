@@ -138,7 +138,11 @@ test("reads a connecting machine's environment off its own facts", () => {
 // one side asleep must not read as the machine being away.
 test("gives one card a row per environment, native first, each with its own liveness", async () => {
     const hub = createPeerHub<HostClient, { version: string }, DeviceFacts, DeviceScopes>(HOST_PEER.hub, { warn: () => {} });
-    const peer = () => ({ client: { ping: async () => ({ ok: true }) } as unknown as HostClient, close: () => {}, announced: { version: "1.274.0" } });
+    const peer = () => ({
+        client: { ping: async () => ({ ok: true }) } as unknown as HostClient,
+        close: () => {},
+        announced: { version: "1.274.0" },
+    });
     const distroKey = hostConnectionKey("rog", "wsl:archlinux");
     const detachNative = hub.attach("rog", peer());
     hub.observe("rog", { ...WINDOWS, hostname: "rog" });

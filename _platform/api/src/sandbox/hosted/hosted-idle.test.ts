@@ -68,12 +68,14 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(prisma.sandbox.update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { daemonUrl: null } });
     });
 
-/* THE MINUTES GO WITH THE ROW unless they are charged first. */
+    /* THE MINUTES GO WITH THE ROW unless they are charged first. */
     it(`charges a machine's open awake stretch to its owner's month before dropping its row`, async () => {
         stubFly(`stopped`);
         const upsert = mock().mockResolvedValue({});
         const wokeAt = daysAgo(30);
-        const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], { hostedUsage: { upsert, aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) } });
+        const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], {
+            hostedUsage: { upsert, aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) },
+        });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(upsert).toHaveBeenCalledWith(
             expect.objectContaining({ where: { sandboxId_month: { sandboxId: `s1`, month: wokeAt.toISOString().slice(0, 7) } } }),
@@ -82,7 +84,7 @@ describe(`collecting the machines nobody came back to`, () => {
         expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteCall);
     });
 
-/* A provider-deleted machine must not leave a hosted row behind. */
+    /* A provider-deleted machine must not leave a hosted row behind. */
     it(`drops the row of a machine Fly no longer has, whatever the clock says about it`, async () => {
         stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ error: `machine not found` }), { status: 404 })));
         const prisma = prismaWith([machine({ sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(15) } })]);
@@ -145,7 +147,9 @@ describe(`collecting the machines nobody came back to`, () => {
 
     it(`measures a machine that never announced from when it was created`, async () => {
         stubFly(`stopped`);
-        const prisma = prismaWith([machine({ createdAt: daysAgo(40), idleWarnedAt: daysAgo(8), sandbox: { ...machine().sandbox, lastSeenAt: null } })]);
+        const prisma = prismaWith([
+            machine({ createdAt: daysAgo(40), idleWarnedAt: daysAgo(8), sandbox: { ...machine().sandbox, lastSeenAt: null } }),
+        ]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
     });
 
@@ -174,7 +178,10 @@ describe(`collecting the machines nobody came back to`, () => {
                 ? Promise.resolve(new Response(``, { status: 202 }))
                 : Promise.resolve(new Response(JSON.stringify({ id: `m2`, state: `stopped` })));
         });
-        const prisma = prismaWith([machine({ idleWarnedAt: daysAgo(8) }), machine({ id: `h2`, appName: `intentic-sbx-b`, idleWarnedAt: daysAgo(8) })]);
+        const prisma = prismaWith([
+            machine({ idleWarnedAt: daysAgo(8) }),
+            machine({ id: `h2`, appName: `intentic-sbx-b`, idleWarnedAt: daysAgo(8) }),
+        ]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h2` } });
     });

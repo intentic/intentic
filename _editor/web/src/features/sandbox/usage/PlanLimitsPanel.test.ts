@@ -109,16 +109,13 @@ it(`states the fix once and spends the rest of the section on names`, () => {
 // A Google credential with no Antigravity project reads as neither spent nor unread: its weekly allowance is
 // untouched and no turn can spend it. Counting it as capacity is what let a fleet read 100% with room in it.
 it(`names a routed credential benched for good, and keeps it out of the capacity count`, () => {
-    const el = mount(
-        [claudeAccount({ id: `acc-1`, label: `first@example.com`, usage: spent })],
-        {
-            ...NO_ROUTED,
-            gemini: [
-                { name: `g-1`, label: `new@gmail.com`, cooling: { reason: `no Antigravity project on this Google account` } },
-                { name: `g-2`, label: `busy@gmail.com`, usage: spent, cooling: { until: 1_700_003_600, reason: `Individual quota reached` } },
-            ],
-        },
-    );
+    const el = mount([claudeAccount({ id: `acc-1`, label: `first@example.com`, usage: spent })], {
+        ...NO_ROUTED,
+        gemini: [
+            { name: `g-1`, label: `new@gmail.com`, cooling: { reason: `no Antigravity project on this Google account` } },
+            { name: `g-2`, label: `busy@gmail.com`, usage: spent, cooling: { until: 1_700_003_600, reason: `Individual quota reached` } },
+        ],
+    });
 
     expect(alarm(el)?.textContent?.trim()).toBe(`Can't serve a turn · 1`);
     expect(alarm(el)?.closest(`div.flex.flex-col`)?.textContent).toContain(`no Antigravity project on this Google account`);

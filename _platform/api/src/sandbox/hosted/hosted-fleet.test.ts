@@ -85,9 +85,7 @@ describe(`stampHostedOwners`, () => {
             if (target.includes(`/metadata/`)) {
                 return Promise.resolve(new Response(null, { status: 204 }));
             }
-            return Promise.resolve(
-                new Response(JSON.stringify({ apps: [{ name: `intentic-sbx-a` }, { name: `intentic-sbx-b` }] }), { status: 200 }),
-            );
+            return Promise.resolve(new Response(JSON.stringify({ apps: [{ name: `intentic-sbx-a` }, { name: `intentic-sbx-b` }] }), { status: 200 }));
         });
         const prisma = fakePrisma(
             [taken({ appName: `intentic-sbx-a`, machineId: `m1` }), taken({ appName: `intentic-sbx-b`, machineId: `m2`, sandboxId: `s2` })],

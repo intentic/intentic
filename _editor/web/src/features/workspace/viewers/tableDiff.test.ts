@@ -8,7 +8,14 @@ describe(`parsing fileq's rendering of a workbook`, () => {
     it(`reads each sheet's table, header first, skipping the separator row and undoing the pipe escape`, () => {
         const sheets = sheetsOfMarkdown(`## Prices\n\n| Item | Cost |\n| --- | --- |\n| Bread | 2 |\n| A \\| B | 3 |\n\n## Notes\n\n(empty sheet)`);
         expect(sheets).toEqual([
-            { name: `Prices`, rows: [[`Item`, `Cost`], [`Bread`, `2`], [`A | B`, `3`]] },
+            {
+                name: `Prices`,
+                rows: [
+                    [`Item`, `Cost`],
+                    [`Bread`, `2`],
+                    [`A | B`, `3`],
+                ],
+            },
             { name: `Notes`, rows: [] },
         ]);
     });
@@ -21,7 +28,10 @@ describe(`parsing delimited text`, () => {
             [`x;y`, `say "hi"`],
             [`two\nlines`, `z`],
         ]);
-        expect(sheetOfDelimited(`a\tb\n1\t2`, `t.tsv`).rows).toEqual([[`a`, `b`], [`1`, `2`]]);
+        expect(sheetOfDelimited(`a\tb\n1\t2`, `t.tsv`).rows).toEqual([
+            [`a`, `b`],
+            [`1`, `2`],
+        ]);
     });
 
     it(`drops blank lines rather than reading them as empty rows`, () => {
@@ -31,7 +41,10 @@ describe(`parsing delimited text`, () => {
 
 describe(`tableDiff`, () => {
     it(`pairs an edited row with what it became and marks the one cell that moved`, () => {
-        const [diff] = tableDiff([sheet(`S`, [`Item`, `Cost`], [`Bread`, `2`], [`Milk`, `1`])], [sheet(`S`, [`Item`, `Cost`], [`Bread`, `3`], [`Milk`, `1`])]);
+        const [diff] = tableDiff(
+            [sheet(`S`, [`Item`, `Cost`], [`Bread`, `2`], [`Milk`, `1`])],
+            [sheet(`S`, [`Item`, `Cost`], [`Bread`, `3`], [`Milk`, `1`])],
+        );
         expect(diff?.kind).toBe(`changed`);
         expect(kinds(diff!.rows)).toEqual([`same`, `changed`, `same`]);
         expect(diff!.rows[1]!.cells).toEqual([
@@ -80,13 +93,28 @@ describe(`tableDiff`, () => {
 
 describe(`foldUnchangedRows`, () => {
     it(`keeps the header and one row of context on each side of a change, folding the rest`, () => {
-        const rows: RowDiff[] = Array.from({ length: 12 }, (_, index) => ({ kind: index === 8 ? `changed` : `same`, cells: [], beforeLine: index + 1, afterLine: index + 1 }));
+        const rows: RowDiff[] = Array.from({ length: 12 }, (_, index) => ({
+            kind: index === 8 ? `changed` : `same`,
+            cells: [],
+            beforeLine: index + 1,
+            afterLine: index + 1,
+        }));
         const runs = foldUnchangedRows(rows);
-        expect(runs.map((run) => (run.kind === `fold` ? `fold:${run.count}` : run.row.kind))).toEqual([`same`, `fold:6`, `same`, `changed`, `same`, `fold:2`]);
+        expect(runs.map((run) => (run.kind === `fold` ? `fold:${run.count}` : run.row.kind))).toEqual([
+            `same`,
+            `fold:6`,
+            `same`,
+            `changed`,
+            `same`,
+            `fold:2`,
+        ]);
     });
 
     it(`shows an all-unchanged sheet whole`, () => {
-        const rows: RowDiff[] = [{ kind: `same`, cells: [] }, { kind: `same`, cells: [] }];
+        const rows: RowDiff[] = [
+            { kind: `same`, cells: [] },
+            { kind: `same`, cells: [] },
+        ];
         expect(foldUnchangedRows(rows)).toHaveLength(2);
     });
 });

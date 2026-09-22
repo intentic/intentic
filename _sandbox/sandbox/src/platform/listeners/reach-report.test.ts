@@ -59,7 +59,7 @@ describe("probeSelf", () => {
         expect(verdict.ok === false && verdict.detail).toContain("502");
     });
 
-/* A HOSTED SANDBOX HAS NO TUNNEL, so it must not be told about one. */
+    /* A HOSTED SANDBOX HAS NO TUNNEL, so it must not be told about one. */
     it("blames the edge, not a tunnel, for a hosted sandbox's 502", async () => {
         stubGlobal("fetch", async () => new Response("not connected right now", { status: 502 }));
         const verdict = await probeSelf(PUBLIC_URL, "abc", "direct");
@@ -155,7 +155,7 @@ describe("createReachReporter", () => {
         expect(createReachReporter(config, logger).status()).toEqual({ state: "off" });
     });
 
-/* A container told a public name but given nothing to dial with. */
+    /* A container told a public name but given nothing to dial with. */
     it("settles at once when the daemon dials no edge, naming why and probing nothing", async () => {
         const probe = mock(async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
         stubGlobal("fetch", probe);

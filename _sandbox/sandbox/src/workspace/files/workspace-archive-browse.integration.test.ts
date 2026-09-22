@@ -77,11 +77,7 @@ test("it is laid out the way Extract lays it out, so browsing and extracting agr
 
 test("a .gitignore inside an archive hides nothing: it is the archive's own content", async () => {
     const archive = await archiveOf(`bundle.tar.gz`, { ".gitignore": `secret.txt\n`, "secret.txt": `s`, "node_modules/left.js": `x` });
-    expect(await names(archive, `bundle.tar.gz`)).toEqual([
-        `bundle.tar.gz/.gitignore`,
-        `bundle.tar.gz/node_modules`,
-        `bundle.tar.gz/secret.txt`,
-    ]);
+    expect(await names(archive, `bundle.tar.gz`)).toEqual([`bundle.tar.gz/.gitignore`, `bundle.tar.gz/node_modules`, `bundle.tar.gz/secret.txt`]);
 });
 
 test("the same archive unpacks once, however many readers ask at the same time", async () => {

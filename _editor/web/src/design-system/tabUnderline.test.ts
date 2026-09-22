@@ -9,7 +9,11 @@ import "@intentic/testing/dom";
 import { it, expect } from "bun:test";
 import { ui } from "@intentic/ui";
 
-const classesOf = (active: boolean, ...overrides: string[]): string[] => ui.tab(active, ...overrides).split(/\s+/).filter(Boolean);
+const classesOf = (active: boolean, ...overrides: string[]): string[] =>
+    ui
+        .tab(active, ...overrides)
+        .split(/\s+/)
+        .filter(Boolean);
 
 // A rule that appeared only under the active tab would add 2px to that tab's height on selection, dropping the row
 // below by 2px every time the reader switched.
