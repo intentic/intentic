@@ -68,7 +68,7 @@
     "_shared/extension-manifest/src/points/files.ts": 1,
     "_shared/sandbox-contract/src/policy/approvals-execution.ts": 1,
     "_shared/sandbox-contract/src/policy/command-classes.test.ts": 2,
-    "_shared/sandbox-contract/src/state/workspace-state.test.ts": 11,
+    "_shared/sandbox-contract/src/state/workspace-state.test.ts": 9,
     "_site/demo/src/fixture/browserShots.ts": 1,
     "_site/site/src/lib/api-examples.ts": 1
 }
