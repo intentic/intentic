@@ -72,6 +72,13 @@ export interface QueuedMessage {
     readonly editorContext?: EditorContext;
 }
 
+// A turn this window has opened and not yet handed to the daemon: its drawn bubble, its abort, the session it resumes.
+interface OpenedTurn {
+    readonly bubble: number;
+    readonly controller: AbortController;
+    readonly resume: SessionRef | undefined;
+}
+
 // Two adjacent queued nudges with no attachments (e.g. repeated "Continue") collapse into one: a second behind an
 // undelivered first says nothing new. Never collapses against real words or attachments.
 const repeatsNudge = (message: { readonly text: string; readonly attachments: readonly ChatAttachment[] }, neighbour?: QueuedMessage): boolean => {
@@ -377,6 +384,9 @@ export class Conversation {
 
     // True while drainQueue owns the idle flush, so a second drain can't send the same messages twice.
     private flushing = false;
+
+    // An errand's words are still being composed (startErrand): open here, unknown to the daemon, so Stop is local.
+    private composing = false;
 
     // Queued messages handed to a send the daemon has not acknowledged; they are still in `queued`, so nothing about
     // them is lost if this window dies, and a refusal has nothing to hand back (requeueUndelivered).
@@ -944,6 +954,67 @@ export class Conversation {
         if (this.streaming.value) {
             return;
         }
+        await this.deliverTurn(this.openTurn(text, attachments, settings), text, attachments, settings, editorContext);
+    }
+
+    // An app errand whose words need a read first: the turn opens at the call, its row and the working line drawn, and
+    // `compose` fills it in (undefined: no turn after all). Resolves with whether the daemon took it, not at its end.
+    async startErrand(opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>): Promise<boolean> {
+        // The user is driving again, exactly as a composer send says it (see `enqueue`).
+        this.interrupted = false;
+        this.keep();
+        if (this.stopping !== undefined) {
+            await this.stopping;
+        }
+        // A turn already live here can't have a second opened beside it: the words go the way any message would.
+        if (this.streaming.value || this.flushing) {
+            const prompt = await compose(new AbortController().signal);
+            if (prompt === undefined) {
+                return false;
+            }
+            void this.enqueue(prompt);
+            return true;
+        }
+        const settings = this.turnSettings();
+        const opened = this.openTurn(opening, [], settings);
+        this.composing = true;
+        const composed = compose(opened.controller.signal);
+        // A read abandoned by a Stop may still fail later, and nobody is left to hear it.
+        composed.catch(() => undefined);
+        // A Stop ends the turn in the frame it was pressed, whether or not the read it interrupts honours the abort.
+        const stopped = new Promise<undefined>((settle) => opened.controller.signal.addEventListener(`abort`, () => settle(undefined), { once: true }));
+        let prompt: string | undefined;
+        try {
+            prompt = await Promise.race([composed, stopped]);
+        } catch (error) {
+            // A Stop or a closed tab aborted the read: nothing was sent, so nothing is reported either.
+            if (!opened.controller.signal.aborted) {
+                this.takeBack(opened);
+                throw error;
+            }
+        } finally {
+            this.composing = false;
+        }
+        if (prompt === undefined || opened.controller.signal.aborted) {
+            this.takeBack(opened);
+            return false;
+        }
+        this.transcript.reword(opened.bubble, prompt);
+        const words = prompt;
+        return new Promise<boolean>((taken) => {
+            void this.deliverTurn(opened, words, [], settings, undefined, taken);
+        });
+    }
+
+    // Ends a turn this window opened before any of it left: its bubble goes, and the queue behind it may flush.
+    private takeBack(opened: OpenedTurn): void {
+        this.transcript.dropLocal(opened.bubble);
+        this.endTurn();
+    }
+
+    // What a turn does before its words leave, in the order a send always did it; the bubble and the working line draw
+    // here, so whatever follows may be a wait.
+    private openTurn(text: string, attachments: readonly ChatAttachment[], settings: TurnSettings): OpenedTurn {
         // A pending reattach probe must not race this send's stream, nor must a superseded resume fire one later.
         this.probe?.abort();
         this.failures.cancelProbe();
@@ -957,27 +1028,56 @@ export class Conversation {
         this.pendingSwitchNoticeId = undefined;
         // This turn is what the next model swap is measured against; read off the conversation's own ref.
         this.sentModel = this.model.value;
-        // A fork names its origin on its first turn; consumed on the daemon's ack, so a refused send can retry cleanly.
-        const forkOf = this.pendingForkOf.value;
-        // First message of a fresh conversation names it, free; an attachment-only send is named after the files.
-        if (this.title.value === null) {
-            this.title.value = deriveTitle(text.length > 0 ? text : attachments.map((file) => file.name).join(`, `));
-        }
         // The user's bubble, drawn now so the send reads as sent, replaced once the daemon's row arrives, same id.
-        const userMessageId = this.transcript.append({
+        const bubble = this.transcript.append({
             role: `user`,
             text,
             ...(attachments.length > 0 ? { attachments: attachments.map((file) => file.path) } : {}),
         });
-        // This window's own copy of the words, for a refusal to hand back; the daemon retracts its row itself.
-        const sent: SentMessage = { text, attachments };
-        // Everything but the run, which the daemon only names in the ack below.
-        const turn: Omit<TurnContext, "run"> = { sent, provider: settings.agent, account: settings.account, harness: settings.harness };
         // This turn starts from the user's pick; the previous turn's live posture is history by the time this runs.
         this.liveMode.value = undefined;
         const controller = new AbortController();
         this.beginTurn(controller, Date.now());
+        return { bubble, controller, resume };
+    }
 
+    // First message of a fresh conversation names it, free; an attachment-only send is named after the files.
+    private nameAfter(text: string, attachments: readonly ChatAttachment[]): void {
+        if (this.title.value === null) {
+            this.title.value = deriveTitle(text.length > 0 ? text : attachments.map((file) => file.name).join(`, `));
+        }
+    }
+
+    // Turned away at the door: the daemon refused before any turn existed, says why, and keeps the words.
+    private async turnedAway(response: Response, bubble: number, sent: SentMessage): Promise<void> {
+        if (response.status === 409) {
+            this.error.value = `This agent already has a turn running: wait for it to finish.`;
+            return;
+        }
+        const refusal = await sandboxError(response, { method: `POST`, path: `/agent` });
+        this.transcript.dropLocal(bubble);
+        this.requeueUndelivered(sent);
+        this.error.value = `${refusal.message} Your message is held below: send it again once that's sorted.`;
+    }
+
+    // Hands an opened turn's words to the daemon and follows it to its end. `taken` hears exactly once whether the daemon
+    // took the turn: at its ack, or as the turn ends without one.
+    private async deliverTurn(
+        opened: OpenedTurn,
+        text: string,
+        attachments: readonly ChatAttachment[],
+        settings: TurnSettings,
+        editorContext: EditorContext | undefined,
+        taken: (taken: boolean) => void = () => undefined,
+    ): Promise<void> {
+        const { bubble: userMessageId, controller, resume } = opened;
+        // A fork names its origin on its first turn; consumed on the daemon's ack, so a refused send can retry cleanly.
+        const forkOf = this.pendingForkOf.value;
+        this.nameAfter(text, attachments);
+        // This window's own copy of the words, for a refusal to hand back; the daemon retracts its row itself.
+        const sent: SentMessage = { text, attachments };
+        // Everything but the run, which the daemon only names in the ack below.
+        const turn: Omit<TurnContext, "run"> = { sent, provider: settings.agent, account: settings.account, harness: settings.harness };
         // Chips and @-mentions ride apart, since only a chip was chosen; mentions skip chips, already visible inline.
         const attachmentPaths = attachments.map((file) => file.path);
         const mentionedPaths = mentionPaths(text).filter((path) => !attachmentPaths.includes(path));
@@ -1004,16 +1104,8 @@ export class Conversation {
                     }),
                 ),
             });
-            // Turned away at the door: the daemon refused before any turn existed, says why, and keeps the words.
             if (!response.ok) {
-                if (response.status === 409) {
-                    this.error.value = `This agent already has a turn running: wait for it to finish.`;
-                    return;
-                }
-                const refusal = await sandboxError(response, { method: `POST`, path: `/agent` });
-                this.transcript.dropLocal(userMessageId);
-                this.requeueUndelivered(sent);
-                this.error.value = `${refusal.message} Your message is held below: send it again once that's sorted.`;
+                await this.turnedAway(response, userMessageId, sent);
                 return;
             }
             // The ack means the turn is running daemon-side regardless of this tab; a fork's rows are already copied.
@@ -1022,6 +1114,7 @@ export class Conversation {
             this.settleDelivered();
             const { run } = (await response.json()) as { run: string };
             this.turnAccepted = true;
+            taken(true);
             this.latchRemoteRegistration();
             await followRun(
                 this.conversationId,
@@ -1038,20 +1131,26 @@ export class Conversation {
                 this.at,
             );
         } catch (err) {
-            // A user-initiated Stop aborts the fetch; that's expected, not an error to surface.
-            const stopped = err instanceof DOMException && err.name === `AbortError`;
-            // The send that never left: the bubble returns to the queue, and the continue offer is refused too.
-            if (!this.turnAccepted) {
-                this.transcript.dropLocal(userMessageId);
-                this.requeueUndelivered(sent);
-                this.error.value = stopped ? null : `${errorMessage(err, `Chat failed.`)} Your message is held below, send it again to deliver it.`;
-                return;
-            }
-            if (!stopped) {
-                this.error.value = errorMessage(err, `Chat failed.`);
-            }
+            this.turnBroke(err, userMessageId, sent);
         } finally {
+            // Heard already on the ack, so this only speaks for a turn that ended without one.
+            taken(this.turnAccepted);
             this.endTurn();
+        }
+    }
+
+    // Where a sent turn's request or stream threw. A user-initiated Stop aborts the fetch, which is expected, not an error
+    // to surface; a send that never left gets its bubble back into the queue, and the continue offer is refused too.
+    private turnBroke(err: unknown, bubble: number, sent: SentMessage): void {
+        const stopped = err instanceof DOMException && err.name === `AbortError`;
+        if (!this.turnAccepted) {
+            this.transcript.dropLocal(bubble);
+            this.requeueUndelivered(sent);
+            this.error.value = stopped ? null : `${errorMessage(err, `Chat failed.`)} Your message is held below, send it again to deliver it.`;
+            return;
+        }
+        if (!stopped) {
+            this.error.value = errorMessage(err, `Chat failed.`);
         }
     }
 
@@ -1337,6 +1436,11 @@ export class Conversation {
         }
         this.keep();
         this.ended();
+        // Nothing has left for the daemon to cancel: aborting the composing read ends the turn (startErrand).
+        if (this.composing) {
+            this.abort();
+            return;
+        }
         const stopping = postTurnControl(this.at, `/agent/stop`, { conversationId: this.conversationId }).then((delivered) => {
             if (!delivered) {
                 this.stopLocally();

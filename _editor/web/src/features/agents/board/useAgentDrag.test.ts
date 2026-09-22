@@ -1,5 +1,6 @@
 import { it, expect, afterEach, mock } from "bun:test";
 import { mocked, hoisted } from "@intentic/testing/bun";
+import type { ResolveAsk } from "../fleet/agentActions";
 
 // The board's presses, one per card: asserts scoping only, that two in-flight actions are two states the board can
 // show, not one slot the second overwrites. Browser-needing modules and agentActions are stubbed, since the whole
@@ -8,7 +9,7 @@ const stub = hoisted(() => ({
     fleet: { value: [] as unknown[] },
     notice: { value: undefined as string | undefined },
     // The deferred halves of the two calls under test, so a test can leave one out and settle the other.
-    asks: [] as ((answer: { sent: boolean; why?: string; settled?: true }) => void)[],
+    asks: [] as ((answer: ResolveAsk) => void)[],
     lands: [] as ((answer: { landed: boolean; changed: boolean }) => void)[],
     // The app's one self-retiring receipt lane, so a test can tell an outcome from a failure by which channel it took.
     said: [] as string[],
@@ -59,16 +60,29 @@ it("reports a press that repaired the card as an outcome, and a refusal as a fai
     const { resolveNow } = useAgentDrag();
 
     const repaired = resolveNow(`a`);
-    stub.asks[0]?.({ sent: false, settled: true, why: `Nothing is blocking this any more: it's ready to land.` });
+    stub.asks[0]?.({ kind: `settled`, why: `Nothing is blocking this any more: it's ready to land.` });
     await repaired;
     expect(stub.said).toEqual([`Nothing is blocking this any more: it's ready to land.`]);
     expect(stub.notice.value).toBeUndefined();
 
     const refused = resolveNow(`b`);
-    stub.asks[1]?.({ sent: false, why: `A rebase can't reach this.` });
+    stub.asks[1]?.({ kind: `refused`, why: `A rebase can't reach this.` });
     await refused;
     expect(stub.notice.value).toBe(`A rebase can't reach this.`);
     expect(stub.said).toHaveLength(1);
+});
+
+// The third kind: a turn opened in the chat and never taken (a Stop mid-read, a refusal at the door). The chat already
+// said why, where it happened; a strip here would be the same sentence twice, and a receipt would call it news.
+it("says nothing for a press the chat has already answered for", async () => {
+    const { resolveNow } = useAgentDrag();
+
+    const dropped = resolveNow(`a`);
+    stub.asks[0]?.({ kind: `dropped` });
+    await dropped;
+
+    expect(stub.notice.value).toBeUndefined();
+    expect(stub.said).toEqual([]);
 });
 
 // The board must not share one `{id, action}` slot across cards: a second press must not clear or override the first
@@ -82,14 +96,14 @@ it("keeps each card spinning until ITS OWN action lands, not until the next pres
     expect(pendingOn(`a`)).toBe(`resolve`);
     expect(pendingOn(`b`)).toBe(`resolve`);
 
-    stub.asks[0]?.({ sent: true });
+    stub.asks[0]?.({ kind: `sent` });
     await first;
 
     // The card that answered goes quiet; the one still waiting on the daemon does not.
     expect(pendingOn(`a`)).toBeUndefined();
     expect(pendingOn(`b`)).toBe(`resolve`);
 
-    stub.asks[1]?.({ sent: true });
+    stub.asks[1]?.({ kind: `sent` });
     await second;
     expect(pendingOn(`b`)).toBeUndefined();
 });
@@ -105,7 +119,7 @@ it("tells two boxes' cards with the same id apart", async () => {
     expect(pendingOn(`a`)).toBe(`resolve`);
     expect(pendingOn(`a`, `box-2`)).toBe(`land`);
 
-    stub.asks[0]?.({ sent: true });
+    stub.asks[0]?.({ kind: `sent` });
     await here;
     expect(pendingOn(`a`)).toBeUndefined();
     expect(pendingOn(`a`, `box-2`)).toBe(`land`);
@@ -145,7 +159,7 @@ it("refuses a second press on the same card while its action is still out", asyn
     expect(askAgentToResolve).toHaveBeenCalledTimes(1);
     expect(pendingOn(`a`)).toBe(`resolve`);
 
-    stub.asks[0]?.({ sent: true });
+    stub.asks[0]?.({ kind: `sent` });
     await first;
     expect(pendingOn(`a`)).toBeUndefined();
 });

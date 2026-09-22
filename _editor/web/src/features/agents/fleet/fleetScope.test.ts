@@ -31,6 +31,7 @@ mock.module("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch }))
 
 const { acrossAttention, boxNameOf, isRemote, openInSandbox, otherFleet, partialAnswer, fleetScope, readingAcross, scopeOffered } =
     await import("./fleetScope");
+const { claim } = await import("./useAgents-provisional");
 
 const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 const agent = (over: Partial<AgentSummary>): AgentSummary =>
@@ -107,6 +108,24 @@ describe("another box's agents as board cards", () => {
     it("does not call a running turn unread", () => {
         otherBoxes.value = [boxOf(`sbx-laptop`, `Laptop`, [agent({ status: `running`, updatedAt: 500, seenAt: 100 })])];
         expect(otherFleet.value[0]?.unread).toBe(false);
+    });
+
+    // A box read at a distance is polled, not streamed, so its own answer to a press is the slowest thing on the board;
+    // the press draws at once, and only on the box it was made in, since agent ids are minted per daemon.
+    it("draws a press on another box's card at once, and on no other box's card with the same id", () => {
+        otherBoxes.value = [
+            boxOf(`sbx-laptop`, `Laptop`, [agent({ status: `error` })]),
+            boxOf(`sbx-desk`, `Desk`, [agent({ status: `error` })]),
+        ];
+
+        const press = claim(`a1`, `sbx-laptop`, `land`);
+        expect(otherFleet.value.map((card) => [card.sandboxId, card.status])).toEqual([
+            [`sbx-laptop`, `landing`],
+            [`sbx-desk`, `error`],
+        ]);
+
+        press.settle(false);
+        expect(otherFleet.value.map((card) => card.status)).toEqual([`error`, `error`]);
     });
 });
 

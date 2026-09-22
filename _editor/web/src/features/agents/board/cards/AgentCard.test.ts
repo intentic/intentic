@@ -171,29 +171,30 @@ it(`holds the land open on the daemon's own landing status, spinning and pressed
     expect(el.textContent).not.toContain(`Working…`);
 });
 
-// The card dims for any pending action (archiving included); `pending` carries which action, not just a flag.
-// Otherwise a Land button would spin through an archive, reporting a land nobody asked for.
+// Any action out on the card holds its other presses; `pending` carries which action, not just a flag. Otherwise a
+// Land button would spin through an archive, reporting a land nobody asked for.
 it(`leaves the land button alone while some other action holds the card`, () => {
     expect(landButton(mount(ready(), `archive`))?.textContent?.trim()).toBe(`Land now`);
 });
 
-// The card the dim is drawn on, which is also the press that opens the chat.
+// The card's own face, which is also the press that opens the chat.
 const body = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`.session-card`)!;
 
-// A land takes minutes, and for all of them the transcript is the one thing a reader wants from the card. Nothing
-// about it contends with the land, so the dim says "busy", not "gone": the card still opens.
-it(`opens the chat on a click while a land holds the card`, () => {
+// A land takes minutes, and for all of them the transcript is the one thing a reader wants from the card. What the
+// press did is the card's own standing, drawn from the press itself (useAgents-provisional), so nothing is laid over
+// the card: a dim would say "not yet" over a card already saying "landing", and the click still opens the chat.
+it(`opens the chat on a click while a land holds the card, with nothing laid over it`, () => {
     const opened = mock();
     const el = mount(ready(`landing`), `land`, { onOpen: opened });
     // jsdom runs a dispatched click whatever `pointer-events` says, so the class is what witnesses it in a browser.
-    expect(body(el).className).toContain(`opacity-60`);
+    expect(body(el).className).not.toContain(`opacity-60`);
     expect(body(el).className).not.toContain(`pointer-events-none`);
     body(el).click();
     expect(opened).toHaveBeenCalledTimes(1);
 });
 
-// What the dim does withhold: the presses that would start a SECOND action on the same agent, each pressed out on
-// its own button rather than by a sheet over the card that took the click to the chat with it.
+// What an action out on the card does withhold: the presses that would start a SECOND action on the same agent, each
+// pressed out on its own button rather than by a sheet over the card that took the click to the chat with it.
 it(`presses out the archive while an archive is already running`, () => {
     expect(buttonLabelled(mount(ready(), `archive`), `Archive agent`)?.disabled).toBe(true);
     expect(landButton(mount(ready(), `archive`))?.disabled).toBe(true);
@@ -360,6 +361,14 @@ it(`offers the way back, and reports its own press`, () => {
     const pressed = relandButton(mount(discarded(0, 4), `reland`))!;
     expect(pressed.textContent?.trim()).toBe(`Landing…`);
     expect(pressed.querySelector(`[data-icon="spinner"]`)).not.toBeNull();
+});
+
+// The card reads `landing` from the press on (useAgents-provisional), and on from any window's press: the one land an
+// `away` card offers is this one, so the button says so and is pressed out, since the daemon refuses a second land.
+it(`holds the way back pressed out while the card is landing, whoever pressed it`, () => {
+    const landing = relandButton(mount(discarded(0, 4, `landing`)))!;
+    expect(landing.textContent?.trim()).toBe(`Landing…`);
+    expect(landing.disabled).toBe(true);
 });
 
 it(`asks the board to re-land on the press`, () => {

@@ -18,7 +18,6 @@
             "closeAgent": "Close agent",
             "completed": "Completed",
             "focusAgent": "Focus agent: {displayTitle}",
-            "handingOver": "Handing it over…",
             "inNotInSandbox": "In {name}, not in the sandbox you're in",
             "keepChatOpen": "Keep this chat open",
             "keepOpenOtherwiseChat": "Keep open, otherwise this chat closes when you open another",

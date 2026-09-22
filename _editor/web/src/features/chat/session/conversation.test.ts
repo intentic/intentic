@@ -21,6 +21,7 @@ import { providerAccounts, selectedAccountId, usageByAccount } from "../accounts
 import { turnDefaults } from "../run/turnDefaults";
 import { AUTO_PROVIDER } from "../models/modelPickerState";
 import { resolvePrompt } from "../../agents/review/conflictResolution";
+import { errands } from "../run/errands";
 import {
     type ChatMessage,
     CONTINUATIONS,
@@ -3912,5 +3913,124 @@ describe(`older history`, () => {
         const conversation = opened();
         conversation.restoreMessages([{ role: `user`, text: `from the mirror` }]);
         expect(conversation.historyMore.value).toBe(false);
+    });
+});
+
+// An app errand whose words need a read first (a land conflict's fresh report). The turn opens at the call, so the chat
+// shows the errand's row and the working line through that read rather than nothing; the read's answer decides
+// whether anything is sent at all, and nothing about a turn that never went is left behind.
+describe(`Conversation.startErrand`, () => {
+    const opening = errands().landConflict.opening;
+    const prompt = `${opening}\n\nWhat blocked the land:\nroot\n  - a.ts`;
+    // Every path this test's conversation asked the daemon for, in order.
+    const asked = (): string[] => sandboxRequestMock.mock.calls.map(([path]) => String(path));
+
+    it(`opens the turn under the errand's row before its words exist, then sends the words it composed`, async () => {
+        const conversation = new Conversation(`c-errand`);
+        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+        let answer: (words: string) => void = () => undefined;
+        const taken = conversation.startErrand(opening, () => new Promise((settle) => (answer = settle)));
+
+        // Before the read answers: the row the transcript folds by its opening, a running turn, and nothing sent.
+        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([{ role: `user`, text: opening }]);
+        expect(conversation.streaming.value).toBe(true);
+        expect(conversation.turnStartedAt.value).toBeGreaterThan(0);
+        expect(asked()).toEqual([]);
+
+        answer(prompt);
+
+        expect(await taken).toBe(true);
+        expect(turnBodies().map((body) => body[`prompt`])).toEqual([prompt]);
+        await waitFor(() => expect(conversation.streaming.value).toBe(false));
+        expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: prompt });
+    });
+
+    it(`takes the turn back with nothing sent when the read leaves nothing to ask`, async () => {
+        const conversation = new Conversation(`c-errand`);
+        sandboxRequestMock.mockImplementation(sseResponse([]));
+
+        expect(await conversation.startErrand(opening, async () => undefined)).toBe(false);
+
+        expect(conversation.messages.value).toEqual([]);
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.queued.value).toEqual([]);
+        expect(asked()).toEqual([]);
+    });
+
+    // The daemon has never heard of a turn still composing, so there is nothing there to cancel: a Stop request would be
+    // a round trip answering "nothing running", and the local turn would outlive the press until it came back.
+    it(`ends a Stop pressed while composing here, aborting the read and asking the daemon nothing`, async () => {
+        const conversation = new Conversation(`c-errand`);
+        sandboxRequestMock.mockImplementation(sseResponse([]));
+        const reads: AbortSignal[] = [];
+        const taken = conversation.startErrand(
+            opening,
+            (signal) =>
+                new Promise((_settle, fail) => {
+                    reads.push(signal);
+                    signal.addEventListener(`abort`, () => fail(new DOMException(`aborted`, `AbortError`)));
+                }),
+        );
+
+        conversation.stop();
+
+        expect(await taken).toBe(false);
+        expect(reads.map((signal) => signal.aborted)).toEqual([true]);
+        expect(asked()).toEqual([]);
+        expect(conversation.messages.value).toEqual([]);
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.error.value).toBeNull();
+        // A stopped errand leaves no words to send again: nothing of the user's was ever in it.
+        expect(conversation.queued.value).toEqual([]);
+    });
+
+    // Not every read honours an abort (a re-judging land already on its way, a transport that keeps going): the Stop is
+    // the reader's, so it ends the turn in the frame it was pressed rather than whenever that read gets round to it.
+    it(`ends a Stop pressed while composing at once, even over a read that ignores the abort`, async () => {
+        const conversation = new Conversation(`c-errand`);
+        sandboxRequestMock.mockImplementation(sseResponse([]));
+        let finish: (words: string) => void = () => undefined;
+        const taken = conversation.startErrand(opening, () => new Promise((settle) => (finish = settle)));
+
+        conversation.stop();
+
+        expect(await taken).toBe(false);
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.messages.value).toEqual([]);
+        // Its late answer names a turn that is already gone, so nothing is sent on it.
+        finish(prompt);
+        await Promise.resolve();
+        expect(asked()).toEqual([]);
+        expect(conversation.messages.value).toEqual([]);
+    });
+
+    // The caller owns this sentence (the board's strip, the review's error line); the chat's own error line would be a
+    // second copy of it under a row that is already gone.
+    it(`hands a failed read to the caller and takes the turn back without an error of its own`, async () => {
+        const conversation = new Conversation(`c-errand`);
+
+        await expect(
+            conversation.startErrand(opening, async () => {
+                throw new Error(`the report could not be read`);
+            }),
+        ).rejects.toThrow(`the report could not be read`);
+
+        expect(conversation.messages.value).toEqual([]);
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.error.value).toBeNull();
+    });
+
+    it(`answers false when the daemon turns the composed turn away, which the chat explains itself`, async () => {
+        const conversation = new Conversation(`c-errand`);
+        sandboxRequestMock.mockImplementation(async (path) =>
+            path === `/agent`
+                ? ({ ok: false, status: 400, json: async () => ({ message: `No account here can run this.` }) } as Response)
+                : ({ ok: true, json: async () => ({}) } as Response),
+        );
+
+        expect(await conversation.startErrand(opening, async () => prompt)).toBe(false);
+
+        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.error.value).toContain(`No account here can run this.`);
     });
 });

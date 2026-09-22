@@ -7,6 +7,7 @@ import { type AgentCommand, isTrialProvider, loopDesignLine, personaModels } fro
 import { turnInFlight } from "../../agents/fleet/agentStatus";
 import { boxNameOf, scopeOffered } from "../../agents/fleet/fleetScope";
 import { useAgents } from "../../agents/fleet/useAgents";
+import { registry } from "../../agents/fleet/useAgents-registry";
 import { modeMeta } from "../models/catalog";
 import {
     type ComposerSituation,
@@ -269,9 +270,11 @@ const { agentById } = useAgents();
 // Follows the fleet for conversations the daemon hasn't created yet: their one-shot reads never retry, so the
 // roster's live stream tells a non-streaming pane when the conversation exists or its turn begins/settles, and it
 // hydrates. Primitive-valued so only an actual transition fires the watch; `undefined` (off the roster) changes
-// nothing.
+// nothing. The daemon's own entry wherever it has one, never the card a press drew ahead of it
+// (useAgents-provisional): that drawing is not a turn to attach to, and would spend the one transition that is.
 const fleetTurn = computed<boolean | undefined>(() => {
-    const agent = agentById(props.conversation.conversationId);
+    const id = props.conversation.conversationId;
+    const agent = registry.value.find((entry) => entry.id === id) ?? agentById(id);
     return agent === undefined ? undefined : turnInFlight(agent);
 });
 // Whether this tab streamed the turn the roster is about to settle: its transcript already has the result.

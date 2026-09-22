@@ -14,7 +14,7 @@ mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), 
 // And the fourth: auditRoster reports through sandboxTarget, which reads window.env on import.
 mock.module("../../../app/clientDiagnostics", () => ({ reportClient: mock() }));
 
-import type { AgentSummary } from "@intentic/sandbox-contract";
+import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
 import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
 import { nextTick, ref } from "vue";
 import { forgetClosedDraft, keepClosedDraft } from "../../chat/drafts/closedDrafts";
@@ -835,6 +835,29 @@ describe("draft cards", () => {
         ).toEqual([{ id: `a1`, status: `running`, startedAt: 4_000, unread: false }]);
     });
 
+    // The case that stranded "Have the agent resolve it": the daemon derives a refused land's conflict flag from the
+    // `conflict` status, so a running turn never carries one, and a drawing of the turn that kept the flag kept the card
+    // in Attention until the roster said otherwise itself.
+    it("moves a conflicted agent to Active on the send, with none of its refused land left on the card", () => {
+        const refused = registered(`a1`);
+        setAgents([{ ...refused, status: `conflict`, attention: { ...refused.attention, conflict: true }, conflictCauses: [`diverged`] }], 0);
+        const conversation = new Conversation(`a1`);
+        conversation.registered.value = true;
+        conversation.streaming.value = true;
+        conversation.turnStartedAt.value = 4_000;
+        useChat().conversations.value = [...useChat().conversations.value, conversation];
+
+        expect(useAgents().lanes.value.attention).toEqual([]);
+        expect(
+            useAgents().lanes.value.active.map((card) => ({
+                id: card.id,
+                status: card.status,
+                conflict: card.attention.conflict,
+                causes: card.conflictCauses,
+            })),
+        ).toEqual([{ id: `a1`, status: `running`, conflict: false, causes: undefined }]);
+    });
+
     // The rollback, and it needs no rollback code: a refused send ends the local turn, and the roster's own status is
     // what the card was always falling back to.
     it("drops the card back to the roster's own lane the moment the local turn ends", () => {
@@ -1378,6 +1401,50 @@ describe("archive", () => {
 
             expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
         });
+
+        // The same promise the other way: the card is back on the board in the frame of the press, and out of the
+        // archive with it, as the live card it will be rather than an archived one wearing the board.
+        it("puts a restored card back on the board on the press, and keeps it there when the restore lands", async () => {
+            const { restore, lanes, archived } = useAgents();
+            setAgents([agent(`b`)], 1);
+            archived.value = [{ ...archivedAgent(`a`), open: false, unread: false, unsent: false }];
+            const request = held<{ moved: AgentSummary[]; rev: number }>();
+            post.mockReturnValueOnce(request.answer as never);
+
+            const press = restore([`a`]);
+
+            expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
+            expect(lanes.value.finished.find((entry) => entry.id === `a`)?.archivedAt).toBeUndefined();
+            expect(archived.value).toEqual([]);
+            request.give({ moved: [agent(`a`)], rev: 2 });
+            await press;
+            expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
+        });
+
+        it("sends a card whose restore failed back to its own place in the archive, under the strip that says why", async () => {
+            const { restore, lanes, archived, notice } = useAgents();
+            setAgents([], 1);
+            archived.value = [`x`, `a`, `y`].map((id) => ({ ...archivedAgent(id), open: false, unread: false, unsent: false }));
+            post.mockRejectedValueOnce(new Error(`daemon went away`));
+
+            await restore([`a`]);
+
+            expect(lanes.value.finished).toEqual([]);
+            expect(archived.value.map((entry) => entry.id)).toEqual([`x`, `a`, `y`]);
+            expect(notice.value).toContain(`daemon went away`);
+        });
+
+        it("takes back exactly the cards the daemon didn't restore", async () => {
+            const { restore, lanes, archived } = useAgents();
+            setAgents([], 1);
+            archived.value = [`a`, `b`].map((id) => ({ ...archivedAgent(id), open: false, unread: false, unsent: false }));
+            post.mockResolvedValueOnce({ moved: [agent(`a`)], rev: 2 } as never);
+
+            await restore([`a`, `b`]);
+
+            expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`a`]);
+            expect(archived.value.map((entry) => entry.id)).toEqual([`b`]);
+        });
     });
 
     it("with no ids asks the daemon to clear the lane, and a sweep is the archive that reports", async () => {
@@ -1794,5 +1861,73 @@ describe("tabs the daemon retired", () => {
         setAgents([agent(`a`)], 0);
 
         expect(openTabs()).toEqual([`here`, `a`]);
+    });
+});
+
+// A held wake leaves the board on its own press. The approvals queue reaches the browser only through a roster read, so
+// a read already on its way can still list the row after the press: it must not put it back, and the first read that
+// no longer lists it is the daemon's own word that the release took.
+describe("held wakes", () => {
+    const wake = (id: string): AutomationApproval => ({ id, automationId: `nightly`, createdAt: 1_000 });
+    const answers = mocked(sandboxJson);
+    // What the next `/agents` read will say is held, and the one release the daemon has not answered yet.
+    let listed: AutomationApproval[] = [];
+    let release: { give: () => void; refuse: (error: Error) => void } | undefined;
+
+    beforeEach(() => {
+        resetAgents();
+        listed = [wake(`w1`), wake(`w2`)];
+        release = undefined;
+        answers.mockReset().mockImplementation(((path: string) => {
+            if (path === `/agents`) {
+                return Promise.resolve({ agents: [], rev: 1, held: listed });
+            }
+            return new Promise((give, refuse) => {
+                release = { give: () => give({}), refuse };
+            });
+        }) as never);
+    });
+
+    const shown = (): string[] => useAgents().heldWakes.value.map((entry) => entry.id);
+
+    it("takes the row off the board on the press, before the daemon has answered", async () => {
+        await useAgents().refresh();
+        expect(shown()).toEqual([`w1`, `w2`]);
+
+        const press = useAgents().releaseHeld(`w1`, `approve`);
+
+        expect(shown()).toEqual([`w2`]);
+        release?.give();
+        await press;
+        expect(shown()).toEqual([`w2`]);
+    });
+
+    it("keeps it off through a read that still lists it, and lets go on the read that doesn't", async () => {
+        await useAgents().refresh();
+        const press = useAgents().releaseHeld(`w1`, `reject`);
+
+        // A read the daemon answered before it heard the release.
+        await useAgents().refresh();
+        expect(shown()).toEqual([`w2`]);
+
+        release?.give();
+        await press;
+        listed = [wake(`w2`)];
+        await useAgents().refresh();
+        expect(shown()).toEqual([`w2`]);
+        // Retired, not merely hidden: a hold the daemon lists again later is a new fact, and is drawn.
+        listed = [wake(`w1`), wake(`w2`)];
+        await useAgents().refresh();
+        expect(shown()).toEqual([`w1`, `w2`]);
+    });
+
+    it("puts the row back when the press fails", async () => {
+        await useAgents().refresh();
+        const press = useAgents().releaseHeld(`w1`, `approve`);
+
+        release?.refuse(new Error(`already released by its countdown`));
+
+        await expect(press).rejects.toThrow(`already released by its countdown`);
+        expect(shown()).toEqual([`w1`, `w2`]);
     });
 });

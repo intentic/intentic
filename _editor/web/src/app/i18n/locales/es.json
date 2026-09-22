@@ -18,7 +18,6 @@
             "closeAgent": "Cerrar el agente",
             "completed": "Completado",
             "focusAgent": "Enfocar el agente: {displayTitle}",
-            "handingOver": "Entregándolo…",
             "inNotInSandbox": "En {name}, no en el sandbox en el que estás",
             "keepChatOpen": "Mantener este chat abierto",
             "keepOpenOtherwiseChat": "Mantenerlo abierto; si no, este chat se cierra cuando abras otro",

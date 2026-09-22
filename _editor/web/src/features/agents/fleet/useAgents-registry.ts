@@ -1,5 +1,5 @@
 import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
-import { ref, shallowRef, watch } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import { invalidateAgentTranscript } from "../../chat/transcript/agentTranscript";
 import { useChat } from "../../chat/run/useChat";
 import { reportClient } from "../../../app/clientDiagnostics";
@@ -21,8 +21,16 @@ export const registry = shallowRef<AgentSummary[]>([]);
 export const archived = shallowRef<FleetAgent[]>([]);
 export const archiveLoading = ref(false);
 
-// Daemon's approvals queue, projected onto the board; kept separate since the stream never carries holds.
-export const heldWakes = shallowRef<AutomationApproval[]>([]);
+// Daemon's approvals queue as last read; kept separate since the stream never carries holds.
+const heldRead = shallowRef<AutomationApproval[]>([]);
+
+// Holds a press here released that a read may still list; each retires on the first read without it (releaseHeld).
+const releasing = shallowRef<ReadonlySet<string>>(new Set());
+
+// The approvals queue as the board draws it: what the daemon holds, less what a press here has already let go.
+export const heldWakes = computed<AutomationApproval[]>(() =>
+    releasing.value.size === 0 ? heldRead.value : heldRead.value.filter((wake) => !releasing.value.has(wake.id)),
+);
 
 // Roster snapshots come from three sources (the stream, refresh(), local archive/restore); a full-replace lets
 // whichever lands last win regardless of truth. Each snapshot carries the revision it was read at:
@@ -97,9 +105,25 @@ export const sameEntries = <T>(left: readonly T[], right: readonly T[]): boolean
 // Single writer for the held list, holding it to the rule `registry` keeps: a re-read carrying the same holds
 // leaves the array alone, since identity is the only change signal its readers get.
 const setHeldWakes = (held: AutomationApproval[]): void => {
-    if (snapshotFingerprint(held) !== snapshotFingerprint(heldWakes.value)) {
-        heldWakes.value = held;
+    if (releasing.value.size > 0) {
+        const listed = new Set(held.map((wake) => wake.id));
+        const still = [...releasing.value].filter((id) => listed.has(id));
+        if (still.length < releasing.value.size) {
+            releasing.value = new Set(still);
+        }
     }
+    if (snapshotFingerprint(held) !== snapshotFingerprint(heldRead.value)) {
+        heldRead.value = held;
+    }
+};
+
+const unrelease = (id: string): void => {
+    if (!releasing.value.has(id)) {
+        return;
+    }
+    const rest = new Set(releasing.value);
+    rest.delete(id);
+    releasing.value = rest;
 };
 
 // Retires every intent the server has now absorbed, then re-projects what remains.
@@ -145,6 +169,28 @@ export const takeOffBoard = (ids: readonly string[]): ((keep?: ReadonlySet<strin
         const returning = back.filter(([id]) => !pending.has(id)).map(([, agent]) => agent);
         if (returning.length > 0) {
             registry.value = withPending([...registry.value, ...returning]);
+        }
+    };
+};
+
+// takeOffBoard's inverse: the cards join the board before the daemon answers, held at +Infinity until its revision.
+// Returns a rollback taking back all but the ids in `keep` (confirmed as moved), and only what this call put there.
+export const putOnBoard = (agents: readonly AgentSummary[]): ((keep?: ReadonlySet<string>) => void) => {
+    holdPending(
+        agents.map((agent) => ({ id: agent.id, present: agent })),
+        Number.POSITIVE_INFINITY,
+    );
+    return (keep) => {
+        const back = new Set(agents.filter((agent) => keep?.has(agent.id) !== true).map((agent) => agent.id));
+        for (const id of back) {
+            // Only this call's own intent: a hold since replaced by a revision is the daemon's confirmation, not ours.
+            if (pending.get(id)?.untilRev === Number.POSITIVE_INFINITY && pending.get(id)?.present !== undefined) {
+                pending.delete(id);
+            }
+        }
+        const leaving = [...back].filter((id) => !pending.has(id));
+        if (leaving.length > 0) {
+            registry.value = withPending(registry.value.filter((agent) => !leaving.includes(agent.id)));
         }
     };
 };
@@ -306,11 +352,16 @@ watch([onScreen, reachable] as const, ([looking, live], [wasLooking]) => {
     }
 });
 
-// Approves or rejects a held wake through the automations routes' own verbs, so surfaces agree on meaning. Removed
-// from the list optimistically; the trailing refresh() repaints whatever else moved.
+// Approves or rejects a held wake through the automations routes' own verbs; the row leaves on the press and a refusal
+// puts it back. The trailing refresh() is the read that retires the release, and repaints whatever else moved.
 export const releaseHeld = async (id: string, verb: `approve` | `reject`): Promise<void> => {
-    await sandboxJson(`/automations/pending/${encodeURIComponent(id)}/${verb}`, { method: `POST` });
-    setHeldWakes(heldWakes.value.filter((entry) => entry.id !== id));
+    releasing.value = new Set(releasing.value).add(id);
+    try {
+        await sandboxJson(`/automations/pending/${encodeURIComponent(id)}/${verb}`, { method: `POST` });
+    } catch (error) {
+        unrelease(id);
+        throw error;
+    }
     void refresh();
 };
 

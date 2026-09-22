@@ -14,8 +14,8 @@ import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
 import { AGENT_DIFF } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded } from "../fleet/agentActions";
-import { landedAway } from "../fleet/agentStatus";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded, type ResolveAsk } from "../fleet/agentActions";
+import { landedAway, turnInFlight } from "../fleet/agentStatus";
 import { blockersOf } from "./conflictResolution";
 import { useAgents } from "../fleet/useAgents";
 import { useNotifications } from "../../../shell/notifications/notifications";
@@ -97,8 +97,16 @@ const statOf = (subset: readonly AgentReviewFile[]): { files: number; additions:
 const viewedByAgent = ref<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
 const NONE: ReadonlySet<string> = new Set();
 
-// Agents whose land conflict the user has handed back to them; see `asked` below for how it's cleared.
+// Agents whose land conflict the user has handed back to them, from the press until the turn it started is over.
 const askedByAgent = ref<ReadonlySet<string>>(new Set());
+const forgetAsk = (id: string): void => {
+    if (!askedByAgent.value.has(id)) {
+        return;
+    }
+    const next = new Set(askedByAgent.value);
+    next.delete(id);
+    askedByAgent.value = next;
+};
 
 // Empty agentId means no review yet (draft agent, or one the roster hasn't resolved); the query below stays
 // disabled until it does.
@@ -189,13 +197,16 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     // Paths a `merge` land left with conflict markers, for the panel to hand back to the user to finish.
     const resolving = ref<LandResult[`resolving`]>(undefined);
 
-    // Whether the user asked the agent to resolve; cleared when the conflict report changes (fresh report wins).
+    // Whether the user asked the agent to resolve: exactly as long as the turn it started (drawn from the press), however
+    // often the report is re-read while the agent rebases.
     const asked = computed(() => askedByAgent.value.has(agentId.value));
-    watch(conflicts, () => {
-        if (askedByAgent.value.has(agentId.value)) {
-            const next = new Set(askedByAgent.value);
-            next.delete(agentId.value);
-            askedByAgent.value = next;
+    const inTurn = computed(() => {
+        const card = useAgents().agentById(agentId.value);
+        return card !== undefined && turnInFlight(card);
+    });
+    watch(inTurn, (live, was) => {
+        if (was && !live) {
+            forgetAsk(agentId.value);
         }
     });
 
@@ -222,22 +233,28 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     const setAutoLand = (autoLand: boolean | null): Promise<void> =>
         run(() => useAgents().setAutoLand(agentId.value, autoLand), `Couldn't change when this agent lands.`);
 
-    // Hands the conflict to the agent; `askedByAgent` is set only once the send succeeds. A refusal (e.g. a stale
-    // report) surfaces through actionError like any other declined mutation.
+    // Hands the conflict to the agent, marked asked on the press and unmarked once the press turns out to start no turn;
+    // a refusal (e.g. a stale report) surfaces through actionError like any other declined mutation.
     const askResolve = (): Promise<void> =>
         run(async () => {
-            const ask = await askAgentToResolve(agentId.value);
-            if (ask.sent) {
-                askedByAgent.value = new Set(askedByAgent.value).add(agentId.value);
-                return;
+            const id = agentId.value;
+            askedByAgent.value = new Set(askedByAgent.value).add(id);
+            let ask: ResolveAsk = { kind: `dropped` };
+            try {
+                ask = await askAgentToResolve(id);
+            } finally {
+                if (ask.kind !== `sent`) {
+                    forgetAsk(id);
+                }
             }
             // A press that found nothing left and put the card right is not a declined mutation: it takes the same
             // floating receipt the board gives it, rather than this panel's red error line.
-            if (ask.settled === true) {
+            if (ask.kind === `settled`) {
                 useNotifications().say(ask.why);
-                return;
             }
-            throw new Error(ask.why);
+            if (ask.kind === `refused`) {
+                throw new Error(ask.why);
+            }
         }, `Couldn't ask the agent to resolve it.`);
 
     const discard = (): Promise<void> =>

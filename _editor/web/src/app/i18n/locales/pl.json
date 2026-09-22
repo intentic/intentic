@@ -18,7 +18,6 @@
             "closeAgent": "Zamknij agenta",
             "completed": "Zakończone",
             "focusAgent": "Skup się na agencie: {displayTitle}",
-            "handingOver": "Przekazywanie…",
             "inNotInSandbox": "W {name}, nie w sandboxie, w którym jesteś",
             "keepChatOpen": "Trzymaj ten czat otwarty",
             "keepOpenOtherwiseChat": "Trzymaj otwarty, inaczej ten czat zamknie się, gdy otworzysz inny",

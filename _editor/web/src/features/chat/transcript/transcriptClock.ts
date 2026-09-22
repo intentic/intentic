@@ -162,6 +162,15 @@ export class TranscriptClock {
         this.state.value = attachRun(this.state.value, head, drawn);
     }
 
+    // Rewords a bubble THIS window drew for a send the daemon hasn't heard yet: an errand's opening becomes its whole
+    // prompt once composed. Refuses a row carrying a `run` stamp, whose words are the daemon's.
+    reword(id: number, text: string): void {
+        this.write((state) => ({
+            ...state,
+            messages: state.messages.map((message) => (message.id === id && message.run === undefined ? { ...message, text } : message)),
+        }));
+    }
+
     /**
      * Drops a bubble THIS window drew for a send the daemon never accepted. Refuses any row carrying a `run` stamp:
      * the daemon addresses those by index, so deleting one here lands every later patch on the wrong row.

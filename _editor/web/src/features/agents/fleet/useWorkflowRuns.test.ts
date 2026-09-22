@@ -1,7 +1,13 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { describe, it, expect, mock } from "bun:test";
+import { mocked, waitFor } from "@intentic/testing/bun";
+import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
+import { createApp, effectScope, ref } from "vue";
+import { WORKFLOW_RUNS } from "../../../lib/queryKeys";
+import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import type { FleetAgent } from "./useAgents-fleet";
-import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane } from "./useWorkflowRuns";
+import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, useWorkflowRuns } from "./useWorkflowRuns";
 
 // Importing these functions pulls in the sandbox client and fleet store, which read `window.env` at import time;
 // mocked here even though this file never touches them.
@@ -98,5 +104,55 @@ describe("runsInLane", () => {
 
     it("hands back everything when the caller lifts the window", () => {
         expect(runsInLane(finished, `finished`, Number.POSITIVE_INFINITY, new Set())).toHaveLength(3);
+    });
+});
+
+// Filing a run away is lossless and undone from the archive itself, so the row moves on the press and the daemon's
+// answer only ever confirms it. A refusal puts back that one run's filing, and nothing else the ledger holds.
+describe("filing a run on the press", () => {
+    // The composable under vue-query's injection, with no component: a mutation needs the client and a scope, nothing
+    // that draws.
+    const standUp = (): { client: QueryClient; runs: ReturnType<typeof useWorkflowRuns> } => {
+        const client = new QueryClient();
+        const app = createApp({});
+        app.use(VueQueryPlugin, { queryClient: client });
+        mocked(useSandboxQuery).mockReturnValue({ query: { data: ref(undefined) } } as never);
+        const runs = effectScope().run(() => app.runWithContext(() => useWorkflowRuns()))!;
+        return { client, runs };
+    };
+    const filedAt = (client: QueryClient, runId: string): number | undefined =>
+        client.getQueryData<WorkflowRun[]>(WORKFLOW_RUNS.every)?.find((entry) => entry.runId === runId)?.archivedAt;
+    // The daemon's answer to the one press out, held open so the frame before it can be read.
+    const heldRefusal = (): ((error: Error) => void) => {
+        let refuse: (error: Error) => void = () => undefined;
+        mocked(sandboxJson).mockImplementation((() => new Promise((_answer, fail) => (refuse = fail))) as never);
+        return (error) => refuse(error);
+    };
+
+    it("files the run away on the press, and back where it stood when the daemon refuses", async () => {
+        const { client, runs } = standUp();
+        client.setQueryData(WORKFLOW_RUNS.every, [run(`r1`), run(`r2`)]);
+        const refuse = heldRefusal();
+
+        const press = runs.archive.mutateAsync(`r1`);
+
+        await waitFor(() => expect(filedAt(client, `r1`)).toEqual(expect.any(Number)));
+        expect(filedAt(client, `r2`)).toBeUndefined();
+        refuse(new Error(`the run is still going`));
+        await expect(press).rejects.toThrow(`the run is still going`);
+        expect(filedAt(client, `r1`)).toBeUndefined();
+    });
+
+    it("brings an archived run back on the press, and returns it to the archive, filing date and all, when refused", async () => {
+        const { client, runs } = standUp();
+        client.setQueryData(WORKFLOW_RUNS.every, [run(`r1`, { archivedAt: 9_000 })]);
+        const refuse = heldRefusal();
+
+        const press = runs.unarchive.mutateAsync(`r1`);
+
+        await waitFor(() => expect(filedAt(client, `r1`)).toBeUndefined());
+        refuse(new Error(`its sessions are gone`));
+        await expect(press).rejects.toThrow(`its sessions are gone`);
+        expect(filedAt(client, `r1`)).toBe(9_000);
     });
 });

@@ -75,7 +75,7 @@ const props = defineProps<{
     agent: FleetAgent;
     dense?: boolean;
     dragging?: boolean;
-    // Action the board has in flight, if any; only that button reports progress, the rest just dims.
+    // Action the board has in flight, withholding every other press; what it did is the card's own drawn standing.
     pending?: PendingAction;
     // This agent's chat is on screen, one weight regardless of how many columns share it.
     selected?: boolean;
@@ -247,9 +247,9 @@ const landAsk = computed(() => {
     const request = props.agent.landRequested;
     return request === undefined ? undefined : `${request.name ?? request.email} asked to land this`;
 });
-// Its own flag, not a wider `landing`: each button must name back only the action actually pressed.
-const relanding = computed(() => props.pending === `reland`);
-const handingOver = computed(() => props.pending === `resolve`);
+// Its own flag, not a wider `landing`, so each button names only its own press; on an `away` card the daemon's
+// `landing` is that press, whichever window made it.
+const relanding = computed(() => props.pending === `reland` || (away.value !== undefined && props.agent.status === `landing`));
 // Gated on exactly what it renders, no more and no less: gating on a subset hides what should show (subagents
 // mid-turn), a superset opens an empty strip.
 // The diff chip's own condition, not merely `diff exists`, since renames alone render nothing.
@@ -417,8 +417,6 @@ const grab = (event: PointerEvent): void => {
             lane === 'attention' ? 'session-card-attention' : '',
             selected ? 'session-card-on' : '',
             dragging ? 'opacity-40' : '',
-            /* A dim and nothing else: each press is withheld on its own button (see `busy`), so the card itself still opens the chat. */
-            busy ? 'opacity-60' : '',
         ]"
         @pointerdown="grab"
         @dragstart.prevent
@@ -562,9 +560,8 @@ const grab = (event: PointerEvent): void => {
                     <Icon name="arrow-right" class="text-sm" />
                 </button>
             </template>
-            <Icon v-if="pending !== undefined" name="spinner" spin class="shrink-0 text-sm text-link" />
             <!-- Same pill, same tones, same precedence as a rail row's corner (RailCard): one standing, one reading. -->
-            <span v-else-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="chip.tone">{{
+            <span v-if="chip !== undefined" v-tooltip.top="chipHint" class="ui-status-pill shrink-0 text-2xs font-semibold" :class="chip.tone">{{
                 chip.label
             }}</span>
             <!-- The resting standing for a card with no reason or unread mark; carries meta.label as a word in its hover, not just a glyph. -->
@@ -655,10 +652,9 @@ const grab = (event: PointerEvent): void => {
 
             <!-- The one board state that's a decision, not a report: the agent redoes the merge in its own worktree, so a wrong answer costs nothing. -->
             <div v-if="resolvable" class="flex min-w-0 flex-col gap-1">
+                <!-- No in-flight face: the press moves the card to Active at once, taking this block with it. -->
                 <Button size="small" :disabled="busy" class="self-start whitespace-nowrap" @click.stop="emit('resolve')">
-                    <Icon :name="handingOver ? 'spinner' : 'sparkles'" :spin="handingOver" />{{
-                        handingOver ? t(`agents.agentCard.handingOver`) : words.resolveConflict
-                    }}
+                    <Icon name="sparkles" />{{ words.resolveConflict }}
                 </Button>
                 <span class="text-2xs leading-snug text-subtle">{{ words.resolveConflictHint }}</span>
             </div>
@@ -686,7 +682,7 @@ const grab = (event: PointerEvent): void => {
                     size="small"
                     severity="secondary"
                     :text="true"
-                    :disabled="busy"
+                    :disabled="busy || relanding"
                     class="shrink-0 whitespace-nowrap"
                     @click.stop="emit('reland')"
                 >

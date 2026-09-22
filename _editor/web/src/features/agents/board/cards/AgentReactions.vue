@@ -7,7 +7,7 @@
 // nobody has marked renders no box at all, not an empty one, since an empty flex child still takes the row's gap, and
 // a control reserving its seat in that row pushed the line below it onto a second row for good. The press that ADDS a
 // mark is the host's to place, in whatever row it already reveals actions in — `open` is what it calls.
-import { computed, ref } from "vue";
+import { computed, ref, shallowRef, watch } from "vue";
 import type { AgentReaction } from "@intentic/sandbox-contract";
 import { ResponsiveOverlay, ui } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
@@ -16,7 +16,7 @@ import { reactToAgent } from "../../fleet/agentActions";
 import { refreshAcross } from "../../../sandbox/live/fleetAcross";
 import { useAgents } from "../../fleet/useAgents";
 import { useSandboxSession } from "../../../sandbox/session/sandboxSession";
-import { PICKER_EMOJI, QUICK_EMOJI, reactionChips } from "./reactions";
+import { PICKER_EMOJI, QUICK_EMOJI, reactionChips, withPress } from "./reactions";
 
 const t = useT();
 
@@ -41,7 +41,17 @@ const {
 const { presentedEmail } = useSandboxSession();
 const { refresh: refreshAgents, notice } = useAgents();
 
-const chips = computed(() => reactionChips(reactions, { me: presentedEmail.value, you: t(`agents.agentReactions.you`) }));
+// The press drawn ahead of the card (the mark pressed, then the daemon's answer) while it still carries the old marks.
+const ahead = shallowRef<{ readonly baseline: string; readonly marks: readonly AgentReaction[] | undefined } | undefined>(undefined);
+const carried = computed(() => JSON.stringify(reactions ?? []));
+watch(carried, (now) => {
+    if (ahead.value !== undefined && ahead.value.baseline !== now) {
+        ahead.value = undefined;
+    }
+});
+const shown = computed(() => (ahead.value !== undefined && ahead.value.baseline === carried.value ? ahead.value.marks : reactions));
+
+const chips = computed(() => reactionChips(shown.value, { me: presentedEmail.value, you: t(`agents.agentReactions.you`) }));
 
 // The emoji whose press is in flight; one at a time, since each answer replaces the whole card.
 const pending = ref<string | undefined>(undefined);
@@ -59,10 +69,16 @@ const press = async (emoji: string, on: boolean): Promise<void> => {
         return;
     }
     pending.value = emoji;
+    const baseline = carried.value;
+    const me = presentedEmail.value;
+    // Nobody to attribute the mark to yet (a session still being established): the chip waits for the daemon's word.
+    ahead.value = me === undefined ? undefined : { baseline, marks: withPress(reactions, { emoji, on }, { email: me, at: Date.now() }) };
     try {
-        await reactToAgent(agentId, emoji, on, sandboxId);
+        const answer = await reactToAgent(agentId, emoji, on, sandboxId);
+        ahead.value = { baseline, marks: answer.reactions };
         await (sandboxId === undefined ? refreshAgents() : Promise.resolve(refreshAcross()));
     } catch (caught) {
+        ahead.value = undefined;
         notice.value = errorMessage(caught, t(`agents.agentReactions.couldNotReact`));
     } finally {
         pending.value = undefined;

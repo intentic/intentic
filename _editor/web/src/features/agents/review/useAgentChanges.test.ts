@@ -40,14 +40,23 @@ mock.module("../fleet/agentActions", () => ({
     landAgent: mock(),
     nothingLanded: () => stub.nothingLanded,
 }));
-mock.module("../fleet/useAgents", () => ({ useAgents: () => ({ archive: mock(), setAutoLand: mock() }) }));
+// `agentById` answers from the card each case puts on the board: whether that card is in a turn is what an ask lives as
+// long as. Read at call time, so the map below is in place by then.
+mock.module("../fleet/useAgents", () => ({
+    useAgents: () => ({ archive: mock(), setAutoLand: mock(), agentById: (id: string) => cards.value.get(id) }),
+}));
 
-import { ref } from "vue";
-import { landAgent } from "../fleet/agentActions";
+import { nextTick, ref, shallowRef } from "vue";
+import { askAgentToResolve, landAgent, type ResolveAsk } from "../fleet/agentActions";
+import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { useAgentChanges } from "./useAgentChanges";
+
+const cards = shallowRef<ReadonlyMap<string, Pick<FleetAgent, "status" | "attention">>>(new Map());
+const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 
 afterEach(() => {
     stub.said.length = 0;
+    cards.value = new Map();
 });
 
 it("isolates viewed files when agent ids name object prototype properties", () => {
@@ -78,4 +87,40 @@ it("says so when a land carried nothing, and stays quiet when it carried work", 
     mocked(landAgent).mockResolvedValue({ landed: true, changed: false });
     await changes.land();
     expect(stub.said).toEqual([stub.nothingLanded]);
+});
+
+// The ask is the review's "the agent is on it" line, and it has to show on the press: the turn it starts is drawn at
+// once (useAgents-provisional), and a panel still offering the ladder beside a card already in Active reads as two
+// answers to one question. It lives exactly as long as that turn, however often the report is re-read under it.
+it("marks the ask on the press and keeps it for the turn it started, then lets it go with that turn", async () => {
+    const changes = useAgentChanges(ref(`asked-1`));
+    let answer: (ask: ResolveAsk) => void = () => undefined;
+    mocked(askAgentToResolve).mockImplementation(() => new Promise((settle) => (answer = settle)));
+
+    const press = changes.askResolve();
+    expect(changes.asked.value).toBe(true);
+
+    cards.value = new Map([[`asked-1`, { status: `running`, attention: none }]]);
+    await nextTick();
+    answer({ kind: `sent` });
+    await press;
+    expect(changes.asked.value).toBe(true);
+
+    cards.value = new Map([[`asked-1`, { status: `conflict`, attention: { ...none, conflict: true } }]]);
+    await nextTick();
+    expect(changes.asked.value).toBe(false);
+});
+
+it("drops the ask the moment the press turns out to have started no turn", async () => {
+    const refused = useAgentChanges(ref(`asked-2`));
+    mocked(askAgentToResolve).mockResolvedValue({ kind: `refused`, why: `A rebase can't reach this.` });
+    await expect(refused.askResolve()).rejects.toThrow(`A rebase can't reach this.`);
+    expect(refused.asked.value).toBe(false);
+
+    // Good news is not an ask either, and takes the floating receipt rather than the panel's error line.
+    const repaired = useAgentChanges(ref(`asked-3`));
+    mocked(askAgentToResolve).mockResolvedValue({ kind: `settled`, why: `Nothing is blocking this any more: it's ready to land.` });
+    await repaired.askResolve();
+    expect(repaired.asked.value).toBe(false);
+    expect(stub.said).toEqual([`Nothing is blocking this any more: it's ready to land.`]);
 });

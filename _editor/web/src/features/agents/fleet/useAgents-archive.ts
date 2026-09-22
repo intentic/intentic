@@ -7,8 +7,8 @@ import { commandShortcut } from "../../../shell/commands/useCommands";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
-import { lanes } from "./useAgents-fleet";
-import { archived, holdPending, takeOffBoard } from "./useAgents-registry";
+import { type FleetAgent, lanes } from "./useAgents-fleet";
+import { archived, holdPending, putOnBoard, takeOffBoard } from "./useAgents-registry";
 
 // The board's exit: archiving takes an agent off the lanes and reclaims its worktree checkout, keeping the branch,
 // transcript and every counter, so it's the routine action (no confirmation, undoable, bulk) while discard stays
@@ -139,26 +139,50 @@ export const archive = async (ids?: readonly string[]): Promise<void> => {
     }
 };
 
-// Puts agents back on the board, the inverse an archive's undo runs; the checkout isn't rebuilt here, so this is as
-// cheap for a hundred agents as for one.
+// The live card an archived entry comes back as: the daemon's summary without the filing date or this browser's own
+// fields, which the fleet merge derives afresh.
+const onBoard = ({ archivedAt: _filed, open: _open, unread: _unread, unsent: _unsent, draftAt: _draftAt, ...summary }: FleetAgent): AgentSummary =>
+    summary as AgentSummary;
+
+// The archive as it stood at the press, less what has left it since, plus what arrived: a restore taken back returns
+// each card to its own place rather than to the top.
+const withReturned = (before: readonly FleetAgent[], returning: ReadonlySet<string>): FleetAgent[] => {
+    const now = new Map(archived.value.map((agent) => [agent.id, agent]));
+    const kept = before.flatMap((agent) => (returning.has(agent.id) ? [agent] : (now.get(agent.id) ?? [])));
+    const arrived = archived.value.filter((agent) => !before.some((held) => held.id === agent.id));
+    return [...arrived, ...kept];
+};
+
+// Puts agents back on the board on the press, the inverse an archive's undo runs, and back in the archive if the
+// daemon doesn't move them; the checkout isn't rebuilt, so a hundred cost what one does.
 export const restore = async (ids: readonly string[]): Promise<void> => {
     const release = claimBusy(ids);
+    const before = archived.value;
+    const leaving = before.filter((agent) => ids.includes(agent.id));
+    const unput = putOnBoard(leaving.map(onBoard));
+    archived.value = before.filter((agent) => !ids.includes(agent.id));
     try {
         const { moved, rev } = await sandboxJson<{ moved: AgentSummary[]; rev: number }>(`/agents/unarchive`, jsonBody(`POST`, { ids }));
         // The same delta, in the other direction, held the same way, so a snapshot in flight can't take the restored
         // card straight back off.
         const back = new Set(moved.map((agent) => agent.id));
-        archived.value = archived.value.filter((agent) => !back.has(agent.id));
         holdPending(
             moved.map((agent) => ({ id: agent.id, present: agent })),
             rev,
         );
+        // ...and whatever the press drew that the daemon didn't move goes back to the archive it came from.
+        unput(back);
+        if (back.size < leaving.length) {
+            archived.value = withReturned(before, new Set(leaving.filter((agent) => !back.has(agent.id)).map((agent) => agent.id)));
+        }
         // What's back on the board is no longer anyone's to undo, including a card-by-card restore from the archive
         // view.
         undoable.value = undoable.value.filter((id) => !back.has(id));
         say(`${back.size} agent${back.size === 1 ? `` : `s`} back on the board`);
         notice.value = undefined;
     } catch (error) {
+        unput();
+        archived.value = withReturned(before, new Set(leaving.map((agent) => agent.id)));
         notice.value = errorMessage(error, `Couldn't restore that.`);
     } finally {
         release();

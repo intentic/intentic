@@ -1115,21 +1115,14 @@ watch(workflowRuns, (list) => {
 });
 
 // The approvals queue's rows, Attention lane only: a hold means only "waiting on you", with no conversation yet to
-// place elsewhere.
-// Releasing is detached daemon-side, so the row leaves on an optimistic remove; `busyHeld` covers the gap so a slow
-// answer can't collect two presses.
-const busyHeld = ref(new Set<string>());
+// place elsewhere. A row leaves on its own press (releaseHeld), so it can't collect a second one, and comes back only
+// if the daemon refused it.
 const releaseWake = async (id: string, verb: `approve` | `reject`): Promise<void> => {
-    busyHeld.value = new Set([...busyHeld.value, id]);
     try {
         await releaseHeld(id, verb);
     } catch {
         // Usually the countdown or another device beat this press to it; refresh repaints the truth either way.
         void refresh();
-    } finally {
-        const rest = new Set(busyHeld.value);
-        rest.delete(id);
-        busyHeld.value = rest;
     }
 };
 
@@ -1317,7 +1310,6 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             v-for="entry in scopedHeld"
                             :key="entry.id"
                             :entry="entry"
-                            :busy="busyHeld.has(entry.id)"
                             :dense="narrow"
                             @approve="releaseWake(entry.id, `approve`)"
                             @reject="releaseWake(entry.id, `reject`)"

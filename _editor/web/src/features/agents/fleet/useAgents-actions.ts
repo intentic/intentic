@@ -6,6 +6,7 @@ import { summonChat } from "../../chat/run/summon";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import type { FleetAgent } from "./useAgents-fleet";
+import { underClaim } from "./useAgents-provisional";
 import { markSeen, registry } from "./useAgents-registry";
 
 // What one card can be told to do: per-agent writes (rename, posture override, resend, disarm a watch) and opening its
@@ -102,12 +103,12 @@ const policyPatch = (ending: TurnBreak, policy: TurnBreakPolicy | undefined): Pa
     return ending === `outage` ? { outagePolicy: retry } : { stopPolicy: retry };
 };
 
-// Sends a stranded turn again by re-running it, rather than appending a "carry on" message. Not optimistic, unlike its
-// neighbours: this starts a turn, and guessing would show a running card over a request that may still answer
-// NOT_FOUND.
-export const resumeHeldTurn = async (id: string): Promise<void> => {
-    await sandboxJson<{ run: string }>(`/agent/resume`, jsonBody(`POST`, { conversationId: id }));
-};
+// Sends a stranded turn again by re-running it, rather than appending a "carry on" message. The card runs from the
+// press (useAgents-provisional) and goes back where it was if the daemon answers that it holds no such turn.
+export const resumeHeldTurn = (id: string): Promise<void> =>
+    underClaim(id, undefined, `turn`, async () => {
+        await sandboxJson<{ run: string }>(`/agent/resume`, jsonBody(`POST`, { conversationId: id }));
+    });
 
 // Disarms outside conditions this conversation is parked on: all of them, or the one named. Optimistic, since dropping
 // the watches is what moves the card out of Active; a press that waited for the round trip would leave the card sitting

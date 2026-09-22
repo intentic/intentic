@@ -1,6 +1,6 @@
 import type { AgentReaction } from "@intentic/sandbox-contract";
 import { describe, it, expect } from "bun:test";
-import { PICKER_EMOJI, QUICK_EMOJI, reactionChips } from "./reactions";
+import { PICKER_EMOJI, QUICK_EMOJI, reactionChips, withPress } from "./reactions";
 
 const reader = { me: `ada@example.com`, you: `you` };
 
@@ -58,5 +58,41 @@ describe(`reactionChips`, () => {
     it(`offers the quick picks inside the picker as well`, () => {
         expect(PICKER_EMOJI).toEqual(expect.arrayContaining([...QUICK_EMOJI]));
         expect(new Set(PICKER_EMOJI).size).toBe(PICKER_EMOJI.length);
+    });
+});
+
+// A mark drawn on the press, before the daemon's answer: it must read exactly as that answer will, so the handover
+// changes nothing on screen: the reader added to the end of a mark's wearers, or taken off it, the chip going with
+// its last wearer as the wire's does.
+describe(`withPress`, () => {
+    const me = { email: `ada@example.com`, at: 5_000 };
+    const bob = { email: `bob@example.com`, name: `Bob`, at: 1_000 };
+
+    it(`adds the reader to a mark somebody already wears, after them`, () => {
+        expect(withPress([{ emoji: `👍`, by: [bob] }], { emoji: `👍`, on: true }, me)).toEqual([{ emoji: `👍`, by: [bob, me] }]);
+    });
+
+    it(`opens a chip of its own for a mark nobody wore, at the end`, () => {
+        expect(withPress([{ emoji: `👍`, by: [bob] }], { emoji: `🚀`, on: true }, me)).toEqual([
+            { emoji: `👍`, by: [bob] },
+            { emoji: `🚀`, by: [me] },
+        ]);
+        expect(withPress(undefined, { emoji: `🚀`, on: true }, me)).toEqual([{ emoji: `🚀`, by: [me] }]);
+    });
+
+    it(`takes the reader off a mark and leaves the others wearing it`, () => {
+        expect(withPress([{ emoji: `👍`, by: [bob, { ...me, at: 2_000 }] }], { emoji: `👍`, on: false }, me)).toEqual([{ emoji: `👍`, by: [bob] }]);
+    });
+
+    it(`takes the chip away with its last wearer`, () => {
+        expect(withPress([{ emoji: `👍`, by: [{ ...me, at: 2_000 }] }, { emoji: `🚀`, by: [bob] }], { emoji: `👍`, on: false }, me)).toEqual([
+            { emoji: `🚀`, by: [bob] },
+        ]);
+    });
+
+    // Pressing a mark the reader already wears (a second window caught up first) must not wear it twice.
+    it(`leaves a mark the reader already wears as it is, whatever case their address arrived in`, () => {
+        const worn = [{ emoji: `👍`, by: [{ email: `Ada@Example.com`, at: 2_000 }] }];
+        expect(withPress(worn, { emoji: `👍`, on: true }, me)).toEqual(worn);
     });
 });

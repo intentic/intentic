@@ -248,7 +248,15 @@ const startTurn = async (request: Request): Promise<Response> => {
     runs.get(conversationId)?.stop();
     const run = visitorRun(conversationId, body.prompt ?? ``, Date.now());
     runs.set(conversationId, run);
-    patchAgent(conversationId, { status: `running`, startedAt: Date.now(), updatedAt: Date.now() });
+    // As the daemon derives them (agents-registry summaryOf): a live turn has nothing parked, and a refused land's flag
+    // and causes follow the `conflict` status the turn replaces, so they go with it.
+    patchAgent(conversationId, {
+        status: `running`,
+        startedAt: Date.now(),
+        updatedAt: Date.now(),
+        attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
+        conflictCauses: undefined,
+    });
     return json({ run: run.id });
 };
 

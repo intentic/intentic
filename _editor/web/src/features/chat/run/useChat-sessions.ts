@@ -144,8 +144,8 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     return true;
 };
 
-// In-flight guard only; unlike `hydrating` (done for good), this clears once the pass ends either way.
-const hydrateInFlight = new WeakSet<Conversation>();
+// The pass in flight, cleared once it ends either way (unlike `hydrating`, done for good), so it can be waited on.
+const hydrateInFlight = new WeakMap<Conversation, Promise<void>>();
 
 // A first turn the daemon never heard of: the words sit in the tab's queue, where a send holds them until the ack
 // (Conversation.drainQueue), and the window that was delivering them is gone — a reload, a closed window. The daemon
@@ -167,9 +167,8 @@ export const hydrateOnce = (conversation: Conversation): void => {
     if (hydrateInFlight.has(conversation)) {
         return;
     }
-    hydrateInFlight.add(conversation);
     hydrating.add(conversation);
-    void hydrate(conversation)
+    const pass = hydrate(conversation)
         .then((current) => {
             if (!current) {
                 hydrating.delete(conversation);
@@ -178,8 +177,35 @@ export const hydrateOnce = (conversation: Conversation): void => {
             resumeUndelivered(conversation);
         })
         // Unreachable daemon leaves the tab as-is; caught so it doesn't surface as an unhandled rejection.
-        .catch(() => hydrating.delete(conversation))
+        .catch(() => {
+            hydrating.delete(conversation);
+        })
         .finally(() => hydrateInFlight.delete(conversation));
+    hydrateInFlight.set(conversation, pass);
+};
+
+// Resolves once a tab shows what it holds, painted or hydrated with nothing to paint: a turn opened sooner sits on a
+// blank transcript the daemon's record won't redraw, since a redraw refuses a live turn (replayStoredSession).
+export const transcriptShown = (conversation: Conversation): Promise<void> => {
+    const pass = hydrateInFlight.get(conversation);
+    if (pass === undefined || conversation.messages.value.length > 0) {
+        return Promise.resolve();
+    }
+    return new Promise((shown) => {
+        const painted = watch(
+            () => conversation.messages.value.length > 0,
+            (drawn) => {
+                if (drawn) {
+                    painted();
+                    shown();
+                }
+            },
+        );
+        void pass.finally(() => {
+            painted();
+            shown();
+        });
+    });
 };
 
 // Tabs already hydrated (attach-first, then session fallback); done, not in-flight (see hydrateInFlight).

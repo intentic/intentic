@@ -18,7 +18,6 @@
             "closeAgent": "Fermer l'agent",
             "completed": "Terminé",
             "focusAgent": "Mettre l'agent au premier plan : {displayTitle}",
-            "handingOver": "Passage de relais…",
             "inNotInSandbox": "Dans {name}, pas dans le sandbox où vous êtes",
             "keepChatOpen": "Garder ce chat ouvert",
             "keepOpenOtherwiseChat": "Le garder ouvert ; sinon ce chat se ferme quand vous en ouvrez un autre",

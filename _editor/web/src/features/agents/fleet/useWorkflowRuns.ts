@@ -97,16 +97,34 @@ export function useWorkflowRuns() {
         onSuccess: invalidate,
     });
 
+    // Files one run in the cached ledger ahead of the daemon. A refusal puts back only that run's filing date: a
+    // whole-ledger snapshot put back would also undo whatever the ledger's own push brought in meanwhile.
+    const refile = (runId: string, archivedAt: number | undefined): void => {
+        queryClient.setQueryData<WorkflowRun[]>(runsKey, (held) => held?.map((run) => (run.runId === runId ? { ...run, archivedAt } : run)));
+    };
+    // The row moves on the press. A ledger read already in flight would paint it back from before the press, so it is
+    // cancelled first; the read after the answer replaces the guess either way.
+    const fileOnPress = async (runId: string, archivedAt: number | undefined): Promise<{ readonly was: number | undefined }> => {
+        await queryClient.cancelQueries({ queryKey: runsKey });
+        const was = queryClient.getQueryData<WorkflowRun[]>(runsKey)?.find((run) => run.runId === runId)?.archivedAt;
+        refile(runId, archivedAt);
+        return { was };
+    };
+
     // Archives an ended run with its sessions (a step has no card of its own to archive separately). Lossless, like
     // an agent's archive; restore brings run and sessions back together.
     const archive = useMutation({
         mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}/archive`, { method: `POST` }),
-        onSuccess: invalidate,
+        onMutate: (runId: string) => fileOnPress(runId, Date.now()),
+        onError: (_error, runId, pressed) => refile(runId, pressed?.was),
+        onSettled: invalidate,
     });
 
     const unarchive = useMutation({
         mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}/unarchive`, { method: `POST` }),
-        onSuccess: invalidate,
+        onMutate: (runId: string) => fileOnPress(runId, undefined),
+        onError: (_error, runId, pressed) => refile(runId, pressed?.was),
+        onSettled: invalidate,
     });
 
     return {

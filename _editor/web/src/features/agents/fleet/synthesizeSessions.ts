@@ -131,7 +131,7 @@ export const synthesisPrompt = (sources: readonly SourceRef[]): string =>
 // The synthesis being prepared right now; the button's busy state and the reentrancy guard against a double press.
 export const synthesizing = ref(false);
 
-// Whether the preparation went, and if not, the one sentence to say so, same shape as ResolveAsk (agentActions.ts).
+// Whether the preparation went, and if not, the one sentence to say so.
 export type SynthesisAsk = { readonly started: true } | { readonly started: false; readonly why: string };
 
 const refused = (why: string): SynthesisAsk => ({ started: false, why });

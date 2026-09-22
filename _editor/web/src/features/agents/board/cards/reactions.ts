@@ -100,6 +100,32 @@ export interface ReactionChip {
 // ada@example.com from another, and a chip that then fails to light is a chip they press twice.
 const sameEmail = (left: string, right: string | undefined): boolean => right !== undefined && left.toLowerCase() === right.toLowerCase();
 
+// A press the daemon hasn't answered yet, applied to the marks it will answer with: the reader joins the mark's wearers
+// (a new chip at the end, if nobody wore it) or leaves them (the chip going with its last wearer, as the wire's does).
+export const withPress = (
+    reactions: readonly AgentReaction[] | undefined,
+    press: { readonly emoji: string; readonly on: boolean },
+    me: { readonly email: string; readonly at: number },
+): AgentReaction[] => {
+    const marks = reactions ?? [];
+    const worn = marks.find((reaction) => reaction.emoji === press.emoji);
+    if (press.on) {
+        if (worn === undefined) {
+            return [...marks, { emoji: press.emoji, by: [me] }];
+        }
+        return worn.by.some((who) => sameEmail(who.email, me.email))
+            ? [...marks]
+            : marks.map((reaction) => (reaction === worn ? { ...reaction, by: [...reaction.by, me] } : reaction));
+    }
+    return marks.flatMap((reaction) => {
+        if (reaction !== worn) {
+            return [reaction];
+        }
+        const by = reaction.by.filter((who) => !sameEmail(who.email, me.email));
+        return by.length === 0 ? [] : [{ ...reaction, by }];
+    });
+};
+
 export const reactionChips = (
     reactions: readonly AgentReaction[] | undefined,
     reader: { readonly me: string | undefined; readonly you: string },

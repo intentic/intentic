@@ -2,8 +2,10 @@ import type { AgentChangesResponse } from "@intentic/api-contract";
 import type { AgentSpan, AgentSummary, LandMode, LandResult } from "@intentic/sandbox-contract";
 import { useDevice } from "@intentic/ui";
 import type { Conversation } from "../../chat/session/conversation";
+import { errands } from "../../chat/run/errands";
 import { summonChat, summonTurn } from "../../chat/run/summon";
 import { useChat } from "../../chat/run/useChat";
+import { transcriptShown } from "../../chat/run/useChat-sessions";
 import { composingConversation, draftConversation } from "../../chat/panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { projectScope } from "../../../app/projectScope";
@@ -15,6 +17,7 @@ import { type RequestOptions, sandboxJson, sandboxJsonAt } from "../../sandbox/c
 import { jsonBody } from "../../sandbox/client/jsonBody";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../review/conflictResolution";
 import type { FleetAgent } from "./useAgents-fleet";
+import { claim, underClaim } from "./useAgents-provisional";
 import { useAgents } from "./useAgents";
 import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../../../lib/queryKeys";
 import { t } from "@intentic/ui/i18n";
@@ -93,16 +96,18 @@ export const openConversation = (id: string): Conversation | undefined =>
 // from the branch's base for work already landed then discarded; `force` overrides the turn guard and must come only
 // from a press that showed the warning first.
 // No headers deadline: the answer comes once the work is in the tree, and a large delta takes longer than the bound;
-// the card's `landing` status carries the wait, so a request given up on would only re-enable a press the daemon
-// refuses.
+// the card's `landing` status, drawn from the press on, carries the wait. `measure` moves no card: it only re-judges.
 export const landAgent = (
     id: string,
     mode: LandMode = `check`,
     span: AgentSpan = `outstanding`,
     force = false,
     at: AgentReach = undefined,
-): Promise<LandResult> =>
-    agentJson<LandResult>(at, `/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }), { deadline: false });
+): Promise<LandResult> => {
+    const request = (): Promise<LandResult> =>
+        agentJson<LandResult>(at, `/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }), { deadline: false });
+    return mode === `measure` ? request() : underClaim(id, at, `land`, request, (result) => result.landed);
+};
 
 // What a land that moved nothing says, wherever it was pressed. Landed-with-nothing-to-show is the one outcome neither
 // the board nor the review can see for itself — both list what the BRANCH holds — so saying nothing left a press that
@@ -128,23 +133,68 @@ export const reactToAgent = (id: string, emoji: string, on: boolean, at: AgentRe
 // discarding the work. An ordinary turn: it lands in the transcript, a running turn takes it as steering, and Stop
 // works on it like any other.
 
-// Whether the turn actually went, and, if not, the one sentence explaining why, so callers can't invent their own
-// wording. `settled` marks the sentence as good news — the press found nothing left to do and put the card right —
-// which reads as a floating receipt, never as the failure strip an ordinary refusal earns.
-export type ResolveAsk = { readonly sent: true } | { readonly sent: false; readonly why: string; readonly settled?: true };
+// How the press ended, with the one sentence each outcome owes, so callers can't invent their own wording.
+export type ResolveAsk =
+    // The daemon took the turn.
+    | { readonly kind: `sent` }
+    // Nothing was left to resolve and the press put the card right: good news, told as a floating receipt.
+    | { readonly kind: `settled`; readonly why: string }
+    // No turn could help, told on the caller's failure strip.
+    | { readonly kind: `refused`; readonly why: string }
+    // Opened but never taken (a Stop, a refusal at the door, a later press); whatever ended it has said so already.
+    | { readonly kind: `dropped` };
 
+// The card moves and the chat opens the turn on the press, and the report its words need is read meanwhile, not first.
+// Resolves once the daemon took the turn or it went nowhere, never at its end, which would hold a busy flag for minutes.
 export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     const { agentById, open } = useAgents();
     const agent = agentById(id);
     if (agent !== undefined) {
         open(agent);
     }
-    const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === id);
+    const conversation = openConversation(id);
     // Send only to conversations that still have an open agent card.
     if (conversation === undefined) {
-        return { sent: false, why: `That agent has no conversation left to send to.` };
+        return { kind: `refused`, why: `That agent has no conversation left to send to.` };
     }
-    const { conflicts } = await sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(id)}/diff`);
+    const press = claim(id, undefined, `turn`);
+    const read = new AbortController();
+    const report = sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(id)}/diff`, { signal: read.signal });
+    // Awaited only inside `compose`, which a superseded press never reaches; its rejection is still thrown there.
+    report.catch(() => undefined);
+    // Settled by `compose` itself whenever it answers without a prompt; a turn that never went says nothing.
+    let unsent: ResolveAsk = { kind: `dropped` };
+    let taken = false;
+    try {
+        await transcriptShown(conversation);
+        // A press made on this card while its chat was painting (a Stop, a discard) is the one that counts.
+        if (!press.stands()) {
+            read.abort();
+            return unsent;
+        }
+        // The app composed this turn, so it runs as the agent, not on whatever the composer in THIS window happens to
+        // hold: a tab minted from a history row or a second window carries the last pick made there, and a turn sent on
+        // it both spends against a model the user never chose for this agent, relabels the card with it afterwards, and
+        // bills an account this conversation was not running on.
+        wearAgentRun(conversation, agent);
+        taken = await conversation.startErrand(errands().landConflict.opening, async (signal) => {
+            signal.addEventListener(`abort`, () => read.abort());
+            const { conflicts } = await report;
+            const answer = await answerFor(id, conflicts);
+            if (typeof answer === `string`) {
+                return answer;
+            }
+            unsent = answer;
+            return undefined;
+        });
+    } finally {
+        press.settle(taken);
+    }
+    return taken ? { kind: `sent` } : unsent;
+};
+
+// What a freshly read report asks of the press: the prompt to send, or the reason there is none.
+const answerFor = async (id: string, conflicts: AgentChangesResponse[`conflicts`]): Promise<string | ResolveAsk> => {
     // Nothing at all in a report re-derived at read time means the stored refusal has since lost its premise, and the
     // card is sitting in Attention over a clash that no longer exists. That is a repair, not a refusal: see `rejudged`.
     if (conflicts === undefined || conflicts.length === 0) {
@@ -153,27 +203,19 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     // Refusing is not a send: the user's own uncommitted edits are the one thing a rebase can't reach, so they're named
     // explicitly rather than sent to the agent as a task.
     const blockers = blockersOf(conflicts);
-    if (agentBlockers(blockers).length === 0) {
-        const yours = userBlockers(blockers).length;
-        return {
-            sent: false,
-            why:
-                yours > 0
-                    ? `A rebase can't reach this: ${yours === 1 ? `the blocked file is` : `all ${yours} blocked files are`} held by your own uncommitted edits. Commit or stash them, then land again.`
-                    : // A refusal naming no path at all is a repo the land couldn't reach (land.ts). Naming it beats
-                      // sending the reader to a report whose entire content is this one sentence.
-                      `The land couldn't reach your workspace's copy of ${conflicts.map((conflict) => conflict.repo).join(`, `)}, so there's nothing here for the agent to rebase.`,
-        };
+    if (agentBlockers(blockers).length > 0) {
+        return resolvePrompt(conflicts);
     }
-    // The app composed this turn, so it runs as the agent, not on whatever the composer in THIS window happens to hold:
-    // a tab minted from a history row or a second window carries the last pick made there, and a turn sent on it both
-    // spends against a model the user never chose for this agent, relabels the card with it afterwards, and bills an
-    // account this conversation was not running on.
-    wearAgentRun(conversation, agent);
-    // Dispatched, not awaited: `enqueue` doesn't settle until the turn does, and awaiting it here would hold the
-    // caller's busy flag across a multi-minute rebase.
-    void conversation.enqueue(resolvePrompt(conflicts));
-    return { sent: true };
+    const yours = userBlockers(blockers).length;
+    return {
+        kind: `refused`,
+        why:
+            yours > 0
+                ? `A rebase can't reach this: ${yours === 1 ? `the blocked file is` : `all ${yours} blocked files are`} held by your own uncommitted edits. Commit or stash them, then land again.`
+                : // A refusal naming no path at all is a repo the land couldn't reach (land.ts). Naming it beats sending
+                  // the reader to a report whose entire content is this one sentence.
+                  `The land couldn't reach your workspace's copy of ${conflicts.map((conflict) => conflict.repo).join(`, `)}, so there's nothing here for the agent to rebase.`,
+    };
 };
 
 // The report has evaporated: every blocker the stored refusal named applies cleanly today. That refusal is what holds
@@ -184,10 +226,10 @@ const rejudged = async (id: string): Promise<ResolveAsk> => {
     try {
         await landAgent(id, `measure`);
         await invalidateAgentAction(id);
-        return { sent: false, settled: true, why: `Nothing is blocking this any more: it's ready to land.` };
+        return { kind: `settled`, why: `Nothing is blocking this any more: it's ready to land.` };
     } catch {
         // The re-check itself failed (a land holding the repo, a daemon that went away); the card stays as it was.
-        return { sent: false, why: `Nothing is blocking this any more, but the re-check didn't go through. Try landing it.` };
+        return { kind: `refused`, why: `Nothing is blocking this any more, but the re-check didn't go through. Try landing it.` };
     }
 };
 
@@ -214,22 +256,25 @@ const wearAgentRun = (conversation: Conversation, agent: FleetAgent | undefined)
     }
 };
 
-// Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible.
-export const discardAgent = async (id: string, at: AgentReach = undefined): Promise<void> => {
-    await agentJson(at, `/agents/${encodeURIComponent(id)}/discard`, { method: `POST` });
-};
+// Discard: drop the worktrees, the agent/<id> branches, and the registry entry. Irreversible; the card leaves on the
+// press and comes back only if the daemon refuses.
+export const discardAgent = (id: string, at: AgentReach = undefined): Promise<void> =>
+    underClaim(id, at, `discard`, async () => {
+        await agentJson(at, `/agents/${encodeURIComponent(id)}/discard`, { method: `POST` });
+    });
 
-// True cancel for an in-flight turn: an open streaming tab runs its own stop() path; otherwise post the cancel straight
-// to the daemon. A card in another box never takes the local branch, since the same id can exist in two sandboxes.
-export const stopAgent = async (id: string, at: AgentReach = undefined): Promise<void> => {
-    const { conversations } = useChat();
-    const conversation = at === undefined ? conversations.value.find((candidate) => candidate.conversationId === id) : undefined;
-    if (conversation !== undefined && conversation.streaming.value) {
-        conversation.stop();
-        return;
-    }
-    await agentJson(at, `/agent/stop`, jsonBody(`POST`, { conversationId: id }));
-};
+// True cancel for an in-flight turn, the card reading `stopping` from the press: an open streaming tab runs its own
+// stop(), else the daemon is told; another box's card never takes the tab branch, since an id repeats across boxes.
+export const stopAgent = (id: string, at: AgentReach = undefined): Promise<void> =>
+    underClaim(id, at, `stop`, async () => {
+        const { conversations } = useChat();
+        const conversation = at === undefined ? conversations.value.find((candidate) => candidate.conversationId === id) : undefined;
+        if (conversation !== undefined && conversation.streaming.value) {
+            conversation.stop();
+            return;
+        }
+        await agentJson(at, `/agent/stop`, jsonBody(`POST`, { conversationId: id }));
+    });
 
 // After a land or discard, invalidate the agent's diff plus the workspace-wide changes and history caches so every
 // surface converges. The two workspace families use `.every` since a land in another box changes that box's own

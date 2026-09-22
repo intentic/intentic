@@ -1,4 +1,4 @@
-import type { LandConflict } from "@intentic/sandbox-contract";
+import type { AgentSummary, LandConflict } from "@intentic/sandbox-contract";
 import { it, expect, afterEach, mock } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals, hoisted } from "@intentic/testing/bun";
 
@@ -9,6 +9,7 @@ const chat = hoisted(() => ({
             conversationId: string;
             isolated: { value: boolean };
             enqueue: (prompt: string) => void;
+            startErrand: (opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>) => Promise<boolean>;
             // Only the errand path touches these, so the tabs the other tests build leave them off.
             wearModel?: (pin: unknown) => void;
             account?: { value: string | undefined };
@@ -16,6 +17,8 @@ const chat = hoisted(() => ({
     },
     // Every prompt that reached a conversation: the assertion for "a turn was actually spent".
     enqueued: [] as string[],
+    // Every errand turn a conversation opened, by its opening: the row the chat draws before the words exist.
+    opened: [] as string[],
 }));
 // A registered tab: `isolated: false` keeps the fleet's draft join from carding it, so the empty roster here leaves
 // askAgentToResolve nothing to open. `unsent` is read of every tab regardless of the latch.
@@ -25,7 +28,22 @@ const tab = (id: string) => ({
     registered: { value: true },
     unsent: { value: false },
     enqueue: (prompt: string) => chat.enqueued.push(prompt),
+    // The chat's half of an errand as Conversation.startErrand keeps it: the turn opens under its opening at once, only
+    // a composed prompt is sent, and every send here is one the daemon takes.
+    startErrand: async (opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>): Promise<boolean> => {
+        chat.opened.push(opening);
+        const prompt = await compose(new AbortController().signal);
+        if (prompt === undefined) {
+            return false;
+        }
+        chat.enqueued.push(prompt);
+        return true;
+    },
 });
+
+// When the tab being opened has its transcript on screen; held open by the one case about what happens meanwhile.
+const painting = hoisted(() => ({ until: undefined as Promise<void> | undefined }));
+mock.module("../../chat/run/useChat-sessions", () => ({ transcriptShown: () => painting.until ?? Promise.resolve() }));
 
 // sandboxClient stays real: the bug under test lived in the gap between agentActions and the actual request. Everything
 // else mocked here is what agentActions's other actions need for a browser (device, router, sandbox).
@@ -79,6 +97,22 @@ const { askAgentToResolve, landAgent, startAgent } = await import("./agentAction
 const { setProjectScope } = await import("../../../app/projectScope");
 // The board's own roster, which the errand reads the agent's settings off; written per test, cleared with the tabs.
 const { registry } = await import("./useAgents-registry");
+const { useAgents } = await import("./useAgents");
+const { claim } = await import("./useAgents-provisional");
+const { errands } = await import("../../chat/run/errands");
+
+const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+// A card refusing to land, as the roster reports one.
+const conflicted = (id: string): AgentSummary => ({
+    id,
+    status: `conflict`,
+    provider: `claude`,
+    harness: `native`,
+    updatedAt: 0,
+    attention: { ...none, conflict: true },
+});
+const lanesOf = (id: string): string[] =>
+    Object.entries(useAgents().lanes.value).flatMap(([lane, cards]) => (cards.some((card) => card.id === id) ? [lane] : []));
 
 // Every request fetch was handed, as the Request the daemon would have received.
 const sent: Request[] = [];
@@ -96,6 +130,8 @@ afterEach(() => {
     sent.length = 0;
     chat.conversations.value = [];
     chat.enqueued.length = 0;
+    chat.opened.length = 0;
+    painting.until = undefined;
     registry.value = [];
     draft.value = { conversationId: `c1`, actsAs: { value: undefined }, startIn: { value: undefined } };
     setProjectScope(undefined);
@@ -140,7 +176,7 @@ it("refuses the ask when every blocked path is the user's own uncommitted work, 
     // The failure this prevents: a turn spent on a prompt whose "What blocked the land:" section is empty, ending in an
     // identical refusal.
     expect(chat.enqueued).toEqual([]);
-    expect(ask).toEqual({ sent: false, why: expect.stringContaining(`Commit or stash them`) });
+    expect(ask).toEqual({ kind: `refused`, why: expect.stringContaining(`Commit or stash them`) });
 });
 
 // The repo-unavailable refusal reads as a conflict on the card and names nothing a rebase could act on, so it's the
@@ -149,7 +185,7 @@ it("refuses the ask when every blocked path is the user's own uncommitted work, 
 it("refuses the ask when the report names no blocked path at all, and names the repo it couldn't reach", async () => {
     chat.conversations.value = [tab(`a1`)];
     stubConflicts([{ repo: `docs`, clean: 0, paths: [] }]);
-    expect(await askAgentToResolve(`a1`)).toEqual({ sent: false, why: expect.stringContaining(`couldn't reach your workspace's copy of docs`) });
+    expect(await askAgentToResolve(`a1`)).toEqual({ kind: `refused`, why: expect.stringContaining(`couldn't reach your workspace's copy of docs`) });
     expect(chat.enqueued).toEqual([]);
     // Nothing is re-judged: the refusal still stands, so retiring it would clear a card that is genuinely stuck.
     expect(sent.filter((request) => request.method === `POST`)).toEqual([]);
@@ -164,7 +200,7 @@ it("re-judges instead of scolding when the refusal it was pressed about has evap
     stubFetch({ repos: [] });
     const ask = await askAgentToResolve(`a1`);
     // Reported as an outcome, not a refusal: the board floats this rather than raising its failure strip.
-    expect(ask).toEqual({ sent: false, settled: true, why: expect.stringContaining(`ready to land`) });
+    expect(ask).toEqual({ kind: `settled`, why: expect.stringContaining(`ready to land`) });
     // No turn spent on a rebase with nothing to rebase...
     expect(chat.enqueued).toEqual([]);
     // ...and the re-judge is a `measure`, the mode that judges a stored refusal without touching the main tree.
@@ -185,7 +221,7 @@ it("sends the composed prompt when the agent's own rebase could reach it, and fe
         },
         { repo: `docs`, clean: 0, paths: [{ path: `README.md`, reason: `workspace` }] },
     ]);
-    expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
+    expect(await askAgentToResolve(`a1`)).toEqual({ kind: `sent` });
     // One turn carrying the agent's half as work and the user's half as hands-off, the split resolvePrompt exists to
     // draw.
     expect(chat.enqueued).toHaveLength(1);
@@ -221,7 +257,7 @@ it("runs the errand on the agent's own model and account, not on the picks this 
     ];
     stubConflicts([{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }]);
 
-    expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
+    expect(await askAgentToResolve(`a1`)).toEqual({ kind: `sent` });
 
     expect(worn).toEqual([{ provider: `claude`, model: `claude-opus-5`, harness: `native`, effort: `xhigh`, thinking: true }]);
     expect(account.value).toBe(`the-account-that-ran-it`);
@@ -245,7 +281,7 @@ it("leaves the tab's account alone when the registry has no account for the agen
     ];
     stubConflicts([{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }]);
 
-    expect(await askAgentToResolve(`a1`)).toEqual({ sent: true });
+    expect(await askAgentToResolve(`a1`)).toEqual({ kind: `sent` });
 
     expect(account.value).toBe(`the-tab-pick`);
 });
@@ -288,7 +324,7 @@ it("keeps the persona a press named over the project's own", () => {
 // A card whose conversation is gone has nothing to send to; inventing one would start a turn on the wrong agent.
 it("refuses the ask when the agent has no conversation left", async () => {
     stubConflicts([{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }]);
-    expect(await askAgentToResolve(`a1`)).toEqual({ sent: false, why: expect.stringContaining(`no conversation`) });
+    expect(await askAgentToResolve(`a1`)).toEqual({ kind: `refused`, why: expect.stringContaining(`no conversation`) });
     // Refused before the report is even read: there is no one to tell.
     expect(sent).toEqual([]);
 });
@@ -300,4 +336,62 @@ it("asks for the cumulative span by name, so a re-land carries work the default 
     stubFetch();
     await landAgent(`a1`, `check`, `cumulative`);
     expect(await sent[0]?.json()).toEqual({ mode: `check`, span: `cumulative`, force: false });
+});
+
+// THE PRESS THIS FILE'S RESOLVE PATH WAS REWRITTEN FOR. The report its words are composed from is a full review of the
+// branch, measured at seconds and sometimes tens of them, and the press used to wait for it before anything moved: the
+// card sat in Attention and the chat showed nothing. Now the card and the chat move on the press, and the read runs
+// inside the turn it will name.
+it("moves the card to Active and opens the errand on the press, before the report its words need has answered", async () => {
+    chat.conversations.value = [tab(`a1`)];
+    registry.value = [conflicted(`a1`)];
+    let answer: (response: Response) => void = () => undefined;
+    stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
+        sent.push(new Request(url, init));
+        return new Promise<Response>((settle) => (answer = settle));
+    });
+
+    const asking = askAgentToResolve(`a1`);
+
+    expect(lanesOf(`a1`)).toEqual([`active`]);
+    await waitFor(() => expect(chat.opened).toEqual([errands().landConflict.opening]));
+    expect(chat.enqueued).toEqual([]);
+
+    answer(Response.json({ repos: [], conflicts: [{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }] }));
+
+    expect(await asking).toEqual({ kind: `sent` });
+    expect(chat.enqueued).toEqual([expect.stringContaining(`src/app.ts`)]);
+});
+
+// The rollback is the claim's to do, not the caller's: a press that ends without a turn gives the card back its own
+// standing the moment it answers.
+it("gives the card back its own lane once the fresh report leaves nothing for the agent to do", async () => {
+    chat.conversations.value = [tab(`a1`)];
+    registry.value = [conflicted(`a1`)];
+    stubConflicts([{ repo: `root`, clean: 4, paths: [{ path: `src/app.ts`, reason: `workspace` }] }]);
+
+    expect((await askAgentToResolve(`a1`)).kind).toBe(`refused`);
+
+    expect(lanesOf(`a1`)).toEqual([`attention`]);
+    expect(chat.enqueued).toEqual([]);
+});
+
+// Between the press and the turn opening there can be a wait (a chat still painting the tab the press opened), and a
+// Stop pressed on the already-moved card in that wait is the press that counts: the errand never opens.
+it("never opens the errand when a later press replaced it while the chat was still painting", async () => {
+    chat.conversations.value = [tab(`a1`)];
+    registry.value = [conflicted(`a1`)];
+    stubConflicts([{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }]);
+    let painted: () => void = () => undefined;
+    painting.until = new Promise((settle) => (painted = settle));
+
+    const asking = askAgentToResolve(`a1`);
+    claim(`a1`, undefined, `stop`);
+    painted();
+
+    expect(await asking).toEqual({ kind: `dropped` });
+    expect(chat.opened).toEqual([]);
+    expect(chat.enqueued).toEqual([]);
+    // The report read the press started is let go rather than left to finish for nobody.
+    expect(sent.filter((request) => request.url.endsWith(`/agents/a1/diff`)).map((request) => request.signal.aborted)).toEqual([true]);
 });

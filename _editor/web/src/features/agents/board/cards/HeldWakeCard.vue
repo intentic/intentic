@@ -16,7 +16,7 @@ import { useT } from "@intentic/ui/i18n";
 // stacked board's lanes are told apart by their order rather than by how heavy their cards are.
 const t = useT();
 
-const { entry, dense } = defineProps<{ entry: AutomationApproval; busy?: boolean; dense?: boolean }>();
+const { entry, dense } = defineProps<{ entry: AutomationApproval; dense?: boolean }>();
 const emit = defineEmits<{ approve: []; reject: [] }>();
 
 // First line of what fired: distinguishes two holds of the same automation (which otherwise share no payload).
@@ -47,7 +47,7 @@ const autoRunLabel = computed(() => {
 <template>
     <div
         class="group flex w-full select-none flex-col rounded-xl border border-dashed border-line bg-card text-left"
-        :class="[dense ? 'gap-2 p-3.5' : 'gap-2.5 p-4', busy ? 'pointer-events-none opacity-60' : '']"
+        :class="dense ? 'gap-2 p-3.5' : 'gap-2.5 p-4'"
     >
         <div class="flex items-center gap-2.5">
             <!-- Pause glyph where an agent card has its identity tile: a held wake, not a session, nothing running yet. -->

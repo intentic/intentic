@@ -10,9 +10,9 @@ import { useNotifications } from "../../../shell/notifications/notifications";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 
 // Pointer-driven card drag: Pointer Events (not HTML5 drag-and-drop) give a real AgentCard ghost, Escape-to-cancel, and
-// DOM hit-testing for the drop target. The card stays in its lane, dimmed, until the action's own roster frame moves
-// it; nothing changes lane on drop itself. Mouse and pen only; touch stacks the lanes instead. Module-level singleton,
-// like useAgents and useChat.
+// DOM hit-testing for the drop target. A drop never assigns a lane: it runs the action, and the action claims the card
+// (useAgents-provisional), so the card moves in the frame of the drop and the roster only confirms it or takes it back.
+// Mouse and pen only; touch stacks the lanes instead. Module-level singleton, like useAgents and useChat.
 
 // Far enough that a click with a shaky hand still opens the card.
 const DRAG_THRESHOLD_PX = 5;
@@ -123,31 +123,29 @@ const runAction = async (id: string, chosen: PendingAction, at?: string): Promis
     }
     if (chosen === `resolve`) {
         // The turn does the rest: it rebases and resolves, and the auto-land at completion moves the card, so a send
-        // that went says nothing here; one that didn't must, since the board can't tell from `status: "conflict"` alone
-        // whether this refusal is the user's to clear.
+        // that went says nothing here, and neither does one the chat already answered for (`dropped`). A refusal must,
+        // since the board can't tell from `status: "conflict"` alone whether it is the user's to clear.
         const ask = await askAgentToResolve(id);
-        if (ask.sent) {
-            return;
-        }
         // A press that put the card right is an outcome, not a failure: it takes the floating receipt, leaving the
         // board's danger strip for the refusals it was written for.
-        if (ask.settled === true) {
+        if (ask.kind === `settled`) {
             say(ask.why);
-            return;
         }
-        notice.value = ask.why;
+        if (ask.kind === `refused`) {
+            notice.value = ask.why;
+        }
         return;
     }
     await discardAgent(id, at);
     await invalidateAgentAction(id, at);
 };
 
-// The card doesn't move lane here; the roster frame the action provokes does. Until it arrives the card shows busy in
-// place.
+// The card doesn't move lane here; the action's claim does, on the press, and the roster frame the action provokes
+// confirms it. The in-flight mark only withholds a second press on the same card until this one has answered.
 const perform = async (id: string, chosen: PendingAction, at?: string): Promise<void> => {
     const key = cardKey(id, at);
-    // Re-entry on the same card is a no-op, like useAsyncAction's: a card mid-action is dimmed and pointer-inert. A
-    // press on another card is not re-entry, which is the whole reason this is a map.
+    // Re-entry on the same card is a no-op, like useAsyncAction's: a card mid-action is pointer-inert. A press on
+    // another card is not re-entry, which is the whole reason this is a map.
     if (inFlight.value.has(key)) {
         return;
     }

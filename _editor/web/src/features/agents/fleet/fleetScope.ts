@@ -7,6 +7,7 @@ import { landOnAfterSwitch } from "../../sandbox/client/sandboxScreen";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
+import { claimedCard } from "./useAgents-provisional";
 import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
 
@@ -49,9 +50,9 @@ export const otherFleet = computed<readonly FleetAgent[]>(() => {
     // about one conversation.
     const tabOf = new Map(chatStrip.value.tabs.flatMap((tab) => (tab.box === undefined ? [] : [[cardKey(tab.box, tab.id), tab] as const])));
     return otherBoxes.value.flatMap((box) =>
-        box.agents.map((agent): FleetAgent => {
+        box.agents.flatMap((agent): FleetAgent[] => {
             const tab = tabOf.get(cardKey(box.sandbox.id, agent.id));
-            return {
+            const card: FleetAgent = {
                 ...agent,
                 sandboxId: box.sandbox.id,
                 open: tab !== undefined,
@@ -60,6 +61,9 @@ export const otherFleet = computed<readonly FleetAgent[]>(() => {
                 unsent: tab?.unsent ?? false,
                 unread: !turnInFlight(agent) && agent.updatedAt > (agent.seenAt ?? 0),
             };
+            // A press on this card from here draws at once; this box is polled, so its roster is the slow half.
+            const shown = claimedCard(card, agent, box.sandbox.id);
+            return shown === undefined ? [] : [shown];
         }),
     );
 });
