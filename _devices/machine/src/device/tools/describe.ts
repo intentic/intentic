@@ -130,10 +130,12 @@ export const describeText = async (scopes: DeviceScopes): Promise<string> => {
             `Folders you may read and write: ${facts.roots.join(", ")}`,
             ...environmentLines(facts),
             `Permissions: run commands ${scopes.shell}, write files ${scopes.write}, see the screen ${scopes.screen}, manage sandboxes ${scopes.sandboxes}`,
-            // The ceiling a sandbox's share is held to, so a reshape is asked for in numbers this engine has.
+            // All a sandbox can use, so a reshape is asked for in numbers this engine has.
             ...(facts.engine === undefined
                 ? []
-                : [`Docker engine: ${(facts.engine.memoryBytes / 1024 ** 3).toFixed(1)} GiB of memory, ${facts.engine.cpus} CPUs (what a sandbox's caps are bounded by)`]),
+                : [
+                      `Docker engine: ${(facts.engine.memoryBytes / 1024 ** 3).toFixed(1)} GiB of memory, ${facts.engine.cpus} CPUs (all a sandbox can use: a CPU cap stops at the cores, and a memory cap past the memory is no cap)`,
+                  ]),
         ].join("\n") + session
     );
 };

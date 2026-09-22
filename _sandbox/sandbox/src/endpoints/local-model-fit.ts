@@ -38,15 +38,20 @@ export const localModelGpu = (): LocalModelGpu => {
     return state === "all" ? "granted" : state === "unsupported" ? "unsupported" : "absent";
 };
 
-// The container's own ceiling where it has one, the machine's otherwise. The cgroup number is the one that matters: a
-// 64 GB host says nothing about a sandbox capped at 8.
+// The container's own ceiling where it binds, the engine's total otherwise: a 64 GB host says nothing about a sandbox
+// capped at 8, and a cap past the engine's total never binds.
+export const memoryFrom = (cgroupMax: string, meminfo: string): { bytes: number; capped: boolean } => {
+    const engine = Number(/^MemTotal:\s+(\d+) kB$/m.exec(meminfo)?.[1] ?? 0) * 1024;
+    const cap = /^\d+$/.test(cgroupMax.trim()) ? Number(cgroupMax.trim()) : undefined;
+    return cap !== undefined && (engine <= 0 || cap < engine) ? { bytes: cap, capped: true } : { bytes: engine, capped: false };
+};
+
 export const hostMemory = async (): Promise<{ bytes: number; capped: boolean }> => {
-    const cgroup = (await readFile("/sys/fs/cgroup/memory.max", "utf8").catch(() => "max")).trim();
-    if (/^\d+$/.test(cgroup)) {
-        return { bytes: Number(cgroup), capped: true };
-    }
-    const meminfo = await readFile("/proc/meminfo", "utf8").catch(() => "");
-    return { bytes: Number(/^MemTotal:\s+(\d+) kB$/m.exec(meminfo)?.[1] ?? 0) * 1024, capped: false };
+    const [cgroupMax, meminfo] = await Promise.all([
+        readFile("/sys/fs/cgroup/memory.max", "utf8").catch(() => "max"),
+        readFile("/proc/meminfo", "utf8").catch(() => ""),
+    ]);
+    return memoryFrom(cgroupMax, meminfo);
 };
 
 // Zero until the GPU is actually passed through: before the grant there is no device to ask, so any figure here would

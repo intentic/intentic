@@ -26,7 +26,7 @@ The **device half** (`src/device/`, the machine side of the `host` capability):
   their logs. `reshape` changes a sandbox's share or privileges through `ic sandbox reshape` on the same
   switch as the swaps, because another reshape undoes it; its ask is a closed form (two caps, two switches)
   spelled into `ic` flags here, so nothing a browser or a model sends reaches docker as text. `describe`
-  reports the docker engine's size beside the OS, which is the ceiling those caps are held to.
+  reports the docker engine's size beside the OS, which is all those caps can amount to.
 - **Drop the links nothing answers** (`intentic-machine device forget-unreachable`, and the button the sandbox's
   Devices tab draws for it): a deleted or recreated sandbox leaves its side of the link here, and the agent re-dials
   that address for as long as the machine runs. Only the resident agent's own live stamp decides what counts as gone

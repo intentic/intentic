@@ -191,12 +191,14 @@ mock.module("../../sandbox/overview/useSandboxSettings", () => {
     };
 });
 
-// A 16 GiB box on a 64 GiB engine a connected device can reshape, so a hold that named a ceiling has a raise to offer.
+// A 16 GiB box a connected device can reshape, on an engine a test may resize; 64 GiB leaves a raise room to offer.
+const ROOMY_ENGINE = { memoryBytes: 64 * 1024 ** 3, cpus: 8 };
+const selfEngine = ref(ROOMY_ENGINE);
 mock.module("../../sandbox/devices/useSelfResources", () => ({
     useSelfResources: () => ({
         slug: computed(() => `box`),
         current: computed(() => ({ memoryBytes: 16 * 1024 ** 3 })),
-        engine: computed(() => ({ memoryBytes: 64 * 1024 ** 3, cpus: 8 })),
+        engine: computed(() => selfEngine.value),
         reshapable: computed(() => true),
         applying: ref(false),
         apply: mock(async () => undefined),
@@ -1083,6 +1085,7 @@ describe(`a low-memory hold`, () => {
     beforeEach(() => {
         pane.streaming = false;
         pane.queued = [{ id: `held`, text: `fix the flaky test` }];
+        selfEngine.value = ROOMY_ENGINE;
     });
 
     it(`sends the held message on one press, with no raise on a hold that named no ceiling`, () => {
@@ -1101,11 +1104,31 @@ describe(`a low-memory hold`, () => {
         pane.messages = [row];
         const element = mount(row);
 
-        // 16 GiB now plus the component's 4 GiB step, well under the 61 GiB this engine allows.
+        // 16 GiB now plus the component's 4 GiB step, well under this engine's 64.
         expect(raise(element)?.textContent?.trim()).toBe(`Raise its memory to 20 GiB`);
         sendAnyway(element)!.click();
 
         expect(resume).toHaveBeenCalledTimes(1);
+    });
+
+    // The WSL guest's 19.53 GiB engine derives exactly the 16 this box has; the raise reaches into its reserve.
+    it(`offers a raise past the derived share, up to the engine's own size`, () => {
+        selfEngine.value = { memoryBytes: 20479632 * 1024, cpus: 16 };
+        const row = hold(`sandboxMemory`);
+        pane.messages = [row];
+        const element = mount(row);
+
+        expect(raise(element)?.textContent?.trim()).toBe(`Raise its memory to 19 GiB`);
+    });
+
+    it(`withdraws the raise, and keeps the send, once the cap already reaches the engine's size`, () => {
+        selfEngine.value = { memoryBytes: 16.5 * 1024 ** 3, cpus: 16 };
+        const row = hold(`sandboxMemory`);
+        pane.messages = [row];
+        const element = mount(row);
+
+        expect(raise(element)).toBeUndefined();
+        expect(sendAnyway(element)?.textContent?.trim()).toBe(`Send anyway`);
     });
 
     // The raise promises the message waits through the restart: false once it has gone, and a restart kills a live turn.

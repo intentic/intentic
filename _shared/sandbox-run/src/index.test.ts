@@ -111,13 +111,13 @@ test("an explicit SANDBOX_MEMORY replaces the derived cap", () => {
     expect(localSandboxMemory(guest, "5g")).toBe("5g");
 });
 
-test("an override is bounded: it may claim up to the machine minus the reserve, never all of it", () => {
+test("an override is the owner's number: the reserve binds only the derived cap, and the engine's size binds nothing", () => {
     const guest = 20479632 * 1024;
-    // 19.53 GiB minus the 3 GiB reserve floors to 16, so a greedy ask lands there, not the number typed.
-    expect(localSandboxMemory(guest, "18g")).toBe("16g");
-    // A machine with real room honours a big ask: the bound is the machine's, not a universal ceiling.
-    expect(localSandboxMemory(256 * 1024 ** 3, "200g")).toBe("200g");
-    // The floor holds from below too: an override cannot starve the image's own toolchain.
+    // Into the reserve: this engine derives 16, and an ask for 18 gets 18.
+    expect(localSandboxMemory(guest, "18g")).toBe("18g");
+    // Past the engine: docker takes it, and the sandbox is then bounded by the engine alone.
+    expect(localSandboxMemory(guest, "32g")).toBe("32g");
+    // The floor holds from below: an override cannot starve the image's own toolchain.
     expect(localSandboxMemory(guest, "1g")).toBe("4g");
 });
 

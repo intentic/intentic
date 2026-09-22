@@ -23,10 +23,11 @@ const box = (limitGib: number, usedGib: number, stalledPercent = 0): MemoryHeadr
     stalledPercent,
 });
 
-// A cgroup reading in GiB, as the four files would answer it.
-const reading = (limitGib: number | undefined, residentGib: number | undefined, swapGib: number | undefined) => ({
+// A cgroup reading in GiB, as the files would answer it; the engine is unread unless given.
+const reading = (limitGib: number | undefined, residentGib: number | undefined, swapGib: number | undefined, engineGib?: number) => ({
     residentBytes: residentGib === undefined ? undefined : residentGib * GIB,
     limitBytes: limitGib === undefined ? undefined : limitGib * GIB,
+    engineBytes: engineGib === undefined ? undefined : engineGib * GIB,
     swapBytes: swapGib === undefined ? undefined : swapGib * GIB,
     pressureText: "",
 });
@@ -116,6 +117,16 @@ test("an unaccounted swap file reads as none rather than blanking the ceiling", 
     expect(unaccounted.swapBytes).toBe(0);
     expect(unaccounted.freeBytes).toBe(6 * GIB);
     expect(admitTurn(unaccounted).admit).toBe(true);
+});
+
+// An owner may cap the box past its engine, and memory the engine does not have is not headroom.
+test("a cap past the engine is measured against the engine, and an uncapped box stays without an opinion", () => {
+    const beyond = headroomFrom(reading(32, 18.5, 0, 19.5));
+    expect(beyond.limitBytes).toBe(19.5 * GIB);
+    expect(beyond.freeBytes).toBe(GIB);
+    expect(refusal(admitTurn(beyond, true))).toContain("18.5 GiB of 19.5 GiB used");
+    expect(headroomFrom(reading(16, 12, 0, 19.5)).limitBytes).toBe(16 * GIB);
+    expect(headroomFrom(reading(undefined, 12, 0, 19.5)).limitBytes).toBeUndefined();
 });
 
 // Unknown ceiling (no cgroup, cgroup v1, hosted) admits rather than refuses on ignorance.

@@ -12,6 +12,8 @@ const MEMORY_PRESSURE = "/sys/fs/cgroup/memory.pressure";
 // Anon this cgroup has pushed to swap. Charged HERE and not to memory.current, which is the whole reason this file
 // reads it: see the `usedBytes` note below.
 const MEMORY_SWAP_CURRENT = "/sys/fs/cgroup/memory.swap.current";
+// The engine's own total, read only as the most a cap can mean: an owner may set memory.max past it.
+const MEMINFO = "/proc/meminfo";
 
 export interface MemoryHeadroom {
     // Undefined when uncapped or cgroup v2 is unavailable; the gate treats both as no opinion.
@@ -39,10 +41,18 @@ const numericFile = async (path: string): Promise<number | undefined> => {
     return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const engineTotalBytes = async (): Promise<number | undefined> => {
+    const kib = /^MemTotal:\s+(\d+) kB$/mu.exec(await readFile(MEMINFO, "utf8").catch(() => ""))?.[1];
+    return kib === undefined || Number(kib) <= 0 ? undefined : Number(kib) * 1024;
+};
+
 export interface MemoryReading {
     // memory.current: the cgroup's RESIDENT charge, which excludes everything it has paged out.
     readonly residentBytes: number | undefined;
+    // memory.max, undefined when uncapped.
     readonly limitBytes: number | undefined;
+    // MemTotal of the engine the container runs on; undefined when unreadable.
+    readonly engineBytes: number | undefined;
     // memory.swap.current; `undefined` is an unaccounted swap, read as none.
     readonly swapBytes: number | undefined;
     readonly pressureText: string;
@@ -50,28 +60,31 @@ export interface MemoryReading {
 
 // Pure function of a reading, for the same reason `admitTurn` below is one: the arithmetic swap broke is the part
 // worth testing, and a cgroup is not something a unit test can stage.
-export const headroomFrom = ({ residentBytes, limitBytes, swapBytes, pressureText }: MemoryReading): MemoryHeadroom => {
+export const headroomFrom = ({ residentBytes, limitBytes, engineBytes, swapBytes, pressureText }: MemoryReading): MemoryHeadroom => {
     // An unreadable swap file is 0, never `undefined`: swap being unaccounted (cgroup v1, swapaccount off) must not
     // turn a box with a measurable ceiling into one with no opinion — that would widen the hole instead of closing it.
     const swapped = swapBytes ?? 0;
     const usedBytes = residentBytes === undefined ? undefined : residentBytes + swapped;
+    // A cap past the engine's total never binds, so the smaller is the ceiling; the engine alone never makes one.
+    const ceiling = limitBytes === undefined || engineBytes === undefined ? limitBytes : Math.min(limitBytes, engineBytes);
     return {
-        limitBytes,
+        limitBytes: ceiling,
         usedBytes,
         swapBytes: swapped,
-        freeBytes: limitBytes === undefined || usedBytes === undefined ? undefined : Math.max(0, limitBytes - usedBytes),
+        freeBytes: ceiling === undefined || usedBytes === undefined ? undefined : Math.max(0, ceiling - usedBytes),
         stalledPercent: parsePressure(pressureText)?.full ?? 0,
     };
 };
 
 export const readMemoryHeadroom = async (): Promise<MemoryHeadroom> => {
-    const [residentBytes, limitBytes, swapBytes, pressureText] = await Promise.all([
+    const [residentBytes, limitBytes, engineBytes, swapBytes, pressureText] = await Promise.all([
         numericFile(MEMORY_CURRENT),
         numericFile(MEMORY_MAX),
+        engineTotalBytes(),
         numericFile(MEMORY_SWAP_CURRENT),
         readFile(MEMORY_PRESSURE, "utf8").catch(() => ""),
     ]);
-    return headroomFrom({ residentBytes, limitBytes, swapBytes, pressureText });
+    return headroomFrom({ residentBytes, limitBytes, engineBytes, swapBytes, pressureText });
 };
 
 const GIB = 1024 ** 3;

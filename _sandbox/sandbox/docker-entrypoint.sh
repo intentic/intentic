@@ -147,6 +147,11 @@ fi
 # boot's death check reads, so a leak ends as a named diagnosis instead of the kernel picking a victim.
 heap_mb=1536
 cgroup_max="$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)"
+# A cap past the engine's own total never binds, so the smaller of the two is what this box has.
+engine_kib="$(sed -n 's/^MemTotal: *\([0-9][0-9]*\) kB$/\1/p' /proc/meminfo 2>/dev/null || true)"
+if [ "$cgroup_max" != "max" ] && [ -n "$cgroup_max" ] && [ -n "$engine_kib" ] && [ "$engine_kib" -gt 0 ] && [ "$cgroup_max" -gt $((engine_kib * 1024)) ]; then
+    cgroup_max=$((engine_kib * 1024))
+fi
 if [ "$cgroup_max" != "max" ] && [ -n "$cgroup_max" ]; then
     quarter=$((cgroup_max / 1048576 / 4))
     if [ "$quarter" -lt 768 ]; then heap_mb=768

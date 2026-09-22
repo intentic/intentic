@@ -44,8 +44,9 @@ export const SANDBOX_CAPABILITIES = ["SYS_ADMIN", "SYS_PTRACE"] as const;
 export const LOCAL_SANDBOX_MEMORY = "7g";
 
 const GIB = 1024 ** 3;
-// Host reserve (distro, docker, sibling containers), and the floor below which a cap breaks the toolchain.
+// What the derived cap leaves the engine (distro, docker, sibling containers); an owner's ask may take it.
 const SANDBOX_MEMORY_RESERVE = 3 * GIB;
+// Below this any cap, derived or asked, breaks the image's own toolchain.
 const SANDBOX_MEMORY_FLOOR = 4 * GIB;
 // Unbounded (`-1`): no-swap cgroups livelock reclaiming file-backed pages rather than triggering OOM.
 export const SANDBOX_MEMORY_SWAP = "-1";
@@ -53,24 +54,20 @@ export const SANDBOX_MEMORY_SWAP = "-1";
 // Formats a byte cap as docker's `<n>g`; shared so a derived and an explicit ask round identically.
 const capString = (capBytes: number): string => `${Math.max(1, Math.floor(capBytes / GIB))}g`;
 
-// An owner's explicit cap, in bytes, held to the same bounds as the derived one; a malformed value throws rather than
-// silently falling back. An unmeasurable machine honours the ask as typed.
-const overrideCapBytes = (override: string, totalBytes: number): number => {
+// An owner's explicit cap in bytes: the number typed, raised only to the floor; a malformed value throws, never falls back.
+const overrideCapBytes = (override: string): number => {
     const asked = /^(\d+)g$/u.exec(override.trim());
     if (asked === null) {
         throw new Error(`SANDBOX_MEMORY must be whole GiB spelled '<n>g' (e.g. '10g'), got '${override}'`);
     }
-    const askedBytes = Math.max(Number(asked[1]) * GIB, SANDBOX_MEMORY_FLOOR);
-    const measured = Number.isFinite(totalBytes) && totalBytes > 0;
-    return measured ? Math.min(askedBytes, Math.max(totalBytes - SANDBOX_MEMORY_RESERVE, SANDBOX_MEMORY_FLOOR)) : askedBytes;
+    return Math.max(Number(asked[1]) * GIB, SANDBOX_MEMORY_FLOOR);
 };
 
-// The per-machine cap, as docker's `<n>g` string, from bytes the caller measured (this module can't read /proc/meminfo
-// itself). `override` (SANDBOX_MEMORY, replayed) replaces the derived cap rather than raising a floor.
+// The cap as docker's `<n>g`, from engine bytes the caller measured: `override` (SANDBOX_MEMORY, replayed) replaces the derived cap.
 export const localSandboxMemory = (totalBytes: number, override?: string): string => {
     // Empty is absent, not invalid: replayableEnv drops empty values, so an unset cap arrives either way.
     if (override !== undefined && override.trim() !== "") {
-        return capString(overrideCapBytes(override, totalBytes));
+        return capString(overrideCapBytes(override));
     }
     if (!Number.isFinite(totalBytes) || totalBytes <= 0) {
         return LOCAL_SANDBOX_MEMORY;

@@ -15,7 +15,8 @@ app); this package is why they cannot disagree about what one is.
   swap unbounded; `index.ts` says why each of those replaced a fraction and a no-swap rule that froze real
   machines). CPUs are unbounded unless asked. Three replayed env vars carry what the owner asked for instead,
   said once ON the container and re-emitted onto every container that replaces it: `SANDBOX_MEMORY` (whole
-  GiB, held inside the same bounds), `SANDBOX_CPUS` (whole cores, at most the engine's), and `SANDBOX_RUNTIME`
+  GiB, the number typed: the 4 GiB floor holds, the reserve and the engine's size do not, since the owner may give the
+  sandbox all of their machine), `SANDBOX_CPUS` (whole cores, at most the engine's), and `SANDBOX_RUNTIME`
   (allowlisted directives the owner added beyond the approved overlay's, `--privileged`, `--gpus=all`). The
   run carries the UNION of the overlay's directives and the owner's, and stamps the overlay's half on the
   container as `SANDBOX_OVERLAY_RUNTIME`, so a reader can tell a capability's demand (which a view draws locked)

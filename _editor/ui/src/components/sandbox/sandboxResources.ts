@@ -9,14 +9,13 @@ import type { DeviceSandboxResources } from "./deviceDetail.js";
 export const PRIVILEGED_TOKEN = `--privileged`;
 export const GPU_TOKEN = `--gpus=all`;
 
-/** The Docker engine's size, the ceiling every cap here is bounded by. */
+/** The Docker engine's size: all a sandbox can use, whatever its caps say. */
 export interface EngineFacts {
     memoryBytes: number;
     cpus: number;
 }
 
-// Rails a cap runs between, mirrored from the run contract's `localSandboxMemory`/`localSandboxCpus`: the
-// contract clamps whatever arrives, so a stale rail here costs a refused keystroke, never a wrong cap.
+// Mirrored from the run contract's `localSandboxMemory`/`localSandboxCpus`, which bounds whatever arrives the same way.
 const GIB = 1024 ** 3;
 const MEMORY_FLOOR_GIB = 4;
 const HOST_RESERVE_GIB = 3;
@@ -26,10 +25,18 @@ export interface CapBounds {
     readonly max?: number | undefined;
 }
 
-export const memoryBounds = (engine: EngineFacts | undefined): CapBounds =>
-    engine === undefined
-        ? { min: MEMORY_FLOOR_GIB }
-        : { min: MEMORY_FLOOR_GIB, max: Math.max(MEMORY_FLOOR_GIB, Math.floor(engine.memoryBytes / GIB) - HOST_RESERVE_GIB) };
+// A floor and no ceiling: the owner may give the sandbox the engine's reserve, or a cap past the engine's size.
+export const MEMORY_BOUNDS: CapBounds = { min: MEMORY_FLOOR_GIB };
+
+// The engine's memory in whole GiB, rounded down: a cap above it buys the sandbox nothing.
+export const engineMemoryGib = (engine: EngineFacts | undefined): number | undefined =>
+    engine === undefined ? undefined : Math.floor(engine.memoryBytes / GIB);
+
+// What an empty memory field means on this engine: the contract's derived cap, the engine minus its reserve.
+export const defaultMemoryGib = (engine: EngineFacts | undefined): number | undefined => {
+    const total = engineMemoryGib(engine);
+    return total === undefined ? undefined : Math.max(MEMORY_FLOOR_GIB, total - HOST_RESERVE_GIB);
+};
 
 export const cpuBounds = (engine: EngineFacts | undefined): CapBounds =>
     engine === undefined ? { min: 1 } : { min: 1, max: Math.max(1, Math.floor(engine.cpus)) };
@@ -82,7 +89,8 @@ export interface FormProblems {
     readonly cpus?: string | undefined;
 }
 
-const capProblem = (value: number | null, bounds: CapBounds, unit: string, floorWhy: string, ceilingWhy: string): string | undefined => {
+// `ceilingWhy` speaks only for bounds that carry a max.
+const capProblem = (value: number | null, bounds: CapBounds, unit: string, floorWhy: string, ceilingWhy?: string): string | undefined => {
     if (value === null) {
         return undefined;
     }
@@ -93,19 +101,13 @@ const capProblem = (value: number | null, bounds: CapBounds, unit: string, floor
         return `At least ${bounds.min} ${unit}: ${floorWhy}`;
     }
     if (bounds.max !== undefined && value > bounds.max) {
-        return `At most ${bounds.max} ${unit} on this computer: ${ceilingWhy}`;
+        return `At most ${bounds.max} ${unit} on this computer${ceilingWhy === undefined ? `.` : `: ${ceilingWhy}`}`;
     }
     return undefined;
 };
 
 export const formProblems = (form: ResourcesForm, engine: EngineFacts | undefined): FormProblems => {
-    const memory = capProblem(
-        form.memoryGib,
-        memoryBounds(engine),
-        `GiB`,
-        `below that the sandbox's own toolchain stops fitting.`,
-        `the rest is what it keeps for itself.`,
-    );
+    const memory = capProblem(form.memoryGib, MEMORY_BOUNDS, `GiB`, `below that the sandbox's own toolchain stops fitting.`);
     const cpus = capProblem(form.cpus, cpuBounds(engine), `CPUs`, `a sandbox needs a core to run on.`, `that is every core its engine has.`);
     return { ...(memory === undefined ? {} : { memory }), ...(cpus === undefined ? {} : { cpus }) };
 };

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { MarkdownFigure, SandboxResourcesDialog, useDevice, ui } from "@intentic/ui";
-import { memoryBounds, type ResourcesAsk } from "@intentic/ui/sandbox-resources";
+import { engineMemoryGib, type ResourcesAsk } from "@intentic/ui/sandbox-resources";
 import { useNow } from "@intentic/ui/async";
 import { formatClock, formatDateTime } from "@intentic/ui/format";
 import { copyCodeFromEvent } from "@intentic/ui/markdown";
@@ -176,7 +176,7 @@ const sendAnyway = (): void => {
 
 // THE RAISE OFFERED ON A LOW-MEMORY HOLD. The daemon says the box is short; this says whether anything can be done
 // about it from here, which only the fleet knows: a machine that is not a connected device has no door a reshape
-// travels, and an engine already given away to the ceiling has nothing left to give.
+// travels, and an engine already given away whole has nothing left to give.
 const selfResources = useSelfResources();
 // How much to offer, above what the container has now. Smaller than this and a raise buys less than the gibibyte a
 // turn must find free; larger and one press hands the box most of the machine without being asked.
@@ -185,16 +185,16 @@ const currentMemoryGib = computed(() => {
     const bytes = selfResources.current.value?.memoryBytes;
     return bytes === undefined ? undefined : Math.floor(bytes / 1024 ** 3);
 });
-// The cap the form opens on, bounded by what this engine will allow; undefined when there is no room above the
-// current one, which is also what withdraws the offer. An uncapped container is left alone: it has no ceiling to
-// raise, and naming a number would lower it.
+// The cap the form opens on, bounded by the engine's own size, past which a raise buys nothing; undefined when the cap
+// already reaches it, which is also what withdraws the offer. An uncapped container is left alone: it has no ceiling
+// to raise, and naming a number would lower it.
 const suggestedMemoryGib = computed(() => {
     const now = currentMemoryGib.value;
-    const ceiling = memoryBounds(selfResources.engine.value).max;
-    if (now === undefined || ceiling === undefined || ceiling <= now) {
+    const engine = engineMemoryGib(selfResources.engine.value);
+    if (now === undefined || engine === undefined || engine <= now) {
         return undefined;
     }
-    return Math.min(now + MEMORY_STEP_GIB, ceiling);
+    return Math.min(now + MEMORY_STEP_GIB, engine);
 });
 // Held too: its clause promises the message waits through the restart, and a restart under a running turn kills it.
 const memoryOffer = computed(

@@ -48,11 +48,14 @@ Who pays for scale is a design decision, not an accident:
   a sandbox that saturates the CPU is the user's machine's problem. Memory is the one exception, and it
   is a narrow one: the local shape carries a `--memory`/`--memory-swap` cap, because user-owned compute
   still means a runaway build must not be able to take the user's desktop down with it, and a cgroup is
-  the only thing that can stop it in time. It is a **share** of the machine, not a number — 35% held
-  between 4 and 24 GiB, so two sandboxes fit on any host big enough for two (`localSandboxMemory`,
-  `_shared/sandbox-run/src/index.ts`). The measurement rides for free: `intentic sandbox run-command`
-  answers from inside an uncapped probe container the flow was already starting, where `/proc/meminfo`
-  reports the docker engine's own total. Hosted shapes opt out via `init: false` and own their sizing.)
+  the only thing that can stop it in time. It is a **share** of the machine, not a number — everything
+  the docker engine has but a 3 GiB reserve for its other tenants, never under 4 GiB (`localSandboxMemory`,
+  `_shared/sandbox-run/src/index.ts`) — and it is only the default: an owner's own cap replaces it as typed,
+  reserve included and even past the engine's size, because the machine is theirs, and everything inside the
+  box that reads its ceiling reads the smaller of the cap and the engine. The measurement rides for free:
+  `intentic sandbox run-command` answers from inside an uncapped probe container the flow was already
+  starting, where `/proc/meminfo` reports the docker engine's own total. Hosted shapes opt out via
+  `init: false` and own their sizing.)
 - **The platform is off the hot path.** The browser drives the daemon directly; the daemon announces
   its URL on boot (not a heartbeat: platform traffic is proportional to boot events, not sandbox
   count × a tick); the SPA is static files. Steady-state platform traffic per active user is roughly

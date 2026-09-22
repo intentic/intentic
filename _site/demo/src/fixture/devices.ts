@@ -56,8 +56,8 @@ const SANDBOXES: NonNullable<Device[`sandboxes`]> = [
         running: true,
         image: `ghcr.io/intentic/sandbox:latest`,
         tunnelRunning: true,
-        // Capped well under the engine's ceiling, so a raise has somewhere to go: the offer withdraws itself when
-        // the cap is already everything the machine will give.
+        // Capped well under the engine's size, so a raise has somewhere to go: the offer withdraws itself once the
+        // cap reaches everything the engine has.
         resources: { memoryBytes: 16 * GIB, cpus: 8, privileged: true, gpu: false, hostRuntime: [`--privileged`], overlayRuntime: [] },
     },
     {

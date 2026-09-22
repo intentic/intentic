@@ -1,6 +1,18 @@
 import { test, expect } from "bun:test";
+import { localSandboxMemory } from "@intentic/sandbox-run";
 import { type DeviceSandboxResources, resourcesSummary } from "@intentic/ui/device";
-import { askFrom, capFromField, cpuBounds, formFrom, formProblems, gpuDropped, locksOf, memoryBounds } from "@intentic/ui/sandbox-resources";
+import {
+    askFrom,
+    capFromField,
+    cpuBounds,
+    defaultMemoryGib,
+    engineMemoryGib,
+    formFrom,
+    formProblems,
+    gpuDropped,
+    locksOf,
+    MEMORY_BOUNDS,
+} from "@intentic/ui/sandbox-resources";
 
 // Pins the resources form's arithmetic here (the kit that owns it has no test runner): what it starts from,
 // refuses, and sends on Apply. Imported via the deep path, not the barrel, so this doesn't boot the component graph.
@@ -18,14 +30,22 @@ const share = (overrides: Partial<DeviceSandboxResources> = {}): DeviceSandboxRe
     ...overrides,
 });
 
-// Whole GiB from a 4 GiB floor to engine-minus-3GiB; whole cores from 1 to the engine's count. A too-small
-// machine still offers the floor; an unmeasured one leaves the ceiling open.
-test(`bounds a cap by the engine, minus what the host keeps`, () => {
-    expect(memoryBounds({ memoryBytes: 20 * GIB, cpus: 12 })).toEqual({ min: 4, max: 17 });
-    expect(memoryBounds({ memoryBytes: 6 * GIB, cpus: 2 })).toEqual({ min: 4, max: 4 });
-    expect(memoryBounds(undefined)).toEqual({ min: 4 });
+// Memory has a 4 GiB floor and no ceiling; whole cores run from 1 to the engine's count, open when unmeasured.
+test(`floors a memory cap without capping it, and bounds cores by the engine`, () => {
+    expect(MEMORY_BOUNDS).toEqual({ min: 4 });
     expect(cpuBounds({ memoryBytes: 20 * GIB, cpus: 12 })).toEqual({ min: 1, max: 12 });
     expect(cpuBounds(undefined)).toEqual({ min: 1 });
+});
+
+// The empty field's default is the contract's own derived cap, on every engine size, the WSL guest's 19.53 GiB included.
+test(`names the same default the run contract derives, and the engine's whole GiB`, () => {
+    for (const bytes of [6 * GIB, 8 * GIB, 16 * GIB, 20479632 * 1024, 20 * GIB, 64 * GIB]) {
+        const engine = { memoryBytes: bytes, cpus: 8 };
+        expect(defaultMemoryGib(engine), String(bytes)).toBe(Number.parseInt(localSandboxMemory(bytes), 10));
+        expect(engineMemoryGib(engine), String(bytes)).toBe(Math.floor(bytes / GIB));
+    }
+    expect(defaultMemoryGib(undefined)).toBeUndefined();
+    expect(engineMemoryGib(undefined)).toBeUndefined();
 });
 
 // Caps round down to whole units; absent means the default (empty field). Switches hold the ask, so a
@@ -82,13 +102,15 @@ test(`names the field that is outside the rails`, () => {
     const fine = formFrom(share());
     expect(formProblems(fine, engine)).toEqual({});
     expect(formProblems({ ...fine, memoryGib: 2 }, engine)).toEqual({ memory: expect.stringContaining(`At least 4 GiB`) });
-    expect(formProblems({ ...fine, memoryGib: 18 }, engine)).toEqual({ memory: expect.stringContaining(`At most 17 GiB`) });
+    // Into the engine's reserve and past its size alike: the owner's number, never refused.
+    expect(formProblems({ ...fine, memoryGib: 18 }, engine)).toEqual({});
+    expect(formProblems({ ...fine, memoryGib: 64 }, engine)).toEqual({});
     expect(formProblems({ ...fine, memoryGib: 8.5 }, engine)).toEqual({ memory: `Whole GiB only.` });
     expect(formProblems({ ...fine, cpus: 0 }, engine)).toEqual({ cpus: expect.stringContaining(`At least 1 CPUs`) });
     expect(formProblems({ ...fine, cpus: 16 }, engine)).toEqual({ cpus: expect.stringContaining(`At most 12 CPUs`) });
     // Both at once are both said, each under its own field.
     expect(Object.keys(formProblems({ ...fine, memoryGib: 1, cpus: 99 }, engine))).toEqual([`memory`, `cpus`]);
-    // No engine, no ceiling: the contract clamps whatever arrives, and the form does not guess at a number.
+    // No engine, no CPU ceiling: the contract bounds cores itself, and the form does not guess at a number.
     expect(formProblems({ ...fine, memoryGib: 999, cpus: 999 }, undefined)).toEqual({});
     expect(formProblems({ ...fine, memoryGib: null, cpus: null }, engine)).toEqual({});
 });

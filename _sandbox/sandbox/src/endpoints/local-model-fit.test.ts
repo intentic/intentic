@@ -1,5 +1,5 @@
 import { test, expect, afterEach } from "bun:test";
-import { estimatedModelMemory, fitsBudget, localModelGpu } from "./local-model-fit.js";
+import { estimatedModelMemory, fitsBudget, localModelGpu, memoryFrom } from "./local-model-fit.js";
 
 // The arithmetic the connect view's offer and the start's admission check share. Reading the machine is the
 // integration half's job (local-model-fit.integration.test.ts); nothing here touches a disk.
@@ -18,6 +18,16 @@ test("the estimate is weights plus a q8 KV cache plus the runtime's own floor", 
     expect(estimatedModelMemory(16_000_000_000, 32_768)).toBe(16_000_000_000 + 2 * 1024 ** 3 + 1024 ** 3);
     // Three times the window is three times the cache and nothing else: the floor is not paid twice.
     expect(estimatedModelMemory(16_000_000_000, 98_304) - estimatedModelMemory(16_000_000_000, 32_768)).toBe(4 * 1024 ** 3);
+});
+
+// A 16 GiB cap binds on the WSL guest's 19.53 GiB engine; a 32 GiB one never can, so the engine is the number then.
+test("memory is the cap where it binds and the engine's total where it does not", () => {
+    const meminfo = "MemTotal:       20479632 kB\nMemFree:          812344 kB\n";
+    expect(memoryFrom("17179869184\n", meminfo)).toEqual({ bytes: 17_179_869_184, capped: true });
+    expect(memoryFrom("34359738368\n", meminfo)).toEqual({ bytes: 20_479_632 * 1024, capped: false });
+    expect(memoryFrom("max\n", meminfo)).toEqual({ bytes: 20_479_632 * 1024, capped: false });
+    // An unreadable engine leaves the cap as the only number there is.
+    expect(memoryFrom("17179869184\n", "")).toEqual({ bytes: 17_179_869_184, capped: true });
 });
 
 // Zero is "we could not measure", and refusing on a reading we never took would be worse than letting llama.cpp decide.

@@ -12,12 +12,14 @@ import {
     askFrom,
     capFromField,
     cpuBounds,
+    defaultMemoryGib,
     type EngineFacts,
+    engineMemoryGib,
     formFrom,
     formProblems,
     gpuDropped,
     locksOf,
-    memoryBounds,
+    MEMORY_BOUNDS,
     type ResourcesAsk,
     type ResourcesForm,
 } from "./sandboxResources.js";
@@ -40,7 +42,7 @@ const {
      * The container's share as it runs now, read off docker by whoever lists the machine. Undefined only while closed.
      */
     current?: DeviceSandboxResources | undefined;
-    /** The Docker engine's size, the rails the two caps run between. Absent when the machine could not say. */
+    /** The Docker engine's size: the CPU rail, the memory default, and all a sandbox can use. Absent when the machine could not say. */
     engine?: EngineFacts | undefined;
     /** Whether this is the sandbox serving the page, which the restart will take down. */
     selfWarning?: boolean;
@@ -72,7 +74,8 @@ watch(
 
 const locks = computed(() => (current === undefined ? {} : locksOf(current)));
 const dropped = computed(() => current !== undefined && gpuDropped(current));
-const memory = computed(() => memoryBounds(engine));
+const memoryDefault = computed(() => defaultMemoryGib(engine));
+const engineGib = computed(() => engineMemoryGib(engine));
 const cpus = computed(() => cpuBounds(engine));
 const problems = computed(() => formProblems(form.value, engine));
 const ask = computed(() => askFrom(initial.value, form.value));
@@ -90,13 +93,22 @@ const setCap = (field: `memoryGib` | `cpus`, event: Event): void => {
 // What an empty field means, said in the field: a measured engine can name the default; an unmeasured one names the
 // rule.
 const memoryPlaceholder = computed(() =>
-    memory.value.max === undefined ? t(`ui.sandboxResourcesDialog.default`) : t(`ui.sandboxResourcesDialog.defaultMax`, { max: memory.value.max }),
+    memoryDefault.value === undefined
+        ? t(`ui.sandboxResourcesDialog.default`)
+        : t(`ui.sandboxResourcesDialog.defaultIs`, { value: memoryDefault.value }),
 );
 const cpuPlaceholder = computed(() =>
     cpus.value.max === undefined ? t(`ui.sandboxResourcesDialog.all`) : t(`ui.sandboxResourcesDialog.allMax`, { max: cpus.value.max }),
 );
 
-// The bounds as one phrase inside the sentence that reports them, rather than three fragments the markup joins: an
+// The floor always, and the engine's size where measured, since a cap past it is no cap.
+const memoryDescription = computed(() =>
+    engineGib.value === undefined
+        ? t(`ui.sandboxResourcesDialog.memoryWhole`, { min: MEMORY_BOUNDS.min })
+        : t(`ui.sandboxResourcesDialog.memoryWholeOf`, { min: MEMORY_BOUNDS.min, engine: engineGib.value }),
+);
+
+// The CPU bounds as one phrase inside the sentence that reports them, rather than three fragments the markup joins: an
 // unmeasured engine has no ceiling to name, and a translator needs the whole sentence to move its words around.
 const bounds = (measured: { min: number; max?: number }): string =>
     measured.max === undefined ? String(measured.min) : t(`ui.sandboxResourcesDialog.range`, { min: measured.min, max: measured.max });
@@ -118,15 +130,14 @@ const uid = useId();
                     class="px-3.5 py-3"
                     :tone="problems.memory === undefined ? `default` : `warning`"
                 >
-                    <template #description>{{ t(`ui.sandboxResourcesDialog.memoryWhole`, { bounds: bounds(memory) }) }}</template>
+                    <template #description>{{ memoryDescription }}</template>
                     <template #control>
                         <!-- The unit sits in a fixed, right-aligned span rather than loose text, so the two cap fields' numbers line up. -->
                         <label class="flex items-center gap-2 text-xs text-muted">
                             <input
                                 :id="`${uid}-memory`"
                                 type="number"
-                                :min="memory.min"
-                                :max="memory.max"
+                                :min="MEMORY_BOUNDS.min"
                                 step="1"
                                 :value="form.memoryGib ?? ``"
                                 :placeholder="memoryPlaceholder"

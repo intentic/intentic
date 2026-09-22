@@ -456,7 +456,7 @@ it(`keeps the menu's vocabulary the same for both apps`, () => {
 // The sandbox's share of the machine, and the Resources form that changes it (reshape carries only what changed).
 const GIB = 1024 ** 3;
 // A connected, permitted machine with a 12 GiB/4-core cap, privileged by the environment, and a 20 GiB/12-core
-// engine to bound the form.
+// engine the form reads its CPU rail and memory default from.
 const shared = (): Device => {
     const row = managed(true);
     return {
@@ -506,20 +506,22 @@ it(`opens the Resources form on the row's own share and sends only what changed,
 
     const memory = document.body.querySelector<HTMLInputElement>(`input[aria-label="Memory cap in GiB"]`);
     expect(memory).toHaveProperty(`value`, `12`);
-    // The rails are the engine's: 20 GiB minus the 3 the host keeps.
-    expect(everything()).toContain(`4 to 17 on this computer`);
+    // A floor and no ceiling: the engine's size is said, and its 20 GiB less the 3 it keeps is what empty means.
+    expect(everything()).toContain(`at least 4. Docker on this computer has 20 GiB`);
+    expect(memory).toHaveProperty(`placeholder`, `default: 17`);
     // The environment's privilege isn't the owner's to withdraw, and the switch says why.
     expect(document.body.querySelector(`input[aria-label="Run privileged"]`)).toHaveProperty(`disabled`, true);
     expect(everything()).toContain(`approved environment requires this`);
     expect(dialogButton(`Apply`)).toHaveProperty(`disabled`, true);
 
-    memory!.value = `16`;
+    // Past the derived share, into what the engine keeps for itself: the owner's to give.
+    memory!.value = `18`;
     memory!.dispatchEvent(new Event(`input`));
     await nextTick();
     expect(dialogButton(`Apply`)).toHaveProperty(`disabled`, false);
     dialogButton(`Apply`)?.click();
     await nextTick();
-    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 16 } }]);
+    expect(verbCalls).toEqual([{ hostId: `host-1`, slug: `work`, op: `reshape`, resources: { memoryGib: 18 } }]);
 });
 
 it(`says nothing about connecting a device that is already managing its sandboxes`, () => {
