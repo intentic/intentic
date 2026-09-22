@@ -39,11 +39,11 @@
             "notes": "npm @cursor/sdk. Never baked into a published image: its licence grants no redistribution."
         },
         "opencode": {
-            "blessed": "1.18.31",
+            "blessed": "1.18.32",
             "notes": "npm opencode-ai, the runtime behind Grok turns."
         },
         "translator": {
-            "blessed": "7.3.9",
+            "blessed": "7.3.12",
             "notes": "CLIProxyAPI GitHub release, the subscription translator behind Gemini, Kimi and ChatGPT turns."
         }
     }
