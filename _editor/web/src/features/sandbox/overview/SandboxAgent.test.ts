@@ -23,7 +23,6 @@ mock.module(`../agent-settings/safety/AgentRules.vue`, () => stub(`Rules`));
 mock.module(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
 mock.module(`../agent-settings/skills/AgentMemoryImport.vue`, () => stub(`Memory import`));
 mock.module(`../agent-settings/behaviour/AgentCodeSearch.vue`, () => stub(`Code search`));
-mock.module(`../agent-settings/behaviour/AgentDependencies.vue`, () => stub(`Dependencies`));
 mock.module(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Command output`));
 mock.module(`../agent-settings/behaviour/AgentSubagents.vue`, () => stub(`Subagents`));
 mock.module(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a turn breaks`));
@@ -47,7 +46,6 @@ const EVERY_GROUP = [
     `Memory`,
     `Memory import`,
     `Code search`,
-    `Dependencies`,
     `Command output`,
     `Subagents`,
     `When a turn breaks`,
@@ -131,7 +129,7 @@ it(`opens the safety category with the gate rules alone`, async () => {
 
 it(`holds delegation under tools, not under the gate rules`, async () => {
     const { el } = await mount({ section: `tools` });
-    expect(shown(el)).toEqual([`Code search`, `Dependencies`, `Command output`, `Subagents`]);
+    expect(shown(el)).toEqual([`Code search`, `Command output`, `Subagents`]);
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;

@@ -20,9 +20,6 @@ import {
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type IsolationAnchor, fromWorktree, inWorktree, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
 import { admitTurn } from "../../../platform/resources/memory-admission.js";
-import { createFreshnessResolver } from "../../../dependencies/registry-freshness.js";
-import { createWorkspacePins } from "../../../dependencies/workspace-pins.js";
-import { statePath } from "../../../workspace/layout/state-paths.js";
 import { dirtyPathsAcross } from "../../../git/changes/changes.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 import { accountsServer } from "../../../browser/tools/accounts-tools.js";
@@ -752,14 +749,6 @@ const honoured = (
         sessionStore: sessionStoreOf(services, context.base.conversationId),
         dependencyIssue: (command) => services.dependencies.issueAt(dependencyDirForCommand(dependencyDir, services.workspace.root, command)),
         dependencyInstallAllowed,
-        // Bound here for the same reason as the dependency answer above: the last point that still knows the workspace
-        // root, which the resolver's cache is keyed to. Built even when the setting is off, since it holds no
-        // connection until asked.
-        dependencyFreshness: settings.dependencyFreshness,
-        freshnessResolver: createFreshnessResolver({ cacheDir: statePath(services.workspace.root, ".intentic/local/cache/", "freshness") }),
-        // Lazy: walked on the first pin a turn actually sees, so a turn touching no manifest pays nothing for building
-        // this.
-        workspacePins: createWorkspacePins(services.workspace.root),
         ...(startPath !== undefined ? { cwd: startPath } : {}),
         // Travels with the cwd, since it is a fact about that cwd: only an isolated turn works in a copy of its own,
         // and a main-tree turn's checkout is the owner's. Stated either way rather than omitted when false, since here

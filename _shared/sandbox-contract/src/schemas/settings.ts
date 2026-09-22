@@ -13,10 +13,6 @@ export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
 export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 // Excludes "custom": there is nothing to fetch, it's whatever the owner already typed into the settings field.
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
-// Declared out here because the daemon branches on it in three places (whether to wire the hook, consult the successor
-// list, what the notice says) and the browser branches on it too.
-export const DependencyFreshnessSchema = z.enum(["off", "versions", "full"]);
-export type DependencyFreshness = z.infer<typeof DependencyFreshnessSchema>;
 // Rules: "at this moment, if this is true, do this" — one table replacing three settings that were the same idea built
 // three ways; a fourth is now a row here, not a release. Moments are named to match `WorkspaceEventKind`, so folding
 // chores in later won't rename what users wrote.
@@ -322,14 +318,6 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Keep an up-to-date markdown rendering of every document, image and audio file in the workspace, made in the background as files land, so the agent reads a pre-derived text instead of paying to parse the file mid-task. Costs background CPU on a document-heavy workspace, so it is a switch rather than a default.",
         ),
-    // versions: a measurement only (the registry's own newest release).
-    // full: also the name of a successor, but only where the registry itself corroborates it (deprecated, or nothing
-    // published in 18 months) — curation supplies the name, measurement supplies the reason.
-    // Informs, never blocks: matching a version the workspace already pins is usually correct, and a gate would fight
-    // legitimate work more than it caught mistakes.
-    dependencyFreshness: DependencyFreshnessSchema.default("off").describe(
-        "Whether a version the agent is about to pin is checked against the package's own registry first. Facts only, or facts plus the name of a maintained replacement where the registry agrees the current choice has been abandoned. It tells the agent and lets it decide rather than refusing, because matching a version your project already uses is usually the right answer and a gate would fight it.",
-    ),
     outputCleaners: z
         .string()
         .default("")
@@ -552,22 +540,6 @@ export const TurnExperimentSchema = z.object({
     cohort: z.string().optional(),
 });
 export type TurnExperiment = z.infer<typeof TurnExperimentSchema>;
-// One dependency version or library improvement suggested or pinned.
-export const DependencyImprovementSchema = z.object({
-    prevented: z.string(),
-    chosen: z.string(),
-    reason: z.string(),
-    at: z.number().optional(),
-});
-export type DependencyImprovement = z.infer<typeof DependencyImprovementSchema>;
-// Rollup of registry freshness interventions over the queried day window.
-export const DependencySavingsSchema = z.object({
-    checked: z.number(),
-    improved: z.number(),
-    recent: z.array(DependencyImprovementSchema),
-    updatedAt: z.number().optional(),
-});
-export type DependencySavings = z.infer<typeof DependencySavingsSchema>;
 // What the settings row can say about the brief without opening it: whether there is one, how much of it this budget
 // reaches, and whether anything is scheduled to rewrite it. Read off the file and the automation store, never stored.
 export const FieldNotesStatusSchema = z.object({
@@ -596,7 +568,6 @@ export const SavingsReportSchema = z.object({
     // Same absence rule as `search`: not measured, never zero.
     map: TurnExperimentSchema.optional(),
     notes: TurnExperimentSchema.optional(),
-    dependencies: DependencySavingsSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 

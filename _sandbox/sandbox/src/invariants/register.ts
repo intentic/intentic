@@ -3,7 +3,6 @@ import { checks as agentsChecks, owner as agentsOwner, type FleetRegistryDeps } 
 import { checks as capabilityChecks, owner as capabilityOwner, type ManifestSecretDeps } from "../capabilities/invariant.js";
 import { checks as childrenChecks, owner as childrenOwner } from "../agent/subagents/invariant.js";
 import { checks as cursorChecks, type CommandGuardDeps, owner as cursorOwner } from "../runtimes/cursor/invariant.js";
-import { checks as dependenciesChecks, owner as dependenciesOwner } from "../dependencies/invariant.js";
 import { checks as derivedChecks, owner as derivedOwner } from "../derived/invariant.js";
 import { checks as engineChecks, owner as engineOwner } from "../engines/invariant.js";
 import { checks as exitChecks, type ExitInvariantDeps, owner as exitOwner } from "../exit/invariant.js";
@@ -49,7 +48,6 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(webextOwner, webextChecks());
     registry.register(runnerOwner, runnerChecks());
     registry.register(engineOwner, engineChecks());
-    registry.register(dependenciesOwner, dependenciesChecks());
     registry.register(derivedOwner, derivedChecks());
     registry.register(fenceOwner, fenceChecks());
     registry.register(runtimeOwner, runtimeChecks());

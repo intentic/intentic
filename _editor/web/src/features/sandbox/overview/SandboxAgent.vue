@@ -10,7 +10,6 @@ import AgentChecks from "../agent-settings/behaviour/AgentChecks.vue";
 import AgentClock from "../agent-settings/behaviour/AgentClock.vue";
 import AgentCodeSearch from "../agent-settings/behaviour/AgentCodeSearch.vue";
 import AgentCommandOutput from "../agent-settings/behaviour/AgentCommandOutput.vue";
-import AgentDependencies from "../agent-settings/behaviour/AgentDependencies.vue";
 import AgentFinishedWork from "../agent-settings/behaviour/AgentFinishedWork.vue";
 import AgentInstructions from "../agent-settings/skills/AgentInstructions.vue";
 import AgentMemory from "../agent-settings/skills/AgentMemory.vue";
@@ -109,7 +108,6 @@ const settingsBlocked = computed<NoticeModel | undefined>(() => {
         <!-- What it may reach for and how much comes back, ending with how much of the job it may delegate. -->
         <template v-else-if="section === `tools`">
             <AgentCodeSearch />
-            <AgentDependencies />
             <AgentCommandOutput />
             <AgentSubagents />
         </template>

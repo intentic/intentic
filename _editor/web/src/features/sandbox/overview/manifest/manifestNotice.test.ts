@@ -87,11 +87,11 @@ describe(`keys this build does not know`, () => {
     });
 
     test(`leans on the line for the eye, and repeats itself for everyone else`, () => {
-        const [notice] = manifestNotices(report({ kind: `unknownKey`, detail: `dependencyFreshnes`, suggestion: `dependencyFreshness` }));
+        const [notice] = manifestNotices(report({ kind: `unknownKey`, detail: `outputCleanrs`, suggestion: `outputCleaners` }));
         expect(notice?.lines[0]?.repairs.map((repair) => repair.label)).toEqual([`Rename it`, `Remove it`]);
         expect(notice?.lines[0]?.repairs.map((repair) => repair.spoken)).toEqual([
-            `Rename "dependencyFreshnes" to "dependencyFreshness"`,
-            `Remove "dependencyFreshnes"`,
+            `Rename "outputCleanrs" to "outputCleaners"`,
+            `Remove "outputCleanrs"`,
         ]);
     });
 

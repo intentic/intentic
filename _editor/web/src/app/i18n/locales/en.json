@@ -1759,20 +1759,6 @@
             "trimNoisyShellOutput": "Trim noisy shell output before it reaches the assistant.",
             "unCleanedAddHandler": "Un-cleaned (add a handler)"
         },
-        "agentDependencies": {
-            "alternatives": "Alternatives",
-            "checkVersionsAgainstRegistry": "Check versions against the registry",
-            "checkedAssistantAddsModifies": "Checked when the assistant adds or modifies dependencies in manifests and install commands.",
-            "dependencies": "Dependencies",
-            "factsOnlyWhetherNewer": "Facts only: whether a newer release exists, and whether the version picked is deprecated. The assistant is told and decides — matching a version this workspace already uses stays a good answer.",
-            "lookUpVersionBefore": "Look up a version before it is pinned, instead of recalling one.",
-            "nothingLookedUpNo": "Nothing is looked up, and no registry is contacted.",
-            "off": "Off",
-            "preventedOutdatedDeprecatedChoices": "prevented outdated or deprecated choices in favor of newer releases or maintained replacements",
-            "recentImprovements": "Recent improvements",
-            "sameFactsPlusName": "The same facts, plus the name of a maintained replacement where a package is being added that has one. Suggestions are made only as a package is added, never about one already in a manifest.",
-            "versions": "Versions"
-        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Apply completed work directly to workspace as uncommitted changes.",
             "archiveFinishedAgents": "Archive finished agents",

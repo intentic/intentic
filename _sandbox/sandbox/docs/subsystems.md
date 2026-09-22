@@ -44,16 +44,6 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   at CI's pace instead of a maintainer's memory. [src/runtimes/claude/claude-sdk.ts](../src/runtimes/claude/claude-sdk.ts) is the loader that
   makes it real for the engine loaded IN this process: both halves of the Claude SDK come from one installed
   prefix, resolved at turn start so a version can never change under a turn already running. Its `/engines` routes are `engines.routes.ts`.
-- [src/dependencies](../src/dependencies): whether the version an agent is about to pin is the one its registry
-  actually has. [src/agent/providers/agent-freshness.ts](../src/agent/providers/agent-freshness.ts) reads the pins out of an install
-  command or a manifest edit and hands the difference back as context, never as a refusal — matching a version the
-  workspace already pins is the commonest reason to write something other than the newest, and it is a good one.
-  `registry-freshness.ts` does the asking under two separate clocks: the caller waits a fraction of a second, the
-  fetch itself gets much longer and is not cancelled when the caller gives up, so a cold lookup lands in the cache
-  and the PostToolUse pass reports it a beat later instead of it being lost. `successors.ts` is the curated half
-  and the only opinion in the feature: it supplies the NAME of a replacement, while whether the incumbent is
-  actually finished stays a registry measurement, so an entry that stops being true stops being said. Off by
-  default (`dependencyFreshness`); off wires no hook and contacts nothing.
 - [src/agent/verification/agent-tests.ts](../src/agent/verification/agent-tests.ts): the `verify-tests` built-in, what a turn did to its tests,
   read at the Stop over every test file the tree says the turn touched. Two measurements: the assertion ratchet
   (the file's exact matchers, loose matchers and pinned literal text against the same file at HEAD, reporting a

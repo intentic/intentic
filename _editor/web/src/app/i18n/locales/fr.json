@@ -1759,20 +1759,6 @@
             "trimNoisyShellOutput": "Élaguer la sortie shell bruyante avant qu'elle n'atteigne l'assistant.",
             "unCleanedAddHandler": "Non nettoyée (ajoutez un gestionnaire)"
         },
-        "agentDependencies": {
-            "alternatives": "Alternatives",
-            "checkVersionsAgainstRegistry": "Vérifier les versions auprès du registre",
-            "checkedAssistantAddsModifies": "Vérifié quand l'assistant ajoute ou modifie des dépendances dans les manifestes et les commandes d'installation.",
-            "dependencies": "Dépendances",
-            "factsOnlyWhetherNewer": "Uniquement des faits : s'il existe une version plus récente, et si la version choisie est dépréciée. L'assistant en est informé et décide — reprendre une version que cet espace de travail utilise déjà reste une bonne réponse.",
-            "lookUpVersionBefore": "Chercher une version avant de l'épingler, au lieu de s'en souvenir.",
-            "nothingLookedUpNo": "Rien n'est cherché, et aucun registre n'est contacté.",
-            "off": "Désactivé",
-            "preventedOutdatedDeprecatedChoices": "choix obsolètes ou dépréciés évités au profit de versions plus récentes ou de remplacements maintenus",
-            "recentImprovements": "Améliorations récentes",
-            "sameFactsPlusName": "Les mêmes faits, plus le nom d'un remplacement maintenu quand on ajoute un paquet qui en a un. Les suggestions ne sont faites qu'à l'ajout d'un paquet, jamais sur un paquet déjà présent dans un manifeste.",
-            "versions": "Versions"
-        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Appliquer le travail terminé directement à l'espace de travail, en changements non committés.",
             "archiveFinishedAgents": "Archiver les agents terminés",

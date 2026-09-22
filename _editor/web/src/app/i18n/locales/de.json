@@ -1759,20 +1759,6 @@
             "trimNoisyShellOutput": "Lärmende Shell-Ausgabe kürzen, bevor sie den Assistenten erreicht.",
             "unCleanedAddHandler": "Ungesäubert (einen Handler hinzufügen)"
         },
-        "agentDependencies": {
-            "alternatives": "Alternativen",
-            "checkVersionsAgainstRegistry": "Versionen gegen die Registry prüfen",
-            "checkedAssistantAddsModifies": "Geprüft, wenn der Assistent Abhängigkeiten in Manifesten und Installationsbefehlen hinzufügt oder ändert.",
-            "dependencies": "Abhängigkeiten",
-            "factsOnlyWhetherNewer": "Nur Fakten: ob es ein neueres Release gibt und ob die gewählte Version veraltet ist. Dem Assistenten wird es gesagt, und er entscheidet — eine Version zu nehmen, die dieser Workspace schon benutzt, bleibt eine gute Antwort.",
-            "lookUpVersionBefore": "Eine Version nachschlagen, bevor sie festgeschrieben wird, statt sich an eine zu erinnern.",
-            "nothingLookedUpNo": "Es wird nichts nachgeschlagen, und keine Registry wird kontaktiert.",
-            "off": "Aus",
-            "preventedOutdatedDeprecatedChoices": "veraltete oder ausgemusterte Entscheidungen zugunsten neuerer Releases oder gepflegter Alternativen verhindert",
-            "recentImprovements": "Jüngste Verbesserungen",
-            "sameFactsPlusName": "Dieselben Fakten, plus der Name einer gepflegten Alternative, wo ein Paket hinzugefügt wird, das eine hat. Vorschläge kommen nur beim Hinzufügen eines Pakets, nie zu einem, das schon in einem Manifest steht.",
-            "versions": "Versionen"
-        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Fertige Arbeit direkt als nicht committete Änderungen in den Workspace übernehmen.",
             "archiveFinishedAgents": "Fertige Agenten archivieren",

@@ -23,7 +23,6 @@ import {
     type RequestDocument,
     type CommandJudgeMode,
     DEFAULT_SAFETY_POLICY,
-    type DependencyFreshness,
     documentOf,
     type PermissionMode,
     type Rule,
@@ -42,9 +41,6 @@ import type { ChildSupervisor } from "../subagents/children.js";
 import { browserArtifactHooks } from "../../browser/cast/browser-artifacts.js";
 import { browserSessionHooks } from "../../browser/sessions/browser-sessions.js";
 import { depsNoticeHooks } from "../tools/agent-deps.js";
-import type { FreshnessResolver } from "../../dependencies/registry-freshness.js";
-import type { WorkspacePins } from "../../dependencies/workspace-pins.js";
-import { freshnessHooks } from "../providers/agent-freshness.js";
 import { searchNoticeHooks } from "../verification/agent-search.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import { editDiagnosticsHooks, type EditReviewer } from "../verification/agent-diagnostics.js";
@@ -107,11 +103,6 @@ export interface AgentRequest {
     // Project-scoped dependency answer for the command-failure hook, so one project's error stays its own.
     readonly dependencyIssue?: (command: string) => Promise<DependencyIssue | undefined>;
     readonly dependencyInstallAllowed?: boolean;
-    // How far freshness checks may go, and the turn-scoped resolver that answers them; absent mode wires no hook.
-    readonly dependencyFreshness?: DependencyFreshness;
-    readonly freshnessResolver?: FreshnessResolver;
-    // What this workspace already pins, so a new package matching the catalog's version isn't reported as stale.
-    readonly workspacePins?: WorkspacePins;
     // Files the tree says are dirty, by both names, so a Bash edit gets the same diagnostics as a native Edit.
     readonly dirtyFiles?: DirtyFiles;
     // Owner's file.edited rules bound to this turn's placement, run on every file an edit tool or shell writes.
@@ -523,8 +514,6 @@ const baseOptions = (
             // Masks every stored credential to its reference in any tool result, not just Bash's.
             request.secrets !== undefined ? redactionHooks(request.secrets.list) : {},
             installSteeringHooks(request.dependencyInstallAllowed === true, request.onImageInstall),
-            // Checks a version about to be pinned against the registry; absent mode or resolver wires no hook.
-            freshnessHooks(request.dependencyFreshness, request.freshnessResolver, request.workspacePins),
             // Checks classified outbound calls against owner action rules before they run, even under
             // bypassPermissions.
             hasRules(request.actionRules) ? outboundGuardHooks(request.actionRules) : {},

@@ -1759,20 +1759,6 @@
             "trimNoisyShellOutput": "Przycinaj hałaśliwe wyjście powłoki, zanim dotrze do asystenta.",
             "unCleanedAddHandler": "Nieoczyszczone (dodaj obsługę)"
         },
-        "agentDependencies": {
-            "alternatives": "Alternatywy",
-            "checkVersionsAgainstRegistry": "Sprawdzaj wersje w rejestrze",
-            "checkedAssistantAddsModifies": "Sprawdzane, gdy asystent dodaje albo zmienia zależności w manifestach i poleceniach instalacji.",
-            "dependencies": "Zależności",
-            "factsOnlyWhetherNewer": "Same fakty: czy istnieje nowsze wydanie i czy wybrana wersja jest wycofana. Asystent dostaje tę informację i decyduje — dopasowanie się do wersji, której ta przestrzeń robocza już używa, wciąż jest dobrą odpowiedzią.",
-            "lookUpVersionBefore": "Sprawdź wersję, zanim zostanie przypięta, zamiast ją wspominać z pamięci.",
-            "nothingLookedUpNo": "Nic nie jest sprawdzane i żaden rejestr nie jest odpytywany.",
-            "off": "Wyłączone",
-            "preventedOutdatedDeprecatedChoices": "przestarzałych albo wycofanych wyborów zastąpiono nowszymi wydaniami lub utrzymywanymi zamiennikami",
-            "recentImprovements": "Ostatnie usprawnienia",
-            "sameFactsPlusName": "Te same fakty plus nazwa utrzymywanego zamiennika, gdy dodawany jest pakiet, który go ma. Sugestie pojawiają się tylko przy dodawaniu pakietu, nigdy przy takim, który już jest w manifeście.",
-            "versions": "Wersje"
-        },
         "agentFinishedWork": {
             "applyCompletedWorkDirectly": "Wprowadzaj skończoną pracę wprost do przestrzeni roboczej jako niezacommitowane zmiany.",
             "archiveFinishedAgents": "Archiwizuj skończone agenty",
