@@ -107,12 +107,21 @@ export const pairings = <T>(burns?: string): Pairings<T> => {
     };
 };
 
+// Who is presenting a token — and, when nobody is, whether that is a fact about the token or merely this read's
+// silence. The two are one answer everywhere else and must not be here: an unreadable manifest answers with the empty
+// fallback (json-file.ts), and a door that reported that as "not enrolled" would tell a peer to throw away a
+// credential this sandbox still holds.
+export type Presented =
+    | { readonly kind: "enrolled"; readonly id: string }
+    | { readonly kind: "unknown" }
+    | { readonly kind: "unreadable"; readonly detail: string };
+
 export interface Enrollments<X extends object> {
     // Enrolls an id and returns its durable token, the only time this daemon can see it. Re-issuing rotates: the old
     // token stops verifying the moment the new one lands, a clean replacement, not a second key.
     readonly issue: (id: string, extra: X) => Promise<string>;
-    // Who is presenting this token, or undefined; the only authorization these doors have.
-    readonly verify: (presented: string) => Promise<string | undefined>;
+    // Who is presenting this token; the only authorization these doors have.
+    readonly verify: (presented: string) => Promise<Presented>;
     readonly enrolled: (id: string) => Promise<boolean>;
     // Everything enrolled, without the digest: who is here and whatever this door keeps beside them.
     readonly list: () => Promise<({ readonly id: string } & X)[]>;
@@ -166,11 +175,18 @@ export const enrollments = <Shape extends z.ZodRawShape>(args: {
         },
         verify: async (presented) => {
             if (presented === "") {
-                return undefined;
+                return { kind: "unknown" };
+            }
+            // `state`, not `read`: the fallback an unreadable manifest answers with is indistinguishable from an empty
+            // one, and this is the read where that difference decides whether a peer keeps its credential.
+            const stored = await file.state();
+            if (stored.unreadable) {
+                return { kind: "unreadable", detail: stored.detail };
             }
             const hash = sha256Hex(presented);
             // Fixed-length hex digests, so the comparison is timing-safe regardless of the presented token's length.
-            return (await read()).find((held) => tokenEquals(held.hash, hash))?.id;
+            const held = (stored.value[args.key] ?? []).find((entry) => tokenEquals(entry.hash, hash));
+            return held === undefined ? { kind: "unknown" } : { kind: "enrolled", id: held.id };
         },
         enrolled: async (id) => (await read()).some((held) => held.id === id),
         list: async () =>

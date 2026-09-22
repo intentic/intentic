@@ -1,5 +1,5 @@
 import { existsSync, mkdtempSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -97,9 +97,9 @@ describe("enrollments", () => {
         const second = await store(historyRoot).issue("rig", {});
 
         const rebooted = store(historyRoot);
-        expect(await rebooted.verify(second)).toBe("rig");
-        expect(await rebooted.verify(first)).toBeUndefined();
-        expect(await rebooted.verify("")).toBeUndefined();
+        expect(await rebooted.verify(second)).toEqual({ kind: "enrolled", id: "rig" });
+        expect(await rebooted.verify(first)).toEqual({ kind: "unknown" });
+        expect(await rebooted.verify("")).toEqual({ kind: "unknown" });
         expect(await rebooted.list()).toEqual([{ id: "rig" }]);
     });
 
@@ -116,19 +116,36 @@ describe("enrollments", () => {
         ]);
     });
 
+    // The distinction the doors above this rest on. json-file.ts answers an unparseable manifest with the same empty
+    // fallback an absent one gets, so a `verify` that read through it could only say "not enrolled" — and every door
+    // spends that answer by telling the peer its credential is dead. An absent file stays `unknown`: nothing was ever
+    // enrolled there, which is a fact and not a fault.
+    it("separates a manifest it could not read from one that holds no such token", async () => {
+        const historyRoot = root();
+        const records = store(historyRoot);
+        const token = await records.issue("rig", {});
+        expect(await records.verify(token)).toEqual({ kind: "enrolled", id: "rig" });
+
+        await writeFile(join(historyRoot, "enrollments.json"), "{ this is not json");
+        expect(await store(historyRoot).verify(token)).toEqual({ kind: "unreadable", detail: "the file is not valid JSON" });
+
+        await rm(join(historyRoot, "enrollments.json"));
+        expect(await store(historyRoot).verify(token)).toEqual({ kind: "unknown" });
+    });
+
     it("renames without disturbing the key, and revokes once", async () => {
         const historyRoot = root();
         const records = store(historyRoot);
         const token = await records.issue("rig", { host: "rog" });
 
         await records.rename("rig", "the-rig");
-        expect(await records.verify(token)).toBe("the-rig");
+        expect(await records.verify(token)).toEqual({ kind: "enrolled", id: "the-rig" });
         expect(await records.enrolled("rig")).toBe(false);
         expect(await records.list()).toEqual([{ id: "the-rig", host: "rog" }]);
 
         expect(await records.revoke("the-rig")).toBe(true);
         // A repeat revoke is a no-op that reports false, not a rewrite of the file.
         expect(await records.revoke("the-rig")).toBe(false);
-        expect(await records.verify(token)).toBeUndefined();
+        expect(await records.verify(token)).toEqual({ kind: "unknown" });
     });
 });

@@ -1,5 +1,6 @@
 import { upgradeWebSocket } from "@hono/node-server";
 import { errorMessage } from "@intentic/base/errors";
+import { PEER_TRY_AGAIN, PEER_UNAUTHORIZED } from "@intentic/sandbox-contract/peer-dial";
 import { converterReadable, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract/peer-mcp-server";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
@@ -25,6 +26,9 @@ import type { PeerStore } from "./peer-store.js";
 // How long a fresh socket may stay anonymous before the daemon closes it; its only job then is send hello.
 const AUTH_DEADLINE_MS = 10_000;
 
+// Standard WebSocket "protocol error". Here it means one thing: a first frame this build cannot read as a hello.
+const PROTOCOL_ERROR = 1002;
+
 export interface PeerRouteDeps<Client extends PeerClient<Facts, Scopes>, Announced, Facts, Scopes, Extra> {
     readonly store: PeerStore<Extra>;
     readonly hub: PeerHub<Client, Announced, Facts, Scopes>;
@@ -48,20 +52,32 @@ const scopesOf = async <Scopes>(services: Services, kind: "device" | "webext", i
     return capability === undefined ? undefined : (capability.config as Scopes);
 };
 
+// Admitted, or refused with whether the peer should come back. `retry: false` is the expensive answer — it closes the
+// socket 1008, which ends the far end's dial loop for good and costs someone a walk to that machine — so it is
+// reserved for the one refusal that is genuinely about the credential.
+export type PeerAdmission<Scopes> =
+    | { readonly id: string; readonly scopes: Scopes | undefined }
+    | { readonly refusal: string; readonly retry: boolean };
+
 // Who is at the socket and what still grants them anything: the enrollment says which peer, the card says whether the
-// owner is still lending it a machine. An enrollment that outlived its card is refused rather than attached on
-// whatever scopes the peer was last pushed; refused and not revoked, so a manifest that is merely unreadable for a
-// moment costs a reconnect instead of a re-pairing.
+// owner is still lending it a machine. Only a store this daemon could READ and that holds no such token is final; a
+// card that isn't there is drift, not a decision, and the two are on different sides of the line because the manifest
+// is a workspace file (.intentic/config/capabilities.json) while the enrollment is not. Drift is caught by
+// peers/invariant.ts and healed by dropping the enrollment, which is what turns it into an honest 1008.
 export const admitPeer = async <Scopes>(
     services: Services,
     door: Pick<PeerDoor<{ token: string }, unknown, Record<never, never>>, "noun" | "scopesKind" | "cardOf">,
     store: Pick<PeerStore<unknown>, "verify">,
     token: string,
-): Promise<{ readonly id: string; readonly scopes: Scopes | undefined } | { readonly refusal: string }> => {
-    const id = await store.verify(token);
-    if (id === undefined) {
-        return { refusal: "unauthorized" };
+): Promise<PeerAdmission<Scopes>> => {
+    const presented = await store.verify(token);
+    if (presented.kind === "unreadable") {
+        return { refusal: `this sandbox cannot read its enrollment manifest right now (${presented.detail})`, retry: true };
     }
+    if (presented.kind === "unknown") {
+        return { refusal: "unauthorized", retry: false };
+    }
+    const { id } = presented;
     if (door.scopesKind === undefined) {
         return { id, scopes: undefined };
     }
@@ -69,7 +85,7 @@ export const admitPeer = async <Scopes>(
     // the one set of switches its owner ticked for that machine.
     const scopes = await scopesOf<Scopes>(services, door.scopesKind, door.cardOf?.(id) ?? id);
     return scopes === undefined
-        ? { refusal: `this ${door.noun} is not connected to this sandbox: add it again from its capability card` }
+        ? { refusal: `no capability card grants this ${door.noun} anything right now`, retry: true }
         : { id, scopes };
 };
 
@@ -182,7 +198,9 @@ export const createPeerRoutes = <
             onOpen: (_event, ws) => {
                 deadline = setTimeout(() => {
                     if (detach === undefined) {
-                        ws.close(1008, "unauthorized");
+                        // A hello that did not arrive says nothing about the enrollment behind it: a laptop waking on a
+                        // slow link is exactly the peer this must not unpair.
+                        ws.close(PEER_TRY_AGAIN, "no hello within the deadline");
                     }
                 }, AUTH_DEADLINE_MS);
             },
@@ -201,13 +219,15 @@ export const createPeerRoutes = <
                 const hello = door.hello.schema.safeParse(raw);
                 if (!hello.success) {
                     services.logger.warn({ err: hello.error }, `${door.slug}: first frame was not a hello`);
-                    ws.close(1008, "unauthorized");
+                    // A frame this build cannot read is a protocol fault, named as one. Not 1008: the likeliest cause
+                    // is a peer older or newer than this daemon, and version skew must cost a reconnect, not a pairing.
+                    ws.close(PROTOCOL_ERROR, "first frame was not a hello");
                     return;
                 }
                 const admitted = await admitPeer<Scopes>(services, door, store, hello.data.token);
                 if ("refusal" in admitted) {
-                    services.logger.warn({ reason: admitted.refusal }, `${door.slug}: refused a socket`);
-                    ws.close(1008, admitted.refusal);
+                    services.logger.warn({ reason: admitted.refusal, retry: admitted.retry }, `${door.slug}: refused a socket`);
+                    ws.close(admitted.retry ? PEER_TRY_AGAIN : PEER_UNAUTHORIZED, admitted.refusal);
                     return;
                 }
                 const { id, scopes } = admitted;

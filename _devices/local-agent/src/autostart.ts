@@ -1,8 +1,9 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
+import { LOG_ROTATE_BYTES } from "./detached.js";
 import { type CliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub } from "./launcher.js";
 import type { Log } from "./home.js";
 
@@ -88,6 +89,132 @@ export const windowsRunValueAddArgs = (name: string, commandLine: string): strin
 
 export const windowsRunValueDeleteArgs = (name: string): string[] => ["delete", WINDOWS_RUN_KEY, "/v", name, "/f"];
 
+/* ---- the supervised Windows shape: a per-user logon task ---- */
+
+// A Run value starts the agent once at logon and nothing watches it afterwards, which is the whole of "it stopped
+// running and nobody noticed". A per-user logon task is the same launch with a supervisor attached: Task Scheduler
+// restarts a failed action, and a repeating trigger re-starts one that exited cleanly or was killed. It needs no
+// password and no elevation because the principal is an InteractiveToken for the user registering it — the schtasks
+// form that DOES need a password is `/sc ONLOGON /ru`, which is why this goes in as XML.
+
+// How often the watchdog trigger starts the task. `IgnoreNew` makes a start while the agent is up a no-op, so this is
+// the interval on noticing a dead agent, not on anything that happens to a healthy one.
+const WINDOWS_WATCHDOG_MINUTES = 5;
+// How many times Task Scheduler restarts a FAILED action before leaving it to the watchdog above.
+const WINDOWS_RESTART_COUNT = 3;
+
+const schtasksExe = (): string => join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "schtasks.exe");
+
+// The account the task logs on for and runs as. A bare username is accepted, but a qualified one is what the Task
+// Scheduler UI shows back and what survives a machine rename.
+const windowsAccount = (): string => {
+    const user = process.env["USERNAME"] ?? "";
+    const domain = process.env["USERDOMAIN"] ?? "";
+    return domain === "" || user === "" ? user : `${domain}\\${user}`;
+};
+
+// Paths and command lines land in XML text nodes, and a Windows path may legally hold `&`.
+const xmlText = (value: string): string =>
+    value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+
+// The task, in the element order Windows itself writes when it exports one: Task Scheduler's parser is positional
+// within <Settings>, so matching its own output is the only ordering that is not a guess.
+export const windowsTaskXml = (spec: AutostartSpec, launcher: CliLauncher, stub: string, account: string): string => {
+    // `--wait` is what makes the task a supervisor rather than a launcher: a task counts as RUNNING only while its
+    // action process does, which is what `IgnoreNew` swallows repetitions against and what a restart is measured from.
+    const [program, ...args] = [stub, "--log", spec.logPath, "--wait", "--", ...launcher, ...spec.foregroundArgs];
+    return `<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>${xmlText(spec.desktopComment)}</Description>
+    <URI>\\${xmlText(spec.windowsRunValue)}</URI>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>${xmlText(account)}</UserId>
+    </LogonTrigger>
+    <TimeTrigger>
+      <Repetition>
+        <Interval>PT${WINDOWS_WATCHDOG_MINUTES}M</Interval>
+        <StopAtDurationEnd>false</StopAtDurationEnd>
+      </Repetition>
+      <StartBoundary>2020-01-01T00:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+    </TimeTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>${xmlText(account)}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>7</Priority>
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>
+      <Count>${WINDOWS_RESTART_COUNT}</Count>
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>${xmlText(program ?? "")}</Command>
+      <Arguments>${xmlText(quotedCommandLine(args))}</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+`;
+};
+
+export const windowsTaskCreateArgs = (spec: AutostartSpec, xmlPath: string): string[] => [
+    "/create",
+    "/tn",
+    spec.windowsRunValue,
+    "/xml",
+    xmlPath,
+    "/f",
+];
+
+export const windowsTaskDeleteArgs = (spec: AutostartSpec): string[] => ["/delete", "/tn", spec.windowsRunValue, "/f"];
+
+// schtasks reads the file, so it has to be a file. UTF-16LE with a BOM, matching the declaration above: schtasks
+// rejects a UTF-8 body under a UTF-16 declaration with an error that blames the task's values rather than its bytes.
+const registerWindowsTask = async (spec: AutostartSpec, launcher: CliLauncher, stub: string, log: Log): Promise<void> => {
+    const account = windowsAccount();
+    if (account === "") {
+        throw new Error("this session names no user (USERNAME is unset), so a per-user logon task has nobody to run as");
+    }
+    const xmlPath = join(tmpdir(), `${spec.id}-${process.pid}.xml`);
+    try {
+        await writeFile(xmlPath, Buffer.from(`\uFEFF${windowsTaskXml(spec, launcher, stub, account)}`, "utf16le"));
+        register(schtasksExe(), windowsTaskCreateArgs(spec, xmlPath));
+    } finally {
+        await rm(xmlPath, { force: true });
+    }
+    // Both would start an agent at logon, and the second would find the pidfile held and leave. Tidier to have one.
+    clearWindowsRunValue(spec.windowsRunValue);
+    log(`registered the "${spec.windowsRunValue}" logon task: it starts at sign-in, restarts on failure, and is re-checked every ${WINDOWS_WATCHDOG_MINUTES} minutes.`);
+};
+
 // Throws with what reg.exe actually said.
 export const setWindowsRunValue = (name: string, commandLine: string): void => register(regExe(), windowsRunValueAddArgs(name, commandLine));
 
@@ -117,6 +244,7 @@ After=network-online.target
 
 [Service]
 Type=simple
+ExecStartPre=-/bin/sh -c '[ -f "${spec.logPath}" ] && [ "$(wc -c < "${spec.logPath}")" -ge ${LOG_ROTATE_BYTES} ] && mv -f "${spec.logPath}" "${spec.logPath}.1"'
 ExecStart=${quotedCommandLine([...launcher, ...spec.foregroundArgs])}
 StandardOutput=append:${spec.logPath}
 StandardError=append:${spec.logPath}
@@ -133,17 +261,21 @@ WantedBy=default.target
 
 // `enable --now` both resumes at boot and starts the unit now, so the caller can skip its own spawn. Lingering keeps
 // the user manager (and unit) alive without a session, or a headless box would never autostart.
-const registerSystemdUser = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
+const registerSystemdUser = async (spec: AutostartSpec, launcher: CliLauncher, log: Log, startNow: boolean): Promise<boolean> => {
     const unit = systemdUnitPath(spec);
     await mkdir(dirname(unit), { recursive: true });
     await writeFile(unit, systemdUserUnit(spec, launcher), { mode: 0o644 });
     spawnSync("loginctl", ["enable-linger"], { stdio: "ignore" });
     // daemon-reload so a rewritten unit is picked up, not the version systemd already parsed.
     spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
-    register("systemctl", ["--user", "enable", "--now", systemdUnitName(spec)]);
+    register("systemctl", ["--user", "enable", ...(startNow ? ["--now"] : []), systemdUnitName(spec)]);
     // Named by its own log file, not the journal; see systemdUserUnit.
-    log(`registered ${systemdUnitName(spec)} to run now and at boot. Follow it with: tail -f ${spec.logPath}`);
-    return true;
+    log(
+        startNow
+            ? `registered ${systemdUnitName(spec)} to run now and at boot. Follow it with: tail -f ${spec.logPath}`
+            : `${systemdUnitName(spec)} is registered to run at boot.`,
+    );
+    return startNow;
 };
 
 // Exec args are quoted per the desktop-entry grammar.
@@ -156,8 +288,9 @@ Exec=${quotedCommandLine([...launcher, ...spec.foregroundArgs])}
 X-GNOME-Autostart-enabled=true
 `;
 
-// RunAtLoad starts it at login; no KeepAlive, so a deliberate stop stays stopped. The current session is covered
-// separately by the caller.
+// RunAtLoad starts it at login; KeepAlive restarts it afterwards, but only when it exits non-zero — the same bargain
+// systemd's `Restart=on-failure` makes, and it lines up with this agent's own exits (0 for every deliberate stop,
+// 128+SIGNAL otherwise). Without it a crashed agent stayed dead until the next login, with nothing watching.
 export const macLaunchAgentXml = (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: CliLauncher): string =>
     `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -169,16 +302,23 @@ export const macLaunchAgentXml = (spec: AutostartSpec, agent: LaunchAgentSpec, l
 ${[...launcher, ...spec.foregroundArgs].map((arg) => `        <string>${arg}</string>`).join("\n")}
     </array>
     <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key>
+    <dict><key>SuccessfulExit</key><false/></dict>
     <key>StandardOutPath</key><string>${spec.logPath}</string>
     <key>StandardErrorPath</key><string>${spec.logPath}</string>
 </dict>
 </plist>
 `;
 
-const registerMac = async (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: CliLauncher): Promise<boolean> => {
+const registerMac = async (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: CliLauncher, startNow: boolean): Promise<boolean> => {
     const plist = macPlistPath(agent);
     await mkdir(dirname(plist), { recursive: true });
     await writeFile(plist, macLaunchAgentXml(spec, agent, launcher), { mode: 0o644 });
+    // launchd reads this directory at login either way, so the file alone is the whole of "resume at boot". Booting
+    // the job out is how the OTHER half is done, and it would kill the very agent asking to be re-registered.
+    if (!startNow) {
+        return false;
+    }
     const uid = process.getuid?.() ?? 0;
     // Bootout any prior instance, then bootstrap (modern launchctl); falls back to legacy `load -w` on older macOS.
     spawnSync("launchctl", ["bootout", `gui/${uid}/${agent.label}`], { stdio: "ignore" });
@@ -191,10 +331,10 @@ const registerMac = async (spec: AutostartSpec, agent: LaunchAgentSpec, launcher
 
 // Exactly one of a systemd user unit or an XDG entry is written, never both, or a desktop machine starts the agent
 // twice.
-const registerLinux = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
+const registerLinux = async (spec: AutostartSpec, launcher: CliLauncher, log: Log, startNow: boolean): Promise<boolean> => {
     if (systemdUserAvailable()) {
         await rm(linuxDesktopPath(spec), { force: true });
-        return await registerSystemdUser(spec, launcher, log);
+        return await registerSystemdUser(spec, launcher, log, startNow);
     }
     const file = linuxDesktopPath(spec);
     await mkdir(dirname(file), { recursive: true });
@@ -209,7 +349,16 @@ const registerLinux = async (spec: AutostartSpec, launcher: CliLauncher, log: Lo
 
 // Registers the agent to start at login. Returns true only when the OS mechanism also launched it for the current
 // session (macOS bootstrap, systemd enable --now), so the caller can skip its own spawn.
-export const registerAutostart = async (spec: AutostartSpec, launcher: CliLauncher, log: Log): Promise<boolean> => {
+//
+// `startNow: false` registers and nothing else, for the one caller that is the running agent itself re-asserting its
+// own entry: every mechanism here is idempotent, but the two that also START would hand that agent a rival, and on
+// macOS the restart goes through booting the job out — which is to say, killing the caller.
+export const registerAutostart = async (
+    spec: AutostartSpec,
+    launcher: CliLauncher,
+    log: Log,
+    { startNow = true }: { readonly startNow?: boolean } = {},
+): Promise<boolean> => {
     try {
         if (process.platform === "darwin") {
             // No LaunchAgent spec: says so instead of silently writing an XDG entry macOS never reads.
@@ -217,13 +366,23 @@ export const registerAutostart = async (spec: AutostartSpec, launcher: CliLaunch
                 log(`note: ${spec.id} has no macOS login autostart yet; it runs until this machine restarts.`);
                 return false;
             }
-            return await registerMac(spec, spec.launchAgent, launcher);
+            return await registerMac(spec, spec.launchAgent, launcher, startNow);
         }
         if (process.platform === "win32") {
             // Registering the flashing shape and saying so beats refusing to register or registering silently: the stub
             // just isn't installed beside a dev checkout.
             const stub = windowsLaunchStub(launcher);
-            if (stub === undefined) {
+            if (stub !== undefined) {
+                // The supervised shape needs the stub: a task whose action is the console agent itself would put a
+                // window on the desktop at every logon AND every watchdog tick, which is worse than the Run key it
+                // replaces. Falling back on refusal keeps a machine that cannot register a task starting at all.
+                try {
+                    await registerWindowsTask(spec, launcher, stub, log);
+                    return false;
+                } catch (error) {
+                    log(`note: couldn't register a logon task for ${spec.id} (${reason(error)}); falling back to a login entry that starts it once and is not supervised.`);
+                }
+            } else {
                 log(
                     `note: ${WINDOWS_LAUNCH_STUB} isn't installed beside this agent, so ${spec.id} will start at login through a console window that flashes on the desktop. Re-run the install command from the capability card to get it.`,
                 );
@@ -232,7 +391,7 @@ export const registerAutostart = async (spec: AutostartSpec, launcher: CliLaunch
             return false;
         }
         if (process.platform === "linux") {
-            return await registerLinux(spec, launcher, log);
+            return await registerLinux(spec, launcher, log, startNow);
         }
         log(`note: ${spec.id} has no login autostart on ${process.platform}; it runs until this machine restarts.`);
     } catch (error) {
@@ -256,6 +415,9 @@ export const unregisterAutostart = async (spec: AutostartSpec, log: Log): Promis
             return;
         }
         if (process.platform === "win32") {
+            // Both mechanisms, unconditionally: which one is in force depends on what the install found, and leaving
+            // the other behind is how an uninstalled agent comes back at the next logon.
+            spawnSync(schtasksExe(), windowsTaskDeleteArgs(spec), { stdio: "ignore", windowsHide: true });
             clearWindowsRunValue(spec.windowsRunValue);
             return;
         }

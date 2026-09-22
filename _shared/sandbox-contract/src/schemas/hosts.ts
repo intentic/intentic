@@ -31,6 +31,10 @@ export const DeviceFactsSchema = z.object({
     wsl: WslEnvironmentSchema.optional(),
     // Windows only: the distros `wsl -l -q` lists, the names `run_command`'s `in: "wsl:<name>"` accepts.
     wslDistros: z.array(z.string()).optional(),
+    // What this machine's agent is holding links to, and how much of it is answering nothing. COUNTS AND AN AGE ONLY:
+    // the rest are other sandboxes' addresses, and a sandbox has no business learning its siblings'. Absent from an
+    // agent older than this field, which is why "none unreachable" is not the same value as "did not say".
+    links: z.object({ total: z.number(), unreachable: z.number(), unreachableSince: z.number().optional() }).optional(),
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 

@@ -1,9 +1,18 @@
 import { spawn } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isProcessAlive, livePid, livePidRecord, pidFileBody, spawnDetached, spawnThroughStub } from "./detached.js";
+import {
+    isProcessAlive,
+    livePid,
+    livePidRecord,
+    LOG_ROTATE_BYTES,
+    pidFileBody,
+    rotateIfLarge,
+    spawnDetached,
+    spawnThroughStub,
+} from "./detached.js";
 
 // Tests that a returned pid means something is actually running under it, not which spawn flags were used (the
 // runtime's job).
@@ -29,11 +38,54 @@ describe("spawnDetached", () => {
         expect(readFileSync(log, "utf8")).toContain("boom");
     });
 
+    // A detached child that is a TASK rather than a agent: `device forget-unreachable` with nothing to drop prints one
+    // line and exits, well inside the settle window, and the caller that asked for it must read that as done.
+    it("answers for a child that was meant to finish, even when it finishes at once", async () => {
+        const log = logFile();
+
+        const pid = await spawnDetached(log, [process.execPath], ["-e", "console.log('dropped nothing')"], { finishes: true });
+
+        // Answered without waiting the window out, which is the whole point; the child's own line lands right after.
+        expect(pid).toBeGreaterThan(0);
+        await expect.poll(() => readFileSync(log, "utf8"), { timeout: 5_000 }).toContain("dropped nothing");
+    });
+
     it("detaches the agent from the caller, so it is still there once the caller is done with it", async () => {
         const pid = await spawnDetached(logFile(), [process.execPath], stayAlive);
 
         expect(isProcessAlive(pid)).toBe(true);
         process.kill(pid);
+    });
+});
+
+// A resident agent appends to one file for as long as the machine is up, and one measured in the field had reached
+// 7 MB. Rolled HERE, at the open, because the running agent writes through a handle its parent opened: renaming the
+// path from inside would move a name nothing is writing to any more.
+describe("rotateIfLarge", () => {
+    it("sets the log aside once it is too big, keeping exactly one rollover", async () => {
+        const log = logFile();
+        writeFileSync(log, "x".repeat(LOG_ROTATE_BYTES));
+
+        await rotateIfLarge(log);
+
+        expect(existsSync(log)).toBe(false);
+        expect(statSync(`${log}.1`).size).toBe(LOG_ROTATE_BYTES);
+    });
+
+    it("leaves a log that is still small alone, so a restart does not cost the run before it", async () => {
+        const log = logFile();
+        writeFileSync(log, "still readable");
+
+        await rotateIfLarge(log);
+
+        expect(readFileSync(log, "utf8")).toBe("still readable");
+        expect(existsSync(`${log}.1`)).toBe(false);
+    });
+
+    // Called on the way into starting the agent, so it owes the caller nothing: a log with no directory, no
+    // permission, or nothing there at all must not be able to stop the thing that writes it from running.
+    it("says nothing about a log that is not there", async () => {
+        await expect(rotateIfLarge(join(tmpdir(), "no-such-dir-for-rotation", "agent.log"))).resolves.toBeUndefined();
     });
 });
 

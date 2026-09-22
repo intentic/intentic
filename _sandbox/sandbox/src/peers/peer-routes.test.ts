@@ -6,7 +6,7 @@ import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerHub } from "./peer-hub.js";
 import { admitPeer, createPeerRoutes } from "./peer-routes.js";
-import type { PeerStore } from "./peer-store.js";
+import type { PeerStore, Presented } from "./peer-store.js";
 
 // The two files a door keeps on /history, spelled the way the doors spell them.
 const peerFiles =
@@ -205,26 +205,41 @@ test("a door without a bridge has no mcp route", () => {
 // config IS the grant pushed over the socket.
 const laptopCard = { id: "laptop", kind: "device", config: { platform: "linux", shell: "on" } };
 
-const admission = async (verified: string | undefined, cards: readonly typeof laptopCard[]) =>
+const admission = async (presented: Presented, cards: readonly typeof laptopCard[]) =>
     admitPeer<{ platform: string }>(
         { capabilities: { list: async () => cards } } as unknown as Services,
         door,
-        { verify: async () => verified },
+        { verify: async () => presented },
         "presented-token",
     );
 
+const enrolled = (id: string): Presented => ({ kind: "enrolled", id });
+
 test("an enrolled peer whose card still grants it attaches with that card's config as its scopes", async () => {
-    expect(await admission("laptop", [laptopCard])).toEqual({ id: "laptop", scopes: laptopCard.config });
+    expect(await admission(enrolled("laptop"), [laptopCard])).toEqual({ id: "laptop", scopes: laptopCard.config });
 });
 
-test("a token the store does not know is refused without naming anything back", async () => {
-    expect(await admission(undefined, [laptopCard])).toEqual({ refusal: "unauthorized" });
+// `retry: false` is the expensive verdict: it closes 1008, which ends the far end's dial loop for good. Only a store
+// this daemon could read and that holds no such token earns it.
+test("a token the store read and does not hold is the one refusal that is final", async () => {
+    expect(await admission({ kind: "unknown" }, [laptopCard])).toEqual({ refusal: "unauthorized", retry: false });
 });
 
-// The state this exists for: a card removed while the enrollment survived (a hand-edited manifest, a landed checkout).
-// Attaching would run on whatever scopes the device was last pushed, which nobody is granting any more.
-test("an enrollment no card holds is refused, and told where a connection comes back from", async () => {
-    expect(await admission("ghost", [laptopCard])).toEqual({
-        refusal: `this device is not connected to this sandbox: add it again from its capability card`,
+// A manifest this build could not parse answers `verify` with the same empty list an empty one does. Reporting that as
+// "not enrolled" is what used to unpair every connected machine over one unreadable file.
+test("an enrollment manifest that could not be read refuses without spending the pairing", async () => {
+    const refused = await admission({ kind: "unreadable", detail: "the file is not valid JSON" }, [laptopCard]);
+    expect(refused).toMatchObject({ retry: true });
+    expect("refusal" in refused && refused.refusal).toContain("not valid JSON");
+});
+
+// The state this exists for: a card removed while the enrollment survived (a hand-edited manifest, a landed checkout,
+// a recreate whose /work is still settling). Attaching would run on scopes nobody is granting any more — but the card
+// lives in the workspace and the enrollment does not, so its absence is drift, not a withdrawal. peers/invariant.ts
+// reports it and dropping the enrollment is what makes it final.
+test("an enrollment no card holds is refused, and invited back rather than unpaired", async () => {
+    expect(await admission(enrolled("ghost"), [laptopCard])).toEqual({
+        refusal: `no capability card grants this device anything right now`,
+        retry: true,
     });
 });

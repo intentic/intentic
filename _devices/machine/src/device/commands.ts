@@ -1,11 +1,23 @@
 import { rm } from "node:fs/promises";
 import { sleep } from "@intentic/base/async";
+import { plural } from "@intentic/base/format";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { resolveDaemonBase } from "../daemon-base.js";
 import { prepareSetup } from "../install.js";
 import { reconcileResidency } from "../resident.js";
-import { auditPath, configPath, type HostLink, readLinks, readPrepareUpdates, removeLinks, upsertLink, writePrepareUpdates } from "./config.js";
+import {
+    auditPath,
+    configPath,
+    type HostLink,
+    readLinks,
+    readLinkStates,
+    readPrepareUpdates,
+    removeLinks,
+    unreachableIn,
+    upsertLink,
+    writePrepareUpdates,
+} from "./config.js";
 
 // device: setup (redeem a pairing, connect and stay connected), uninstall (disconnect, keep the audit log), and updates
 // (the background-download switch). The connection agent is the shared resident agent (../resident.ts); there's no OAuth,
@@ -198,4 +210,45 @@ const updates = buildCommand<UpdatesFlags>({
     },
 });
 
-export const deviceCommands = { setup, uninstall, updates };
+// Drops the links this machine has been dialling into silence for long enough that "the sandbox is restarting" has
+// stopped being a reading of it — a recreated or deleted sandbox, whose address nothing will ever answer again.
+// Evidence only: the set comes from the resident agent's own live stamp, so a machine whose agent is not running drops
+// NOTHING rather than guessing from a config it cannot check against a socket. The link carrying the request that
+// triggered this is answering by definition, so it is never in the set.
+const forgetUnreachable = buildCommand({
+    docs: { brief: "Forget the sandboxes this device has stopped being able to reach (a deleted or recreated one)" },
+    parameters: {},
+    async func(this: CommandContext) {
+        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
+        await dropUnreachableLinks(out);
+    },
+});
+
+export const dropUnreachableLinks = async (out: Log): Promise<void> => {
+    const stamped = await readLinkStates();
+    if (stamped === undefined) {
+        out("This machine's agent isn't running, so nothing here knows which links are answering. Start it with `intentic-machine run` and try again.");
+        return;
+    }
+    const gone = unreachableIn(stamped);
+    if (gone.length === 0) {
+        out(`Every link this device holds is answering (${plural(Object.keys(stamped).length, "link")}). Nothing dropped.`);
+        return;
+    }
+    for (const { url } of gone) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- one read-modify-write per link: the config is rewritten whole
+        await removeLinks(url);
+    }
+    const left = await readLinks();
+    // Restarted against the config as it now is, or the dial loops for the links just dropped keep running in the agent
+    // that is already up — which is the whole point of dropping them.
+    await reconcileResidency(out);
+    out(`Dropped ${plural(gone.length, "unreachable link")}: ${gone.map(({ url }) => url).join(", ")}.`);
+    out(
+        left.length === 0
+            ? "This device is no longer connected to any sandbox. Connecting one again is a fresh command from its capability card."
+            : `Still connected to ${plural(left.length, "sandbox", "sandboxes")}.`,
+    );
+};
+
+export const deviceCommands = { setup, uninstall, updates, "forget-unreachable": forgetUnreachable };

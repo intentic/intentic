@@ -51,7 +51,7 @@ beforeAll(async () => {
     const services = {
         config: { historyRoot: parentHistory },
         logger: { warn: () => undefined, info: () => undefined },
-        runners: { verify: async (presented: string) => (presented === TOKEN ? "test-runner" : undefined) },
+        runners: { verify: async (presented: string) => (presented === TOKEN ? { kind: "enrolled", id: "test-runner" } : { kind: "unknown" }) },
     } as unknown as Services;
     const app = new Hono();
     app.get("/system/runners/git/:repo/info/refs", createRunnerGitRefsRoute(services));
@@ -122,7 +122,7 @@ test("the door also serves a parent whose repo keeps its in-tree .git (the local
         config: { historyRoot: localHistory },
         workspace: { root: localWork },
         logger: { warn: () => undefined, info: () => undefined },
-        runners: { verify: async (presented: string) => (presented === TOKEN ? "test-runner" : undefined) },
+        runners: { verify: async (presented: string) => (presented === TOKEN ? { kind: "enrolled", id: "test-runner" } : { kind: "unknown" }) },
     } as unknown as Services;
     const app = new Hono();
     app.get("/system/runners/git/:repo/info/refs", createRunnerGitRefsRoute(services));

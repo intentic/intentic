@@ -80,7 +80,7 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
 export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceStatus> => {
     const [pid, links, sync, stamped] = await Promise.all([readResidentPid(), readLinks(), deviceReport(mutagen), readLinkStates()]);
     /* A agent that is not running holds no sockets, so every link is closed and that needs no stamp to know;. */
-    const states: readonly (PeerLinkState | undefined)[] = links.map((link) => (pid === undefined ? "closed" : stamped?.[link.sandboxUrl]));
+    const states: readonly (PeerLinkState | undefined)[] = links.map((link) => (pid === undefined ? "closed" : stamped?.[link.sandboxUrl]?.state));
     const connected = states.every((state) => state !== undefined) ? states.filter((state) => state === "open").length : undefined;
     return {
         version: MACHINE_VERSION,

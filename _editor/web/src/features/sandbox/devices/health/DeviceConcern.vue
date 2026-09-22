@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Button, Icon } from "@intentic/ui";
+import type { DeviceAgentOp } from "@intentic/sandbox-contract";
 import { type RouteLocationRaw, RouterLink } from "vue-router";
 import type { DeviceConcern } from "./deviceAttention";
 import { useT } from "@intentic/ui/i18n";
@@ -15,9 +16,15 @@ const { concern } = defineProps<{
     concern: DeviceConcern;
     /** Where a `card` fix leads; built by the page, since this module holds no router knowledge. */
     route?: RouteLocationRaw;
+    /** Whether this page is already running something on a machine: the row knows, this line only draws it. */
+    busy?: boolean;
+    /** Whether the thing it is running is THIS fix, which is the difference between a spinner and a dead button. */
+    running?: boolean;
 }>();
 
-const emit = defineEmits<{ connect: [] }>();
+// `agent` carries the op rather than running it here: this component holds no client, and the row above it already owns
+// the machine every verb would be sent to.
+const emit = defineEmits<{ connect: []; agent: [op: DeviceAgentOp] }>();
 
 // Spelled out per tone, not templated: Tailwind only emits a utility it can see used literally. The two that
 // signal keep <Notice>'s own tint, so they are recognisable as the same rank of thing; `info` is a machine state
@@ -63,6 +70,19 @@ const GLYPH: Record<DeviceConcern[`tone`], string> = { info: `text-muted`, warni
         >
             <template #icon><Icon name="arrow-up-right" /></template>
         </Button>
+        <!-- An agent verb, sent over the connection the machine is already holding: the errand and the thing that
+             closes it, on one line, rather than a sentence here and a command to go and type. -->
+        <Button
+            v-else-if="concern.fix?.kind === `agent`"
+            size="small"
+            severity="secondary"
+            :label="concern.fix.label"
+            :loading="running"
+            :disabled="busy"
+            v-tooltip.top="concern.fix.hint"
+            class="ml-auto shrink-0"
+            @click="emit(`agent`, concern.fix.op)"
+        />
         <!-- Connect actions request a command for the machine without running one locally. -->
         <Button
             v-else-if="concern.fix?.kind === `connect`"

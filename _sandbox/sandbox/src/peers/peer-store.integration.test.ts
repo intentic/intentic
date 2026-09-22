@@ -30,7 +30,7 @@ test("a pairing enrolls exactly the id it was minted for, and the token carries 
     const enrolled = await store.enroll(token);
     expect(enrolled?.id).toBe("laptop");
     expect(enrolled?.token.startsWith("iht_")).toBe(true);
-    expect(await store.verify(enrolled?.token ?? "")).toBe("laptop");
+    expect(await store.verify(enrolled?.token ?? "")).toEqual({ kind: "enrolled", id: "laptop" });
 });
 
 test("a pairing is spent by one enrollment, and an unknown one enrolls nothing", async () => {
@@ -45,8 +45,8 @@ test("re-enrolling a peer rotates its token: the old one stops verifying", async
     const { store } = tempStore();
     const first = await store.enroll(store.mintPairing("laptop").token);
     const second = await store.enroll(store.mintPairing("laptop").token);
-    expect(await store.verify(second?.token ?? "")).toBe("laptop");
-    expect(await store.verify(first?.token ?? "")).toBeUndefined();
+    expect(await store.verify(second?.token ?? "")).toEqual({ kind: "enrolled", id: "laptop" });
+    expect(await store.verify(first?.token ?? "")).toEqual({ kind: "unknown" });
 });
 
 test("revoke drops the peer; verify, enrolled and list all stop reporting it", async () => {
@@ -59,21 +59,21 @@ test("revoke drops the peer; verify, enrolled and list all stop reporting it", a
     expect(await store.revoke("desktop")).toBe(false);
     expect(await store.enrolled("desktop")).toBe(false);
     expect(await store.list()).toEqual([]);
-    expect(await store.verify(enrolled?.token ?? "")).toBeUndefined();
+    expect(await store.verify(enrolled?.token ?? "")).toEqual({ kind: "unknown" });
 });
 
 test("a rename carries the enrollment, so the far end's own key keeps working", async () => {
     const { store } = tempStore();
     const enrolled = await store.enroll(store.mintPairing("chrome").token);
     await store.rename("chrome", "personal-chrome");
-    expect(await store.verify(enrolled?.token ?? "")).toBe("personal-chrome");
+    expect(await store.verify(enrolled?.token ?? "")).toEqual({ kind: "enrolled", id: "personal-chrome" });
     expect(await store.enrolled("chrome")).toBe(false);
 });
 
 test("an empty token never verifies: a missing credential must not read as a match", async () => {
     const { store } = tempStore();
     await store.enroll(store.mintPairing("laptop").token);
-    expect(await store.verify("")).toBeUndefined();
+    expect(await store.verify("")).toEqual({ kind: "unknown" });
 });
 
 test("the enrollment file stores no usable credential", async () => {

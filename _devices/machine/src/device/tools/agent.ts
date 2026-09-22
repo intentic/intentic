@@ -11,10 +11,16 @@ import { assertScope } from "../policy.js";
 // serving this socket, so the work is detached (spawnDetached) and tailed back rather than spawned inline,
 // which would die with an EPIPE mid-swap. Gated by "Run commands", not a sandbox switch: this touches no container.
 
-// `intentic-machine <verb>`; the op is a two-member enum in the contract and this is the whole mapping.
-// `restart` is bare `run`, not `run --stop`: reconcileResidency already stops the agent it finds before starting
-// its own.
-export const AGENT_VERB: Record<DeviceAgentOp, string> = { upgrade: "upgrade", restart: "run" };
+// `intentic-machine <verb…>`; the op is a closed enum in the contract and this is the whole mapping. Argv, not one
+// word, since a verb under a route map is two. `restart` is bare `run`, not `run --stop`: reconcileResidency already
+// stops the agent it finds before starting its own.
+// `finishes` says which of them is a TASK: the drop does its work and exits, and on the path where there is nothing to
+// drop it exits in milliseconds, which spawnDetached would otherwise report as a agent that crashed on startup.
+export const AGENT_VERB: Record<DeviceAgentOp, { readonly argv: readonly string[]; readonly finishes: boolean }> = {
+    upgrade: { argv: ["upgrade"], finishes: false },
+    restart: { argv: ["run"], finishes: false },
+    "forget-unreachable": { argv: ["device", "forget-unreachable"], finishes: true },
+};
 
 // How long to keep reading the log after the detached run stops looking alive. `upgrade` replaces the binary
 // then starts a new agent, so the spawned pid can exit before its last lines are flushed.
@@ -34,19 +40,35 @@ const readFrom = async (path: string, from: number): Promise<{ text: string; at:
 // Start it, then narrate it. The answer is about what was STARTED, not what it achieved, since this process is
 // usually not alive to see the end; the reader confirms by the version moving. `onLine` is the same callback
 // the sandbox flows take (see ../router.ts).
+// Every op here restarts the resident agent — the drop reconciles it, so the links it removed stop being dialled — which
+// is why all three warn about the same dropped connection.
+const started = (op: DeviceAgentOp, installed: string | undefined): string => {
+    if (op === "upgrade") {
+        return `Updating the agent on this device${installed === undefined ? "" : ` (currently ${installed})`}. Its background agent restarts, so this connection drops while that happens.`;
+    }
+    if (op === "restart") {
+        return `Restarting this device's agent. This connection drops while that happens.`;
+    }
+    return `Dropping this device's links to sandboxes that have stopped answering. Its agent restarts against what is left, so this connection drops while that happens.`;
+};
+
+// What the reader is left with once the run is out of this process's hands. Never a claim about the outcome: the work is
+// detached, and this connection usually dies before it ends.
+const settled: Record<DeviceAgentOp, string> = {
+    upgrade: `The update ran on this device. Whether the new agent is the one serving shows in its version, which this view re-reads on its own.`,
+    restart: `The agent was restarted on this device.`,
+    "forget-unreachable": `The drop ran on this device. What it removed is in the lines above; this device's link count catches up when its agent dials back in.`,
+};
+
 export const runAgentOp = async (op: DeviceAgentOp, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "shell");
-    const installed = installedBuild();
-    onLine(
-        op === "upgrade"
-            ? `Updating the agent on this device${installed === undefined ? "" : ` (currently ${installed})`}. Its background agent restarts, so this connection drops while that happens.`
-            : `Restarting this device's agent agent. This connection drops while that happens.`,
-    );
+    onLine(started(op, installedBuild()));
     // Fresh watermark per run, taken before the spawn: the log is append-only and long-lived, so a reader must see
     // only this run's lines.
     const start = (await readFrom(agentLogPath, 0)).at;
-    const pid = await spawnDetached(agentLogPath, machineLauncher(), [AGENT_VERB[op]]);
-    onLine(`Started ${AGENT_VERB[op]} (pid ${pid}), detached from this connection so it finishes either way. Log: ${agentLogPath}`);
+    const { argv, finishes } = AGENT_VERB[op];
+    const pid = await spawnDetached(agentLogPath, machineLauncher(), argv, { finishes });
+    onLine(`Started ${argv.join(" ")} (pid ${pid}), detached from this connection so it finishes either way. Log: ${agentLogPath}`);
 
     let at = start;
     const deadline = Date.now() + WATCH_TIMEOUT_MS;
@@ -67,7 +89,5 @@ export const runAgentOp = async (op: DeviceAgentOp, scopes: DeviceScopes, onLine
         // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
         await sleep(POLL_MS);
     }
-    return op === "upgrade"
-        ? `The update ran on this device. Whether the new agent is the one serving shows in its version, which this view re-reads on its own.`
-        : `The agent agent was restarted on this device.`;
+    return settled[op];
 };

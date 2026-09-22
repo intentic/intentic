@@ -1,8 +1,8 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { writeSecretFile } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import type { PeerLinkState } from "@intentic/sandbox-contract/peer-dial";
+import { LONG_OUTAGE_ATTEMPTS, type PeerLinkState, type PeerOutage } from "@intentic/sandbox-contract/peer-dial";
 import { baseDir } from "../config.js";
 
 // Device state lives at ~/.intentic/machine/device.json and audit.jsonl; permissions come from writeSecretFile.
@@ -17,14 +17,21 @@ export const linkStatePath = join(baseDir, "links.tick");
 export const LINK_STAMP_MS = 5_000;
 export const LINK_STAMP_STALE_MS = LINK_STAMP_MS * 4;
 
+// One link as the processes that are not the agent see it: what its socket is doing, and — only while something is
+// wrong — how long it has been wrong for. `status` renders the first; the capability card counts the second.
+export interface LinkReading {
+    readonly state: PeerLinkState;
+    readonly outage?: PeerOutage;
+}
+
 interface LinkStateStamp {
     readonly at: number;
-    readonly links: Readonly<Record<string, PeerLinkState>>;
+    readonly links: Readonly<Record<string, LinkReading>>;
 }
 
 // Best-effort, like the sync half's heartbeat: a stamp that fails to write costs one `status` its live answer,
 // and must never be able to take a connection down with it.
-export const stampLinkStates = async (links: Readonly<Record<string, PeerLinkState>>): Promise<void> => {
+export const stampLinkStates = async (links: Readonly<Record<string, LinkReading>>): Promise<void> => {
     await writeFile(linkStatePath, JSON.stringify({ at: Date.now(), links } satisfies LinkStateStamp)).catch(() => undefined);
 };
 
@@ -41,10 +48,18 @@ const parseStamp = (raw: string | undefined): LinkStateStamp | undefined => {
 
 // What the agent last stamped, or undefined when there is no usable answer: no file, unreadable, or too old to be
 // about now. Callers report that absence as unknown rather than choosing a state to show.
-export const readLinkStates = async (now = Date.now()): Promise<Readonly<Record<string, PeerLinkState>> | undefined> => {
+export const readLinkStates = async (now = Date.now()): Promise<Readonly<Record<string, LinkReading>> | undefined> => {
     const stamped = parseStamp(await readFile(linkStatePath, "utf8").catch(() => undefined));
     return stamped === undefined || now - stamped.at > LINK_STAMP_STALE_MS ? undefined : stamped.links;
 };
+
+// Which links have been failing long enough to be treated as gone, at the same threshold the dial loop uses to stop
+// reading silence as a restart — one line, drawn once, so the count the card shows and the set the drop removes can
+// never disagree. Read from a stamp only: with no live reading there is no evidence, and the callers of this delete.
+export const unreachableIn = (stamped: Readonly<Record<string, LinkReading>>): readonly { url: string; outage: PeerOutage }[] =>
+    Object.entries(stamped).flatMap(([url, reading]) =>
+        reading.outage !== undefined && reading.outage.failures >= LONG_OUTAGE_ATTEMPTS ? [{ url, outage: reading.outage }] : [],
+    );
 
 // One sandbox this device answers to. Scopes are a cache, not the source of truth: the sandbox pushes them on every
 // connect; the token is the real credential, currently in a 0600 file rather than the OS keychain.
@@ -65,21 +80,44 @@ export interface DeviceConfigFile {
     readonly prepareUpdates?: boolean;
 }
 
-export const readDeviceConfig = async (): Promise<DeviceConfigFile> => JSON.parse(await readFile(configPath, "utf8")) as DeviceConfigFile;
+// The config as written. A missing file is an EMPTY link list, not an error: "nothing has ever been connected here" is
+// a real answer every caller has a use for. A file that EXISTS and won't parse is a genuine fault and propagates, the
+// same rule the sync half's readState keeps — because the two callers that read "no links" act on it destructively:
+// the agent retires its own login entry (resident.ts) and every writer below rebuilds the file from what it read.
+export const readDeviceConfig = async (): Promise<DeviceConfigFile> => {
+    const raw = await readFile(configPath, "utf8").catch((error: NodeJS.ErrnoException) => {
+        if (error.code === "ENOENT") {
+            return undefined;
+        }
+        throw error;
+    });
+    return raw === undefined ? { links: [] } : (JSON.parse(raw) as DeviceConfigFile);
+};
 
 export const writeDeviceConfig = async (config: DeviceConfigFile): Promise<void> =>
     await writeSecretFile(configPath, baseDir, JSON.stringify(config, undefined, 2));
 
 // Read-modify-write for every writer below, so none of them rebuild the file from `links` alone and drop another field.
+// Every mutation writes the whole file back, so what this reads decides what survives: content this build cannot PARSE
+// is set aside and started over, and anything else (a lock, a permission, a disk) propagates untouched. Collapsing the
+// two is what let one unreadable moment replace a machine's links with the absence of them — `rememberScopes` runs on
+// every connect and writes whatever it read.
 const updateDeviceConfig = async (mutate: (config: DeviceConfigFile) => DeviceConfigFile): Promise<DeviceConfigFile> => {
-    const config = (await readDeviceConfig().catch(() => undefined)) ?? { links: [] };
+    const config = await readDeviceConfig().catch(async (error: unknown) => {
+        if (!(error instanceof SyntaxError)) {
+            throw error;
+        }
+        await rename(configPath, `${configPath}.corrupt`).catch(() => undefined);
+        return { links: [] } satisfies DeviceConfigFile;
+    });
     const next = mutate(config);
     await writeDeviceConfig(next);
     return next;
 };
 
-// Every link, or none when nothing has ever been connected, so a missing file and an empty list aren't two cases.
-export const readLinks = async (): Promise<readonly HostLink[]> => (await readDeviceConfig().catch(() => undefined))?.links ?? [];
+// Every link, or none when nothing has ever been connected, so a missing file and an empty list aren't two cases. An
+// unreadable file is a third case and throws: callers act on emptiness, and none of them may act on a guess.
+export const readLinks = async (): Promise<readonly HostLink[]> => (await readDeviceConfig()).links ?? [];
 
 // Adds a sandbox, keeping the others; replaces rather than duplicates an existing one (a token rotation or
 // re-enrollment). Keyed on the url, the link's one sandbox-chosen identity field.
@@ -110,7 +148,8 @@ export const rememberScopes = async (sandboxUrl: string, scopes: DeviceScopes): 
     }).catch(() => undefined);
 };
 
-// The background-download switch; absent or unreadable reads as on.
+// The background-download switch; absent or unreadable reads as on. A preference, not a credential: the cost of
+// guessing it is one download, so this is the one reader here that may.
 export const readPrepareUpdates = async (): Promise<boolean> => (await readDeviceConfig().catch(() => undefined))?.prepareUpdates !== false;
 
 export const writePrepareUpdates = async (on: boolean): Promise<void> => {

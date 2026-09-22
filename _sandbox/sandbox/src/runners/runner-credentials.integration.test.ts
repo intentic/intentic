@@ -148,7 +148,7 @@ describe("translator proxy", () => {
         const translatorUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
         const services = {
             config: { translator: { url: translatorUrl, token: "local-secret" } },
-            runners: { verify: async (presented: string) => (presented === TOKEN ? "r" : undefined) },
+            runners: { verify: async (presented: string) => (presented === TOKEN ? { kind: "enrolled", id: "r" } : { kind: "unknown" }) },
             logger: quiet,
         } as unknown as Services;
         const app = new Hono();

@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { arch, homedir, hostname, platform, release, type } from "node:os";
 import { promisify } from "node:util";
 import type { DeviceFacts, DeviceScopes } from "@intentic/sandbox-contract";
+import { readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf } from "../policy.js";
 import { shellFor } from "./shell.js";
 import { wslEnvironment } from "../../wsl.js";
@@ -63,8 +64,25 @@ const wslDistros = async (): Promise<string[] | undefined> => {
     return distros.length === 0 ? undefined : distros;
 };
 
+// This machine's links as a count, read from the stamp the resident agent keeps (device/config.ts) rather than from
+// the sockets, since `describe` is answered on one of them and knows only its own. Which links count as unreachable is
+// `unreachableIn`'s to say, so this and the drop that acts on it can never disagree about what is gone.
+export const linkFacts = async (): Promise<DeviceFacts["links"]> => {
+    const stamped = await readLinkStates();
+    if (stamped === undefined) {
+        return undefined;
+    }
+    const gone = unreachableIn(stamped);
+    const since = gone.map(({ outage }) => outage.since);
+    return {
+        total: Object.keys(stamped).length,
+        unreachable: gone.length,
+        ...(since.length === 0 ? {} : { unreachableSince: Math.min(...since) }),
+    };
+};
+
 export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
-    const [os, engine, wsl, distros] = await Promise.all([osName(), engineFacts(), wslEnvironment(), wslDistros()]);
+    const [os, engine, wsl, distros, links] = await Promise.all([osName(), engineFacts(), wslEnvironment(), wslDistros(), linkFacts()]);
     return {
         os,
         arch: arch(),
@@ -75,6 +93,7 @@ export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
         ...(engine === undefined ? {} : { engine }),
         ...(wsl === undefined ? {} : { wsl }),
         ...(distros === undefined ? {} : { wslDistros: distros }),
+        ...(links === undefined ? {} : { links }),
     };
 };
 

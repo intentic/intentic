@@ -533,6 +533,40 @@ test(`keeps both ways back for the one gap that is silence`, () => {
     ]);
 });
 
+// A machine dialling a sandbox that no longer exists, which its agent will keep doing forever. The counts ride the
+// connect-time facts, so they are what the machine itself last said, not what this sandbox can see of its siblings.
+const withLinks = (links: NonNullable<Device[`facts`]>[`links`], overrides: Partial<Device> = {}) =>
+    concernsOf({ facts: { os: `linux`, arch: `x64`, shell: `/bin/zsh`, home: `/home/ada`, roots: [], links }, ...overrides }, {}, undefined, GRANTED);
+
+test(`raises the links that stopped answering, with the drop as a button rather than a command to type`, () => {
+    const concerns = withLinks({ total: 5, unreachable: 2, unreachableSince: NOW - 3 * 24 * 60 * 60_000 });
+    const links = concerns.find((concern) => concern.key === `links`);
+    // `3d ago`, not a date: the page's own short relative style, which is what `days` buys this sentence.
+    expect(links?.text).toBe(`2 of its 5 sandbox links have stopped answering, the oldest 3d ago.`);
+    expect(links?.fix).toMatchObject({ kind: `agent`, op: `forget-unreachable`, label: `Forget them` });
+    // The drop travels over the socket like every other verb here, so nothing is left for the reader to go and type.
+    expect(links?.command).toBeUndefined();
+});
+
+test(`counts one dead link in the singular, and dates it only when the machine said since when`, () => {
+    const [links] = withLinks({ total: 3, unreachable: 1 });
+    expect(links?.text).toBe(`One of its 3 sandbox links has stopped answering.`);
+});
+
+// An agent older than the field says nothing rather than zero, and a machine answering all of its links has nothing to
+// close: neither may draw a line, or this strip grows one for every healthy machine.
+test(`says nothing about links a machine is holding perfectly well`, () => {
+    expect(withLinks({ total: 4, unreachable: 0 })).toEqual([]);
+    expect(withLinks(undefined)).toEqual([]);
+});
+
+// The button travels over the connection the machine isn't holding; the gap above it is already the sentence that
+// explains every silence on the row.
+test(`leaves the dead links unsaid on a machine that cannot hear the drop`, () => {
+    const concerns = withLinks({ total: 5, unreachable: 2 }, { gap: `offline`, online: false });
+    expect(concerns.map((concern) => concern.key)).toEqual([`gap`]);
+});
+
 test(`explains the gap without a button when there is no card to connect the machine`, () => {
     const concerns = concernsOf({ hostId: undefined, platform: `macos` });
     const block = concerns.find((concern) => concern.key === `block`);

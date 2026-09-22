@@ -1,6 +1,12 @@
 // The one outbound socket a peer (machine agent, webext, runner) holds to its sandbox: hello carries the enrollment
 // token in the frame, then the link is pure oRPC. Reconnects on backoff after any drop except a revoked enrollment
 // (code 1008), which never retries.
+//
+// THE RULE BOTH ENDS ARE HELD TO: 1008 means the sandbox READ its enrollment store and does not hold this token. It
+// costs the far end its pairing — someone has to walk to that machine and paste a command — so it is the one refusal
+// that may never stand in for a moment the sandbox was having. A manifest mid-write, a capability card not yet
+// restored after a recreate, a hello that arrived late: all of those are PEER_TRY_AGAIN, and all of them used to be
+// 1008.
 
 // Reconnect backoff: fast floor for a restart, low cap so a reopened laptop is back within a minute.
 export const PEER_LINK_BACKOFF = { floorMs: 1_000, capMs: 30_000, stableMs: 60_000 } as const;
@@ -9,12 +15,24 @@ export const PEER_LINK_BACKOFF = { floorMs: 1_000, capMs: 30_000, stableMs: 60_0
 const LOUD_ATTEMPTS = 3;
 const QUIET_LOG_MS = 10 * 60_000;
 
+/* HOW OFTEN A LINK NOBODY IS ANSWERING MAY TRY, once "the sandbox is restarting" has stopped being a plausible
+   reading of the silence. The ladder above caps at 30s and stays there forever, which is right for the first minutes
+   and absurd after the first week: a machine holding a link to a sandbox that no longer exists spent 2,880 attempts a
+   day on it, and most of a 7 MB log saying so. The link is never given up — a laptop closed for a fortnight must find
+   its sandboxes again — it just stops asking every half minute. Reaching the far end once resets it (`failures = 0`),
+   so an outage that ends is back on the fast ladder immediately. */
+export const LONG_OUTAGE_ATTEMPTS = 20;
+export const LONG_OUTAGE_MS = 15 * 60_000;
+
 /* HOW LONG A SOCKET MAY SAY NOTHING before this side calls the link dead, as a multiple of the door's own heartbeat. */
 export const PEER_LINK_SILENCE_HEARTBEATS = 3;
 export const peerLinkSilenceMs = (heartbeatMs: number): number => heartbeatMs * PEER_LINK_SILENCE_HEARTBEATS;
 
 // The sandbox closes with this when the token is not enrolled: a decision, not a fault, and one that never heals.
-const UNAUTHORIZED = 1008;
+export const PEER_UNAUTHORIZED = 1008;
+// Refused, but not about this peer's credential: the sandbox could not decide right now. Retried on the ordinary
+// ladder, which is the whole difference between the two.
+export const PEER_TRY_AGAIN = 1013;
 
 // WebSocket spec's readyState value for open, named so a fake socket need not import the real class.
 const OPEN = 1;
@@ -50,11 +68,20 @@ export interface PeerDialSpec<S extends SocketLike> {
 // it for `status`, which otherwise has only the link list on disk and no idea whether any of it is up).
 export type PeerLinkState = "open" | "connecting" | "closed";
 
+// How long this link has been failing and how many attempts it has spent, for the readers that are not this process.
+// Absent while the socket is open, so "is anything wrong here" is answerable without publishing a healthy link's
+// history. `since` is the first failure of THIS outage: one answer resets it.
+export interface PeerOutage {
+    readonly failures: number;
+    readonly since: number;
+}
+
 export interface PeerLink {
     // Resolves when the loop is asked to stop or refused for good; never rejects, a connection error is a retry.
     readonly done: Promise<void>;
     readonly stop: (reason?: string) => void;
     readonly state: () => PeerLinkState;
+    readonly outage: () => PeerOutage | undefined;
 }
 
 export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink => {
@@ -73,6 +100,8 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
     // loud: between them they are the whole of the quiet rule above.
     let failures = 0;
     let quietSince = 0;
+    // When the CURRENT outage began, as opposed to when this link was last complained about.
+    let failingSince: number | undefined;
 
 /* What ONE failed attempt is allowed to say. */
     const complain = (said: string, delay: number): void => {
@@ -135,9 +164,11 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
                 resolveDone();
                 return;
             }
-            const delay = spec.backoff.next(openedAt === undefined ? 0 : Date.now() - openedAt);
+            const rung = spec.backoff.next(openedAt === undefined ? 0 : Date.now() - openedAt);
             openedAt = undefined;
             failures += 1;
+            failingSince ??= Date.now();
+            const delay = failures >= LONG_OUTAGE_ATTEMPTS ? Math.max(rung, LONG_OUTAGE_MS) : rung;
             complain(said, delay);
             waiting = true;
             setTimeout(() => void open(), delay);
@@ -166,6 +197,7 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             // "connected to …" line this open is about to log is what reports the recovery.
             failures = 0;
             quietSince = 0;
+            failingSince = undefined;
             arm();
             spec.attach(ws);
             const send = (hello: Record<string, unknown>): void => {
@@ -185,7 +217,7 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
 
         ws.addEventListener("close", (event) => {
             /* A revocation is answered here rather than through `drop`: it is the one close that ends the loop. */
-            if (event.code === UNAUTHORIZED) {
+            if (event.code === PEER_UNAUTHORIZED) {
                 dropped = true;
                 disarm();
                 if (socket === ws) {
@@ -196,7 +228,9 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
                 spec.revoked();
                 return;
             }
-            drop(`disconnected (${event.code ?? "no code"})`);
+            // Named rather than numbered, because this is the code a reader most needs not to mistake for the one
+            // above it: the sandbox is up and talking, it just would not admit this socket this time.
+            drop(event.code === PEER_TRY_AGAIN ? "the sandbox is not ready to admit this connection yet" : `disconnected (${event.code ?? "no code"})`);
         });
 
         /* Socket errors record a cause; the close event owns retry scheduling. */
@@ -222,5 +256,6 @@ export const dialPeer = <S extends SocketLike>(spec: PeerDialSpec<S>): PeerLink 
             resolveDone();
         },
         state: () => (socket?.readyState === OPEN ? "open" : socket !== undefined || waiting ? "connecting" : "closed"),
+        outage: () => (failingSince === undefined ? undefined : { failures, since: failingSince }),
     };
 };

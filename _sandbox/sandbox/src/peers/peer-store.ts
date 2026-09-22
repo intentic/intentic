@@ -1,6 +1,17 @@
+import type { Context } from "hono";
 import type { z } from "zod";
-import { enrollments, pairings } from "../store/enrollment.js";
+import { enrollments, pairings, type Presented } from "../store/enrollment.js";
 import type { PeerStoreSpec } from "./peer.js";
+
+export type { Presented };
+
+// The bearer doors' half of the rule the socket is held to (peer-routes.ts): a token nobody holds is the caller's
+// problem, a manifest this daemon could not read is its own. They differ in who has to act, which is why answering
+// the second as the first sends a peer off to re-pair a credential that was never withdrawn.
+export const refusePresented = (c: Context, refused: Exclude<Presented, { readonly kind: "enrolled" }>): Response =>
+    refused.kind === "unreadable"
+        ? c.json({ error: `this sandbox cannot read its enrollment manifest right now (${refused.detail})` }, 503)
+        : c.json({ error: "unauthorized" }, 401);
 
 // Credential half of a peer door: enrolled once, then a durable per-peer token on every reconnect; binds a pairing to
 // one id so a redeemed token can only become the peer meant. Lives on /history, not /work (which the agent reads and
@@ -16,8 +27,9 @@ export interface PeerStore<Extra> {
     readonly seedPairing: (id: string, token: string, extra?: Extra) => Promise<boolean>;
     // Redeems a pairing into a durable token, spent either way; undefined means unknown, expired, or replayed.
     readonly enroll: (pairToken: string) => Promise<({ readonly id: string; readonly token: string } & Extra) | undefined>;
-    // Which peer is presenting this token, if any; the only authorization on the WebSocket.
-    readonly verify: (presented: string) => Promise<string | undefined>;
+    // Which peer is presenting this token — and when none does, whether that is settled or just this read's silence;
+    // the only authorization on the WebSocket.
+    readonly verify: (presented: string) => Promise<Presented>;
     readonly enrolled: (id: string) => Promise<boolean>;
     readonly list: () => Promise<Pairing<Extra>[]>;
     // Moves an enrollment onto a new id, keeping the peer's key valid; no re-pairing needed at the far end.

@@ -8,6 +8,7 @@ import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { bearerFrom } from "../auth/auth.js";
 import { repoGitDir } from "../history/history.js";
+import { type Presented, refusePresented } from "../peers/peer-store.js";
 
 // Smart-HTTP git door: one repo's real git dir served for a runner's stock git fetch/push. No protocol lives here, each
 // route spawns git's own --stateless-rpc half and moves bytes. Auth is the runner's bearer token; push safety is git's
@@ -20,8 +21,9 @@ const execFileAsync = promisify(execFile);
 
 const SERVICES = new Set(["git-upload-pack", "git-receive-pack"]);
 
-// Which runner is calling, or undefined. Every route below starts here; there is no anonymous read.
-const callerRunner = async (services: Services, c: Context): Promise<string | undefined> =>
+// Which runner is calling, and when none is, whether that is settled. Every route below starts here; there is no
+// anonymous read.
+const callerRunner = async (services: Services, c: Context): Promise<Presented> =>
     await services.runners.verify(bearerFrom(c.req.header("authorization")));
 
 // Two parent shapes: a container parent keeps every repo's git dir on /history; a local parent never reshapes the
@@ -74,8 +76,9 @@ const rpcArgs = (service: string, gitDir: string, advertise: boolean): string[] 
 export const createRunnerGitRefsRoute =
     (services: Services) =>
     async (c: Context): Promise<Response> => {
-        if ((await callerRunner(services, c)) === undefined) {
-            return c.json({ error: "unauthorized" }, 401);
+        const caller = await callerRunner(services, c);
+        if (caller.kind !== "enrolled") {
+            return refusePresented(c, caller);
         }
         const service = c.req.query("service") ?? "";
         if (!SERVICES.has(service)) {
@@ -108,9 +111,9 @@ export const createRunnerGitRefsRoute =
 export const createRunnerGitRpcRoute =
     (services: Services, service: "git-upload-pack" | "git-receive-pack") =>
     async (c: Context): Promise<Response> => {
-        const runner = await callerRunner(services, c);
-        if (runner === undefined) {
-            return c.json({ error: "unauthorized" }, 401);
+        const caller = await callerRunner(services, c);
+        if (caller.kind !== "enrolled") {
+            return refusePresented(c, caller);
         }
         const gitDir = await repoDirOf(services, c);
         if (gitDir === undefined) {
@@ -128,7 +131,7 @@ export const createRunnerGitRpcRoute =
         });
         child.on("close", (code) => {
             if (code !== 0) {
-                services.logger.warn({ runner, service, code, stderr: stderr.slice(0, 2000) }, "runner git door: rpc exited non-zero");
+                services.logger.warn({ runner: caller.id, service, code, stderr: stderr.slice(0, 2000) }, "runner git door: rpc exited non-zero");
             }
         });
         const request = Readable.fromWeb(raw as Parameters<typeof Readable.fromWeb>[0]);

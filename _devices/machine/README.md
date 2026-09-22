@@ -27,6 +27,11 @@ The **device half** (`src/device/`, the machine side of the `host` capability):
   switch as the swaps, because another reshape undoes it; its ask is a closed form (two caps, two switches)
   spelled into `ic` flags here, so nothing a browser or a model sends reaches docker as text. `describe`
   reports the docker engine's size beside the OS, which is the ceiling those caps are held to.
+- **Drop the links nothing answers** (`intentic-machine device forget-unreachable`, and the button the sandbox's
+  Devices tab draws for it): a deleted or recreated sandbox leaves its side of the link here, and the agent re-dials
+  that address for as long as the machine runs. Only the resident agent's own live stamp decides what counts as gone
+  (`src/device/config.ts`), so a machine whose agent is stopped drops **nothing** — "I can't reach it" and "I'm not
+  running" are the same sentence from a config file, and only one of them is a reason to delete a link.
 - Keep each local sandbox's **next update downloaded** (`src/device/auto-prepare.ts`): a background tick
   runs `ic sandbox prepare <slug> --auto` every few hours, so the web app's update card offers a half-minute
   restart instead of minutes of pulling. On by default; the switch is `intentic-machine device updates

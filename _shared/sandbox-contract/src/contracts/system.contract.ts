@@ -209,9 +209,9 @@ export const systemContract = {
         .route({
             method: "POST",
             path: "/system/devices/{id}/agent/{op}",
-            summary: "Update or restart the agent on one of your own devices",
+            summary: "Update, restart, or clean up the links of the agent on one of your own devices",
             description:
-                "Updates a machine you own to the current intentic-machine agent, or restarts the loop it is running, over the connection that machine holds open. The answer is a stream of the run's own output — and it normally stops mid-run, because the agent's loop is what carries this connection: the work is detached from it first, so it finishes regardless, and the device's reported version is what confirms it. Takes the machine's \"Run commands\" permission, the same one a command typed there would.",
+                "Updates a machine you own to the current intentic-machine agent, restarts the loop it is running, or drops the links it holds to sandboxes that have stopped answering — over the connection that machine holds open. The answer is a stream of the run's own output — and it normally stops mid-run, because the agent's loop is what carries this connection: the work is detached from it first, so it finishes regardless, and the device's reported version is what confirms it. Takes the machine's \"Run commands\" permission, the same one a command typed there would.",
         })
         .input(DeviceAgentFlowInputSchema)
         .output(streamOf(DeviceFlowLineSchema)),

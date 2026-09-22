@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
+import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 // Decides which sandboxes may drive this device; upsertLink must merge, not overwrite (setup once dropped an existing
@@ -90,6 +91,33 @@ test("the credential file is written so only this user can read it", async () =>
     });
 });
 
+// The difference every destructive reader downstream rests on. "No links" retires this machine's login entry and
+// rebuilds this file from what was read, so a file that EXISTS and cannot be parsed must not be able to say it — and
+// `rememberScopes`, which runs on every connect, would have written that emptiness back over a machine's pairings.
+test("a config file that cannot be parsed is a fault, not an empty machine", async () => {
+    await config.upsertLink(link("https://one.example", "laptop"));
+    const held = await readFile(config.configPath, "utf8");
+    await writeFile(config.configPath, '{"links": [ this is not json');
+
+    await expect(config.readLinks()).rejects.toThrow(SyntaxError);
+    // Best-effort by contract, so it stays quiet — but quietly writing `{links: []}` here is the whole bug.
+    await config.rememberScopes("https://one.example", scopes("on"));
+
+    await writeFile(config.configPath, held);
+    expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://one.example"]);
+});
+
+// A write, unlike a read, has to get past it somehow: `device setup` on a machine whose file went bad must work. The
+// unparseable content is kept beside the new file rather than overwritten, which is what makes starting over safe.
+test("a writer sets unparseable content aside instead of building on it", async () => {
+    await writeFile(config.configPath, "}{");
+    await config.upsertLink(link("https://five.example", "laptop"));
+
+    expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://five.example"]);
+    expect(await readFile(`${config.configPath}.corrupt`, "utf8")).toBe("}{");
+    await config.removeLinks();
+});
+
 /* A link stamp is valid only inside its freshness window; an expired stamp cannot report a live link. */
 test("a machine whose agent never stamped its links has no answer, rather than a wrong one", async () => {
     // Runs before anything below writes a stamp: this is an agent too old to have the code, seen from here.
@@ -97,7 +125,12 @@ test("a machine whose agent never stamped its links has no answer, rather than a
 });
 
 test("a stamp inside its window is the answer; past it, the agent that wrote it is presumed gone", async () => {
-    const states = { "https://one.example": "open", "https://two.example": "connecting" } as const;
+    // A healthy link carries no outage; one that is down carries how long it has been, which is the only thing that
+    // tells "restarting" from "gone" for a reader that is not the agent holding the socket.
+    const states = {
+        "https://one.example": { state: "open" },
+        "https://two.example": { state: "connecting", outage: { failures: 40, since: 1_700_000_000_000 } },
+    } as const;
     await config.stampLinkStates(states);
     // The instant the writer recorded, read back from the stamp rather than sampled beside it: the boundary is
     // measured from that, and a millisecond spent writing the file would otherwise land a case on the wrong side.
@@ -106,6 +139,21 @@ test("a stamp inside its window is the answer; past it, the agent that wrote it 
     expect(await config.readLinkStates(at)).toEqual(states);
     expect(await config.readLinkStates(at + config.LINK_STAMP_STALE_MS)).toEqual(states);
     expect(await config.readLinkStates(at + config.LINK_STAMP_STALE_MS + 1)).toBeUndefined();
+});
+
+// The count on the capability card and the set the drop deletes are the same function, so a link can never be shown as
+// gone and then survive the button that says it is.
+test("a link counts as gone only once it has failed as often as the dial loop's own long-outage rung", () => {
+    const at = 1_700_000_000_000;
+    const states = {
+        "https://open.example": { state: "open" },
+        // One attempt short: still inside "the sandbox is restarting", which is the whole point of the threshold.
+        "https://blipping.example": { state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS - 1, since: at } },
+        "https://gone.example": { state: "connecting", outage: { failures: LONG_OUTAGE_ATTEMPTS, since: at } },
+    } as const;
+
+    expect(config.unreachableIn(states).map((entry) => entry.url)).toEqual(["https://gone.example"]);
+    expect(config.unreachableIn({})).toEqual([]);
 });
 
 test("a stamp caught half-written reads as no answer, since the next one is seconds away", async () => {

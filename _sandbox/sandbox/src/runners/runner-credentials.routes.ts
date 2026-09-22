@@ -10,6 +10,7 @@ import { replaceRejectedToken } from "../runtimes/claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { bearerFrom } from "../auth/auth.js";
 import { type HarnessCredentialsResult, resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
+import { type Presented, refusePresented } from "../peers/peer-store.js";
 
 // A runner's turns spend this sandbox's model providers through three bearer-authenticated routes:
 // POST /system/runners/credentials: resolves one turn's credential, stripped to what may travel.
@@ -17,7 +18,7 @@ import { type HarnessCredentialsResult, resolveHarnessCredentials } from "../age
 // ALL /system/runners/translator/*: proxies the loopback translator so its local bearer never leaves.
 // Never travels: refresh tokens, the translator's local bearer, or the per-model allowance (reads parent-local state).
 
-const callerRunner = async (services: Services, c: Context): Promise<string | undefined> =>
+const callerRunner = async (services: Services, c: Context): Promise<Presented> =>
     await services.runners.verify(bearerFrom(c.req.header("authorization")));
 
 // Exported for its unit test: every arm is a rule about what leaves the sandbox. `envOauth` travels as an ordinary
@@ -55,9 +56,9 @@ export const toRunnerCredential = (resolved: HarnessCredentialsResult, translato
 export const createRunnerCredentialsRoute =
     (services: Services) =>
     async (c: Context): Promise<Response> => {
-        const runner = await callerRunner(services, c);
-        if (runner === undefined) {
-            return c.json({ error: "unauthorized" }, 401);
+        const caller = await callerRunner(services, c);
+        if (caller.kind !== "enrolled") {
+            return refusePresented(c, caller);
         }
         const body = RunnerCredentialRequestSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!body.success) {
@@ -73,23 +74,23 @@ export const createRunnerCredentialsRoute =
             ...(body.data.account !== undefined ? { account: body.data.account } : {}),
             ...(body.data.model !== undefined ? { model: body.data.model } : {}),
         });
-        services.logger.info({ runner, agent: body.data.agent ?? "claude", ok: resolved.ok }, "runner: credential resolved for a remote turn");
+        services.logger.info({ runner: caller.id, agent: body.data.agent ?? "claude", ok: resolved.ok }, "runner: credential resolved for a remote turn");
         return c.json(toRunnerCredential(resolved, services.config.translator.url, services.config.claudeCodeOauthToken));
     };
 
 export const createRunnerCredentialRefreshRoute =
     (services: Services) =>
     async (c: Context): Promise<Response> => {
-        const runner = await callerRunner(services, c);
-        if (runner === undefined) {
-            return c.json({ error: "unauthorized" }, 401);
+        const caller = await callerRunner(services, c);
+        if (caller.kind !== "enrolled") {
+            return refusePresented(c, caller);
         }
         const body = RunnerCredentialRefreshRequestSchema.safeParse(await c.req.json().catch(() => undefined));
         if (!body.success) {
             return c.json({ error: "invalid request" }, 400);
         }
         const accessToken = await replaceRejectedToken(services.claudeStore, body.data.account, body.data.rejected).catch((error: unknown) => {
-            services.logger.warn({ err: error, runner, account: body.data.account }, "runner: mid-turn token re-mint failed");
+            services.logger.warn({ err: error, runner: caller.id, account: body.data.account }, "runner: mid-turn token re-mint failed");
             return undefined;
         });
         return c.json(accessToken !== undefined ? { accessToken } : {});
@@ -101,8 +102,9 @@ const DROPPED_HEADERS = new Set(["authorization", "host", "connection", "content
 export const createRunnerTranslatorProxyRoute =
     (services: Services) =>
     async (c: Context): Promise<Response> => {
-        if ((await callerRunner(services, c)) === undefined) {
-            return c.json({ error: "unauthorized" }, 401);
+        const caller = await callerRunner(services, c);
+        if (caller.kind !== "enrolled") {
+            return refusePresented(c, caller);
         }
         const translator = services.config.translator;
         if (translator.url === "") {

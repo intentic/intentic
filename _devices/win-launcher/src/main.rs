@@ -67,6 +67,7 @@ fn start(launch: &Launch) -> Result<std::process::Child, String> {
     if let Some(dir) = launch.log.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
+    rotate_if_large(&launch.log);
     let out = open_log(&launch.log)?;
     let err = out.try_clone().map_err(|why| {
         format!(
@@ -87,6 +88,24 @@ fn start(launch: &Launch) -> Result<std::process::Child, String> {
                 launch.program.to_string_lossy()
             )
         })
+}
+
+/// How big the agent's log may get before the previous one is set aside; one rollover is kept, so the pair is
+/// bounded at twice this. Matches LOG_ROTATE_BYTES in @intentic/local-agent, the other place that opens this file.
+#[cfg(windows)]
+const LOG_ROTATE_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Rolled here because this is where the file is OPENED. The agent cannot do it: it writes through the handle this
+/// process hands it, so renaming the path from inside would move a name nothing is writing to. Best-effort — a log
+/// that will not roll is not a reason to refuse to start the agent.
+#[cfg(windows)]
+fn rotate_if_large(path: &std::path::Path) {
+    let too_big = std::fs::metadata(path).is_ok_and(|file| file.len() >= LOG_ROTATE_BYTES);
+    if too_big {
+        let mut previous = path.as_os_str().to_owned();
+        previous.push(".1");
+        let _ = std::fs::rename(path, previous);
+    }
 }
 
 #[cfg(windows)]

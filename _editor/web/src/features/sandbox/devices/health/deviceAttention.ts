@@ -1,4 +1,4 @@
-import type { Device } from "@intentic/sandbox-contract";
+import type { Device, DeviceAgentOp } from "@intentic/sandbox-contract";
 import type { IconName } from "@intentic/ui";
 import type { NoticeTone } from "@intentic/ui/notice";
 import { timeAgo } from "@intentic/ui/format";
@@ -30,7 +30,17 @@ export interface DeviceConnectFix {
     readonly hint: string;
 }
 
-export type DeviceFix = DeviceCardFix | DeviceConnectFix;
+// One of the agent's own verbs, run over the socket that machine is already holding: a button here, rather than a
+// command the reader has to walk to the machine and type. Carries the op alone — which machine it goes to is the row's,
+// and the row is what draws this.
+export interface DeviceAgentFix {
+    readonly kind: `agent`;
+    readonly label: string;
+    readonly hint: string;
+    readonly op: DeviceAgentOp;
+}
+
+export type DeviceFix = DeviceCardFix | DeviceConnectFix | DeviceAgentFix;
 
 export interface DeviceConcern {
     readonly key: string;
@@ -185,6 +195,43 @@ const blockConcern = (block: ManageBlock, reconnectable: boolean): DeviceConcern
     };
 };
 
+// The one verb offered from this strip: everything else the agent can be asked to do is a standing button in its own
+// panel (deviceAgent.ts), and belongs there whether or not anything is wrong.
+const forgetUnreachable = (): DeviceAgentFix => ({
+    kind: `agent`,
+    label: `Forget them`,
+    hint: `Drops only the links that have answered nothing for long enough to be gone, and restarts its agent against what is left. Every link that is answering — including the one this page is talking over — is left exactly as it is.`,
+    op: `forget-unreachable`,
+});
+
+// Links this machine keeps dialling into nothing: sandboxes deleted or recreated at another address, which its agent
+// will re-dial for as long as the machine runs. Counted from the machine's own live reading, so it clears itself when
+// the agent comes back holding fewer links, and it is raised only where the button can travel — a machine with a gap
+// cannot hear the drop, and its gap is the sentence above this one.
+const linksConcern = (device: Device, readAt: number): DeviceConcern | undefined => {
+    const links = device.facts?.links;
+    // Same floor the agent's own verbs are drawn at (deviceAgent.ts): a machine holding no socket, or holding one with
+    // "Run commands" off, cannot be asked to do this, and a button that only ever refuses is worse than no button.
+    if (links === undefined || links.unreachable === 0 || device.online !== true || device.gap !== undefined) {
+        return undefined;
+    }
+    const since = links.unreachableSince;
+    const count =
+        links.unreachable === 1
+            ? `One of its ${links.total} sandbox links has`
+            : `${links.unreachable} of its ${links.total} sandbox links have`;
+    return {
+        key: `links`,
+        tone: `info`,
+        icon: `link-broken`,
+        // `days`, unlike every other age on this page: these outages are measured in weeks, and the default's absolute
+        // date mid-sentence answers "when did it break" where the reader is asking "how long have I been dialling it".
+        text: `${count} stopped answering${since === undefined ? `` : `, the oldest ${timeAgo(since, { now: readAt, days: true })}`}.`,
+        hint: `A sandbox that was deleted, or recreated at a new address, leaves its side of the link on this machine. The agent keeps dialling it — slowly, forever — and nothing will ever answer.`,
+        fix: forgetUnreachable(),
+    };
+};
+
 // The block alone, for a machine whose sandboxes are listed once under several environments: it is about the door
 // the buttons go through, not about any one environment, so it is drawn beside the list rather than under a row.
 export const blockAttention = (
@@ -229,6 +276,12 @@ export const deviceAttention = (
             text: `Last heard from ${timeAgo(device.report?.capturedAt ?? readAt, { now: readAt })}.`,
             hint: `Everything below is what the machine looked like then, not now.`,
         });
+    }
+    // After the machine's own state, before the door: this is about what it is holding, which only means anything once
+    // the reader knows it is answering at all.
+    const links = linksConcern(device, readAt);
+    if (links !== undefined) {
+        concerns.push(links);
     }
     // Last, and quietest: nothing here is broken, it only explains an absence of buttons.
     if (block !== undefined) {

@@ -85,6 +85,9 @@ const COMMAND_UNREACHED: Record<SyncCommand, string> = {
 const AGENT_ASKED: Record<DeviceAgentOp, string> = {
     upgrade: `Updating. The new version shows here when its loop comes back.`,
     restart: `Restarting. This page catches up when its loop comes back.`,
+    // The machine restarts its agent against the links it has left, so this page hears the new count the same way it
+    // hears a new version: on the loop's next hello, not from this request.
+    "forget-unreachable": `Dropping the links that stopped answering. The count here catches up when its loop comes back.`,
 };
 
 // What the Devices row says while one of these is out on a machine, as a continuation of the section's own name.
@@ -112,7 +115,11 @@ const SYNC_WORKING: Record<SyncCommand, string> = {
     "sync-clean": `Clearing build output`,
 };
 
-const AGENT_WORKING: Record<DeviceAgentOp, string> = { upgrade: `Updating a device's agent`, restart: `Restarting a device's agent` };
+const AGENT_WORKING: Record<DeviceAgentOp, string> = {
+    upgrade: `Updating a device's agent`,
+    restart: `Restarting a device's agent`,
+    "forget-unreachable": `Dropping a device's dead links`,
+};
 
 const counted = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
 

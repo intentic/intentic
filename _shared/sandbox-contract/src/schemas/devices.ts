@@ -106,9 +106,11 @@ export const DeviceFlowLineSchema = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("error"), message: z.string() }),
 ]);
 export type DeviceFlowLine = z.infer<typeof DeviceFlowLineSchema>;
-// Both ops stop the resident process mid-command; a stream ending with no terminal frame is normal, not a failure, and
+// Every op stops the resident process mid-command; a stream ending with no terminal frame is normal, not a failure, and
 // confirmation is the version moving on the next poll. `restart` is just a bare `intentic-machine run`.
-export const DeviceAgentOpSchema = z.enum(["upgrade", "restart"]);
+// `forget-unreachable` drops the machine's links to sandboxes that have answered nothing for long enough to be gone
+// (peer-dial's LONG_OUTAGE_ATTEMPTS) — never the link carrying the request, which is by definition answering.
+export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable"]);
 export type DeviceAgentOp = z.infer<typeof DeviceAgentOpSchema>;
 export const DeviceAgentFlowSchema = z.object({ op: DeviceAgentOpSchema });
 export type DeviceAgentFlow = z.infer<typeof DeviceAgentFlowSchema>;

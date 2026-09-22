@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { dialPeer, type SocketLike } from "./peer-dial.js";
+import { dialPeer, LONG_OUTAGE_ATTEMPTS, LONG_OUTAGE_MS, PEER_TRY_AGAIN, type SocketLike } from "./peer-dial.js";
 
 /* The loop every peer runs, over a socket the test plays. */
 
@@ -153,7 +153,7 @@ test("a socket that goes silent is abandoned and redialled, though no close ever
 });
 
 /* THE FAR END THAT IS NEVER COMING BACK, which is not a failure the loop can fix and not one it may narrate. */
-test("a far end that never answers is reported a few times, then retried quietly at the same cadence", async () => {
+test("a far end that never answers is reported a few times, then retried quietly", async () => {
     vi.useFakeTimers();
     try {
         const { link, sockets, said } = dialling(60_000);
@@ -177,7 +177,11 @@ test("a far end that never answers is reported a few times, then retried quietly
             expect.stringContaining("still nothing after 4 attempts"),
             expect.stringContaining("14 failed attempts"),
         ]);
-        // The retries themselves are untouched: one dial per ladder delay, still going, plus the one now armed.
+        // The retries themselves are untouched while the outage is young: one dial per ladder delay, twenty of them.
+        // The twentieth failure is what arms the long rest, so the dial after it is LONG_OUTAGE_MS away rather than
+        // one more rung — quiet in the log and quiet on the wire, which are separate rules meeting here.
+        expect(sockets).toHaveLength(20);
+        await vi.advanceTimersByTimeAsync(LONG_OUTAGE_MS);
         await vi.waitFor(() => expect(sockets).toHaveLength(21));
 
         link.stop();
@@ -228,6 +232,71 @@ test("a refused enrollment (1008) is never retried and is reported once", async 
         await vi.advanceTimersByTimeAsync(60_000);
         expect(sockets).toHaveLength(1);
         expect(link.state()).toBe("closed");
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// The other half of the same rule, and the one that cost real pairings: a sandbox mid-restart refuses sockets it
+// cannot decide about, and every one of those refusals used to arrive as 1008. Both codes here mean "come back",
+// and a loop that ended on either would leave someone walking to a laptop to paste a command.
+test.each([
+    [PEER_TRY_AGAIN, "the sandbox is not ready to admit this connection yet"],
+    [1002, "disconnected (1002)"],
+])("a refusal that is not about the credential (%i) keeps the loop on the ladder", async (code, complaint) => {
+    vi.useFakeTimers();
+    try {
+        const { link, sockets, said, revoked } = dialling();
+        await vi.waitFor(() => expect(sockets).toHaveLength(1));
+        sockets[0]?.opens();
+        sockets[0]?.drops(code);
+
+        expect(revoked).not.toHaveBeenCalled();
+        expect(said.at(-1)).toBe(`${complaint}; reconnecting in 1s`);
+        await vi.advanceTimersByTimeAsync(1_000);
+        await vi.waitFor(() => expect(sockets).toHaveLength(2));
+
+        link.stop();
+        await link.done;
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+// The ladder caps at 30s and would stay there forever. Right for the first minutes, absurd after the first week: a
+// link to a sandbox that no longer exists spent 2,880 attempts a day saying so. It is never given up — a laptop closed
+// for a fortnight has to find its sandboxes again — it just stops asking every half minute.
+test("a link nobody has answered in a long time rests between tries, and is never given up", async () => {
+    vi.useFakeTimers();
+    try {
+        const RUNG_MS = 30_000;
+        const { link, sockets, said } = dialling(RUNG_MS);
+        // Up to the threshold on the ordinary ladder: drop, wait its rung, get the next socket.
+        for (let attempt = 1; attempt < LONG_OUTAGE_ATTEMPTS; attempt += 1) {
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one drop per attempt is serial by definition
+            await vi.waitFor(() => expect(sockets).toHaveLength(attempt));
+            sockets.at(-1)?.drops(1006);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+            await vi.advanceTimersByTimeAsync(RUNG_MS);
+        }
+        await vi.waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS));
+        sockets.at(-1)?.drops(1006);
+
+        // The ladder's own rung would have redialled by now. This one is resting.
+        await vi.advanceTimersByTimeAsync(RUNG_MS);
+        expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS);
+
+        // And it does come round: slowed, never abandoned.
+        await vi.advanceTimersByTimeAsync(LONG_OUTAGE_MS - RUNG_MS);
+        await vi.waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS + 1));
+
+        // And one answer puts it straight back on the fast ladder — the outage is over, the penalty goes with it.
+        sockets.at(-1)?.opens();
+        sockets.at(-1)?.drops(1006);
+        expect(said.at(-1)).toBe("disconnected (1006); reconnecting in 30s");
+
+        link.stop();
+        await link.done;
     } finally {
         vi.useRealTimers();
     }

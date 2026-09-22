@@ -141,7 +141,10 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
                     :key="concern.key"
                     :concern="concern"
                     :route="concern.fix?.kind === `card` ? cardRoute(concern.fix) : undefined"
+                    :busy="ops.working.value"
+                    :running="concern.fix?.kind === `agent` && ops.agentOp(environment) === concern.fix.op"
                     @connect="emit(`connect`)"
+                    @agent="(op) => void ops.runAgent(environment, op)"
                 />
                 <DeviceAgentNotes :notes="notes" />
                 <template v-if="activity">

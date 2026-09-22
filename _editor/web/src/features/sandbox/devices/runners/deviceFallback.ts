@@ -63,7 +63,13 @@ export const sandboxFallback = (verb: SandboxVerb, slug: string, resources?: Res
  * The command that does this to the machine's own agent by hand. `restart` is bare `run`, not a stop and a start:
  * the loop it finds is stopped by the one it starts (the agent's own AGENT_VERB says the same).
  */
-export const agentFallback = (op: DeviceAgentOp): string => `intentic-machine ${op === `upgrade` ? `upgrade` : `run`}`;
+const AGENT_COMMAND: Record<DeviceAgentOp, string> = {
+    upgrade: `upgrade`,
+    restart: `run`,
+    "forget-unreachable": `device forget-unreachable`,
+};
+
+export const agentFallback = (op: DeviceAgentOp): string => `intentic-machine ${AGENT_COMMAND[op]}`;
 
 /**
  * The command that removes a runner by hand. Only removal: starting one redeems a pairing the parent sandbox mints,

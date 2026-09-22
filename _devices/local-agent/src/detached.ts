@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, rename, stat } from "node:fs/promises";
 import { uptime } from "node:os";
 import { basename } from "node:path";
 import { setTimeout } from "node:timers/promises";
@@ -89,6 +89,22 @@ const STUB_REPLY_MS = 10_000;
 // stderr, and that text is the whole of the error message.
 const STUB_DRAIN_MS = 250;
 
+/* HOW BIG THIS AGENT'S LOG MAY GET before the previous one is set aside: one rollover kept, so the file is bounded at
+   twice this and the run before the current one is still readable. */
+export const LOG_ROTATE_BYTES = 8 * 1024 * 1024;
+
+// Rolled here, where the file is OPENED, and nowhere else: a running agent inherits the handle its parent opened, so
+// renaming the path from inside it just moves a name the agent is no longer writing to. Best-effort by construction —
+// a log that could not be rolled is not a reason to refuse to start the thing that writes it.
+export const rotateIfLarge = async (logPath: string, limit = LOG_ROTATE_BYTES): Promise<void> => {
+    const size = await stat(logPath)
+        .then((file) => file.size)
+        .catch(() => 0);
+    if (size >= limit) {
+        await rename(logPath, `${logPath}.1`).catch(() => undefined);
+    }
+};
+
 // Starts the agent directly, the way every platform without a stub does.
 const spawnHere = (logPath: string, launcher: CliLauncher, args: readonly string[]): number => {
     const logFd = openSync(logPath, "a");
@@ -151,10 +167,20 @@ export const spawnThroughStub = async (stub: string, logPath: string, launcher: 
 };
 
 // Answers the pid only once the agent survives the settle window: a pid alone proves only that a process was created,
-// not that it kept running.
-export const spawnDetached = async (logPath: string, launcher: CliLauncher, args: readonly string[]): Promise<number> => {
+// not that it kept running. `finishes` is for the children that are a TASK rather than a agent — they do their work and
+// exit, often inside the window, and reading that as a crash would report every fast success as a failure.
+export const spawnDetached = async (
+    logPath: string,
+    launcher: CliLauncher,
+    args: readonly string[],
+    { finishes = false }: { readonly finishes?: boolean } = {},
+): Promise<number> => {
+    await rotateIfLarge(logPath);
     const stub = windowsLaunchStub(launcher);
     const pid = stub === undefined ? spawnHere(logPath, launcher, args) : await spawnThroughStub(stub, logPath, launcher, args);
+    if (finishes) {
+        return pid;
+    }
     for (let waited = 0; waited < SETTLE_MS; waited += SETTLE_POLL_MS) {
         await setTimeout(SETTLE_POLL_MS);
         if (!isProcessAlive(pid)) {

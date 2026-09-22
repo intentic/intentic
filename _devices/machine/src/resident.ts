@@ -16,7 +16,7 @@ import {
 import type { PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { MACHINE_AUTOSTART } from "./autostart.js";
 import { startAutoPrepare } from "./device/auto-prepare.js";
-import { type HostLink, LINK_STAMP_MS, linkStatePath, readLinks, stampLinkStates } from "./device/config.js";
+import { type HostLink, LINK_STAMP_MS, type LinkReading, linkStatePath, readLinks, stampLinkStates } from "./device/config.js";
 import { connect } from "./device/connection.js";
 import { baseDir, runLogPath, runPidPath } from "./config.js";
 import { mirrorHeartbeatPath, readState } from "./sync/config.js";
@@ -96,10 +96,11 @@ export const startResidentIfStopped = async (log: Log): Promise<void> => {
 
 // Bring the resident state in line with the config: restart when there is anything to serve, retire the login
 // entry when there is nothing. The stop comes first even when a restart follows, since the running agent fixes
-// its link list at startup and would otherwise keep serving the old config indefinitely.
+// its link list at startup and would otherwise keep serving the old config indefinitely — but the READ comes before
+// the stop, so a config this build cannot read leaves the agent that is already serving it alone.
 export const reconcileResidency = async (log: Log): Promise<void> => {
-    await stopResident();
     const [links, state] = await Promise.all([readLinks(), readState()]);
+    await stopResident();
     if (links.length === 0 && state.pairings.length === 0) {
         await unregisterAutostart(MACHINE_AUTOSTART, log);
         return;
@@ -123,8 +124,11 @@ const stampLinks = (links: readonly HostLink[], connections: readonly PeerLink[]
     if (links.length === 0) {
         return () => undefined;
     }
-    const stamp = (): void =>
-        void stampLinkStates(Object.fromEntries(links.map((link, at) => [link.sandboxUrl, connections[at]?.state() ?? "closed"] as const)));
+    const reading = (connection: PeerLink | undefined): LinkReading => {
+        const outage = connection?.outage();
+        return { state: connection?.state() ?? "closed", ...(outage === undefined ? {} : { outage }) };
+    };
+    const stamp = (): void => void stampLinkStates(Object.fromEntries(links.map((link, at) => [link.sandboxUrl, reading(connections[at])] as const)));
     stamp();
     const timer = setInterval(stamp, LINK_STAMP_MS);
     // The sockets are what keep this process alive; a stamp timer must never be the reason it outlives them.
@@ -132,22 +136,46 @@ const stampLinks = (links: readonly HostLink[], connections: readonly PeerLink[]
     return () => clearInterval(timer);
 };
 
-// The foreground agent, what a supervisor (systemd, launchd, the Windows launcher stub) runs. Claims the shared
-// pidfile and refuses if a live agent already holds it, since two of these tear down each other's sessions
-// rather than merely wasting a process; the refusal exits 0 so a supervisor doesn't restart it into refusing
-// again. On a signal it exits 128+SIGNAL, not 0, since exiting 0 told systemd this was a clean stop under
-// `Restart=on-failure` and it never restarted a deliberate stop.
-export const runForeground = async (log: Log): Promise<void> => {
+// Claims the shared pidfile for this process, or reports who holds it. Two agents tear down each other's sessions
+// rather than merely wasting a process, so the loser leaves; it is the caller's job to exit 0 after, since a
+// supervisor told this was a failure would restart it into losing again.
+const claimResidency = async (log: Log): Promise<boolean> => {
     const holder = await readResidentPid();
     if (holder !== undefined && holder !== process.pid) {
         log(`a machine agent is already running (pid ${holder}): leaving it alone. Stop it with \`intentic-machine run --stop\` first.`);
-        return;
+        return false;
     }
     // Stamped with the build claiming it, so every other process can tell what is SERVING from what is installed
     // (readResidentBuild).
     await writeSecretFile(runPidPath, baseDir, await pidFileBody(process.pid, MACHINE_VERSION));
+    return true;
+};
 
-    const [links, state] = await Promise.all([readLinks(), readState()]);
+// Retires the login entry once this machine has nothing left to come back for. A read that fails keeps the entry:
+// retiring it is a decision nothing but a fresh install undoes, and an unreadable config is not evidence for one.
+const retireIfNothingToServe = async (log: Log, said: string): Promise<void> => {
+    const [links, state] = await Promise.all([readLinks(), readState()]).catch(() => [undefined, undefined] as const);
+    if (links?.length === 0 && state?.pairings.length === 0) {
+        await unregisterAutostart(MACHINE_AUTOSTART, log);
+        log(said);
+    }
+};
+
+// The foreground agent, what a supervisor (systemd, launchd, the Windows logon task) runs. On a signal it exits
+// 128+SIGNAL, not 0, since exiting 0 told systemd this was a clean stop under `Restart=on-failure` and it never
+// restarted a deliberate stop.
+export const runForeground = async (log: Log): Promise<void> => {
+    if (!(await claimResidency(log))) {
+        return;
+    }
+
+    // A config this build cannot read is the one case that must NOT reach the branch below: "nothing to serve" retires
+    // the login entry, and nothing but a fresh install puts it back. Thrown rather than swallowed, so the exit is
+    // non-zero and the supervisor that exists for exactly this restarts into another attempt.
+    const [links, state] = await Promise.all([readLinks(), readState()]).catch(async (error: unknown) => {
+        await cleanup();
+        throw error;
+    });
     if (links.length === 0 && state.pairings.length === 0) {
         // Terminal, and said once: this runs at every login, and a agent that treated it as a bad tick would log the
         // same line every few seconds for the session's life.
@@ -156,6 +184,11 @@ export const runForeground = async (log: Log): Promise<void> => {
         await cleanup();
         return;
     }
+
+    // The login entry, re-asserted by the one process that knows there is still something to come back for. Registered
+    // without starting anything: this agent IS the thing the entry would start. An entry lost to a tidied Run key, a
+    // reset profile or an uninstall of something adjacent comes back on the next start instead of never.
+    await registerAutostart(MACHINE_AUTOSTART, machineLauncher(), log, { startNow: false });
 
     // The device half: one outbound socket per linked sandbox, each with its own token, grant and retry agent.
     // Nothing is multiplexed or shared but this log.
@@ -190,10 +223,6 @@ export const runForeground = async (log: Log): Promise<void> => {
 
     // Every half has ended on its own (no signal). Whether the login entry goes too is re-read rather than
     // remembered, since a `setup` may have added a link while the watcher was winding down.
-    const [linksNow, stateNow] = await Promise.all([readLinks(), readState()]);
-    if (linksNow.length === 0 && stateNow.pairings.length === 0) {
-        await unregisterAutostart(MACHINE_AUTOSTART, log);
-        log("nothing left to serve: agent exiting. Reconnect from a card in your sandbox.");
-    }
+    await retireIfNothingToServe(log, "nothing left to serve: agent exiting. Reconnect from a card in your sandbox.");
     await cleanup();
 };
