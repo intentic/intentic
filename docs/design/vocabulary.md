@@ -106,6 +106,26 @@ anything: **that became "free plan"**, done, across 20 files.
 everywhere, so both are kept. See the audit's
 [correction](../audits/vocabulary-audit.md#correction-seven-of-these-are-not-collisions).
 
+### reload
+
+Not a collision between two of this repo's ideas — a collision with a key on the reader's keyboard.
+
+**Reload means F5.** Anyone reading a screen has a browser open, and every browser they have ever used spends
+that word on refreshing the page. So a button saying "Reload sandbox" beside one saying "Reload page" asks them
+to tell two identical words apart by their noun, in the one moment they are already confused about why the
+screen is misbehaving. Worse, the cheap reading is the wrong one: pressing F5 at a sandbox running stale code
+changes nothing, and the reader concludes the product is broken rather than that they pressed the wrong thing.
+
+**The sandbox restarts. The page reloads.** One word each, and they are never swapped. The dev inner loop is
+`dev-restart.sh` and the device command is `dev-restart`; the button is **Restart sandbox**, the hint under it
+says what it rebuilds and how long it takes, and the only thing on that card still called a reload is the page,
+which genuinely is one.
+
+Kept, because none of them is a sandbox restarting: `location.reload()` and every "reload the page";
+**hot reload** and Vite's HMR; `systemctl daemon-reload`, `ipsec reload` and an nginx reload, which are those
+tools' own command names; and the extension host's **Reload extensions**, which re-runs one process inside the
+sandbox rather than restarting the sandbox — a different subsystem with its own settled vocabulary.
+
 ### the rest of class A
 
 | word | verdict |

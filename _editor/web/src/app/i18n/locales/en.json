@@ -2929,20 +2929,21 @@
             "whatSyncDoes": "Pairs this computer with the sandbox and mirrors a folder both ways."
         },
         "sandboxBehindCard": {
-            "compilesWorkingTreeOn": "Compiles the working tree on {hostId} and restarts this sandbox.",
-            "compilingOnRestartingContainer": "Compiling on {hostId} and restarting the container: this can take a minute, and the connection drops as it comes back.",
-            "copyReloadCommand": "Copy reload command",
+            "copyRestartCommand": "Copy restart command",
             "environmentTab": "Environment ›",
-            "nCalls": "{count} calls",
-            "rebuiltOnReloadPage": "Rebuilt on {hostId} — reload this page to pick it up.",
-            "reloading": "Reloading…",
+            "newerSide": "newer",
+            "olderSide": "older",
+            "rebuildsYourCodeOn": "Rebuilds your code on {hostId} and restarts the sandbox — about a minute.",
+            "rebuiltOnReloadPage": "Done on {hostId} — reload this page to pick it up.",
             "reloadPage": "Reload page",
-            "reloadRecompilesDaemon": "This recompiles the daemon in the container that is already running — about a minute. Rebuilding the whole image from your checkout takes minutes and is more than a contract gap needs:",
-            "reloadSandbox": "Reload sandbox",
+            "restarting": "Restarting…",
+            "restartingOn": "Rebuilding on {hostId} and restarting. This page will go quiet for a moment and come back on its own.",
+            "restartIsQuicker": "It keeps your files and anything that's running. The full rebuild takes several minutes, and you don't need it for this:",
+            "restartSandbox": "Restart sandbox",
             "run": "Run",
-            "staysUpdateSandboxImage": "If it stays, update the sandbox image.",
+            "staysUpdateSandboxImage": "If it's still here afterwards, update your sandbox.",
             "stillHereRun": "Still here? Run",
-            "updateSandboxImage": "Update the sandbox image."
+            "updateSandboxImage": "Update your sandbox to a newer version."
         },
         "sandboxConnecting": {
             "runOnMyComputer": "Run it on my computer"

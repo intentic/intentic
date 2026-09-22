@@ -474,7 +474,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
         }
     }
     // The dev wrapper binds the checkout's compiled trees over the image's baked copies (dev-mounts.mjs), so
-    // a daemon edit reloads in seconds instead of a rebuild — newline-separated -v specs, straight through.
+    // a daemon edit restarts in seconds instead of a rebuild — newline-separated -v specs, straight through.
     if let Ok(dev_mounts) = std::env::var("INTENTIC_DEV_MOUNTS") {
         mounts.extend(
             dev_mounts

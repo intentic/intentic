@@ -23,7 +23,7 @@ import { ownSlug } from "./self-host.js";
 
 // This side's timeout exceeds the machine's own budget, so an overrun surfaces as its answer, not a cutoff.
 export const COMMAND_TIMEOUT_MS = 20_000;
-// A build (dev-reload) or an install that fetches Mutagen and cloudflared (sync-install) is minutes, not seconds; the
+// A build (dev-restart) or an install that fetches Mutagen and cloudflared (sync-install) is minutes, not seconds; the
 // machine's own ceiling is ten minutes, and the hub's connection ceiling is above that.
 const LONG_COMMAND_TIMEOUT_MS = 8 * 60_000;
 // READING THE REBUILD LOG IS A `stat` AND A `tail` AND STILL NEEDS THIS. What costs is getting there — a login shell,
@@ -254,13 +254,15 @@ export const DEVICE_COMMANDS: Readonly<Record<DeviceCommand, DeviceCommandSpec>>
     // The dev inner loop, run where the checkout is: compile the daemon and restart this very container. The slug is
     // this sandbox's own, never the caller's, and the answer usually never arrives — the daemon carrying it is the one
     // being restarted, which the card treats as the expected ending.
-    "dev-reload": {
-        done: "Reloaded: the daemon is running the code in that checkout.",
+    // Named for what it does, and never for the F5 key: to anyone with a browser open that word means the page,
+    // and this restarts their whole sandbox. `_tools/constants/src/vocabulary.mjs` holds the rule.
+    "dev-restart": {
+        done: "Restarted: the sandbox is running the code in that checkout.",
         line: (facts) =>
             facts.devRoot === undefined || facts.ownSlug === undefined
                 ? undefined
-                : `${WITH_PNPM} sh ${shellDir(facts.devRoot)}/_sandbox/sandbox/scripts/dev-reload.sh ${facts.ownSlug}`,
-        needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to reload from",
+                : `${WITH_PNPM} sh ${shellDir(facts.devRoot)}/_sandbox/sandbox/scripts/dev-restart.sh ${facts.ownSlug}`,
+        needs: "only a dev sandbox launched by dev-sandbox.sh knows which checkout to restart from",
         timeoutMs: LONG_COMMAND_TIMEOUT_MS,
         path: (facts) => facts.devRoot,
     },

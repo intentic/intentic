@@ -148,7 +148,7 @@ test("implements every action the contract names", () => {
         "sync-unpair",
         "sync-install",
         "sync-clean",
-        "dev-reload",
+        "dev-restart",
         "dev-rebuild",
         "dev-rebuild-log",
     ];
@@ -157,22 +157,22 @@ test("implements every action the contract names", () => {
 
 // The dev inner loop, run where the checkout is. The slug is this container's own, never the caller's: a reload aimed
 // at another sandbox on that machine would restart somebody else's daemon.
-test("reloads THIS sandbox from the checkout the container records, not the caller's sandbox", () => {
-    const line = DEVICE_COMMANDS["dev-reload"].line(facts({ devRoot: "/home/ada/intentic", sandboxId: "someone-else" }));
+test("restarts THIS sandbox from the checkout the container records, not the caller's sandbox", () => {
+    const line = DEVICE_COMMANDS["dev-restart"].line(facts({ devRoot: "/home/ada/intentic", sandboxId: "someone-else" }));
     // Spelled in full, prefix included: both dev commands carry the toolchain with them, because the login shell the
     // agent runs never reads the interactive rc pnpm's installer writes PNPM_HOME into.
     expect(line).toBe(
-        'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; sh "/home/ada/intentic"/_sandbox/sandbox/scripts/dev-reload.sh work-abc',
+        'export PNPM_HOME="${PNPM_HOME:-$HOME/.local/share/pnpm}"; export PATH="$PNPM_HOME:$PNPM_HOME/bin:$PATH"; sh "/home/ada/intentic"/_sandbox/sandbox/scripts/dev-restart.sh work-abc',
     );
 });
 
 // No checkout recorded means every non-dev sandbox, where there is no script to run and no path to guess at.
-test("refuses to reload a sandbox that has no checkout behind it", () => {
-    expect(DEVICE_COMMANDS["dev-reload"].line(facts())).toBeUndefined();
-    expect(DEVICE_COMMANDS["dev-reload"].line(facts({ devRoot: "/home/ada/intentic", ownSlug: undefined }))).toBeUndefined();
-    expect(DEVICE_COMMANDS["dev-reload"].needs).toContain("dev-sandbox.sh");
+test("refuses to restart a sandbox that has no checkout behind it", () => {
+    expect(DEVICE_COMMANDS["dev-restart"].line(facts())).toBeUndefined();
+    expect(DEVICE_COMMANDS["dev-restart"].line(facts({ devRoot: "/home/ada/intentic", ownSlug: undefined }))).toBeUndefined();
+    expect(DEVICE_COMMANDS["dev-restart"].needs).toContain("dev-sandbox.sh");
     // A build is minutes; the 20s default would kill it and report a timeout as the answer.
-    expect(DEVICE_COMMANDS["dev-reload"].timeoutMs).toBeGreaterThan(60_000);
+    expect(DEVICE_COMMANDS["dev-restart"].timeoutMs).toBeGreaterThan(60_000);
 });
 
 // The dev OUTER loop: the image rebuilt from the checkout. Detached with its output to a log, because the build can run
@@ -265,12 +265,12 @@ test("crosses a checkout's command into the distro of the Windows PC that holds 
         hostFacts: { ...WINDOWS_PC, wslDistros: ["archlinux", "docker-desktop"] },
     });
     expect(doorRoute(DEVICE_COMMANDS["dev-rebuild"], windowsSide, asked("dev-rebuild"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
-    expect(doorRoute(DEVICE_COMMANDS["dev-reload"], windowsSide, asked("dev-reload"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
+    expect(doorRoute(DEVICE_COMMANDS["dev-restart"], windowsSide, asked("dev-restart"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
     // Reading the log is the same question: it sits in the home of whichever environment ran the build.
     expect(doorRoute(DEVICE_COMMANDS["dev-rebuild-log"], windowsSide, asked("dev-rebuild-log"))).toEqual({ environment: "wsl:archlinux", in: "wsl:archlinux" });
     // The distro's own door needs no crossing, and no crossing is ever sent to it.
     const distroSide = facts({ platform: "linux", devRoot: "/home/radarsu/intentic" });
-    for (const command of ["dev-rebuild", "dev-reload", "dev-rebuild-log"] as const) {
+    for (const command of ["dev-rebuild", "dev-restart", "dev-rebuild-log"] as const) {
         expect(doorRoute(DEVICE_COMMANDS[command], distroSide, asked(command))).toEqual({ environment: HOST_NATIVE_ENVIRONMENT });
     }
 });

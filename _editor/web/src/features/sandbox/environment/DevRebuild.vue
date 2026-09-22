@@ -16,7 +16,7 @@ import { useT } from "@intentic/ui/i18n";
 // them until something builds it. A button where the machine is reachable, the command to paste where it isn't; the
 // checkout's path is the sandbox's own record of where it came from, never a guess.
 //
-// It rides the named-command door (`dev-rebuild`, beside `dev-reload`) rather than a machine-side sandbox op, and that
+// It rides the named-command door (`dev-rebuild`, beside `dev-restart`) rather than a machine-side sandbox op, and that
 // is the load-bearing choice: the closed set of commands lives in the DAEMON and what crosses to the machine is a line
 // for `run_command`, a tool every released agent already has. A new op would instead have to reach a machine whose
 // agent is usually older than the sandbox asking — which is every dogfooding machine, and is what made the first
@@ -73,11 +73,11 @@ const live = computed(() => rebuildRunning(run.phase));
 // The two costs, side by side: the build interrupts nothing, the swap at the end of it is the restart.
 const cost = `Builds the image while you keep working (may take minutes), then restarts (~30s). /work is kept.`;
 
-// THE OTHER OFFER, NAMED BEFORE IT IS MISTAKEN FOR THIS ONE. The Sandbox overview carries "Reload sandbox" when the
-// daemon's route surface drifts from this app's, and the two read as one action on two tabs: both say "from your
-// checkout", both restart the container. They are not the same size. This builds a whole image; that recompiles the
-// daemon inside the container already running, which is all a code change needs.
-const insteadOfReload = `Only for the image. A daemon change alone is the quicker “Reload sandbox” on the Sandbox overview.`;
+// THE OTHER OFFER, NAMED BEFORE IT IS MISTAKEN FOR THIS ONE. The Sandbox overview carries "Restart sandbox" when the
+// two sides drift apart, and both offers read as one action on two tabs: both say "from your checkout", both end in a
+// restart. They are not the same size. This builds a whole new image; that one restarts the sandbox already running,
+// which is all a code change needs.
+const insteadOfRestart = `Only needed for the image itself. For a code change, “Restart sandbox” on the Sandbox overview is quicker.`;
 
 const command = computed(() =>
     props.root === undefined ? `pnpm rebuild:sandbox ${props.slug}` : `cd ${props.root} && pnpm rebuild:sandbox ${props.slug}`,
@@ -209,7 +209,7 @@ const checkout = computed(() => {
                     </div>
 
                     <p class="text-2xs leading-relaxed text-subtle">{{ cost }}</p>
-                    <p class="text-2xs leading-relaxed text-subtle">{{ insteadOfReload }}</p>
+                    <p class="text-2xs leading-relaxed text-subtle">{{ insteadOfRestart }}</p>
                 </div>
             </AnchoredOverlay>
 

@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
 // Pins the wording this card shows for a missing vs. a drifted route, and which side (if any) it blames.
+// Two rules the words themselves must keep, both asserted below: nothing a reader sees is written in the vocabulary
+// of whoever built this (no "route", "call", "contract", "daemon"), and nothing calls the sandbox's restart a
+// RELOAD — that word belongs to the page, and blurring the two sends someone to press F5 at a stale sandbox.
 // jsdom: mounts the component tree and reads rendered text.
 import { type Device, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -8,8 +11,8 @@ import { resetDaemonRoutes, setDaemonRoutes } from "../useDaemonRoutes";
 import { resetContractFreshness } from "../contractFreshness";
 import { IconStub } from "@intentic/ui/testing";
 
-// Sandbox slug the printed reload command names, so it targets this machine's sandbox specifically, and the checkout
-// the dev image was built from, which is the folder the reload runs in.
+// Sandbox slug the printed restart command names, so it targets this machine's sandbox specifically, and the checkout
+// the dev image was built from, which is the folder the restart runs in.
 vi.mock(`../../environment/useEnvironment`, () => ({
     useEnvironment: () => ({ slug: ref(`sandbox-abc123`), localImage: ref({ base: `intentic-sandbox:dev`, root: `/home/ada/intentic` }) }),
 }));
@@ -87,13 +90,16 @@ it(`says nothing at all while the two builds agree`, () => {
 it(`names the sandbox as behind only when a missing route proves it`, () => {
     setDaemonRoutes(withoutVpn, SHAPES);
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`Sandbox is behind the app`);
-    expect(text).toContain(`This sandbox was built before these calls existed`);
+    expect(text).toContain(`Your sandbox is older than this page`);
+    expect(text).toContain(`Your sandbox was built before these parts existed`);
     // The area reads as the product names it, with what the reader would be looking at when it bites.
     expect(text).toContain(`VPN`);
     expect(text).toContain(`this sandbox's VPN connection`);
-    expect(text).toContain(`${LEVEL.length - withoutVpn.length} missing`);
+    expect(text).toContain(`not available`);
     expect(text).not.toMatch(/reload this page/i);
+    // The side something proves is behind, marked; never the count of internal endpoints, which means nothing here.
+    expect(text).toContain(`older`);
+    expect(text).not.toContain(`${LEVEL.length - withoutVpn.length} missing`);
 });
 
 // "Routes disagree" named the mechanism and nothing else. Both sides make the SAME calls here; what they can't agree
@@ -101,26 +107,47 @@ it(`names the sandbox as behind only when a missing route proves it`, () => {
 it(`refuses to name a side when only the payloads disagree`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`App and sandbox are out of sync`);
-    expect(text).toContain(`Both sides make the same calls and disagree about the fields inside them.`);
+    expect(text).toContain(`Some parts of this page may not work`);
+    expect(text).toContain(`The two know about the same features but disagree on the details.`);
     expect(text).toContain(`Sandbox settings`);
     expect(text).toContain(`everything on the Sandbox tabs`);
-    expect(text).toContain(`1 differ`);
-    expect(text).not.toContain(`Sandbox is behind the app`);
+    expect(text).toContain(`may misbehave`);
+    expect(text).not.toContain(`Your sandbox is older than this page`);
     expect(text).toMatch(/reload page/i);
 });
 
 // The question the old card never answered: WHICH two programs. Each names itself, what it is, and how many calls
 // it knows — the scale the disagreement count is read against.
-it(`names both programs and the size of each one's call surface`, () => {
+it(`names both sides in words that don't assume you built this`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const text = mount().textContent ?? ``;
     expect(text).toContain(`This page`);
-    expect(text).toContain(`the editor, loaded in this browser tab`);
-    expect(text).toContain(`This sandbox`);
-    expect(text).toContain(`the daemon answering this page`);
-    expect(text).toContain(`${SANDBOX_ROUTE_NAMES.length} calls`);
-    expect(text).toContain(`${SANDBOX_ROUTE_NAMES.length - 1} of ${SANDBOX_ROUTE_NAMES.length} shared calls match`);
+    expect(text).toContain(`the editor you're looking at, in this browser tab`);
+    expect(text).toContain(`Your sandbox`);
+    expect(text).toContain(`the machine running your code`);
+    expect(text).toContain(`Everything else between them lines up.`);
+});
+
+// The vocabulary rule, enforced rather than trusted: these are the words that made two earlier versions of this card
+// unreadable to everyone who had not written the contract. They may live in the evidence drawer, never in the report.
+it(`says nothing in the vocabulary of whoever built it`, () => {
+    setDaemonRoutes(withoutVpn, reshaped(`settings.get`));
+    const text = mount().textContent ?? ``;
+    for (const word of [`route`, `contract`, `daemon`, `endpoint`, `schema`, `payload`, `compiled`, `working tree`]) {
+        expect(text.toLowerCase()).not.toContain(word);
+    }
+});
+
+// The rule the owner set: "reload" is F5 and nothing else. The sandbox restarts.
+it(`never calls restarting the sandbox a reload`, () => {
+    hostId.value = `ada-laptop`;
+    setDaemonRoutes(LEVEL, reshaped(`settings.get`));
+    const el = mount();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Restart sandbox`);
+    expect(text).not.toMatch(/reload (the )?sandbox/i);
+    // The only reload on the card is the page's own, which genuinely is one.
+    expect([...el.querySelectorAll(`button`)].map((button) => button.textContent)).toContain(`Reload page`);
 });
 
 // One shared schema reaches dozens of routes across areas that have nothing to do with each other, so the area list
@@ -131,8 +158,9 @@ it(`counts the drifted routes, not just the areas they land in`, () => {
     setDaemonRoutes(LEVEL, reshaped(...agentRoutes));
     const text = mount().textContent ?? ``;
     expect(text).toContain(`Running a turn`);
-    expect(text).toContain(`${agentRoutes.length} differ`);
-    expect(text).toContain(`${agentRoutes.length} calls · 1 area`);
+    expect(text).toContain(`may misbehave`);
+    // One row, whatever the endpoint count behind it: the reader's unit is the feature, not the wire.
+    expect(text).toContain(`1 feature affected`);
 });
 
 // The dotted route names are the evidence, not the report: they used to be all the card said, and now they are what
@@ -150,7 +178,7 @@ it(`keeps the route names behind the row, with what the gap costs`, () => {
     return nextTick().then(() => {
         const text = el.textContent ?? ``;
         expect(text).toContain(agentRoute!);
-        expect(text).toContain(`disagree about the fields inside them`);
+        expect(text).toContain(`The two sides expect slightly different things here.`);
         expect(text).not.toContain(`Everything else works`);
         expect(text).not.toContain(`Still showing`);
     });
@@ -162,9 +190,9 @@ it(`calls a total disagreement one mismatch rather than naming every area`, () =
     const allDifferent = Object.fromEntries(Object.keys(SHAPES).map((name) => [name, `different`]));
     setDaemonRoutes(LEVEL, allDifferent);
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`App and sandbox are running different contracts`);
-    expect(text).toContain(`${Object.keys(SHAPES).length} of ${Object.keys(SHAPES).length} shared calls carry different fields`);
-    expect(text).toContain(`different builds rather than one changed field`);
+    expect(text).toContain(`This page and your sandbox are far apart`);
+    expect(text).toContain(`Nearly every part of the app is affected, so they aren't listed one by one.`);
+    expect(text).toContain(`two quite different versions`);
     // Not forty rows of areas: the `where` line of one that would otherwise be listed.
     expect(text).not.toContain(`the file tree, the editor and search`);
 });
@@ -176,31 +204,29 @@ it(`names an uncompiled contract as the cause and withholds the page reload`, ()
     resetContractFreshness([`settings.get`]);
     const el = mount();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`Sandbox is running an older compiled contract`);
-    expect(text).toContain(`1 call differs`);
-    expect(text).toContain(`Reloading this page won't help.`);
-    expect(text).not.toContain(`App and sandbox are out of sync`);
+    expect(text).toContain(`Your sandbox hasn't picked up your latest changes`);
+    expect(text).toContain(`Refreshing this page won't help`);
+    expect(text).not.toContain(`Some parts of this page may not work`);
     expect([...el.querySelectorAll(`button`)].some((button) => button.textContent === `Reload page`)).toBe(false);
 });
 
 // A tab left open across a sandbox update: harmless on its own, and the one direction the old card could never name.
 it(`names this page as the older side when the sandbox offers routes it has never heard of`, () => {
     setDaemonRoutes([...LEVEL, `future.feature`], reshaped(`settings.get`));
-    expect(mount().textContent ?? ``).toContain(`This page is older than the sandbox.`);
+    expect(mount().textContent ?? ``).toContain(`This page is the older of the two.`);
 });
 
 // Each side holding routes the other lacks: two branches, not two points on one line, and no single reload fixes it.
 it(`calls a two-way gap a fork rather than naming either side as behind`, () => {
     setDaemonRoutes([...withoutVpn, `future.feature`], SHAPES);
     const text = mount().textContent ?? ``;
-    expect(text).toContain(`App and sandbox are on different builds`);
-    expect(text).toContain(`1 call in the sandbox's direction`);
-    expect(text).toContain(`neither is simply older`);
+    expect(text).toContain(`This page and your sandbox are from different versions`);
+    expect(text).toContain(`neither one is simply newer`);
     // Both directions get a row of their own, since they are different failures: one feature is gone, one is unused.
-    expect(text).toContain(`${LEVEL.length - withoutVpn.length} missing`);
-    expect(text).toContain(`1 extra`);
-    expect(text).not.toContain(`Sandbox is behind the app`);
-    expect(text).not.toContain(`This page is older than the sandbox.`);
+    expect(text).toContain(`not available`);
+    expect(text).toContain(`not used yet`);
+    expect(text).not.toContain(`Your sandbox is older than this page`);
+    expect(text).not.toContain(`This page is the older of the two.`);
 });
 
 it(`says nothing about a newer sandbox while the two still agree`, () => {
@@ -208,11 +234,11 @@ it(`says nothing about a newer sandbox while the two still agree`, () => {
     expect(mount().textContent?.trim()).toBe(``);
 });
 
-it(`prints the reload for THIS sandbox, not an image rebuild, when nothing can reach that checkout`, () => {
+it(`prints the restart for THIS sandbox, not an image rebuild, when nothing can reach that checkout`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const el = mount();
     const text = el.textContent ?? ``;
-    expect(text).toContain(`dev-reload.sh sandbox-abc123`);
+    expect(text).toContain(`dev-restart.sh sandbox-abc123`);
     expect(text).not.toContain(`build:sandbox`);
     expect(el.querySelector(`.ui-code`)).not.toBeNull();
 });
@@ -222,14 +248,14 @@ it(`runs the reload on the device hosting this sandbox instead of printing it`, 
     hostId.value = `ada-laptop`;
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const el = mount();
-    const reload = [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`);
+    const reload = [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Restart sandbox`);
     expect(reload).toEqual(expect.any(HTMLButtonElement));
-    expect(el.textContent ?? ``).not.toContain(`dev-reload.sh`);
+    expect(el.textContent ?? ``).not.toContain(`dev-restart.sh`);
     expect(el.querySelector(`.ui-code`)).toBeNull();
 
     reload?.click();
     // The command name is the whole ask: the argv is the daemon's to build (hosts/device-commands.ts).
-    expect(severingCalls).toEqual([`ada-laptop:dev-reload`]);
+    expect(severingCalls).toEqual([`ada-laptop:dev-restart`]);
 });
 
 // Which machine runs this sandbox is read off the very payload a behind daemon disagrees about, so the button that
@@ -238,9 +264,9 @@ it(`reloads on the one connected device when nothing claims to run this sandbox`
     fleet.value = [{ key: `ada-laptop`, label: `ada-laptop`, hostId: `ada-laptop`, online: true }];
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const el = mount();
-    const reload = [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`);
+    const reload = [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Restart sandbox`);
     reload?.click();
-    expect(severingCalls).toEqual([`ada-laptop:dev-reload`]);
+    expect(severingCalls).toEqual([`ada-laptop:dev-restart`]);
 });
 
 // One PC answering through two doors folds to one machine, so the fallback above is offered — but the reload is a
@@ -267,8 +293,8 @@ it(`reloads through the distro's door, not the Windows side of the same PC`, () 
     ];
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const el = mount();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`)?.click();
-    expect(severingCalls).toEqual([`rog-wsl:dev-reload`]);
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Restart sandbox`)?.click();
+    expect(severingCalls).toEqual([`rog-wsl:dev-restart`]);
 });
 
 // The machine is connected; which of its shells the owner connected it through is not the reader's problem. The
@@ -286,8 +312,8 @@ it(`offers the reload on a PC connected only on its Windows side`, () => {
     ];
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const el = mount();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Reload sandbox`)?.click();
-    expect(severingCalls).toEqual([`rog:dev-reload`]);
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent === `Restart sandbox`)?.click();
+    expect(severingCalls).toEqual([`rog:dev-restart`]);
 });
 
 // Two machines and no reading of which holds this container is a guess, and a reload aimed at the wrong one is a
@@ -299,8 +325,8 @@ it(`prints the command rather than choosing between two connected devices`, () =
     ];
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const el = mount();
-    expect([...el.querySelectorAll(`button`)].some((button) => button.textContent === `Reload sandbox`)).toBe(false);
-    expect(el.textContent ?? ``).toContain(`dev-reload.sh sandbox-abc123`);
+    expect([...el.querySelectorAll(`button`)].some((button) => button.textContent === `Restart sandbox`)).toBe(false);
+    expect(el.textContent ?? ``).toContain(`dev-restart.sh sandbox-abc123`);
 });
 
 // The case the command block was hiding: a machine is already syncing this sandbox, so the reason there is no
@@ -328,7 +354,7 @@ it(`offers to connect the machine already syncing this sandbox`, () => {
     expect(text).toContain(`radarsu-rog`);
     expect(text).toContain(`syncs this sandbox but is not connected as a device`);
     // The command stays: connecting is an offer, not a precondition for getting out of this state now.
-    expect(text).toContain(`dev-reload.sh sandbox-abc123`);
+    expect(text).toContain(`dev-restart.sh sandbox-abc123`);
 });
 
 // Nothing to offer, so nothing is said: an invitation to connect a machine that isn't there is noise.

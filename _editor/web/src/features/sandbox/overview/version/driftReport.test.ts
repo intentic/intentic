@@ -20,7 +20,7 @@ it(`names an area as the product names it, not as the contract does`, () => {
 it(`has a name for every group in the shipped contract`, () => {
     const groups = [...new Set(SANDBOX_ROUTE_NAMES.map((name) => name.split(`.`)[0] ?? name))];
     const unnamed = driftAreas({ missing: groups.map((group) => `${group}.probe`), drifted: [], extra: [] })
-        .filter((area) => area.where === `a part of the app this page predates`)
+        .filter((area) => area.where === `something newer than this page`)
         .map((area) => area.key);
     expect(unnamed).toEqual([]);
 });
@@ -29,7 +29,7 @@ it(`has a name for every group in the shipped contract`, () => {
 // one would be worse than admitting that.
 it(`falls back to the group's own name for a route this build has never heard of`, () => {
     const [area] = driftAreas({ missing: [], drifted: [], extra: [`teleport.engage`] });
-    expect(area).toMatchObject({ key: `teleport`, label: `Teleport`, where: `a part of the app this page predates`, kind: `extra` });
+    expect(area).toMatchObject({ key: `teleport`, label: `Teleport`, where: `something newer than this page`, kind: `extra` });
 });
 
 // Worst first: a call that isn't there takes the feature with it, a drifted one answers and lies, an extra one costs

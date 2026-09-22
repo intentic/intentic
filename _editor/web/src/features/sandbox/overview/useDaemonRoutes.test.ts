@@ -195,14 +195,16 @@ describe(`driftedRouteReason`, () => {
         expect(driftedRouteReason(`GET`, `/settings`)).toMatch(/reload this page/i);
     });
 
-    it(`names the uncompiled contract as the cause, and rules the page reload out`, () => {
+    it(`names the stale sandbox as the cause, and rules the page reload out`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
         resetContractFreshness([`settings.get`]);
         const reason = driftedRouteReason(`GET`, `/settings`);
-        expect(reason).toMatch(/since it was last compiled/i);
-        expect(reason).toMatch(/dev-reload\.sh/);
+        expect(reason).toMatch(/older than this checkout/i);
+        expect(reason).toMatch(/dev-restart\.sh/);
         // The page is the fresher of the two here, so offering its reload sends the reader the wrong way.
         expect(reason).not.toMatch(/reload this page/i);
+        // A restart is never called a reload: the reader has a browser open, and would press F5 at a stale sandbox.
+        expect(reason).not.toMatch(/reload (the |it|this )?sandbox/i);
     });
 
     it(`blames this page when the daemon offers routes it has never heard of`, () => {

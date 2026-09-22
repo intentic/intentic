@@ -219,7 +219,7 @@ export async function runDeviceCommand(hostId: string, command: DeviceCommand, a
     return DeviceCommandResultSchema.parse(await response.json());
 }
 
-// The same call for a command that takes its own answer down with it: `dev-reload` restarts the container serving
+// The same call for a command that takes its own answer down with it: `dev-restart` restarts the container serving
 // this request, so the connection dropping IS the expected ending, reported as `undefined`. Anything the daemon
 // managed to answer — a refusal, a bad request, the device being unreachable — still throws, since a reply that
 // arrived is a reply about what happened.

@@ -119,7 +119,7 @@ export type DeviceAgentFlowInput = z.infer<typeof DeviceAgentFlowInputSchema>;
 // command: the same socket carries `run_command`, which would grant a shell on the user's machine.
 // `sync-unpair` runs the machine's own `sync uninstall --sandbox` (terminates both Mutagen sessions, drops the pairing,
 // self-revokes enrollment); revoking from the sandbox side is a different route.
-// `dev-reload`, `dev-rebuild` and `sync-install` are the three whose argv the daemon fills from what only it knows — the
+// `dev-restart`, `dev-rebuild` and `sync-install` are the three whose argv the daemon fills from what only it knows — the
 // dev checkout on that machine, a freshly minted pairing token — which is also why none takes a path or a token from the
 // caller. The two dev commands are also why a machine-side op is the wrong shape for them: this door carries a COMMAND
 // STRING to a tool every released agent already has, so a sandbox can drive a machine whose agent predates the feature.
@@ -140,7 +140,7 @@ export const DeviceCommandSchema = z.enum([
     "sync-resume",
     "sync-unpair",
     "sync-clean",
-    "dev-reload",
+    "dev-restart",
     "dev-rebuild",
     "dev-rebuild-log",
     "sync-install",
@@ -149,7 +149,7 @@ export type DeviceCommand = z.infer<typeof DeviceCommandSchema>;
 // The reversible sync switches: the subset a device's own row drives with a pair of buttons, as opposed to the two
 // commands a card elsewhere issues once. Its own type so those button tables stay total without carrying entries for
 // commands they can never send.
-export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude(["dev-reload", "dev-rebuild", "dev-rebuild-log", "sync-install", "sync-clean"]);
+export const DeviceSyncSwitchSchema = DeviceCommandSchema.exclude(["dev-restart", "dev-rebuild", "dev-rebuild-log", "sync-install", "sync-clean"]);
 export type DeviceSyncSwitch = z.infer<typeof DeviceSyncSwitchSchema>;
 
 // WHERE A DETACHED REBUILD REPORTS ITSELF. `dev-rebuild` returns the moment the build is under way and nothing streams

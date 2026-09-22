@@ -1,17 +1,14 @@
 import { computed } from "vue";
-import {
-    advertisedRouteCount,
-    comparedRouteCount,
-    driftedRoutes,
-    missingRoutes,
-    ourRouteCount,
-    unknownDaemonRoutes,
-} from "../useDaemonRoutes";
+import { appBehind, comparedRouteCount, daemonBehind, driftedRoutes, missingRoutes, unknownDaemonRoutes } from "../useDaemonRoutes";
 
-// WHO IS FAILING TO TALK TO WHOM, in the words of someone who did not write the contract. The raw diff is three lists
-// of dotted route names (`agent.send`, `sessions.list`); on its own it says "7 routes disagree", which names the
-// mechanism and nothing else — not the two parties, not what breaks, not where the reader would notice. This turns it
-// into the two sides of one conversation and a list of the product's own areas, each carrying its evidence.
+// WHO IS FAILING TO TALK TO WHOM, IN WORDS SOMEONE WHO DID NOT WRITE THIS WOULD USE. The raw diff is three lists of
+// dotted route names (`agent.send`, `sessions.list`), which on its own says "7 routes disagree" — a sentence about the
+// mechanism and about nothing a reader can act on. Every string below is the plain-English half: what broke, what it
+// will look like when it bites, and which part of the app it is in. The dotted names stay, one chevron away, for
+// whoever goes and fixes it.
+//
+// No "route", "call", "endpoint", "contract", "schema" or "daemon" in anything a reader sees. Those are the words that
+// made the first version of this card unreadable to everyone who had not written it.
 
 // The three ways two builds fail to meet, worst first. They are genuinely different failures and no single sentence
 // covers them: one call is absent, one is present with different fields, one exists on a side that can't ask for it.
@@ -45,28 +42,28 @@ const AREAS: Readonly<Record<string, { label: string; where: string }>> = {
     agent: { label: `Running a turn`, where: `sending, stopping and following a turn` },
     agents: { label: `The fleet`, where: `the agent board and each agent's status` },
     approvals: { label: `Approvals`, where: `what the agent prepared for you to allow` },
-    areas: { label: `Workspace areas`, where: `the named parts a member's reach is granted in` },
+    areas: { label: `Workspace areas`, where: `who is allowed to see which parts of the workspace` },
     automations: { label: `Automations`, where: `scheduled wake-ups and their approvals` },
     capabilities: { label: `Capabilities`, where: `connectors, accounts and the cards that grant them` },
     chores: { label: `Chores`, where: `maintenance runs and their evidence` },
     ci: { label: `CI`, where: `check runs and their results` },
     diff: { label: `Changes`, where: `the diff panel and file-by-file review` },
-    endpoints: { label: `Model endpoints`, where: `the models this sandbox can call` },
+    endpoints: { label: `AI models`, where: `the models this sandbox is allowed to use` },
     exit: { label: `Exit nodes`, where: `which country this sandbox's traffic leaves from` },
     extensions: { label: `Extensions`, where: `installed extensions and their views` },
     git: { label: `Git`, where: `branches, commits and what is staged` },
     history: { label: `History`, where: `the record of past conversations and turns` },
-    intentic: { label: `Deployments`, where: `the intentic CLI's plan and apply runs` },
+    intentic: { label: `Deployments`, where: `deployment plans and the runs that apply them` },
     inventory: { label: `Deploy inventory`, where: `what this workspace has and wants deployed` },
     issues: { label: `Issues`, where: `reported problems and their reports` },
-    logs: { label: `Logs`, where: `the daemon's own log files` },
+    logs: { label: `Logs`, where: `the sandbox's own log files` },
     loops: { label: `Loops`, where: `running and saved agent loops` },
     netdisk: { label: `Network disks`, where: `mounted network storage` },
     panels: { label: `Panels`, where: `the operator panels in the sidebar` },
     personas: { label: `Personas`, where: `the identities the agent speaks as` },
     ports: { label: `Ports`, where: `what this sandbox listens on, and previews` },
     prepush: { label: `Pre-push checks`, where: `what stands between a change and a push` },
-    providers: { label: `AI providers`, where: `connected provider accounts` },
+    providers: { label: `AI accounts`, where: `the accounts your agents run on` },
     public: { label: `Outbox`, where: `files published at the sandbox's public address` },
     push: { label: `Pushing`, where: `sending work to a repository` },
     safety: { label: `Safety policy`, where: `the policy document and what it decided` },
@@ -75,10 +72,10 @@ const AREAS: Readonly<Record<string, { label: string; where: string }>> = {
     settings: { label: `Sandbox settings`, where: `everything on the Sandbox tabs` },
     share: { label: `Shared pages`, where: `conversations published as read-only pages` },
     skills: { label: `Skills`, where: `what the agent knows and what is switched on` },
-    // Not "the sandbox itself": the party row two lines above is called "This sandbox", and one card cannot use that
-    // word for both a side of the conversation and an area inside it.
-    system: { label: `Sandbox internals`, where: `terminals, restarts, devices and sync` },
-    translator: { label: `Subscriptions`, where: `routed-provider subscriptions` },
+    // Named for what a reader would actually open, not for the group: "the sandbox itself" would collide with the
+    // row above that IS the sandbox, and "internals" tells nobody which screen to distrust.
+    system: { label: `Terminals and devices`, where: `terminals, restarts, devices and syncing` },
+    translator: { label: `Subscriptions`, where: `AI plans you signed in to instead of paying per token` },
     usage: { label: `Usage`, where: `what each account has spent and what is left` },
     vpn: { label: `VPN`, where: `this sandbox's VPN connection` },
     workflows: { label: `Workflows`, where: `multi-agent workflow runs` },
@@ -89,7 +86,7 @@ const AREAS: Readonly<Record<string, { label: string; where: string }>> = {
 const groupOf = (route: string): string => route.split(`.`)[0] ?? route;
 
 const nameOf = (key: string): { label: string; where: string } =>
-    AREAS[key] ?? { label: key.charAt(0).toUpperCase() + key.slice(1), where: `a part of the app this page predates` };
+    AREAS[key] ?? { label: key.charAt(0).toUpperCase() + key.slice(1), where: `something newer than this page` };
 
 // Folds three flat route lists into one row per area of the product. Pure, so the whole table above is testable
 // without a daemon.
@@ -133,17 +130,18 @@ export const driftedAreas = computed(() =>
     driftAreas({ missing: missingRoutes.value, drifted: driftedRoutes.value, extra: unknownDaemonRoutes.value }),
 );
 
-// What each kind COSTS, never what it is: the card's heading already says which disagreement this is, and a drawer
-// that restates it spends the one place there was room to say what actually goes wrong.
+// What each kind COSTS, never what it is: the heading already says which disagreement this is, and a drawer that
+// restates it spends the one place there was room to say what actually goes wrong.
 export const KIND_IMPACT: Readonly<Record<DriftKind, string>> = {
-    missing: `The sandbox answers these with a 404, so anything here that needs one fails outright until it catches up.`,
-    drifted: `These answer, carrying fields this page doesn't expect: a value can come back blank, and a save can be rejected.`,
-    extra: `This page has no name for these, so it never asks for them. Nothing breaks; you only miss what they offer.`,
+    missing: `Your sandbox doesn't have this part yet, so anything here that needs it won't work until the sandbox catches up.`,
+    drifted: `The two sides expect slightly different things here. You might see something come up empty, or a change that won't save.`,
+    extra: `Your sandbox has this and this page is too old to use it. Nothing is broken — you just don't get it yet.`,
 };
 
-// One word beside the count, so a mixed list can be read down its right edge without opening a row. The sentence
-// each stands for is KIND_IMPACT, one chevron away.
-export const KIND_TAG: Readonly<Record<DriftKind, string>> = { missing: `missing`, drifted: `differ`, extra: `extra` };
+// What the badge says, so the list can be read down its right edge without opening anything. Each stands for one of
+// the sentences above. Never a number: the number is how many internal endpoints are involved, which is a fact about
+// the code and not about the reader's day.
+export const KIND_TAG: Readonly<Record<DriftKind, string>> = { missing: `not available`, drifted: `may misbehave`, extra: `not used yet` };
 
 // `extra` is the one kind that costs nothing, so it is drawn as a remark rather than a warning; the other two are
 // both a feature not working, loudly or silently.
@@ -151,46 +149,53 @@ export const KIND_TONE: Readonly<Record<DriftKind, "warning" | "info">> = { miss
 export const KIND_BADGE: Readonly<Record<DriftKind, "warning" | "neutral">> = { missing: `warning`, drifted: `warning`, extra: `neutral` };
 
 // A gap and a disagreement are not the same shape of failure, and the glyph says which before the words do:
-// `arrows-h` for two sides pulling one call apart, a warning triangle for one that isn't there at all.
+// `arrows-h` for two sides pulling one thing apart, a warning triangle for something that isn't there at all.
 export const KIND_ICON: Readonly<Record<DriftKind, "exclamation-triangle" | "arrows-h" | "question-circle">> = {
     missing: `exclamation-triangle`,
     drifted: `arrows-h`,
     extra: `question-circle`,
 };
 
-// THE TWO PARTIES, as facts rather than as a verdict. Each side's own size is the scale a drift count is read
-// against, and naming both is the answer to "which application can't talk to which".
+// THE TWO SIDES, named the way a reader would point at them: one is the thing they are looking at, the other is the
+// thing behind it. This pair is the answer to "which of these two can't talk to the other", which is the question the
+// old card left entirely unanswered.
 export interface DriftParty {
     readonly icon: "window-maximize" | "box";
     readonly label: string;
     readonly what: string;
-    // How many calls this side names; absent for a daemon that advertised none.
-    readonly calls: number | undefined;
+    // `older` on the side that is behind, when anything proves which one is; never on both, and absent whenever the
+    // evidence only shows a disagreement. A guess about which side is stale sends someone to restart the wrong one.
+    readonly age: "older" | "newer" | undefined;
 }
 
-// A constant, not a computed: this side's contract is compiled into the bundle being read, so nothing about it can
-// change while the page is open.
-export const APP_PARTY: DriftParty = {
+// Which side is behind, from the only two facts that prove it: a part one side has and the other has never heard of.
+// Both directions at once is a fork, where neither is simply older, so neither row is marked.
+const ages = (): { app: DriftParty["age"]; sandbox: DriftParty["age"] } => {
+    if (daemonBehind.value && appBehind.value) {
+        return { app: undefined, sandbox: undefined };
+    }
+    if (daemonBehind.value) {
+        return { app: `newer`, sandbox: `older` };
+    }
+    return appBehind.value ? { app: `older`, sandbox: `newer` } : { app: undefined, sandbox: undefined };
+};
+
+export const appParty = (): DriftParty => ({
     icon: `window-maximize`,
     label: `This page`,
-    what: `the editor, loaded in this browser tab`,
-    calls: ourRouteCount,
-};
+    what: `the editor you're looking at, in this browser tab`,
+    age: ages().app,
+});
 
 export const sandboxParty = (where: string | undefined): DriftParty => ({
     icon: `box`,
-    label: `This sandbox`,
-    what: where === undefined ? `the daemon answering this page` : `the daemon answering this page, on ${where}`,
-    calls: advertisedRouteCount.value,
+    label: `Your sandbox`,
+    what: where === undefined ? `the machine running your code` : `the machine running your code, on ${where}`,
+    age: ages().sandbox,
 });
 
-// The disagreement as one measured line, which is what the two counts above are for: how many of the calls BOTH
-// sides publish a shape for actually match. Undefined when neither side published enough to compare.
-export const agreementLine = computed<string | undefined>(() => {
-    const compared = comparedRouteCount.value;
-    if (compared === 0) {
-        return undefined;
-    }
-    const drifted = driftedRoutes.value.length;
-    return `${compared - drifted} of ${compared} shared calls match`;
-});
+// The only reassuring thing on the card, and worth saying: most of what these two do together is fine, so this is a
+// few features misbehaving rather than a broken sandbox. Silent when the two sides never compared enough to know.
+export const agreementLine = computed<string | undefined>(() =>
+    comparedRouteCount.value === 0 ? undefined : `Everything else between them lines up.`,
+);

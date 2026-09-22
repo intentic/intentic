@@ -89,6 +89,17 @@ export const RETIRED = [
         since: "2026-09-21",
     },
     {
+        id: "reload-restart",
+        // RELOAD IS F5 AND NOTHING ELSE. A reader with a browser open reads "reload" as refreshing the page, so a
+        // button that says it while restarting their whole sandbox teaches exactly the wrong reflex. The sandbox
+        // restarts; the page reloads. Only the sandbox-restart sense is refused here: `location.reload()`, "reload
+        // the page", hot reload, `systemctl daemon-reload` and the extension host's own reload all keep the word.
+        pattern:
+            /\b(dev-reload|reloadSandbox|reloadOnDevice|reloadCommand|copyReloadCommand)\b|[Rr]eload(ing|s|ed)? (the |this |your |a )?(sandbox|daemon|container)\b|[Ss]andbox reload\b/,
+        became: "restart (the PAGE still reloads; hot reload and `systemctl daemon-reload` are untouched)",
+        since: "2026-09-22",
+    },
+    {
         id: "area-shell",
         pattern: /\b(AreaTile|AreaRow|areaReachable|areaIcon|areaBands|areaCommands|shellAreas|extensionAreas|lastAreaPath|FloatingArea|ChatArea)\b|Every area is on the rail|Rail Area/,
         became: "section",

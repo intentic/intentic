@@ -225,7 +225,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
     rather than through an agent, a closed enum whose argv is built here from the name, never sent by the
     caller, because the socket underneath also carries `run_command`. Three of those names need more than a
     name, and take it from what only the daemon knows rather than from the caller: the dev checkout recorded on
-    this container (`dev-reload`, which restarts the very daemon answering the request, and `dev-rebuild`, which
+    this container (`dev-restart`, which restarts the very daemon answering the request, and `dev-rebuild`, which
     builds a fresh image out there and swaps this container onto it) and a pairing minted for that one call
     (`sync-install`, enrolling desktop sync on a machine already connected). `dev-rebuild` is also the one
     action nothing can stream — it is detached on the machine, and the swap at the end kills the daemon that

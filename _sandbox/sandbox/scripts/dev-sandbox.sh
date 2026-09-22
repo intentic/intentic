@@ -27,7 +27,7 @@ ROOT="$(cd "$SCRIPT_DIR" && pwd)"
 while [ "$ROOT" != "/" ] && [ ! -f "$ROOT/pnpm-workspace.yaml" ]; do ROOT="$(dirname "$ROOT")"; done
 
 # Bind the compiled JS from the working tree over the copies baked into the image, so a later daemon edit
-# needs only `tsgo` + `docker restart` (dev-reload.sh, seconds) instead of a full image rebuild (minutes).
+# needs only `tsgo` + `docker restart` (dev-restart.sh, seconds) instead of a full image rebuild (minutes).
 # Skipped silently when node isn't on PATH or nothing is compiled yet — the container then runs the baked
 # copies, which is exactly the old behaviour. See dev-mounts.mjs for what is mounted and why node_modules
 # never is.
@@ -35,12 +35,12 @@ INTENTIC_DEV_MOUNTS=""
 if command -v node >/dev/null 2>&1; then
     INTENTIC_DEV_MOUNTS="$(node "$SCRIPT_DIR/dev-mounts.mjs" 2>/dev/null || true)"
     [ -n "$INTENTIC_DEV_MOUNTS" ] &&
-        echo "intentic: mounting $(printf '%s\n' "$INTENTIC_DEV_MOUNTS" | grep -c .) compiled tree(s) from the working tree — daemon edits reload with dev-reload.sh."
+        echo "intentic: mounting $(printf '%s\n' "$INTENTIC_DEV_MOUNTS" | grep -c .) compiled tree(s) from the working tree — daemon edits restart with dev-restart.sh."
 fi
 export INTENTIC_DEV_MOUNTS
 
 # Tell the daemon WHERE those mounts came from. It cannot see a host path from inside the container, and knowing
-# it is what lets the Sandbox page's reload button run dev-reload.sh out here (through this machine's own device
+# it is what lets the Sandbox page's restart button run dev-restart.sh out here (through this machine's own device
 # connection) instead of printing the command for someone to paste. Delivered through the run contract's escape
 # hatch, so it is replayed by every later recreate like any other allowlisted var (REPLAY_ENV in
 # @intentic/sandbox-run); appended, never assigned, so a caller's own INTENTIC_SET_ENV survives.

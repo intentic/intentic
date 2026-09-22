@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// intentic dev-sandbox watch loop: rebuilds the image or reloads the daemon as sandbox sources change. One-time setup:
+// intentic dev-sandbox watch loop: rebuilds the image or restarts the daemon as sandbox sources change. One-time setup:
 // 1. `SANDBOX_IMAGE=intentic-sandbox:dev bash _site/site/public/scripts/connect.sh` builds the dev image, sets up
 //    tunnel/auth.
 // 2. `pnpm dev:sandbox` runs this script; leave it running.
@@ -26,7 +26,7 @@ const run = (command, args) =>
         child.on("exit", (code) => resolvePromise(code ?? 1));
     });
 
-// Denylist of what the dev-mount can't carry; everything else reloads via mount, only these need a rebuild.
+// Denylist of what the dev-mount can't carry; everything else restarts via mount, only these need a rebuild.
 const IMAGE_ONLY_PATHS = [
     join(REPO_ROOT, "_sandbox/sandbox/Dockerfile"),
     join(REPO_ROOT, "_sandbox/sandbox/docker-entrypoint.sh"),
@@ -61,8 +61,8 @@ const cycle = async (fullRebuild) => {
     } else {
         // Fast path: builds into the mounted dists and restarts the daemon; refuses on a container older than the
         // mounts.
-        console.log("\nintentic: change detected, reloading the daemon…");
-        await run("sh", [join(SCRIPT_DIR, "dev-reload.sh"), ...SLUG_ARGS]);
+        console.log("\nintentic: change detected, restarting the daemon…");
+        await run("sh", [join(SCRIPT_DIR, "dev-restart.sh"), ...SLUG_ARGS]);
     }
     building = false;
     if (pending !== undefined) {
@@ -90,5 +90,5 @@ const schedule = (path) => {
 watch(WATCH_PATHS, { ignored, ignoreInitial: true }).on("all", (_event, path) => schedule(path));
 
 console.log(
-    `intentic: watching sandbox sources for ${SLUG_ARGS[0] ?? "this machine's sandbox"}, source edits reload in seconds; Dockerfile/bin/skills/deps rebuild the image. Ctrl-C to stop.`,
+    `intentic: watching sandbox sources for ${SLUG_ARGS[0] ?? "this machine's sandbox"}, source edits restart in seconds; Dockerfile/bin/skills/deps rebuild the image. Ctrl-C to stop.`,
 );

@@ -1,5 +1,8 @@
 #!/bin/sh
-# intentic dev-sandbox FAST reload — recompile the daemon and restart it in place, without rebuilding the image.
+# intentic dev-sandbox FAST restart — recompile the daemon and restart it in place, without rebuilding the image.
+#
+# NEVER CALLED A RELOAD, HERE OR ON SCREEN: a reader who has a browser open reads "reload" as F5, and this one
+# restarts their whole sandbox. The word is reserved for the page.
 #
 # This is the inner loop dev-sandbox.sh's bind-mounts make possible: the running container reads /opt/sandbox/dist
 # (and each baked workspace package's dist) straight from the working tree, so a source edit needs a TypeScript
@@ -34,7 +37,7 @@ if [ -z "$SLUG" ]; then
         exit 1
     fi
     if [ "$count" -gt 1 ]; then
-        echo "error: this machine runs more than one sandbox — name the one to reload, 'dev-reload.sh <slug>':" >&2
+        echo "error: this machine runs more than one sandbox — name the one to restart, 'dev-restart.sh <slug>':" >&2
         printf '%s\n' "$matches" | sed "s/^${ORIGIN_HOST_PREFIX}/  /" >&2
         exit 1
     fi
@@ -50,7 +53,7 @@ fi
 # baked code, which reads as "my change did nothing" — the exact confusion this whole path exists to remove.
 if ! docker inspect --format '{{range .Mounts}}{{.Destination}}{{"\n"}}{{end}}' "$CONTAINER" | grep -qx '/opt/sandbox/dist'; then
     echo "error: ${CONTAINER} was created without the dev mounts, so a restart would re-run the baked daemon." >&2
-    echo "       Recreate it once with 'sh _sandbox/sandbox/scripts/dev-sandbox.sh' to enable fast reloads." >&2
+    echo "       Recreate it once with 'sh _sandbox/sandbox/scripts/dev-sandbox.sh' to enable fast restarts." >&2
     exit 1
 fi
 
@@ -77,7 +80,7 @@ docker restart "$CONTAINER" >/dev/null
 # Gate on the daemon's own /health, exactly like dev-sandbox.sh: a container that comes back up but crash-loops
 # on the new code must not report success. Then on its BOOT: /health answers the moment the process listens,
 # while every data route stays parked behind the readiness gate until the chain converges — returning at the
-# first 200 reports "reloaded" for a daemon the browser cannot read yet.
+# first 200 reports "restarted" for a daemon the browser cannot read yet.
 echo "intentic: waiting for the daemon…"
 tries=0
 until docker exec "$CONTAINER" curl -sf http://localhost:8787/health >/dev/null 2>&1; do
@@ -100,4 +103,4 @@ while docker exec "$CONTAINER" curl -sf http://localhost:8787/health 2>/dev/null
     sleep 1
 done
 
-echo "intentic: daemon reloaded — docker logs -f ${CONTAINER}"
+echo "intentic: daemon restarted — docker logs -f ${CONTAINER}"

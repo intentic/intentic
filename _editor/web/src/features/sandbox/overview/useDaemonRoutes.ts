@@ -98,11 +98,13 @@ export const driftScope = computed<DriftScope>(() => {
 // True when the daemon shapes a shared route differently; independent of `daemonBehind`.
 export const daemonDrifted = computed(() => driftedRoutes.value.length > 0);
 
-// What to do about a gap: a dev reloads the sandbox they just changed, a user updates the released image. In dev
-// the daemon runs from the working tree, not the image, so a reload, not a rebuild, is what updates it.
+// What to do about a gap: a dev restarts the sandbox they just changed, a user updates the released image. In dev
+// the sandbox runs the checkout rather than the image, so a restart, not a rebuild, is what picks the change up.
+// RESTART, NEVER RELOAD: this sentence reaches a browser console and an agent alike, and "reload" there is read as
+// refreshing a page — which would leave the reader pressing F5 at a sandbox that needs restarting.
 const daemonOlderRemedy = (): string =>
     import.meta.env.DEV
-        ? `This sandbox is running older code than this app: reload it with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
+        ? `This sandbox is running older code than this app: restart it with 'sh _sandbox/sandbox/scripts/dev-restart.sh'.`
         : `Update the sandbox to a newer image to use this feature.`;
 
 // Drift says which side moved only when something else has proved it. The dev server's reading comes first because it
@@ -110,13 +112,13 @@ const daemonOlderRemedy = (): string =>
 // way; otherwise neither side can be named and both remedies are offered, cheapest first.
 const eitherSideOlderRemedy = (): string => {
     if (contractUncompiled.value) {
-        return `The contract has changed since it was last compiled, and the sandbox runs the compiled copy: reload the sandbox with 'sh _sandbox/sandbox/scripts/dev-reload.sh', which rebuilds it. Reloading this page won't help.`;
+        return `The sandbox is running code older than this checkout: restart it with 'sh _sandbox/sandbox/scripts/dev-restart.sh', which rebuilds it first. Reloading this page won't help.`;
     }
     if (appBehind.value) {
-        return `This page is running older code than the sandbox: reload it.`;
+        return `This page is running older code than the sandbox: reload the page.`;
     }
     return import.meta.env.DEV
-        ? `One of the two is running older code: reload this page, or the sandbox with 'sh _sandbox/sandbox/scripts/dev-reload.sh'.`
+        ? `One of the two is running older code: reload this page, or restart the sandbox with 'sh _sandbox/sandbox/scripts/dev-restart.sh'.`
         : `Reload this page, or update the sandbox to a newer image.`;
 };
 
