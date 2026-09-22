@@ -144,7 +144,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
 
 <template>
     <div class="flex flex-col gap-3">
-        <div class="flex flex-col">
+        <div v-if="groups.length > 0" class="flex flex-col">
             <div
                 v-for="group in groups"
                 :key="group.sandboxId"
