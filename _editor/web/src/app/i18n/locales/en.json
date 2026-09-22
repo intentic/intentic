@@ -909,6 +909,7 @@
             "editMessageReplacesEverything": "Edit this message: replaces it and everything after",
             "expandMessage": "Expand message",
             "hideCheck": "Hide the check",
+            "hideMessage": "Hide the message",
             "hideCommand": "Hide the command",
             "isntConnectedYet": "{name} isn't connected yet",
             "keepFutureWorkOn": "Keep future work on the branch",
@@ -937,6 +938,7 @@
             "sendAnyway": "Send anyway",
             "setupDidntFinishWhile": "The setup didn't finish while the agent waited: it continued without it.",
             "showCheck": "Show the check",
+            "showMessage": "Show the message",
             "showCommand": "Show the command",
             "skip": "Skip",
             "skipFree": "Skip: free",
@@ -2188,7 +2190,6 @@
             "rebuildNow": "Rebuild now",
             "reconnectsOnOwn": "Reconnects on its own",
             "restartsSandbox": "Restarts the sandbox",
-            "runOnDeviceHolds": "Run it on the device that holds that checkout:",
             "runs": "Runs",
             "sandboxDoesntRecordCheckout": "This sandbox doesn't record which checkout its image came from, so it can't start the rebuild for you. Run it there, and recreating it once with"
         },

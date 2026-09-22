@@ -910,6 +910,7 @@
             "expandMessage": "Rozwiń wiadomość",
             "hideCheck": "Ukryj sprawdzenie",
             "hideCommand": "Ukryj polecenie",
+            "hideMessage": "Ukryj wiadomość",
             "isntConnectedYet": "{name} nie jest jeszcze podłączone",
             "keepFutureWorkOn": "Wstrzymaj przyszłą pracę na gałęzi",
             "no": "Nie",
@@ -938,6 +939,7 @@
             "setupDidntFinishWhile": "Konfiguracja nie skończyła się, kiedy agent czekał: poszedł dalej bez niej.",
             "showCheck": "Pokaż sprawdzenie",
             "showCommand": "Pokaż polecenie",
+            "showMessage": "Pokaż wiadomość",
             "skip": "Pomiń",
             "skipFree": "Pomiń: za darmo",
             "spentToday": "{amountUsd} $ · dziś wydano {spentTodayUsd} $ z {dailyCapUsd} $",
@@ -2188,7 +2190,6 @@
             "rebuildNow": "Przebuduj teraz",
             "reconnectsOnOwn": "Łączy się sam z powrotem",
             "restartsSandbox": "Restartuje sandbox",
-            "runOnDeviceHolds": "Uruchom to na urządzeniu, które trzyma ten checkout:",
             "runs": "Uruchamia",
             "sandboxDoesntRecordCheckout": "Ten sandbox nie zapisuje, z jakiego checkoutu wziął się jego obraz, więc nie może uruchomić przebudowy za Ciebie. Uruchom ją tam, a jednorazowe odtworzenie go przez"
         },

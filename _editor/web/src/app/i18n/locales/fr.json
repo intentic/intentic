@@ -910,6 +910,7 @@
             "expandMessage": "Déplier le message",
             "hideCheck": "Masquer la vérification",
             "hideCommand": "Masquer la commande",
+            "hideMessage": "Masquer le message",
             "isntConnectedYet": "{name} n'est pas encore connecté",
             "keepFutureWorkOn": "Retenir le travail à venir sur la branche",
             "no": "Non",
@@ -938,6 +939,7 @@
             "setupDidntFinishWhile": "L'installation n'a pas abouti pendant que l'agent attendait : il a continué sans.",
             "showCheck": "Afficher la vérification",
             "showCommand": "Afficher la commande",
+            "showMessage": "Afficher le message",
             "skip": "Passer",
             "skipFree": "Passer : gratuit",
             "spentToday": "{amountUsd} $ · {spentTodayUsd} $ sur {dailyCapUsd} $ dépensés aujourd'hui",
@@ -2188,7 +2190,6 @@
             "rebuildNow": "Reconstruire maintenant",
             "reconnectsOnOwn": "Se reconnecte tout seul",
             "restartsSandbox": "Redémarre le sandbox",
-            "runOnDeviceHolds": "Lancez-la sur l'appareil qui détient ce checkout :",
             "runs": "Exécute",
             "sandboxDoesntRecordCheckout": "Ce sandbox n'enregistre pas de quel checkout vient son image : il ne peut donc pas lancer la reconstruction pour vous. Lancez-la là-bas, et le recréer une fois avec"
         },

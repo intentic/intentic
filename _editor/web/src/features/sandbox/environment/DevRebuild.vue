@@ -267,15 +267,11 @@ const checkout = computed(() => {
         </template>
 
         <template v-else>
-            <p class="text-2xs text-subtle">
-                {{ t(`sandbox.devRebuild.runs`) }} <span class="font-mono">{{ base }}</span> {{ t(`sandbox.devRebuild.checkoutNotPublishedRelease`) }}
-            </p>
             <!-- Two different gaps, one fallback: no checkout recorded, or nobody here can reach the machine holding it. -->
             <p v-if="root === undefined" class="text-2xs text-subtle">
                 {{ t(`sandbox.devRebuild.sandboxDoesntRecordCheckout`) }} <span class="font-mono">dev-sandbox.sh</span>
                 {{ t(`sandbox.devRebuild.makesButtonOn`) }}
             </p>
-            <p v-else class="text-2xs text-subtle">{{ t(`sandbox.devRebuild.runOnDeviceHolds`) }}</p>
             <Code :code="command" :lang="commandLang(`unix`)" :label="t(`sandbox.devRebuild.rebuildCommand`)" :wrap="true" />
             <ConnectDeviceHint v-if="root" :slug="slug" gains="rebuilding from your checkout becomes a button here." />
         </template>

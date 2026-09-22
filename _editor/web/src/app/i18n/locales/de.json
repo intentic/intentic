@@ -910,6 +910,7 @@
             "expandMessage": "Nachricht ausklappen",
             "hideCheck": "Die Prüfung ausblenden",
             "hideCommand": "Den Befehl ausblenden",
+            "hideMessage": "Die Nachricht ausblenden",
             "isntConnectedYet": "{name} ist noch nicht verbunden",
             "keepFutureWorkOn": "Künftige Arbeit auf dem Branch halten",
             "no": "Nein",
@@ -938,6 +939,7 @@
             "setupDidntFinishWhile": "Die Einrichtung wurde nicht fertig, während der Agent gewartet hat: er hat ohne sie weitergemacht.",
             "showCheck": "Die Prüfung anzeigen",
             "showCommand": "Den Befehl anzeigen",
+            "showMessage": "Die Nachricht anzeigen",
             "skip": "Überspringen",
             "skipFree": "Überspringen: kostenlos",
             "spentToday": "{amountUsd} $ · heute {spentTodayUsd} $ von {dailyCapUsd} $ ausgegeben",
@@ -2188,7 +2190,6 @@
             "rebuildNow": "Jetzt neu bauen",
             "reconnectsOnOwn": "Verbindet sich von selbst wieder",
             "restartsSandbox": "Startet die Sandbox neu",
-            "runOnDeviceHolds": "Führen Sie ihn auf dem Gerät aus, das diesen Checkout hält:",
             "runs": "Läuft",
             "sandboxDoesntRecordCheckout": "Diese Sandbox zeichnet nicht auf, aus welchem Checkout ihr Image kam, sie kann den Neubau also nicht für Sie starten. Führen Sie ihn dort aus; sie einmal neu anzulegen mit"
         },

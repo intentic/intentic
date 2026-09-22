@@ -910,6 +910,7 @@
             "expandMessage": "Desplegar el mensaje",
             "hideCheck": "Ocultar la comprobación",
             "hideCommand": "Ocultar el comando",
+            "hideMessage": "Ocultar el mensaje",
             "isntConnectedYet": "{name} todavía no está conectado",
             "keepFutureWorkOn": "Retener el trabajo futuro en la rama",
             "no": "No",
@@ -938,6 +939,7 @@
             "setupDidntFinishWhile": "La configuración no terminó mientras el agente esperaba: continuó sin ella.",
             "showCheck": "Mostrar la comprobación",
             "showCommand": "Mostrar el comando",
+            "showMessage": "Mostrar el mensaje",
             "skip": "Omitir",
             "skipFree": "Omitir: gratis",
             "spentToday": "{amountUsd} $ · {spentTodayUsd} $ de {dailyCapUsd} $ gastados hoy",
@@ -2188,7 +2190,6 @@
             "rebuildNow": "Reconstruir ahora",
             "reconnectsOnOwn": "Se reconecta sola",
             "restartsSandbox": "Reinicia el sandbox",
-            "runOnDeviceHolds": "Ejecútalo en el dispositivo que tiene ese checkout:",
             "runs": "Ejecuta",
             "sandboxDoesntRecordCheckout": "Este sandbox no registra de qué checkout salió su imagen, así que no puede iniciar la reconstrucción por ti. Ejecútala allí, y recrearlo una vez con"
         },

@@ -130,10 +130,12 @@ it(`renders button and reveals command overlay with cost on focus`, async () => 
     expect(overlay?.textContent).toContain(`Builds the image while you keep working`);
 });
 
-it(`renders current state text in fallback when device or root is absent`, () => {
+it(`renders rebuild command in fallback when device is absent`, () => {
     hostId.value = undefined;
     const el = mount({ slug: nextSlug(), base: `intentic-sandbox:dev`, root: `/home/radarsu/intentic` });
-    expect(el.textContent).toContain(`Runs intentic-sandbox:dev from your checkout, not a published release.`);
+    expect(el.textContent).toContain(`Rebuild command`);
+    expect(el.textContent).toContain(`pnpm rebuild:sandbox`);
+    expect(el.textContent).not.toContain(`Runs intentic-sandbox:dev from your checkout, not a published release.`);
 });
 
 // WHAT SENT A READER DOWN THE SLOW PATH BELIEVING IT WAS THE QUICK ONE. Both buttons on the Environment card apply the
