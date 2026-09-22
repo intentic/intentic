@@ -171,16 +171,18 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                             :class="isOpen(group) ? `rotate-90` : undefined"
                             aria-hidden="true"
                         />
-                        <!-- Running is a dot alone, the resting state of a healthy row; stopped keeps its word beside it. -->
-                        <span
-                            v-if="group.sandbox"
-                            class="h-1.5 w-1.5 shrink-0 rounded-full"
-                            :class="group.sandbox.running ? `bg-success` : `bg-subtle`"
-                            role="img"
-                            :aria-label="group.sandbox.running ? `running` : `stopped`"
-                            :title="group.sandbox.running ? `running` : `stopped`"
-                        ></span>
-                        <Icon v-else name="box" class="shrink-0 text-2xs text-subtle" />
+                        <!-- Fixed-width column so dot and icon leads occupy the same space. -->
+                        <span class="flex w-3.5 shrink-0 items-center justify-center">
+                            <span
+                                v-if="group.sandbox"
+                                class="h-1.5 w-1.5 rounded-full"
+                                :class="group.sandbox.running ? `bg-success` : `bg-subtle`"
+                                role="img"
+                                :aria-label="group.sandbox.running ? `running` : `stopped`"
+                                :title="group.sandbox.running ? `running` : `stopped`"
+                            ></span>
+                            <Icon v-else name="box" class="text-2xs text-subtle" />
+                        </span>
                         <span class="min-w-0 truncate text-xs font-semibold text-content">{{ group.title }}</span>
                         <!-- The exact id, kept and demoted: the title is the friendliest name available, and this is what gets typed into a terminal. -->
                         <span v-if="group.subtitle" class="hidden shrink-0 truncate font-mono text-2xs text-subtle sm:inline">
@@ -194,7 +196,7 @@ onBeforeUnmount(() => clearTimeout(flashTimer));
                         <span v-else-if="!group.sandbox" class="shrink-0 text-2xs text-muted">{{ t(`ui.deviceDetail.notRunningHere`) }}</span>
                         <slot name="badges" :group="group" />
                         <!-- What the closed line still answers: facts are counted and uncoloured, a warning is why the row unfolded itself. -->
-                        <span v-if="!isOpen(group)" class="ml-auto flex min-w-0 shrink items-center gap-x-2 pl-2">
+                        <span v-if="!isOpen(group)" class="ml-auto flex min-w-0 shrink items-center gap-x-2.5 pl-3">
                             <span v-for="fact in groupSummary(group).facts" :key="fact" class="shrink-0 text-2xs text-subtle">{{ fact }}</span>
                             <span v-for="warning in groupSummary(group).warnings" :key="warning" class="truncate text-2xs text-warning">
                                 {{ warning }}
