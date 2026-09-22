@@ -1,5 +1,5 @@
 import type { Workflow, WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { gateVerdictOf } from "./workflow-gate.js";
 
 // One path reaches `fail`; every other way a run ends reaches `blocked`. A regression letting a failed step, a stopped

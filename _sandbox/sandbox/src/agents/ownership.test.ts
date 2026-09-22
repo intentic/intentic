@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
 
 // The three ways a conversation changes hands, and the one way it does not: a collaborator reaching for someone else's.

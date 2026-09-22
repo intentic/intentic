@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, jest } from "bun:test";
 import { ref } from "vue";
 import { SAVE_AFTER_MS, type SavePolicy, useSaveDraft } from "@intentic/ui/markdown-document";
 
@@ -30,8 +30,8 @@ const draftOf = (policy: SavePolicy, disk: string | undefined = DISK) => {
     return { ...draft, text, stored, saving, writes, type };
 };
 
-beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+beforeEach(() => jest.useFakeTimers());
+afterEach(() => jest.useRealTimers());
 
 describe(`save="auto"`, () => {
     test(`writes once the typing stops, not once per keystroke`, () => {
@@ -39,9 +39,9 @@ describe(`save="auto"`, () => {
         it.type(`# On disk\nA`);
         it.type(`# On disk\nAb`);
         it.type(`# On disk\nAbc`);
-        vi.advanceTimersByTime(SAVE_AFTER_MS - 1);
+        jest.advanceTimersByTime(SAVE_AFTER_MS - 1);
         expect(it.writes).toEqual([]);
-        vi.advanceTimersByTime(1);
+        jest.advanceTimersByTime(1);
         expect(it.writes).toEqual([`# On disk\nAbc`]);
     });
 
@@ -50,7 +50,7 @@ describe(`save="auto"`, () => {
     test(`never writes a document that was only read`, () => {
         const it = draftOf(`auto`);
         // Nothing typed: the surface mounted, the reader looked at it, and the clock ran on.
-        vi.advanceTimersByTime(SAVE_AFTER_MS * 10);
+        jest.advanceTimersByTime(SAVE_AFTER_MS * 10);
         expect(it.writes).toEqual([]);
     });
 
@@ -58,7 +58,7 @@ describe(`save="auto"`, () => {
         const it = draftOf(`auto`);
         it.type(`${DISK}oops`);
         it.type(DISK);
-        vi.advanceTimersByTime(SAVE_AFTER_MS * 2);
+        jest.advanceTimersByTime(SAVE_AFTER_MS * 2);
         expect(it.writes).toEqual([]);
     });
 
@@ -68,7 +68,7 @@ describe(`save="auto"`, () => {
         it.leave();
         expect(it.writes).toEqual([`${DISK}half a sen`]);
         // And the timer it cancelled does not then write the same text a second time.
-        vi.advanceTimersByTime(SAVE_AFTER_MS * 2);
+        jest.advanceTimersByTime(SAVE_AFTER_MS * 2);
         expect(it.writes).toHaveLength(1);
     });
 
@@ -83,7 +83,7 @@ describe(`save="explicit"`, () => {
     test(`typing schedules nothing: this is text every turn reads, and it waits to be told`, () => {
         const it = draftOf(`explicit`);
         it.type(`${DISK}a new rule`);
-        vi.advanceTimersByTime(SAVE_AFTER_MS * 10);
+        jest.advanceTimersByTime(SAVE_AFTER_MS * 10);
         expect(it.writes).toEqual([]);
     });
 
@@ -114,7 +114,7 @@ describe(`save="none"`, () => {
     test(`the form owns the save, so typing and leaving both write nothing`, () => {
         const it = draftOf(`none`);
         it.type(`${DISK}typed`);
-        vi.advanceTimersByTime(SAVE_AFTER_MS * 10);
+        jest.advanceTimersByTime(SAVE_AFTER_MS * 10);
         it.leave();
         expect(it.writes).toEqual([]);
     });

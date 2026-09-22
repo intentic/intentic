@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import {
     acquireProfileLock,
     clearMarker,

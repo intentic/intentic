@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, spyOn, jest } from "bun:test";
 import {
     CI_FIX_PREFIX,
     ciFixConversationId,
@@ -15,7 +15,7 @@ import { ConversationIdSchema } from "../schemas/agent.js";
 
 const mockRandomValues = (values: readonly number[]) => {
     const remaining = [...values];
-    const getRandomValues = vi.spyOn(crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
+    const getRandomValues = spyOn(crypto, "getRandomValues").mockImplementation(<T extends ArrayBufferView | null>(array: T): T => {
         if (!(array instanceof Uint32Array)) {
             throw new TypeError(`Expected a Uint32Array`);
         }
@@ -29,7 +29,7 @@ const mockRandomValues = (values: readonly number[]) => {
     return { getRandomValues, remaining };
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => jest.restoreAllMocks());
 
 test("every generated id passes the conversation-id guard", () => {
     for (let index = 0; index < 2_000; index += 1) {

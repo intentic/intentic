@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
 //
 // The evidence line under a filtered card. Two things are load-bearing and neither is markup: WHOSE words the
 // line is (a reply quoted under a card reads as the reader's own until it says otherwise), and that the term
 // is marked without ever handing chat text to v-html. Mounted with plain Vue, as ReviewStat.test does.
-import { describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect } from "bun:test";
 import { createApp, h } from "vue";
 
 // The marking helper lives beside the filter, which reaches the app shell and its media queries on import.

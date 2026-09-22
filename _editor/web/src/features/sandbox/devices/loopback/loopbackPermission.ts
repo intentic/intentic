@@ -29,8 +29,8 @@ const query = async (): Promise<PermissionStatus | undefined> => {
     return undefined;
 };
 
-// Reads the Tauri-injected marker directly rather than through environment.ts, which throws under the
-// windowless vitest `node` environment several suites use via useEndpoint's import chain.
+// Reads the Tauri-injected marker directly rather than through environment.ts, which throws in a suite with no
+// window, several of which reach this module through useEndpoint's import chain.
 const desktopWebview = (): Window["__INTENTIC_DESKTOP__"] => (typeof window === `undefined` ? undefined : window.__INTENTIC_DESKTOP__);
 
 // The desktop app answers before Chrome is asked: its workspace webview disables the check at install time

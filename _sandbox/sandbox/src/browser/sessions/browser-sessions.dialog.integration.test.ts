@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserContext } from "playwright";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { answerBrowserDialog, browserSessionContext, closeBrowserSession, listBrowserSessions, openBrowserSession } from "./browser-sessions.js";
 
 // A Playwright client dismisses any dialog nobody listens for, and this daemon attaches to the agent's browser as a
@@ -45,7 +45,7 @@ const launch = async (port: number): Promise<{ context: BrowserContext; profile:
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-test("a dialog the agent's page opens is held for whoever answers, not dismissed by the daemon's own attach", { timeout: 90_000 }, async () => {
+test("a dialog the agent's page opens is held for whoever answers, not dismissed by the daemon's own attach", async () => {
     const port = await freePort();
     const launched = await launch(port);
     if (launched === undefined) {
@@ -83,4 +83,4 @@ test("a dialog the agent's page opens is held for whoever answers, not dismissed
         await context.close().catch(() => undefined);
         rmSync(profile, { recursive: true, force: true });
     }
-});
+}, { timeout: 90_000 });

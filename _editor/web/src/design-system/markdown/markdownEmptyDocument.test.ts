@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
 // An EMPTY document, on the editing surface. Markdown has no block for "nothing", so the splitter returns no blocks at
 // all: without a line standing in for them the `contenteditable` renders no children, which is a pane with nothing to
 // click, nothing to focus and nowhere to put a caret. Mounted for real (jsdom, plain Vue) since the whole question is
 // what the DOM ends up holding.
-import { describe, expect, test } from "vitest";
+import "@intentic/testing/dom";
+import { describe, test, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import { MarkdownDocument } from "@intentic/ui";
 

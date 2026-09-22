@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { type TreeEntry, vitestProjects } from "./useVitest";
 
 const file = (path: string): TreeEntry => ({ name: path.split(`/`).at(-1) ?? path, path, type: `file` });

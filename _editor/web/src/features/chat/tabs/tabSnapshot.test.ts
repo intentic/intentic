@@ -1,5 +1,5 @@
 import { STATE_DIR } from "@intentic/constants";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
 
 // Pins the reader's contract: every tab named once, a focus naming one of them, nothing readable dropped. A
 // duplicate conversationId would collide on Vue's v-for key, scrambling names and closes.
@@ -41,7 +41,7 @@ beforeEach(() => {
 
 describe(`reading a tab snapshot`, () => {
     it(`restores the workflow selection alongside the tabs and pane order`, () => {
-        const run = { runId: `run-1`, mode: `pinned` };
+        const run = { runId: `run-1`, mode: `pinned` } as const;
         writeTabSnapshot(`sb1`, JSON.stringify({ active: `b`, panes: [`a`, `b`], tabs: [tab(`a`), tab(`b`)], run }));
 
         const snapshot = readTabSnapshot(`sb1`);
@@ -132,7 +132,7 @@ describe(`reading a tab snapshot`, () => {
             draftAt: 1_700,
             provider: `codex`,
             harness: `claude-code`,
-            session: { id: `sess-1`, provider: `codex`, harness: `claude-code` },
+            session: { id: `sess-1`, provider: `codex`, harness: `claude-code`, account: undefined },
             title: `Fix the login handler`,
             attachments: [{ name: `pic.png`, path: `.intentic/records/artifacts/attachments/u1/pic.png` }],
             queued: [{ text: `also the tests`, attachments: [] }],
@@ -281,7 +281,7 @@ describe(`reading a tab snapshot`, () => {
 
         const restored = readTabSnapshot(`sb1`)?.tabs[0];
         expect(restored).not.toHaveProperty(`account`);
-        expect(restored?.session).toEqual({ id: `sess-1`, provider: `claude`, harness: `native` });
+        expect(restored?.session).toEqual({ id: `sess-1`, provider: `claude`, harness: `native`, account: undefined });
     });
 
     it(`drops a session that reads back without what minted it, rather than completing it from the tab`, () => {

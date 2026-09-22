@@ -14,14 +14,14 @@ import {
     type TranscriptRow,
     withResumeNote,
 } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { waitFor, SETTLES } from "@intentic/testing/bun";
 import type { PersistedAgent } from "../../../agents/registry/agents-store.js";
 import { fileHeldWakesStore } from "../../../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../../../automations/automations-store.js";
 import type { WakeFn } from "../../../automations/scheduler.js";
 import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { SETTLES } from "@intentic/testing/vitest";
 import type { TranscriptAgent } from "../../../sessions/agent-transcript.js";
 import { testMintedSlices } from "../../../harness/route-services.testing.js";
 import { automationConfig } from "../../../harness/route-stores.testing.js";
@@ -107,7 +107,7 @@ test("a started turn records its settled transcript, whatever provider ran it", 
         harness: "native",
     });
     expect(started).toEqual(expect.any(Object));
-    await vi.waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), SETTLES);
+    await waitFor(async () => expect(await record.read("tr-record")).toHaveLength(2), SETTLES);
     // The run each row came from is part of the record: within its retention window that run is still attachable, and
     // a window redrawing from here has to recognise its rows when the head arrives.
     expect(await record.read("tr-record")).toEqual([
@@ -252,7 +252,11 @@ const withPersonas = (services: Services, cards: readonly Persona[]): Services =
     personas: unstubbed<Services["personas"]>("personas", { get: async (id) => cards.find((card) => card.id === id) }),
 });
 
-const ranAs = async (cards: readonly Persona[], settings: Partial<SandboxSettings>, turn: AgentTurn & { conversationId: string }): Promise<AgentTurn> => {
+const ranAs = async (
+    cards: readonly Persona[],
+    settings: Partial<SandboxSettings>,
+    turn: AgentTurn & { conversationId: string },
+): Promise<AgentTurn> => {
     const services = withPersonas(withProviders(fakeServices(mkdtempSync(join(tmpdir(), "agent-run-model-"))), ["claude", "codex", "gemini"]), cards);
     await services.sandboxSettings.set({ ...SandboxSettingsSchema.parse({}), ...settings });
     const seen: AgentTurn[] = [];
@@ -279,7 +283,12 @@ test("the persona's own ladder outranks the role's list, and brings its knobs", 
 
 test("a persona with no ladder, or none reachable, leaves the question to the role", async () => {
     const roles = { modelRoles: { [ROLE]: [{ provider: "codex", model: "gpt-5.6" }] } };
-    const silent = await ranAs([{ id: "quiet", capabilities: [] }], roles, { prompt: "fix CI", conversationId: "ar-persona-silent", runRole: ROLE, actsAs: "quiet" });
+    const silent = await ranAs([{ id: "quiet", capabilities: [] }], roles, {
+        prompt: "fix CI",
+        conversationId: "ar-persona-silent",
+        runRole: ROLE,
+        actsAs: "quiet",
+    });
     expect(silent).toMatchObject({ agent: "codex", model: "gpt-5.6" });
     // Kimi isn't connected in this fixture.
     const unreachable = await ranAs([{ id: "far", capabilities: [], models: [{ provider: "kimi", model: "k2" }] }], roles, {
@@ -677,7 +686,7 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
     };
     await resumeInterruptedTurns(services, capture, BOOT_AT);
 
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toMatch(/restarted/i);
     expect(prompts[0]).toContain("finish the report");
     expect(inputs[0]?.sessionId).toBe("s-partial");
@@ -704,7 +713,7 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
         yield { kind: "done" };
     };
     await resumeInterruptedTurns(services, wake, BOOT_AT);
-    await vi.waitFor(() => expect(order).toContain(`wake`), SETTLES);
+    await waitFor(() => expect(order).toContain(`wake`), SETTLES);
 
     expect(order[0]).toBe(`record:attempts=1`);
     expect(order.indexOf(`record:attempts=1`)).toBeLessThan(order.indexOf(`wake`));
@@ -827,7 +836,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
-    await vi.waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2), SETTLES);
 
     const runs = (await services.automations.get("hook"))?.runs ?? [];
     // runs sorts newest first: the completed re-fire sits above the interrupted record it replaced.
@@ -844,7 +853,7 @@ test("a re-fire skips the approval gate: the wake was already past it when the d
 
     const prompts: string[] = [];
     await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
-    await vi.waitFor(() => expect(prompts).toEqual(["sweep"]), SETTLES);
+    await waitFor(() => expect(prompts).toEqual(["sweep"]), SETTLES);
     // Re-holding it would ask a question the owner has already answered.
     expect(await services.heldWakes.list()).toEqual([]);
 });
@@ -926,7 +935,7 @@ const parkedEntry = (conversationId: string, cards: ParkedRequest[], extra: Part
 // True once the cards' frames have folded through registry observe, the same moment the fleet and any attached window
 // render them.
 const cardsUp = async (observed: AgentEvent[], kind: ParkedRequest["kind"]): Promise<void> => {
-    await vi.waitFor(() => expect(observed.map((event) => event.kind)).toContain(kind), SETTLES);
+    await waitFor(() => expect(observed.map((event) => event.kind)).toContain(kind), SETTLES);
 };
 
 test("a parked turn is rehydrated at boot: the cards go back up as they stood, and nothing runs until the user answers", async () => {
@@ -941,7 +950,7 @@ test("a parked turn is rehydrated at boot: the cards go back up as they stood, a
     expect(observed[1]).toEqual(planRequest("r-up"));
     expect(prompts).toEqual([]);
     // Re-journals through the ordinary frame loop, so a second restart rehydrates it again.
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
         const [entry] = await services.turnJournal.list();
         expect(entry?.kind === "turn" ? (entry.parked ?? []).map((card) => card.requestId) : []).toEqual(["r-up"]);
     }, SETTLES);
@@ -953,7 +962,7 @@ test("a parked turn is rehydrated at boot: the cards go back up as they stood, a
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-up" });
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
-    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), SETTLES);
+    await waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), SETTLES);
 });
 
 test("approving the restored plan resumes the session in the posture a live approval grants", async () => {
@@ -970,7 +979,7 @@ test("approving the restored plan resumes the session in the posture a live appr
     await cardsUp(observed, "plan");
 
     expect(resolveRequest({ kind: "plan", requestId: "r-plan", approve: true })).toBe("settled");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
     expect(prompts[0]).toMatch(/approved.*plan/i);
     // bypassPermissions is POST_PLAN_MODE; a restart must not re-add per-tool prompts a live approval already spared.
@@ -996,7 +1005,7 @@ test("rejecting the restored plan with feedback goes back into plan mode carryin
 
     const feedback = "Use pnpm, not npm.";
     expect(resolveRequest({ kind: "plan", requestId: "r-rej", approve: false, feedback })).toBe("settled");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(feedback);
     expect(inputs[0]).toMatchObject({ permissionMode: "plan" });
     await settle("pk-rej");
@@ -1010,7 +1019,7 @@ test("answering the restored question resumes with the picks, worded as a live a
     await cardsUp(observed, "question");
 
     expect(resolveRequest({ kind: "question", requestId: "r-q", answers: { "Deploy now?": ["Yes"] } })).toBe("settled");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // formatAnswers' own wording, so a restart reads identically to a live answer.
     expect(prompts[0]).toMatch(/user answered/i);
     expect(prompts[0]).toContain("Yes");
@@ -1028,7 +1037,7 @@ test("dismissing the restored question ends the turn quietly, exactly as a live 
     await settle("pk-dis");
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
-    await vi.waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), SETTLES);
+    await waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), SETTLES);
 });
 
 test("allowing the restored permission resumes the turn told to run the tool", async () => {
@@ -1039,7 +1048,7 @@ test("allowing the restored permission resumes the turn told to run the tool", a
     await cardsUp(observed, "permission");
 
     expect(resolveRequest({ kind: "permission", requestId: "r-allow", decision: "once" })).toBe("settled");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
     expect(prompts[0]).toMatch(/allowed Bash/i);
     await settle("pk-allow");
@@ -1053,7 +1062,7 @@ test("denying the restored permission with feedback resumes as a redirection; a 
     await cardsUp(observed, "permission");
     const feedback = "Read the file instead.";
     expect(resolveRequest({ kind: "permission", requestId: "r-redir", decision: "deny", feedback })).toBe("settled");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(feedback);
     await settle("pk-redir");
 
@@ -1077,7 +1086,7 @@ test("one answer resumes a turn parked on several cards: the others freeze cance
     await cardsUp(observed, "permission");
 
     expect(resolveRequest({ kind: "permission", requestId: "r-mp", decision: "once" })).toBe("settled");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toMatch(/allowed Bash/i);
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-mq" });
     await settle("pk-multi");
@@ -1110,7 +1119,12 @@ const heldWake = (turns: AgentTurn[]): WakeFn =>
 test("a turn refused before it ran is sent again in full, and NOT onto the session it left behind", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-1", isolated: true }, sessionId: "s-void", ran: false });
+    recordHeldTurn({
+        reason: "limit",
+        input: { prompt: "ship the parser", conversationId: "lim-1", isolated: true },
+        sessionId: "s-void",
+        ran: false,
+    });
 
     expect(await fireHeldResume(services, heldWake(turns), "lim-1")).toEqual(expect.any(Object));
     await settle("lim-1");
@@ -1130,7 +1144,12 @@ test("a turn refused before it ran is sent again in full, and NOT onto the sessi
 test("a limit reached mid-flight keeps the session holding its work, and says so", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-2", isolated: true }, sessionId: "s-real", ran: true });
+    recordHeldTurn({
+        reason: "limit",
+        input: { prompt: "ship the parser", conversationId: "lim-2", isolated: true },
+        sessionId: "s-real",
+        ran: true,
+    });
 
     await fireHeldResume(services, heldWake(turns), "lim-2");
     await settle("lim-2");
@@ -1171,7 +1190,12 @@ test("a press on a switched account runs on it, and cannot take the old account'
 test("a press that names the routing the turn already had resumes its session", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-same", isolated: true }, sessionId: "s-real", ran: true });
+    recordHeldTurn({
+        reason: "limit",
+        input: { prompt: "ship the parser", conversationId: "lim-same", isolated: true },
+        sessionId: "s-real",
+        ran: true,
+    });
 
     await fireHeldResume(services, heldWake(turns), "lim-same", { agent: "claude", harness: "native", model: "claude-sonnet-4-5" });
     await settle("lim-same");
@@ -1279,7 +1303,12 @@ test("nothing held answers with nothing, so the press falls back to saying carry
 test("a turn a dead runtime cut short is sent again on its own session, with no allowance in the note", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({ reason: "stopped", input: { prompt: "ship the parser", conversationId: "stop-1", isolated: true }, sessionId: "s-real", ran: true });
+    recordHeldTurn({
+        reason: "stopped",
+        input: { prompt: "ship the parser", conversationId: "stop-1", isolated: true },
+        sessionId: "s-real",
+        ran: true,
+    });
 
     await fireHeldResume(services, heldWake(turns), "stop-1");
     await settle("stop-1");
@@ -1520,7 +1549,10 @@ test("a held turn with no booked move and no arming stays held", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
     const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-unbooked", isolated: true }, ran: false, reopensAt: REOPENS }, RECORDED);
+    recordHeldTurn(
+        { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-unbooked", isolated: true }, ran: false, reopensAt: REOPENS },
+        RECORDED,
+    );
 
     await scheduler.tick(RECORDED + 5_000);
     await scheduler.tick(REOPENS * 1000 + 1);

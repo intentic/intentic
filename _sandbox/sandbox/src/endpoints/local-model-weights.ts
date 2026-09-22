@@ -56,7 +56,8 @@ const openStream = async (
         const blob = await downloadFile({
             repo: source.repo,
             path: source.path,
-            fetch: (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => fetch(input, { ...init, signal }),
+            // bun-types' `fetch` carries `preconnect`, which a request wrapper has no use for.
+            fetch: ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => fetch(input, { ...init, signal })) as typeof fetch,
         });
         if (blob === null) {
             throw new Error(`${source.repo} has no ${source.path}, check the model path on the card.`);

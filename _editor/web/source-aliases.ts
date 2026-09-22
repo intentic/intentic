@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 
-// Source-first alias map shared by vite.config.ts and vitest.config.ts so app and test resolution can't fork. Libs
+// Source-first alias map shared by vite.config.ts and bun.setup.ts so app and test resolution can't fork. Libs
 // and first-party extensions resolve to true source, not an injected node_modules copy, so a lazily-loaded
 // extension view and the app share one host.ts singleton; daemon-only packages are skipped.
 

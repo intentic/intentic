@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
 // Needs jsdom: whether a row animates is what this component renders, and only a mounted render can show that.
-import { afterEach, describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, afterEach } from "bun:test";
 import type { TodoItem } from "@intentic/sandbox-contract";
 import { type App, createApp, h } from "vue";
 import ChatTodoList from "./ChatTodoList.vue";

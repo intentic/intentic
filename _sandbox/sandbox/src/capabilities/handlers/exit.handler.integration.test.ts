@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Capability, ExitConfig } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "../capability.js";
 import { exitHandler } from "./exit.handler.js";

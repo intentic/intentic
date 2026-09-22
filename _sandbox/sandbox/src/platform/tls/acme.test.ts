@@ -1,6 +1,6 @@
 import { createHash, createPublicKey, generateKeyPairSync } from "node:crypto";
 import { exportJWK, flattenedVerify, importJWK } from "jose";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import { obtainCertificate } from "./acme.js";
 
 // In-process fake CA exercising ACME's real failure modes: nonce rotation, jwk-then-kid, POST-as-GET vs `{}`, and the
@@ -133,7 +133,7 @@ const run = async (
             zone.set(recordName, value);
             await publish?.(recordName, value);
         },
-        removeChallenge: hooks.remove ?? vi.fn(async () => undefined),
+        removeChallenge: hooks.remove ?? mock(async () => undefined),
         resolveTxt: hooks.resolveTxt ?? (async (recordName) => (zone.has(recordName) ? [zone.get(recordName)!] : [])),
         fetchImpl: ca.fetchImpl,
         wait: async (ms) => {
@@ -144,7 +144,7 @@ const run = async (
 };
 
 it("walks an order to a certificate, publishing the digest the spec asks for", async () => {
-    const publish = vi.fn(async () => undefined);
+    const publish = mock(async () => undefined);
     const ca = fakeCa();
     expect(await run(ca, { publish })).toEqual({ certificate: PEM });
 
@@ -193,7 +193,7 @@ it("retries a badNonce once with the fresh nonce, the way a CA expects", async (
 });
 
 it("fails with the CA's own reason when validation is refused, and still cleans up", async () => {
-    const remove = vi.fn(async () => undefined);
+    const remove = mock(async () => undefined);
     await expect(run(fakeCa({ authzStatus: () => "invalid" }), { remove })).rejects.toThrowError(/no TXT record found/);
     // The challenge record must not survive a failed order, so the next attempt can publish a different value.
     expect(remove).toHaveBeenCalledWith(`_acme-challenge.${HOST}`);
@@ -255,7 +255,7 @@ it("lets an HTTP error status through untouched: that is the CA answering, not a
 });
 
 it("never lets a failed cleanup spoil an issued certificate", async () => {
-    const remove = vi.fn(async () => {
+    const remove = mock(async () => {
         throw new Error("zone unreachable");
     });
     expect(await run(fakeCa(), { remove })).toEqual({ certificate: PEM });

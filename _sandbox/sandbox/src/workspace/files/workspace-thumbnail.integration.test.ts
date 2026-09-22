@@ -2,7 +2,7 @@ import { mkdtemp, readdir, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { stateRelPath } from "../layout/state-paths.js";
 import { thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 
@@ -11,7 +11,9 @@ const CACHE = stateRelPath(".intentic/local/cache/", "thumbnails");
 
 // A picture far larger than a tile, so the point of the exercise — that what comes back is not the original — is real.
 const writePicture = async (path: string, width: number, height: number): Promise<number> => {
-    const bytes = await sharp({ create: { width, height, channels: 3, background: { r: 200, g: 40, b: 90 } } }).png().toBuffer();
+    const bytes = await sharp({ create: { width, height, channels: 3, background: { r: 200, g: 40, b: 90 } } })
+        .png()
+        .toBuffer();
     await writeFile(path, bytes);
     return bytes.byteLength;
 };
@@ -22,7 +24,8 @@ test("workspaceThumbnail answers a small webp, not the file it was made from", a
     const sourceBytes = await writePicture(file, 1600, 1200);
 
     const thumbnail = await workspaceThumbnail(root, file);
-    expect(thumbnail).toMatchObject({ bytes: expect.any(Buffer), etag: expect.stringMatching(/^[\da-f]{64}$/) });
+    expect(thumbnail?.bytes).toBeInstanceOf(Buffer);
+    expect(thumbnail?.etag).toMatch(/^[\da-f]{64}$/);
     expect(thumbnail!.bytes.byteLength).toBeLessThan(sourceBytes / 10);
 
     const drawn = await sharp(thumbnail!.bytes).metadata();

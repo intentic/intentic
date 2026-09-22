@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { type AgentEvent, type AgentTurn, LOOP_DIR, SandboxSettingsSchema, type Workflow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { memoryDoorTokens } from "../auth/door-tokens.js";
 import type { Services } from "../composition.js";
 import type { TurnFn } from "../loops/loop-runner.js";

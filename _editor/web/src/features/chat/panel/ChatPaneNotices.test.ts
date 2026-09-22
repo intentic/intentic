@@ -1,21 +1,23 @@
-// @vitest-environment jsdom
 // The trial's standing above the composer: `unavailable` is an interruption (nothing answered, held below, needs
 // Retry); `degraded` isn't (the pool answered after failing over). Both used to share one sentence and button,
 // wrongly telling a working answer's reader their message had failed.
+import "@intentic/testing/dom";
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as vueRouterOriginal from "vue-router";
+import { RouterLinkStub } from "../../../testing/routerLinkStub";
 
 const provider = ref<AgentProvider>(TRIAL_PROVIDER);
 const reachable = ref(true);
 const streaming = ref(false);
-const resume = vi.fn(async () => {});
-const loadTrialStatus = vi.fn(async () => {});
+const resume = mock(async () => {});
+const loadTrialStatus = mock(async () => {});
 
 // The pane's own view, injected as the real strip would from ChatPane, mounted here directly.
-vi.mock(`../models/useChat-catalog`, () => ({ loadTrialStatus }));
-vi.mock(`./useChat-view`, () => ({
+mock.module(`../models/useChat-catalog`, () => ({ loadTrialStatus }));
+mock.module(`./useChat-view`, () => ({
     usePaneView: () => ({
         conversation: ref({ conversationId: `agent-1`, resume }),
         provider,
@@ -31,26 +33,28 @@ vi.mock(`./useChat-view`, () => ({
 }));
 // The active sandbox, for the hosted-hours strip: a hosted row its reader owns, or nothing.
 const active = ref<{ hosted: { region: string; warm: boolean } | null; role: string } | undefined>(undefined);
-vi.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
+mock.module(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable, active }) }));
 // The free plan's meter as the strip reads it: settable, so the threshold is hostedHours.ts's rule.
-const hostedMeter = ref<{ usedMinutes: number; allowanceMinutes: number; remainingMinutes: number; fraction: number; resetsAt: string } | undefined>(undefined);
+const hostedMeter = ref<{ usedMinutes: number; allowanceMinutes: number; remainingMinutes: number; fraction: number; resetsAt: string } | undefined>(
+    undefined,
+);
 const lowOnHours = ref(false);
 const planOffered = ref(true);
-vi.mock(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ meter: hostedMeter, lowOnHours, offered: planOffered }) }));
-vi.mock(`../../agents/fleet/useAgents`, () => ({
+mock.module(`../../settings/hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ meter: hostedMeter, lowOnHours, offered: planOffered }) }));
+mock.module(`../../agents/fleet/useAgents`, () => ({
     useAgents: () => ({
         agentById: () => undefined,
         archived: ref([]),
-        loadArchived: vi.fn(async () => {}),
-        restore: vi.fn(),
+        loadArchived: mock(async () => {}),
+        restore: mock(),
         busyIds: ref([]),
     }),
 }));
 // The account gate is its own component with its own test; this file is only about the trial strip beneath it.
-vi.mock(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
-    RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
+mock.module(`../accounts/ChatAccountPanel.vue`, () => ({ default: defineComponent({ name: `ChatAccountPanel`, setup: () => () => undefined }) }));
+mock.module(`vue-router`, () => ({
+    ...vueRouterOriginal,
+    RouterLink: RouterLinkStub as never,
 }));
 
 const { trialStatus } = await import("../accounts/providerCatalog");

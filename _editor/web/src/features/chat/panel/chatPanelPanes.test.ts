@@ -1,10 +1,11 @@
-// @vitest-environment jsdom
 // Pins what the panel draws against the real DOM, not the store: a correctly picked chat, a run that releases cleanly,
 // and no column drawn for a chat that never arrived.
+import "@intentic/testing/dom";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { chatRun, showRun } from "../run/chatRun";
 import { resetChat, useChat } from "../run/useChat";
 import { draftConversation, reveal } from "./useChat-reveal";
@@ -21,10 +22,11 @@ import { MIN_PANE_PX, useLayout } from "../../../shell/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 
 // useDevice reads matchMedia at module load (matches:false keeps it desktop, the only form factor with panes); jsdom
 // implements neither IntersectionObserver nor scrollIntoView.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
@@ -37,12 +39,11 @@ vi.hoisted(() => {
 const runs = ref<WorkflowRun[]>([]);
 // An empty roster avoids driving the real fleet queries in a test about which chat the panel shows; none of these
 // fixtures fork.
-vi.mock(`../../agents/fleet/useAgents`, async () => {
-    const { computed } = await import(`vue`);
+mock.module(`../../agents/fleet/useAgents`, () => {
     return { useAgents: () => ({ fleet: computed(() => []), agentById: () => undefined }) };
 });
-vi.mock(`../../agents/fleet/useWorkflowRuns`, async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
+mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+    ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs, designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 

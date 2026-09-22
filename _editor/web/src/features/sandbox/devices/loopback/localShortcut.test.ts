@@ -1,7 +1,10 @@
-// @vitest-environment jsdom
 // jsdom because the subject is what survives a reload: under `node` the storage boundary degrades to
 // in-memory and every persistence assertion would pass for the wrong reason.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, mock } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
+import type { LoopbackPermission } from "./loopbackPermission";
+import { activeSandboxId } from "../../overview/activeSandbox";
 
 // A yes belongs to the browser, a no belongs to the sandbox; swapped, either costs every future sandbox the
 // shortcut or re-prompts an already-granted permission. Stored answers matter only while Chrome is at `prompt`.
@@ -9,30 +12,19 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const LAPTOP = `1111aaaa`;
 const DESKTOP = `2222bbbb`;
 
-// The browser under test. `undefined` means no Local Network Access permission at all (WebKit, Firefox,
-// Chrome <142), read as "nothing in the way". Only `loopback-network` answers, the name the app asks first.
-const browserSays = (state: PermissionState | undefined): void => {
-    if (state === undefined) {
-        Reflect.deleteProperty(globalThis.navigator, `permissions`);
-        return;
-    }
-    Object.defineProperty(globalThis.navigator, `permissions`, {
-        configurable: true,
-        value: {
-            query: ({ name }: PermissionDescriptor): Promise<PermissionStatus> =>
-                String(name) === `loopback-network`
-                    ? Promise.resolve({ state } as PermissionStatus)
-                    : Promise.reject(new TypeError(`unknown permission ${String(name)}`)),
-        },
-    });
+// The browser's verdict, given rather than read: loopbackPermission holds its query for the life of the
+// document (its own suite covers what it reads off the Permissions API), so nothing under this module could
+// change it between cases.
+const browser = { verdict: `prompt` as LoopbackPermission };
+const browserSays = (verdict: LoopbackPermission): void => {
+    browser.verdict = verdict;
 };
+mock.module("./loopbackPermission", () => ({ loopbackPermission: async () => browser.verdict }));
 
-// A fresh module registry over the same localStorage is what a reload is; load after `browserSays`, since the
-// permission is asked once per document.
+// A fresh module over the same localStorage is what a reload is.
 const load = async () => {
-    vi.resetModules();
-    const [shortcut, active] = await Promise.all([import(`./localShortcut`), import(`../../overview/activeSandbox`)]);
-    return { ...shortcut.useLocalShortcut(), answerFor: shortcut.shortcutAnswer, activeSandboxId: active.activeSandboxId };
+    const shortcut = await freshImport<typeof import("./localShortcut")>("./localShortcut", import.meta.url);
+    return { ...shortcut.useLocalShortcut(), answerFor: shortcut.shortcutAnswer };
 };
 
 beforeEach(() => {
@@ -41,13 +33,8 @@ beforeEach(() => {
     browserSays(`prompt`);
 });
 
-afterEach(() => {
-    browserSays(undefined);
-    Reflect.deleteProperty(globalThis.window, `__INTENTIC_DESKTOP__`);
-});
-
 it(`asks about a sandbox once, and only while the user is looking at it`, async () => {
-    const { question, ask, answerFor, activeSandboxId } = await load();
+    const { question, ask, answerFor } = await load();
     activeSandboxId.value = LAPTOP;
 
     expect(await answerFor(LAPTOP)).toBe(`unasked`);
@@ -64,7 +51,7 @@ it(`asks about a sandbox once, and only while the user is looking at it`, async 
 
 it(`keeps a yes for the whole browser, because that is the scope of the permission it stands for`, async () => {
     const first = await load();
-    first.activeSandboxId.value = LAPTOP;
+    activeSandboxId.value = LAPTOP;
     first.ask(LAPTOP);
     first.allow();
 
@@ -80,7 +67,7 @@ it(`keeps a yes for the whole browser, because that is the scope of the permissi
 
 it(`keeps a no for that sandbox alone, so the answer can change when the user's machines do`, async () => {
     const first = await load();
-    first.activeSandboxId.value = DESKTOP;
+    activeSandboxId.value = DESKTOP;
     first.ask(DESKTOP);
     first.decline(DESKTOP);
 
@@ -107,7 +94,7 @@ it(`lets a later yes cover a sandbox already refused, without a way to un-grant 
 // The dialog is the point, so a browser that never raises one is never asked — the case WebKit/Firefox got
 // wrong: a question about a permission that doesn't exist, buying a reach already held.
 it(`asks nobody in a browser with no such permission`, async () => {
-    browserSays(undefined);
+    browserSays(`ungated`);
     const { answerFor, question } = await load();
 
     expect(await answerFor(LAPTOP)).toBe(`allowed`);
@@ -137,21 +124,4 @@ it(`stops reaching when Chrome says no, whatever this app was told earlier`, asy
     const revoked = await load();
     expect(await revoked.answerFor(LAPTOP)).toBe(`declined`);
     expect(revoked.question.value).toBeUndefined();
-});
-
-// Settled at install time: the desktop webview loads one origin and doesn't gate the reach at all.
-it(`asks nobody inside a desktop webview that does not gate the reach`, async () => {
-    globalThis.window.__INTENTIC_DESKTOP__ = { version: `1.2.3`, installId: `i`, update: null, loopbackUngated: true };
-    const { answerFor } = await load();
-
-    expect(await answerFor(LAPTOP)).toBe(`allowed`);
-});
-
-// An older app's webview still enforces the check and says nothing; reading that as ungated would show
-// Chrome's dialog with nothing on screen to place it.
-it(`still asks inside a desktop webview that has not said it is ungated`, async () => {
-    globalThis.window.__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `i`, update: null };
-    const { answerFor } = await load();
-
-    expect(await answerFor(LAPTOP)).toBe(`unasked`);
 });

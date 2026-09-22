@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // What the sign-in panel shows at each point of a handshake, asserted off the handshake's own `flow` field rather
 // than the provider's name. Covers three regressions: a paste field left under a self-finishing flow, a redirect
 // grant not recognized off the clipboard, and a panel still asking for an address while redeeming the one it has.
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -19,11 +19,11 @@ interface Flow {
 const nativeConnectFlow = ref<Flow | undefined>(undefined);
 const translatorConnectFlow = ref<Flow | undefined>(undefined);
 const connectSent = ref(false);
-const completeConnect = vi.fn(async () => true);
-const completeTranslator = vi.fn(async () => true);
+const completeConnect = mock(async () => true);
+const completeTranslator = mock(async () => true);
 
 // The chat store is a module singleton the panel reads directly; this is the whole of what it needs from it.
-vi.mock(`../../chat/run/useChat`, () => ({
+mock.module(`../../chat/run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
         translatorConnectFlow,
@@ -35,7 +35,7 @@ vi.mock(`../../chat/run/useChat`, () => ({
     }),
 }));
 // Stubbed, not imported, so assertions test the panel's own markup, not <Button>'s current rendering.
-vi.mock(`@intentic/ui`, () => ({
+mock.module(`@intentic/ui`, () => ({
     ui: { inputSm: (extra: string) => extra, textAction: (extra: string) => extra, linkButton: (extra: string) => extra },
     // `as`/`href` honoured since the panel's first control is a link to the provider, and its target is asserted here.
     Button: defineComponent({
@@ -51,7 +51,7 @@ vi.mock(`@intentic/ui`, () => ({
     }),
     CopyButton: defineComponent({ render: () => h(`button`) }),
 }));
-vi.mock(`../../chat/accounts/ProviderLogo.vue`, () => ({ default: defineComponent({ render: () => h(`svg`) }) }));
+mock.module(`../../chat/accounts/ProviderLogo.vue`, () => ({ default: defineComponent({ render: () => h(`svg`) }) }));
 
 let app: App | undefined;
 afterEach(() => {

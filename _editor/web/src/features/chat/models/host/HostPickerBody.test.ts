@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 //
 // THE SHELL PICKER AS A FORM: every row STAGES, and the bar at the bottom is the only thing that answers.
 //
@@ -8,12 +7,14 @@
 // it are one press rather than a dismissal followed by a second click. And leaving the panel any other way is a
 // plain cancel: the version that answered on dismissal meant a user who dragged the effort meter and changed
 // their mind had armed the tier they were backing out of.
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, defineComponent, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as uiOriginal from "@intentic/ui";
 
 /* The model list itself is the app's own panel and has its own suite. */
-vi.mock(`../ModelPicker.vue`, () => ({
+mock.module(`../ModelPicker.vue`, () => ({
     default: defineComponent({
         setup:
             (_props, { emit, slots }) =>
@@ -38,7 +39,7 @@ vi.mock(`../ModelPicker.vue`, () => ({
                 ]),
     }),
 }));
-vi.mock(`../../accounts/PickerAccounts.vue`, () => ({
+mock.module(`../../accounts/PickerAccounts.vue`, () => ({
     default: defineComponent({
         setup:
             (_props, { emit }) =>
@@ -47,7 +48,7 @@ vi.mock(`../../accounts/PickerAccounts.vue`, () => ({
     }),
 }));
 // The meter itself is tested elsewhere; this stub checks which rungs the panel hands it and what it emits.
-vi.mock(`../../composer/EffortMeter.vue`, () => ({
+mock.module(`../../composer/EffortMeter.vue`, () => ({
     default: defineComponent({
         props: { efforts: { type: Array, default: () => [] } },
         emits: [`pick`],
@@ -64,8 +65,8 @@ vi.mock(`../../composer/EffortMeter.vue`, () => ({
 }));
 // The kit's action button is PrimeVue's underneath and wants its plugin; the commit bar only needs it to carry a
 // label, a disabled state and a click.
-vi.mock(`@intentic/ui`, async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
+mock.module(`@intentic/ui`, () => ({
+    ...uiOriginal,
     Button: defineComponent({
         props: { label: String, disabled: Boolean },
         setup:
@@ -74,7 +75,7 @@ vi.mock(`@intentic/ui`, async (importOriginal) => ({
                 h(`button`, { disabled: props.disabled, onClick: attrs[`onClick`] }, props.label),
     }),
 }));
-vi.mock(`../../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
+mock.module(`../../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => true) }) }));
 
 const { dismissModelPick, modelRequest, requestModelPick, settleModelPick } = await import("./hostModelPicker");
 const { modelLabelFor, providerModels } = await import("../../accounts/providerCatalog");
@@ -110,7 +111,7 @@ afterEach(() => {
 /* THE ROW SELECTS, THE BAR ANSWERS. */
 it(`selects a model row without settling, and answers when the bar is pressed`, async () => {
     const anchor = document.createElement(`button`);
-    const settled = vi.fn();
+    const settled = mock();
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-haiku-4-5`, action: `Fix with agent` });
     void result.then(settled);
     const element = mount();
@@ -184,7 +185,7 @@ it(`drops the account and harness when the selection moves to another provider`,
 /* THE TIER IS A SETTING OF THE ANSWER, not the answer: choosing a rung leaves the panel open, and the press that ends it carries the rung. */
 it(`carries the tier into the answer`, async () => {
     const anchor = document.createElement(`button`);
-    const settled = vi.fn();
+    const settled = mock();
     const result = requestModelPick({ anchor, provider: `claude`, model: `claude-opus-4-6`, chooseRun: true, action: `Fix with agent` });
     void result.then(settled);
     const element = mount();
@@ -372,7 +373,7 @@ it(`offers no run settings to a caller that has not said it carries them`, () =>
 /* NOTHING CHOSEN IS A REAL STATE the panel opens in — an automation rung added past the end of its ladder arrives with a blank pair. */
 it(`refuses the press until a model has been chosen`, async () => {
     const anchor = document.createElement(`button`);
-    const settled = vi.fn();
+    const settled = mock();
     const result = requestModelPick({ anchor, provider: ``, model: ``, action: `Use this model` });
     void result.then(settled);
     const element = mount();

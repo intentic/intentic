@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { hostKeyPath, hostsDir, linkSshHosts, writeSshHost } from "./ssh-hosts.js";
 
 // HOME stands in for the container's ephemeral filesystem and `history` for the /history volume: a "recreate"

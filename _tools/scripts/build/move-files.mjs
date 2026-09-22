@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Moves files with `git mv` and rewrites every specifier the move invalidates: in the moved file, in every importer
-// (`vi.mock`, dynamic `import()`), and in a package's `exports` targets, keeping each file's import style. Config path
+// (`mock.module`, dynamic `import()`), and in a package's `exports` targets, keeping each file's import style. Config path
 // literals (tsconfig, vite, Dockerfile, baseline keys) are a separate sweep; refuses a file with unstaged changes
 // unless `--force`.
 import { execFileSync } from "node:child_process";
@@ -15,7 +15,7 @@ const CODE = /\.(ts|tsx|mts|cts|js|mjs|cjs|vue|astro)$/;
 
 // Matches real import syntax only, skipping a computed `${...}` specifier and matching typeof-import args too.
 const SPECIFIER =
-    /(?<=\bfrom\s*|\bimport\s*\(\s*|\brequire\(\s*|\bimport\s+|\b(?:vi\.)?(?:mock|doMock|unmock|importActual|importOriginal|importMock)\s*(?:<[^>\n]*>)?\s*\(\s*)(["'`])([^"'`\n$]+)\1/g;
+    /(?<=\bfrom\s*|\bimport\s*\(\s*|\brequire\(\s*|\bimport\s+|\bmock\.module\s*\(\s*)(["'`])([^"'`\n$]+)\1/g;
 
 const posix = (path) => path.split("\\").join("/");
 const withoutExtension = (path) => path.replace(/\.[^./]+$/, "");

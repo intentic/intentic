@@ -6,8 +6,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { unstubbed } from "@intentic/testing";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect, mock } from "bun:test";
+import { SETTLES, hoisted, waitFor } from "@intentic/testing/bun";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -24,8 +24,8 @@ import { createRunsCache } from "./runs-cache.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.
-const { published } = vi.hoisted(() => ({ published: [] as string[] }));
-vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+const { published } = hoisted(() => ({ published: [] as string[] }));
+mock.module("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
 const run = (id: number, conclusion: string, branch = "main") => ({
     id,
@@ -101,7 +101,7 @@ test("a run that appears after the first pass wakes the ci automation", async ()
     await poller.poll();
     publish([run(2, "failure"), run(1, "success")]);
     await poller.poll();
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_failed");
     expect(prompts[0]).toContain("pipeline_broken");
     expect(prompts[0]).toContain(`"lint"`);

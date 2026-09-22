@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
 // Pins what a reload restores from persisted tab state, and what happens to focus when the tab that held it
 // (a diff) isn't stored.
-import { expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect } from "bun:test";
 import { nextTick } from "vue";
 
 // Read at module load: the active sandbox id keys the strip's storage key.
@@ -139,12 +139,12 @@ it(`replaces the previewed diff with the next one looked at, in its place`, () =
     openDiff(diffPayload(`src/a.ts`), `preview`);
     const first = activeId.value;
 
-    expect(tabs.value.map((tab) => tab.id)).toEqual([...kept, first]);
+    expect<(string | null)[]>(tabs.value.map((tab) => tab.id)).toEqual([...kept, first]);
     expect(previewId.value).toBe(first);
 
     openDiff(diffPayload(`src/b.ts`), `preview`);
 
-    expect(tabs.value.map((tab) => tab.id)).toEqual([...kept, activeId.value]);
+    expect<(string | null)[]>(tabs.value.map((tab) => tab.id)).toEqual([...kept, activeId.value]);
     expect(previewId.value).toBe(activeId.value);
 });
 
@@ -156,7 +156,7 @@ it(`hands the tab over on a double-click, and previews the next one beside it`, 
 
     openDiff(diffPayload(`src/c.ts`), `preview`);
 
-    expect(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`, promoted, activeId.value]);
+    expect<(string | null)[]>(tabs.value.map((tab) => tab.id)).toEqual([`src/main.ts`, `health:root`, `README.md`, promoted, activeId.value]);
 });
 
 it(`releases the slot when the previewed row is re-opened to keep`, () => {

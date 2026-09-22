@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { VAULTED } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
 import { hasSession, markConnected, sessionDir } from "../browser/sessions/session-store.js";

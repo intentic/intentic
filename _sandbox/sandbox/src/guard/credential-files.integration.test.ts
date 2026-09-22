@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createCredentialOracle } from "./credential-files.js";
 
 // Oracle answers about real files it writes to disk. `false` is the only answer that removes a permission card;
@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    // os.homedir() reads $HOME on POSIX, which is how the `~` cases below get a directory they own.
+    // The oracle expands home from $HOME, as a shell would, which is how the `~` cases below get a directory they own.
     if (home === undefined) {
         delete process.env["HOME"];
         return;

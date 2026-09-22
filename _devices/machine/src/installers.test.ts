@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { INSTALL_SCRIPTS, INSTALL_SCRIPTS_DIR } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // The four installers that put this agent on a machine, held to what little they still do. Each dialect's
 // bootstrap block (curl|sh / irm|iex, standalone, no imports) still has to exist twice, and what goes wrong in
@@ -44,7 +44,7 @@ const PAIRS = [
         handsOver: /@\(\$route, 'setup'/u,
         runnableStage: /^\s*\$part = "\$Dest\.part(?:-\$published)?\.exe"$/mu,
     },
-] as const satisfies readonly {
+] satisfies {
     dialect: string;
     device: keyof typeof INSTALL_SCRIPTS;
     sync: keyof typeof INSTALL_SCRIPTS;

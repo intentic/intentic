@@ -3,23 +3,33 @@ import { STATE_DIR } from "@intentic/constants";
 // diffs, notices, never a summary), the preparation refuses whole synthesis when any source can't be captured
 // completely, and the composed chat opens as a draft with nothing sent until the user decides.
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { ref } from "vue";
+import { mocked } from "@intentic/testing/bun";
 
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn(), sandboxUpload: vi.fn() }));
+mock.module("../../sandbox/client/sandboxClient", () => ({
+    sandboxRequest: mock(),
+    sandboxRequestVia: mock(),
+    sandboxError: mock(),
+    SandboxHttpError: class SandboxHttpError extends Error {},
+    sandboxJson: mock(),
+    sandboxUpload: mock(),
+}));
 // The real router pulls the auth/environment chain, which needs window.env; nothing here navigates.
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
+mock.module("../../../router", () => ({ router: { push: mock() } }));
 // Same window.env chain via analytics; the action only fires a milestone event through track.
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
 // Same window.env chain via useSandbox; the tab persistence only reads activeSandboxId and reachable.
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }) };
 });
 // agentActions reaches ui's useDevice, which reads window.matchMedia at module scope; the reveal is what this module
 // takes from it, and this mock is also the assertion hook that the composed chat is shown.
-vi.mock("./agentActions", () => ({ revealConversation: vi.fn() }));
+// Listed by hand rather than spread over the real module: importing it here would load its graph before the mocks
+// below, which is the one thing this file's seams cannot survive.
+mock.module("./agentActions", () => ({ revealConversation: mock(), openConversation: mock() }));
 
 // The node test environment has neither storage; conversations persist their tab snapshot on every change.
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
@@ -39,8 +49,8 @@ const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
 const { sandboxRequest, sandboxUpload } = await import("../../sandbox/client/sandboxClient");
-const sandboxRequestMock = vi.mocked(sandboxRequest);
-const sandboxUploadMock = vi.mocked(sandboxUpload);
+const sandboxRequestMock = mocked(sandboxRequest);
+const sandboxUploadMock = mocked(sandboxUpload);
 const { revealConversation } = await import("./agentActions");
 const { resetChat, useChat } = await import("../../chat/run/useChat");
 const { draftConversation, reveal } = await import("../../chat/panel/useChat-reveal");
@@ -68,7 +78,7 @@ beforeEach(() => {
 
 afterEach(() => {
     receiveFloatingNote({ kind: `gone`, panel: `chat`, id: `w1` });
-    vi.clearAllMocks();
+    jest.clearAllMocks();
 });
 
 // Two settled conversations side by side, the board state the button appears for; each gets a restored transcript and a
@@ -254,10 +264,10 @@ describe(`synthesizeSessions`, () => {
         expect(composed.draft.value).toContain(`${2} attached agent`);
         expect(composed.draft.value).toContain(`Approach one`);
         expect(composed.draft.value).toContain(`Approach two`);
-        expect(composed.attachments.value).toMatchObject([
-            { name: `source-A-approach-one.md`, status: `done` },
-            { name: `source-B-approach-two.md`, status: `done` },
-        ]);
+        // Row by row: a whole-array toMatchObject compares the elements outright instead of matching each partially.
+        expect(composed.attachments.value).toHaveLength(2);
+        expect(composed.attachments.value[0]).toMatchObject({ name: `source-A-approach-one.md`, status: `done` });
+        expect(composed.attachments.value[1]).toMatchObject({ name: `source-B-approach-two.md`, status: `done` });
         expect(composed.modePick.value).toBe(`default`);
         expect(composed.messages.value).toHaveLength(0);
         expect(composed.streaming.value).toBe(false);

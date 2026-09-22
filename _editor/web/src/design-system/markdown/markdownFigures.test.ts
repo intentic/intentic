@@ -1,11 +1,12 @@
-// @vitest-environment jsdom
 // Rendering, not parsing: figures.test.ts covers the fence vocabulary as data; this file proves a document carrying
 // those fences reaches the DOM as components, and that a document without them still renders in the single-root shape
 // every surface depends on.
-import { describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { createApp, h } from "vue";
 
-// Two jsdom gaps this file depends on, both filled for the package by vitest.setup.ts before this file loads.
+// Two jsdom gaps this file depends on, both filled for the package by bun.setup.ts before this file loads.
 // `matchMedia`: the design-system barrel has import-time side effects (useDevice, Picker). `ResizeObserver`: Vue Flow
 // measures its container on mount, reached through DagGraph.
 
@@ -67,7 +68,7 @@ describe(`<Markdown> with figures`, () => {
         const host = render(
             `\`\`\`dag\n{ "title": "The wire", "nodes": [{ "id": "web", "label": "Browser app", "note": "Vue" }, { "id": "daemon", "label": "Daemon" }], "edges": [{ "from": "web", "to": "daemon" }] }\n\`\`\``,
         );
-        await vi.waitFor(
+        await waitFor(
             () => {
                 expect(host.querySelector(`figure`)).not.toBeNull();
             },

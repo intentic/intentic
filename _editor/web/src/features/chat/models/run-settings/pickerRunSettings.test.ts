@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { carryPinKnobs, defaultPinRunSettings, honoredPinKnobs, pinKnobSummary } from "./pickerRunSettings";
 
 test("defaultPinRunSettings offers effort and thinking only where the runtime honors them", () => {

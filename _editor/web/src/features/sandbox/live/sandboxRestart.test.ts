@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 import { expectRestart, forgetRestarts, type RestartWork, restartExpected, restartFinished, restartRunning } from "./sandboxRestart";
 
 // Needs jsdom: the ledger's whole point is surviving the container that serves this page, which it does in
@@ -63,14 +64,14 @@ describe(`what the app knows about a coming restart`, () => {
     });
 
     it(`answers with the newest, since that is the one the reader is waiting on`, () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             expectRestart(work({ id: `update`, quiet: { title: `Restarting onto the update`, detail: `Half a minute.` } }));
-            vi.advanceTimersByTime(1_000);
+            jest.advanceTimersByTime(1_000);
             expectRestart(work());
             expect(restartExpected(`sbx-1`)?.quiet.title).toBe(quiet.title);
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 });
@@ -95,10 +96,7 @@ describe(`a reader who reloads mid-swap`, () => {
         localStorage.setItem(`intentic.restart.sbx-1.dev-rebuild`, JSON.stringify({ ...work(), startedAt: Date.now(), ...over }));
 
     // A fresh import is the reload: the ledger reads storage once, at module load, exactly as the new page does.
-    const reload = async (): Promise<typeof import("./sandboxRestart")> => {
-        vi.resetModules();
-        return import(`./sandboxRestart`);
-    };
+    const reload = (): Promise<typeof import("./sandboxRestart")> => freshImport("./sandboxRestart", import.meta.url);
 
     it(`still knows why the sandbox is quiet`, async () => {
         store();

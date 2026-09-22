@@ -1,5 +1,5 @@
 import type { SandboxDefinition } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { definitionDiff, DefinitionFormatError, emitDefinitionToml, parseDefinitionToml, settingsDefinition, settingsDrift } from "./definition.js";
 
 // Round-trip promises: emit then parse is byte-identical, emission is deterministic, and a bad document fails naming

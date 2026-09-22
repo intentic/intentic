@@ -1,5 +1,5 @@
 // Test fixture compiled and asserted against deploy.graph.ts; the canonical example lives in
-// /_tools/examples/deploy.config.ts. Imports relatively so it runs under vitest; a real consumer imports from
+// /_tools/examples/deploy.config.ts. Imports relatively so it runs under bun test; a real consumer imports from
 // "@intentic/sdk".
 import { env } from "@intentic/graph";
 import { defineStack } from "../index.js";

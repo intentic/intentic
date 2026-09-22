@@ -45,7 +45,7 @@ const ensureWhisperModel = async (ctx: GatewayCtx, config: DiscordConnectorConfi
     const staged = `${path}.${randomUUID()}.part`;
     try {
         // hub's web ReadableStream and the DOM lib's disagree on generics, same object at runtime.
-        await pipeline(Readable.fromWeb(blob.stream() as import("node:stream/web").ReadableStream), createWriteStream(staged));
+        await pipeline(Readable.fromWeb(blob.stream() as unknown as import("node:stream/web").ReadableStream), createWriteStream(staged));
         await rename(staged, path);
     } catch (error) {
         await rm(staged, { force: true });

@@ -3,10 +3,12 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 // Managed ssh-config shared by the `ssh` capability and git-provider key access: `<alias>.conf` plus a 0600 key/pass
-// file per alias. Resolved from homedir() per call, not cached; symlinked onto /history so credentials survive
-// container recreates.
+// file per alias. Resolved per call, not cached; symlinked onto /history so credentials survive container recreates.
 
-export const hostsDir = (): string => join(homedir(), ".ssh", "intentic-hosts");
+// HOME is the home directory of record, read per call so a test can point it at a temp dir.
+const homeDir = (): string => process.env["HOME"] ?? homedir();
+
+export const hostsDir = (): string => join(homeDir(), ".ssh", "intentic-hosts");
 export const hostConfPath = (alias: string): string => join(hostsDir(), `${alias}.conf`);
 export const hostKeyPath = (alias: string): string => join(hostsDir(), `${alias}.key`);
 export const hostPassPath = (alias: string): string => join(hostsDir(), `${alias}.pass`);
@@ -16,7 +18,7 @@ const INCLUDE = "Include intentic-hosts/*.conf";
 // Ensures ~/.ssh/config Includes the managed dir once; a relative Include resolves under ~/.ssh, so a bare glob matches
 // every alias file. Writes via temp file + rename so a crash mid-write cannot truncate the user's config.
 const ensureInclude = async (): Promise<void> => {
-    const sshDir = join(homedir(), ".ssh");
+    const sshDir = join(homeDir(), ".ssh");
     const userConfig = join(sshDir, "config");
     const current = await readFile(userConfig, "utf8").catch(() => "");
     if (current.includes(INCLUDE)) {

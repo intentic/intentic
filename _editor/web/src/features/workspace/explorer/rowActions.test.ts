@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock, spyOn } from "bun:test";
 import { registerDocumentProvider } from "../../../core-views/documentRegistry";
 import { rowActionsFor, type RowActionSources } from "./rowActions";
 
@@ -9,10 +9,10 @@ const sources = (over: Partial<RowActionSources> = {}): RowActionSources => ({
     manageableDirs: new Set<string>(),
     personaDirs: new Map<string, number>(),
     checkDirs: new Map<string, { adopted: boolean; changed: boolean }>(),
-    openDirectory: vi.fn(),
-    openPersonas: vi.fn(),
-    openChecks: vi.fn(),
-    openDocument: vi.fn(),
+    openDirectory: mock(),
+    openPersonas: mock(),
+    openChecks: mock(),
+    openDocument: mock(),
     ...over,
 });
 
@@ -144,7 +144,7 @@ describe(`rowActionsFor`, () => {
     });
 
     it(`drops a provider whose detect throws, keeping the rest of the row`, () => {
-        vi.spyOn(console, `error`).mockImplementation(() => {});
+        spyOn(console, `error`).mockImplementation(() => {});
         disposables.push(
             registerDocumentProvider({
                 owner: `acme.broken`,

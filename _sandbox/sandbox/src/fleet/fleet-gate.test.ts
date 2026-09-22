@@ -1,5 +1,5 @@
 import type { AgentEvent, DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { type CreateAsk, createSandboxThroughFleet, type FleetGateDeps, slugOf } from "./fleet-gate.js";
 
@@ -19,14 +19,14 @@ const ok = (payload: unknown) => ({ status: 200, body: JSON.stringify(payload), 
 interface Fake {
     readonly deps: FleetGateDeps;
     readonly frames: AgentEvent[];
-    readonly provision: ReturnType<typeof vi.fn>;
+    readonly provision: ReturnType<typeof mock>;
     readonly flows: DeviceSandboxFlow[];
 }
 
 const fake = (over: Partial<FleetGateDeps> = {}, lines: DeviceFlowLine[] = [{ kind: "result", message: `Created sandbox "sandbox-abc123def456".` }]): Fake => {
     const frames: AgentEvent[] = [];
     const flows: DeviceSandboxFlow[] = [];
-    const provision = vi.fn(async () => ok(PROVISIONED));
+    const provision = mock(async () => ok(PROVISIONED));
     const deps: FleetGateDeps = {
         token: async () => "itk_test",
         list: async () => ok({ sandboxes: [] }),

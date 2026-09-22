@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { listLogFiles, pruneLogFiles, tailLogFile } from "./log-files.js";
 
 const tempDirs: string[] = [];

@@ -1,6 +1,6 @@
 import { Terminal } from "@xterm/headless";
 import type { Terminal as DomTerminal } from "@xterm/xterm";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { urlLinksAt } from "./terminalUrlLinks";
 
 // Covers the buffer step plain-string tests can't: reading a real xterm buffer and mapping indices to columns. Uses
@@ -40,7 +40,7 @@ describe(`urlLinksAt`, () => {
             expect(link?.text).toBe(OAUTH_URL);
             // Starts past the two-space indent on row 2, ends on the last character of row 4.
             expect(link?.range.start).toEqual({ x: 3, y: 2 });
-            expect(link?.range.end).toEqual({ x: OAUTH_PANEL[3]?.length, y: 4 });
+            expect<{ x: number | undefined; y: number } | undefined>(link?.range.end).toEqual({ x: OAUTH_PANEL[3]?.length, y: 4 });
         }
         expect(urlLinksAt(term, 1, activate)).toEqual([]);
         expect(urlLinksAt(term, 5, activate)).toEqual([]);

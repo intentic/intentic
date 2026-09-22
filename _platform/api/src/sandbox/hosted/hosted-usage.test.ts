@@ -1,6 +1,7 @@
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../config.js";
 import {
     hostedArrivalBudget,
@@ -13,7 +14,7 @@ import {
     usageResetsAt,
 } from "./hosted-usage.js";
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
+const logger = { info: mock(), warn: mock(), error: mock() } as never;
 
 const STANDARD = hostedTier(`standard`);
 
@@ -24,28 +25,28 @@ const config = (monthlyHours = FREE_TIER.monthlyHours, ramp: { newAccountDays: n
 const onFree = { sandboxId: `s1`, tier: FREE_TIER.id, ownerId: `u1` };
 const onStandard = { sandboxId: `s1`, tier: STANDARD.id, ownerId: `u1` };
 
-const prismaWith = (over: Record<string, Record<string, ReturnType<typeof vi.fn>>>) =>
+const prismaWith = (over: Record<string, Record<string, ReturnType<typeof mock>>>) =>
     ({
         hostedUsage: {
-            findUnique: vi.fn().mockResolvedValue(null),
-            upsert: vi.fn().mockResolvedValue({}),
-            aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }),
+            findUnique: mock().mockResolvedValue(null),
+            upsert: mock().mockResolvedValue({}),
+            aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }),
         },
         // No open stretch unless a test says so: the live half of the meter reads the machine's own wake stamp.
-        hostedMachine: { update: vi.fn().mockResolvedValue({}), findUnique: vi.fn().mockResolvedValue(null), findMany: vi.fn().mockResolvedValue([]) },
-        hostedOom: { create: vi.fn().mockResolvedValue({}), count: vi.fn().mockResolvedValue(0) },
+        hostedMachine: { update: mock().mockResolvedValue({}), findUnique: mock().mockResolvedValue(null), findMany: mock().mockResolvedValue([]) },
+        hostedOom: { create: mock().mockResolvedValue({}), count: mock().mockResolvedValue(0) },
         ...over,
     }) as unknown as PrismaClient;
 
 // Fly's answer for one machine read; updated_at is the stamp the meter closes a stretch on.
 const stubMachine = (state: string, updatedAt?: string) => {
-    vi.stubGlobal(`fetch`, () =>
+    stubGlobal(`fetch`, () =>
         Promise.resolve(new Response(JSON.stringify({ id: `m1`, state, ...(updatedAt === undefined ? {} : { updated_at: updatedAt }) }))),
     );
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe(`the hosted hour meter`, () => {
@@ -65,23 +66,23 @@ describe(`the hosted hour meter`, () => {
 
         it(`adds the minutes since the open stretch began to the settled row`, async () => {
             const prisma = prismaWith({
-                hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 100 }) },
-                hostedMachine: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue({ wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }) },
+                hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: 100 }) },
+                hostedMachine: { update: mock(), findUnique: mock().mockResolvedValue({ wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }) },
             });
             expect(await hostedUsedMinutes(prisma, `s1`, now)).toBe(100 + 120);
         });
 
         it(`leaves a stretch that began last month to last month's row`, async () => {
             const prisma = prismaWith({
-                hostedMachine: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue({ wokeAt: new Date(`2026-07-31T23:00:00.000Z`) }) },
+                hostedMachine: { update: mock(), findUnique: mock().mockResolvedValue({ wokeAt: new Date(`2026-07-31T23:00:00.000Z`) }) },
             });
             expect(await hostedUsedMinutes(prisma, `s1`, now)).toBe(0);
         });
 
         it(`is what the budget reads, so an awake machine can run a month out`, async () => {
             const prisma = prismaWith({
-                hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 2_300 }) },
-                hostedMachine: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue({ wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }) },
+                hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: 2_300 }) },
+                hostedMachine: { update: mock(), findUnique: mock().mockResolvedValue({ wokeAt: new Date(`2026-08-13T10:00:00.000Z`) }) },
             });
             expect(await hostedBudgetOf(prisma, config(), onFree, now)).toMatchObject({ usedMinutes: 2_420, remainingMinutes: 0 });
         });
@@ -91,7 +92,7 @@ describe(`the hosted hour meter`, () => {
      * not unmetered: it has a bigger month, which is the whole reason the ladder's arithmetic works out. */
     describe(`whose month it is, and whether any is left`, () => {
         it(`meters a free machine against this deployment's configured ceiling`, async () => {
-            const prisma = prismaWith({ hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 90 }) } });
+            const prisma = prismaWith({ hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: 90 }) } });
             expect(await hostedBudgetOf(prisma, config(), onFree)).toEqual({
                 metered: true,
                 allowanceMinutes: FREE_TIER.monthlyHours * 60,
@@ -101,7 +102,7 @@ describe(`the hosted hour meter`, () => {
         });
 
         it(`meters a paid machine against its own rung's hours, not the free plan's and not nothing`, async () => {
-            const prisma = prismaWith({ hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 90 }) } });
+            const prisma = prismaWith({ hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: 90 }) } });
             const budget = await hostedBudgetOf(prisma, config(), onStandard);
             expect(budget.allowanceMinutes).toBe(STANDARD.monthlyHours * 60);
             expect(budget.allowanceMinutes).toBeGreaterThan(FREE_TIER.monthlyHours * 60);
@@ -122,7 +123,7 @@ describe(`the hosted hour meter`, () => {
         });
 
         it(`never reports a negative remainder, however far past the ceiling a stretch ran`, async () => {
-            const over = prismaWith({ hostedUsage: { findUnique: vi.fn().mockResolvedValue({ minutes: 99_000 }) } });
+            const over = prismaWith({ hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: 99_000 }) } });
             expect(await hostedBudgetOf(over, config(), onFree)).toMatchObject({ usedMinutes: 99_000, remainingMinutes: 0 });
         });
     });
@@ -132,16 +133,16 @@ describe(`the hosted hour meter`, () => {
     describe(`the account's month`, () => {
         it(`sums every row of the month, including rows whose sandbox is gone`, async () => {
             const prisma = prismaWith({
-                hostedUsage: { aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: 1_800 } }) },
-                hostedMachine: { update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+                hostedUsage: { aggregate: mock().mockResolvedValue({ _sum: { minutes: 1_800 } }) },
+                hostedMachine: { update: mock(), findMany: mock().mockResolvedValue([]) },
             });
             expect(await hostedOwnerMinutes(prisma, `u1`)).toBe(1_800);
         });
 
         it(`refuses a new machine to an account whose released one already spent the month`, async () => {
             const prisma = prismaWith({
-                hostedUsage: { aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: FREE_TIER.monthlyHours * 60 } }) },
-                hostedMachine: { update: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+                hostedUsage: { aggregate: mock().mockResolvedValue({ _sum: { minutes: FREE_TIER.monthlyHours * 60 } }) },
+                hostedMachine: { update: mock(), findMany: mock().mockResolvedValue([]) },
             });
             expect(await hostedArrivalBudget(prisma, config(), `u1`)).toMatchObject({ metered: true, remainingMinutes: 0 });
         });
@@ -149,10 +150,10 @@ describe(`the hosted hour meter`, () => {
         it(`adds the live minutes of whatever is awake right now`, async () => {
             const now = new Date(`2026-08-13T12:00:00.000Z`);
             const prisma = prismaWith({
-                hostedUsage: { aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: 10 } }) },
+                hostedUsage: { aggregate: mock().mockResolvedValue({ _sum: { minutes: 10 } }) },
                 hostedMachine: {
-                    update: vi.fn(),
-                    findMany: vi.fn().mockResolvedValue([{ wokeAt: new Date(`2026-08-13T11:00:00.000Z`) }, { wokeAt: new Date(`2026-08-13T11:30:00.000Z`) }]),
+                    update: mock(),
+                    findMany: mock().mockResolvedValue([{ wokeAt: new Date(`2026-08-13T11:00:00.000Z`) }, { wokeAt: new Date(`2026-08-13T11:30:00.000Z`) }]),
                 },
             });
             expect(await hostedOwnerMinutes(prisma, `u1`, now)).toBe(10 + 60 + 30);
@@ -164,7 +165,7 @@ describe(`the hosted hour meter`, () => {
     describe(`the newcomer ramp`, () => {
         const now = new Date(`2026-08-13T12:00:00.000Z`);
         const ramp = { newAccountDays: 7, newAccountHours: 10 };
-        const born = (daysAgo: number) => ({ findUnique: vi.fn().mockResolvedValue({ createdAt: new Date(now.getTime() - daysAgo * 24 * 60 * 60_000) }) });
+        const born = (daysAgo: number) => ({ findUnique: mock().mockResolvedValue({ createdAt: new Date(now.getTime() - daysAgo * 24 * 60 * 60_000) }) });
 
         it(`holds a week-old account to the ramp and says when the full month applies`, async () => {
             const budget = await hostedBudgetOf(prismaWith({ user: born(2) }), config(40, ramp), onFree, now);
@@ -243,7 +244,7 @@ describe(`the hosted hour meter`, () => {
 
         // Unreachable isn't evidence anything stopped; guessing would risk billing time that was never used.
         it(`leaves the stretch open when Fly cannot be reached`, async () => {
-            vi.stubGlobal(`fetch`, () => Promise.reject(new Error(`network down`)));
+            stubGlobal(`fetch`, () => Promise.reject(new Error(`network down`)));
             const prisma = prismaWith({});
             await settleHostedStretch(prisma, config(), logger, machine(new Date()));
             expect(prisma.hostedUsage.upsert).not.toHaveBeenCalled();
@@ -272,7 +273,7 @@ describe(`the hosted hour meter`, () => {
      * ended. Nothing else on the platform can see inside a machine, and this costs no extra round trip. */
     describe(`a machine the kernel killed`, () => {
         const oomKilled = (state: string) => {
-            vi.stubGlobal(`fetch`, () =>
+            stubGlobal(`fetch`, () =>
                 Promise.resolve(
                     new Response(
                         JSON.stringify({
@@ -290,8 +291,8 @@ describe(`the hosted hour meter`, () => {
 
         it(`writes the kill with the rung and memory the machine HAD, and still settles the stretch`, async () => {
             oomKilled(`stopped`);
-            const create = vi.fn().mockResolvedValue({});
-            const prisma = prismaWith({ hostedOom: { create }, hostedMachine: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue(null) } });
+            const create = mock().mockResolvedValue({});
+            const prisma = prismaWith({ hostedOom: { create }, hostedMachine: { update: mock(), findUnique: mock().mockResolvedValue(null) } });
             await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt: new Date(`2026-08-13T10:00:00.000Z`) });
             expect(create).toHaveBeenCalledWith({
                 data: { hostedMachineId: `h1`, sandboxId: `s1`, tier: FREE_TIER.id, memoryMb: FREE_TIER.memoryMb },
@@ -305,7 +306,7 @@ describe(`the hosted hour meter`, () => {
         // A machine still running has not ended, so its last exit event is an older life's and says nothing about now.
         it(`writes nothing for a machine that is still up`, async () => {
             oomKilled(`started`);
-            const create = vi.fn();
+            const create = mock();
             const prisma = prismaWith({ hostedOom: { create } });
             await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt: new Date() });
             expect(create).not.toHaveBeenCalled();
@@ -314,8 +315,8 @@ describe(`the hosted hour meter`, () => {
         // A bookkeeping row must never be the thing that leaves a stretch open and a machine billing forever.
         it(`settles the stretch even when the kill cannot be written down`, async () => {
             oomKilled(`stopped`);
-            const create = vi.fn().mockRejectedValue(new Error(`write failed`));
-            const prisma = prismaWith({ hostedOom: { create }, hostedMachine: { update: vi.fn(), findUnique: vi.fn().mockResolvedValue(null) } });
+            const create = mock().mockRejectedValue(new Error(`write failed`));
+            const prisma = prismaWith({ hostedOom: { create }, hostedMachine: { update: mock(), findUnique: mock().mockResolvedValue(null) } });
             await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt: new Date(`2026-08-13T10:00:00.000Z`) });
             expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
         });

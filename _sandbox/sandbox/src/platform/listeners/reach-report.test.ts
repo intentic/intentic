@@ -1,10 +1,11 @@
 import { EventEmitter } from "node:events";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { stubGlobal, unstubAllGlobals, stubEnv, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // The platform post, mocked like announce.test.ts: every post succeeds and is recorded, since what matters is what gets
 // reported.
 const posted: Array<{ path: string; body: unknown }> = [];
-const requestMock = vi.fn((url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
+const requestMock = mock((url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
     const req = new EventEmitter() as EventEmitter & { end: (payload: string) => void };
     req.end = (payload: string) => {
         posted.push({ path: url.pathname, body: JSON.parse(payload) as unknown });
@@ -12,7 +13,7 @@ const requestMock = vi.fn((url: URL, _opts: unknown, cb: (res: { statusCode: num
     };
     return req;
 });
-vi.mock("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
+mock.module("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
 
 const { createReachReporter, probeSelf } = await import("./reach-report.js");
 const { sandboxIdFromToken } = await import("@intentic/sandbox-contract/tunnel-ids");
@@ -24,35 +25,35 @@ const config = {
     // The id /health has to match is derived from this token, so the probe proves it reached itself.
     connectToken: "tok",
 } as unknown as Parameters<typeof createReachReporter>[0];
-const logger = { info: vi.fn(), warn: vi.fn(), debug: vi.fn() } as unknown as Parameters<typeof createReachReporter>[1];
+const logger = { info: mock(), warn: mock(), debug: mock() } as unknown as Parameters<typeof createReachReporter>[1];
 // What the reporter expects its own /health to answer with, derived from the token exactly as the daemon does.
 const OWN_ID = sandboxIdFromToken("tok");
 
 // Drains the several-awaits-deep post→probe→body chain without moving the clock.
 const settle = async (): Promise<void> => {
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     posted.length = 0;
     requestMock.mockClear();
 });
 afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
+    jest.useRealTimers();
+    unstubAllGlobals();
 });
 
 // The only check that the sandbox's public address actually answers; every failure it can name surfaces on the setup
 // page.
 describe("probeSelf", () => {
     it("passes when its own address answers with its own id", async () => {
-        vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: true, sandboxId: "abc" }), { status: 200 }));
+        stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: true, sandboxId: "abc" }), { status: 200 }));
         expect(await probeSelf(PUBLIC_URL, "abc")).toEqual({ ok: true });
     });
 
     it("names a tunnel that is up with nothing behind it", async () => {
-        vi.stubGlobal("fetch", async () => new Response("no share here", { status: 502 }));
+        stubGlobal("fetch", async () => new Response("no share here", { status: 502 }));
         const verdict = await probeSelf(PUBLIC_URL, "abc");
         expect(verdict.ok).toBe(false);
         expect(verdict.ok === false && verdict.detail).toContain("502");
@@ -60,7 +61,7 @@ describe("probeSelf", () => {
 
 /* A HOSTED SANDBOX HAS NO TUNNEL, so it must not be told about one. */
     it("blames the edge, not a tunnel, for a hosted sandbox's 502", async () => {
-        vi.stubGlobal("fetch", async () => new Response("not connected right now", { status: 502 }));
+        stubGlobal("fetch", async () => new Response("not connected right now", { status: 502 }));
         const verdict = await probeSelf(PUBLIC_URL, "abc", "direct");
         expect(verdict.ok).toBe(false);
         if (verdict.ok === false) {
@@ -71,7 +72,7 @@ describe("probeSelf", () => {
     });
 
     it("names an address that cannot be reached at all", async () => {
-        vi.stubGlobal("fetch", async () => {
+        stubGlobal("fetch", async () => {
             throw new TypeError("fetch failed");
         });
         const verdict = await probeSelf(PUBLIC_URL, "abc");
@@ -82,11 +83,11 @@ describe("probeSelf", () => {
     });
 
     it("names an address that hangs, apart from one that refuses", async () => {
-        vi.stubGlobal("fetch", async () => {
+        stubGlobal("fetch", async () => {
             throw new DOMException("timed out", "TimeoutError");
         });
         const unreachable = await probeSelf(PUBLIC_URL, "abc");
-        vi.stubGlobal("fetch", async () => {
+        stubGlobal("fetch", async () => {
             throw new TypeError("fetch failed");
         });
         const refused = await probeSelf(PUBLIC_URL, "abc");
@@ -98,7 +99,7 @@ describe("probeSelf", () => {
     });
 
     it("refuses a healthy answer that belongs to a different sandbox", async () => {
-        vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: true, sandboxId: "someone-else" }), { status: 200 }));
+        stubGlobal("fetch", async () => new Response(JSON.stringify({ ok: true, sandboxId: "someone-else" }), { status: 200 }));
         const verdict = await probeSelf(PUBLIC_URL, "abc");
         expect(verdict.ok).toBe(false);
         if (verdict.ok === false) {
@@ -110,7 +111,7 @@ describe("probeSelf", () => {
 
 describe("createReachReporter", () => {
     it("says it is checking before it knows, then reports the verdict and goes quiet", async () => {
-        vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
+        stubGlobal("fetch", async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
         const reporter = createReachReporter(config, logger);
         reporter.start({ by: "tunnel" });
         await settle();
@@ -119,12 +120,12 @@ describe("createReachReporter", () => {
         expect(posted.every((post) => post.path === "/sandbox/boot-report")).toBe(true);
         expect(reporter.status().state).toBe("reachable");
 
-        await vi.advanceTimersByTimeAsync(120_000);
+        await advanceTimersByTimeAsync(120_000);
         expect(posted).toHaveLength(2);
     });
 
     it("keeps reporting an address that does not answer, and keeps its reason", async () => {
-        vi.stubGlobal("fetch", async () => new Response("nope", { status: 404 }));
+        stubGlobal("fetch", async () => new Response("nope", { status: 404 }));
         const reporter = createReachReporter(config, logger);
         reporter.start({ by: "tunnel" });
         await settle();
@@ -133,20 +134,20 @@ describe("createReachReporter", () => {
         expect(reporter.status().detail).toContain("404");
         expect(reporter.status().retrying).toBe(true);
 
-        await vi.advanceTimersByTimeAsync(3_000);
+        await advanceTimersByTimeAsync(3_000);
         expect(posted.filter((post) => (post.body as { reach: string }).reach === "unreachable").length).toBeGreaterThan(1);
     });
 
     it("stops retrying after the give-up window, keeping the last reason", async () => {
-        vi.stubGlobal("fetch", async () => new Response("nope", { status: 404 }));
+        stubGlobal("fetch", async () => new Response("nope", { status: 404 }));
         const reporter = createReachReporter(config, logger);
         reporter.start({ by: "tunnel" });
-        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await advanceTimersByTimeAsync(10 * 60_000);
         const settled = posted.length;
 
         expect(reporter.status().state).toBe("unreachable");
         expect(reporter.status().retrying).toBe(false);
-        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await advanceTimersByTimeAsync(10 * 60_000);
         expect(posted).toHaveLength(settled);
     });
 
@@ -156,8 +157,8 @@ describe("createReachReporter", () => {
 
 /* A container told a public name but given nothing to dial with. */
     it("settles at once when the daemon dials no edge, naming why and probing nothing", async () => {
-        const probe = vi.fn(async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
-        vi.stubGlobal("fetch", probe);
+        const probe = mock(async () => new Response(JSON.stringify({ sandboxId: OWN_ID }), { status: 200 }));
+        stubGlobal("fetch", probe);
         const reporter = createReachReporter(config, logger);
 
         reporter.start({ by: "loopback", reason: "no INGRESS_URL, so there is no edge to dial" });
@@ -172,7 +173,7 @@ describe("createReachReporter", () => {
         expect(reporter.status().detail).toContain("setup screen");
         // Told once. Waiting is not a strategy here, so neither is re-reporting.
         expect(posted.map((post) => (post.body as { reach: string }).reach)).toEqual(["unreachable"]);
-        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        await advanceTimersByTimeAsync(10 * 60_000);
         expect(posted).toHaveLength(1);
 
         expect(posted.map((post) => (post.body as { retrying?: boolean }).retrying)).toEqual([false]);
@@ -180,9 +181,9 @@ describe("createReachReporter", () => {
 
     // Drift rides the same report that still gets through when the tunnel itself is down.
     it("names the env a drifted container is missing, on the same post as the verdict", async () => {
-        vi.stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
-        vi.stubEnv("SANDBOX_GRANT", "");
-        vi.stubEnv("INGRESS_URL", "");
+        stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
+        stubEnv("SANDBOX_GRANT", "");
+        stubEnv("INGRESS_URL", "");
         const reporter = createReachReporter(config, logger);
 
         reporter.start({ by: "loopback", reason: "no INGRESS_URL, so there is no edge to dial" });
@@ -197,9 +198,9 @@ describe("createReachReporter", () => {
 
     // No drift: the field is absent, not an empty array, when nothing needs explaining.
     it("says nothing about drift when the container carries what it needs", async () => {
-        vi.stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
-        vi.stubEnv("SANDBOX_GRANT", "ig1.payload.sig");
-        vi.stubEnv("INGRESS_URL", "https://ingress.intentic.dev");
+        stubEnv("SANDBOX_PUBLIC_URL", PUBLIC_URL);
+        stubEnv("SANDBOX_GRANT", "ig1.payload.sig");
+        stubEnv("INGRESS_URL", "https://ingress.intentic.dev");
         const reporter = createReachReporter(config, logger);
 
         reporter.start({ by: "loopback", reason: "this profile serves no front door for a tunnel to reach" });

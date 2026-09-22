@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Hono } from "hono";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { z } from "zod";
 import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
@@ -86,7 +86,7 @@ test("a peer that was never enrolled is a 404 naming the door's noun, not a hang
 });
 
 test("a request is forwarded verbatim and its answer returned unchanged", async () => {
-    const mcp = vi.fn(async () => ({ jsonrpc: "2.0", id: 9, result: { tools: [{ name: "run_command" }] } }));
+    const mcp = mock(async () => ({ jsonrpc: "2.0", id: 9, result: { tools: [{ name: "run_command" }] } }));
     const response = await post(routeFor({ mcp }), { jsonrpc: "2.0", id: 9, method: "tools/list" });
     expect(mcp).toHaveBeenCalledWith("laptop", { jsonrpc: "2.0", id: 9, method: "tools/list" });
     expect(await response.json()).toEqual({ jsonrpc: "2.0", id: 9, result: { tools: [{ name: "run_command" }] } });
@@ -94,7 +94,7 @@ test("a request is forwarded verbatim and its answer returned unchanged", async 
 
 // A notification has nothing to answer; replying is a protocol violation the MCP client reports as noise.
 test("a notification is delivered and answered 202 with no body", async () => {
-    const mcp = vi.fn(async () => undefined);
+    const mcp = mock(async () => undefined);
     const response = await post(routeFor({ mcp }), { jsonrpc: "2.0", method: "notifications/initialized" });
     expect(response.status).toBe(202);
     expect(mcp).toHaveBeenCalledTimes(1);
@@ -112,7 +112,7 @@ test("an offline peer answers as a readable JSON-RPC error, not an HTTP failure"
 });
 
 test("an asleep peer still completes the handshake under the door's server name and its last build", async () => {
-    const mcp = vi.fn();
+    const mcp = mock();
     const response = await post(routeFor({ online: false, mcp }), { jsonrpc: "2.0", id: 1, method: "initialize" });
     const body = (await response.json()) as { result: { capabilities: Record<string, unknown>; serverInfo: { name: string; version: string } } };
     expect(body.result.capabilities).toHaveProperty("tools");
@@ -156,7 +156,7 @@ test("a tuple a peer publishes as a boolean-closed array is repaired on the way 
 });
 
 test("a tool call on an asleep peer is not answered locally", async () => {
-    const mcp = vi.fn(async () => {
+    const mcp = mock(async () => {
         throw new Error("is not connected right now");
     });
     await post(routeFor({ online: false, mcp }), { jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "describe" } });
@@ -164,7 +164,7 @@ test("a tool call on an asleep peer is not answered locally", async () => {
 });
 
 test("a call the door's judgement stops is answered as a refusing tool result and never forwarded", async () => {
-    const mcp = vi.fn();
+    const mcp = mock();
     const app = routeFor({ mcp, beforeCall: async (payload) => ((payload as { id?: number }).id === 7 ? { refusal: "Held for the owner." } : undefined) });
     const response = await post(app, { jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "run_command" } });
     expect(await response.json()).toEqual({ jsonrpc: "2.0", id: 7, result: { content: [{ type: "text", text: "Held for the owner." }], isError: true } });
@@ -173,7 +173,7 @@ test("a call the door's judgement stops is answered as a refusing tool result an
 
 // Not applied to a tool list: that's the peer's own account of itself, not something to wrap.
 test("a tool call's answer goes through the door's seal, under the tool's name; a tool list does not", async () => {
-    const sealAnswer = vi.fn((id: string, tool: string, answer: unknown) => ({ sealed: `${id}:${tool}`, answer }));
+    const sealAnswer = mock((id: string, tool: string, answer: unknown) => ({ sealed: `${id}:${tool}`, answer }));
     const app = routeFor({ mcp: async () => ({ jsonrpc: "2.0", id: 1, result: { content: [] } }), sealAnswer });
     const call = await post(app, { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "snapshot" } });
     expect(await call.json()).toEqual({ sealed: "laptop:snapshot", answer: { jsonrpc: "2.0", id: 1, result: { content: [] } } });

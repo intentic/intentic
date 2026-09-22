@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { parseStatsFile, summarizeStats } from "./filter-stats.mjs";
 
 test("summarizeStats: saved-% and tokens come from the cleaned population only", () => {

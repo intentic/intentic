@@ -1,12 +1,13 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { nextTick } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 
-const load = () => import("./useIconRailSize");
+// The preference is read once, at module scope, so each case needs its own evaluation of the module.
+const load = () => freshImport<typeof import("./useIconRailSize")>("./useIconRailSize", import.meta.url);
 
 beforeEach(() => {
     localStorage.clear();
-    vi.resetModules();
 });
 
 describe(`useIconRailSize`, () => {

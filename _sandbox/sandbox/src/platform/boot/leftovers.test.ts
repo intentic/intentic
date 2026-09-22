@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { leftoverProcesses, ownerOf, type ScannedProcess, WORKLOAD_ENV, workloadStamp } from "./leftovers.js";
 import { parseProcStat } from "../resources/proc-stat.js";
 

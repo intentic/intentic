@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { changedFiles, changesAgainstBase, changesBetweenRefs, dirtyPathsAcross } from "./changes.js";
 import {
     checkoutRef,
@@ -90,7 +90,7 @@ test("changedFiles maps porcelain states, expands untracked dirs, and skips igno
 // Absent on an unborn HEAD, never a fabricated empty-tree sha a caller could wrongly attribute against.
 test("changedFiles reports HEAD's sha alongside the branch, and nothing on an unborn repo", async () => {
     const dir = await tempRepo();
-    expect(await sh(dir, "rev-parse", "HEAD")).toBe((await changedFiles(dir)).head);
+    expect((await changedFiles(dir)).head).toBe(await sh(dir, "rev-parse", "HEAD"));
 
     const unborn = await mkdtemp(join(tmpdir(), "intentic-changes-unborn-"));
     tempDirs.push(unborn);

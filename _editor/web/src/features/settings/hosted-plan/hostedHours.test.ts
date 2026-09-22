@@ -1,6 +1,6 @@
 import type { HostedPlanState } from "@intentic/api-contract";
 import { FREE_TIER } from "@intentic/constants";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { formatDayShort, formatMinutes, hoursLeftLine, hoursMeter, lowOnHours, machineStandingLine, planBadge } from "./hostedHours";
 
 // Pins the hosted-plan sentences as words: the failure this suite guards against is two surfaces phrasing the same fact
@@ -30,7 +30,7 @@ const RENEWS_AT = `2026-10-01T00:00:00.000Z`;
 const subscriber = (over: Partial<HostedPlanState> = {}): HostedPlanState => state({ onPlan: true, status: `active`, renewsAt: RENEWS_AT, ...over });
 
 // The free plan's chip; the same answer for spent hours, unspent hours, no ceiling, and no machine at all.
-const FREE = { label: `free`, variant: `neutral`, detail: `Free plan. This account is not on the hosted plan.` };
+const FREE = { label: `free`, variant: `neutral`, detail: `Free plan. This account is not on the hosted plan.` } as const;
 
 describe(`minutes as words`, () => {
     it(`speaks minutes under an hour, whole hours plain, and a decimal otherwise`, () => {

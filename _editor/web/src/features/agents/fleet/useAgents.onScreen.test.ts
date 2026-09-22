@@ -1,20 +1,20 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { mocked } from "@intentic/testing/bun";
 
 // Same edges useAgents.test.ts cuts: importing the fleet store pulls in useChat and the app shell behind it.
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
+mock.module("../../sandbox/client/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { nextTick } from "vue";
+import { nextTick, ref } from "vue";
 import { Conversation } from "../../chat/session/conversation";
 import { useChat } from "../../chat/run/useChat";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
@@ -45,7 +45,7 @@ const seen = (id: string): [string, RequestInit] => [`/agents/${id}/seen`, { met
 
 beforeEach(() => {
     resetAgents();
-    vi.mocked(sandboxJson)
+    mocked(sandboxJson)
         .mockReset()
         .mockResolvedValue(undefined as never);
 });

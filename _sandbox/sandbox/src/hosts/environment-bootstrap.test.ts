@@ -1,5 +1,6 @@
 import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts } from "@intentic/sandbox-contract";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import { bootstrapEnvironments, bootstrapTargets, forgetBootstrap } from "./environment-bootstrap.js";
 
@@ -64,7 +65,7 @@ const services = (over: { enrolled?: (id: string) => boolean; answer?: () => { t
 
 // Fire-and-forget by design, so a test has to let the microtasks it queued run.
 const settle = async (): Promise<void> => {
-    await vi.waitFor(() => expect(true).toBe(true));
+    await waitFor(() => expect(true).toBe(true));
     await new Promise((resolve) => setImmediate(resolve));
 };
 

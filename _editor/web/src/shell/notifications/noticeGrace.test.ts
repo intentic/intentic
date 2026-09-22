@@ -1,6 +1,6 @@
 import type { NoticeModel } from "@intentic/ui/notice";
 import { effectScope, nextTick, ref } from "vue";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { NOTICE_GRACE_MS, useNoticeGrace } from "./noticeGrace";
 
 const lost: NoticeModel = { tone: `danger`, title: `Lost contact with your sandbox.` };
@@ -16,8 +16,8 @@ const inScope = async <T>(body: () => T): Promise<{ value: T; stop: () => void }
 };
 
 describe(`useNoticeGrace`, () => {
-    beforeEach(() => vi.useFakeTimers());
-    afterEach(() => vi.useRealTimers());
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
 
     it(`says nothing about a failure that heals inside the grace`, async () => {
         const source = ref<NoticeModel | undefined>(undefined);
@@ -25,12 +25,12 @@ describe(`useNoticeGrace`, () => {
 
         source.value = lost;
         await nextTick();
-        vi.advanceTimersByTime(NOTICE_GRACE_MS - 1);
+        jest.advanceTimersByTime(NOTICE_GRACE_MS - 1);
         expect(said.value).toBeUndefined();
 
         source.value = undefined;
         await nextTick();
-        vi.advanceTimersByTime(NOTICE_GRACE_MS);
+        jest.advanceTimersByTime(NOTICE_GRACE_MS);
         expect(said.value).toBeUndefined();
         stop();
     });
@@ -41,7 +41,7 @@ describe(`useNoticeGrace`, () => {
 
         source.value = lost;
         await nextTick();
-        vi.advanceTimersByTime(NOTICE_GRACE_MS);
+        jest.advanceTimersByTime(NOTICE_GRACE_MS);
         expect(said.value).toEqual(lost);
         stop();
     });
@@ -49,7 +49,7 @@ describe(`useNoticeGrace`, () => {
     it(`clears the moment it heals, without waiting for anything`, async () => {
         const source = ref<NoticeModel | undefined>(lost);
         const { value: said, stop } = await inScope(() => useNoticeGrace(source));
-        vi.advanceTimersByTime(NOTICE_GRACE_MS);
+        jest.advanceTimersByTime(NOTICE_GRACE_MS);
         expect(said.value).toEqual(lost);
 
         source.value = undefined;
@@ -65,13 +65,13 @@ describe(`useNoticeGrace`, () => {
 
         source.value = lost;
         await nextTick();
-        vi.advanceTimersByTime(NOTICE_GRACE_MS - 100);
+        jest.advanceTimersByTime(NOTICE_GRACE_MS - 100);
         source.value = other;
         await nextTick();
-        vi.advanceTimersByTime(100);
+        jest.advanceTimersByTime(100);
         expect(said.value).toBeUndefined();
 
-        vi.advanceTimersByTime(NOTICE_GRACE_MS);
+        jest.advanceTimersByTime(NOTICE_GRACE_MS);
         expect(said.value).toEqual(other);
         stop();
     });
@@ -81,7 +81,7 @@ describe(`useNoticeGrace`, () => {
     it(`updates the words in place once it is being said`, async () => {
         const source = ref<NoticeModel | undefined>(lost);
         const { value: said, stop } = await inScope(() => useNoticeGrace(source));
-        vi.advanceTimersByTime(NOTICE_GRACE_MS);
+        jest.advanceTimersByTime(NOTICE_GRACE_MS);
 
         source.value = other;
         await nextTick();
@@ -96,7 +96,7 @@ describe(`useNoticeGrace`, () => {
         await nextTick();
 
         stop();
-        vi.advanceTimersByTime(NOTICE_GRACE_MS * 2);
+        jest.advanceTimersByTime(NOTICE_GRACE_MS * 2);
         expect(said.value).toBeUndefined();
     });
 });

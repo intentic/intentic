@@ -1,8 +1,9 @@
-// @vitest-environment jsdom
 // Last-line recovery: a crash inside the startup window reads as poisoned local state, so the app wipes what this
 // origin stored and reloads once. These tests pin the once-ness (a crash surviving the clean slate must surface,
 // not loop) and the split across the reload (this page only marks the database wipe; the next boot performs it).
-import { beforeAll, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeAll, beforeEach, mock, spyOn, jest } from "bun:test";
+import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 // Hoisted to top level (like storageRule.test.ts, staleChunk.test.ts) so compiling the sandbox-contract/vue-query
 // graph it drags in is charged to file load, not a single test's budget. Only the healing half needs a fresh
 // module per test; the purge half has no module state to reset.
@@ -10,25 +11,22 @@ import { purgeIfMarked } from "./selfHeal";
 
 // jsdom's `window.location` is unforgeable; the reload is observed through a replaced global, resolved at call
 // time.
-const reload = vi.fn();
+const reload = mock();
 
 beforeAll(() => {
     Object.defineProperty(globalThis, `location`, { configurable: true, value: { reload } });
 });
 
 beforeEach(() => {
-    vi.restoreAllMocks();
-    vi.unstubAllGlobals();
+    jest.restoreAllMocks();
+    unstubAllGlobals();
     localStorage.clear();
     sessionStorage.clear();
     reload.mockClear();
 });
 
 // Fresh module per test: the startup clock and the in-flight guard are module state.
-const load = async (): Promise<typeof import("./selfHeal")> => {
-    vi.resetModules();
-    return await import("./selfHeal");
-};
+const load = (): Promise<typeof import("./selfHeal")> => freshImport<typeof import("./selfHeal")>("./selfHeal", import.meta.url);
 
 it(`answers a startup crash by wiping storage, marking the try, and reloading`, async () => {
     const { reportStartupError } = await load();
@@ -37,7 +35,7 @@ it(`answers a startup crash by wiping storage, marking the try, and reloading`, 
     expect(localStorage.getItem(`intentic.workspaceTabs.sbx-1`)).toBeNull();
     expect(localStorage.getItem(`intentic.wipeOnBoot`)).toBe(`1`);
     expect(sessionStorage.getItem(`intentic.selfHealed`)).toBe(`1`);
-    expect(reload).toHaveBeenCalledOnce();
+    expect(reload).toHaveBeenCalledTimes(1);
 });
 
 it(`does not wipe twice: a crash that survives the clean slate surfaces instead of looping`, async () => {
@@ -53,9 +51,9 @@ it(`does not wipe twice: a crash that survives the clean slate surfaces instead 
 });
 
 it(`leaves an error outside the startup window alone: that is a bug, not poisoned storage`, async () => {
-    vi.spyOn(performance, `now`).mockReturnValue(0);
+    spyOn(performance, `now`).mockReturnValue(0);
     const { reportStartupError } = await load();
-    vi.spyOn(performance, `now`).mockReturnValue(60_000);
+    spyOn(performance, `now`).mockReturnValue(60_000);
     localStorage.setItem(`user-preference`, `kept`);
     reportStartupError(new Error(`boom`));
     expect(localStorage.getItem(`user-preference`)).toBe(`kept`);
@@ -64,7 +62,7 @@ it(`leaves an error outside the startup window alone: that is a bug, not poisone
 
 it(`the marked boot deletes every database this origin holds, then retires the mark`, async () => {
     const deleted: string[] = [];
-    vi.stubGlobal(`indexedDB`, {
+    stubGlobal(`indexedDB`, {
         databases: () => Promise.resolve([{ name: `keyval-store` }, { name: `intentic.chat` }]),
         deleteDatabase: (name: string) => {
             deleted.push(name);
@@ -80,8 +78,8 @@ it(`the marked boot deletes every database this origin holds, then retires the m
 });
 
 it(`an unmarked boot touches no database`, async () => {
-    const deleteDatabase = vi.fn();
-    vi.stubGlobal(`indexedDB`, { databases: () => Promise.resolve([]), deleteDatabase });
+    const deleteDatabase = mock();
+    stubGlobal(`indexedDB`, { databases: () => Promise.resolve([]), deleteDatabase });
     await purgeIfMarked();
     expect(deleteDatabase).not.toHaveBeenCalled();
 });

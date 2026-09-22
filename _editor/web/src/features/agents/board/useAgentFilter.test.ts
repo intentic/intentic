@@ -1,14 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import * as actualVueQuery from "@tanstack/vue-query";
 
 // Same module-eval cuts useAgents.test.ts makes: importing the fleet store pulls in the router, analytics and sandbox
 // modules, which read environment.ts's `window.env` at import time.
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
 // The roster's own report when it catches itself behind (auditRoster) posts through sandboxTarget, another of those
 // import-time reads.
-vi.mock("../../../app/clientDiagnostics", () => ({ reportClient: vi.fn() }));
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../../app/clientDiagnostics", () => ({ reportClient: mock() }));
+mock.module("../../sandbox/client/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(`sbx-1`), reachable: ref(true) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
@@ -16,9 +17,9 @@ vi.mock("../../sandbox/client/useSandbox", async () => {
 });
 // These cases run on fake timers, so useChat's hydrate watch actually runs here; the registered placeholder has an
 // empty transcript and other requests answer 404, irrelevant to the filter but must not unlatch `registered`.
-vi.mock("../../sandbox/client/sandboxClient", () => ({
-    sandboxJson: vi.fn(async () => ({})),
-    sandboxRequest: vi.fn(async (path: string) =>
+mock.module("../../sandbox/client/sandboxClient", () => ({
+    sandboxJson: mock(async () => ({})),
+    sandboxRequest: mock(async (path: string) =>
         path === `/agents/blank/transcript`
             ? { ok: true, status: 200, body: null, json: async () => ({ messages: [] }) }
             : { ok: false, status: 404, body: null },
@@ -30,11 +31,9 @@ vi.mock("../../sandbox/client/sandboxClient", () => ({
 const answers = { agents: undefined as unknown, sessions: undefined as unknown };
 // The keys the composable asked under, kept live, since re-asking on a match-case flip is part of what's tested.
 const keys: Ref<unknown[]>[] = [];
-vi.mock("@tanstack/vue-query", async (importOriginal) => {
-    const actual = await importOriginal<typeof import("@tanstack/vue-query")>();
-    const { computed, ref, unref } = await import("vue");
+mock.module("@tanstack/vue-query", () => {
     return {
-        ...actual,
+        ...actualVueQuery,
         useQuery: (options: { queryKey: Ref<unknown[]> }) => {
             keys.push(options.queryKey);
             return {
@@ -46,7 +45,7 @@ vi.mock("@tanstack/vue-query", async (importOriginal) => {
 });
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { effectScope, nextTick, unref, type EffectScope, type Ref } from "vue";
+import { computed, effectScope, type EffectScope, nextTick, ref, type Ref, unref } from "vue";
 import { Conversation } from "../../chat/session/conversation";
 import { useChat } from "../../chat/run/useChat";
 import { useAgentFilter } from "./useAgentFilter";
@@ -68,7 +67,7 @@ const agent = (id: string, extra: Partial<AgentSummary> = {}): AgentSummary => (
 // The composable debounces its daemon tier by 150ms; the local tier answers on the tick. Waits out the timer so the
 // stubbed answer is considered current.
 const settle = async (): Promise<void> => {
-    await vi.advanceTimersByTimeAsync(200);
+    await advanceTimersByTimeAsync(200);
     await nextTick();
 };
 
@@ -103,7 +102,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     resetAgents();
     keys.length = 0;
     answers.agents = undefined;

@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 // A list is one size, pinned on the real components since none of it is visible any other way:
 // `_tools/checks/row-tiers.mjs` guards that nobody re-answers the tier locally, but a passing gate says nothing about
 // whether the answer reaches the rows, the loading outline, and the notes between them.
@@ -6,8 +5,9 @@
 // Pins four things: a group with no `density` is compact, and its rows take that; a row with no `density` takes its
 // group's; a <SkeletonRows> promises the height of the rows that land; a row's `#lead` is handed the tier's mark size;
 // a <RowNote> pads from the same tier.
+import "@intentic/testing/dom";
 import { DisclosureRow, ROW_TIERS, Row, RowGroup, RowNote, SkeletonRows } from "@intentic/ui";
-import { afterEach, expect, it } from "vitest";
+import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 
 const mounted: { app: App; host: HTMLElement }[] = [];

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { markSegments } from "./markSegments";
 
 // The term is marked without v-html: this text is a chat's own words, which are not trusted markup.

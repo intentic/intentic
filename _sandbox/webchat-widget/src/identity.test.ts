@@ -1,4 +1,5 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, spyOn, jest } from "bun:test";
+import { unstubAllGlobals } from "@intentic/testing/bun";
 import {
     resetConversation,
     storeCursor,
@@ -12,8 +13,8 @@ import {
 
 afterEach(() => {
     window.localStorage.clear();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+    unstubAllGlobals();
+    jest.restoreAllMocks();
 });
 
 test(`the thread id is minted once and reused: this is what threads a follow-up into one conversation`, () => {
@@ -59,10 +60,10 @@ test(`a cursor that storage lost or a hand corrupted reads as the start of the t
 });
 
 test(`a browser that refuses storage still chats: it just gets a fresh thread each time`, () => {
-    vi.spyOn(Storage.prototype, `getItem`).mockImplementation(() => {
+    spyOn(Storage.prototype, `getItem`).mockImplementation(() => {
         throw new Error(`SecurityError`);
     });
-    vi.spyOn(Storage.prototype, `setItem`).mockImplementation(() => {
+    spyOn(Storage.prototype, `setItem`).mockImplementation(() => {
         throw new Error(`SecurityError`);
     });
     expect(visitorConversationId(`support`)).toMatch(/^[0-9a-f-]{36}$/);

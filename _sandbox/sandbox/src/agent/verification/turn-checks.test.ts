@@ -1,5 +1,5 @@
 import type { Rule } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { landingOutcome, recordCheckVerdict, takeCheckVerdict } from "./turn-checks.js";
 
 const CHECK: Rule = {

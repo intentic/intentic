@@ -1,16 +1,17 @@
-// @vitest-environment jsdom
 // jsdom: pins that a whole-card-upsert edit doesn't silently drop untouched fields, and that a folder's persona
 // list matches exactly, not more or fewer.
+import "@intentic/testing/dom";
 import type { Persona } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const personas = ref<Persona[]>([]);
-const save = vi.fn<(persona: Persona) => Promise<unknown>>().mockResolvedValue({ ok: true });
+const save = mock<(persona: Persona) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-vi.mock(`../../sandbox/personas/usePersonas`, () => ({
+mock.module(`../../sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected: ref([]),
@@ -18,12 +19,12 @@ vi.mock(`../../sandbox/personas/usePersonas`, () => ({
         error: ref(undefined),
         isLoading: ref(false),
         save: { mutateAsync: save, isPending: ref(false) },
-        remove: { mutateAsync: vi.fn(), isPending: ref(false) },
+        remove: { mutateAsync: mock(), isPending: ref(false) },
     }),
 }));
 
 // Mocked since the real composable reaches the sandbox client at import time, unavailable under jsdom.
-vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: ref([]) }) }));
+mock.module(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities: ref([]) }) }));
 
 const { default: DirectoryPersonas } = await import("./DirectoryPersonas.vue");
 
@@ -83,7 +84,7 @@ it(`saves a new persona that starts in the clicked folder`, async () => {
     await nextTick();
     await type(`Refactor crew`);
     buttonLabelled(`Add persona`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toMatchObject({
         id: `refactor-crew`,
         label: `Refactor crew`,
@@ -99,7 +100,7 @@ it(`asks for a name and nothing else, and commits no powers`, async () => {
     expect(text()).not.toContain(`Run commands`);
     await type(`Docs bot`);
     buttonLabelled(`Add persona`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0].powers).toBeUndefined();
 });
 
@@ -148,7 +149,7 @@ it(`keeps the rest of a card when it is renamed from the tree`, async () => {
     await nextTick();
     await type(`Docs crew`);
     buttonLabelled(`Save`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({
         id: `docs-bot`,
         label: `Docs crew`,
@@ -176,7 +177,7 @@ it(`keeps the powers of a bounded card`, async () => {
     await nextTick();
     expect(text()).toContain(`Run commands`);
     buttonLabelled(`Save`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0].powers).toEqual({
         files: `read`,
         shell: false,
@@ -215,7 +216,7 @@ it(`points an existing persona at this folder, keeping everything else about it`
     byAriaLabel(`Start Docs bot here`)!.click();
     await nextTick();
     buttonLabelled(`Start here`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({
         id: `docs-bot`,
         label: `Docs bot`,
@@ -239,7 +240,7 @@ it(`offers a persona that starts nowhere, and says so`, async () => {
     await nextTick();
     expect(text()).not.toContain(`This moves it`);
     buttonLabelled(`Start here`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({ id: `free-agent`, capabilities: [], workspace: { startIn: `docs` } });
 });
 

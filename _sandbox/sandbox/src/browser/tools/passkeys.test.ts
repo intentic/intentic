@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { mergePasskey, type PasskeyCredential } from "./passkeys.js";
 
 /* The passkey store is the only cross-browser credential carrier; its rpId must remain valid. */

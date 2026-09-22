@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { detectProjects, managerFromPackageJson, recipeFor } from "./index.js";
 
 test("the lockfile names the manager, most specific first", () => {

@@ -2,7 +2,7 @@ import { defineRule } from "@oxlint/plugins";
 
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
 
-const moduleMockMethods = new Set(["doMock", "mock", "unstable_mockModule"]);
+const moduleMockMethods = new Set(["doMock", "mock", "module", "unstable_mockModule"]);
 
 function resolveVariable(
   sourceCode: SourceCode,
@@ -44,7 +44,7 @@ function isTestFrameworkObject(
     }
     const source = definition.parent.source.value;
     const name = importedName(definition.node);
-    return (source === "vitest" && name === "vi") || (source === "@jest/globals" && name === "jest");
+    return (source === "vitest" && name === "vi") || (source === "@jest/globals" && name === "jest") || (source === "bun:test" && name === "mock");
   });
 }
 
@@ -56,6 +56,7 @@ function moduleMockCall(sourceCode: SourceCode, callee: ESTree.Expression): bool
     ? property.type === "Literal" &&
       (property.value === "doMock" ||
         property.value === "mock" ||
+        property.value === "module" ||
         property.value === "unstable_mockModule")
       ? property.value
       : null
@@ -71,7 +72,7 @@ export const noModuleMockingRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow Vitest and Jest module mocking; tests must replace dependencies through real interfaces.",
+        "Disallow Vitest, Jest and bun:test module mocking; tests must replace dependencies through real interfaces.",
     },
     messages: {
       moduleMock:

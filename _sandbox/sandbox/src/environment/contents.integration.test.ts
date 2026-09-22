@@ -1,10 +1,12 @@
+import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { repoRoot } from "@intentic/constants/node";
 import type { Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import { readEnvironmentContents } from "./contents.js";
@@ -15,6 +17,11 @@ import { clearVersionCache } from "./version-probe.js";
 // everything else by name and grouping, never a version number.
 
 const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
+
+const execFileAsync = promisify(execFile);
+
+// The expected version is whatever the `node` on PATH answers, which is the binary the probe reads, not the runner's own.
+const nodeVersion = async (): Promise<string> => (await execFileAsync("node", ["--version"])).stdout.trim().slice(1);
 
 const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Services =>
     unstubbed<Services>("services", {
@@ -70,7 +77,7 @@ test("groups what the owner approved, names it, and reads its version off the to
     const present = custom[0];
     expect(present?.state).toBe("active");
     expect(present?.tools.map((tool) => tool.name)).toContain("node");
-    expect(present?.tools.find((tool) => tool.name === "node")?.version).toBe(process.version.slice(1));
+    expect(present?.tools.find((tool) => tool.name === "node")?.version).toBe(await nodeVersion());
     expect(present?.purpose?.length).toBeGreaterThan(0);
     // `detail` carries the whole comment, not comment-minus-purpose, avoiding a doubled opening sentence.
     expect(present?.detail?.startsWith(present?.purpose ?? "")).toBe(true);

@@ -1,5 +1,5 @@
 import { call, ORPCError } from "@orpc/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import type { ApnsForwarder, ApnsVerdict } from "./apns.js";
@@ -10,12 +10,12 @@ import { pushRelayRoutes } from "./push-relay.routes.js";
 
 const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null };
 
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof mock>>>) => overrides as unknown as OrpcContext[`prisma`];
 
 // Each test builds its own forwarder; a fresh config per context keeps the module's per-config cache from leaking.
-const forwarder = (verdict: ApnsVerdict): ApnsForwarder & { send: ReturnType<typeof vi.fn> } => ({
+const forwarder = (verdict: ApnsVerdict): ApnsForwarder & { send: ReturnType<typeof mock> } => ({
     enabled: true,
-    send: vi.fn().mockResolvedValue(verdict),
+    send: mock().mockResolvedValue(verdict),
 });
 
 const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
@@ -23,7 +23,7 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
         prisma: fakePrisma({}),
         config: { api: { url: `https://platform.example` }, apns: { keyP8: `key` } } as Config,
         user,
-        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        logger: { info: mock(), warn: mock(), error: mock() },
         headers: new Headers(),
         ...overrides,
     }) as OrpcContext;
@@ -32,7 +32,7 @@ const notification = { title: `Turn finished`, body: `done`, tag: `conv-1` };
 
 describe(`register`, () => {
     it(`mints a fresh secret, stores only its hash, and answers with the grant the daemon will hold`, async () => {
-        const upsert = vi.fn().mockImplementation(async (args: { create: { secretHash: string } }) => ({ id: `d1`, ...args.create }));
+        const upsert = mock().mockImplementation(async (args: { create: { secretHash: string } }) => ({ id: `d1`, ...args.create }));
         const ctx = context({ prisma: fakePrisma({ pushDevice: { upsert } }) });
 
         const grant = await call(pushRelayRoutes(() => forwarder(`delivered`)).register, { platform: `ios`, token: `tok-1` }, { context: ctx });
@@ -54,7 +54,7 @@ describe(`register`, () => {
     });
 
     it(`404s on a platform with no APNs key: a relay that cannot forward must say it does not exist`, async () => {
-        const routes = pushRelayRoutes(() => ({ enabled: false, send: vi.fn() }));
+        const routes = pushRelayRoutes(() => ({ enabled: false, send: mock() }));
         await expect(call(routes.register, { platform: `ios`, token: `t` }, { context: context() })).rejects.toMatchObject({
             code: `NOT_FOUND`,
         });
@@ -63,7 +63,7 @@ describe(`register`, () => {
 
 describe(`unregister`, () => {
     it(`scopes the delete to the caller's own rows, someone else's deviceId deletes nothing and learns nothing`, async () => {
-        const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
+        const deleteMany = mock().mockResolvedValue({ count: 0 });
         const ctx = context({ prisma: fakePrisma({ pushDevice: { deleteMany } }) });
 
         await expect(call(pushRelayRoutes(() => forwarder(`delivered`)).unregister, { deviceId: `d9` }, { context: ctx })).resolves.toEqual({
@@ -86,7 +86,7 @@ describe(`send`, () => {
     it(`is sessionless and forwards to the row's token when the secret matches`, async () => {
         const { secret, hash } = await minted();
         const apns = forwarder(`delivered`);
-        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: vi.fn().mockResolvedValue(row(hash)) } }) });
+        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: mock().mockResolvedValue(row(hash)) } }) });
 
         await expect(call(pushRelayRoutes(() => apns).send, { deviceId: `d1`, secret, notification }, { context: ctx })).resolves.toEqual({
             delivered: true,
@@ -95,7 +95,7 @@ describe(`send`, () => {
     });
 
     it(`answers 404 for an unknown device: the daemon prunes and never retries`, async () => {
-        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: vi.fn().mockResolvedValue(null) } }) });
+        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: mock().mockResolvedValue(null) } }) });
         await expect(
             call(pushRelayRoutes(() => forwarder(`delivered`)).send, { deviceId: `dx`, secret: `s`, notification }, { context: ctx }),
         ).rejects.toMatchObject({ code: `NOT_FOUND` });
@@ -103,7 +103,7 @@ describe(`send`, () => {
 
     it(`answers 403 for a rotated secret: the old daemon row is permanently dead`, async () => {
         const { hash } = await minted();
-        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: vi.fn().mockResolvedValue(row(hash)) } }) });
+        const ctx = context({ user: null, prisma: fakePrisma({ pushDevice: { findUnique: mock().mockResolvedValue(row(hash)) } }) });
         await expect(
             call(pushRelayRoutes(() => forwarder(`delivered`)).send, { deviceId: `d1`, secret: `wrong`, notification }, { context: ctx }),
         ).rejects.toMatchObject({ code: `FORBIDDEN` });
@@ -111,10 +111,10 @@ describe(`send`, () => {
 
     it(`deletes the row and answers 410 when Apple says the device is gone: both halves of the channel die together`, async () => {
         const { secret, hash } = await minted();
-        const remove = vi.fn().mockResolvedValue({});
+        const remove = mock().mockResolvedValue({});
         const ctx = context({
             user: null,
-            prisma: fakePrisma({ pushDevice: { findUnique: vi.fn().mockResolvedValue(row(hash)), delete: remove } }),
+            prisma: fakePrisma({ pushDevice: { findUnique: mock().mockResolvedValue(row(hash)), delete: remove } }),
         });
 
         await expect(
@@ -125,10 +125,10 @@ describe(`send`, () => {
 
     it(`answers 502 on a transient: a misconfigured relay must never read as "prune every iPhone"`, async () => {
         const { secret, hash } = await minted();
-        const remove = vi.fn();
+        const remove = mock();
         const ctx = context({
             user: null,
-            prisma: fakePrisma({ pushDevice: { findUnique: vi.fn().mockResolvedValue(row(hash)), delete: remove } }),
+            prisma: fakePrisma({ pushDevice: { findUnique: mock().mockResolvedValue(row(hash)), delete: remove } }),
         });
 
         await expect(

@@ -1,6 +1,6 @@
 // What a peek may claim about a file it has only read the ends of. Pins the two claims that would be lies: a line
 // count derived from a clipped window, and a fragment of a line drawn as though it were a line.
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { dropPartialFirst, dropPartialLast, type FilePeek, isAudioPath, isImagePath, peekLead, peekLines, peekOmitted } from "./filePeek";
 
 const peek = (over: Partial<FilePeek> = {}): FilePeek => ({

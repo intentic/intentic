@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, describe, expect, test } from "vitest";
+import { describe, test, expect, afterAll } from "bun:test";
 import { packageOf, passesAgainstHead } from "./agent-test-strength.js";
 
 // Runs the mechanism against a real git repo and real vitest, nothing stubbed: the seam between config, baseline and

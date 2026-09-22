@@ -1,31 +1,33 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, reactive } from "vue";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { type App, computed, createApp, h, nextTick, reactive, ref, shallowRef } from "vue";
 import { type AgentWatch, verifyNudgePrompt, watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract";
-import { errands, errandPrompt } from "../run/errands";
-import type { ChatMessage } from "./transcript";
+import { errandOf, errands, errandPrompt } from "../run/errands";
+import { changedNothing, type ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
+import { formatElapsed } from "../../agents/fleet/agentStatus";
 
-const clock = vi.hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
-const roster = vi.hoisted(() => ({ running: 0, watches: undefined as AgentWatch[] | undefined }));
+const clock = hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
+const roster = hoisted(() => ({ running: 0, watches: undefined as AgentWatch[] | undefined }));
 // Async like the action it stands in for: the row awaits it and swallows a failed disarm, so a sync stub rejects.
-const stopWatching = vi.hoisted(() => vi.fn(async () => undefined));
+const stopWatching = hoisted(() => mock(async () => undefined));
 // Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it.
-const pane = vi.hoisted(() => ({ streaming: true, editing: undefined as ChatMessage | undefined }));
-const beginEdit = vi.hoisted(() => vi.fn());
+const pane = hoisted(() => ({ streaming: true, editing: undefined as ChatMessage | undefined }));
+const beginEdit = hoisted(() => mock());
 // Hoisted rather than fresh per call, so a card's answer can be read back from the one the pane actually holds.
-const answerQuestion = vi.hoisted(() => vi.fn());
+const answerQuestion = hoisted(() => mock());
 // What useMarkdown hands the row under test (prose runs, figures); empty unless the test is about the answer body.
-const markdown = vi.hoisted(() => ({
+const markdown = hoisted(() => ({
     parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
 }));
 
 // Every ResizeObserver a mounted row builds, with the boxes it watches. jsdom has no layout to fire one, so the pinned
 // band's suite fires the row's own by hand; the others are left alone and never fire, as before.
-const resizers = vi.hoisted(() => [] as { readonly targets: Element[]; readonly fire: () => void }[]);
+const resizers = hoisted(() => [] as { readonly targets: Element[]; readonly fire: () => void }[]);
 
-vi.hoisted(() => {
+hoisted(() => {
     // Resize/IntersectionObserver stubs since jsdom lacks both; never firing leaves clamp/pin at their default state.
     const idle = class {
         observe(): void {}
@@ -54,7 +56,7 @@ vi.hoisted(() => {
 
 // Imported as a namespace since this file already binds `h`/`defineComponent`, which a destructured factory would
 // shadow.
-vi.mock("@intentic/ui", async () => {
+mock.module("@intentic/ui", async () => {
     const vue = await import("vue");
     return {
         useDevice: () => ({ mobile: vue.ref(false) }),
@@ -94,46 +96,39 @@ vi.mock("@intentic/ui", async () => {
         // Highlighting never lands in jsdom; returning undefined is the pending-highlight state the block already
         // renders for.
         useHighlighter: () => ({ tokenizeLine: async () => undefined }),
+        // Named by the graph (the resources dialog, link and port helpers) but never reached by a card here; bun
+        // links an ESM import against exactly what this factory returns.
+        SandboxResourcesDialog: vue.defineComponent({ render: () => undefined }),
+        browserOwnsClick: () => false,
+        clipboardOf: () => undefined,
+        parseLoopbackLink: () => undefined,
+        openForwardedPort: () => {},
     };
 });
 // Stub renders one prose run naming its source, enough to tell a drawn document from a folded one without a real
 // parser.
-vi.mock("@intentic/ui/markdown", () => ({
-    copyCodeFromEvent: vi.fn(),
+mock.module("@intentic/ui/markdown", () => ({
+    copyCodeFromEvent: mock(),
     renderMarkdownParts: (source: string) => [{ kind: `html`, html: `<p>${source}</p>` }],
 }));
-// `withoutResumeNote` stays real, since the errand row depends on it to recognize a resumed turn's re-sent errand.
-// Rides on the real contract with only `planParts` stubbed, since hand-listing exports breaks on every addition to the
-// contract's vocabulary.
-vi.mock("@intentic/sandbox-contract", async (importActual) => ({
-    ...(await importActual<typeof import("@intentic/sandbox-contract")>()),
-    planParts: (text: string) => ({ body: text }),
-}));
-vi.mock("../drafts/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
+mock.module("../drafts/attachmentPreviews", () => ({ attachmentPreview: () => undefined }));
 // formatElapsed stays real, since the loader's readout is exactly that format.
-vi.mock("../../agents/fleet/agentStatus", async () => {
-    const { formatElapsed } = await vi.importActual<typeof import("../../agents/fleet/agentStatus")>("../../agents/fleet/agentStatus");
-    return { effectiveAutoLand: () => false, effectiveOutageResume: () => false, formatElapsed };
-});
-vi.mock("./transcript", async () => {
-    const { errandOf } = await vi.importActual<typeof import("../run/errands")>("../run/errands");
-    return { foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined };
-});
-vi.mock("../../../lib/markdown/useMarkdown", async () => {
-    const { computed } = await import("vue");
+mock.module("../../agents/fleet/agentStatus", () => ({ effectiveAutoLand: () => false, effectiveOutageResume: () => false, formatElapsed }));
+// changedNothing stays real: it decides whether a checklist is drawn at all, which is a card's own reading.
+mock.module("./transcript", () => ({ foldsIntoTurn: (message: ChatMessage) => errandOf(message) !== undefined, changedNothing }));
+mock.module("../../../lib/markdown/useMarkdown", () => {
     return { useMarkdown: () => computed(() => markdown.parts) };
 });
-vi.mock("../../workspace/files/openFileRef", () => ({ openFileRefFromEvent: vi.fn() }));
-vi.mock("../../workspace/changes/history/useHistory", () => ({ restoreSnapshot: vi.fn() }));
-vi.mock("../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
-vi.mock("../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
-vi.mock("./ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
-vi.mock("../tools/ChatToolCard.vue", () => ({ default: { render: () => undefined } }));
-vi.mock("../tools/ChatToolGroup.vue", () => ({ default: { render: () => undefined } }));
+mock.module("../../workspace/files/openFileRef", () => ({ openFileRefFromEvent: mock(), openWorkspaceRef: mock() }));
+mock.module("../../workspace/changes/history/useHistory", () => ({ restoreSnapshot: mock(), invalidateWorkspace: mock() }));
+mock.module("../tools/toolGrouping", () => ({ groupConsecutiveTools: () => [] }));
+mock.module("../composer/ChatAttachmentStrip.vue", () => ({ default: { render: () => undefined } }));
+mock.module("./ChatTodoList.vue", () => ({ default: { render: () => undefined } }));
+mock.module("../tools/ChatToolCard.vue", () => ({ default: { render: () => undefined } }));
+mock.module("../tools/ChatToolGroup.vue", () => ({ default: { render: () => undefined } }));
 
 // Stubs the pane's own view, not the focused one (useChat's PANE_VIEW), since this row reads its pane's conversation.
-vi.mock("../panel/useChat-view", async () => {
-    const { computed, ref, shallowRef } = await import("vue");
+mock.module("../panel/useChat-view", () => {
     const conversation = shallowRef({
         conversationId: `agent-1`,
         providerRetry: ref(undefined),
@@ -146,10 +141,10 @@ vi.mock("../panel/useChat-view", async () => {
     return {
         usePaneView: () => ({
             conversation,
-            decidePlan: vi.fn(),
+            decidePlan: mock(),
             answerQuestion,
-            cancelQuestion: vi.fn(),
-            decidePermission: vi.fn(),
+            cancelQuestion: mock(),
+            decidePermission: mock(),
             streaming: computed(() => pane.streaming),
             awaitingDecision: ref(false),
             // isDeciding always false, so the card's buttons stay offered in every mount here.
@@ -162,19 +157,18 @@ vi.mock("../panel/useChat-view", async () => {
 
 // Roster count of this conversation's live subagents, which the loader reports waiting on, and the outside conditions
 // it is parked on, which a watch's own notice row reads to say whether it is still waiting.
-vi.mock("../../agents/fleet/useAgents", () => ({
+mock.module("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
         agentById: () => ({ subagents: { running: roster.running, total: roster.running }, watches: roster.watches }),
-        setAutoLand: vi.fn(),
-        setResumeAfterOutage: vi.fn(),
+        setAutoLand: mock(),
+        setResumeAfterOutage: mock(),
         stopWatching,
     }),
 }));
 
-vi.mock("../../sandbox/overview/useSandboxSettings", async () => {
-    const { ref } = await import("vue");
+mock.module("../../sandbox/overview/useSandboxSettings", () => {
     return {
-        useSandboxSettings: () => ({ settings: ref(undefined), save: { mutateAsync: vi.fn() } }),
+        useSandboxSettings: () => ({ settings: ref(undefined), save: { mutateAsync: mock() } }),
     };
 });
 
@@ -198,8 +192,8 @@ const mount = (subject: ChatMessage = message, extra: { doomed?: boolean } = {})
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000_000);
     clock.turnStartedAt = Date.now() - 35_000;
     roster.running = 0;
     roster.watches = undefined;
@@ -215,13 +209,13 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 it(`releases a removed prompt element and observes its replacement`, async () => {
     const subject = reactive<ChatMessage>({ id: 12, role: `user`, text: `first prompt` });
     const element = mount(subject);
-    const errors = vi.fn();
+    const errors = mock();
     app!.config.errorHandler = errors;
     await nextTick();
     const first = element.querySelector(`.chat-prompt-text`)!;
@@ -248,7 +242,7 @@ describe(`ChatMessageView loader`, () => {
 
         app?.unmount();
         app = undefined;
-        vi.advanceTimersByTime(12_000);
+        jest.advanceTimersByTime(12_000);
 
         const reopened = mount();
         expect(reopened.textContent).toContain(`(47s)`);
@@ -284,7 +278,7 @@ describe(`ChatMessageView loader`, () => {
 
     it(`ticks while the turn runs and drops the readout when the start is unknown`, async () => {
         const element = mount();
-        vi.advanceTimersByTime(30_000);
+        jest.advanceTimersByTime(30_000);
         await nextTick();
         expect(element.textContent).toContain(`(1m 5s)`);
 
@@ -353,13 +347,15 @@ describe(`ChatMessageView question card`, () => {
         expect(element.textContent).toContain(String(2));
     });
 
-    // Write-up the question refers to, attached to the card by the daemon (agent.ts).
-    const document = { path: `docs/findings.md`, title: `Why it is slow`, markdown: `# Why it is slow` };
+    // Write-up the question refers to, attached to the card by the daemon (agent.ts). Its opening heading repeats the
+    // title, which the card strips (planParts), so the prose below it is what proves the body is drawn.
+    const document = { path: `docs/findings.md`, title: `Why it is slow`, markdown: `# Why it is slow\n\nThe index rebuilds on every keystroke.` };
+    const BODY = `The index rebuilds on every keystroke.`;
 
     it(`draws the document a question is about, inside the card, open`, () => {
         const element = mount({ ...ask(false), question: { ...ask(false).question!, document } });
         expect(element.textContent).toContain(`Why it is slow`);
-        expect(element.textContent).toContain(`# Why it is slow`);
+        expect(element.textContent).toContain(BODY);
         expect(element.textContent).toContain(`findings.md`);
     });
 
@@ -373,19 +369,19 @@ describe(`ChatMessageView question card`, () => {
                     name: `Write`,
                     category: `edit`,
                     status: `completed`,
-                    content: [{ type: `diff`, path: `docs/findings.md`, newText: `# Why it is slow` }],
+                    content: [{ type: `diff`, path: `docs/findings.md`, newText: document.markdown }],
                 },
             ],
         });
         expect(element.textContent).toContain(`Why it is slow`);
-        expect(element.textContent).not.toContain(`# Why it is slow`);
+        expect(element.textContent).not.toContain(BODY);
 
         const fold = [...element.querySelectorAll<HTMLButtonElement>(`button[aria-expanded]`)].find((button) =>
             button.textContent?.includes(`Why it is slow`),
         );
         fold?.click();
         await nextTick();
-        expect(element.textContent).toContain(`# Why it is slow`);
+        expect(element.textContent).toContain(BODY);
     });
 
     it(`keeps a single-select question round, silent, and one-pick-at-a-time`, async () => {

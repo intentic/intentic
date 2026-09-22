@@ -1,5 +1,5 @@
 import { type Capability, LOCAL_MODEL_WINDOW_DEFAULT } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { translatedEndpoints } from "./endpoint-translator.js";
 import {
     endpointConfigOf,

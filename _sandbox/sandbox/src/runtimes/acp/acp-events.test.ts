@@ -1,5 +1,5 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { sessionUpdateEvent } from "./acp-events.js";
 
 const CWD = WORKSPACE_ROOT;

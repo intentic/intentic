@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 import { reloadOnHotUpdate } from "./hotReload";
 
 // Guards a dev-only singleton against Vite's hot update, which re-executes a changed module and everything up to
@@ -8,7 +9,8 @@ import { reloadOnHotUpdate } from "./hotReload";
 // accept.
 
 // A module as Vite hands it over: its url, and a hot context if the dev server is there.
-const meta = (url: string, hot: ImportMeta["hot"]): ImportMeta => ({ url, hot }) as unknown as ImportMeta;
+// `hot` is absent in a production build, which bun-types' own ImportMeta does not allow for.
+const meta = (url: string, hot: ImportMeta["hot"] | undefined): ImportMeta => ({ url, hot }) as unknown as ImportMeta;
 
 const hotContext = (): { context: ImportMeta["hot"]; accepted: (() => void)[] } => {
     const accepted: (() => void)[] = [];
@@ -20,11 +22,11 @@ const hotContext = (): { context: ImportMeta["hot"]; accepted: (() => void)[] } 
     return { context, accepted };
 };
 
-let reload: ReturnType<typeof vi.fn>;
+let reload: ReturnType<typeof mock>;
 
 beforeEach(() => {
     globalThis.intenticSingletonModules = undefined;
-    reload = vi.fn();
+    reload = mock();
     // jsdom refuses a real navigation; the assertion is only that reload was called.
     Object.defineProperty(window, `location`, { configurable: true, value: { reload } });
 });
@@ -87,8 +89,7 @@ describe(`reloadOnHotUpdate`, () => {
     it(`survives its own module being re-evaluated`, async () => {
         reloadOnHotUpdate(meta(`/src/composables/chat/useChat.ts`, hotContext().context));
 
-        vi.resetModules();
-        const { reloadOnHotUpdate: reborn } = await import("./hotReload");
+        const { reloadOnHotUpdate: reborn } = await freshImport<typeof import("./hotReload")>("./hotReload", import.meta.url);
         reborn(meta(`/src/composables/chat/useChat.ts?t=1788553354564`, hotContext().context));
 
         expect(reload).toHaveBeenCalledTimes(1);

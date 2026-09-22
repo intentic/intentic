@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { GitChange } from "@intentic/sandbox-contract";
 import { buildFileTree, flattenFileTree, type TreeNode } from "./commitFileTree";
 

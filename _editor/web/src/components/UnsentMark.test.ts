@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
 // Tests what the hover says, not the markup: the mark itself can only say a message exists, so the hover carries
 // which one and how long. Mounted with plain Vue, glyph and tooltip stubbed as in MatchLine.test / Subagents.test.
-import { describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, spyOn, jest } from "bun:test";
+import { mocked } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 
 import UnsentMark from "./UnsentMark.vue";
@@ -40,40 +41,40 @@ describe(`<UnsentMark>`, () => {
     });
 
     it(`names the message and how long it has been standing`, () => {
-        vi.spyOn(Date, `now`).mockReturnValue(1_000_000);
+        spyOn(Date, `now`).mockReturnValue(1_000_000);
         try {
             expect(hintOf({ preview: `fix the login redirect`, at: 1_000_000 - 12 * 60_000 })).toBe(`Not sent, 12m: fix the login redirect`);
         } finally {
-            vi.mocked(Date.now).mockRestore();
+            mocked(Date.now).mockRestore();
         }
     });
 
     // Ages off the shared clock the mark arms itself, and keeps ageing: a tick handed down as a prop made the rail
     // that hosts the mark redraw every card it holds, once a second, to move this one line.
     it(`ages against the shared clock as it advances`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         // A multiple of the mark's 15s step, so the quantised reading is the system time itself.
-        vi.setSystemTime(600_000);
+        jest.setSystemTime(600_000);
         try {
             const host = render({ preview: `fix the login redirect`, at: 580_000 });
             expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, just now: fix the login redirect`);
-            vi.advanceTimersByTime(45_000);
+            jest.advanceTimersByTime(45_000);
             await nextTick();
             expect(host.querySelector(`span`)!.getAttribute(`aria-label`)).toBe(`Not sent, 1m: fix the login redirect`);
         } finally {
             app?.unmount();
             app = undefined;
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
     // An attachment or a queued message has nothing to quote; the mark still shows, the hint just omits the words.
     it(`reports the age alone when what is unsent is not typed words`, () => {
-        vi.spyOn(Date, `now`).mockReturnValue(2 * 86_400_000);
+        spyOn(Date, `now`).mockReturnValue(2 * 86_400_000);
         try {
             expect(hintOf({ at: 0 })).toBe(`Not sent, 2d`);
         } finally {
-            vi.mocked(Date.now).mockRestore();
+            mocked(Date.now).mockRestore();
         }
     });
 

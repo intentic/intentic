@@ -1,7 +1,7 @@
 import { FIELD_NOTES_FILE } from "@intentic/constants";
 import { CHORES } from "@intentic/sandbox-contract/chores";
 import { Cron } from "croner";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { CORE_AUTOMATION_TEMPLATES, FIELD_NOTES_AUTOMATION_ID } from "./catalog.js";
 
 // Pins that scheduled chore templates come from `@intentic/sandbox-contract/chores`, not hand-written here.
@@ -17,15 +17,15 @@ const monthlyShapeOf = (expression: string): { readonly day: number; readonly ho
 
 describe(`code chores come from the book`, () => {
     const shelf = CORE_AUTOMATION_TEMPLATES.filter((template) => template.chore === true);
-    const scheduled = CHORES.filter((chore) => chore.automation !== undefined);
+    const scheduled = CHORES.flatMap((chore) => (chore.automation === undefined ? [] : [{ ...chore, automation: chore.automation }]));
 
     test(`every chore the book says is worth running unattended has a template`, () => {
         for (const chore of scheduled) {
             const template = shelf.find((entry) => entry.id === chore.id);
             expect(template).toMatchObject({ title: chore.title });
             expect(template?.description).toBe(chore.description);
-            expect(template?.guard).toBe(chore.automation?.guard);
-            expect(template?.trigger).toEqual({ kind: `schedule`, cron: chore.automation?.cron });
+            expect(template?.guard).toBe(chore.automation.guard);
+            expect(template?.trigger).toEqual({ kind: `schedule`, cron: chore.automation.cron });
         }
     });
 

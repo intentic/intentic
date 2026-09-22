@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { extensionUiNames } from "@intentic/extension-ui/names";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // CI guard for the extension-ui public surface. hostModules.ts checks names.mjs against the real kit at dev boot (a
 // console.error a developer can miss); this fails the build instead. The kit is a `.vue` graph that can't be imported

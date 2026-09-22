@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { decodeAnswers, encodeName, encodeQuery, skipName } from "./exit-dns.js";
 
 // Codec tests for the hand-rolled DNS encoder/decoder, needed since Node's resolver can't be told a source address.

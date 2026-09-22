@@ -4,7 +4,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { ExtensionManifestSchema, type FileContribution } from "@intentic/extension-manifest";
 import { WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { isWatchIgnored } from "./workspace-watch.js";
 
 // Pins that every declared file binding names a path the workspace watcher (isWatchIgnored) doesn't blanket-exclude, or

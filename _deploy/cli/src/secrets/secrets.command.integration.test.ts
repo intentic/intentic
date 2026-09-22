@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { DesiredStateGraph, SecretSource } from "@intentic/graph";
 import { fakeForgejoApi } from "@intentic/providers";
 import { readSyncState, secretDigest, writeSyncState } from "@intentic/scaffold";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Output } from "../lib/output.js";
 import { APPLY_WORKFLOW_PATH } from "../pipelines/adopt-pipelines.js";
 import { pushSecrets } from "./secrets.command.js";

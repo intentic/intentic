@@ -1,14 +1,14 @@
-// @vitest-environment jsdom
 // jsdom: fleetScope declares an account preference read from localStorage and announced on a BroadcastChannel at module
 // load, neither of which exists in the node environment.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 
 const sandboxes = ref<{ id: string; name: string; image: string | null; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
-const select = vi.fn();
-vi.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId, select }) }));
+const select = mock();
+mock.module("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId, select }) }));
 
 // The store this reads from, stubbed to the shape its surfaces see; what it does with the network is fleetAcross's own
 // business.
@@ -17,10 +17,17 @@ const silentBoxes = ref<unknown[]>([]);
 // `boxAttention` stubbed to its two real answers: a number, or undefined for a box that's never answered, the case the
 // sum below must not turn into a zero.
 const boxAttention = (box: { attention?: number }): number | undefined => box.attention;
-vi.mock("../../sandbox/live/fleetAcross", () => ({ otherBoxes, silentBoxes, boxAttention, subscribe: vi.fn(), refreshAcross: vi.fn() }));
+mock.module("../../sandbox/live/fleetAcross", () => ({
+    otherBoxes,
+    silentBoxes,
+    boxAttention,
+    subscribe: mock(),
+    refreshAcross: mock(),
+    markSeenAcross: mock(),
+}));
 
-const landOnAfterSwitch = vi.fn();
-vi.mock("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch }));
+const landOnAfterSwitch = mock();
+mock.module("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch }));
 
 const { acrossAttention, boxNameOf, isRemote, openInSandbox, otherFleet, partialAnswer, fleetScope, readingAcross, scopeOffered } =
     await import("./fleetScope");
@@ -150,14 +157,20 @@ describe("what the board says when its answer is partial", () => {
 
 describe("how much the other boxes are owed", () => {
     it("adds up what every other box says it needs", () => {
-        otherBoxes.value = [{ ...(boxOf(`sbx-laptop`, `Laptop`, []) as object), attention: 2 }, { ...(boxOf(`sbx-pi`, `Pi`, []) as object), attention: 3 }];
+        otherBoxes.value = [
+            { ...(boxOf(`sbx-laptop`, `Laptop`, []) as object), attention: 2 },
+            { ...(boxOf(`sbx-pi`, `Pi`, []) as object), attention: 3 },
+        ];
         expect(acrossAttention.value).toBe(5);
     });
 
     // A box that has never answered contributes nothing and blocks nothing: the switcher can draw a dash per row, but a
     // badge has one digit, so the unknown is told in words instead.
     it("skips a box that has never answered rather than counting it as zero or giving up", () => {
-        otherBoxes.value = [{ ...(boxOf(`sbx-laptop`, `Laptop`, []) as object), attention: 2 }, { ...(boxOf(`sbx-pi`, `Pi`, []) as object), attention: undefined }];
+        otherBoxes.value = [
+            { ...(boxOf(`sbx-laptop`, `Laptop`, []) as object), attention: 2 },
+            { ...(boxOf(`sbx-pi`, `Pi`, []) as object), attention: undefined },
+        ];
         expect(acrossAttention.value).toBe(2);
     });
 });

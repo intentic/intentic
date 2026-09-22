@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { parseDnsSocketInodes, parsePressure } from "./loop-watchdog.js";
 
 // Real /proc/pressure shapes: memory/io carry both lines, cpu carries only `some` (a runnable task always

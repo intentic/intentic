@@ -1,5 +1,5 @@
 import type { WorkflowRun, WorkflowStepRun } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { runConversations } from "./workflow-state.js";
 
 // Which of a run's step records name a chat that actually exists: the question archiving a run is built on,

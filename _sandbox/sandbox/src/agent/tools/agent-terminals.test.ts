@@ -1,6 +1,6 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { syncHookOutput } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";

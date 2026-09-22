@@ -1,5 +1,5 @@
 import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import {
     candidatesFor,
     certifiedLoopbackUrl,
@@ -54,7 +54,7 @@ it(`offers no loopback candidate for a machine the platform put somewhere this b
 });
 
 it(`never reaches for the machine when the sandbox cannot be on it`, async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = mock();
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } }, fetchMock)).toEqual({
         kind: `public`,
         base: TUNNEL,
@@ -80,35 +80,35 @@ it(`accepts a loopback candidate only when the daemon behind it names THIS sandb
         await probeEndpoint(
             local,
             id,
-            vi.fn(async () => health(id)),
+            mock(async () => health(id)),
         ),
     ).toBe(true);
     expect(
         await probeEndpoint(
             local,
             id,
-            vi.fn(async () => health(`0123456789ab`)),
+            mock(async () => health(`0123456789ab`)),
         ),
     ).toBe(false);
     expect(
         await probeEndpoint(
             local,
             id,
-            vi.fn(async () => health(undefined)),
+            mock(async () => health(undefined)),
         ),
     ).toBe(false);
     expect(
         await probeEndpoint(
             local,
             id,
-            vi.fn(async () => new Response(`<html>`, { status: 200 })),
+            mock(async () => new Response(`<html>`, { status: 200 })),
         ),
     ).toBe(false);
     expect(
         await probeEndpoint(
             local,
             id,
-            vi.fn(async () => new Response(``, { status: 502 })),
+            mock(async () => new Response(``, { status: 502 })),
         ),
     ).toBe(false);
 });
@@ -118,7 +118,7 @@ it(`treats every way a loopback call can be refused as the same instruction: use
     const local = { kind: `local` as const, base: certifiedLoopbackUrl(id, CERT_HOST)! };
     // Models Safari's mixed-content refusal, a declined LNA prompt, and nothing listening: all reject the fetch the
     // same way.
-    const refused = vi.fn(async () => {
+    const refused = mock(async () => {
         throw new TypeError(`Failed to fetch`);
     });
     expect(await probeEndpoint(local, id, refused)).toBe(false);
@@ -127,18 +127,18 @@ it(`treats every way a loopback call can be refused as the same instruction: use
 it(`qualifies the tunnel too, now that something ranks below it`, async () => {
     const id = await sandboxIdOf(TOKEN);
     const tunnel = { kind: `public` as const, base: TUNNEL };
-    const answering = vi.fn(async () => health(id));
+    const answering = mock(async () => health(id));
     expect(await probeEndpoint(tunnel, id, answering)).toBe(true);
     expect(answering).toHaveBeenCalledWith(`${TUNNEL}/health`, expect.anything());
 
-    const offline = vi.fn(async () => {
+    const offline = mock(async () => {
         throw new TypeError(`Failed to fetch`);
     });
     expect(await probeEndpoint(tunnel, id, offline)).toBe(false);
 });
 
 it(`takes the tunnel on trust when nothing ranks below it`, async () => {
-    const fetchMock = vi.fn();
+    const fetchMock = mock();
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, hosted: { state: `started` } }, fetchMock)).toEqual({
         kind: `public`,
         base: TUNNEL,
@@ -151,29 +151,29 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     expect(
         await selectEndpoint(
             { daemonUrl: TUNNEL, token: TOKEN, ...anywhere },
-            vi.fn(async () => health(id)),
+            mock(async () => health(id)),
         ),
     ).toEqual({
         kind: `local`,
-        base: certifiedLoopbackUrl(id, CERT_HOST),
+        base: certifiedLoopbackUrl(id, CERT_HOST)!,
     });
 
     // Certificate lookup fails but everything else answers: falls to the tunnel, not the plain loopback.
-    const noCertificate = vi.fn(async (input: string | URL | Request) => {
+    const noCertificate = mock(async (input: string | URL | Request) => {
         if (String(input).startsWith(certifiedLoopbackUrl(id, CERT_HOST)!)) {
             throw new TypeError(`Failed to fetch`);
         }
         return health(id);
-    }) as unknown as typeof fetch;
+    });
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, noCertificate)).toEqual({ kind: `public`, base: TUNNEL });
 
     // Only the plain loopback address answers: models being offline, which is what plain http exists for.
-    const offline = vi.fn(async (input: string | URL | Request) => {
+    const offline = mock(async (input: string | URL | Request) => {
         if (!String(input).startsWith(localDaemonUrlInsecure(id))) {
             throw new TypeError(`Failed to fetch`);
         }
         return health(id);
-    }) as unknown as typeof fetch;
+    });
     expect(await selectEndpoint({ daemonUrl: TUNNEL, token: TOKEN, ...anywhere }, offline)).toEqual({
         kind: `local-insecure`,
         base: localDaemonUrlInsecure(id),
@@ -182,7 +182,7 @@ it(`selects the shortcut when it answers as us, and always resolves to something
     expect(
         await selectEndpoint(
             { daemonUrl: TUNNEL, token: TOKEN, ...anywhere },
-            vi.fn(async () => {
+            mock(async () => {
                 throw new TypeError(`Failed to fetch`);
             }),
         ),

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { discoverPanels, listenerDir, listenersByRepo, oneServerPerDir, panelKey, panelRunDir } from "./panels.js";

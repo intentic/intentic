@@ -66,6 +66,8 @@ export const destroy = buildCommand<DestroyFlags>({
         };
         process.once("SIGINT", onSignal);
         process.once("SIGTERM", onSignal);
+        // bun's Process augmentation hides EventEmitter's own removeListener; the base view still takes a signal name.
+        const signals: NodeJS.EventEmitter = process;
         try {
             // Read-only secret load (no backfill): API-backed deletes resolve generated admin passwords from env.
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, false, out.log), collectSecrets(graph).generated, process.env);
@@ -78,8 +80,8 @@ export const destroy = buildCommand<DestroyFlags>({
             );
             out.result({ ...pruned, executed: true });
         } finally {
-            process.removeListener("SIGINT", onSignal);
-            process.removeListener("SIGTERM", onSignal);
+            signals.removeListener("SIGINT", onSignal);
+            signals.removeListener("SIGTERM", onSignal);
             // Write back whatever the redactor is still holding as a possible secret prefix, or the
             // command's last line goes missing. Runs on the error path too, a throw must not eat output.
             redactor.flush();

@@ -1,8 +1,10 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { effectScope } from "vue";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { closeOwnWindow, raiseOwnWindow, widenOwnWindow } from "../../app/environments/desktop";
 import { claimFloating, createFloatingSurface, floatingWindowPanel, receiveFloatingNote } from "./floating";
+import * as desktopOriginal from "../../app/environments/desktop";
 
 // Pins the note protocol windows exchange to arbitrate a floating panel, not any one window's bookkeeping:
 //
@@ -12,11 +14,11 @@ import { claimFloating, createFloatingSurface, floatingWindowPanel, receiveFloat
 
 // What the floating window does to ITSELF goes through one seam (browser: the DOM; desktop app: a link, desktop.test.ts);
 // here only that it is asked, and when.
-vi.mock(`../../app/environments/desktop`, async (importOriginal) => ({
-    ...(await importOriginal<typeof import("../../app/environments/desktop")>()),
-    closeOwnWindow: vi.fn(),
-    raiseOwnWindow: vi.fn(),
-    widenOwnWindow: vi.fn(),
+mock.module(`../../app/environments/desktop`, () => ({
+    ...desktopOriginal,
+    closeOwnWindow: mock(),
+    raiseOwnWindow: mock(),
+    widenOwnWindow: mock(),
 }));
 
 const size = () => ({ width: 800, height: 600 });
@@ -38,8 +40,8 @@ const stubLocks = (held: readonly string[]) => {
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000_000);
     localStorage.clear();
 });
 
@@ -47,11 +49,11 @@ afterEach(async () => {
     // Ends every test with the arrangement empty, like a fresh window. Tokens go first, then the clock runs out fully,
     // so the module's one sweep interval fully retires and doesn't wedge the next test's.
     lockedNames?.clear();
-    await vi.advanceTimersByTimeAsync(10_000);
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-    vi.clearAllMocks();
+    await advanceTimersByTimeAsync(10_000);
+    jest.useRealTimers();
+    unstubAllGlobals();
+    jest.restoreAllMocks();
+    jest.clearAllMocks();
     Reflect.deleteProperty(navigator, `locks`);
     lockedNames = undefined;
 });
@@ -59,8 +61,8 @@ afterEach(async () => {
 describe(`a panel nobody floats`, () => {
     it(`is drawn by this window and offers to open one`, () => {
         const surface = createFloatingSurface(`preview`, size);
-        const open = vi.fn((_url: string, _target: string, _features: string) => ({ focus: vi.fn() }) as unknown as Window);
-        vi.stubGlobal(`open`, open);
+        const open = mock((_url: string, _target: string, _features: string) => ({ focus: mock() }) as unknown as Window);
+        stubGlobal(`open`, open);
 
         expect(surface.floats.value).toBe(false);
         expect(surface.here.value).toBe(false);
@@ -85,7 +87,7 @@ describe(`a panel floating in another window`, () => {
         expect(surface.shows.value).toBe(false);
 
         // Silence: what a dock, a close, a crash or a kill all look like from here.
-        vi.advanceTimersByTime(4_000);
+        jest.advanceTimersByTime(4_000);
 
         expect(surface.floats.value).toBe(false);
         expect(surface.shows.value).toBe(true);
@@ -96,11 +98,11 @@ describe(`a panel floating in another window`, () => {
         receiveFloatingNote(here(`chat`, `w-1`));
 
         // A page load out there is a gap in the beat; the deadline is deliberately several beats long.
-        vi.advanceTimersByTime(1_000);
+        jest.advanceTimersByTime(1_000);
         expect(surface.shows.value).toBe(false);
 
         receiveFloatingNote(here(`chat`, `w-1`));
-        vi.advanceTimersByTime(1_000);
+        jest.advanceTimersByTime(1_000);
 
         expect(surface.shows.value).toBe(false);
     });
@@ -113,14 +115,14 @@ describe(`a panel floating in another window`, () => {
         receiveFloatingNote(here(`chat`, `w-1`));
 
         // Many deadlines' worth of silence with no beat; the realm (lock) is still held, though.
-        await vi.advanceTimersByTimeAsync(60_000);
+        await advanceTimersByTimeAsync(60_000);
 
         expect(surface.floats.value).toBe(true);
         expect(surface.shows.value).toBe(false);
 
         // When that window really goes, the browser drops the token with it: no beat, no realm, no claim.
         locks.drop();
-        await vi.advanceTimersByTimeAsync(2_000);
+        await advanceTimersByTimeAsync(2_000);
 
         expect(surface.shows.value).toBe(true);
     });
@@ -130,7 +132,7 @@ describe(`a panel floating in another window`, () => {
         stubLocks([`intentic.floating.chat.w-1`]);
         receiveFloatingNote(here(`chat`, `w-1`));
 
-        vi.advanceTimersByTime(4_000);
+        jest.advanceTimersByTime(4_000);
         await Promise.resolve();
 
         expect(surface.shows.value).toBe(false);
@@ -138,8 +140,8 @@ describe(`a panel floating in another window`, () => {
 
     it(`raises that window instead of opening a second one`, () => {
         const surface = createFloatingSurface(`chat`, size);
-        const open = vi.fn((_url: string, _target: string, _features: string) => null);
-        vi.stubGlobal(`open`, open);
+        const open = mock((_url: string, _target: string, _features: string) => null);
+        stubGlobal(`open`, open);
         receiveFloatingNote(here(`chat`, `w-1`));
 
         surface.open();
@@ -173,7 +175,7 @@ describe(`the floating window itself`, () => {
     // The window's own half: claim the panel, beat, and act on what it hears. Held in a scope, since the claim
     // releases with the route component that took it.
     const claim = (panel: `chat` | `terminal`, onDock: () => void, since = 1_000) => {
-        vi.setSystemTime(since);
+        jest.setSystemTime(since);
         const scope = effectScope();
         scope.run(() => claimFloating(panel, onDock));
         return () => scope.stop();
@@ -181,7 +183,7 @@ describe(`the floating window itself`, () => {
 
     it(`draws the panel, and says so to every other window`, () => {
         const surface = createFloatingSurface(`chat`, size);
-        const release = claim(`chat`, vi.fn());
+        const release = claim(`chat`, mock());
 
         expect(surface.here.value).toBe(true);
         expect(surface.floats.value).toBe(true);
@@ -213,8 +215,8 @@ describe(`the floating window itself`, () => {
             configurable: true,
         });
 
-        const release = claim(`chat`, vi.fn());
-        await vi.advanceTimersByTimeAsync(1);
+        const release = claim(`chat`, mock());
+        await advanceTimersByTimeAsync(1);
 
         // Named after the claim, with id, so two racing windows get a token at once; the oldest-claim rule decides.
         expect(asked).toHaveLength(1);
@@ -222,13 +224,13 @@ describe(`the floating window itself`, () => {
         expect(letGo).toBe(false);
 
         release();
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
 
         expect(letGo).toBe(true);
     });
 
     it(`closes itself when any window asks it to dock`, () => {
-        const onDock = vi.fn();
+        const onDock = mock();
         const release = claim(`chat`, onDock);
 
         receiveFloatingNote({ kind: `dock`, panel: `chat` });
@@ -240,7 +242,7 @@ describe(`the floating window itself`, () => {
     // Its own presses act on its own window, through the seam that knows whether a script may (desktop.ts).
     it(`docks its own Dock press by closing its own window, and raises itself when asked`, () => {
         const surface = createFloatingSurface(`chat`, size);
-        const release = claim(`chat`, vi.fn());
+        const release = claim(`chat`, mock());
 
         surface.dock();
         expect(closeOwnWindow).toHaveBeenCalledTimes(1);
@@ -257,7 +259,7 @@ describe(`the floating window itself`, () => {
         Object.defineProperty(window, `outerWidth`, { value: 900, configurable: true });
         Object.defineProperty(window, `screenX`, { value: 100, configurable: true });
         Object.defineProperty(window.screen, `availWidth`, { value: 2560, configurable: true });
-        const release = claim(`chat`, vi.fn());
+        const release = claim(`chat`, mock());
 
         surface.fit(1400);
         expect(widenOwnWindow).toHaveBeenLastCalledWith(1400);
@@ -273,7 +275,7 @@ describe(`the floating window itself`, () => {
     });
 
     it(`leaves another panel's dock request alone`, () => {
-        const onDock = vi.fn();
+        const onDock = mock();
         const release = claim(`chat`, onDock);
 
         receiveFloatingNote({ kind: `dock`, panel: `terminal` });
@@ -285,7 +287,7 @@ describe(`the floating window itself`, () => {
     // Both windows independently reach the same verdict about the same pair; the younger claim is always the one
     // that stands down.
     it(`stands down for an older claim on the same panel`, () => {
-        const onDock = vi.fn();
+        const onDock = mock();
         const release = claim(`chat`, onDock, 5_000);
 
         receiveFloatingNote(here(`chat`, `older`, 4_000));
@@ -295,7 +297,7 @@ describe(`the floating window itself`, () => {
     });
 
     it(`keeps the panel when the other claim is younger`, () => {
-        const onDock = vi.fn();
+        const onDock = mock();
         const release = claim(`chat`, onDock, 4_000);
 
         receiveFloatingNote(here(`chat`, `younger`, 5_000));
@@ -305,7 +307,7 @@ describe(`the floating window itself`, () => {
     });
 
     it(`breaks a tie on the same millisecond by id, so exactly one of the pair goes`, () => {
-        const onDock = vi.fn();
+        const onDock = mock();
         const release = claim(`chat`, onDock, 4_000);
         // A lower id sorts first and wins; the other half of the pair reaches the mirror verdict and stays.
         receiveFloatingNote(here(`chat`, `00000000-0000-0000-0000-000000000000`, 4_000));
@@ -318,8 +320,8 @@ describe(`the floating window itself`, () => {
 describe(`where the window comes back`, () => {
     it(`reopens on the frame the floating window last reported`, () => {
         const surface = createFloatingSurface(`terminal`, size);
-        const open = vi.fn((_url: string, _target: string, _features: string) => ({ focus: vi.fn() }) as unknown as Window);
-        vi.stubGlobal(`open`, open);
+        const open = mock((_url: string, _target: string, _features: string) => ({ focus: mock() }) as unknown as Window);
+        stubGlobal(`open`, open);
         // The floating window's own record of where it was, written from its own realm, not measured while closing.
         localStorage.setItem(`intentic.floating.frame.terminal`, `2200,180,900,1100`);
 
@@ -330,8 +332,8 @@ describe(`where the window comes back`, () => {
 
     it(`ignores a frame stranded on a screen that is no longer attached`, () => {
         const surface = createFloatingSurface(`terminal`, size);
-        const open = vi.fn((_url: string, _target: string, _features: string) => ({ focus: vi.fn() }) as unknown as Window);
-        vi.stubGlobal(`open`, open);
+        const open = mock((_url: string, _target: string, _features: string) => ({ focus: mock() }) as unknown as Window);
+        stubGlobal(`open`, open);
         // One screen, with a frame far off its right edge: unreachable, so the panel opens centred instead.
         Object.defineProperty(window.screen, `isExtended`, { value: false, configurable: true });
         Object.defineProperty(window.screen, `availWidth`, { value: 1440, configurable: true });
@@ -344,8 +346,8 @@ describe(`where the window comes back`, () => {
 
     it(`refuses a frame no window was ever deliberately left at`, () => {
         const surface = createFloatingSurface(`terminal`, size);
-        const open = vi.fn((_url: string, _target: string, _features: string) => ({ focus: vi.fn() }) as unknown as Window);
-        vi.stubGlobal(`open`, open);
+        const open = mock((_url: string, _target: string, _features: string) => ({ focus: mock() }) as unknown as Window);
+        stubGlobal(`open`, open);
         localStorage.setItem(`intentic.floating.frame.terminal`, `0,0,12,8`);
 
         surface.open();

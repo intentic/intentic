@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { isolatedAgent, noIsolation } from "../../testing.js";
 import { changesAgainstBase } from "../../git/changes/changes.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
@@ -158,7 +158,7 @@ test("a workspace refusal re-derives as diverged once the user commits their edi
     const refusal = await landAgent(worktrees, entry);
     expect(refusal.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
 
-    expect(await outstandingConflicts(worktrees, entry)).toEqual(refusal.conflicts);
+    expect(await outstandingConflicts(worktrees, entry)).toEqual(refusal.conflicts!);
 
     // No land runs, so the stored report still says `workspace`; re-derivation calls it `diverged` instead.
     await sh(work, "add", "-A");

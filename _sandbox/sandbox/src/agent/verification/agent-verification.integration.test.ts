@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, test } from "vitest";
+import { test, expect, afterAll } from "bun:test";
 import { projectChecks } from "./agent-verification.js";
 
 // What the nudge offers to run, read off a real tree: every rule is about files being there or not (a manifest script,

@@ -1,16 +1,17 @@
-// @vitest-environment jsdom
 // These tests mount the real page and read the first frame: Google's button must be there immediately, and the
 // credential mint it races runs without the shared sign-in overlay.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as actualVueRouter from "vue-router";
 
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
 // The link's query params carrying the state and challenge the handoff is tied to.
 const query = ref<Record<string, string>>({ state: `nonce-1`, challenge: `chal-1` });
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
     useRoute: () =>
         ({
             get query() {
@@ -23,21 +24,21 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
 }));
 
 // A mint that never settles, since a silent attempt going quiet is what these tests read on the first frame.
-const getIdToken = vi.fn<(options?: { gate?: boolean; usableFor?: number }) => Promise<string | undefined>>(() => new Promise<never>(() => {}));
+const getIdToken = mock<(options?: { gate?: boolean; usableFor?: number }) => Promise<string | undefined>>(() => new Promise<never>(() => {}));
 // An ordinary browser, where Google's button renders; the webview refusal case is signInSurfaces.test.ts's case.
-const renderButton = vi.fn<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
-const adoptIdToken = vi.fn<(credential: string) => boolean>().mockReturnValue(true);
-vi.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
-const signInWithGoogle = vi.fn<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
+const renderButton = mock<(parent: HTMLElement, dark: boolean) => Promise<boolean>>().mockResolvedValue(true);
+const adoptIdToken = mock<(credential: string) => boolean>().mockReturnValue(true);
+mock.module(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton, adoptIdToken }) }));
+const signInWithGoogle = mock<(callbackPath?: string) => Promise<void>>().mockResolvedValue(undefined);
 // What this window's session resolves to; null means a signed-out browser, covered by the tests below.
 const user = ref<{ email: string } | null>({ email: `owner@example.com` });
-const refresh = vi.fn<() => Promise<{ email: string } | null>>().mockResolvedValue(null);
-const signInWithGoogleCredential = vi.fn<(idToken: string) => Promise<void>>().mockResolvedValue(undefined);
-vi.mock(`./useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
-const handoff = vi.fn();
+const refresh = mock<() => Promise<{ email: string } | null>>().mockResolvedValue(null);
+const signInWithGoogleCredential = mock<(idToken: string) => Promise<void>>().mockResolvedValue(undefined);
+mock.module(`./useAuth`, () => ({ useAuth: () => ({ user, refresh, signInWithGoogle, signInWithGoogleCredential }) }));
+const handoff = mock();
 // The credential the platform already holds; undefined means it holds nothing usable.
-const googleIdToken = vi.fn<() => Promise<{ idToken?: string }>>().mockResolvedValue({});
-vi.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff, googleIdToken } } }));
+const googleIdToken = mock<() => Promise<{ idToken?: string }>>().mockResolvedValue({});
+mock.module(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff, googleIdToken } } }));
 
 // A Google credential shaped like idTokenClaims actually reads one, so the page's freshness check and its identity
 // check both run for real, not against a stub.
@@ -66,9 +67,9 @@ const mount = async (): Promise<HTMLElement> => {
 beforeEach(() => {
     query.value = { state: `nonce-1`, challenge: `chal-1` };
     user.value = { email: `owner@example.com` };
-    // Reset, not clear: a test that gave the mint an answer must not leave it answering for the next one. Vitest
-    // restores the implementation `vi.fn(impl)` was built with, which is the mint that never settles.
-    getIdToken.mockReset();
+    // Reset, not clear: a test that gave the mint an answer must not leave it answering for the next one. A reset
+    // drops the implementation as well as the calls, so the mint that never settles is put back by hand.
+    getIdToken.mockReset().mockImplementation(() => new Promise<never>(() => {}));
     renderButton.mockClear();
     adoptIdToken.mockClear();
     signInWithGoogle.mockClear();

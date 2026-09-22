@@ -1,6 +1,6 @@
 import type { AccountUsage } from "@intentic/sandbox-contract";
 import { pino } from "pino";
-import { expect, test, vi } from "vitest";
+import { test, expect, jest } from "bun:test";
 import type { AccountUsageStore } from "./account-usage.js";
 import { createHeadroomService, FRESH_MS, type HeadroomReading, type HeadroomSource, type HeadroomTarget } from "./headroom.js";
 import { memoryUsageParkStore, type UsageParkStore } from "./usage-parks.js";
@@ -51,7 +51,8 @@ const source = (
 };
 
 test("reads every target in scope, records what it found, and announces each write", async () => {
-    vi.useFakeTimers({ now: NOW });
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
     try {
         const { store, recorded } = memoryStore();
         const { source: claude, reads } = source([
@@ -64,7 +65,7 @@ test("reads every target in scope, records what it found, and announces each wri
 
         await service.refresh({ scope: { providers: ["claude"] } });
         expect(reads).toEqual({ a: 1 });
-        expect(recorded["a"]).toEqual({ windows: WINDOWS.windows, measuredAt: NOW });
+        expect(recorded["a"]).toEqual({ windows: [...WINDOWS.windows], measuredAt: NOW });
         expect(announced).toEqual(["claude/a"]);
 
         await service.refresh();
@@ -72,12 +73,13 @@ test("reads every target in scope, records what it found, and announces each wri
         expect(reads).toEqual({ a: 1, "gemini:g.json": 1 });
         expect(announced).toEqual(["claude/a", "gemini/gemini:g.json"]);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 test("a reading within the freshness bound is not retaken, unless the caller says something happened", async () => {
-    vi.useFakeTimers({ now: NOW });
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
     try {
         const fresh: AccountUsage = { windows: [...WINDOWS.windows], measuredAt: NOW - FRESH_MS / 2 };
         const { store } = memoryStore({ a: fresh });
@@ -93,7 +95,7 @@ test("a reading within the freshness bound is not retaken, unless the caller say
         await service.refresh({ scope: { account: "a" }, maxAgeMs: 0 });
         expect(reads).toEqual({ a: 2 });
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -117,7 +119,8 @@ test("two triggers landing together cost one read, and a failed read leaves the 
 });
 
 test("a target's own read budget outranks any freshness a trigger asks for, and only a watched re-measure spends it early", async () => {
-    vi.useFakeTimers({ now: NOW });
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
     try {
         const budget = FRESH_MS * 5;
         const { store } = memoryStore({ budgeted: { windows: [...WINDOWS.windows], measuredAt: NOW - FRESH_MS * 2 } });
@@ -141,12 +144,13 @@ test("a target's own read budget outranks any freshness a trigger asks for, and 
         await service.refresh({ maxAgeMs: 0, watched: true });
         expect(reads).toEqual({ budgeted: 1, "gemini:g.json": 3 });
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 test("honours the endpoint's own stay-away, even for a press someone is watching", async () => {
-    vi.useFakeTimers({ now: NOW });
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
     try {
         const { store } = memoryStore();
         let calls = 0;
@@ -168,13 +172,13 @@ test("honours the endpoint's own stay-away, even for a press someone is watching
         // Reported for as long as it holds, so a screen can say why a re-measure moved nothing.
         expect(service.held()).toEqual([{ provider: "claude", account: "a", until: NOW + 600_000 }]);
         expect(await service.parked("a")).toBe(true);
-        vi.setSystemTime(NOW + 600_001);
+        jest.setSystemTime(NOW + 600_001);
         expect(service.held()).toEqual([]);
         expect(await service.parked("a")).toBe(false);
         await service.refresh({ maxAgeMs: 0, watched: true });
         expect(calls).toBe(2);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -183,7 +187,8 @@ test("honours the endpoint's own stay-away, even for a press someone is watching
 // refusing, and the answer was a stay-away measured from that moment — so restarting pushed the number further out of
 // reach than leaving it alone would have.
 test("a park outlives the process that earned it, so a restart cannot spend the read it was holding off", async () => {
-    vi.useFakeTimers({ now: NOW });
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
     try {
         const parks: UsageParkStore = memoryUsageParkStore();
         const reader = (): ReturnType<typeof source> =>
@@ -203,11 +208,11 @@ test("a park outlives the process that earned it, so a restart cannot spend the 
         expect(restarted.held()).toEqual([{ provider: "claude", account: "a", until: NOW + 3_600_000 }]);
 
         // Past the instant the provider named, the next trigger asks again — a park is a wait, not a write-off.
-        vi.setSystemTime(NOW + 3_600_001);
+        jest.setSystemTime(NOW + 3_600_001);
         await restarted.refresh({ maxAgeMs: 0, watched: true });
         expect(after.reads).toEqual({ a: 1 });
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -237,7 +242,7 @@ test("answers a caller on time even when the endpoint is not, and the reading st
     expect(recorded).toEqual({});
     answer();
     await service.refresh();
-    expect(recorded["a"]?.windows).toEqual(WINDOWS.windows);
+    expect(recorded["a"]?.windows).toEqual([...WINDOWS.windows]);
 });
 
 test("a reading handed in from elsewhere is recorded and announced like a swept one, and a clear is announced too", async () => {
@@ -267,11 +272,11 @@ test("a read that failed keeps the last snapshot; one that found nothing takes i
     service.onChange((_provider, _account, usage) => announced.push(usage));
 
     await service.refresh({ maxAgeMs: 0 });
-    expect(recorded["a"]?.windows).toEqual(WINDOWS.windows);
+    expect(recorded["a"]?.windows).toEqual([...WINDOWS.windows]);
 
     answer = { windows: [] };
     await service.refresh({ maxAgeMs: 0 });
-    expect(recorded["a"]?.windows).toEqual(WINDOWS.windows);
+    expect(recorded["a"]?.windows).toEqual([...WINDOWS.windows]);
 
     answer = { windows: [], empty: true };
     await service.refresh({ maxAgeMs: 0 });

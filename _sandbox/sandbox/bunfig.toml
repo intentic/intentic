@@ -1,0 +1,3 @@
+[test]
+preload = ["../../_tools/testing/src/bun-preload.ts", "./src/fences/engine-fence.ts", "./src/fences/tmux-fence.ts"]
+pathIgnorePatterns = ["**/dist/**", "**/deploy/**", "**/.cache/**", "**/.turbo/**", "**/out-tsc/**"]

@@ -1,7 +1,7 @@
 import { type SandboxSettings, SandboxSettingsSchema, ZoneSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { createSettingsRoutes } from "./settings.routes.js";
@@ -33,7 +33,7 @@ test("a sandbox with no clock takes the one the browser offers", async () => {
         timezone: "Europe/Warsaw",
         adopted: true,
     });
-    expect((await services.sandboxSettings.get()).timezone).toBe("Europe/Warsaw");
+    expect((await services.sandboxSettings.get()).timezone).toBe(ZoneSchema.parse("Europe/Warsaw"));
 });
 
 /* THE ONE THAT MATTERS: the second browser, and the tenth, change nothing. */
@@ -45,7 +45,7 @@ test("a sandbox that already has one keeps it, whatever the next browser offers"
         timezone: "Europe/Warsaw",
         adopted: false,
     });
-    expect((await services.sandboxSettings.get()).timezone).toBe("Europe/Warsaw");
+    expect((await services.sandboxSettings.get()).timezone).toBe(ZoneSchema.parse("Europe/Warsaw"));
 });
 
 // The rest of the settings are untouched by an adoption: the route reads the whole object and writes it back with one

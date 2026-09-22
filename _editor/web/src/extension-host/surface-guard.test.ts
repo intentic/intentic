@@ -4,7 +4,7 @@ import { repoRoot } from "@intentic/constants/node";
 import * as sdkModule from "@intentic/extension-api";
 import { extensionApiVersion } from "@intentic/extension-api";
 import { CONTRIBUTION_POINTS, ExtensionManifestSchema, ListenerContributionSchema } from "@intentic/extension-manifest";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // extensionApiVersion is an author's only signal for host compatibility; the snapshot in surface.json fails when the
 // live surface changes without a new versioned entry.
@@ -24,9 +24,9 @@ interface RecordedSurface {
     readonly sandboxApi?: readonly string[];
     // api.workspace's own members, recorded from 2.10.0 on; a top-level record can't see additions inside workspace.
     readonly workspaceApi?: readonly string[];
-/* api.chat's own members, recorded from 2.11.0 on: `openAgent` was added there. */
+    /* api.chat's own members, recorded from 2.11.0 on: `openAgent` was added there. */
     readonly chatApi?: readonly string[];
-/* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still unrecorded. */
+    /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still unrecorded. */
     readonly moduleExports?: readonly string[];
 }
 
@@ -109,7 +109,7 @@ test(`the SDK README names exactly the contribution points the schema has`, () =
     const sentence = /Contribution points:([\s\S]*?), plus the/.exec(readme);
     expect(sentence).not.toBeNull();
     const named = [...(sentence?.[1] ?? ``).matchAll(/`(\w+)`/g)].map((match) => match[1] ?? ``).toSorted();
-    expect(named).toEqual(liveSurface().contributes);
+    expect<readonly string[]>(named).toEqual(liveSurface().contributes);
 });
 
 test(`every file the SDK README points at exists`, () => {

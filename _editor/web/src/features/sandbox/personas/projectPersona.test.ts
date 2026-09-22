@@ -1,13 +1,14 @@
 import { PersonaSchema } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 
-vi.mock("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: vi.fn(async () => undefined) } }));
-vi.mock("../client/sandboxClient", () => ({
+mock.module("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: mock(async () => undefined) } }));
+mock.module("../client/sandboxClient", () => ({
     sandboxJson: (path: string, init?: RequestInit) => calls.handle(path, init),
 }));
 
 // Every daemon call the module made, and what the fake daemon answers to the list read.
-const calls = vi.hoisted(() => ({
+const calls = hoisted(() => ({
     made: [] as { path: string; method: string; body?: unknown }[],
     listed: [] as { id: string; capabilities: string[] }[],
     handle(path: string, init?: RequestInit): Promise<unknown> {

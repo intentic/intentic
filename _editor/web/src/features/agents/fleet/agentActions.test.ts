@@ -1,8 +1,9 @@
 import type { LandConflict } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
+import { waitFor, stubGlobal, unstubAllGlobals, hoisted } from "@intentic/testing/bun";
 
 // The chat tabs agentActions sends through, swappable per test; hoisted because the module factory below is.
-const chat = vi.hoisted(() => ({
+const chat = hoisted(() => ({
     conversations: {
         value: [] as {
             conversationId: string;
@@ -28,8 +29,8 @@ const tab = (id: string) => ({
 
 // sandboxClient stays real: the bug under test lived in the gap between agentActions and the actual request. Everything
 // else mocked here is what agentActions's other actions need for a browser (device, router, sandbox).
-vi.mock("@intentic/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
-vi.mock("../../chat/run/useChat", () => ({
+mock.module("@intentic/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
+mock.module("../../chat/run/useChat", () => ({
     // `active` and `releaseDone` are both reached by module-scope watchers in useAgents the moment that module loads.
     useChat: () => ({
         conversations: chat.conversations,
@@ -38,30 +39,31 @@ vi.mock("../../chat/run/useChat", () => ({
     }),
 }));
 // The strip the fleet reads at module load; empty so no draft card competes with the registry rows under test.
-vi.mock("../../chat/panel/useChat-strip", () => ({
+mock.module("../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     chatPreviews: { value: {} },
     previewOf: () => undefined,
 }));
 // The draft startAgent pins and summons, one per test so its pins can be read back.
-const draft = vi.hoisted(() => ({
+const draft = hoisted(() => ({
     value: { conversationId: `c1`, actsAs: { value: undefined as string | undefined }, startIn: { value: undefined as string | undefined } },
 }));
-vi.mock("../../chat/panel/useChat-reveal", () => ({
+mock.module("../../chat/panel/useChat-reveal", () => ({
     // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
     // pressing Anyone un-pins a persona.
     draftConversation: () => ({ ...draft.value, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
     agentTabOf: () => ({}),
+    composingConversation: () => undefined,
 }));
 // The summons channel is the seam startAgent shows the new tab through; this suite has no second window to receive it,
 // so a summoned turn runs here, as summonTurn does in any window drawing the chat.
-vi.mock("../../chat/run/summon", () => ({
+mock.module("../../chat/run/summon", () => ({
     summonChat: () => {},
     summonTurn: (conversation: { enqueue: (prompt: string) => void }, prompt: string) => conversation.enqueue(prompt),
 }));
-vi.mock("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined } }));
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../sandbox/client/useSandbox", () => ({
+mock.module("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined }, UNPERSISTED: `unpersisted` }));
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../sandbox/client/useSandbox", () => ({
     useSandbox: () => ({
         active: { value: { token: `connect` } },
         activeSandboxId: { value: `s1` },
@@ -69,7 +71,7 @@ vi.mock("../../sandbox/client/useSandbox", () => ({
     }),
     sandboxKey: (...parts: unknown[]) => parts,
 }));
-vi.mock("../../sandbox/session/sandboxSession", () => ({
+mock.module("../../sandbox/session/sandboxSession", () => ({
     useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }),
 }));
 
@@ -81,7 +83,7 @@ const { registry } = await import("./useAgents-registry");
 // Every request fetch was handed, as the Request the daemon would have received.
 const sent: Request[] = [];
 const stubFetch = (body: unknown = { landed: true }): void => {
-    vi.stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
+    stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
         sent.push(new Request(url, init));
         return Promise.resolve(Response.json(body));
     });
@@ -97,14 +99,15 @@ afterEach(() => {
     registry.value = [];
     draft.value = { conversationId: `c1`, actsAs: { value: undefined }, startIn: { value: undefined } };
     setProjectScope(undefined);
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 // Pinned because a missing content-type is invisible from this side and fatal on the daemon's: a string body is
 // labelled text/plain, and its oRPC handler drops the `{id}` it took from the path.
 it("sends the land body as JSON, so the daemon parses an object and keeps the agent id from the path", async () => {
     stubFetch();
-    await expect(landAgent(`a1`)).resolves.toEqual({ landed: true });
+    // The daemon answers with the fields it has; `as unknown` is the whole answer under a type that requires more.
+    expect((await landAgent(`a1`)) as unknown).toEqual({ landed: true });
     const [request] = sent;
     expect(request?.url).toBe(`https://daemon.test/agents/a1/land`);
     expect(request?.headers.get(`content-type`)).toBe(`application/json`);
@@ -268,7 +271,7 @@ it("starts an agent under the open project wearing the project's own persona, ma
     startAgent(`Fix the footer.`);
     expect(draft.value.actsAs.value).toBe(`project-web`);
     expect(draft.value.startIn.value).toBe(`web`);
-    await vi.waitFor(() => expect(chat.enqueued).toEqual([`Fix the footer.`]));
+    await waitFor(() => expect(chat.enqueued).toEqual([`Fix the footer.`]));
     const posted = sent.find((request) => request.method === `POST` && request.url === `https://daemon.test/personas`);
     expect(await posted?.json()).toMatchObject({ id: `project-web`, workspace: { startIn: `web`, folders: [`web`] }, context: { repos: [`web`] } });
 });

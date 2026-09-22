@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { CloudflareTokenError, listZoneNames, reapOrphanDnsRecords } from "./cloudflare.js";
 
 // The two things this platform still asks Cloudflare for: the zone list, and the DNS behind the loopback cert.
@@ -10,7 +11,7 @@ const ok = (result: unknown, resultInfo?: { total_pages: number }) =>
 // Routes the stubbed fetch by method + URL substring, recording calls for order/payload assertions.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
-    vi.stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
+    stubGlobal(`fetch`, (url: string, init?: RequestInit): Promise<Response> => {
         const method = init?.method ?? `GET`;
         calls.push({ method, url, ...(typeof init?.body === `string` ? { body: JSON.parse(init.body) } : {}) });
         const route = routes.find((candidate) => candidate.match(method, url));
@@ -23,7 +24,7 @@ const stubFetch = (routes: { match: (method: string, url: string) => boolean; re
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe(`listZoneNames`, () => {
@@ -39,7 +40,7 @@ describe(`listZoneNames`, () => {
         stubFetch([{ match: () => true, respond: () => new Response(``, { status: 403 }) }]);
         await expect(listZoneNames(`bad`)).rejects.toBeInstanceOf(CloudflareTokenError);
 
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
         stubFetch([
             {
                 match: () => true,

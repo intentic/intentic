@@ -2,7 +2,8 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { homedir } from "node:os";
 import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, jest } from "bun:test";
+import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
@@ -57,12 +58,12 @@ const request = {
 // Forces the pre-tmux event shape: bash routing depends on whether the image bakes in the tmux wrapper
 // (agent-terminal-frame.test.ts covers the enabled path).
 const withoutTmux = (): void => {
-    vi.stubEnv("INTENTIC_AGENT_TMUX", "0");
+    stubEnv("INTENTIC_AGENT_TMUX", "0");
 };
 
 /* THE GRACE WINDOW, WITHOUT THE WAIT. A steered stream ends on a second of silence after its last result. */
 const withoutTheGraceWait = async <T>(work: () => Promise<T>): Promise<T> => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    jest.useFakeTimers();
     try {
         let settled = false;
         const pending = work().finally(() => {
@@ -73,15 +74,15 @@ const withoutTheGraceWait = async <T>(work: () => Promise<T>): Promise<T> => {
                 return await pending;
             }
             // oxlint-disable-next-line eslint/no-await-in-loop -- the loop IS the clock: one window per pass
-            await vi.advanceTimersByTimeAsync(1_000);
+            await advanceTimersByTimeAsync(1_000);
         }
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 };
 
-// Without a vitest config there is no unstubEnvs, so a stub outlives its test and the mode leaks down the file.
-afterEach(() => vi.unstubAllEnvs());
+// Nothing restores a stub on its own, so one outlives its test and the mode leaks down the file.
+afterEach(() => unstubAllEnvs());
 
 test("a turn surfaces session, text deltas, tool actions, and done", async () => {
     withoutTmux();
@@ -389,7 +390,7 @@ test("the request's tools become remote http MCP servers alongside the ui server
         captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    const obs = { type: "http", url: "https://signoz.example.com/mcp", headers: { Authorization: "Bearer tok" } };
+    const obs = { type: "http" as const, url: "https://signoz.example.com/mcp", headers: { Authorization: "Bearer tok" } };
     const tools = [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }];
 
     await collect({ ...request, tools }, capture);
@@ -1069,8 +1070,8 @@ test("a deterministic free-trial model refusal keeps the upstream detail and sug
 });
 
 test("a usage-limit retry parks the turn at its reset instead of masquerading as a provider outage", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-30T20:00:00.000Z"));
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-30T20:00:00.000Z"));
     try {
         const events = await collect(
             request,
@@ -1100,7 +1101,7 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
             { kind: "done" },
         ]);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -1108,8 +1109,8 @@ test("a usage-limit retry parks the turn at its reset instead of masquerading as
 const retryFrame = { type: "system", subtype: "api_retry", session_id: "s", attempt: 1, max_retries: 300, error_status: 429 } as const;
 
 test("a routed usage-limit retry names the vendor that refused and takes its reset from that vendor's quota, not the harness backoff", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-31T15:32:33.000Z"));
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-31T15:32:33.000Z"));
     const reopensAt = Date.parse("2026-08-06T09:57:46.000Z") / 1000;
     try {
         const vendor = "Google";
@@ -1132,7 +1133,7 @@ test("a routed usage-limit retry names the vendor that refused and takes its res
         expect(failure?.resetsAt).toBe(reopensAt);
         expect(events.at(-1)).toEqual({ kind: "done" });
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -1173,8 +1174,8 @@ test("a routed usage-limit retry with no quota reading on file carries no reset 
 // A translator's own model_cooldown reset_seconds (from its scheduler) overrides the recorded quota snapshot, which can
 // be stale.
 test("a routed refusal takes the translator's own reset_seconds over the recorded quota", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-31T15:32:33.000Z"));
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-07-31T15:32:33.000Z"));
     try {
         const events = await collect(
             {
@@ -1210,7 +1211,7 @@ test("a routed refusal takes the translator's own reset_seconds over the recorde
             { kind: "done" },
         ]);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -1294,9 +1295,9 @@ test("a turn with no plan limits to read yields no account_usage frame at all", 
     expect(refused).toEqual([{ kind: "done" }]);
 
     // No OAuth token at all (endpoint/container-env turn): the endpoint is never even asked.
-    const unattributed = await collect(request, fakeQuery({ type: "result", subtype: "success" }), () => {
+    const unattributed = await collect(request, fakeQuery({ type: "result", subtype: "success" }), (() => {
         throw new Error("no credential to read usage with");
-    });
+    }) as unknown as typeof fetch);
     expect(unattributed).toEqual([{ kind: "done" }]);
 });
 
@@ -1936,7 +1937,7 @@ test("the bundled CLI-only skills are hidden from the model on every turn, fast 
         captured.push(args.options);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    const hidden = { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off" };
+    const hidden = { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off" } as const;
 
     await collect(request, capture);
     expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden });

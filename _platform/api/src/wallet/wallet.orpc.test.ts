@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@intentic/prisma";
 import { call, ORPCError } from "@orpc/server";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import type { Config } from "../config.js";
 import type { OrpcContext } from "../context.js";
 import type { CustodyGateway } from "./wallet-custody.js";
@@ -13,21 +13,21 @@ const ADDRESS = `0x857b06519E91e3A54538791bDbb0E22373e36b66`;
 const on = { wallet: { custodyUrl: `https://custody.test`, custodyKey: `ck_test` } } as unknown as Config;
 const off = { wallet: { custodyUrl: ``, custodyKey: `` } } as unknown as Config;
 
-const custody = (): CustodyGateway => ({ wallet: vi.fn(async () => ({ id: `cw-1`, address: ADDRESS })), signTypedData: vi.fn() });
+const custody = (): CustodyGateway => ({ wallet: mock(async () => ({ id: `cw-1`, address: ADDRESS })), signTypedData: mock() });
 
 // A wallet delegate over one optional seeded row; `update` answers the caps it was handed.
 const fakePrisma = (seeded?: { id: string; address: string; perPaymentMaxUsd: string; dailyCapUsd: string }) => {
-    const create = vi.fn(async ({ data }: { data: Record<string, string> }) => ({ id: `wallet-new`, address: data[`address`], perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` }));
-    const update = vi.fn(async ({ data }: { data: { perPaymentMaxUsd: string; dailyCapUsd: string } }) => data);
+    const create = mock(async ({ data }: { data: Record<string, string> }) => ({ id: `wallet-new`, address: data[`address`], perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00` }));
+    const update = mock(async ({ data }: { data: { perPaymentMaxUsd: string; dailyCapUsd: string } }) => data);
     return {
-        prisma: { wallet: { findUnique: vi.fn().mockResolvedValue(seeded ?? null), create, update } } as unknown as PrismaClient,
+        prisma: { wallet: { findUnique: mock().mockResolvedValue(seeded ?? null), create, update } } as unknown as PrismaClient,
         create,
         update,
     };
 };
 
 const context = (prisma: PrismaClient, over: Partial<OrpcContext> = {}): OrpcContext =>
-    ({ prisma, config: on, user, logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() }, ...over }) as unknown as OrpcContext;
+    ({ prisma, config: on, user, logger: { info: mock(), warn: mock(), error: mock() }, ...over }) as unknown as OrpcContext;
 
 const policy = { network: `eip155:8453` as const, perPaymentMaxUsd: `2.00`, dailyCapUsd: `20.00` };
 

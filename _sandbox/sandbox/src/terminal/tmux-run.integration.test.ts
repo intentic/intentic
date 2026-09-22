@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { packageRoot } from "@intentic/constants/node";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // Runs the real bin/tmux-run with tmux and nsenter stubbed, pinning which namespace the wrapper's tmux client forks the
 // server in. Passes without tmux or nsenter installed.

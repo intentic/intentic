@@ -1,26 +1,26 @@
-// @vitest-environment jsdom
 //
 // THE APPROVAL EDITOR'S THREE STATES, pinned because the first one went missing in a way nobody could see: the
 // "Needs approval" switch was bound to whether a gate was STORED, so flipping it on changed nothing it read, and
 // the picker under it appeared only when the roster had somebody to pre-select. An owner on a fresh sandbox
 // flipped the switch, watched nothing happen, and concluded the feature had no way to name anybody.
+import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import { createApp, h, nextTick, ref } from "vue";
 import type { CredentialGate } from "@intentic/sandbox-contract";
 import type { SecretRow } from "../../sandbox/secrets/secretRows";
 import { IconStub } from "@intentic/ui/testing";
 
-const setGate = { mutateAsync: vi.fn(async () => undefined) };
-const removeGate = { mutateAsync: vi.fn(async () => undefined) };
+const setGate = { mutateAsync: mock(async () => undefined) };
+const removeGate = { mutateAsync: mock(async () => undefined) };
 const approverChoices = ref<string[]>([]);
 const isOwner = ref(true);
 const stored = ref<CredentialGate | undefined>(undefined);
 
-vi.mock(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
-vi.mock(`./useSecrets`, () => ({
-    reveal: vi.fn(),
-    useSecrets: () => ({ remove: { mutateAsync: vi.fn() } }),
+mock.module(`vue-router`, () => ({ RouterLink: { template: `<a><slot /></a>` } }));
+mock.module(`./useSecrets`, () => ({
+    reveal: mock(),
+    useSecrets: () => ({ remove: { mutateAsync: mock() } }),
     useCredentialGates: () => ({
         gates: ref([]),
         gateFor: (subject: string) => (stored.value?.subject === subject ? stored.value : undefined),

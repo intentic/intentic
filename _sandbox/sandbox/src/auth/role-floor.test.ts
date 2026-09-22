@@ -1,5 +1,5 @@
 import { ATTACHMENTS_DIR } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { guestReach, memberRefusal, routeFloor } from "./role-floor.js";
 
 describe("routeFloor", () => {

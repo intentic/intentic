@@ -1,5 +1,5 @@
-// @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect } from "bun:test";
 import { barsChanged, cornerBar } from "./controlsReserve";
 
 /* The bar that gives up its right end to the window's own buttons, and what that bar is re-measured on. */

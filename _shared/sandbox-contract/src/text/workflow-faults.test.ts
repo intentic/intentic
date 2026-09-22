@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { type Workflow, WorkflowSchema, type WorkflowStep } from "../schemas/workflows.js";
 import { workflowFaults, workflowRunFaults } from "./workflow-faults.js";
 

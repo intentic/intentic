@@ -1,5 +1,5 @@
-// @vitest-environment jsdom
-import { expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect } from "bun:test";
 import { useKeyedDraft } from "@intentic/ui";
 import { effectScope, ref } from "vue";
 

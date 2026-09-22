@@ -2,7 +2,7 @@
 // the daemon, the browser has no init check that fails loudly when a new provider is missing a tab, a
 // readiness rule, or a connect panel shape; each test below asks one such question of every provider.
 import { accessFor, modelsFor, NATIVE_PROVIDERS, PROVIDER_SPECS, providerLabel, providerSpec, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { beforeEach, expect, it } from "vitest";
+import { it, expect, beforeEach } from "bun:test";
 import { accessBadge, connectPitch, hasSignIn, providerReady } from "../session/access";
 import { accountsLoaded, noTranslatorAccounts, providerAccounts, translatorAccounts } from "./providerAccounts";
 import {
@@ -24,7 +24,7 @@ beforeEach(() => {
     endpointsLoaded.value = true;
 });
 
-it.each(NATIVE_PROVIDERS)(`%s has a tab to connect it on`, (provider) => {
+it.each([...NATIVE_PROVIDERS])(`%s has a tab to connect it on`, (provider) => {
     // The label is the assertion: a blank tab is as unusable as no tab, and a missing one fails just as
     // loudly.
     expect(providerTabs.find((entry) => entry.value === provider)?.label.trim(), `${provider} has no account tab`).toBe(
@@ -32,12 +32,12 @@ it.each(NATIVE_PROVIDERS)(`%s has a tab to connect it on`, (provider) => {
     );
 });
 
-it.each(NATIVE_PROVIDERS)(`%s reads as not connected on a sandbox with nothing connected`, (provider) => {
+it.each([...NATIVE_PROVIDERS])(`%s reads as not connected on a sandbox with nothing connected`, (provider) => {
     // With no account anywhere, no provider may claim it can send.
     expect(providerReady(provider), `${provider} claims it can send with nothing connected`).toBe(false);
 });
 
-it.each(NATIVE_PROVIDERS)(`%s says what it costs and what to connect while it is locked`, (provider) => {
+it.each([...NATIVE_PROVIDERS])(`%s says what it costs and what to connect while it is locked`, (provider) => {
     // A locked row must state its price; an empty badge is a row a user cannot act on.
     expect(accessBadge(provider), `${provider} is locked with no badge`).toContain(accessFor(provider)?.requirement);
     for (const harness of [`native`, `claude-code`] as const) {
@@ -47,7 +47,7 @@ it.each(NATIVE_PROVIDERS)(`%s says what it costs and what to connect while it is
     }
 });
 
-it.each(NATIVE_PROVIDERS)(`%s has a name every surface can print`, (provider) => {
+it.each([...NATIVE_PROVIDERS])(`%s has a name every surface can print`, (provider) => {
     // Two labels, two questions: the picker names the runtime, the account rows name whose account it is.
     expect(providerLabel(provider), `${provider} has no picker label`).not.toBe(provider);
     expect(providerDisplayLabel(provider), `${provider} has no display label`).not.toBe(provider);
@@ -69,7 +69,7 @@ it.each(PROVIDER_SPECS.map((spec) => ({ id: spec.id, kind: spec.auth.kind })))(`
 
 // Only Claude carries a static browser-side floor; every other provider's list is deliberately empty
 // until its first live load.
-it.each(NATIVE_PROVIDERS)(`%s's browser-side model floor is Claude's alone`, (provider) => {
+it.each([...NATIVE_PROVIDERS])(`%s's browser-side model floor is Claude's alone`, (provider) => {
     expect(modelOptionsFor(provider).length > 0).toBe(provider === `claude`);
     expect(modelsFor(provider).length > 0).toBe(provider === `claude`);
 });
@@ -81,7 +81,7 @@ it(`the free trial is not a native provider`, () => {
 });
 
 /* WHICH PROVIDERS MAY BE OFFERED A SIGN-IN, asked of the spec table rather than by elimination. */
-it.each(NATIVE_PROVIDERS)(`%s has a sign-in a card may offer`, (provider) => {
+it.each([...NATIVE_PROVIDERS])(`%s has a sign-in a card may offer`, (provider) => {
     expect(hasSignIn(provider), `${provider} has nothing to connect`).toBe(true);
 });
 

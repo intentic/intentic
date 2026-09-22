@@ -1,5 +1,5 @@
 import type { GitCommit } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { matchesSearch, searchWords } from "./searchCommits.js";
 
 const commit = (over: Partial<GitCommit> = {}): GitCommit => ({

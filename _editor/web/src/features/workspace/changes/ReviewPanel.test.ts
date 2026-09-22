@@ -1,26 +1,27 @@
-// @vitest-environment jsdom
 // jsdom because the subject is which sentence the column prints. The panel used to decide that from "a read is in
 // flight", and a workspace being written to (a test run, a build) makes the daemon re-read this list about once a
 // second — so a clean tree blinked between its answer and its waiting line for as long as the writes lasted. Only a
 // render can tell those two sentences apart.
+import "@intentic/testing/dom";
 import type { GitChangesResponse } from "@intentic/api-contract";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import { signalConnection } from "../../sandbox/client/useSandbox";
 import { registry } from "../../agents/fleet/useAgents-registry";
 import { changesKey } from "./useChanges";
+import * as actualSandboxClient from "../../sandbox/client/sandboxClient";
 
 // Every daemon read in the panel's graph goes through this one function. `/git/changes` is handed out a request at a
 // time, so a read can be held open while the assertions run; everything else answers empty, since no other query
 // decides anything here.
 const held: ((response: GitChangesResponse) => void)[] = [];
-vi.mock("../../sandbox/client/sandboxClient", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("../../sandbox/client/sandboxClient")>()),
+mock.module("../../sandbox/client/sandboxClient", () => ({
+    ...actualSandboxClient,
     sandboxJson: (path: string) => (path === `/git/changes` ? new Promise((resolve) => held.push(resolve)) : Promise.resolve({})),
 }));
 

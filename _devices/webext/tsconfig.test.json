@@ -2,5 +2,8 @@
 // because this package emits nothing — `build` is esbuild, and tsgo's only job in it is to say no.
 {
     "extends": "./tsconfig.json",
-    "include": ["./src/**/*", "./vitest.config.ts"]
+    "compilerOptions": {
+        "types": ["bun"]
+    },
+    "include": ["./src/**/*"]
 }

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createRequest } from "../../agent/tools/agent-requests.js";
 import { clearBrowserHelp, closeBrowserSession, listBrowserSessions, openBrowserSession, raiseBrowserHelp } from "./browser-sessions.js";
 

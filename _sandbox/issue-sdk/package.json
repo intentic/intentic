@@ -24,16 +24,15 @@
         "build": "vite build",
         "typecheck": "tsgo --noEmit",
         "watch": "vite build --watch",
-        "test": "vitest run",
-        "test:watch": "vitest"
+        "test": "suites",
+        "test:watch": "suites --watch"
     },
     "devDependencies": {
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "jsdom": "catalog:",
-        "vite": "catalog:",
-        "vitest": "catalog:"
+        "vite": "catalog:"
     }
 }

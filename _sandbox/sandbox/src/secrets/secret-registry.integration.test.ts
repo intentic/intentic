@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ENV_FILE, SECRETS_FILE } from "@intentic/scaffold";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileSecretVault } from "../capabilities/credentials/secret-vault.js";
 import { resolveSecretReferences, secretReference, secretRegistryOf } from "./secret-registry.js";
 

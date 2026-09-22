@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { ListeningPort } from "../ports/port-scan.js";
 import { createPanelUpstreamResolver, panelDirOf, resolvePanelUpstream } from "./panel-upstream.js";
 
@@ -109,7 +109,11 @@ describe("the live resolver", () => {
             ttlMs: 0,
         });
         const burst = await Promise.all([resolver("app"), resolver("app"), resolver("app")]);
-        expect(burst).toEqual(Array.from({ length: 3 }, () => ({ state: "serving", port: 3000, assigned: false })));
+        expect(burst).toEqual([
+            { state: "serving", port: 3000, assigned: false },
+            { state: "serving", port: 3000, assigned: false },
+            { state: "serving", port: 3000, assigned: false },
+        ]);
         expect(scans).toBe(1);
         await new Promise((resolve) => setTimeout(resolve, 2));
         await resolver("app");

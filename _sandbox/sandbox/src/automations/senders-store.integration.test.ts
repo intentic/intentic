@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileSendersStore, SENDERS_KEPT } from "./senders-store.js";
 
 const store = () => fileSendersStore(join(mkdtempSync(join(tmpdir(), "senders-")), "senders.json"));

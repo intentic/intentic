@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from "vitest";
+import { test, expect, beforeEach } from "bun:test";
 import { isUnknownSlashCommand, localCommandText, recordCommands, resetCommands, unknownCommandName } from "./agent-commands.js";
 
 beforeEach(() => {

@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
 import type { Capability } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { stubEnv } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
 import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
@@ -33,7 +34,7 @@ const linux = (id: string): Capability => ({ id, kind: "device", config: { platf
 
 const app = (enrolled: string[], cards: Capability[]) => {
     // authorized_keys is derived from the store on every write; HOME stays a temp dir so no suite touches the real one.
-    vi.stubEnv("HOME", mkdtempSync(join(tmpdir(), "sync-revoke-")));
+    stubEnv("HOME", mkdtempSync(join(tmpdir(), "sync-revoke-")));
     const cut: string[] = [];
     const door = hostDoor(enrolled);
     return {

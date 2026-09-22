@@ -1,5 +1,5 @@
 import type { AgentCapabilities, AgentProvider } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Services } from "../../../composition.js";
 import { services } from "../../../harness/route-services.testing.js";
 import { contextShortfall, declaredWindow } from "./context-budget.js";

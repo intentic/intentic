@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createPostgresProvider } from "./postgres.js";
 import { createPostgresDatabaseProvider } from "./postgres-database.js";

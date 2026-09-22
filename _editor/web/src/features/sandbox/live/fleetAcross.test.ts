@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 
@@ -8,10 +9,10 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 // Mocks the query client and sandbox client, neither of which the derivation under test touches.
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
-vi.mock("../client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-const sandboxJsonQuietly = vi.fn();
-vi.mock("../client/sandboxClient", () => ({ sandboxJsonQuietly }));
-vi.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: vi.fn() } }));
+mock.module("../client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
+const sandboxJsonQuietly = mock();
+mock.module("../client/sandboxClient", () => ({ sandboxJsonQuietly }));
+mock.module("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: mock() } }));
 
 const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");
 type BoxFleet = Parameters<typeof boxAttention>[0];
@@ -80,7 +81,7 @@ describe("marking an agent in another box as read", () => {
         ];
         sandboxJsonQuietly.mockResolvedValue(roster());
         const release = subscribe();
-        await vi.waitFor(() => expect(otherBoxes.value[0]?.state).toBe(`ready`));
+        await waitFor(() => expect(otherBoxes.value[0]?.state).toBe(`ready`));
         expect(boxAttention(otherBoxes.value[0]!)).toBe(1);
 
         markSeenAcross(`sbx-other`, `a1`);

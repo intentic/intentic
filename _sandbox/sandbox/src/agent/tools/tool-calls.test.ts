@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { homedir } from "node:os";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import {
     displayNameOf,
     editDiffContent,

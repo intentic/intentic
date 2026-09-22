@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 import type { ManagedProcesses, ProcessSpec } from "../../processes/managed-processes.js";
 import type { DependencyLandOrigin } from "./dependency-origin.js";
+import { checkRunningIn } from "./checks-in-flight.js";
 import { checkCommandFor, type VerifyDeps } from "./verify-deps.js";
 import { fileVerifyStore } from "./verify-store.js";
 
@@ -63,12 +65,10 @@ const hangingProcesses = (): ManagedProcesses => {
     } as unknown as ManagedProcesses;
 };
 
-// Fresh module per case, since the module's queue is process-wide and mustn't leak between tests. The check window
-// comes from the same reset graph, so a case reads the registry its own run writes rather than the static import's.
-const freshQueue = async (): Promise<typeof import("./verify-deps.js") & typeof import("./checks-in-flight.js")> => {
-    vi.resetModules();
-    return { ...(await import("./checks-in-flight.js")), ...(await import("./verify-deps.js")) };
-};
+// Fresh module per case, since the module's queue is process-wide and mustn't leak between tests. Only this module is
+// re-evaluated, so the check window it opens is the one the statically imported registry reports.
+const freshQueue = async (): Promise<typeof import("./verify-deps.js")> =>
+    freshImport<typeof import("./verify-deps.js")>("./verify-deps.js", import.meta.url);
 
 const deps = (
     root: string,
@@ -227,7 +227,7 @@ test("a finished check says it wrote the tree where nothing was watching", async
 });
 
 test("a check that outran the watch window says so too: it wrote before it was stopped", async () => {
-    const { queueVerify, checkRunningIn } = await freshQueue();
+    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { test: "vitest run" });
     const feed: string[] = [];
@@ -243,7 +243,7 @@ test("a check that outran the watch window says so too: it wrote before it was s
 // The window the review reads (git.routes.ts ownWork): open while the build is rewriting the project's output dirs,
 // and already closed when the announcement lands, so the rescan it triggers reports the tree the build settled on.
 test("the check window is open while the build runs and closed before the announcement that rescans", async () => {
-    const { queueVerify, checkRunningIn } = await freshQueue();
+    const { queueVerify } = await freshQueue();
     const root = await workspace();
     await ready(root, { verify: "pnpm run build" });
     const feed: string[] = [];

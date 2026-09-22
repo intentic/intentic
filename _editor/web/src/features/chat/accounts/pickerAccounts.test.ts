@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { capacityCounts, matchAccounts } from "./pickerAccounts";
 import type { PlanHeadroom } from "../session/usageStatus";
 
@@ -7,11 +7,11 @@ import type { PlanHeadroom } from "../session/usageStatus";
 
 // pickerAccounts reaches useChat for live account lists; stub its side-effecting seams so import
 // stays inert.
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
-vi.mock("./useChat-accounts", () => ({
-    accountsOf: vi.fn(() => []),
-    refreshConnections: vi.fn(async () => {}),
-    subscriptionOnly: vi.fn(() => false),
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: mock() }));
+mock.module("./useChat-accounts", () => ({
+    accountsOf: mock(() => []),
+    refreshConnections: mock(async () => {}),
+    subscriptionOnly: mock(() => false),
 }));
 
 const headroom = (percent: number): PlanHeadroom => ({
@@ -52,8 +52,8 @@ test("says nothing at all for a plan that publishes no limits, rather than repor
 
 test("matches the identity line as well as the name: a pool is looked up by the part of the address you remember", () => {
     const rows = [row(`Google`, 10, `radarsuspam12@gmail.com`), row(`Google`, 10, `radratdev@gmail.com`)];
-    expect(matchAccounts(rows, `spam12`)).toEqual([rows[0]]);
-    expect(matchAccounts(rows, `RADRATDEV`)).toEqual([rows[1]]);
+    expect(matchAccounts(rows, `spam12`)).toEqual([rows[0]!]);
+    expect(matchAccounts(rows, `RADRATDEV`)).toEqual([rows[1]!]);
 });
 
 test("an empty or blank query is not a filter: the whole list comes back", () => {

@@ -3,12 +3,12 @@
 // order. All four are recognized by shape, not a list, so a new package needs no addition here.
 // 1. every test file sits inside some type-check program; a suite reaching the machine is named as one
 //    (`.integration.`/`.e2e.`), even through an imported fixture module
-// 2. every package running vitest sets its own budget (UNIT_SUITE/INTEGRATION_SUITE or testTimeout), instead of
-//    inheriting vitest's 5s hang detector
-// 3. an allow-list `vi.mock` of a workspace package provides every name the code under test imports from it
+// 2. every package running `suites` preloads the shared budget through its bunfig.toml, and every preload it names
+//    exists
+// 3. an allow-list `mock.module` of a workspace package provides every name the code under test imports from it
 // 4. an emitted package's tsconfig references every emitted package it depends on, so `tsgo -b` builds them in order
 import { existsSync, readFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { finish } from "./lib/report.mjs";
 import { byName, configFor, emitsDist, excludesOf, packages, root, sourceOf, TEST_FILE, walk } from "./lib/repo.mjs";
 
@@ -17,11 +17,14 @@ import { byName, configFor, emitsDist, excludesOf, packages, root, sourceOf, TES
 const MACHINE_PRIMITIVES = /mkdtemp|node:child_process|simple-git|dockerode|testcontainers/;
 const FIXTURE_MODULE = /(^|[.-])testing\.[cm]?tsx?$/;
 const INTEGRATION_NAME = /\.(integration|e2e)\.(test|spec)\.[cm]?[jt]sx?$/;
-// Cuts what names a module without running it: a `vi.mock` replacing it, and a type-only import or `typeof import()`
-// that erases before the suite runs.
+// The package's test script is the shared runner (bin/suites.mjs in @intentic/testing), so the budget and the
+// bunfig.toml preload are what it counts on.
+const runsSuites = (pkg) => /\bsuites\b/.test(pkg.scripts?.test ?? "");
+// Cuts what names a module without running it: a `mock.module` replacing it, and a type-only import or
+// `typeof import()` that erases before the suite runs.
 const runtimeText = (source) =>
     source
-        .replace(/vi\.mock\([^)]*\)/g, "")
+        .replace(/mock\.module\([^)]*\)/g, "")
         .replace(/\bimport\s+type\s[\s\S]*?from\s*["'][^"']+["'];?/g, "")
         .replace(/\btypeof\s+import\(\s*["'][^"']+["']\s*\)/g, "");
 
@@ -81,16 +84,15 @@ const reachesTheMachine = (file, wanted, seen = new Set()) => {
 
 const problems = [];
 for (const { name, dir, pkg } of packages) {
-    // Only where the budget exists: vitest picks it by file name; Playwright specs reach the machine by definition.
-    const runsVitest = /vitest/.test(pkg.scripts?.test ?? "");
-    for (const file of runsVitest ? walk(dir) : []) {
+    // Only where the budget exists: `suites` picks it by file name; Playwright specs reach the machine by definition.
+    for (const file of runsSuites(pkg) ? walk(dir) : []) {
         if (INTEGRATION_NAME.test(file) || !reachesTheMachine(file, undefined)) {
             continue;
         }
         const relative = file.slice(root.length + 1);
         problems.push(
             `${relative}: opens temp trees, spawns processes or drives real git, but its name puts it under the ` +
-                `unit budget (5s): rename it to ${relative.replace(/\.(test|spec)\./, ".integration.$1.")}`,
+                `unit budget (a 20s hang detector): rename it to ${relative.replace(/\.(test|spec)\./, ".integration.$1.")}`,
         );
     }
     if (walk(dir).length === 0) {
@@ -117,53 +119,33 @@ for (const { name, dir, pkg } of packages) {
 
 // Budgets.
 
-const VITEST_CONFIG = "vitest.config.ts";
-
-// A helper in @intentic/testing/vitest that spreads BOTH suites itself carries the budget for every config calling
-// it, so naming it is naming the ceiling. Read out of that file rather than listed here: a second helper must not
-// have to be remembered in two places.
-const budgetedHelpers = () => {
-    const source = readFileSync(join(root, "_tools/testing/src/vitest.ts"), "utf8");
-    const declarations = [...source.matchAll(/^export const (\w+)\s*=/gmu)];
-    return declarations
-        .filter(({ 1: name }, index) => {
-            const start = declarations[index].index;
-            const end = declarations[index + 1]?.index ?? source.length;
-            const body = source.slice(start, end);
-            return name !== "UNIT_SUITE" && name !== "INTEGRATION_SUITE" && /\bUNIT_SUITE\b/.test(body) && /\bINTEGRATION_SUITE\b/.test(body);
-        })
-        .map(({ 1: name }) => name);
-};
-
-const HELPERS = budgetedHelpers();
+const BUNFIG = "bunfig.toml";
+// Loaded per file: the budget by suite name. Without it a bare `bun test` runs on bun's 5s hang detector.
+const PRELOAD = "_tools/testing/src/bun-preload.ts";
+const preloadsOf = (source) =>
+    [...(/preload\s*=\s*\[([^\]]*)\]/.exec(source)?.[1] ?? "").matchAll(/["']([^"']+)["']/g)].map((match) => match[1]);
 const budgetless = [];
 for (const { name, dir, pkg } of packages) {
-    if (!/vitest/.test(pkg.scripts?.test ?? "") || walk(dir).length === 0) {
+    if (!runsSuites(pkg) || walk(dir).length === 0) {
         continue;
     }
-    const config = join(dir, VITEST_CONFIG);
+    const config = join(dir, BUNFIG);
     if (!existsSync(config)) {
-        budgetless.push(
-            `${name}: runs vitest with no ${VITEST_CONFIG}, so every suite gets the 5s hang detector. Add one: ` +
-                `\`projects: [{ test: UNIT_SUITE }, { test: INTEGRATION_SUITE }]\` from @intentic/testing/vitest.`,
-        );
+        budgetless.push(`${name}: runs suites with no ${BUNFIG}. Add one whose [test] preload names ${PRELOAD}.`);
         continue;
     }
-    const source = readFileSync(config, "utf8");
-    // Matched on the suite names, not the import specifier: _tools/testing imports them from its own source.
-    const named = /\bUNIT_SUITE\b|\bINTEGRATION_SUITE\b/.test(source) || HELPERS.some((helper) => new RegExp(`\\b${helper}\\b`, "u").test(source));
-    if (!named && !/\btestTimeout\b/.test(source)) {
-        budgetless.push(
-            `${name}: ${VITEST_CONFIG} spreads neither UNIT_SUITE nor INTEGRATION_SUITE and sets no testTimeout, ` +
-                `so its suites inherit the 5s hang detector silently. Use the shared pair, or state the ceiling ` +
-                `this package needs and why (see _editor/web/vitest.config.ts).`,
-        );
+    const preloads = preloadsOf(readFileSync(config, "utf8"));
+    if (!preloads.some((preload) => resolve(dir, preload) === join(root, PRELOAD))) {
+        budgetless.push(`${name}: ${BUNFIG} does not preload ${PRELOAD}, so its suites carry no budget of their own.`);
+    }
+    for (const preload of preloads.filter((preload) => !existsSync(resolve(dir, preload)))) {
+        budgetless.push(`${name}: ${BUNFIG} preloads ${preload}, which does not exist, so no suite in the package can start.`);
     }
 }
 
 // Mock coverage.
 
-const MOCK = /vi\.mock\(\s*["']([^"']+)["']\s*,\s*(async\s*)?\(\s*\)\s*=>\s*\(?\s*\{/g;
+const MOCK = /mock\.module\(\s*["']([^"']+)["']\s*,\s*(async\s*)?\(\s*\)\s*=>\s*\(?\s*\{/g;
 const RELATIVE_IMPORT = /import\s+(?:[\w$]+\s*,?\s*)?(?:\{[^}]*\}\s*)?from\s*["'](\.[^"']+)["']/g;
 // The object literal that opens at `from`, found by brace depth.
 const literalAt = (source, from) => {
@@ -229,14 +211,14 @@ const mockGaps = (file, source, match, readers) => {
         return missing.length === 0
             ? []
             : [
-                  `${file.slice(root.length + 1)}: vi.mock("${specifier}") provides {${[...provided].join(", ")}} but ` +
-                      `${reader.slice(root.length + 1)} imports {${missing.join(", ")}} from it: spread \`await importOriginal()\` into the factory, or add them`,
+                  `${file.slice(root.length + 1)}: mock.module("${specifier}") provides {${[...provided].join(", ")}} but ` +
+                      `${reader.slice(root.length + 1)} imports {${missing.join(", ")}} from it: spread the original module into the factory, or add them`,
               ];
     });
 };
 const unmocked = [];
 for (const { dir, pkg } of packages) {
-    if (!/vitest/.test(pkg.scripts?.test ?? "")) {
+    if (!runsSuites(pkg)) {
         continue;
     }
     for (const file of walk(dir)) {
@@ -278,13 +260,13 @@ const unreferenced = [];
 finish(
     [
         ["Test files outside the program or the budget they belong in", problems],
-        ["A package's tests run on vitest's default 5s ceiling without saying so", budgetless],
+        ["A package's suites run without the shared budget, or name a preload that does not exist", budgetless],
         ["A workspace package is mocked with an allow-list that misses a name the code under test imports", unmocked],
         ["An emitted package depends on another without a project reference, so the emit may run in the wrong order", unreferenced],
     ],
     [
         "typecheck coverage: every package with tests type-checks them, and every machine-touching suite is named as one",
-        "test budgets: every package running vitest names its ceiling instead of inheriting the 5s hang detector",
+        "test budgets: every package running suites preloads the shared budget, and every preload it names exists",
         "mock coverage: every allow-list mock of a workspace package provides what the code under test imports from it",
         "references: every emitted package names the emitted packages it depends on, so tsgo -b builds them first",
     ],

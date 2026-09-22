@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createResidentEngine, type QueryOutcome, type ResidentEngine } from "@intentic/iq-engine";
 import type { Logger } from "pino";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { retrievalEvidenceOf, retrieveTurnContext, TURN_CONTEXT_NOTE_HEADER, type TurnContextDeps } from "./turn-context.js";
 import { stripTurnPreamble, withTurnPreamble } from "../../prompt/turn-preamble.js";
 
@@ -27,8 +28,8 @@ const outcome = (overrides: Partial<QueryOutcome> = {}): QueryOutcome => ({
     ...overrides,
 });
 
-const warn = vi.fn();
-const debug = vi.fn();
+const warn = mock();
+const debug = mock();
 const depsOf = (run: ResidentEngine["run"]): TurnContextDeps => ({
     iq: { run },
     logger: { warn, debug } as unknown as Pick<Logger, "warn" | "debug">,
@@ -155,7 +156,7 @@ test("the pre-injected query holds no stage back: the engine runs its full pipel
 });
 
 test("an ineligible prompt never reaches the engine", async () => {
-    const run = vi.fn();
+    const run = mock();
     expect(await retrieveTurnContext(depsOf(run as unknown as ResidentEngine["run"]), "go for it")).toMatchObject({ skipped: "ineligible" });
     expect(run).not.toHaveBeenCalled();
 });
@@ -184,11 +185,11 @@ test("a failed retrieval costs the note and nothing else", async () => {
     );
     // Do not fail a turn because its optional search was unrequested.
     expect(result).toMatchObject({ skipped: "failed" });
-    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledTimes(1);
 });
 
 test("a retrieval that outruns its deadline is abandoned, not waited on", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         let aborted = false;
         const deps = depsOf(
@@ -201,14 +202,14 @@ test("a retrieval that outruns its deadline is abandoned, not waited on", async 
                 }),
         );
         const pending = retrieveTurnContext(deps, "how does the daemon decide which runtime serves a turn?");
-        await vi.advanceTimersByTimeAsync(3_000);
+        await advanceTimersByTimeAsync(3_000);
         expect(await pending).toEqual({ skipped: "deadline", durationMs: 3_000 });
         // The abort still goes out: it releases the half of a query that listens for it (the rg child).
         expect(aborted).toBe(true);
         // An abort here is the deadline firing by design, not a failure worth a warn log.
         expect(warn).not.toHaveBeenCalledTimes(2);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 

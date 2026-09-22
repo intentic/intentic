@@ -13,7 +13,8 @@ if (command === "login") {
 } else {
     const stream = ndJsonStream(
         Writable.toWeb(process.stdout) as WritableStream<Uint8Array>,
-        Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>,
+        // Through unknown: bun-types gives Readable.toWeb a ReadableStream whose getReader overloads do not line up.
+        Readable.toWeb(process.stdin) as unknown as ReadableStream<Uint8Array>,
     );
     bridgeAgentApp().connect(stream);
     // The connection lives until the editor closes stdin; keep the process alive alongside it.

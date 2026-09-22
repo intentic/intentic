@@ -1,5 +1,5 @@
 import { eventIterator, oc } from "@orpc/contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { z } from "zod";
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, SANDBOX_ROUTES, sandboxRouteName } from "../index.js";
 import { contractRoutes, routeNameForRequest, routeShapes, streamOf } from "./routes.js";

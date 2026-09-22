@@ -1,4 +1,5 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, mock, jest } from "bun:test";
+import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createPeerHub, type PeerClient } from "./peer-hub.js";
 
 /* What is left of a hub once oRPC owns the wire: the roster, liveness, and what to do when a peer goes. */
@@ -10,10 +11,10 @@ interface Scopes {
     readonly shell: "on" | "off";
 }
 interface Client extends PeerClient<Facts, Scopes> {
-    describe: ReturnType<typeof vi.fn<(input?: undefined, options?: { signal?: AbortSignal }) => Promise<Facts>>>;
-    setScopes: ReturnType<typeof vi.fn<(scopes: Scopes) => Promise<{ ok: true }>>>;
-    ping: ReturnType<typeof vi.fn<() => Promise<{ ok: true }>>>;
-    mcp: ReturnType<typeof vi.fn<(payload: unknown) => Promise<unknown>>>;
+    describe: ReturnType<typeof mock<(input?: undefined, options?: { signal?: AbortSignal }) => Promise<Facts>>>;
+    setScopes: ReturnType<typeof mock<(scopes: Scopes) => Promise<{ ok: true }>>>;
+    ping: ReturnType<typeof mock<() => Promise<{ ok: true }>>>;
+    mcp: ReturnType<typeof mock<(payload: unknown) => Promise<unknown>>>;
 }
 
 const facts: Facts = { os: "Ubuntu 24.04" };
@@ -24,10 +25,10 @@ const hub = () => createPeerHub<Client, { version: string }, Facts, Scopes>(spec
 const fakePeer = () => {
     const closed: string[] = [];
     const client: Client = {
-        describe: vi.fn(async () => facts),
-        setScopes: vi.fn(async () => ({ ok: true }) as const),
-        ping: vi.fn(async () => ({ ok: true }) as const),
-        mcp: vi.fn(async (payload: unknown) => ({ echoed: payload })),
+        describe: mock(async () => facts),
+        setScopes: mock(async () => ({ ok: true }) as const),
+        ping: mock(async () => ({ ok: true }) as const),
+        mcp: mock(async (payload: unknown) => ({ echoed: payload })),
     };
     return { client, closed, connection: { client, close: (_code: number, reason: string) => void closed.push(reason), announced: { version: "0.1.0" } } };
 };
@@ -151,7 +152,7 @@ test("a peer is asked for its tools the moment it connects, not when a turn firs
     const peer = fakePeer();
     peer.client.mcp.mockResolvedValueOnce({ jsonrpc: "2.0", id: "hosts-tools", result: { tools: [{ name: "screenshot" }] } });
     const detach = live.attach("laptop", peer.connection);
-    await vi.waitFor(() => expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "screenshot" }] }));
+    await waitFor(() => expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "screenshot" }] }));
     expect(peer.client.mcp).toHaveBeenCalledWith(
         { jsonrpc: "2.0", id: "hosts-tools", method: "tools/list", params: {} },
         expect.objectContaining({ signal: expect.anything() }),
@@ -169,7 +170,7 @@ test("a peer that will not answer for its tools keeps the ones it published befo
     peer.client.mcp.mockRejectedValueOnce(new Error("gone"));
     live.attach("laptop", peer.connection);
     expect(live.online("laptop")).toBe(true);
-    await vi.waitFor(() => expect(peer.client.mcp).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(peer.client.mcp).toHaveBeenCalledTimes(1));
     expect(live.knownTools("laptop")).toEqual({ tools: [{ name: "run_command" }] });
 });
 
@@ -189,31 +190,31 @@ test("a hub built over a memory that already holds a peer lists its tools before
 
 /* A lid closing does not always produce a close frame: the socket can simply stop answering. */
 test("a peer that stops answering the heartbeat is dropped", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const live = hub();
         const peer = fakePeer();
         peer.client.ping.mockRejectedValue(new Error("gone"));
         live.attach("laptop", peer.connection);
         expect(live.online("laptop")).toBe(true);
-        await vi.advanceTimersByTimeAsync(31_000);
+        await advanceTimersByTimeAsync(31_000);
         expect(live.online("laptop")).toBe(false);
         expect(peer.closed).toEqual(["no answer"]);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 test("a healthy peer stays online across heartbeats, at the door's own cadence", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const live = createPeerHub<Client, { version: string }, Facts, Scopes>({ ...spec, heartbeatMs: 20_000 }, logger);
         const peer = fakePeer();
         live.attach("laptop", peer.connection);
-        await vi.advanceTimersByTimeAsync(65_000);
+        await advanceTimersByTimeAsync(65_000);
         expect(peer.client.ping).toHaveBeenCalledTimes(3);
         expect(live.online("laptop")).toBe(true);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });

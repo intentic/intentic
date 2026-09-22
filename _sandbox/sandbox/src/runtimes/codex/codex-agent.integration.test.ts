@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { fakeCodexRunner } from "../../testing.js";
 import { createCodexAgent } from "./codex-agent.js";
 

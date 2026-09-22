@@ -1,7 +1,7 @@
 /* This package is consumed from source and never emits build artifacts. */
 {
     "compilerOptions": {
-        "types": ["node"],
+        "types": ["node", "bun"],
         "noEmit": true,
         "rootDir": "./src",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",

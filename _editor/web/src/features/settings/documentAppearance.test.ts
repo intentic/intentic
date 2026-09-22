@@ -1,28 +1,33 @@
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { receivePreferenceChange } from "@intentic/ui/preference";
+import { freshImport } from "@intentic/testing/bun";
 
 // Never imports the settings page: calls installDocumentAppearance directly, mirroring main.ts, so a preference wired
 // only into that page's import graph would fail here too.
-
-const boot = () => import("./documentAppearance");
-const seam = () => import("@intentic/ui/preference");
+const { installDocumentAppearance } = await import("./documentAppearance");
 
 const root = () => document.documentElement;
+
+// The skin reads storage and paints <html> as it is evaluated, so each case gets its own evaluation of it; the newest
+// one is the one a change from another window reaches, since a preference holds the last that claimed its key. The
+// scheme and text size stay the one instance per window, which is what those changes reach.
+const boot = async (): Promise<void> => {
+    await freshImport<typeof import("../../skins/useSkin")>("../../skins/useSkin", import.meta.url);
+    installDocumentAppearance();
+};
 
 beforeEach(() => {
     localStorage.clear();
     root().removeAttribute(`data-skin`);
     root().removeAttribute(`data-mode`);
     root().removeAttribute(`data-text-size`);
-    vi.resetModules();
 });
 
 describe(`installDocumentAppearance`, () => {
     it(`applies a stored skin`, async () => {
         localStorage.setItem(`ui-skin`, `sanctum`);
-        const { installDocumentAppearance } = await boot();
-
-        installDocumentAppearance();
+        await boot();
 
         // beforeEach strips the attribute, so it can only be back because useSkin read storage and wrote it —
         // this is not the anti-flash markup surviving.
@@ -30,20 +35,14 @@ describe(`installDocumentAppearance`, () => {
     });
 
     it(`makes a skin picked in another window land here`, async () => {
-        const { installDocumentAppearance } = await boot();
-        const { receivePreferenceChange } = await seam();
-
-        installDocumentAppearance();
+        await boot();
         receivePreferenceChange({ key: `ui-skin`, raw: `sanctum` });
 
         expect(root().getAttribute(`data-skin`)).toBe(`sanctum`);
     });
 
     it(`makes the scheme and the text size land here too`, async () => {
-        const { installDocumentAppearance } = await boot();
-        const { receivePreferenceChange } = await seam();
-
-        installDocumentAppearance();
+        await boot();
         receivePreferenceChange({ key: `ui-color-scheme`, raw: `dark` });
         receivePreferenceChange({ key: `ui-text-size`, raw: `large` });
 
@@ -53,10 +52,7 @@ describe(`installDocumentAppearance`, () => {
 
     it(`drops a skin back to none when light or dark is chosen`, async () => {
         localStorage.setItem(`ui-skin`, `sanctum`);
-        const { installDocumentAppearance } = await boot();
-        const { receivePreferenceChange } = await seam();
-
-        installDocumentAppearance();
+        await boot();
         receivePreferenceChange({ key: `ui-skin`, raw: `none` });
 
         expect(root().hasAttribute(`data-skin`)).toBe(false);
@@ -65,10 +61,7 @@ describe(`installDocumentAppearance`, () => {
     // Cleared is not "off": the skin goes back to following the scheme, and sanctum is what the dark one wears.
     it(`hands a cleared skin back to the scheme rather than switching it off`, async () => {
         localStorage.setItem(`ui-skin`, `none`);
-        const { installDocumentAppearance } = await boot();
-        const { receivePreferenceChange } = await seam();
-
-        installDocumentAppearance();
+        await boot();
         receivePreferenceChange({ key: `ui-color-scheme`, raw: `dark` });
         receivePreferenceChange({ key: `ui-skin`, raw: null });
 

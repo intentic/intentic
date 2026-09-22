@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";

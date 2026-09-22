@@ -1,5 +1,5 @@
 import type { Device } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { deviceConnections, isDeviceConnection } from "./deviceConnections";
 
 // The gap this closes: a machine reached only by desktop sync is a real, live device, and Capabilities used to show

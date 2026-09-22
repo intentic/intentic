@@ -1,5 +1,5 @@
 import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";

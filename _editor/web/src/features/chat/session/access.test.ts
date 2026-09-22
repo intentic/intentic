@@ -1,7 +1,7 @@
 // Pins that access.ts treats an endpoint as ready by existing, the trial's readiness as a spendable measurement,
 // and accessKnown as gating both reads landing before either is trusted.
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { beforeEach, expect, it } from "vitest";
+import { it, expect, beforeEach } from "bun:test";
 import { accessKnown, firstReadyProvider, providerReady, providerReadyOn } from "./access";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "../accounts/providerCatalog";

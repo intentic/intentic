@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { repoNameFromUrl } from "./repoName";
 
 /* The name a clone lands under is derived, not asked for, so the derivation is the whole form's correctness. */

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import {
     FREE_TIER,
     FREE_TIER_MONTHLY_CEILING_USD,

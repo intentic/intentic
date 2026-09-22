@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { REPO_ROLES } from "@intentic/scaffold";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { workspacePaths } from "./workspace.js";
 
 test("workspacePaths lays each role repo out directly under <root>", () => {

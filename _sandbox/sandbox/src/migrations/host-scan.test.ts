@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { HostHub } from "../hosts/host-peer.js";
 import { detectOpenclaw } from "./openclaw.js";
 import { probeHost, scanHost } from "./host-scan.js";

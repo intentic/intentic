@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../../logger.js";
 import { memoryMintedStore } from "../../harness/route-stores.testing.js";
 import { metaLoginDriver } from "./meta-login.js";
@@ -62,14 +63,14 @@ const envelope = (data: unknown) => ({ code: 0, msg: "", data });
 const connected = (store: ReturnType<typeof memoryMintedStore>) => store.credentials();
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
 });
 
 afterEach(() => {
     // A sign-in whose poll is still running would tick into the next test's fake clock.
     cancelAllMintedLogins();
-    vi.useRealTimers();
-    vi.restoreAllMocks();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
 });
 
 /* --- Meta: RFC 8628 device flow, then the exchange that makes the token usable --------------------------- */
@@ -92,7 +93,7 @@ const metaVendor = (options: { tokenAnswers: ((call: Call) => unknown)[]; mint?:
 
 const startMeta = async (vendor: ReturnType<typeof fakeVendor>) => {
     const store = memoryMintedStore("Meta");
-    const forgotten = vi.fn();
+    const forgotten = mock();
     const started = await startMintedLogin({
         provider: "meta",
         driver: metaLoginDriver(META_HOSTS),
@@ -137,7 +138,7 @@ test("Meta's approval mints the vendor's own key and stores it, and only it", as
     const { store, forgotten } = await startMeta(vendor);
 
     // Two ticks at the vendor's advertised five seconds: pending, then granted.
-    await vi.advanceTimersByTimeAsync(11_000);
+    await advanceTimersByTimeAsync(11_000);
 
     const stored = await connected(store);
     expect(stored).toHaveLength(1);
@@ -164,25 +165,25 @@ test("Meta's slow_down widens the poll interval instead of ending the sign-in", 
     const { store } = await startMeta(vendor);
 
     // First tick at 5s says slow down. The second must NOT come at 10s.
-    await vi.advanceTimersByTimeAsync(9_000);
+    await advanceTimersByTimeAsync(9_000);
     const afterFirst = vendor.calls.filter((call) => call.url === META_HOSTS.token).length;
     expect(afterFirst, "the first tick did not happen at the advertised interval").toBe(1);
 
     // 5s + the slow_down step: the second tick lands at 15s, not 10s.
-    await vi.advanceTimersByTimeAsync(3_000);
+    await advanceTimersByTimeAsync(3_000);
     expect(vendor.calls.filter((call) => call.url === META_HOSTS.token).length, "the interval did not widen").toBe(1);
-    await vi.advanceTimersByTimeAsync(4_000);
+    await advanceTimersByTimeAsync(4_000);
     expect(await connected(store)).toHaveLength(1);
 });
 
 test("a Meta sign-in declined on the page connects nothing", async () => {
     const vendor = metaVendor({ tokenAnswers: [() => ({ error: "access_denied" })] });
     const { store } = await startMeta(vendor);
-    await vi.advanceTimersByTimeAsync(6_000);
+    await advanceTimersByTimeAsync(6_000);
     expect(await connected(store)).toEqual([]);
     // The poll stops: a declined sign-in that kept asking would spend ten more minutes being declined.
     const asked = vendor.calls.filter((call) => call.url === META_HOSTS.token).length;
-    await vi.advanceTimersByTimeAsync(20_000);
+    await advanceTimersByTimeAsync(20_000);
     expect(vendor.calls.filter((call) => call.url === META_HOSTS.token).length).toBe(asked);
 });
 
@@ -194,18 +195,18 @@ test("a Meta account with no active plan is refused rather than stored", async (
         mint: () => ({ api_key: "LLM|useless", user_email: "someone@example.com", require_payment: true }),
     });
     const { store } = await startMeta(vendor);
-    await vi.advanceTimersByTimeAsync(6_000);
+    await advanceTimersByTimeAsync(6_000);
     expect(await connected(store)).toEqual([]);
 });
 
 test("cancelling a Meta sign-in stops its poll", async () => {
     const vendor = metaVendor({ tokenAnswers: [() => ({ error: "authorization_pending" })] });
     const { store, started } = await startMeta(vendor);
-    await vi.advanceTimersByTimeAsync(6_000);
+    await advanceTimersByTimeAsync(6_000);
     const asked = vendor.calls.filter((call) => call.url === META_HOSTS.token).length;
 
     cancelMintedLogin("meta", started.handshake);
-    await vi.advanceTimersByTimeAsync(30_000);
+    await advanceTimersByTimeAsync(30_000);
     expect(vendor.calls.filter((call) => call.url === META_HOSTS.token).length, "a cancelled sign-in kept polling").toBe(asked);
     expect(await connected(store)).toEqual([]);
 });
@@ -253,7 +254,7 @@ test("Z.ai's international sign-in polls to completion and provisions the plan's
     expect(started.code).toBe("");
     expect(started.state).toBe("");
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTimersByTimeAsync(5_000);
 
     const stored = await connected(store);
     // The credential is the pair: the international Anthropic surface wants `<apiKey>.<secretKey>` and refuses either
@@ -321,7 +322,7 @@ test("the pasted address finishes a mainland sign-in and provisions its key", as
         // BigModel names the grant `authCode`, which is the one word this whole paste-back turns on.
         redirectUrl: `http://127.0.0.1:8317/callback?authCode=grant-abc&state=${started.state}`,
     });
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceTimersByTimeAsync(100);
 
     const stored = await connected(store);
     expect(stored[0]?.apiKey).toBe("ak-made.sk-secret");
@@ -348,7 +349,7 @@ test("an address from a different sign-in is refused and redeems nothing", async
             redirectUrl: "http://127.0.0.1:8317/callback?authCode=grant-abc&state=some-other-attempt",
         }),
     ).toThrow(/different sign-in/);
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceTimersByTimeAsync(100);
     expect(vendor.calls).toEqual([]);
     expect(await connected(store)).toEqual([]);
 });
@@ -364,7 +365,7 @@ test("an address carrying the vendor's error fails the sign-in in the vendor's w
             redirectUrl: "http://127.0.0.1:8317/callback?error=access_denied&error_description=You%20declined%20it",
         }),
     ).toThrow("You declined it");
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceTimersByTimeAsync(100);
     expect(await connected(store)).toEqual([]);
 });
 

@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // Walks the repo for anything that hand-rolls the sandbox container's run shape (a container started with the workspace
 // volume at /work) instead of composing from @intentic/sandbox-run or using the image's own CLI verb.
@@ -80,7 +80,7 @@ test("no file in the repo hand-rolls a sandbox container run: TS composes from t
             expect(CONTRACT.test(content), `${rel}: a TS creation path must compose its run from @intentic/sandbox-run`).toBe(true);
             continue;
         }
-        expect.fail(`${rel}: hand-rolled sandbox docker run — execute \`intentic ${VERB}\` (the image speaks the run contract) instead`);
+        throw new Error(`${rel}: hand-rolled sandbox docker run — execute \`intentic ${VERB}\` (the image speaks the run contract) instead`);
     }
 }, 20_000);
 
@@ -109,8 +109,9 @@ test("a setup code reaches ic as a value: minted without a hyphen, and passed be
         ).toBe(true);
     }
     const minter = await readFile(join(REPO_ROOT, CODE_MINTER), "utf8");
-    expect(minter.includes(BASE62), `${CODE_MINTER}: must mint from the base62 alphabet — its own comment says what the two extra characters cost.`).toBe(
-        true,
-    );
+    expect(
+        minter.includes(BASE62),
+        `${CODE_MINTER}: must mint from the base62 alphabet — its own comment says what the two extra characters cost.`,
+    ).toBe(true);
     expect(BASE64URL_CALL.test(minter), `${CODE_MINTER}: minting base64url again, so one secret in 64 starts with a hyphen.`).toBe(false);
 });

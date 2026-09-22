@@ -1,26 +1,28 @@
-// @vitest-environment jsdom
 // The corner this pins: a bar arrives at the window's right edge with its own controls at its right end, and the
 // reserve for the window's buttons only reached it on the NEXT frame, so one frame painted that bar's last control
 // under the buttons. Every view mounts through a dynamic import, so no click, keypress or route change is still
 // pending when its bars land; the measurement has to follow the document instead. Frames are pumped by hand here,
 // and the assertions that matter are the ones made without pumping one.
+import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
+import { stubGlobal, unstubAllGlobals, mocked } from "@intentic/testing/bun";
 import { type App, createApp } from "vue";
 import { workDesktopWindow } from "../../app/environments/desktop";
 import WindowControls from "./WindowControls.vue";
+import * as desktopOriginal from "../../app/environments/desktop";
 
 // Partial, over the real module: the component reaches for whatever the desktop lane grows next, and a mock listing
 // its exports by hand fails the mount the day one is added.
-vi.mock(import("../../app/environments/desktop"), async (importOriginal) => ({
-    ...(await importOriginal()),
+mock.module("../../app/environments/desktop", () => ({
+    ...desktopOriginal,
     desktopFrameless: () => true,
     // Both fire on mount; the real ones navigate to an `intentic://` link jsdom cannot follow.
-    workDesktopWindow: vi.fn(),
-    announceDesktopMode: vi.fn(),
+    workDesktopWindow: mock(),
+    announceDesktopMode: mock(),
 }));
 
-vi.mock("vue-router", () => ({ useRoute: () => ({ fullPath: `/workspace` }) }));
+mock.module("vue-router", () => ({ useRoute: () => ({ fullPath: `/workspace` }) }));
 
 const RESERVE = `padding-inline-end`;
 
@@ -45,7 +47,7 @@ const mountControls = (): void => {
 // top-right corner of a 1280-wide window, and every bar running the window's full width along the top edge — into
 // the corner, which is exactly the case under test.
 const layOut = (): void => {
-    vi.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockImplementation(function (this: HTMLElement) {
+    spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockImplementation(function (this: HTMLElement) {
         return this.classList.contains(`window-controls`) ? new DOMRect(1160, 0, 120, 36) : new DOMRect(0, 0, 1280, 36);
     });
 };
@@ -70,11 +72,11 @@ beforeEach(() => {
     document.body.replaceChildren();
     pending = undefined;
     layOut();
-    vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback) => {
+    stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback) => {
         pending = callback;
         return 1;
     });
-    vi.stubGlobal(`cancelAnimationFrame`, () => {
+    stubGlobal(`cancelAnimationFrame`, () => {
         pending = undefined;
     });
 });
@@ -82,8 +84,8 @@ beforeEach(() => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+    unstubAllGlobals();
+    jest.restoreAllMocks();
 });
 
 it(`reserves the corner on a bar that arrived after mount, before the frame it would have painted under the buttons in`, async () => {
@@ -134,7 +136,7 @@ it(`draws the window's three buttons and marks the document frameless for as lon
    page itself has started a drag. A click on the background, or a drag a surface took over, used to leave the window
    glued to the pointer. */
 describe(`a press on the background`, () => {
-    const verb = vi.mocked(workDesktopWindow);
+    const verb = mocked(workDesktopWindow);
     let ground: HTMLElement;
 
     // Below the title band (the buttons are 36 high), on a plain element: nothing claims it, so it is the window's.
@@ -145,10 +147,27 @@ describe(`a press on the background`, () => {
         window.dispatchEvent(new MouseEvent(`pointermove`, { bubbles: true, buttons, clientX: x, clientY: y }));
     };
 
+    // jsdom lays nothing out: an element wide enough that no press lands on its scrollbar edge. Defined rather than
+    // spied on, since a spy cannot stand in for an accessor.
+    const measured: [string, PropertyDescriptor | undefined][] = [];
+    const sized = (name: "clientWidth" | "clientHeight", value: number): void => {
+        measured.push([name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)]);
+        Object.defineProperty(HTMLElement.prototype, name, { configurable: true, get: () => value });
+    };
+
+    afterEach(() => {
+        for (const [name, descriptor] of measured.splice(0)) {
+            if (descriptor === undefined) {
+                delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
+            } else {
+                Object.defineProperty(HTMLElement.prototype, name, descriptor);
+            }
+        }
+    });
+
     beforeEach(() => {
-        // jsdom lays nothing out: an element wide enough that no press lands on its scrollbar edge.
-        vi.spyOn(HTMLElement.prototype, `clientWidth`, `get`).mockReturnValue(1280);
-        vi.spyOn(HTMLElement.prototype, `clientHeight`, `get`).mockReturnValue(800);
+        sized(`clientWidth`, 1280);
+        sized(`clientHeight`, 800);
         ground = document.createElement(`div`);
         document.body.append(ground);
         mountControls();

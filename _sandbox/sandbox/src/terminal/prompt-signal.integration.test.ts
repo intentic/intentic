@@ -1,7 +1,8 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { watchPromptSignals } from "./prompt-signal.js";
 
 // What the image's zsh hook does on every prompt: `: >| .../prompt`, which creates the file the first time and
@@ -16,10 +17,10 @@ test("a shell reaching its prompt wakes the feed, first prompt and every one aft
     }, dir);
 
     touch(dir);
-    await vi.waitFor(() => expect(signals).toBeGreaterThan(0));
+    await waitFor(() => expect(signals).toBeGreaterThan(0));
     const created = signals;
     touch(dir);
-    await vi.waitFor(() => expect(signals).toBeGreaterThan(created));
+    await waitFor(() => expect(signals).toBeGreaterThan(created));
     stop();
 });
 

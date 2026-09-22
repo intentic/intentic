@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { applyEdit, fileAnchor, renderForRead } from "./hashline.js";
 
 // Pull the anchor + per-line tags out of a hashline_read view, the way the model would when composing an edit.

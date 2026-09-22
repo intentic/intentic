@@ -10,10 +10,11 @@ weighs against everything else in its context; a failing rule is a fact it has t
 
 | | what it is | run by |
 |---|---|---|
-| `/.oxlintrc.json` | the whole standard — 264 rules, green on main | `pnpm lint`, editors, the stop gate |
+| `/.oxlintrc.json` | the whole standard — 251 rules, green on main | `pnpm lint`, editors, the stop gate |
 | `/.oxlintrc.agent.json` | the above plus rules main cannot meet yet | the edit hook, `pnpm lint:agent` |
-| `/.oxlintrc.plugins.json` | the above plus the JS-plugin rules | `pnpm lint:plugins` — installed, not yet what the edit hook runs |
-| `_tools/oxlint/anti-slop/` | vendored rule sources | loaded by the config above |
+| `/.oxlintrc.plugins.json` | the above plus anti-slop and cognitive complexity | `pnpm lint:plugins` — installed, not yet what the edit hook runs |
+| `_tools/oxlint/bun-test/` | test-hygiene rules for `bun:test` suites | `/.oxlintrc.json`, so every config above |
+| `_tools/oxlint/anti-slop/` | vendored rule sources | `/.oxlintrc.plugins.json` |
 
 The root config is what main satisfies. The agent config is what code written from here on is held to: it
 currently carries one rule, cyclomatic `complexity: 10`, which 737 existing functions across 517 files exceed —
@@ -80,8 +81,8 @@ being told to do in the middle of a task.
 The root config carries the reasoning inline, next to each rule. They fall into three groups.
 
 **Wrong about this codebase.** `no-await-in-loop` (953 hits, sequential writes that are the intent);
-`vitest/require-mock-type-parameters` (977, ceremony); `unicorn/consistent-function-scoping` (185, deliberate
-factory closures); `unicorn/no-hex-escape` (control characters this repo handles on purpose).
+`unicorn/consistent-function-scoping` (185, deliberate factory closures); `unicorn/no-hex-escape` (control
+characters this repo handles on purpose).
 
 **Punishing the code that does the right thing.** Each of these was sampled at its own call sites before being
 switched off — the test is not "is the rule reasonable in the abstract" but "is the code it flags here worse
@@ -97,10 +98,6 @@ than the code it would produce":
   one expression earlier. `toSorted()` there allocates a second array to throw the first away.
 - `promise/no-multiple-resolved` counted the two arms of `port === 0 ? reject(…) : resolve(…)` as two
   resolutions of one promise.
-- `vitest/no-conditional-expect` breaks table-driven tests, which is how most suites here are written.
-- `vitest/valid-title` demands a literal, outlawing `test(name, …)` — every parameterised suite.
-- `vitest/no-commented-out-tests` was 100% false positives, matching the word "it" followed by a parenthesis in
-  English prose, in files that are not tests.
 - `promise/no-callback-in-promise` and `no-promise-in-callback` fired on
   `handleEntry(...).then(() => next(), fail)` inside a tar-stream handler — the only way to drive a callback
   API from a promise.
@@ -144,8 +141,8 @@ promises.
 
 **What is decidable is the opposite: an assertion that cannot fail.** `toBeDefined` says only "not undefined";
 `toBeTruthy` passes for any non-empty string and every object ever constructed. That is a shape.
-`jest/no-restricted-matchers` carries the ban list, and the `help` text on each entry is the rule rather than
-decoration — oxlint prints it under the diagnostic and it is the only part an agent can act on.
+`bun-test/no-restricted-matchers` carries the ban list, and the reason on each entry is the rule rather than
+decoration — it is printed with the diagnostic and is the only part an agent can act on.
 
 It is in the ROOT config, green, with no backlog. It started at 328 sites (`toBeDefined` 254,
 `toHaveBeenCalled` 46, `toBeTruthy` 18, `toBeFalsy` 5, `resolves.not.toThrow` 1) and every one was given the
@@ -168,10 +165,9 @@ arrives as an array and would have satisfied any presence check as `{}`; a rank 
 never compared against it, and so never made the claim in its own name; and a `window.open` spy never cleared
 between tests, so half a suite's counts depended on file order.
 
-`jest` is enabled as a plugin for this one rule, which oxlint ships in that namespace only. Oxlint's vitest
-plugin is largely the jest plugin renamed, so enabling both double-reports every rule that exists in each —
-measured, 288 + 127 `valid-expect`, 88 + 88 `require-to-throw-message`. Every jest twin is explicitly off next
-to the vitest decision it duplicates.
+The rule is this repo's own, for the reason the `bun-test` section below gives: oxlint's `jest/` and `vitest/`
+namespaces cannot see a suite that imports from `bun:test`, and the hit counts in the table above were measured
+while the suites still imported from `vitest`.
 
 **Neither half says whether a test detects a fault.** That question is answered by running the code broken and
 watching, which is two other things: the `verify-tests` rule, which at the end of a turn re-runs a new test
@@ -220,6 +216,45 @@ pnpm install && pnpm lint:types
 
 Expect a real backlog on first run; that measurement decides whether type-aware joins the stop gate or lands
 as the next ratchet entry.
+
+## bun-test
+
+`bun-test/` is six rules over the suites, configured in `/.oxlintrc.json` and gated by `pnpm lint`. They exist
+because **oxlint's own `jest/` and `vitest/` rules recognise a test function only when it is imported from
+`vitest` or `@jest/globals`.** Every one of the ~1,575 files here imports from `bun:test`, so the whole family
+was silent: measured, a file with `it.only`, `it.skip` and two identical titles reported three errors with a
+`vitest` import and zero with a `bun:test` one. `settings.jest` and `settings.vitest` carry no import-source
+option, so there was nothing to configure.
+
+| rule | replaces |
+|---|---|
+| `bun-test/no-focused-tests` | `vitest/no-focused-tests` |
+| `bun-test/no-disabled-tests` | `vitest/no-disabled-tests` |
+| `bun-test/no-identical-title` | `vitest/no-identical-title` |
+| `bun-test/no-restricted-matchers` | `jest/no-restricted-matchers` |
+| `bun-test/expect-expect` | `vitest/expect-expect` |
+| `bun-test/no-standalone-expect` | `vitest/no-standalone-expect` |
+
+**Every rule resolves the name to its import** before it fires, the way anti-slop's `no-module-mocking` does, so
+a local binding called `test` or `it` in production code is never a test, and `_tools/onboarding/specs` — whose
+`test.skip(condition, reason)` comes from `@playwright/test` — is left alone.
+
+Two places where the semantics are deliberate rather than inherited:
+
+- **The conditional forms are not disabled tests.** `describe.skipIf`, `test.skipIf`, `it.runIf` and `todoIf`
+  state the condition they wait on, which is the opposite of a test nobody checks. Only bare `.skip` and
+  `.todo` are rejected.
+- **A restriction names a whole chain.** `toBeTruthy` matches `expect(x).toBeTruthy()` and leaves
+  `expect(x).not.toBeTruthy()` alone, which is what `jest/no-restricted-matchers` did and what the negation
+  note above depends on: there are 368 `.not.toHaveBeenCalled()` call sites here and every one of them is a
+  strong assertion.
+
+`no-standalone-expect` also allows an `expect` inside a `beforeAll`/`afterEach` body, which oxlint's
+`vitest/no-standalone-expect` reports: a hook runs with the test, not with collection, and about 190 hook
+bodies here assert in one. An `expect` inside an ordinary helper function is allowed for the same reason —
+`route-turns.testing.ts` asserts the shape of an attach stream on behalf of its callers. What is left is the
+shape the rule is for: an assertion in a `describe` body or at module level, which runs once while bun is
+still reading the file.
 
 ## anti-slop
 

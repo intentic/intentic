@@ -1,6 +1,7 @@
-// @vitest-environment jsdom
-import { afterEach, expect, it, vi } from "vitest";
-import { createApp, h } from "vue";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { createApp, h, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { registerView } from "../../core-views/registry";
 import { sandboxSections } from "../../features/sandbox/sandboxNav";
@@ -17,22 +18,18 @@ import { useNavigationCommands } from "./useNavigationCommands";
 await startAppI18n();
 
 // Read inside the mock factories, so a test can set the grant and the plan before mounting.
-const state = vi.hoisted(() => ({ canShip: true, planOffered: true }));
+const state = hoisted(() => ({ canShip: true, planOffered: true }));
 
-vi.mock(`../../features/extensions/usePanels`, async () => {
-    const { ref } = await import(`vue`);
+mock.module(`../../features/extensions/usePanels`, () => {
     return { usePanels: () => ({ panels: ref([]), allPanels: ref([]), isLoading: ref(false), settled: ref(true) }) };
 });
-vi.mock(`../../features/capabilities/connect/useCapabilities`, async () => {
-    const { ref } = await import(`vue`);
+mock.module(`../../features/capabilities/connect/useCapabilities`, () => {
     return { useCapabilities: () => ({ capabilities: ref([]), settled: ref(true) }) };
 });
-vi.mock(`../../features/sandbox/secrets/useRole`, async () => {
-    const { ref } = await import(`vue`);
+mock.module(`../../features/sandbox/secrets/useRole`, () => {
     return { useRole: () => ({ canShip: ref(state.canShip), isGuest: ref(false) }) };
 });
-vi.mock(`../../features/settings/hosted-plan/useHostedPlan`, async () => {
-    const { ref } = await import(`vue`);
+mock.module(`../../features/settings/hosted-plan/useHostedPlan`, () => {
     return { useHostedPlan: () => ({ offered: ref(state.planOffered) }) };
 });
 

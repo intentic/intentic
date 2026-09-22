@@ -1,5 +1,5 @@
 import { capabilitiesOf } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { promptDisclosure } from "./prompt-disclosure.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 

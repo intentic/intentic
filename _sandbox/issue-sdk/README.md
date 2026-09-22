@@ -58,7 +58,7 @@ check that build out and read your real frames — **there are no sourcemaps to 
 
 ```sh
 ./node_modules/.bin/vite build     # → dist/sdk.js (IIFE) + dist/sdk.mjs (ESM)
-./node_modules/.bin/vitest run
+pnpm test
 ```
 
 The daemon takes this package as a **prod dependency** and resolves `dist/sdk.js` through its export, so

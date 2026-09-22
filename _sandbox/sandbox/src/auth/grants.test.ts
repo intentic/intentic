@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { ControlTokens } from "./control-tokens.js";
 import { type Grant, grantsOf } from "./grants.js";
 

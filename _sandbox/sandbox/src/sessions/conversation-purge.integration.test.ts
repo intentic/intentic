@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { purgeConversationState, type PurgeConversation } from "./conversation-purge.js";
 import { claudeStoreOf } from "./session-store.js";
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { parseRtf } from "./parse";
 import { textOfBlock, type Block } from "../odf/document-model";
 

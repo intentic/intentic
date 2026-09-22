@@ -1,5 +1,5 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { containerUrlFix, expandPaste, normalizeFieldValue, wireguardSummary } from "./normalize";
 
 // Repair before refusing: each case is something a person actually pastes or types, and what the

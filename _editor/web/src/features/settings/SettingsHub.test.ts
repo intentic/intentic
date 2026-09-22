@@ -1,28 +1,28 @@
-// @vitest-environment jsdom
 //
 // THE ADDRESS STRIPE SENDS A PAYER BACK TO. `/settings/billing?plan=welcome` is always a cold load, and Billing is
 // the one section of this hub drawn off a read — so on that first frame the index does not list it. A hub that
 // judges an unlisted slug unknown cleans the address away, and the payer lands on another section with the query
 // gone, which is the only input the page's post-checkout wait has.
+import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 
 // The plan read still in flight: `enabled` unanswered, so the Billing row has nothing to be drawn from yet.
 const planLoading = ref(true);
-vi.mock(`./hosted-plan/useHostedPlan`, () => ({
+mock.module(`./hosted-plan/useHostedPlan`, () => ({
     useHostedPlan: () => ({ offered: ref(false), isLoading: planLoading }),
 }));
 
-// vi.mock calls are hoisted, so each specifier must be a literal string; can't loop over the section list.
+// A mock.module specifier must be a literal string, so the section list cannot be looped over here.
 const stub = (slug: string) => ({ default: defineComponent({ render: () => h(`section`, { "data-section": slug }) }) });
-vi.mock(`./SettingsProfile.vue`, () => stub(`profile`));
-vi.mock(`./SettingsBilling.vue`, () => stub(`billing`));
-vi.mock(`./SettingsAppearance.vue`, () => stub(`appearance`));
-vi.mock(`./SettingsNotifications.vue`, () => stub(`notifications`));
-vi.mock(`./SettingsKeybindings.vue`, () => stub(`keybindings`));
-vi.mock(`./SettingsData.vue`, () => stub(`data`));
+mock.module(`./SettingsProfile.vue`, () => stub(`profile`));
+mock.module(`./SettingsBilling.vue`, () => stub(`billing`));
+mock.module(`./SettingsAppearance.vue`, () => stub(`appearance`));
+mock.module(`./SettingsNotifications.vue`, () => stub(`notifications`));
+mock.module(`./SettingsKeybindings.vue`, () => stub(`keybindings`));
+mock.module(`./SettingsData.vue`, () => stub(`data`));
 
 const { default: SettingsHub } = await import("./SettingsHub.vue");
 

@@ -1,6 +1,7 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { InlineRename } from "@intentic/ui";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 
 // The app's one rename control lives in @intentic/ui, which has no test runner; its contract is pinned here.
@@ -48,14 +49,14 @@ afterEach(() => {
 });
 
 it(`reads as text until it is pressed, and says so to a screen reader`, () => {
-    const host = mount({ value: `radarsu-intentic`, write: vi.fn(), action: `Rename sandbox` });
+    const host = mount({ value: `radarsu-intentic`, write: mock(), action: `Rename sandbox` });
     expect(host.querySelector(`input`)).toBeNull();
     expect(name(host).textContent).toBe(`radarsu-intentic, Rename sandbox`);
     expect(name(host).querySelector(`.sr-only`)?.textContent).toBe(`, Rename sandbox`);
 });
 
 it(`opens a field carrying the name, selected, in the text's own place`, async () => {
-    const host = mount({ value: `radarsu-intentic`, write: vi.fn() });
+    const host = mount({ value: `radarsu-intentic`, write: mock() });
     name(host).click();
     await nextTick();
 
@@ -65,7 +66,7 @@ it(`opens a field carrying the name, selected, in the text's own place`, async (
     expect(document.activeElement).toBe(input);
     // Selected, not just focused, so the first keystroke replaces the name. A tick behind the mount: v-model
     // writes the value in its own mounted hook, and a selection made before that would be of the empty string.
-    await vi.waitFor(() => expect(input.selectionEnd).toBe(`radarsu-intentic`.length));
+    await waitFor(() => expect(input.selectionEnd).toBe(`radarsu-intentic`.length));
     expect(input.selectionStart).toBe(0);
 });
 
@@ -73,7 +74,7 @@ it(`opens a field carrying the name, selected, in the text's own place`, async (
 // With both present the cell is as wide as the longer, which is why the field starts the width of the name it
 // replaced and grows with what is typed instead of jumping to a fixed width.
 it(`sizes the box from the name at rest and from the draft while typing`, async () => {
-    const host = mount({ value: `radarsu-intentic`, write: vi.fn() });
+    const host = mount({ value: `radarsu-intentic`, write: mock() });
     expect(twins(host)).toEqual([`radarsu-intentic`]);
 
     name(host).click();
@@ -87,7 +88,7 @@ it(`sizes the box from the name at rest and from the draft while typing`, async 
 // Nothing appears beside the name when editing starts: the row holds the same two boxes in both modes, the
 // affordance slot simply changes which glyph it carries.
 it(`adds no control to the row when the mode changes`, async () => {
-    const host = mount({ value: `radarsu-intentic`, write: vi.fn() });
+    const host = mount({ value: `radarsu-intentic`, write: mock() });
     expect(root(host).children.length).toBe(2);
     expect(root(host).querySelectorAll(`button`).length).toBe(2);
 
@@ -99,31 +100,31 @@ it(`adds no control to the row when the mode changes`, async () => {
 });
 
 it(`commits the trimmed name on Enter and closes`, async () => {
-    const write = vi.fn<(next: string) => Promise<void>>().mockResolvedValue(undefined);
+    const write = mock<(next: string) => Promise<void>>().mockResolvedValue(undefined);
     const host = mount({ value: `radarsu-intentic`, write });
     name(host).click();
     await nextTick();
     await type(host, `  workbench  `);
     await press(host, `Enter`);
 
-    await vi.waitFor(() => expect(write).toHaveBeenCalledWith(`workbench`));
+    await waitFor(() => expect(write).toHaveBeenCalledWith(`workbench`));
     expect(write).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(host.querySelector(`input`)).toBeNull());
+    await waitFor(() => expect(host.querySelector(`input`)).toBeNull());
 });
 
 it(`commits on blur, so clicking away keeps what was typed`, async () => {
-    const write = vi.fn<(next: string) => Promise<void>>().mockResolvedValue(undefined);
+    const write = mock<(next: string) => Promise<void>>().mockResolvedValue(undefined);
     const host = mount({ value: `radarsu-intentic`, write });
     name(host).click();
     await nextTick();
     await type(host, `workbench`);
     field(host).dispatchEvent(new FocusEvent(`blur`));
 
-    await vi.waitFor(() => expect(write).toHaveBeenCalledWith(`workbench`));
+    await waitFor(() => expect(write).toHaveBeenCalledWith(`workbench`));
 });
 
 it(`writes nothing on Escape, and nothing for a name that did not change`, async () => {
-    const write = vi.fn<(next: string) => Promise<void>>().mockResolvedValue(undefined);
+    const write = mock<(next: string) => Promise<void>>().mockResolvedValue(undefined);
     const host = mount({ value: `radarsu-intentic`, write });
 
     name(host).click();
@@ -141,7 +142,7 @@ it(`writes nothing on Escape, and nothing for a name that did not change`, async
 });
 
 it(`writes nothing for an emptied name, rather than saving a nameless thing`, async () => {
-    const write = vi.fn<(next: string) => Promise<void>>().mockResolvedValue(undefined);
+    const write = mock<(next: string) => Promise<void>>().mockResolvedValue(undefined);
     const host = mount({ value: `radarsu-intentic`, write });
     name(host).click();
     await nextTick();
@@ -154,7 +155,7 @@ it(`writes nothing for an emptied name, rather than saving a nameless thing`, as
 
 // The failure the three hand-rolled sites all got wrong: they closed the field and threw the typed name away.
 it(`keeps the field open with the typed name when the write refuses, and floats the reason`, async () => {
-    const write = vi.fn<(next: string) => Promise<void>>().mockRejectedValue(new Error(`The sandbox is offline.`));
+    const write = mock<(next: string) => Promise<void>>().mockRejectedValue(new Error(`The sandbox is offline.`));
     const host = mount({ value: `radarsu-intentic`, write, failure: `Couldn't save the sandbox's name.` });
     name(host).click();
     await nextTick();
@@ -163,7 +164,7 @@ it(`keeps the field open with the typed name when the write refuses, and floats 
 
     // Teleported to the document, fixed against the field's own window: this control is dropped into row groups
     // and cards that clip their overflow, and a refusal drawn inside one is cut off on the last row of a list.
-    const alert = await vi.waitFor(() => document.body.querySelector<HTMLElement>(`[role="alert"]`)!);
+    const alert = await waitFor(() => document.body.querySelector<HTMLElement>(`[role="alert"]`)!);
     expect(alert.parentElement).toBe(document.body);
     expect(alert.textContent).toBe(`The sandbox is offline.`);
     expect(alert.className).toContain(`fixed`);
@@ -173,19 +174,19 @@ it(`keeps the field open with the typed name when the write refuses, and floats 
 });
 
 it(`says the app's own sentence when the refusal has no message of its own`, async () => {
-    const write = vi.fn<(next: string) => Promise<void>>().mockRejectedValue(new Error(``));
+    const write = mock<(next: string) => Promise<void>>().mockRejectedValue(new Error(``));
     const host = mount({ value: `radarsu-intentic`, write, failure: `Couldn't save the sandbox's name.` });
     name(host).click();
     await nextTick();
     await type(host, `workbench`);
     await press(host, `Enter`);
 
-    const alert = await vi.waitFor(() => document.body.querySelector<HTMLElement>(`[role="alert"]`)!);
+    const alert = await waitFor(() => document.body.querySelector<HTMLElement>(`[role="alert"]`)!);
     expect(alert.textContent).toBe(`Couldn't save the sandbox's name.`);
 });
 
 it(`draws a nameless thing in its fallback words, and caps what can be typed`, async () => {
-    const host = mount({ value: undefined, write: vi.fn(), fallback: `Sandbox`, maxlength: 60 });
+    const host = mount({ value: undefined, write: mock(), fallback: `Sandbox`, maxlength: 60 });
     expect(name(host).textContent).toBe(`Sandbox, Rename`);
 
     name(host).click();
@@ -195,7 +196,7 @@ it(`draws a nameless thing in its fallback words, and caps what can be typed`, a
 });
 
 it(`is plain text where the name is not the reader's to change`, () => {
-    const host = mount({ value: `radarsu-intentic`, write: vi.fn(), editable: false });
+    const host = mount({ value: `radarsu-intentic`, write: mock(), editable: false });
     expect(host.querySelector(`button`)).toBeNull();
     // The cell alone: no affordance slot to reserve when there is nothing to press.
     expect(root(host).children.length).toBe(1);

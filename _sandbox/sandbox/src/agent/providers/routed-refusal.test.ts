@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { probeRoutedEndpoint, routedRefusal, routedEndpointOf, transientUpstream } from "./routed-refusal.js";
 
 // Pins the distinction the module exists for: a 5xx to ride out vs. one to never wait for, both arriving from the SDK

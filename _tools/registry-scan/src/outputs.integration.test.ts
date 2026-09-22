@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { REGISTRY_FACTS_FILE, type RegistryFile } from "@intentic/registry";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { ListingProposal, ScanResult } from "./scan.js";
 import { writeScanOutputs } from "./outputs.js";
 
@@ -37,11 +37,7 @@ describe(`writeScanOutputs`, () => {
     it(`writes the summary when nothing is proposed: the steady state once every tagged repo is listed`, async () => {
         const dir = root();
         const listed = [{ name: "intentic.example", stars: 3, pushedAt: SCANNED_AT }];
-        await writeScanOutputs(
-            dir,
-            file,
-            result({ facts: { scannedAt: SCANNED_AT, entries: listed } }),
-        );
+        await writeScanOutputs(dir, file, result({ facts: { scannedAt: SCANNED_AT, entries: listed } }));
 
         const summary = await readFile(join(dir, ".scan", "summary.md"), "utf8");
         expect(summary).toContain(`**${listed.length}**`);
@@ -54,7 +50,8 @@ describe(`writeScanOutputs`, () => {
         await writeScanOutputs(dir, file, result({ proposals: [proposal] }));
 
         const proposalDir = join(dir, ".scan", "proposals", "acme.incidents");
-        expect(await readdir(proposalDir)).toEqual(["body.md", "marketplace.json", "title.txt"].toSorted());
+        // Sorted here: a directory listing has no order of its own, and bun and node hand back different ones.
+        expect((await readdir(proposalDir)).toSorted()).toEqual(["body.md", "marketplace.json", "title.txt"]);
         expect(JSON.parse(await readFile(join(proposalDir, "marketplace.json"), "utf8"))).toEqual({ name: "intentic", plugins: [proposal.entry] });
         expect(await readFile(join(proposalDir, "title.txt"), "utf8")).toBe(`Add acme.incidents (acme/incidents)\n`);
         expect(await readFile(join(proposalDir, "body.md"), "utf8")).toContain(`| Pinned commit | \`${SHA}\` |`);

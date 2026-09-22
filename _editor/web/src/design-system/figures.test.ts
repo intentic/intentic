@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { type BarsFigure, type DagFigure, parseFigure, splitFigureSegments, type StatsFigure } from "@intentic/ui/markdown";
 
 // The figure fences generated documentation is authored with; lives here since @intentic/ui ships no test runner. The

@@ -5,8 +5,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { workspacePaths } from "../workspace/workspace.js";
 import type { Capability } from "@intentic/sandbox-contract";
 
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 
 import { createApp } from "../app.js";
 
@@ -154,7 +154,7 @@ test("secrets.set / remove rewrite .env and fire a best-effort `secrets push` fo
     expect((await client.secrets.list()).keys.toSorted()).toEqual(["EXTRA_TOKEN", "HOST_SSH_KEY", "MyMixed_Key"]);
     await client.secrets.remove({ key: "EXTRA_TOKEN" });
     expect((await client.secrets.list()).keys.toSorted()).toEqual(["HOST_SSH_KEY", "MyMixed_Key"]);
-    await vi.waitFor(
+    await waitFor(
         () =>
             expect(pushes).toEqual([
                 ["deploy", "secrets", "push"],

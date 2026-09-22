@@ -1,12 +1,13 @@
-// @vitest-environment jsdom
 // The view forwards input only while the user has taken control, so every handler here has two answers; paste
 // exists separately since the remote Chromium's clipboard is inside the sandbox, unreachable from the user's
 // machine.
-import { expect, test, vi } from "vitest";
+import "@intentic/testing/dom";
+import { test, expect, mock } from "bun:test";
+import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { effectScope, ref } from "vue";
 
 // The ticket mint is an HTTP round trip; only the socket's URL matters to this suite.
-vi.mock(`../sandbox/session/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.test/system/browser-view` }));
+mock.module(`../sandbox/session/wsTicket`, () => ({ socketUrl: async () => `wss://sandbox.test/system/browser-view` }));
 
 const { useBrowserView } = await import(`./useBrowserView`);
 
@@ -52,7 +53,7 @@ const mouse = (over: Partial<MouseEvent> = {}): MouseEvent =>
         metaKey: false,
         shiftKey: false,
         altKey: false,
-        preventDefault: vi.fn(),
+        preventDefault: mock(),
         ...over,
     }) as unknown as MouseEvent;
 
@@ -64,7 +65,7 @@ const press = (key: string, held: { ctrl?: boolean; shift?: boolean } = {}): Key
         metaKey: false,
         shiftKey: held.shift === true,
         altKey: false,
-        preventDefault: vi.fn(),
+        preventDefault: mock(),
     }) as unknown as KeyboardEvent;
 
 // A paste as the host browser delivers it: the clipboard answers by MIME type, and only text is asked for.
@@ -80,7 +81,7 @@ const connected = async (): Promise<{
     socket: () => FakeSocket;
 }> => {
     const sockets: FakeSocket[] = [];
-    vi.stubGlobal(
+    stubGlobal(
         `WebSocket`,
         class extends FakeSocket {
             constructor() {
@@ -91,7 +92,7 @@ const connected = async (): Promise<{
     );
     const view = effectScope().run(() => useBrowserView(ref(`browser-abc12345`)))!;
     // connect() awaits the ticket before it constructs anything.
-    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    await waitFor(() => expect(sockets).toHaveLength(1));
     // Geometry comes off the wire, so a test needing readable coordinates must say what the picture is, as the daemon
     // does. `stage()` matches this size, so the letterbox arithmetic is the identity and a click lands where aimed.
     sockets[0]!.deliver({ type: `ready`, kind: `frames`, width: 1280, height: 800 });
@@ -107,7 +108,7 @@ test("a paste from the user's own machine arrives as text the remote page can re
 
     // Ctrl/Cmd+V must stay with the host: swallowing it would stop the paste event from ever firing, and the remote
     // clipboard it would reach isn't the user's.
-    const chord = { key: `v`, ctrlKey: true, metaKey: false, altKey: false, preventDefault: vi.fn() } as unknown as KeyboardEvent;
+    const chord = { key: `v`, ctrlKey: true, metaKey: false, altKey: false, preventDefault: mock() } as unknown as KeyboardEvent;
     view.onKeyDown(chord);
     expect(chord.preventDefault).not.toHaveBeenCalled();
 });
@@ -151,7 +152,7 @@ test("nothing is typed into a browser the user is only watching", async () => {
 // is read back before the chord is let through, since the same path also carries Ctrl+X, which would delete the
 // text first.
 test("copying puts the remote page's selection on the user's own clipboard, then lets the chord through", async () => {
-    const writeText = vi.fn(async () => {});
+    const writeText = mock(async () => {});
     Object.defineProperty(navigator, `clipboard`, { value: { writeText }, configurable: true });
     const { view, wire, socket } = await connected();
     view.driving.value = true;
@@ -162,8 +163,8 @@ test("copying puts the remote page's selection on the user's own clipboard, then
     expect(wire()).not.toContainEqual({ type: `key`, key: `x`, ctrl: true });
 
     socket().deliver({ type: `selection`, text: `one-time 314159` });
-    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith(`one-time 314159`));
-    await vi.waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `x`, ctrl: true }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith(`one-time 314159`));
+    await waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `x`, ctrl: true }));
 });
 
 // Chromium decides a drag from the buttons currently held, not the last press; a move reporting none is a move
@@ -238,7 +239,7 @@ test("no pointer event reaches a browser the user is only watching", async () =>
 // settled.
 test("a frame arrives as bytes, and its tag byte decides how it is read", async () => {
     const made: string[] = [];
-    vi.stubGlobal(`URL`, {
+    stubGlobal(`URL`, {
         createObjectURL: (blob: Blob) => {
             made.push(blob.type);
             return `blob:frame-${made.length}`;
@@ -261,7 +262,7 @@ test("a frame arrives as bytes, and its tag byte decides how it is read", async 
 // stream) and geometry (the whole window, not just the page), since assuming either would misplace every click.
 test("a video stream is announced by its ready, and the geometry it brings is what clicks are measured against", async () => {
     const decoded: { codec?: string; chunks: { key: boolean; bytes: number[] }[] } = { chunks: [] };
-    vi.stubGlobal(
+    stubGlobal(
         `VideoDecoder`,
         class {
             state = `configured`;
@@ -274,7 +275,7 @@ test("a video stream is announced by its ready, and the geometry it brings is wh
             close(): void {}
         },
     );
-    vi.stubGlobal(
+    stubGlobal(
         `EncodedVideoChunk`,
         class {
             constructor(readonly init: { type: string; data: Uint8Array }) {
@@ -302,7 +303,7 @@ test("a video stream is announced by its ready, and the geometry it brings is wh
 
 // No decoder means no fallback; saying so beats a permanently black rectangle that looks like a stopped browser.
 test("a client that cannot decode video says so instead of showing nothing", async () => {
-    vi.stubGlobal(`VideoDecoder`, undefined);
+    stubGlobal(`VideoDecoder`, undefined);
     const { view, socket } = await connected();
 
     socket().deliver({ type: `ready`, kind: `video`, width: 1280, height: 880, codec: `avc1.42C028` });
@@ -324,14 +325,14 @@ test("the pointer takes the shape the remote page would give it", async () => {
 // A copy over nothing selected must not leave stale text on the clipboard, and must still let the page have its
 // chord, in case the site binds Ctrl+C itself.
 test("copying an empty selection writes nothing", async () => {
-    const writeText = vi.fn(async () => {});
+    const writeText = mock(async () => {});
     Object.defineProperty(navigator, `clipboard`, { value: { writeText }, configurable: true });
     const { view, wire, socket } = await connected();
     view.driving.value = true;
 
     view.onKeyDown(press(`c`, { ctrl: true }));
     socket().deliver({ type: `selection`, text: `` });
-    await vi.waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `c`, ctrl: true }));
+    await waitFor(() => expect(wire()).toContainEqual({ type: `key`, key: `c`, ctrl: true }));
     expect(writeText).not.toHaveBeenCalled();
 });
 
@@ -407,7 +408,7 @@ test("the picture box's size is asked of the daemon once it settles, and only wh
 
     view.requestSize(900.4, 600.2);
     view.requestSize(900.4, 600.2);
-    await vi.waitFor(() => expect(wire()).toContainEqual({ type: `resize`, width: 900, height: 600 }));
+    await waitFor(() => expect(wire()).toContainEqual({ type: `resize`, width: 900, height: 600 }));
     expect(wire().filter((message) => (message as { type?: string }).type === `resize`)).toHaveLength(1);
 
     // A fresh `ready` for a stream the daemon restarted is not a new box; nothing is asked again.
@@ -418,7 +419,7 @@ test("the picture box's size is asked of the daemon once it settles, and only wh
 // On the video path a webp is the settled page's sharp still, laid over the canvas; it must never reach the <img>
 // the frames path uses, which would show it beside the video.
 test("a still on the video path goes to the canvas, not the img", async () => {
-    vi.stubGlobal(
+    stubGlobal(
         `VideoDecoder`,
         class {
             state = `configured`;

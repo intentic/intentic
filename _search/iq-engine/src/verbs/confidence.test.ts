@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { EngineHit } from "../types.js";
 import { fieldMargin } from "./dispatch.js";
 

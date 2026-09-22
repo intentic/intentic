@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { asLabel, createUi, estimate, humanDuration, truncate, wrap, type UiProcess } from "./ui.js";
 
 // plain is a wire contract: the desktop app parses its markers into a progress bar and CI reads them from a log, so the

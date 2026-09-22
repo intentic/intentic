@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { PROFILE_COOKIE, PROFILE_KEYS, PROFILE_PARAM, PROFILE_STORAGE_KEY, PROFILES, type Profile, type ProfileLook } from "@intentic/constants";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // index.html's pre-paint script adopts an arriving profile before any module loads, so it cannot import the table it
 // applies — it spells the values out. This reads them back and fails if they have parted from @intentic/constants.
@@ -29,7 +29,7 @@ describe(`the pre-paint profile script`, () => {
     it(`applies the same profiles the rest of the product ships`, () => {
         const applied = literal<Record<Profile, Record<string, string>>>(`PROFILES`);
         const expected = Object.fromEntries(Object.entries(PROFILES).map(([id, look]) => [id, asStored(look)]));
-        expect(applied).toEqual(expected);
+        expect<Record<string, Record<string, string>>>(applied).toEqual(expected);
     });
 
     // The release half of the rule: a key the incoming profile doesn't name must be cleared, not stranded. Only a key
@@ -70,7 +70,9 @@ const SCRIPT = [...html.matchAll(/<script>([\s\S]*?)<\/script>/gu)].map((match) 
 
 /** The attributes the served markup starts with; the script corrects these, it does not write them from nothing. */
 const tagAttributes = (): Map<string, string> =>
-    new Map([...(/<html([^>]*)>/u.exec(html)?.[1] ?? ``).matchAll(/([\w-]+)="([^"]*)"/gu)].map((attribute) => [attribute[1] ?? ``, attribute[2] ?? ``]));
+    new Map(
+        [...(/<html([^>]*)>/u.exec(html)?.[1] ?? ``).matchAll(/([\w-]+)="([^"]*)"/gu)].map((attribute) => [attribute[1] ?? ``, attribute[2] ?? ``]),
+    );
 
 interface BootResult {
     readonly stored: Record<string, string>;
@@ -162,7 +164,11 @@ describe(`arriving with a profile`, () => {
 
     // The rule that makes the link safe to click twice: what someone chose in Settings is theirs, not the link's.
     it(`leaves a look the reader chose for themselves, however they got here`, () => {
-        const chosen = { ...boot(`https://app.intentic.dev/login?profile=maker`).stored, [PROFILE_KEYS.skin]: `sanctum`, [PROFILE_KEYS.scheme]: `dark` };
+        const chosen = {
+            ...boot(`https://app.intentic.dev/login?profile=maker`).stored,
+            [PROFILE_KEYS.skin]: `sanctum`,
+            [PROFILE_KEYS.scheme]: `dark`,
+        };
         const { stored, attributes } = boot(`https://app.intentic.dev/login?profile=maker`, { stored: chosen });
         expect(stored[PROFILE_KEYS.skin]).toBe(`sanctum`);
         expect(stored[PROFILE_KEYS.scheme]).toBe(`dark`);
@@ -235,14 +241,26 @@ describe(`the light the first frame is painted in`, () => {
     });
 
     it(`obeys a pinned scheme over the system's`, () => {
-        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.scheme]: `light` } }, `dark`))).toEqual({ mode: undefined, skin: undefined });
-        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.scheme]: `dark` } }, `light`))).toEqual({ mode: `dark`, skin: `sanctum` });
+        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.scheme]: `light` } }, `dark`))).toEqual({
+            mode: undefined,
+            skin: undefined,
+        });
+        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.scheme]: `dark` } }, `light`))).toEqual({
+            mode: `dark`,
+            skin: `sanctum`,
+        });
     });
 
     // Sanctum is the app's DARK look and has no daylight dress, so a pinned skin and a pinned scheme are one choice
     // made twice; a pinned `none` is the way to have the dark scheme without the stone.
     it(`obeys a pinned skin over what the scheme would have asked for`, () => {
-        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.skin]: `none` } }, `dark`))).toEqual({ mode: `dark`, skin: undefined });
-        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.skin]: `sanctum` } }, `light`))).toEqual({ mode: undefined, skin: `sanctum` });
+        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.skin]: `none` } }, `dark`))).toEqual({
+            mode: `dark`,
+            skin: undefined,
+        });
+        expect(looks(boot(`https://app.intentic.dev/login`, { stored: { [PROFILE_KEYS.skin]: `sanctum` } }, `light`))).toEqual({
+            mode: undefined,
+            skin: `sanctum`,
+        });
     });
 });

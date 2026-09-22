@@ -1,6 +1,6 @@
 import { HISTORY_ROOT } from "@intentic/constants";
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { PersistedAgentSchema, type PersistedAgent } from "../registry/agents-store.js";
 import { fleetMessages, fleetRecall, fleetRoster, resolveHandle, type FleetRecallDeps } from "./fleet-recall.js";
 

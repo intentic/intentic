@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { ContextMenu } from "@intentic/ui";
 import type { MenuItem } from "primevue/menuitem";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -44,7 +44,7 @@ it(`carries the destination's real address, so the browser can act on it`, async
 });
 
 it(`lets the command own a plain click, without the anchor also loading the page`, async () => {
-    const command = vi.fn();
+    const command = mock();
     await mountMenu([item({ command })]);
 
     const event = new MouseEvent(`click`, { bubbles: true, cancelable: true });
@@ -57,7 +57,7 @@ it(`lets the command own a plain click, without the anchor also loading the page
 });
 
 it(`hands a modified click to the browser and holds the command back`, async () => {
-    const command = vi.fn();
+    const command = mock();
     await mountMenu([item({ command })]);
 
     const event = new MouseEvent(`click`, { bubbles: true, cancelable: true, ctrlKey: true });
@@ -70,7 +70,7 @@ it(`hands a modified click to the browser and holds the command back`, async () 
 });
 
 it(`leaves an ordinary command row alone: no address, and the click still runs it`, async () => {
-    const command = vi.fn();
+    const command = mock();
     await mountMenu([{ label: `Rename`, command }]);
 
     const row = rowNamed(`Rename`);

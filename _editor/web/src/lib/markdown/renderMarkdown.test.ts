@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
 // Needs jsdom: DOMPurify has no `sanitize` under node, and happy-dom strips tags but keeps `<script>` content, worse
 // than nothing. Only this file needs a document; the rest of the suite stays on node.
-import { beforeEach, describe, expect, it, test } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, test, expect, beforeEach } from "bun:test";
 import { watchEffect } from "vue";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { copyCodeFromEvent, escapeHtml } from "@intentic/ui/markdown";

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { registerTurn, SteeringQueue, steeringRelay, steerTurn, stopTurn, turnActive, turnSteered } from "./agent-steering.js";
 
 const drain = async (queue: SteeringQueue): Promise<string[]> => {

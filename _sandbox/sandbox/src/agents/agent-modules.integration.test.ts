@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { agentRepoModules } from "./land/agent-changes.js";
 import type { IsolatedAgent } from "./registry/agents-store.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";

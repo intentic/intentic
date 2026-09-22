@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { SchemeChoice } from "@intentic/ui";
 import type { Skin, SkinChoice } from "../../skins/useSkin";
 import { THEME_ROW, type ThemeRow, themeRowLook, themeRowValue } from "./themeRow";

@@ -1,7 +1,7 @@
 import { env } from "@intentic/graph";
 import type { CloudflareIntent, HostIntent, IntentSet } from "@intentic/need-resolver";
 import { needKey, resolveNeeds } from "@intentic/need-resolver";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Assignment } from "../emit/emit.js";
 import { emit } from "../emit/emit.js";
 import { forgejoCatalog } from "../lib/catalog.js";

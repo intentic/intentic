@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { compareModelIds, compareUnrankedModelIds, familyOf, namesThinking, releaseOf, tierRankOf } from "./model-order.js";
 
 // The order every provider's catalog is served and browsed in; only Anthropic's catalog arrives ranked, the rest hand

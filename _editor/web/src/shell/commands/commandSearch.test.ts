@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { nameScore, rankCommands } from "./commandSearch";
 import type { RegisteredCommand } from "./useCommands";
 

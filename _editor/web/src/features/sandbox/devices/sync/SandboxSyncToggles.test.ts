@@ -1,17 +1,17 @@
-// @vitest-environment jsdom
 // THE TOGGLE THAT STARTS FILE SYNC, on the row that is read about. What is pinned here is the choice it puts in front
 // of the reader: one folder per environment of the computer, each spelled in that environment's own filesystem, and a
 // command that carries the folder — because the folder is what decides which side ends up running mutagen.
+import "@intentic/testing/dom";
 import type { Device } from "@intentic/sandbox-contract";
 import { sandboxGroups } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import type { DeviceOps } from "../runners/deviceOps";
 import type { DeviceRow, MachineRow } from "../deviceRows";
 
-vi.mock(`../../client/useSandbox`, () => ({
+mock.module(`../../client/useSandbox`, () => ({
     useSandbox: () => ({ active: { value: { name: `work` } }, daemonUrl: { value: `https://sandbox-82789f4106b4.radarsu.com` } }),
 }));
 

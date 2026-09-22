@@ -1,6 +1,6 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createEngine, type Engine, IQ_DIR } from "./index.js";
 import { openIndex } from "./store/db.js";
 import { listFiles } from "./store/index-store.js";

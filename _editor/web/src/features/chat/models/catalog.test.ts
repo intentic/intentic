@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { statusIcon, statusTabClass } from "./catalog";
 
 /* The tab strip's two projections of one conversation's status, checked against the rule that decides how many of them are allowed to move. */

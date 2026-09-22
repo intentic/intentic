@@ -1,15 +1,17 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf, HARNESSES, PROVIDERS } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
+import * as onPathOriginal from "../../platform/boot/on-path.js";
+import * as engineResolveOriginal from "../../engines/engine-resolve.js";
 
 // opencode's health checks whether the feature pack is installed on the machine running the suite (present locally,
 // absent in CI); stubbed present so the tests only cover the credential logic.
-vi.mock("../../engines/engine-resolve.js", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("../../engines/engine-resolve.js")>()),
+mock.module("../../engines/engine-resolve.js", async () => ({
+    ...engineResolveOriginal,
     engineBinary: async () => "/usr/bin/opencode",
 }));
-vi.mock("../../platform/boot/on-path.js", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("../../platform/boot/on-path.js")>()),
+mock.module("../../platform/boot/on-path.js", async () => ({
+    ...onPathOriginal,
     onPath: async () => true,
 }));
 

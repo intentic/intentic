@@ -50,7 +50,8 @@ const fileExists = (path: string): Promise<boolean> =>
         () => false,
     );
 
-const credentialsPath = (): string => join(homedir(), ".git-credentials");
+// HOME is the home directory of record, read per call so a test can point it at a temp dir.
+const credentialsPath = (): string => join(process.env["HOME"] ?? homedir(), ".git-credentials");
 
 // Upserts the https credential line for this host (rewrites any prior line, e.g. a rotated token); a plain fs write
 // (0600), never a visible command.
@@ -134,8 +135,7 @@ const deleteKeyReal = async (host: GitHost, title: string): Promise<void> => {
         for (const key of keys.filter((entry) => entry.title === title)) {
             await fetch(`${host.apiBase}/user/keys/${key.id}`, { method: "DELETE", headers: listHeaders });
         }
-    } catch {
-    }
+    } catch {}
 };
 
 // Does the host let this key in? -T runs no command; IdentitiesOnly + -i offer exactly this key; BatchMode avoids

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { SshExecutor } from "../core/ssh.js";
 import { fakeForgejoApi } from "./forgejo-api.fake.js";
 import type { ForgejoHook } from "./forgejo-api.js";

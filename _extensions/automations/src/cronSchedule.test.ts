@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { ZoneSchema } from "@intentic/sandbox-contract/time";
 import { cronOf, defaultSchedule, nextIn, parseCron, type ScheduleState, scheduleLabel, scheduleTriggerLabel, since } from "./cronSchedule";
 
@@ -112,11 +112,11 @@ describe(`since / nextIn`, () => {
     const MINUTE = 60_000;
 
     beforeEach(() => {
-        vi.useFakeTimers();
-        vi.setSystemTime(NOW);
+        jest.useFakeTimers();
+        jest.setSystemTime(NOW);
     });
     afterEach(() => {
-        vi.useRealTimers();
+        jest.useRealTimers();
     });
 
     it(`steps a past run through the minute/hour/day tiers`, () => {

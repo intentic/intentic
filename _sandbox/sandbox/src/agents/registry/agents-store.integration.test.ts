@@ -1,7 +1,7 @@
 import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { fileAgentsStore, type PersistedAgent } from "./agents-store.js";
 
 // The store guards the fleet's ONLY record: these tests are about the ways a bad file used to become an

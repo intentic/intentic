@@ -3,8 +3,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect, afterEach } from "bun:test";
+import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import { createApp } from "../../app.js";
 
@@ -454,7 +454,7 @@ test("a steer taken mid-turn lands in the run's frames, and in the record, betwe
         { role: "user", text: "and the tests" },
         { role: "assistant", text: "will do" },
     ]);
-    await vi.waitFor(() => expect(recorded).not.toHaveLength(0), SETTLES);
+    await waitFor(() => expect(recorded).not.toHaveLength(0), SETTLES);
     expect(recorded.filter((row) => row.role !== "notice").map(({ role, text }) => ({ role, text }))).toEqual([
         { role: "user", text: "ship it" },
         { role: "assistant", text: "on it" },
@@ -478,7 +478,7 @@ test("a turn that fails before the provider bills anything still lands on the le
     );
     await runAgentTurn(client, { prompt: "go", conversationId: "conv-failed" });
 
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect(ledger[0]).toMatchObject({
         outcome: "error",
         errorCode: "claude-not-entitled",
@@ -506,7 +506,7 @@ test("a turn that succeeds is recorded as such, with the experiment metrics it e
     );
     await runAgentTurn(client, { prompt: "go", conversationId: "conv-ok" });
 
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect(ledger[0]).toMatchObject({ outcome: "ok", costUsd: 0.5, searchCalls: 0, openingSearches: 0 });
     // Nothing failed, so there is no code and no sentence to carry.
     expect("errorCode" in (ledger[0] ?? {})).toBe(false);
@@ -532,7 +532,7 @@ test("an arm planning drew rides the ledger row without the append naming the fi
     );
     await runAgentTurn(client, { prompt: "go", conversationId: "conv-notes" });
 
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     // The arm this id draws, from the same function planning draws it with: a transcribed `true` would also pass
     // against a row carrying the opposite arm.
     expect(ledger[0]).toMatchObject({ notesArm: conversationExperimentArm("field-notes", "conv-notes", 0.5), turnIndex: 0 });
@@ -590,7 +590,7 @@ test("a turn that proved its edits is recorded as verified, naming the check tha
     );
     await runAgentTurn(client, { prompt: "fix the parser", conversationId: "conv-verified" });
 
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     // The command matters: 'verified' alone would read as the whole repo being green, not one file.
     expect(ledger[0]).toMatchObject({ outcome: "ok", verification: "verified", check: "pnpm test src/parser.test.ts", filesEdited: 1 });
 });
@@ -623,7 +623,7 @@ test("a turn that stopped talking is recorded as such: unproven edits, its own c
 
     // Still a finished turn, not a failure: it left a diff and a standing to land.
     expect(facts.filter((fact) => fact.kind === "error")).toEqual([]);
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect(ledger[0]).toMatchObject({
         outcome: "ok",
         verification: "unproven",
@@ -662,8 +662,13 @@ test("a turn that ends with nothing to show for it is reported as a failure, not
     // Uncoded on purpose: it's what lets the chat offer a Continue press instead of a dead end.
     expect("code" in (failure ?? {})).toBe(false);
 
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
-    expect(ledger[0]).toMatchObject({ outcome: "error", errorMessage: expect.stringContaining("nothing to show for it"), filesEdited: 0, toolCalls: 2 });
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    expect(ledger[0]).toMatchObject({
+        outcome: "error",
+        errorMessage: expect.stringContaining("nothing to show for it"),
+        filesEdited: 0,
+        toolCalls: 2,
+    });
 });
 
 // The preamble-and-stop shape: the model announces a step, calls nothing, and the SDK reports a clean success. Prose is
@@ -685,7 +690,7 @@ test("a turn that only promises to act is left alone in chat but recorded as hav
     const { facts } = await runAgentTurn(client, { prompt: "fix the topbar", conversationId: "conv-preamble" });
 
     expect(facts.filter((fact) => fact.kind === "error")).toEqual([]);
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect(ledger[0]).toMatchObject({ outcome: "ok", toolCalls: 0, filesEdited: 0 });
 });
 
@@ -726,7 +731,7 @@ test("a turn the provider never answered records no verdict at all", async () =>
     );
     await runAgentTurn(client, { prompt: "go", conversationId: "conv-refused" });
 
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect("verification" in (ledger[0] ?? {})).toBe(false);
     expect("compactions" in (ledger[0] ?? {})).toBe(false);
 });
@@ -746,7 +751,7 @@ test("the ledger carries the requested model as well as the resolved one", async
     );
     await runAgentTurn(client, { prompt: "go", conversationId: "conv-model", model: "opus-4-6-thinking" });
 
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect(ledger[0]).toMatchObject({ modelRequested: "opus-4-6-thinking" });
 });
 
@@ -766,6 +771,6 @@ test("an empty model pick is recorded as no pick at all, not as an empty one", a
     // The wire allows it, and the Codex path reads it as the catalog default: not a pick.
     await runAgentTurn(client, { prompt: "go", conversationId: "conv-blank", model: "" });
 
-    await vi.waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(ledger).toHaveLength(1), SETTLES);
     expect("modelRequested" in (ledger[0] ?? {})).toBe(false);
 });

@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterAll } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
 import { createEngineClient, type EngineClient } from "./client.js";
@@ -71,9 +72,9 @@ test("markDirty crosses the wire: a new file becomes findable without a restart"
     await writeFile(join(root, "alpha/src/gadget_host.ts"), "export const hostGadget = 1;\n");
     engine.markDirty();
 
-    await expect
-        .poll(async () => (await engine.run(request({ verb: "files", query: "gadget_host" }))).result.groups.length, { timeout: 30_000 })
-        .toBeGreaterThan(0);
+    await waitFor(async () => {
+        expect((await engine.run(request({ verb: "files", query: "gadget_host" }))).result.groups.length).toBeGreaterThan(0);
+    }, { timeout: 30_000 });
 });
 
 // The signal itself can't cross the boundary; forwarded as a message the child raises on its own controller.
@@ -134,7 +135,7 @@ test("the ceiling replaces a child on its own, and says which one it was", async
     const watched = createEngineClient({ root, memoryCeilingBytes: 1, memoryCheckIntervalMs: 20, onRecycle: (info) => recycled.push(info) });
     try {
         const first = watched.pid();
-        await expect.poll(() => recycled.length, { timeout: 10_000 }).toBeGreaterThan(0);
+        await waitFor(() => expect(recycled.length).toBeGreaterThan(0), { timeout: 10_000 });
         expect(recycled[0]?.pid).toBe(first);
         expect(recycled[0]?.rssBytes).toBeGreaterThan(0);
         // Exactly once: nothing re-forks until a search asks for one, so a ceiling cannot spin on an idle engine.

@@ -1,6 +1,6 @@
 import { fakeForgejoApi } from "@intentic/providers";
 import type { GitRunner } from "@intentic/scaffold";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { adoptRepos } from "./adopt.js";
 
 // Fake git runner answering adopt's two queries (staged diff, remote list) from the given maps;

@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { pairings } from "../store/enrollment.js";
 import {
     enrolledFleet,
@@ -29,7 +29,7 @@ const mirrorsOf = async (historyRoot: string): Promise<string[]> =>
 // Pins this door's use of pairings: single-use, time-limited, and mode-carrying — the enroll trusts the pairing's mode,
 // not the agent.
 describe("pairing tokens", () => {
-    afterEach(() => vi.useRealTimers());
+    afterEach(() => jest.useRealTimers());
 
     const table = (): { pending: ReturnType<typeof pairings<SyncMode>>; historyRoot: string } => {
         const historyRoot = mkdtempSync(join(tmpdir(), "sync-"));
@@ -49,10 +49,10 @@ describe("pairing tokens", () => {
     });
 
     it("expires after its TTL", () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         const { pending } = table();
         const { token, expiresIn } = pending.mint("sync");
-        vi.advanceTimersByTime((expiresIn + 1) * 1000);
+        jest.advanceTimersByTime((expiresIn + 1) * 1000);
         expect(pending.peek(token)).toBeUndefined();
     });
 

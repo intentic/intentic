@@ -1,4 +1,5 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, mock, jest } from "bun:test";
+import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { dialPeer, LONG_OUTAGE_ATTEMPTS, LONG_OUTAGE_MS, PEER_TRY_AGAIN, type SocketLike } from "./peer-dial.js";
 
 /* The loop every peer runs, over a socket the test plays. */
@@ -63,7 +64,7 @@ const dialling = (delay?: number) => {
     const sockets: FakeSocket[] = [];
     const attached: FakeSocket[] = [];
     const said: string[] = [];
-    const revoked = vi.fn();
+    const revoked = mock();
     const link = dialPeer<FakeSocket>({
         open: async () => {
             const socket = new FakeSocket();
@@ -82,11 +83,11 @@ const dialling = (delay?: number) => {
 
 test("the handler is attached before the hello goes out, and the hello is the first frame", async () => {
     const { link, sockets, attached, said } = dialling();
-    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    await waitFor(() => expect(sockets).toHaveLength(1));
     expect(link.state()).toBe("connecting");
     sockets[0]?.opens();
-    await vi.waitFor(() => expect(sockets[0]?.sent).toHaveLength(1));
-    expect(attached).toEqual([sockets[0]]);
+    await waitFor(() => expect(sockets[0]?.sent).toHaveLength(1));
+    expect(attached).toEqual([sockets[0]!]);
     expect(JSON.parse(sockets[0]?.sent[0] ?? "{}")).toEqual({ type: "hello", token: "iht_test", version: "1.0.0" });
     expect(said).toEqual(["connected #1"]);
     expect(link.state()).toBe("open");
@@ -97,73 +98,73 @@ test("the handler is attached before the hello goes out, and the hello is the fi
 });
 
 test("a drop redials on the ladder, telling it how long the socket held", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const { link, sockets, said } = dialling();
-        await vi.waitFor(() => expect(sockets).toHaveLength(1));
+        await waitFor(() => expect(sockets).toHaveLength(1));
         sockets[0]?.opens();
-        await vi.advanceTimersByTimeAsync(5_000);
+        await advanceTimersByTimeAsync(5_000);
         sockets[0]?.drops(1006);
         expect(link.state()).toBe("connecting");
         expect(said.at(-1)).toBe("disconnected (1006); reconnecting in 1s");
-        await vi.advanceTimersByTimeAsync(1_000);
-        await vi.waitFor(() => expect(sockets).toHaveLength(2));
+        await advanceTimersByTimeAsync(1_000);
+        await waitFor(() => expect(sockets).toHaveLength(2));
         link.stop();
         await link.done;
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 /* A silent socket must be abandoned even when no close event arrives. */
 test("a socket that goes silent is abandoned and redialled, though no close ever arrives", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const { link, sockets, said } = dialling();
-        await vi.waitFor(() => expect(sockets).toHaveLength(1));
+        await waitFor(() => expect(sockets).toHaveLength(1));
         sockets[0]?.opens();
 
         // A frame inside every window holds the link: this is the sandbox's heartbeat, three beats of it.
         for (let beat = 0; beat < 3; beat += 1) {
-            await vi.advanceTimersByTimeAsync(SILENCE_MS - 1_000);
+            await advanceTimersByTimeAsync(SILENCE_MS - 1_000);
             sockets[0]?.says();
         }
         expect(link.state()).toBe("open");
         expect(sockets).toHaveLength(1);
 
         // Then the beats stop, and nothing else happens: no close, no error.
-        await vi.advanceTimersByTimeAsync(SILENCE_MS);
+        await advanceTimersByTimeAsync(SILENCE_MS);
         expect(said.at(-1)).toBe(`nothing heard for ${SILENCE_MS / 1_000}s; reconnecting in 1s`);
         expect(sockets[0]?.closed).toEqual({ code: 1000, reason: "no heartbeat" });
         expect(link.state()).toBe("connecting");
 
-        await vi.advanceTimersByTimeAsync(1_000);
-        await vi.waitFor(() => expect(sockets).toHaveLength(2));
+        await advanceTimersByTimeAsync(1_000);
+        await waitFor(() => expect(sockets).toHaveLength(2));
 
         // The close an abandoned socket may still emit minutes later must not put a second loop on the link.
         sockets[0]?.drops(1006);
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(sockets).toHaveLength(2);
 
         link.stop();
         await link.done;
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 /* THE FAR END THAT IS NEVER COMING BACK, which is not a failure the loop can fix and not one it may narrate. */
 test("a far end that never answers is reported a few times, then retried quietly", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const { link, sockets, said } = dialling(60_000);
         for (let attempt = 1; attempt <= 20; attempt += 1) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- one attempt after another is the thing under test
-            await vi.waitFor(() => expect(sockets).toHaveLength(attempt));
+            await waitFor(() => expect(sockets).toHaveLength(attempt));
             sockets.at(-1)?.errors();
             sockets.at(-1)?.drops(1006);
             // oxlint-disable-next-line eslint/no-await-in-loop -- the ladder's own wait, serial by construction
-            await vi.advanceTimersByTimeAsync(60_000);
+            await advanceTimersByTimeAsync(60_000);
         }
 
         // Twenty minutes of a dead link: eight lines, the last of them a count rather than a repetition.
@@ -181,33 +182,33 @@ test("a far end that never answers is reported a few times, then retried quietly
         // The twentieth failure is what arms the long rest, so the dial after it is LONG_OUTAGE_MS away rather than
         // one more rung — quiet in the log and quiet on the wire, which are separate rules meeting here.
         expect(sockets).toHaveLength(20);
-        await vi.advanceTimersByTimeAsync(LONG_OUTAGE_MS);
-        await vi.waitFor(() => expect(sockets).toHaveLength(21));
+        await advanceTimersByTimeAsync(LONG_OUTAGE_MS);
+        await waitFor(() => expect(sockets).toHaveLength(21));
 
         link.stop();
         await link.done;
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 // Quiet is a property of the current outage, not of the link: whatever it hid, the next one starts from nothing.
 test("a link that comes back is loud again about the outage after it", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const { link, sockets, said } = dialling();
         for (let attempt = 1; attempt <= 5; attempt += 1) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- one attempt after another is the thing under test
-            await vi.waitFor(() => expect(sockets).toHaveLength(attempt));
+            await waitFor(() => expect(sockets).toHaveLength(attempt));
             sockets.at(-1)?.drops(1006);
             // oxlint-disable-next-line eslint/no-await-in-loop -- the ladder's own wait, serial by construction
-            await vi.advanceTimersByTimeAsync(1_000);
+            await advanceTimersByTimeAsync(1_000);
         }
         const whileQuiet = said.length;
 
-        await vi.waitFor(() => expect(sockets).toHaveLength(6));
+        await waitFor(() => expect(sockets).toHaveLength(6));
         sockets.at(-1)?.opens();
-        await vi.waitFor(() => expect(said.at(-1)).toBe("connected #6"));
+        await waitFor(() => expect(said.at(-1)).toBe("connected #6"));
         sockets.at(-1)?.drops(1006);
 
         expect(said.at(-1)).toBe("disconnected (1006); reconnecting in 1s");
@@ -216,24 +217,24 @@ test("a link that comes back is loud again about the outage after it", async () 
         link.stop();
         await link.done;
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 test("a refused enrollment (1008) is never retried and is reported once", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const { link, sockets, revoked } = dialling();
-        await vi.waitFor(() => expect(sockets).toHaveLength(1));
+        await waitFor(() => expect(sockets).toHaveLength(1));
         sockets[0]?.opens();
         sockets[0]?.drops(1008);
         await link.done;
         expect(revoked).toHaveBeenCalledTimes(1);
-        await vi.advanceTimersByTimeAsync(60_000);
+        await advanceTimersByTimeAsync(60_000);
         expect(sockets).toHaveLength(1);
         expect(link.state()).toBe("closed");
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -244,22 +245,22 @@ test.each([
     [PEER_TRY_AGAIN, "the sandbox is not ready to admit this connection yet"],
     [1002, "disconnected (1002)"],
 ])("a refusal that is not about the credential (%i) keeps the loop on the ladder", async (code, complaint) => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const { link, sockets, said, revoked } = dialling();
-        await vi.waitFor(() => expect(sockets).toHaveLength(1));
+        await waitFor(() => expect(sockets).toHaveLength(1));
         sockets[0]?.opens();
         sockets[0]?.drops(code);
 
         expect(revoked).not.toHaveBeenCalled();
         expect(said.at(-1)).toBe(`${complaint}; reconnecting in 1s`);
-        await vi.advanceTimersByTimeAsync(1_000);
-        await vi.waitFor(() => expect(sockets).toHaveLength(2));
+        await advanceTimersByTimeAsync(1_000);
+        await waitFor(() => expect(sockets).toHaveLength(2));
 
         link.stop();
         await link.done;
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -267,28 +268,28 @@ test.each([
 // link to a sandbox that no longer exists spent 2,880 attempts a day saying so. It is never given up — a laptop closed
 // for a fortnight has to find its sandboxes again — it just stops asking every half minute.
 test("a link nobody has answered in a long time rests between tries, and is never given up", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const RUNG_MS = 30_000;
         const { link, sockets, said } = dialling(RUNG_MS);
         // Up to the threshold on the ordinary ladder: drop, wait its rung, get the next socket.
         for (let attempt = 1; attempt < LONG_OUTAGE_ATTEMPTS; attempt += 1) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- one drop per attempt is serial by definition
-            await vi.waitFor(() => expect(sockets).toHaveLength(attempt));
+            await waitFor(() => expect(sockets).toHaveLength(attempt));
             sockets.at(-1)?.drops(1006);
             // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
-            await vi.advanceTimersByTimeAsync(RUNG_MS);
+            await advanceTimersByTimeAsync(RUNG_MS);
         }
-        await vi.waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS));
+        await waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS));
         sockets.at(-1)?.drops(1006);
 
         // The ladder's own rung would have redialled by now. This one is resting.
-        await vi.advanceTimersByTimeAsync(RUNG_MS);
+        await advanceTimersByTimeAsync(RUNG_MS);
         expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS);
 
         // And it does come round: slowed, never abandoned.
-        await vi.advanceTimersByTimeAsync(LONG_OUTAGE_MS - RUNG_MS);
-        await vi.waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS + 1));
+        await advanceTimersByTimeAsync(LONG_OUTAGE_MS - RUNG_MS);
+        await waitFor(() => expect(sockets).toHaveLength(LONG_OUTAGE_ATTEMPTS + 1));
 
         // And one answer puts it straight back on the fast ladder — the outage is over, the penalty goes with it.
         sockets.at(-1)?.opens();
@@ -298,7 +299,7 @@ test("a link nobody has answered in a long time rests between tries, and is neve
         link.stop();
         await link.done;
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -326,7 +327,7 @@ test("a stop during resolution opens nothing, and a socket a slow resolver still
         log: () => undefined,
         revoked: () => undefined,
     });
-    await vi.waitFor(() => expect(answer).toEqual(expect.any(Function)));
+    await waitFor(() => expect(answer).toEqual(expect.any(Function)));
     link.stop();
     await link.done;
     answer?.();
@@ -351,10 +352,10 @@ test("a stop during resolution opens nothing, and a socket a slow resolver still
         log: () => undefined,
         revoked: () => undefined,
     });
-    await vi.waitFor(() => expect(answer).toEqual(expect.any(Function)));
+    await waitFor(() => expect(answer).toEqual(expect.any(Function)));
     careless.stop();
     answer?.();
-    await vi.waitFor(() => expect(late[0]?.closed).toEqual({ code: 1000, reason: "stopping" }));
+    await waitFor(() => expect(late[0]?.closed).toEqual({ code: 1000, reason: "stopping" }));
 });
 
 test("a pairing that is gone by the next attempt ends the loop rather than dialling nowhere", async () => {
@@ -377,7 +378,7 @@ test("a pairing that is gone by the next attempt ends the loop rather than diall
         log: () => undefined,
         revoked: () => undefined,
     });
-    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    await waitFor(() => expect(sockets).toHaveLength(1));
     sockets[0]?.opens();
     sockets[0]?.drops(1006);
     await link.done;

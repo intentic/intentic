@@ -1,75 +1,86 @@
-// @vitest-environment jsdom
 // jsdom pins what the header row is allowed to hold, per two measured failures: a longer status word squeezed the
 // title (fixed by hiding words below @md), and at 390px the mode switch left no room for the title (fixed by
 // moving it outside `.view-header`). Asserted structurally, not just as "present somewhere".
-import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, nextTick } from "vue";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, mock, jest } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 // The threshold the header's bars wait for, read from where it's defined rather than restated as a number here.
 import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
+import * as actualVueRouter from "vue-router";
+import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import * as actualUi from "@intentic/ui";
+import * as actualAgentActions from "../fleet/agentActions";
 
 // What the second test turns: the form factor (a desktop page is the review, where a phone's is the chat) and whether
 // either half of the fleet has answered for this id yet. Defaults are the first test's world, restored after each.
-const { knobs } = vi.hoisted(() => ({ knobs: { mobile: true, known: true } }));
+const { knobs } = hoisted(() => ({ knobs: { mobile: true, known: true } }));
 
 // The header's back link is a real RouterLink now, which needs a router this bare mount never installs.
-vi.mock(import("vue-router"), async (importOriginal) => ({
-    ...(await importOriginal()),
+// Every factory below is synchronous: a mock.module factory runs in place, and awaiting inside one that replaces a
+// module already in this file's graph never returns.
+mock.module("vue-router", () => ({
+    ...actualVueRouter,
     // `query` too: the page reads `?sandbox=`, and vue-router never produces a route object without one.
     useRoute: () => ({ params: { id: `agent-1` }, query: {} }) as never,
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
-    RouterLink: (await import("../../../testing/routerLinkStub")).RouterLinkStub as never,
+    useRouter: () => ({ push: mock(), replace: mock() }) as never,
+    RouterLink: RouterLinkStub as never,
 }));
 
-vi.mock("@intentic/ui", async () => {
-    const vue = await import("vue");
-    const empty = (name: string) => vue.defineComponent({ name, render: () => null });
+// Snapshotted before the mocks below replace their modules: a namespace is a live binding, and the real one is
+// spread so a name anything in the graph imports is never missing.
+const realUi = { ...actualUi };
+const realAgentActions = { ...actualAgentActions };
+
+mock.module("@intentic/ui", () => {
+    const empty = (name: string) => defineComponent({ name, render: () => null });
     return {
+        ...realUi,
         ui: { iconButton: () => `` },
         // Button comes from the kit, not PrimeVue; this mount only cares where buttons are, not what they do.
         Button: empty(`Button`),
         Modal: empty(`Modal`),
+        Notice: empty(`Notice`),
         ResponsiveOverlay: empty(`ResponsiveOverlay`),
-        SegmentedControl: vue.defineComponent({ name: `SegmentedControl`, render: () => vue.h(`div`, { "data-mode-switch": `` }) }),
-        useDevice: () => ({ mobile: vue.ref(knobs.mobile) }),
-        // The real one: the header's bars and the review's outline are exactly its two thresholds.
-        useLoadingReveal: (await import("@intentic/ui/loading-reveal")).useLoadingReveal,
+        SegmentedControl: defineComponent({ name: `SegmentedControl`, render: () => h(`div`, { "data-mode-switch": `` }) }),
+        useDevice: () => ({ mobile: ref(knobs.mobile) }),
     };
 });
 
-vi.mock("../../chat/panel/ChatPanel.vue", () => ({ default: { render: () => null } }));
-vi.mock("./AgentReviewPanel.vue", () => ({ default: { render: () => null } }));
-vi.mock("../board/session/AgentSessionMenu.vue", () => ({ default: { render: () => null } }));
-vi.mock("../board/session/SessionChip.vue", () => ({ default: { render: () => null } }));
-vi.mock("../board/session/SessionIdentity.vue", () => ({ default: { render: () => null } }));
+mock.module("../../chat/panel/ChatPanel.vue", () => ({ default: { render: () => null } }));
+mock.module("./AgentReviewPanel.vue", () => ({ default: { render: () => null } }));
+mock.module("../board/session/AgentSessionMenu.vue", () => ({ default: { render: () => null } }));
+mock.module("../board/session/SessionChip.vue", () => ({ default: { render: () => null } }));
+mock.module("../board/session/SessionIdentity.vue", () => ({ default: { render: () => null } }));
 // The phone's chats sheet hangs off the title; a header test only cares that the title is its handle.
-vi.mock("../../chat/tabs/ChatSwitcherSheet.vue", () => ({ default: { render: () => null } }));
+mock.module("../../chat/tabs/ChatSwitcherSheet.vue", () => ({ default: { render: () => null } }));
 
-vi.mock("../fleet/agentStatus", () => ({
+mock.module("../fleet/agentStatus", () => ({
     agentStatusMeta: () => ({ icon: `spinner`, spin: true, label: `Running`, class: `text-link` }),
     unregistered: () => false,
     writingNow: () => true,
+    blocked: () => false,
+    turnInFlight: () => false,
 }));
 
-vi.mock("../fleet/useAgents", async () => {
-    const { ref } = await import("vue");
+mock.module("../fleet/useAgents", () => {
     const agent = { id: `agent-1`, branch: `agent/agent-1`, status: `running`, title: `Readable mobile title` };
     return {
         useAgents: () => ({
             fleet: ref(knobs.known ? [agent] : []),
             archived: ref([]),
             // An unknown id is asked about once and the page waits on the answer, so this read is the one left hanging.
-            refresh: vi.fn(() => (knobs.known ? Promise.resolve() : new Promise<void>(() => {}))),
-            loadArchived: vi.fn(async () => {}),
-            open: vi.fn(),
+            refresh: mock(() => (knobs.known ? Promise.resolve() : new Promise<void>(() => {}))),
+            loadArchived: mock(async () => {}),
+            open: mock(),
             agentById: () => (knobs.known ? agent : undefined),
-            rename: vi.fn(async () => {}),
+            rename: mock(async () => {}),
         }),
     };
 });
 
-vi.mock("../../chat/run/useChat", async () => {
-    const { ref } = await import("vue");
+mock.module("../../chat/run/useChat", () => {
     return {
         useChat: () => ({
             // `peek`/`unsent` are what the phone's focus-leave sweep checks (AgentDetail.sweepPeek); this agent is one
@@ -89,22 +100,21 @@ vi.mock("../../chat/run/useChat", async () => {
                       ]
                     : [],
             ),
-            setActive: vi.fn(),
-            closeTabs: vi.fn(),
-            openConversation: vi.fn(),
+            setActive: mock(),
+            closeTabs: mock(),
+            openConversation: mock(),
             active: ref({ conversationId: `agent-1` }),
         }),
     };
 });
 // Stubbed strip (nothing open) so this mount skips standing up the whole tab store for a header test.
-vi.mock("../../chat/panel/useChat-strip", () => ({
+mock.module("../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     chatPreviews: { value: {} },
     previewOf: () => undefined,
 }));
 
-vi.mock("./useAgentChanges", async () => {
-    const { ref } = await import("vue");
+mock.module("./useAgentChanges", () => {
     return {
         useAgentChanges: () => ({
             actionBusy: ref(false),
@@ -112,15 +122,15 @@ vi.mock("./useAgentChanges", async () => {
             pending: ref([]),
             count: ref(0),
             loading: ref(false),
-            land: vi.fn(),
-            discard: vi.fn(),
-            refresh: vi.fn(),
+            land: mock(),
+            discard: mock(),
+            refresh: mock(),
         }),
     };
 });
 
-vi.mock("../fleet/agentActions", () => ({ requestLandAgent: vi.fn(async () => {}), startAgent: vi.fn() }));
-vi.mock("../../sandbox/secrets/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
+mock.module("../fleet/agentActions", () => ({ ...realAgentActions, requestLandAgent: mock(async () => {}), startAgent: mock() }));
+mock.module("../../sandbox/secrets/useRole", () => ({ useRole: () => ({ canDrive: true, canReview: true, canShip: true }) }));
 
 const { default: AgentDetail } = await import("./AgentDetail.vue");
 
@@ -133,7 +143,7 @@ afterEach(() => {
     knobs.mobile = true;
     knobs.known = true;
     // Only the wait test fakes them; left on, they would freeze every timer after it.
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 it(`keeps a mobile running agent's title slot: the view switch is not in the header, and only the status words compact`, async () => {
@@ -170,7 +180,7 @@ it(`keeps a mobile running agent's title slot: the view switch is not in the hea
 it(`holds the header's places and the review's shape while the fleet is still being asked about the id`, async () => {
     knobs.mobile = false;
     knobs.known = false;
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const el = document.createElement(`div`);
     document.body.append(el);
     app = createApp(AgentDetail);
@@ -182,7 +192,7 @@ it(`holds the header's places and the review's shape while the fleet is still be
     // Under the reveal delay the answer still reads as immediate, so nothing is drawn.
     expect(el.querySelector(`.skeleton`)).toBeNull();
 
-    vi.advanceTimersByTime(REVEAL_DELAY_MS);
+    jest.advanceTimersByTime(REVEAL_DELAY_MS);
     await nextTick();
 
     // The header keeps a bar where the name and the status will be, and never prints the word "Agent" as a stand-in.

@@ -1,24 +1,24 @@
-// @vitest-environment jsdom
 // Pins what the page decides rather than displays: an open area writes as it changes, a folderless one is never sent
 // (the daemon refuses it), a rename can't drop folders picked a moment ago, and the picker never offers a folder the
 // schema would refuse. jsdom: renders and reads the mounted DOM.
+import "@intentic/testing/dom";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { STATE_DIR } from "@intentic/constants";
+import { STATE_DIR, WORKSPACE_ROOT as root } from "@intentic/constants";
 import type { Area } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, ref } from "vue";
-
+import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
+import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
 const areas = ref<Area[]>([]);
 // Upserts like the real route: creating an area opens it immediately, so a mock that didn't add the row would leave
 // the creation test asserting against a page that never redrew.
-const save = vi.fn<(area: Area) => Promise<unknown>>().mockImplementation(async (area) => {
+const save = mock<(area: Area) => Promise<unknown>>().mockImplementation(async (area) => {
     areas.value = [...areas.value.filter((entry) => entry.id !== area.id), area];
     return { ok: true };
 });
-const remove = vi.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
+const remove = mock<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-vi.mock(`./useAreas`, () => ({
+mock.module(`./useAreas`, () => ({
     useAreas: () => ({
         areas,
         labelOf: (id: string) => id,
@@ -35,19 +35,17 @@ const personas = ref([
     { id: `support-bot`, label: `Support bot`, capabilities: [], workspace: { startIn: `web/support` } },
     { id: `scribe`, label: `Scribe`, capabilities: [], workspace: { startIn: `docs` } },
 ]);
-vi.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
+mock.module(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 
 const role = ref<string>(`owner`);
-vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));
-vi.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => ref(true) }));
+mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ role: role.value }) }) }));
+mock.module(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => ref(true) }));
 
 // <FolderPicker>'s own reads; this suite is about the page, so the tree is a fixture and nothing is fetched lazily.
 const tree = ref<WorkspaceTreeEntry[]>([]);
-vi.mock(`../client/sandboxClient`, () => ({ sandboxJson: vi.fn().mockResolvedValue({ entries: [] }) }));
-vi.mock(`../client/useSandboxQuery`, async () => {
-    // Imported inside the factory, not from the file's own imports: `vi.mock` is hoisted above them.
-    const { computed, ref: shallow } = await import(`vue`);
-    const { WORKSPACE_ROOT: root } = await import(`@intentic/constants`);
+mock.module(`../client/sandboxClient`, () => ({ sandboxJson: mock().mockResolvedValue({ entries: [] }) }));
+mock.module(`../client/useSandboxQuery`, () => {
+    // Imported inside the factory so the mock owns its own bindings, not this file's.
     return {
         useSandboxQuery: () => ({
             query: { data: computed(() => ({ root, tree: tree.value, hidden: 0 })), isPending: shallow(false) },
@@ -112,7 +110,7 @@ const type = async (field: HTMLInputElement, value: string): Promise<void> => {
 };
 
 beforeEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
     save.mockClear();
     remove.mockClear();
     role.value = `owner`;
@@ -139,7 +137,7 @@ it(`writes an open area as it changes, with no Save button anywhere`, async () =
     expect(buttonLabelled(el, `Save`)).toBeUndefined();
 
     await pickFolder(el, `docs`);
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0].folders).toEqual([`web/support`, `docs`]);
 });
 
@@ -164,7 +162,7 @@ it(`keeps a folder picked a moment ago when the name is committed`, async () => 
     const el = mount();
     await openRow(el, `Support desk`);
     await pickFolder(el, `docs`);
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
 
     nameControl(el, `Support desk`).click();
     await nextTick();
@@ -172,7 +170,7 @@ it(`keeps a folder picked a moment ago when the name is committed`, async () => 
     await type(field, `Help centre`);
     field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
 
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
     expect(save.mock.calls[1]![0]).toMatchObject({ id: `support`, label: `Help centre`, folders: [`web/support`, `docs`] });
 });
 
@@ -192,11 +190,11 @@ it(`refuses to create an area until it has both a name and a folder, then opens 
     expect(create().disabled).toBe(false);
 
     create().click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({ id: `marketing-site`, label: `Marketing site`, folders: [`docs`] });
 
     // Named it, now say what it is: the new row is the open one.
-    await vi.waitFor(() => expect(el.querySelector(`input[id="area-brief-marketing-site"]`)).not.toBeNull());
+    await waitFor(() => expect(el.querySelector(`input[id="area-brief-marketing-site"]`)).not.toBeNull());
 });
 
 it(`never offers the sandbox's own configuration as a folder`, async () => {

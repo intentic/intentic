@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import type { CodeAnalysis } from "@intentic/code-read";
 import { createCodeAnalysisClient, type WorkerPort } from "./codeAnalysisClient";
 import type { CodeAnalysisRequest, CodeAnalysisResponse } from "./codeAnalysisProtocol";
@@ -35,14 +36,14 @@ class FakeWorker implements WorkerPort {
 describe(`code analysis worker client`, () => {
     it(`coalesces the same text and language, then keeps the settled analysis warm`, async () => {
         const worker = new FakeWorker();
-        const local = vi.fn();
+        const local = mock();
         const analyze = createCodeAnalysisClient(async () => worker, local);
         const expected: CodeAnalysis = { code: { text: `const a = 1;`, lines: [2] }, imports: [] };
 
         const first = analyze(`// note\nconst a = 1;`, `typescript`);
         const concurrent = analyze(`// note\nconst a = 1;`, `typescript`);
         expect(concurrent).toBe(first);
-        await vi.waitFor(() => expect(worker.sent).toHaveLength(1));
+        await waitFor(() => expect(worker.sent).toHaveLength(1));
 
         worker.respond({ id: worker.sent[0]!.id, analysis: expected });
         await expect(first).resolves.toEqual(expected);
@@ -53,10 +54,10 @@ describe(`code analysis worker client`, () => {
 
     it(`uses the local analyzer when workers are unavailable`, async () => {
         const expected: CodeAnalysis = { code: { text: `a`, lines: [1] }, imports: [] };
-        const local = vi.fn(async () => expected);
+        const local = mock(async () => expected);
         const analyze = createCodeAnalysisClient(async () => undefined, local);
 
         await expect(analyze(`a`, `typescript`)).resolves.toEqual(expected);
-        expect(local).toHaveBeenCalledOnce();
+        expect(local).toHaveBeenCalledTimes(1);
     });
 });

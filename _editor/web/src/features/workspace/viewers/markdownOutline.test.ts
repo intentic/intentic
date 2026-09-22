@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
 // Arithmetic behind the markdown preview's outline rail: which section is active, which headings exist.
-import { describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect } from "bun:test";
 import { activeAt, matchHeadings, progressAt, readHeadings, type OutlineHeading } from "./markdownOutline";
 
 const container = (html: string): HTMLElement => {
@@ -97,6 +97,6 @@ describe(`matchHeadings`, () => {
     });
 
     it(`carries each survivor's document position, not its place in the results`, () => {
-        expect(matchHeadings(headings, `uncovered`)).toEqual([{ heading: headings[2], index: 2 }]);
+        expect<unknown>(matchHeadings(headings, `uncovered`)).toEqual([{ heading: headings[2], index: 2 }]);
     });
 });

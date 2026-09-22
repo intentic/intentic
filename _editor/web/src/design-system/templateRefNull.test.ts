@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
 // The fact three production crashes rested on: a `ref<HTMLElement>()` bound to a template ref is typed
 // `HTMLElement | undefined`, but Vue writes NULL into it when the element goes, so `x === undefined` guards let a
 // null through into `.offsetHeight`, `.style` and `observe()`. Pinned here because nothing else in the app states
 // it, and every guard on a template ref is written against it.
-import { expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect } from "bun:test";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 
 it("Vue clears a template ref to null, not undefined, when its element unmounts", async () => {

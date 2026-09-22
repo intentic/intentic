@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { listPublicFiles, resolvePublicFile } from "./public-files.js";
 
 // The outbox's guards against a real directory; resolvePublicFile takes its root as an argument so these run against a

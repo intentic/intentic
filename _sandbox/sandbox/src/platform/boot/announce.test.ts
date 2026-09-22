@@ -1,10 +1,11 @@
 import { EventEmitter } from "node:events";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // Each register attempt's outcome comes off a queue: `{ status }` acks with that code, `{ err: true }` simulates a
 // transport failure.
 const outcomes: Array<{ status?: number; err?: boolean }> = [];
-const requestMock = vi.fn((_url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
+const requestMock = mock((_url: URL, _opts: unknown, cb: (res: { statusCode: number; resume: () => void }) => void) => {
     const req = new EventEmitter() as EventEmitter & { end: () => void };
     req.end = () => {
         const outcome = outcomes.shift() ?? { status: 200 };
@@ -16,7 +17,7 @@ const requestMock = vi.fn((_url: URL, _opts: unknown, cb: (res: { statusCode: nu
     };
     return req;
 });
-vi.mock("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
+mock.module("node:https", () => ({ request: (...args: unknown[]) => requestMock(...(args as Parameters<typeof requestMock>)) }));
 
 const { createAnnouncer } = await import("./announce.js");
 
@@ -25,14 +26,14 @@ const config = {
     sandbox: { publicUrl: "https://sandbox-x.intentic.dev" },
     connectToken: "tok",
 } as unknown as Parameters<typeof createAnnouncer>[0];
-const logger = { info: vi.fn(), warn: vi.fn() } as unknown as Parameters<typeof createAnnouncer>[1];
+const logger = { info: mock(), warn: mock() } as unknown as Parameters<typeof createAnnouncer>[1];
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     outcomes.length = 0;
     requestMock.mockClear();
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => jest.useRealTimers());
 
 // Request fires synchronously; the verdict lands a microtask later (the post is awaited), so this drains before reading
 // status().
@@ -47,7 +48,7 @@ describe("createAnnouncer", () => {
         createAnnouncer(config, logger).start();
 
         expect(requestMock).toHaveBeenCalledTimes(1);
-        vi.advanceTimersByTime(120_000);
+        jest.advanceTimersByTime(120_000);
         expect(requestMock).toHaveBeenCalledTimes(1);
     });
 
@@ -57,9 +58,9 @@ describe("createAnnouncer", () => {
         expect(requestMock).toHaveBeenCalledTimes(1);
 
         // First retry backs off 2s, then acks and never fires again.
-        await vi.advanceTimersByTimeAsync(2_000);
+        await advanceTimersByTimeAsync(2_000);
         expect(requestMock).toHaveBeenCalledTimes(2);
-        await vi.advanceTimersByTimeAsync(120_000);
+        await advanceTimersByTimeAsync(120_000);
         expect(requestMock).toHaveBeenCalledTimes(2);
     });
 
@@ -69,9 +70,9 @@ describe("createAnnouncer", () => {
         }
         createAnnouncer(config, logger).start();
         // 20 minutes is well past the 10-minute give-up bound; the retry loop must actually stop.
-        await vi.advanceTimersByTimeAsync(20 * 60_000);
+        await advanceTimersByTimeAsync(20 * 60_000);
         const settled = requestMock.mock.calls.length;
-        await vi.advanceTimersByTimeAsync(20 * 60_000);
+        await advanceTimersByTimeAsync(20 * 60_000);
         expect(requestMock).toHaveBeenCalledTimes(settled);
     });
 
@@ -100,7 +101,7 @@ describe("createAnnouncer", () => {
             expect(rejected.detail).toContain("HTTP 409");
             expect(rejected.retrying).toBe(true);
             // Retry succeeds; the verdict moves from rejected to registered.
-            await vi.advanceTimersByTimeAsync(2_000);
+            await advanceTimersByTimeAsync(2_000);
             expect(announcer.status().state).toBe("registered");
         });
 
@@ -110,7 +111,7 @@ describe("createAnnouncer", () => {
             }
             const announcer = createAnnouncer(config, logger);
             announcer.start();
-            await vi.advanceTimersByTimeAsync(20 * 60_000);
+            await advanceTimersByTimeAsync(20 * 60_000);
             const settled = announcer.status();
             expect(settled.state).toBe("unreachable");
             expect(settled.detail).toContain("boom");

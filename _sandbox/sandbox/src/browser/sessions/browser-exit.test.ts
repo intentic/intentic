@@ -1,5 +1,5 @@
 import type { Capability } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { boundExitId } from "./browser-exit.js";
 import { profileOwner } from "./session-store.js";
 

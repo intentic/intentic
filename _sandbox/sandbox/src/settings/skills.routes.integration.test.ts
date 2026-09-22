@@ -3,7 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { type Capability, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";
 import { clientFor, errorCode } from "../harness/route-client.testing.js";

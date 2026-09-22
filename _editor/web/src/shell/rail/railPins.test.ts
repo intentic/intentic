@@ -1,5 +1,5 @@
-// @vitest-environment jsdom
-import { beforeEach, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach } from "bun:test";
 import { useRailPins } from "./railPins";
 
 // Pins the reader's overrule of the rail table: a toggle is visible to the rail immediately (localStorage isn't

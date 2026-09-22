@@ -107,7 +107,7 @@ export const shared = {
     plugins: [vue(), tailwindcss(), stableDevStyles()],
     define: { "import.meta.env.BUILD_ID": JSON.stringify(BUILD_ID) },
     resolve: {
-        // Source-first workspace aliases shared with vitest.config.ts; see source-aliases.ts.
+        // Source-first workspace aliases shared with bun.setup.ts; see source-aliases.ts.
         alias: sourceAliases(),
     },
     optimizeDeps: {

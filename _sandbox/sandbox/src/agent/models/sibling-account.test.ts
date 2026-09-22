@@ -1,5 +1,5 @@
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import type { PersistedAgent } from "../../agents/registry/agents-store.js";

@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { guidanceStats } from "./guidance-corpus.js";
 
 // Regression tests for three ways this parser silently reported a wrong figure. Fixtures are hand-written so the

@@ -1,6 +1,6 @@
 import type { UsageWindow } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { ClaudeStore, StoredAccount } from "../runtimes/claude/claude-credentials.js";
 import { claimLimitReset, type LimitResetDeps, readLimitReset } from "./claude-limit-reset.js";
 import { claudeUsageWindows, RATE_LIMIT_PARK_MS } from "./claude-usage.js";
@@ -136,7 +136,7 @@ test("a claim that changed nothing says which kind of nothing, and never reports
     const profile = { "/api/oauth/profile": { body: { organization: { uuid: "org-1" } } } };
 
     // Provider's own refusal words ride out intact; different reasons matter to the person who pressed the button.
-    for (const result of ["already_used", "not_limited", "ineligible"]) {
+    for (const result of ["already_used", "not_limited", "ineligible"] as const) {
         const { fetchFn } = provider({ ...profile, "/reset_rate_limits": { body: { result } } });
         expect(await claimLimitReset(store(), "a", fetchFn)).toEqual({ result });
     }

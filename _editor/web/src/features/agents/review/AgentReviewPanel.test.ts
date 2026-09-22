@@ -1,11 +1,12 @@
-// @vitest-environment jsdom
 // jsdom because the subject is the file list: a land conflict used to be a paragraph naming a few paths above
 // rows that all looked alike, forcing the reader to match strings by eye. The fix (a mark per blocked row, a
 // count per heading, a narrowing filter) is entirely in what renders, so only rendering can pin it.
+import "@intentic/testing/dom";
 import type { AgentChangesResponse, AgentHistoryResponse } from "@intentic/api-contract";
 import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock, jest } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref, type Ref } from "vue";
 import { reasonCopy } from "./conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
@@ -19,15 +20,15 @@ import { REVEAL_DELAY_MS } from "@intentic/ui/loading-reveal";
 
 // The import chain pulls in app-wide singletons reading browser globals at import time; matches:false keeps the
 // device desktop, where list and diff share the screen.
-vi.hoisted(() => {
+hoisted(() => {
     // jsdom implements no scrolling; selecting a row calls scrollIntoView, so this is stubbed to a no-op.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
 });
 
 // The only stand-ins: FileDiffPane's two inner viewers. Monaco is real but decides nothing this suite cares
 // about; the list is the subject.
-vi.mock("../../workspace/viewers/DiffView.vue", () => ({ default: { render: () => null } }));
-vi.mock("../../workspace/viewers/BinaryDiffView.vue", () => ({ default: { render: () => null } }));
+mock.module("../../workspace/viewers/DiffView.vue", () => ({ default: { render: () => null } }));
+mock.module("../../workspace/viewers/BinaryDiffView.vue", () => ({ default: { render: () => null } }));
 
 const { default: AgentReviewPanel } = await import("./AgentReviewPanel.vue");
 // The comment toggle that decides which reading every badge prints, imported once globals are in place.
@@ -125,7 +126,7 @@ afterEach(() => {
     document.body.innerHTML = ``;
     queryClient.clear();
     // The reveal-delay test is the only one that fakes them; left on, they would freeze every timer after it.
-    vi.useRealTimers();
+    jest.useRealTimers();
     // Toggles are app-wide state outliving a mount; reset here so one test can't hand the next a different panel.
     if (showComments.value) {
         toggleShowComments();
@@ -455,16 +456,16 @@ const reading = (state: { fetching: boolean; loaded: boolean }): ReturnType<type
         fetching: ref(state.fetching),
         loaded: ref(state.loaded),
         error: ref(undefined),
-        refresh: vi.fn(),
-        fileDiff: vi.fn(),
+        refresh: mock(),
+        fileDiff: mock(),
         viewed: ref(new Set<string>()),
         viewedCount: ref(0),
-        setViewed: vi.fn(),
-        land: vi.fn(),
-        setAutoLand: vi.fn(),
-        askResolve: vi.fn(),
-        discard: vi.fn(),
-        archive: vi.fn(),
+        setViewed: mock(),
+        land: mock(),
+        setAutoLand: mock(),
+        askResolve: mock(),
+        discard: mock(),
+        archive: mock(),
         conflicts: ref(undefined),
         resolving: ref(undefined),
         // Every checkout on its own branch, the state these readings are about.
@@ -493,7 +494,7 @@ const mountReading = async (state: { fetching: boolean; loaded: boolean }): Prom
 // is old enough to be drawn (so the empty state, which says the opposite, can never flash), and once drawn it is the
 // review's own two columns.
 it(`holds the review's shape through its first read instead of a line of text`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const el = await mountReading({ fetching: true, loaded: false });
 
     // Below the reveal delay an answer still reads as immediate, so nothing is drawn — least of all the sentence for
@@ -501,7 +502,7 @@ it(`holds the review's shape through its first read instead of a line of text`, 
     expect(el.querySelector(`.skeleton`)).toBeNull();
     expect(el.textContent).not.toContain(`hasn't changed any files`);
 
-    vi.advanceTimersByTime(REVEAL_DELAY_MS);
+    jest.advanceTimersByTime(REVEAL_DELAY_MS);
     await nextTick();
 
     // One status region for the whole wait, with the subject read rather than printed over the rows' places.

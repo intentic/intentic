@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { IN_MEMORY, openSearchIndex } from "./search-index.js";
 import type { SpokenLine } from "./transcript-search.js";
 

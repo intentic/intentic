@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { ExtensionManifestSchema, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { SANDBOX_ROUTES } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 
 // Conformance: every daemon route a first-party extension calls must be declared in its manifest's permissions.sandbox,
 // or apiImpl.ts throws at runtime.
@@ -202,7 +202,7 @@ test("the scanner finds calls in every extension that declares sandbox routes", 
     expect(declaring.filter((name) => !callers.includes(name))).toEqual([]);
 });
 
-// Callers with a call outside their own namespace; an empty test.each would be a vitest error, not a pass.
+// Callers with a call outside their own namespace; an empty test.each would be an error, not a pass.
 const declaringCallers = callers.filter((name) => declarableCallsOf(name).length > 0);
 
 describe.each(declaringCallers)("%s declares every sandbox route it calls", (name) => {

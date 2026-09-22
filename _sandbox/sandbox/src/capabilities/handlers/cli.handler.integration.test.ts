@@ -6,7 +6,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { CapabilityContributionSchema } from "@intentic/extension-manifest";
 import { exec } from "@intentic/scaffold";
 import type { Capability, CliConfig } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { setListenerStatus } from "../../extensions/listener-status.js";
 import type { ExtensionHost } from "../../extensions/installed-extensions.js";
 import { createTerminalRunner, directExec } from "../../terminal/terminal-run.js";

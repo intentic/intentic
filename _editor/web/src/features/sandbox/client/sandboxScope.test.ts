@@ -1,4 +1,5 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 
 // Pins sandboxScope's reset list by name, since the failure mode is a new singleton added elsewhere that this
 // file never learns to reset. Asserts each reset fires on a real switch and not when the id is merely re-set to
@@ -7,24 +8,24 @@ import { beforeEach, expect, test, vi } from "vitest";
 const calls: string[] = [];
 const record = (name: string) => (): void => void calls.push(name);
 
-vi.mock(`../../agents/fleet/useAgents`, () => ({ resetAgents: record(`resetAgents`) }));
-vi.mock(`../../agents/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`), resetArchive: record(`resetArchive`) }));
-vi.mock(`../../chat/run/useChat`, () => ({ resetChat: record(`resetChat`) }));
-vi.mock(`../../chat/accounts/useChat-accounts`, () => ({ loadAccountStatus: record(`loadAccountStatus`) }));
-vi.mock(`../../workspace/files/useEditBuffers`, () => ({ resetEditBuffers: record(`resetEditBuffers`) }));
-vi.mock(`../../../shell/presence/usePresence`, () => ({ resetPresence: record(`resetPresence`) }));
-vi.mock(`../../workspace/push/usePushFlow`, () => ({ resetPushFlow: record(`resetPushFlow`) }));
-vi.mock(`../../../shell/window/useLayout`, () => ({ resetTerminalOpen: record(`resetTerminalOpen`) }));
-vi.mock(`../../workspace/changes/live/useWorkspaceLive`, () => ({ resetWorkspaceLive: record(`resetWorkspaceLive`) }));
-vi.mock(`../../workspace/tabs/useWorkspaceTabs`, () => ({ resetWorkspaceTabs: record(`resetWorkspaceTabs`) }));
-vi.mock(`../../workspace/explorer/useWorkspaceTree`, () => ({ resetWorkspaceTreeState: record(`resetWorkspaceTreeState`) }));
+mock.module(`../../agents/fleet/useAgents`, () => ({ resetAgents: record(`resetAgents`) }));
+mock.module(`../../agents/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`), resetArchive: record(`resetArchive`) }));
+mock.module(`../../chat/run/useChat`, () => ({ resetChat: record(`resetChat`) }));
+mock.module(`../../chat/accounts/useChat-accounts`, () => ({ loadAccountStatus: record(`loadAccountStatus`) }));
+mock.module(`../../workspace/files/useEditBuffers`, () => ({ resetEditBuffers: record(`resetEditBuffers`) }));
+mock.module(`../../../shell/presence/usePresence`, () => ({ resetPresence: record(`resetPresence`) }));
+mock.module(`../../workspace/push/usePushFlow`, () => ({ resetPushFlow: record(`resetPushFlow`) }));
+mock.module(`../../../shell/window/useLayout`, () => ({ resetTerminalOpen: record(`resetTerminalOpen`) }));
+mock.module(`../../workspace/changes/live/useWorkspaceLive`, () => ({ resetWorkspaceLive: record(`resetWorkspaceLive`) }));
+mock.module(`../../workspace/tabs/useWorkspaceTabs`, () => ({ resetWorkspaceTabs: record(`resetWorkspaceTabs`) }));
+mock.module(`../../workspace/explorer/useWorkspaceTree`, () => ({ resetWorkspaceTreeState: record(`resetWorkspaceTreeState`) }));
 
 // Stands in for useSandbox so the switch can be exercised without the platform client, sandbox list or a connection.
-const { activeSandboxId, reachable } = await vi.hoisted(async () => {
+const { activeSandboxId, reachable } = await hoisted(async () => {
     const { ref } = await import(`vue`);
     return { activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) };
 });
-vi.mock(`./useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
+mock.module(`./useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId, reachable }) }));
 
 await import("./sandboxScope");
 const { nextTick } = await import("vue");

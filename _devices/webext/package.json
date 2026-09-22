@@ -13,8 +13,8 @@
     "scripts": {
         "build": "node ../../_tools/scripts/build/clean-outputs.mjs dist dist.zip && esbuild src/background/main.ts --bundle --format=esm --target=chrome116 --minify --outfile=dist/background.js --log-level=warning && esbuild src/content/pair-bridge.ts --bundle --format=iife --target=chrome116 --minify --outfile=dist/pair-bridge.js --log-level=warning && esbuild src/popup/popup.ts --bundle --format=iife --target=chrome116 --minify --outfile=dist/popup.js --log-level=warning && cp -R static/. dist/ && node scripts/stamp-manifest.mjs && node scripts/size-budget.mjs",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
-        "test": "vitest run",
-        "test:watch": "vitest",
+        "test": "suites",
+        "test:watch": "suites --watch",
         "package": "node scripts/pack.mjs",
         "icons": "node scripts/render-icons.mjs",
         "store-assets": "node scripts/render-store-assets.mjs",
@@ -30,9 +30,8 @@
     "devDependencies": {
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "esbuild": "catalog:",
-        "jsdom": "catalog:",
-        "vitest": "catalog:"
+        "esbuild": "catalog:"
     }
 }

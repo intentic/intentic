@@ -1,24 +1,31 @@
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock } from "bun:test";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import type { TurnContext } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { testConfig } from "../../testing.js";
-import { cursorMcpServers } from "./cursor-tools.js";
-import { planCursorTurn } from "./cursor-provider.js";
+import * as browserToolsOriginal from "../../browser/tools/browser-tools.js";
+import * as cursorSdkOriginal from "./cursor-sdk.js";
 
 /* What a Cursor turn is handed to reach out of itself: the daemon's http MCP tools, which cursorMcpServers mounts. */
 
-vi.mock("./cursor-sdk.js", () => ({ CURSOR_SDK_MISSING: "missing sdk", cursorSdk: async () => ({ Agent: {} }) }));
+mock.module("./cursor-sdk.js", () => ({ ...cursorSdkOriginal, CURSOR_SDK_MISSING: "missing sdk", cursorSdk: async () => ({ Agent: {} }) }));
 
 // The login door reaches the environment builder, which reaches the provider registry, which imports this module back:
 // benign when the daemon boots through the registry, a half-built module when a suite enters here. Nothing below signs
 // anyone in, so the door stays out of the graph.
-vi.mock("./cursor-accounts.js", () => ({ cursorAccountDoor: {} }));
+mock.module("./cursor-accounts.js", () => ({ cursorAccountDoor: {} }));
 
-const browserServers = vi.fn();
-vi.mock("../../browser/tools/browser-tools.js", () => ({ browserServersOf: (...args: unknown[]) => browserServers(...args) }));
+const browserServers = mock();
+mock.module("../../browser/tools/browser-tools.js", () => ({
+    ...browserToolsOriginal,
+    browserServersOf: (...args: unknown[]) => browserServers(...args),
+}));
+
+// Loaded after the mocks: mock.module binds at this point, and a static import would have already evaluated the graph.
+const { cursorMcpServers } = await import("./cursor-tools.js");
+const { planCursorTurn } = await import("./cursor-provider.js");
 
 const ROOT = "/nowhere/cursor-plan";
 
@@ -68,7 +75,11 @@ test("a connected browser extension reaches the turn as an http MCP server named
 
     expect(request.tools).toEqual([{ name: "chrome", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/webext/chrome`, token: "webext-bridge" }]);
     expect(cursorMcpServers(request)).toEqual({
-        chrome: { type: "http", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/webext/chrome`, headers: { Authorization: "Bearer webext-bridge" } },
+        chrome: {
+            type: "http",
+            url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/webext/chrome`,
+            headers: { Authorization: "Bearer webext-bridge" },
+        },
     });
 });
 

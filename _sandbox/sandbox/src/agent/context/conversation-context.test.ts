@@ -1,6 +1,6 @@
 import type { AgentTurn, Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import type { Composition } from "../../agents/registry/agents-store.js";
 import { contextNoteFor, decideComposition } from "./conversation-context.js";

@@ -1,5 +1,5 @@
 import { sinceOf, withinWindow } from "@intentic/ui/time";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // The app's one "how far back" vocabulary (_editor/ui/src/lib/timeWindow.ts); Activity and Logs both narrow their feed
 // by it, so a wrong cutoff here silently hides rows on both. Reached by its own subpath rather than the barrel since

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { advanceIdle, type IdleSample } from "./local-model-idle.js";
 
 /* When a loaded model has stopped earning the memory it holds, decided from CPU samples alone. */

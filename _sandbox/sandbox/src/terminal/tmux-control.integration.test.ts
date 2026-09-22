@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import { promisify } from "node:util";
-import { afterEach, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterEach } from "bun:test";
 import { attachControlTerminal, type ControlTerminal, spawnControlClient } from "./tmux-control.js";
 
 // @xterm/headless v6 ships as CommonJS; Node's ESM lexer can't detect its named exports.
@@ -42,10 +42,14 @@ const quiet = async (h: Harness, ms = 400): Promise<void> => {
 const open = (argv: string[], cols = 80, rows = 24): Harness => {
     const chunks: Buffer[] = [];
     const exits: { code: number; reason: string }[] = [];
-    const terminal = attachControlTerminal(argv, { cols, rows }, {
-        output: (bytes) => chunks.push(bytes),
-        exit: (code, reason) => exits.push({ code, reason }),
-    });
+    const terminal = attachControlTerminal(
+        argv,
+        { cols, rows },
+        {
+            output: (bytes) => chunks.push(bytes),
+            exit: (code, reason) => exits.push({ code, reason }),
+        },
+    );
     return { terminal, text: () => Buffer.concat(chunks).toString("utf8"), exits };
 };
 
@@ -177,9 +181,9 @@ test("a replay puts the same rows and the same cursor on an empty xterm that the
     const shown = Array.from({ length: 8 }, (_, row) => (buffer.getLine(buffer.viewportY + row)?.translateToString(true) ?? "").trimEnd());
 
     const tmuxScreen = (await tmux("capture-pane", "-p", "-t", `=${name}:`)).split("\n").map((line) => line.trimEnd());
-    const [cursorX, cursorY] = (await tmux("display", "-p", "-t", `=${name}:`, "#{cursor_x} #{cursor_y}")).split(" ").map(Number);
+    const cursor = (await tmux("display", "-p", "-t", `=${name}:`, "#{cursor_x} #{cursor_y}")).split(" ").map(Number);
     expect(shown).toEqual(tmuxScreen);
-    expect([buffer.cursorX, buffer.cursorY]).toEqual([cursorX, cursorY]);
+    expect([buffer.cursorX, buffer.cursorY]).toEqual(cursor);
     expect(buffer.length).toBeGreaterThan(8);
     expect(buffer.getLine(0)?.translateToString(true)).toContain("for i in");
 });

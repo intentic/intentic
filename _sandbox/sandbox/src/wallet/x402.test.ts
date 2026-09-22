@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { atomicToUsd, mintAuthorization, parseChallenge, parseSettlement, paymentHeader, usdToAtomic } from "./x402.js";
 
 /* The wire, driven with the strings a real endpoint would actually send. */

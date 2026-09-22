@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { discoverProjects, installPanelKey, type ProjectSetupStatus, SETUP_NOTICE_HEADER, setupNoticeFor, setupStateOf } from "./workspace-setup.js";
 

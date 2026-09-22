@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import { DEFAULT_REPLY, type FakeUpstream, startFakeUpstream } from "./server.ts";
 
 // Trial requests asserted against the CI stand-in. The valuable tests are refusals: the platform hits two surfaces with

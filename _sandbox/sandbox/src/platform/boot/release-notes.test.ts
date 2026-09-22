@@ -1,9 +1,10 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { isDevBuild } from "../../version.js";
 import { breakingNotes, parseBreakingNotes, parseReleaseNotes, refreshReleaseNotes, startReleaseNotesCheck, updateNotes } from "./release-notes.js";
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 // The body shape publish-github.sh writes: the user-facing section first, the commit-subject grouping under it.
@@ -44,7 +45,7 @@ test("reads the breaking section apart from the notes", () => {
 });
 
 test("collects every breaking sentence in the gap, and a release that only breaks still counts", async () => {
-    vi.stubGlobal("fetch", async () =>
+    stubGlobal("fetch", async () =>
         releasesResponse([
             { tag_name: "v1.188.0", body: "## Breaking changes\n\n- The export command is gone.\n" },
             { tag_name: "v1.187.0", body: "## What's new\n\n- Middle thing.\n" },
@@ -57,7 +58,7 @@ test("collects every breaking sentence in the gap, and a release that only break
 });
 
 test("collects the notes for every release newer than this sandbox, and none of the older ones", async () => {
-    vi.stubGlobal("fetch", async () =>
+    stubGlobal("fetch", async () =>
         releasesResponse([
             { tag_name: "v1.188.0", body: "## What's new\n\n- Newest thing.\n" },
             { tag_name: "v1.187.0", body: "## What's new\n\n- Middle thing.\n" },
@@ -72,7 +73,7 @@ test("collects the notes for every release newer than this sandbox, and none of 
 
 test("says one change once, however many releases carried it", async () => {
     // The fixture differs only in case, to prove the same-sentence check ignores it.
-    vi.stubGlobal("fetch", async () =>
+    stubGlobal("fetch", async () =>
         releasesResponse([
             { tag_name: "v1.188.0", body: "## What's new\n\n- The same thing.\n" },
             { tag_name: "v1.187.0", body: "## What's new\n\n- the same thing.\n" },
@@ -83,13 +84,13 @@ test("says one change once, however many releases carried it", async () => {
 });
 
 test("an unknown installed version asks for nothing: that is the dev build", async () => {
-    vi.stubGlobal("fetch", async () => releasesResponse([{ tag_name: "v1.188.0", body: "## What's new\n\n- Newest thing.\n" }]));
+    stubGlobal("fetch", async () => releasesResponse([{ tag_name: "v1.188.0", body: "## What's new\n\n- Newest thing.\n" }]));
     await refreshReleaseNotes();
     expect(updateNotes(undefined)).toEqual([]);
 });
 
 test("drafts and pre-releases are not what anybody is being offered", async () => {
-    vi.stubGlobal("fetch", async () =>
+    stubGlobal("fetch", async () =>
         releasesResponse([
             { tag_name: "v1.189.0", body: "## What's new\n\n- Unreleased thing.\n", draft: true },
             { tag_name: "v1.188.0", body: "## What's new\n\n- Beta thing.\n", prerelease: true },
@@ -101,9 +102,9 @@ test("drafts and pre-releases are not what anybody is being offered", async () =
 });
 
 test("a failed refresh keeps the previous cached notes", async () => {
-    vi.stubGlobal("fetch", async () => releasesResponse([{ tag_name: "v1.187.0", body: "## What's new\n\n- Still here.\n" }]));
+    stubGlobal("fetch", async () => releasesResponse([{ tag_name: "v1.187.0", body: "## What's new\n\n- Still here.\n" }]));
     await refreshReleaseNotes();
-    vi.stubGlobal("fetch", async () => {
+    stubGlobal("fetch", async () => {
         throw new Error("offline");
     });
     await refreshReleaseNotes();
@@ -112,7 +113,7 @@ test("a failed refresh keeps the previous cached notes", async () => {
 
 test("a dev build never fetches, for the same reason it is never offered an update", async () => {
     let fetched = false;
-    vi.stubGlobal("fetch", async () => {
+    stubGlobal("fetch", async () => {
         fetched = true;
         return releasesResponse([]);
     });

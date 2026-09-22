@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { checks } from "./invariant.js";
 import type { IssuesStore } from "./issues-store.js";
 

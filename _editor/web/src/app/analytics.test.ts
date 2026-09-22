@@ -1,32 +1,44 @@
 import type { User } from "@intentic/api-contract";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
+import { freshImport, stubGlobal, mocked } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 
 // Plain ref stands in for useAuth's module singleton; the mock closure keeps re-imported analytics modules
-// (vi.resetModules per test) watching the same instance.
+// (one evaluation per test) watching the same instance.
 const user = ref<User | null>(null);
-vi.mock("../features/auth/useAuth", () => ({ useAuth: () => ({ user }) }));
-vi.mock("posthog-js", () => ({
-    default: { init: vi.fn(), identify: vi.fn(), reset: vi.fn(), capture: vi.fn(), register: vi.fn() },
+mock.module("../features/auth/useAuth", () => ({ useAuth: () => ({ user }) }));
+mock.module("posthog-js", () => ({
+    default: { init: mock(), identify: mock(), reset: mock(), capture: mock(), register: mock() },
 }));
+
+// environment.ts reads `window.env` once, at import; this is the same object under the same name, mutated per case,
+// since the module under test reads the key through it on every call.
+const environment = {
+    production: false,
+    api: { url: `` },
+    auth: { googleClientId: `` },
+    analytics: { posthogKey: ``, posthogHost: `https://app.intentic.dev/wire` },
+    afterSignOut: ``,
+};
+mock.module("./environments/environment", () => ({ environment }));
 
 // `desktop` stands in for the app's init script (windows.rs), the only signal that tells this SPA it's running in
 // the desktop app rather than a browser tab.
 const bootAnalytics = async (posthogKey: string, desktop?: { version: string; installId: string; update: string | null }) => {
-    vi.resetModules();
-    vi.stubGlobal(`window`, {
-        env: { analytics: { posthogKey, posthogHost: `https://app.intentic.dev/wire` } },
+    environment.analytics.posthogKey = posthogKey;
+    stubGlobal(`window`, {
+        env: environment,
         ...(desktop !== undefined ? { __INTENTIC_DESKTOP__: desktop } : {}),
     });
     const posthog = (await import(`posthog-js`)).default;
-    const analytics = await import(`./analytics`);
+    const analytics = await freshImport<typeof import("./analytics")>("./analytics", import.meta.url);
     analytics.initAnalytics();
     return { posthog, analytics };
 };
 
 beforeEach(() => {
-    // The posthog-js mock instance is shared across vi.resetModules boots: drop the previous test's calls.
-    vi.clearAllMocks();
+    // The posthog-js mock instance is shared across boots: drop the previous test's calls.
+    jest.clearAllMocks();
     user.value = null;
 });
 
@@ -75,13 +87,13 @@ describe(`initAnalytics`, () => {
         // Counted, not asserted outright: `user` is a module singleton, so every boot in this file leaves a live
         // watcher
         // that a sign-out here also triggers.
-        const said = vi.mocked(posthog.register).mock.calls.length;
+        const said = mocked(posthog.register).mock.calls.length;
 
         user.value = null;
         await nextTick();
 
-        expect(vi.mocked(posthog.register).mock.calls.length).toBeGreaterThan(said);
-        expect(vi.mocked(posthog.register).mock.calls.at(-1)).toEqual([
+        expect(mocked(posthog.register).mock.calls.length).toBeGreaterThan(said);
+        expect(mocked(posthog.register).mock.calls.at(-1)).toEqual([
             { client: `desktop`, desktop_version: `1.15.1`, desktop_install_id: `install-abc` },
         ]);
     });
@@ -90,7 +102,7 @@ describe(`initAnalytics`, () => {
     // still loses replay to Brave/uBlock; the `sdk.` prefix misses those rules, and nginx.conf strips it back off.
     it(`prefixes SDK script filenames so filename-anchored blocker rules miss them`, async () => {
         const { posthog } = await bootAnalytics(`phc_test`);
-        const { prepare_external_dependency_script: prepare } = vi.mocked(posthog.init).mock.calls[0]![1]!;
+        const { prepare_external_dependency_script: prepare } = mocked(posthog.init).mock.calls[0]![1]!;
 
         const rewrite = (src: string) => {
             const script = { src } as HTMLScriptElement;

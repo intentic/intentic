@@ -1,5 +1,5 @@
 import { ResourceGroupSchema } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { groupAccent, resourceIcon, resourceLogoUrl } from "./resourceVisual";
 
 describe(`resourceIcon`, () => {

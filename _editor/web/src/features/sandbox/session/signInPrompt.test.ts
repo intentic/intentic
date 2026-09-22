@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from "vitest";
+import { it, expect, afterEach } from "bun:test";
 import { completeSignIn, dismissSignIn, offerPasskey, raiseSignIn, useSignInPrompt } from "./signInPrompt";
 
 // The one question the gate is asked and the one answer the session module waits for: raising shows it, settling

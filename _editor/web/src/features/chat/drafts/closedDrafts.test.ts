@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { ref } from "vue";
+import { freshImport } from "@intentic/testing/bun";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });
@@ -75,16 +76,6 @@ describe(`closedDrafts`, () => {
         expect(closedDrafts.value.map((entry) => entry.conversationId)).toEqual([`c2`]);
     });
 
-    it(`survives the window that wrote it`, async () => {
-        keepClosedDraft(tab(`c1`, `still here tomorrow`));
-        vi.resetModules();
-
-        // A fresh realm, a reload or another window opening, reading the same origin's storage.
-        const { closedDrafts: reloaded } = await import("./closedDrafts");
-
-        expect(reloaded.value.map((entry) => entry.draft)).toEqual([`still here tomorrow`]);
-    });
-
     // Cross-window note: the × is pressed in the popped-out window, the board keeping the card is here.
     // A snapshot, never a patch; the last note wins.
     it(`takes the whole set from another window's note`, () => {
@@ -102,5 +93,15 @@ describe(`closedDrafts`, () => {
         receiveChatNote({ sandbox: `sb2`, note: { kind: `closed-drafts`, tabs: [] } });
 
         expect(closedDrafts.value.map((entry) => entry.conversationId)).toEqual([`c1`]);
+    });
+    // Last in the file: a reload registers the window's one reader for this note kind (chatChannel keeps a single
+    // reader per kind), so the copy loaded here, not the one above, is what a later note would reach.
+    it(`survives the window that wrote it`, async () => {
+        keepClosedDraft(tab(`c1`, `still here tomorrow`));
+
+        // A fresh realm, a reload or another window opening, reading the same origin's storage.
+        const { closedDrafts: reloaded } = await freshImport<typeof import("./closedDrafts")>("./closedDrafts", import.meta.url);
+
+        expect(reloaded.value.map((entry) => entry.draft)).toEqual([`still here tomorrow`]);
     });
 });

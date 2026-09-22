@@ -1,5 +1,5 @@
 import { capabilitiesOf, PROVIDERS } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { promptReach, spokenList } from "./promptReach";
 
 /* The sentence under the System prompt control, asserted by SHAPE rather than by its words. */

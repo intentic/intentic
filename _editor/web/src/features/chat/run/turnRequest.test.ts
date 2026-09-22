@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { turnRequestBody } from "./turnRequest";
 
 // Baseline turn settings reused across the request-shape tests below.

@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, jest } from "bun:test";
 import { createWsTickets, redeemTicket } from "./ws-tickets.js";
 
 const IDENTITY = { email: "owner@x.com", role: "owner" as const };
@@ -25,14 +25,14 @@ test("an unminted or empty ticket is refused", () => {
 });
 
 test("a ticket expires, so one that leaks and is never used cannot be picked up later", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const tickets = createWsTickets();
         const ticket = tickets.mint(IDENTITY);
-        vi.advanceTimersByTime(31_000);
+        jest.advanceTimersByTime(31_000);
         expect(tickets.redeem(ticket)).toBeUndefined();
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 

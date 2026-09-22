@@ -1,7 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import type { AddressInfo } from "node:net";
-import { afterAll, expect, test } from "vitest";
+import { test, expect, afterAll } from "bun:test";
 import type { PortTarget } from "../ports/port-forwards.js";
 import type { PanelUpstream, PanelUpstreamResolver } from "./panel-upstream.js";
 import { createPreviewProxy, PREVIEW_PROBE_PATH, type PreviewProxyDeps, type SlotResolver } from "./preview-proxy.js";

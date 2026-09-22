@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import type { Config } from "../../config.js";
 import { forgetProviderCapacity, hostedCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
 
@@ -14,9 +14,9 @@ const fakePrisma = (fleet: { machines?: number; pooled?: number; building?: numb
     const pooled = fleet.pooled ?? 0;
     const ready = fleet.ready ?? 0;
     const counts = {
-        machines: vi.fn().mockResolvedValue(fleet.machines ?? 0),
-        pool: vi.fn().mockImplementation((args?: { where?: Record<string, unknown> }) => Promise.resolve(args?.where === undefined ? pooled : ready)),
-        builds: vi.fn().mockResolvedValue(fleet.building ?? 0),
+        machines: mock().mockResolvedValue(fleet.machines ?? 0),
+        pool: mock().mockImplementation((args?: { where?: Record<string, unknown> }) => Promise.resolve(args?.where === undefined ? pooled : ready)),
+        builds: mock().mockResolvedValue(fleet.building ?? 0),
     };
     return {
         counts,

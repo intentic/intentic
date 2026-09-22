@@ -70,7 +70,7 @@ export const PanelSummarySchema = z.object({
     // desiredState: desired-state.json (present after the first resolve).
     // directoryUi: .intentic/ui/index.html.
     // monorepo: pnpm-workspace.yaml + turbo.json.
-    // vitest: a root vitest.config.ts, or "vitest" in the manifest/workspace catalog.
+    // vitest: a root vitest config file, or "vitest" in the inspected repo's manifest/workspace catalog.
     // userStories: docs/user-stories.
     // docs: docs/architecture.
     deployConfig: z.boolean().describe("It declares infrastructure."),

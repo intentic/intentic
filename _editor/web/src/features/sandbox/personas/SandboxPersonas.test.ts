@@ -1,14 +1,15 @@
-// @vitest-environment jsdom
 // Pins two wordings that cost something if wrong: marking a persona whose accounts are all signed out, and saving both
 // accounts on a persona that spans sites. jsdom: renders and reads the mounted DOM.
+import "@intentic/testing/dom";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { type Persona, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
 import type { BrowserAccount } from "../../extensions/useBrowserAccounts";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { waitFor, hoisted } from "@intentic/testing/bun";
+import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
-vi.hoisted(() => {
+hoisted(() => {
     // jsdom has no ResizeObserver; AnchoredOverlay throws on open without one, as an unhandled rejection off the
     // assertion path.
 });
@@ -17,13 +18,13 @@ const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
 // Upserts like the real route; creating a persona opens it immediately, so a mock that didn't add the persona would leave
 // creation tests asserting against a page that never redrew.
-const save = vi.fn<(persona: Persona) => Promise<unknown>>().mockImplementation(async (persona) => {
+const save = mock<(persona: Persona) => Promise<unknown>>().mockImplementation(async (persona) => {
     personas.value = [...personas.value.filter((entry) => entry.id !== persona.id), persona];
     return { ok: true };
 });
-const remove = vi.fn<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
+const remove = mock<(id: string) => Promise<unknown>>().mockResolvedValue({ ok: true });
 
-vi.mock(`./usePersonas`, () => ({
+mock.module(`./usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected,
@@ -36,23 +37,22 @@ vi.mock(`./usePersonas`, () => ({
 }));
 
 const accounts = ref<BrowserAccount[]>([]);
-vi.mock(`../../extensions/useBrowserAccounts`, () => ({
+mock.module(`../../extensions/useBrowserAccounts`, () => ({
     useBrowserAccounts: () => ({ accounts, accountOf: (id: string) => accounts.value.find((entry) => entry.id === id) }),
 }));
 
 // Mocked since the real composable reaches the sandbox client at import time, which jsdom has no environment for.
 const capabilities = ref<{ id: string; kind: string }[]>([]);
-vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+mock.module(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 
 // Stubbed separately from the query mock below, which answers everything with a workspace tree; this suite is about the
 // persona, so the kit answers empty.
-vi.mock(`./usePersonaKit`, async () => {
-    const { computed, ref: shallow } = await import(`vue`);
-    const idle = { mutateAsync: vi.fn().mockResolvedValue({ ok: true }), isPending: shallow(false) };
+mock.module(`./usePersonaKit`, () => {
+    const idle = { mutateAsync: mock().mockResolvedValue({ ok: true }), isPending: shallow(false) };
     return {
         usePersonaKit: () => ({
             kit: computed(() => ({ prompt: ``, skills: [] })),
-            readSkill: vi.fn(),
+            readSkill: mock(),
             error: shallow(undefined),
             isLoading: shallow(false),
             savePrompt: idle,
@@ -65,13 +65,20 @@ vi.mock(`./usePersonaKit`, async () => {
 // A real small tree, not empty, since "the picker lists your folders" is the actual claim under test; the file is here
 // to be filtered out.
 const tree = ref<WorkspaceTreeEntry[]>([]);
-vi.mock(`../client/sandboxClient`, () => ({ sandboxJson: vi.fn().mockResolvedValue({ entries: [], hidden: 0 }) }));
+// Every name the graph imports from the daemon client, since bun links an ESM import against exactly what this
+// factory returns; only sandboxJson is ever called.
+mock.module(`../client/sandboxClient`, () => ({
+    sandboxJson: mock().mockResolvedValue({ entries: [], hidden: 0 }),
+    sandboxRequest: mock(),
+    sandboxRequestVia: mock(),
+    sandboxError: mock(async () => new Error(`unused`)),
+    SandboxHttpError: class SandboxHttpError extends Error {},
+}));
 // The named parts of the workspace: the persona editor reads them to say which of them gain the persona being written.
 // Holds the `docs` folder of the tree below, so a persona starting there is one this area hands over.
 const areas = ref([{ id: `handbook`, label: `Handbook`, folders: [`docs`] }]);
-vi.mock(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
-vi.mock(`../client/useSandboxQuery`, async () => {
-    const { computed, ref: shallow } = await import(`vue`);
+mock.module(`../areas/useAreas`, () => ({ useAreas: () => ({ areas }) }));
+mock.module(`../client/useSandboxQuery`, () => {
     return {
         useSandboxQuery: () => ({
             query: { data: computed(() => ({ root: `/work`, tree: tree.value, hidden: 0 })), isPending: shallow(false) },
@@ -119,7 +126,7 @@ const rowFor = (el: HTMLElement, id: string): HTMLElement => {
 // Waits for a tab to render rather than a tick count, since opening settles over an unstable number of them.
 const openPersona = async (el: HTMLElement, id: string): Promise<void> => {
     rowFor(el, id).click();
-    await vi.waitFor(() => expect(el.querySelector(`[role="tab"]`)).not.toBeNull());
+    await waitFor(() => expect(el.querySelector(`[role="tab"]`)).not.toBeNull());
 };
 
 // PrimeVue's ToggleSwitch is a checkbox under its skin; flips it by the label text beside it.
@@ -160,13 +167,13 @@ const addPersona = async (el: HTMLElement, name: string): Promise<void> => {
     await nextTick();
     await type(nameField(el), name);
     buttonLabelled(el, `Create`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     await nextTick();
 };
 
 // Found by role, so a stray button whose label matches a heading can't satisfy it.
 const openTab = async (el: HTMLElement, label: string): Promise<void> => {
-    const tab = await vi.waitFor(() => {
+    const tab = await waitFor(() => {
         const found = [...el.querySelectorAll(`[role="tab"]`)].find((entry) => (entry.textContent ?? ``).trim() === label);
         expect(found, `no tab labelled ${label}`).toEqual(expect.any(Object));
         return found!;
@@ -236,7 +243,7 @@ it(`saves one persona holding accounts on two different sites`, async () => {
     buttonLabelled(el, `reddit-work`)!.click();
     buttonLabelled(el, `x-company`)!.click();
 
-    await vi.waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
+    await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
     expect(save.mock.calls.at(-1)![0]).toMatchObject({ id: `work`, label: `Work`, capabilities: [`reddit-work`, `x-company`] });
 });
 
@@ -252,7 +259,7 @@ it(`asks only for a name, then opens the persona it made`, async () => {
 
     await type(nameField(el), `Work`);
     buttonLabelled(el, `Create`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(save.mock.calls[0]![0]).toEqual({ id: `work`, label: `Work`, capabilities: [] });
 
     await nextTick();
@@ -354,7 +361,7 @@ it(`fences a persona to a folder chosen from the workspace tree`, async () => {
 
     folderRow(`docs`)!.click();
 
-    await vi.waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
+    await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
     expect(save.mock.calls.at(-1)![0].workspace).toEqual({ folders: [`docs`] });
 });
 
@@ -368,7 +375,7 @@ it(`says which areas gain the persona, and that starting nowhere keeps it the ow
 
     await openFolderPicker(el, `Starts in`);
     folderRow(`docs`)!.click();
-    await vi.waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
+    await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(1), { timeout: 2000 });
     await nextTick();
     expect(save.mock.calls.at(-1)![0].workspace).toEqual({ startIn: `docs` });
     expect(text(el)).toContain(`Anyone granted Handbook can talk to it.`);
@@ -433,8 +440,11 @@ it(`renames a persona on Enter, keeping the rest of its persona`, async () => {
     const field = el.querySelector<HTMLInputElement>(`input[aria-label="Persona name"]`)!;
     await type(field, `Work crew`);
     field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save.mock.calls[0]![0]).toMatchObject({ id: `work`, label: `Work crew`, capabilities: [`reddit-work`, `x-company`] });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    const written = save.mock.calls[0]![0];
+    expect(written).toMatchObject({ id: `work`, label: `Work crew` });
+    // Spread: what the form hands over is Vue's reactive array, which no array matcher reads as a plain one.
+    expect([...written.capabilities]).toEqual([`reddit-work`, `x-company`]);
 });
 
 it(`abandons a rename on Escape without writing`, async () => {
@@ -460,7 +470,7 @@ it(`saves an open persona as soon as a switch is flipped, with no Save button`, 
     const runCommands = [...el.querySelectorAll(`input[type="checkbox"]`)];
     expect(runCommands.length).toBeGreaterThan(0);
     toggleSwitch(el, `Run commands`);
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].powers).toMatchObject({ shell: false });
 });
 
@@ -533,7 +543,7 @@ it(`drops an account when its chip is clicked`, async () => {
     const el = mount();
     await openPersona(el, `work`);
     byAriaLabel(el, `Stop speaking through reddit-work`)!.click();
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].capabilities).toEqual([`x-company`]);
 });
 
@@ -557,7 +567,7 @@ it(`stores nothing about the prompt for a persona that follows the sandbox`, asy
     await openTab(el, `What it may do`);
     toggleSwitch(el, `Run commands`);
 
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].systemPromptMode).toBeUndefined();
 });
 
@@ -569,7 +579,7 @@ it(`stores the base a persona was given one of its own`, async () => {
 
     await openTab(el, `Claude`);
 
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].systemPromptMode).toBe(`claude`);
 });
 
@@ -602,7 +612,7 @@ it(`drops a preamble note by the name the transcript gives it`, async () => {
     expect(text(el)).toContain(dropped.when);
     toggleSwitch(el, dropped.label);
 
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].briefing).toEqual({ omit: [dropped.id] });
     // The consequence replaces the "when" line only once turning it off is the choice that was made.
     expect(text(el)).toContain(dropped.cost);
@@ -619,7 +629,7 @@ it(`opens a stored persona on what it drops, and stores nothing once it drops no
     // Switched back on, so the persona ends up dropping nothing: the file must then say nothing rather than an empty list.
     toggleSwitch(el, dropped.label);
 
-    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1), { timeout: 2000 });
     expect(save.mock.calls[0]![0].briefing).toBeUndefined();
 });
 

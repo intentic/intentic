@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { measure, measureFile, measurePython, TEST_FILE, weakened } from "@intentic/constants/assertion-measure";
 import { verifyTestsMessage } from "./agent-tests.js";
 

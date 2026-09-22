@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { applyConnectionSignal, classifyFailure, initialConnection, type ConnectionSignal, type ConnectionState } from "../live/connection";
 import { DETACHED_AFTER_MS, SANDBOX_BUSY_AFTER_MS, sandboxAvailability, sandboxRequiresGate } from "./availability";
 

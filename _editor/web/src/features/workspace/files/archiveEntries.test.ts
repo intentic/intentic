@@ -1,5 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { archiveAbove, isArchiveContent, opensAsFolder } from "./archiveEntries";
 
 const file = (path: string): WorkspaceTreeEntry => ({ name: path.split(`/`).at(-1) ?? path, path, type: `file` });

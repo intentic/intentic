@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { AgentTurnSchema } from "../schemas/agent.js";
 import { deriveTitle } from "./title.js";
 

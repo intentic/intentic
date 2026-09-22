@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import { fakeFiles } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
@@ -41,7 +41,7 @@ const exportServices = (work: string, history: string): Services =>
 // Polls the directory for the named export's status, since the pack runs detached; checking the named entry, not the
 // whole list, avoids a false idle read.
 const settled = async (history: string, name: string): Promise<void> => {
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
         const found = (await listExports(history)).find((entry) => entry.name === name);
         expect(found?.status ?? "packing").not.toBe("packing");
     }, SETTLES);

@@ -1,5 +1,5 @@
 import type { RewindResult } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { rewindConversation, type RewindDeps } from "./rewind.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
@@ -64,7 +64,7 @@ const deps = (overrides: {
                 return 4;
             },
         },
-        logger: { warn: vi.fn() },
+        logger: { warn: mock() },
     } as unknown as RewindDeps;
     // Stands in for git in the isolated arm: records each command per repo, and fails for named repos to express a
     // missing checkout.

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MEMORY_FILE } from "@intentic/constants";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { workspaceMemoryNote } from "./workspace-memory.js";
 
 // The properties a runtime's own discovery got wrong: the root file reaches a turn that starts somewhere else, a nested

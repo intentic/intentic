@@ -5,7 +5,8 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Logger } from "pino";
-import { afterAll, expect, it } from "vitest";
+import { it, expect, afterAll } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { startPlatformTunnel } from "./local-tunnel.js";
 
 // Reproduces a dev platform's certificate-name mismatch: the bundled translator opens the connection itself and fails
@@ -50,7 +51,7 @@ it("carries a strict client past a dev platform's own certificate", async () => 
     await expect(fetch(`${platformUrl}/trial/status`)).rejects.toThrow();
 
     const tunnel = startPlatformTunnel(platformUrl, logger);
-    await expect.poll(() => tunnel.url(), { timeout: 5_000 }).toBeDefined();
+    await waitFor(() => expect(tunnel.url()).toEqual(expect.any(String)), { timeout: 5_000 });
 
     const response = await fetch(`${tunnel.url()}/trial/v1/models`);
 

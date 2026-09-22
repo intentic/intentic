@@ -1,10 +1,10 @@
 import { INGRESS_GRANT_HEADER, mintReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
-import { serveIngressSession, type IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
+import { serveIngressSession, webSocketDuplex, type IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
 import { generateKeyPairSync } from "node:crypto";
 import { createServer, request as h1Request, type IncomingHttpHeaders, type Server } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { createWebSocketStream, WebSocket } from "ws";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { WebSocket } from "ws";
 import { createCluster, createInternalServer, HOP_HEADER, type Cluster } from "./cluster.js";
 import type { Peer, PeerDiscovery } from "./peers.js";
 import { createTunnelRegistry, DISPLACED_CODE } from "./registry.js";
@@ -154,7 +154,7 @@ const dial = async (
         socket.on(`open`, () => resolve());
         socket.on(`error`, reject);
     });
-    const daemon = await serveIngressSession(createWebSocketStream(socket), { targetPort });
+    const daemon = await serveIngressSession(webSocketDuplex(socket), { targetPort });
     await waitFor(`the tunnel to register`, () => edge.registry.ids().includes(SANDBOX_ID));
     return { socket, daemon, closedWith };
 };
@@ -206,6 +206,8 @@ describe(`two machines behind one address`, () => {
                 host: `127.0.0.1`,
                 port: portOf(b.edge.server),
                 path: `/ws`,
+                // A browser opens a WebSocket on its own connection; a pooled one never carries a 101 under bun.
+                agent: false,
                 headers: { host: `sandbox-${SANDBOX_ID}.${ZONE}`, connection: `Upgrade`, upgrade: `echo` },
             });
             request.on(`upgrade`, (response, socket: Socket) => {

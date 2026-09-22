@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { FREE_TIER, type HostedTier, PAID_TIERS } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import { configSchema, type Config } from "../../config.js";
 import { call } from "@orpc/server";
 import type { OrpcContext } from "../../context.js";
@@ -13,7 +13,7 @@ import { hostedPlanHttpRoutes } from "./hosted-plan.routes.js";
 // Pins what a buyer would call betrayal if it drifted: on-plan means a paid row or the comp list, the webhook never
 // rolls the mirror back, a deleted account's subscription ends with it, and slots equal the plan's quantity.
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
+const logger = { info: mock(), warn: mock(), error: mock() } as never;
 
 const NOW = new Date(`2026-09-06T12:00:00Z`);
 
@@ -66,15 +66,15 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
     const users = seed?.users ?? [];
     const planById = (id: string) => plans.find((plan) => (plan.id ?? `plan-1`) === id);
     const prisma = {
-        user: { findUnique: vi.fn(async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null) },
+        user: { findUnique: mock(async ({ where }: { where: { id: string } }) => users.find((user) => user.id === where.id) ?? null) },
         hostedPlan: {
-            findUnique: vi.fn(
+            findUnique: mock(
                 async ({ where }: { where: { userId?: string; stripeSubscriptionId?: string } }) =>
                     plans.find((plan) =>
                         where.userId === undefined ? plan.stripeSubscriptionId === where.stripeSubscriptionId : plan.userId === where.userId,
                     ) ?? null,
             ),
-            upsert: vi.fn(async ({ where, create, update }: { where: { userId: string }; create: PlanRow; update: Partial<PlanRow> }) => {
+            upsert: mock(async ({ where, create, update }: { where: { userId: string }; create: PlanRow; update: Partial<PlanRow> }) => {
                 const existing = plans.find((plan) => plan.userId === where.userId);
                 if (existing === undefined) {
                     const made: PlanRow = { id: `plan-1`, ...create, items: create.items ?? [] };
@@ -85,7 +85,7 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
                 return existing;
             }),
             // Honors the ordering guard like Postgres would: a row synced later than the event is not a hit.
-            updateMany: vi.fn(async ({ where, data }: { where: { stripeCustomerId: string; syncedAt?: { lte: Date } }; data: Partial<PlanRow> }) => {
+            updateMany: mock(async ({ where, data }: { where: { stripeCustomerId: string; syncedAt?: { lte: Date } }; data: Partial<PlanRow> }) => {
                 const hits = plans.filter(
                     (plan) =>
                         plan.stripeCustomerId === where.stripeCustomerId &&
@@ -98,7 +98,7 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
             }),
         },
         hostedPlanItem: {
-            upsert: vi.fn(async ({ where, create, update }: { where: { planId_tier: { planId: string; tier: string } }; create: ItemRow; update: Partial<ItemRow> }) => {
+            upsert: mock(async ({ where, create, update }: { where: { planId_tier: { planId: string; tier: string } }; create: ItemRow; update: Partial<ItemRow> }) => {
                 const plan = planById(where.planId_tier.planId);
                 const existing = plan?.items.find((item) => item.tier === where.planId_tier.tier);
                 if (existing === undefined) {
@@ -108,7 +108,7 @@ const fakePrisma = (seed?: { plans?: PlanRow[]; users?: { id: string; email: str
                 Object.assign(existing, update);
                 return existing;
             }),
-            deleteMany: vi.fn(async ({ where }: { where: { planId: string; tier: { notIn: string[] } } }) => {
+            deleteMany: mock(async ({ where }: { where: { planId: string; tier: { notIn: string[] } } }) => {
                 const plan = planById(where.planId);
                 if (plan !== undefined) {
                     plan.items = plan.items.filter((item) => where.tier.notIn.includes(item.tier));
@@ -171,7 +171,7 @@ describe(`the hosted plan`, () => {
 
     it(`refuses an unsigned webhook and honours a signed subscription lapse, read fresh off Stripe`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`)] });
-        const gateway = { subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
+        const gateway = { subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
             type: `customer.subscription.deleted`,
@@ -185,7 +185,8 @@ describe(`the hosted plan`, () => {
 
         const accepted = await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) });
         expect(accepted.status).toBe(200);
-        expect(gateway.subscription).toHaveBeenCalledExactlyOnceWith(`sub_1`);
+        expect(gateway.subscription).toHaveBeenCalledTimes(1);
+        expect(gateway.subscription).toHaveBeenCalledWith(`sub_1`);
         expect(plans[0]?.status).toBe(`canceled`);
     });
 
@@ -195,7 +196,7 @@ describe(`the hosted plan`, () => {
             { id: `si_9`, priceId: `price_${ENTRY.id}`, quantity: 2 },
             { id: `si_10`, priceId: `price_max`, quantity: 1 },
         ];
-        const gateway = { subscription: vi.fn(async () => subscription({ items: bought })) } as unknown as StripeGateway;
+        const gateway = { subscription: mock(async () => subscription({ items: bought })) } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
             type: `checkout.session.completed`,
@@ -226,7 +227,7 @@ describe(`the hosted plan`, () => {
     it(`writes no slot for an item whose price belongs to no rung of this ladder`, async () => {
         const { prisma, plans } = fakePrisma();
         const gateway = {
-            subscription: vi.fn(async () => subscription({ items: [{ id: `si_x`, priceId: `price_somebody_elses`, quantity: 4 }] })),
+            subscription: mock(async () => subscription({ items: [{ id: `si_x`, priceId: `price_somebody_elses`, quantity: 4 }] })),
         } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({
@@ -241,7 +242,7 @@ describe(`the hosted plan`, () => {
     it(`mirrors a cancellation that has not ended yet`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`, { syncedAt: new Date(NOW.getTime() - 60_000) })] });
         const gateway = {
-            subscription: vi.fn(async () =>
+            subscription: mock(async () =>
                 subscription({
                     id: `sub_1`,
                     customer: `cus_1`,
@@ -261,7 +262,7 @@ describe(`the hosted plan`, () => {
 
     it(`never rolls the mirror back: the event's copy is not trusted, and a read older than the row is dropped`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`canceled`, { syncedAt: NOW })] });
-        const gateway = { subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
+        const gateway = { subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `canceled` })) } as unknown as StripeGateway;
         // The late event still says active; what Stripe says now is what gets written.
         const late = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `sub_1`, object: `subscription`, status: `active` } } });
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
@@ -270,7 +271,7 @@ describe(`the hosted plan`, () => {
 
         // A read two minutes older than the row's last write (a slower, racing handler): stale by construction,
         // dropped.
-        const active = { subscription: vi.fn(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active` })) } as unknown as StripeGateway;
+        const active = { subscription: mock(async () => subscription({ id: `sub_1`, customer: `cus_1`, status: `active` })) } as unknown as StripeGateway;
         const slower = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway: active, now: () => new Date(NOW.getTime() - 120_000) });
         expect((await slower.request(`/webhook`, { method: `POST`, body: late, headers: signed(late) })).status).toBe(200);
         expect(plans[0]?.status).toBe(`canceled`);
@@ -283,7 +284,7 @@ describe(`the hosted plan`, () => {
 
     it(`acknowledges an event whose object is not a subscription without asking Stripe anything`, async () => {
         const { prisma, plans } = fakePrisma({ plans: [row(`active`)] });
-        const gateway = { subscription: vi.fn() } as unknown as StripeGateway;
+        const gateway = { subscription: mock() } as unknown as StripeGateway;
         const app = hostedPlanHttpRoutes({ config: baseConfig, prisma, gateway, now: () => NOW });
         const payload = JSON.stringify({ type: `customer.subscription.updated`, data: { object: { id: `in_1`, object: `invoice` } } });
         expect((await app.request(`/webhook`, { method: `POST`, body: payload, headers: signed(payload) })).status).toBe(200);
@@ -296,19 +297,19 @@ describe(`the hosted plan`, () => {
 // cascade, while the row still names the subscription.
 describe(`cancelling the plan with its account`, () => {
     it(`cancels a live subscription`, async () => {
-        const gateway = { cancelSubscription: vi.fn(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
+        const gateway = { cancelSubscription: mock(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
         await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, baseConfig, logger, `user-1`, gateway);
         expect(gateway.cancelSubscription).toHaveBeenCalledWith(`sub_1`);
     });
 
     it(`also ends one that is past due: Stripe is still trying to charge it`, async () => {
-        const gateway = { cancelSubscription: vi.fn(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
+        const gateway = { cancelSubscription: mock(async () => subscription({ status: `canceled` })) } as unknown as StripeGateway;
         await cancelHostedPlan(fakePrisma({ plans: [row(`past_due`)] }).prisma, baseConfig, logger, `user-1`, gateway);
         expect(gateway.cancelSubscription).toHaveBeenCalledTimes(1);
     });
 
     it(`has nothing to cancel for an account with no plan, an ended one, or a platform selling nothing`, async () => {
-        const gateway = { cancelSubscription: vi.fn() } as unknown as StripeGateway;
+        const gateway = { cancelSubscription: mock() } as unknown as StripeGateway;
         await cancelHostedPlan(fakePrisma().prisma, baseConfig, logger, `user-1`, gateway);
         await cancelHostedPlan(fakePrisma({ plans: [row(`canceled`)] }).prisma, baseConfig, logger, `user-1`, gateway);
         await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, configWith({ stripePrices: `` }), logger, `user-1`, gateway);
@@ -317,9 +318,9 @@ describe(`cancelling the plan with its account`, () => {
 
     // An erasure must not be held hostage by a payment API; the log line names the manual follow-up.
     it(`lets the deletion proceed when Stripe refuses, and says so at error level`, async () => {
-        const gateway = { cancelSubscription: vi.fn(async () => { throw new Error(`Stripe refused: down`); }) } as unknown as StripeGateway;
-        const errors = vi.fn();
-        await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, baseConfig, { info: vi.fn(), error: errors } as never, `user-1`, gateway);
+        const gateway = { cancelSubscription: mock(async () => { throw new Error(`Stripe refused: down`); }) } as unknown as StripeGateway;
+        const errors = mock();
+        await cancelHostedPlan(fakePrisma({ plans: [row(`active`)] }).prisma, baseConfig, { info: mock(), error: errors } as never, `user-1`, gateway);
         expect(errors).toHaveBeenCalledWith(expect.objectContaining({ subscription: `sub_1` }), expect.stringContaining(`by hand`));
     });
 });
@@ -339,7 +340,7 @@ describe(`the price the plan sells`, () => {
     });
 
     const logs = () => {
-        const spies = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const spies = { info: mock(), warn: mock(), error: mock() };
         return { ...spies, logger: spies as never };
     };
 
@@ -347,7 +348,7 @@ describe(`the price the plan sells`, () => {
     // test means. A price id off the ladder is a mistake in the test, not a case to answer.
     const answering = (over: Partial<StripePrice> | Error = {}): StripeGateway =>
         ({
-            price: vi.fn(async (priceId: string) => {
+            price: mock(async (priceId: string) => {
                 if (over instanceof Error) {
                     throw over;
                 }
@@ -437,7 +438,7 @@ describe(`the doors to Stripe`, () => {
 
     it(`answers a refused checkout with Stripe's reason, not an unhandled error`, async () => {
         const refusing = {
-            checkoutSession: vi.fn(async () => {
+            checkoutSession: mock(async () => {
                 throw new StripeError(`Stripe refused: The price specified is inactive. This field only accepts active prices.`);
             }),
         } as unknown as StripeGateway;
@@ -449,7 +450,7 @@ describe(`the doors to Stripe`, () => {
 
     it(`answers a refused portal the same way`, async () => {
         const refusing = {
-            portalSession: vi.fn(async () => {
+            portalSession: mock(async () => {
                 throw new StripeError(`Stripe refused: No configuration provided`);
             }),
         } as unknown as StripeGateway;

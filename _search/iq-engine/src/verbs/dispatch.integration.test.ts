@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createEngine, type Engine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
@@ -128,7 +128,7 @@ test("a scoped find answers with exactly the unscoped hits for the files in scop
     expect(paths.every((path) => /^alpha\/src\/[^/]+\.ts$/.test(path))).toBe(true);
     for (const group of scoped.result.groups) {
         const same = unscoped.result.groups.find((candidate) => candidate.path === group.path);
-        expect(group.hits.map((hit) => hit.line)).toEqual(same?.hits.map((hit) => hit.line));
+        expect(same?.hits.map((hit) => hit.line)).toEqual(group.hits.map((hit) => hit.line));
     }
     const inScope = unscoped.result.groups.filter((group) => /^alpha\/src\/[^/]+\.ts$/.test(group.path)).map((group) => group.path);
     expect(paths.toSorted()).toEqual(inScope.toSorted());

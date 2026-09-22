@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { packageRoot, repoRoot } from "@intentic/constants/node";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // Turborepo's strict envMode reconstructs the task environment from allowlists; a privacy var baked into the image but
 // missing from globalPassThroughEnv is silently dropped before `astro dev` reads it.

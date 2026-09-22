@@ -1,5 +1,5 @@
 import { env } from "@intentic/graph";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import type { CloudflareIntent, HostIntent, IntentSet } from "./intent.js";
 import { resolveNeeds } from "./needs.js";

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { jobSessionLabel, panePidSessions, type ReapPolicy, reapableSessions } from "./terminal-session.js";
 
 /* The retention sweep's policy. */

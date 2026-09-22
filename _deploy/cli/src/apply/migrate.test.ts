@@ -1,6 +1,6 @@
 import type { DesiredStateGraph, ResourceNode } from "@intentic/graph";
 import type { SshExecutor, SshResult, SshSession, SshTarget } from "@intentic/providers";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { detectHostMoves, migrateHosts } from "./migrate.js";
 
 const secret = (key: string) => ({ $secret: { source: "env", key } });

@@ -7,8 +7,8 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { Hono } from "hono";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect, mock } from "bun:test";
+import { SETTLES, hoisted, waitFor } from "@intentic/testing/bun";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { WakeFn } from "../automations/scheduler.js";
@@ -25,8 +25,8 @@ import { createCiWebhookRoute } from "./webhook.routes.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.
-const { published } = vi.hoisted(() => ({ published: [] as string[] }));
-vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+const { published } = hoisted(() => ({ published: [] as string[] }));
+mock.module("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
 // (automations/activity/logger); `unstubbed` keeps the fake that small: the listeners.integration.test.ts convention.
@@ -126,7 +126,7 @@ test("a failed run freshens the cache with failed jobs and wakes the ci automati
     expect(response.status).toBe(200);
     expect(services.ciRuns.sweep()).toMatchObject([{ repo: "web", runId: 7, status: "failed", failedJobs: ["lint"] }]);
     expect(await services.ciStore.lastConclusion("web", "main")).toBe("failed");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_failed");
     expect(prompts[0]).toContain(`"lint"`);
     expect(prompts[0]).toContain(`"channelId":"web"`);
@@ -138,7 +138,7 @@ test("a success after a failure dispatches pipeline_succeeded AND pipeline_fixed
     const response = await deliver(app, await services.ciStore.secret(), workflowRun("success"));
     expect(response.status).toBe(200);
     expect(await services.ciStore.lastConclusion("web", "main")).toBe("success");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_succeeded");
     expect(prompts[0]).toContain("pipeline_fixed");
 });
@@ -150,12 +150,12 @@ test("a failure after a recorded success dispatches pipeline_failed AND pipeline
     await services.ciStore.recordConclusion("web", "main", "success", 1);
     const secret = await services.ciStore.secret();
     expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_failed");
     expect(prompts[0]).toContain("pipeline_broken");
 
     expect((await deliver(app, secret, workflowRun("failure"))).status).toBe(200);
-    await vi.waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
     expect(prompts[1]).toContain("pipeline_failed");
     expect(prompts[1]).not.toContain("pipeline_broken");
 });
@@ -238,7 +238,7 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
     });
     expect(accepted.status).toBe(200);
     expect(await services.ciStore.lastConclusion("app", "main")).toBe("success");
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("pipeline_succeeded");
     expect(prompts[0]).toContain("gitlab.example.com/group/app/-/pipelines/42");
 });

@@ -1,58 +1,60 @@
-// @vitest-environment jsdom
 // Mounts the Extension tile and pins a version by typing only a repository URL. The commit sha is the one thing an
 // install must have and the one thing nobody can recall, so this is the affordance worth holding still: the form asks
 // the remote, and a repository it cannot read still leaves a box to paste into.
+import "@intentic/testing/dom";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import { type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
+import * as actualVueRouter from "vue-router";
 
 let query: Record<string, string> = {};
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
     useRoute: () => ({ params: { entry: `extension` }, query }) as never,
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn(), resolve: (to: string) => ({ href: to }) }) as never,
+    useRouter: () => ({ push: mock(), replace: mock(), resolve: (to: string) => ({ href: to }) }) as never,
 }));
 
-const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async () => {});
-const readRemoteRefs = vi.fn<(url: string, token?: string, keeping?: string) => Promise<RemoteRefs>>();
+const add = mock<(input: AddCapabilityInput) => Promise<void>>(async () => {});
+const readRemoteRefs = mock<(url: string, token?: string, keeping?: string) => Promise<RemoteRefs>>();
 const capabilities = ref<{ id: string; kind: string; status: { state: string }; config: Record<string, string>; secrets: string[] }[]>([]);
-vi.mock(`./connect/useCapabilities`, () => ({
+mock.module(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
         error: ref(undefined),
         add: (input: AddCapabilityInput) => add(input),
-        remove: { mutateAsync: vi.fn(), isPending: ref(false) },
-        rename: { mutateAsync: vi.fn(), isPending: ref(false) },
-        refetch: vi.fn(),
-        dismissRecommendation: { mutateAsync: vi.fn(), isPending: ref(false) },
+        remove: { mutateAsync: mock(), isPending: ref(false) },
+        rename: { mutateAsync: mock(), isPending: ref(false) },
+        refetch: mock(),
+        dismissRecommendation: { mutateAsync: mock(), isPending: ref(false) },
     }),
-    browseMarketplace: vi.fn(),
-    probeCapability: vi.fn(),
+    browseMarketplace: mock(),
+    probeCapability: mock(),
     readRemoteRefs: (url: string, token?: string, keeping?: string) => readRemoteRefs(url, token, keeping),
 }));
-vi.mock(`../extensions/useExtensions`, () => ({
+mock.module(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
-vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-vi.mock(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
-    viewProcessLogs: vi.fn(),
+mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+mock.module(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
+    viewProcessLogs: mock(),
 }));
-vi.mock(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
+mock.module(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
 }));
-vi.mock(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: vi.fn(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
+mock.module(`../sandbox/devices/useVpn`, () => ({
+    importForticlient: mock(),
+    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
 }));
-vi.mock(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: vi.fn(), unmount: vi.fn() }),
+mock.module(`../sandbox/devices/useNetdisk`, () => ({
+    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
 }));
-vi.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
 
@@ -124,13 +126,13 @@ const typeUrl = async (el: HTMLElement, url: string): Promise<void> => {
 
 // The field settles before it asks, so a URL is one read rather than one per keystroke; every wait here is for that.
 const settled = async (): Promise<void> => {
-    await vi.waitFor(() => expect(readRemoteRefs).toHaveBeenCalledTimes(1), { timeout: 3_000 });
-    await vi.waitFor(() => expect(versionRow(document.body).querySelector(`button`)).not.toBeNull(), { timeout: 3_000 });
+    await waitFor(() => expect(readRemoteRefs).toHaveBeenCalledTimes(1), { timeout: 3_000 });
+    await waitFor(() => expect(versionRow(document.body).querySelector(`button`)).not.toBeNull(), { timeout: 3_000 });
 };
 
 const submitForm = async (el: HTMLElement): Promise<void> => {
     el.querySelector(`form`)!.dispatchEvent(new Event(`submit`, { bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(add).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(1));
     await nextTick();
 };
 
@@ -173,7 +175,7 @@ it(`sends the token with the read, so a private repository answers on the form i
     token.value = `ghp_secret`;
     token.dispatchEvent(new Event(`input`, { bubbles: true }));
     await nextTick();
-    await vi.waitFor(() => expect(readRemoteRefs).toHaveBeenCalledWith(`https://github.com/owner/private`, `ghp_secret`, undefined), { timeout: 3_000 });
+    await waitFor(() => expect(readRemoteRefs).toHaveBeenCalledWith(`https://github.com/owner/private`, `ghp_secret`, undefined), { timeout: 3_000 });
 });
 
 it(`a repository it cannot read is not a dead end: the reason shows and the box comes back`, async () => {
@@ -181,7 +183,7 @@ it(`a repository it cannot read is not a dead end: the reason shows and the box 
     readRemoteRefs.mockRejectedValue(new Error(`Could not read it: that repository is private: add an access token with read access.`));
 
     await typeUrl(el, `https://github.com/owner/secret`);
-    await vi.waitFor(() => expect(versionRow(el).textContent).toContain(`add an access token`), { timeout: 3_000 });
+    await waitFor(() => expect(versionRow(el).textContent).toContain(`add an access token`), { timeout: 3_000 });
 
     // Still typeable: pasting a sha by hand remains the escape hatch, and submitting it still works.
     const box = versionRow(el).querySelector(`input`)!;
@@ -194,11 +196,11 @@ it(`a repository it cannot read is not a dead end: the reason shows and the box 
 
 it(`opening an install pinned to a commit the repository no longer names keeps that commit`, async () => {
     const el = start({ id: `ext`, ref: OLD, url: `https://github.com/owner/extension` });
-    await vi.waitFor(() => expect(readRemoteRefs).toHaveBeenCalledWith(`https://github.com/owner/extension`, undefined, `ext`), { timeout: 3_000 });
+    await waitFor(() => expect(readRemoteRefs).toHaveBeenCalledWith(`https://github.com/owner/extension`, undefined, `ext`), { timeout: 3_000 });
     await nextTick();
 
     // `next` happens to sit on that commit here, so the picker names it rather than pretending it is unknown.
-    await vi.waitFor(() => expect(versionRow(el).textContent).toContain(`next`), { timeout: 3_000 });
+    await waitFor(() => expect(versionRow(el).textContent).toContain(`next`), { timeout: 3_000 });
 
     await submitForm(el);
     expect(add.mock.calls[0]?.[0].config).toMatchObject({ ref: OLD });
@@ -209,5 +211,5 @@ it(`opening an install pinned to a commit the repository no longer names keeps t
 it(`editing a private install keeps its stored token, sending the marker and the connection to resolve it against`, async () => {
     start({ id: `ext`, ref: OLD, url: `https://github.com/owner/private`, secrets: [`token`] });
 
-    await vi.waitFor(() => expect(readRemoteRefs).toHaveBeenCalledWith(`https://github.com/owner/private`, VAULTED, `ext`), { timeout: 3_000 });
+    await waitFor(() => expect(readRemoteRefs).toHaveBeenCalledWith(`https://github.com/owner/private`, VAULTED, `ext`), { timeout: 3_000 });
 });

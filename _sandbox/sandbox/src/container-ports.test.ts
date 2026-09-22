@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import { DAEMON_PORT, LOCAL_PORT, PREVIEW_PORT, TRANSLATOR_PORT } from "@intentic/constants";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // No two fixed in-container binds may share a port; declared ports (@intentic/constants) must be the single source, not
 // a literal in the Dockerfile.

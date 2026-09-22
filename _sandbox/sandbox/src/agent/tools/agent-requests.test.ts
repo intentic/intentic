@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createRequest, resolveRequest, restoreRequest } from "./agent-requests.js";
 
 // The registry decides what every client is told about a card's fate: a real answer versus the abort's stand-in is the

@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readlink, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, test } from "vitest";
+import { test, expect, afterAll } from "bun:test";
 import { createPublicHandler } from "./public-serve.js";
 
 // The outbox over real HTTP: the actual headers a stranger's browser gets, plus conditional requests (no stale cache)
@@ -121,7 +121,7 @@ test("the outbox is read-only from the internet", async () => {
 test("an aborted download does not leave the read descriptor open", async () => {
     const { port, root } = await servedRoot({ "big.bin": "x".repeat(16 * 1024 * 1024) });
     const published = join(root, "big.bin");
-    // Counts fds for this file only; a process-wide count would be racy with vitest's other open files.
+    // Counts fds for this file only; a process-wide count would be racy with the runner's other open files.
     const openHandles = async (): Promise<number> => {
         const fds = await readdir(`/proc/${process.pid}/fd`).catch(() => [] as string[]);
         const targets = await Promise.all(fds.map((fd) => readlink(`/proc/${process.pid}/fd/${fd}`).catch(() => "")));

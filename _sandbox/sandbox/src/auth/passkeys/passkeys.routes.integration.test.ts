@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
 import { softwareAuthenticator } from "../../harness/passkey-authenticator.testing.js";
@@ -7,7 +7,7 @@ import { proven, rejectAuth, rejectForbidden } from "../../harness/route-client.
 import { services } from "../../harness/route-services.testing.js";
 import { memoryPasskeyStore } from "../../harness/route-stores.testing.js";
 import { ForbiddenError, type Proof, type ProvenCaller } from "../auth.js";
-import type { PasskeyStore, StoredCredential } from "./passkey-store.js";
+import type { PasskeyStore } from "./passkey-store.js";
 
 // The passkey routes over the daemon's HTTP surface, as the browser drives them: registration upgrades the session that
 // asked, the two anonymous doors mint one from a passkey alone, and the owner's switch cannot lock the owner out.
@@ -208,7 +208,9 @@ test("requiring a passkey needs one of the owner's first, hands out recovery cod
     expect(regenerated.codes).not.toEqual(codes);
 
     // Off: the codes are gone with it, and regenerating is a step out of order.
-    expect(await bodyOf(await json(owner.app, "POST", "/system/passkeys/policy", { required: false }))).toEqual({ required: false });
+    expect(await bodyOf<{ required: boolean }>(await json(owner.app, "POST", "/system/passkeys/policy", { required: false }))).toEqual({
+        required: false,
+    });
     expect(await owner.store.recovery()).toEqual([]);
     expect((await json(owner.app, "POST", "/system/passkeys/recovery", {})).status).toBe(409);
     expect((await json(owner.app, "POST", "/system/passkeys/policy", { required: "yes" })).status).toBe(400);
@@ -245,12 +247,12 @@ test("the stored credential carries what a passkey-only session needs for presen
     const { app, store } = daemon({ ...proven(OWNER, "owner"), name: "Olive", picture: "https://p/o.png" });
     await registerThrough(app, softwareAuthenticator());
     const [credential] = await store.list();
-    expect(credential).toMatchObject<Partial<StoredCredential>>({ name: "Olive", picture: "https://p/o.png" });
+    expect(credential).toMatchObject({ name: "Olive", picture: "https://p/o.png" });
 });
 
 test("the middleware passes the enrolment allowance to authorize only on the two registration paths", async () => {
     const seen: (boolean | undefined)[] = [];
-    const authorize = vi.fn(async (_bearer: string, _first: string | undefined, options?: { enrolment?: boolean }) => {
+    const authorize = mock(async (_bearer: string, _first: string | undefined, options?: { enrolment?: boolean }) => {
         seen.push(options?.enrolment);
         return proven(OWNER, "owner");
     });

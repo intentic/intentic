@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { WatchOutcome } from "./transcript.js";
 import { watchWakeOf, watchWakePrompt, watchWakeRow, type WatchWakeFields } from "./watch-wake.js";
 
@@ -13,7 +13,7 @@ const fields = (over: Partial<WatchWakeFields> = {}): WatchWakeFields => ({
     ...over,
 });
 
-const OUTCOMES: readonly WatchOutcome[] = ["met", "timeout", "restart-expired"];
+const OUTCOMES: WatchOutcome[] = ["met", "timeout", "restart-expired"];
 
 describe("watch wake", () => {
     // The composer and the parser are the same piece of knowledge; this is what holds them together when either is

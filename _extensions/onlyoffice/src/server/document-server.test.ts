@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, jest } from "bun:test";
 import type { ContainerSpec, ContainerState, DockerEngine } from "./docker.js";
 import { CONTAINER, CONTAINER_LABELS, DocumentServer, IMAGE, RESTART_POLICY, SETUP_DONE_MARKER } from "./document-server.js";
 
@@ -26,7 +26,15 @@ const scripted = (initial: Partial<Scripted[`state`]> = {}): Scripted => {
         inspect: async () => state.container,
         create: async (name, spec: ContainerSpec) => {
             calls.push(`create ${name} ${spec.hostPort} ${spec.env.join(` `)}`);
-            state.container = { running: false, hostPort: spec.hostPort, image: spec.image, env: [...spec.env], labels: spec.labels, restart: RESTART_POLICY, startedAt: 0 };
+            state.container = {
+                running: false,
+                hostPort: spec.hostPort,
+                image: spec.image,
+                env: [...spec.env],
+                labels: spec.labels,
+                restart: RESTART_POLICY,
+                startedAt: 0,
+            };
         },
         start: async (name) => {
             calls.push(`start ${name}`);
@@ -59,7 +67,7 @@ const server = (script: Scripted, log: string[] = []): DocumentServer =>
 describe(`before the owner's first start`, () => {
     it(`reports docker off, then not started, and opens nothing on its own`, async () => {
         const off = scripted({ off: `Add the Docker capability on the Capabilities page to turn it on.` });
-        expect(await server(off).ensureRunning()).toEqual({ state: `docker-off`, detail: off.state.off });
+        expect(await server(off).ensureRunning()).toEqual({ state: `docker-off`, detail: off.state.off! });
         const fresh = scripted();
         const docs = server(fresh);
         expect(await docs.status()).toEqual({ state: `not-started` });
@@ -75,7 +83,11 @@ describe(`the owner's start`, () => {
         const docs = server(script);
         expect(await docs.start()).toEqual({ state: `starting` });
         await docs.settled();
-        expect(script.calls).toEqual([`pull`, `create ${CONTAINER} 4321 JWT_ENABLED=true JWT_SECRET=sec JWT_HEADER=Authorization ALLOW_PRIVATE_IP_ADDRESS=true`, `start ${CONTAINER}`]);
+        expect(script.calls).toEqual([
+            `pull`,
+            `create ${CONTAINER} 4321 JWT_ENABLED=true JWT_SECRET=sec JWT_HEADER=Authorization ALLOW_PRIVATE_IP_ADDRESS=true`,
+            `start ${CONTAINER}`,
+        ]);
         expect(await docs.status()).toEqual({ state: `ready` });
         expect(docs.running()).toEqual({ port: 4321 });
         // A second start is idle work: the container is up.
@@ -109,7 +121,12 @@ describe(`the owner's start`, () => {
     it(`surfaces a failed start as an error state with the engine's words`, async () => {
         const script = scripted();
         const failing = new DocumentServer({
-            engine: { ...script.engine, pull: async () => { throw new Error(`manifest unknown`); } },
+            engine: {
+                ...script.engine,
+                pull: async () => {
+                    throw new Error(`manifest unknown`);
+                },
+            },
             image: IMAGE,
             secret: `sec`,
             log: () => undefined,
@@ -183,7 +200,15 @@ describe(`an open after that`, () => {
     it(`brings a stopped container back up without pulling`, async () => {
         const script = scripted({
             image: true,
-            container: { running: false, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], labels: CONTAINER_LABELS, restart: RESTART_POLICY, startedAt: 0 },
+            container: {
+                running: false,
+                hostPort: 5000,
+                image: IMAGE,
+                env: [`JWT_SECRET=sec`],
+                labels: CONTAINER_LABELS,
+                restart: RESTART_POLICY,
+                startedAt: 0,
+            },
         });
         const docs = server(script);
         expect(await docs.ensureRunning()).toEqual({ state: `starting` });
@@ -196,7 +221,15 @@ describe(`an open after that`, () => {
     it(`recreates a container built from another image, another secret or without the restart policy`, async () => {
         const script = scripted({
             image: true,
-            container: { running: true, hostPort: 5000, image: `onlyoffice/documentserver:8.2.3`, env: [`JWT_SECRET=old`], labels: CONTAINER_LABELS, restart: RESTART_POLICY, startedAt: 0 },
+            container: {
+                running: true,
+                hostPort: 5000,
+                image: `onlyoffice/documentserver:8.2.3`,
+                env: [`JWT_SECRET=old`],
+                labels: CONTAINER_LABELS,
+                restart: RESTART_POLICY,
+                startedAt: 0,
+            },
         });
         const log: string[] = [];
         const docs = server(script, log);
@@ -207,7 +240,18 @@ describe(`an open after that`, () => {
         expect(log.some((line) => line.includes(`recreating`))).toBe(true);
         expect(docs.running()).toEqual({ port: 4321 });
         // The same image and secret, but created before the restart policy existed: recreated once to get it.
-        const older = scripted({ image: true, container: { running: true, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], labels: CONTAINER_LABELS, restart: `no`, startedAt: 0 } });
+        const older = scripted({
+            image: true,
+            container: {
+                running: true,
+                hostPort: 5000,
+                image: IMAGE,
+                env: [`JWT_SECRET=sec`],
+                labels: CONTAINER_LABELS,
+                restart: `no`,
+                startedAt: 0,
+            },
+        });
         const upgraded = server(older);
         await upgraded.ensureRunning();
         await upgraded.settled();
@@ -216,7 +260,18 @@ describe(`an open after that`, () => {
     });
 
     it(`notices a server that stopped answering and starts it again`, async () => {
-        const script = scripted({ image: true, container: { running: true, hostPort: 5000, image: IMAGE, env: [`JWT_SECRET=sec`], labels: CONTAINER_LABELS, restart: RESTART_POLICY, startedAt: 0 } });
+        const script = scripted({
+            image: true,
+            container: {
+                running: true,
+                hostPort: 5000,
+                image: IMAGE,
+                env: [`JWT_SECRET=sec`],
+                labels: CONTAINER_LABELS,
+                restart: RESTART_POLICY,
+                startedAt: 0,
+            },
+        });
         const docs = server(script);
         await docs.ensureRunning();
         await docs.settled();
@@ -237,7 +292,7 @@ describe(`the idle stop`, () => {
     const WINDOW = 30 * MINUTE;
 
     it(`holds a server that is still being asked for, and stops one nobody has asked for`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             const script = scripted();
             const log: string[] = [];
@@ -247,22 +302,22 @@ describe(`the idle stop`, () => {
 
             // A server just brought up counts as used; the clock starts at the healthcheck, not at zero.
             expect(await docs.stopIfIdle(WINDOW)).toBe(false);
-            vi.advanceTimersByTime(WINDOW - MINUTE);
+            jest.advanceTimersByTime(WINDOW - MINUTE);
             expect(await docs.stopIfIdle(WINDOW)).toBe(false);
 
             // `running()` is the listener asking where to proxy, which is the only thing that refreshes the clock.
             expect(docs.running()).toEqual({ port: 4321 });
-            vi.advanceTimersByTime(WINDOW - MINUTE);
+            jest.advanceTimersByTime(WINDOW - MINUTE);
             expect(await docs.stopIfIdle(WINDOW)).toBe(false);
             expect(script.calls).not.toContain(`stop ${CONTAINER}`);
 
-            vi.advanceTimersByTime(2 * MINUTE);
+            jest.advanceTimersByTime(2 * MINUTE);
             expect(await docs.stopIfIdle(WINDOW)).toBe(true);
             expect(script.calls).toContain(`stop ${CONTAINER}`);
             expect(docs.running()).toBeUndefined();
             expect(log.join(`\n`)).toContain(`stopped the document server`);
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 

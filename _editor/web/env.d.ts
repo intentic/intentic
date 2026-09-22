@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-    // Stamped by vite.shared's define, one fresh value per build. Absent under vitest (which shares only the
+    // Stamped by vite.shared's define, one fresh value per build. Absent under bun test (which shares only the
     // aliases, not the define), where buildId() falls back to a constant.
     readonly BUILD_ID?: string;
 }

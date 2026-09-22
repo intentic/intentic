@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
 // The chip a non-picture attachment is drawn as, and the card it opens. Pins what the old name-only chip withheld:
 // which file this is (its ending, not just its beginning), how big, and what is actually in it.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
@@ -9,7 +9,7 @@ import { CHAT_SURFACE, type ChatSurface } from "../../tools/chatToolSurface";
 import type { FilePeek } from "../../drafts/filePeek";
 import ChatFileChip from "./ChatFileChip.vue";
 
-const openFile = vi.fn();
+const openFile = mock();
 
 // A 2.4 MB log: the case the screenshot was of, where head and tail are both quoted and the middle is not.
 const LOG: FilePeek = {
@@ -40,7 +40,7 @@ const mount = (props: Record<string, unknown> = {}, surface: ChatSurface = { ima
 beforeEach(() => {
     openFile.mockClear();
     // jsdom measures every box as 0×0, which AnchoredOverlay reads as an anchor that has gone away and closes over.
-    vi.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
+    spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
         top: 100,
         left: 600,
         width: 200,
@@ -57,7 +57,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 // A trailing truncation eats the timestamp, which is the only part telling this log from the previous run's.
@@ -157,7 +157,7 @@ it("says what a file is instead of a preview it can't give", async () => {
 // placeAnchored trades a side only for its opposite, so a card wanting the left of a chip with no room either side
 // would be placed at a negative x and cut off. Narrow windows and popped-out panels are exactly that case.
 it("drops the card under the chip when neither side of it has room", async () => {
-    vi.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
+    spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
         top: 100,
         left: 300,
         width: 200,

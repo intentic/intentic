@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { mintConnectToken, mintSetupCode } from "./mint-sandbox.js";
 
 // Both of these travel as argv: `ic sandbox connect <code>`, and the shell one-liner the setup page hands out.
@@ -14,7 +14,7 @@ const SAMPLE = 4_000;
 const MINTERS = [
     { name: `mintSetupCode`, mint: mintSetupCode, length: 11 },
     { name: `mintConnectToken`, mint: mintConnectToken, length: 22 },
-] as const;
+];
 
 describe.each(MINTERS)(`$name`, ({ mint, length }) => {
     const minted = Array.from({ length: SAMPLE }, () => mint());

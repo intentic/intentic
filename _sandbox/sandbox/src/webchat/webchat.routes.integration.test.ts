@@ -10,7 +10,8 @@ import {
     WEBCHAT_DAILY_MAX_DEFAULT,
 } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import { runHeldWake, type WakeFn } from "../automations/scheduler.js";
@@ -386,13 +387,13 @@ test("turnstile is verified server-side, and a rejected token never reaches a wa
     const { services } = await setup(webchat("wc-ts", { webchat: { antiBot: "turnstile", turnstileSiteKey: "site", turnstileSecret: "secret" } }));
     const turns: AgentTurn[] = [];
     const app = appFor(services, fakeWake(turns));
-    vi.stubGlobal(
+    stubGlobal(
         "fetch",
-        vi.fn(async () => new Response(JSON.stringify({ success: false }), { status: 200 })),
+        mock(async () => new Response(JSON.stringify({ success: false }), { status: 200 })),
     );
     expect((await post(app, "wc-ts", { conversationId: "v", content: "hi", turnstileToken: "bad" })).status).toBe(403);
     expect(turns).toEqual([]);
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 // The config route.

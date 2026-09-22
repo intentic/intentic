@@ -1,6 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { facetsOf, searchTextOf } from "./extensionFacets";
 
 const manifest = (contributes: ExtensionManifest["contributes"]): ExtensionManifest => ({

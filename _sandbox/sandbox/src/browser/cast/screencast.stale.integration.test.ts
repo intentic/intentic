@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import type { Browser, Page } from "playwright";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { ensureDisplay } from "./display.js";
 import { startScreencast, VIEW_HEIGHT, VIEW_WIDTH, type ScreencastFrame } from "./screencast.js";
 
@@ -65,7 +65,7 @@ const centreOf = async (reader: Page, frame: ScreencastFrame): Promise<number> =
 
 // Swept across offsets rather than staged at one, since the window moves with the debounce and one delay only proves
 // itself. Each offset lands the click before, inside, or behind the capture; all must still reach the viewer.
-test.each([0, 120, 260, 420, 560, 700])("a click %ims after the page settles still reaches the viewer", { timeout: 120_000 }, async (offset) => {
+test.each([0, 120, 260, 420, 560, 700])("a click %ims after the page settles still reaches the viewer", async (offset) => {
     const browser = await launch();
     if (browser === undefined) {
         return; // no browser on this box
@@ -106,4 +106,4 @@ test.each([0, 120, 260, 420, 560, 700])("a click %ims after the page settles sti
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 120_000 });

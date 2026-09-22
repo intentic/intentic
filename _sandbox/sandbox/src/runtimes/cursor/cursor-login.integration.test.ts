@@ -1,11 +1,12 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock } from "bun:test";
+import { waitFor, hoisted } from "@intentic/testing/bun";
 import { createLogger } from "../../logger.js";
 
-const sdk = vi.hoisted(() => ({ login: vi.fn() }));
-vi.mock("./cursor-sdk.js", () => ({ ensureCursorSdk: async () => ({ Cursor: { auth: { login: sdk.login } } }) }));
+const sdk = hoisted(() => ({ login: mock() }));
+mock.module("./cursor-sdk.js", () => ({ ensureCursorSdk: async () => ({ Cursor: { auth: { login: sdk.login } } }) }));
 
 const { fileCursorStore, startCursorLogin } = await import("./cursor-credentials.js");
 
@@ -20,11 +21,11 @@ beforeEach(() => {
 
 test("a completed login stores the account and makes its runtime pack durable", async () => {
     const store = fileCursorStore(mkdtempSync(join(tmpdir(), "cursor-login-")), logger);
-    const connected = vi.fn(async () => {});
+    const connected = mock(async () => {});
 
     const started = await startCursorLogin({ store, keyName: "intentic sandbox (test)", connected });
 
     expect(started.url).toContain("cursor.com/loginDeepControl");
-    await vi.waitFor(() => expect(connected).toHaveBeenCalledOnce());
+    await waitFor(() => expect(connected).toHaveBeenCalledTimes(1));
     expect(await store.credentials()).toMatchObject([{ id: started.handshake, apiKey: "cursor-key", email: "dev@example.com" }]);
 });

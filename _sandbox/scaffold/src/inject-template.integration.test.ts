@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { addAppsToMonorepo, injectApps, injectMonorepoShell } from "./inject-template.js";
 import { readTemplateManifest, type TemplateManifest } from "./template-manifest.js";
 

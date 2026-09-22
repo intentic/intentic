@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, spyOn, jest } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import Icon from "@intentic/ui/icon";
 import { sectionIcon, ICONS, isIconName, type IconName } from "../../../ui/src/icons/iconSets.js";
@@ -21,7 +22,8 @@ const spinner = async (spin: boolean): Promise<HTMLElement> => mount({ name: `sp
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
+    unstubAllGlobals();
     document.body.innerHTML = ``;
 });
 
@@ -59,9 +61,10 @@ it(`leaves an ordinary icon still`, async () => {
 
 it(`slows the spinner for reduced motion and removes its preference listener on unmount`, async () => {
     const query = window.matchMedia(`(prefers-reduced-motion: reduce)`);
-    const remove = vi.spyOn(query, `removeEventListener`);
+    const remove = spyOn(query, `removeEventListener`);
     Object.defineProperty(query, `matches`, { value: true });
-    vi.spyOn(window, `matchMedia`).mockReturnValue(query);
+    // Stubbed rather than spied on: the DOM shim carries `matchMedia` as an accessor, and a spy cannot stand in for one.
+    stubGlobal(`matchMedia`, () => query);
     const host = await spinner(true);
     expect(host.querySelector(`animateTransform`)?.getAttribute(`dur`)).toBe(`3s`);
     app!.unmount();

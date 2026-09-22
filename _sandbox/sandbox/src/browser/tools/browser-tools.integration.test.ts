@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { browserServerSpec, browserServersOf, isolatedBrowserSpec, prepareBrowserOwner, writeBrowserConfig } from "./browser-tools.js";
 import { chromiumWindowArgs, type Display, DISPLAY_HEIGHT, DISPLAY_WIDTH } from "../cast/display.js";
 import { browserFingerprint } from "../sessions/fingerprint.js";

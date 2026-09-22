@@ -2,7 +2,8 @@ import { mkdtempSync } from "node:fs";
 import { appendFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import type { CivilDay } from "@intentic/sandbox-contract";
+import { test, expect } from "bun:test";
 import { fileUsageStore, utcDay } from "./usage-store.js";
 
 const storePath = (): string => join(mkdtempSync(join(tmpdir(), "usage-")), "usage.jsonl");
@@ -192,6 +193,6 @@ test("the model asked for is recorded beside the one that ran, so a routing surp
 });
 
 test("utcDay buckets by UTC, not the host zone", () => {
-    expect(utcDay(Date.UTC(2026, 6, 20, 23, 59, 59))).toBe("2026-07-20");
-    expect(utcDay(Date.UTC(2026, 6, 21, 0, 0, 0))).toBe("2026-07-21");
+    expect(utcDay(Date.UTC(2026, 6, 20, 23, 59, 59))).toBe("2026-07-20" as CivilDay);
+    expect(utcDay(Date.UTC(2026, 6, 21, 0, 0, 0))).toBe("2026-07-21" as CivilDay);
 });

@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
 import { readWatermark, watermarkPath, writeWatermark } from "./watermark.js";
 
 /* THE RESUME MARK, ACROSS A REAL RESTART. */

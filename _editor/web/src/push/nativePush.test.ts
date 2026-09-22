@@ -1,4 +1,5 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { stubGlobal, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { PushNotificationsPlugin } from "../shell/window/capacitor";
 import { nativePushDriver } from "./nativePush";
 
@@ -8,15 +9,15 @@ const listeners = new Map<string, (payload: never) => void>();
 
 const plugin = (overrides?: Partial<PushNotificationsPlugin>): PushNotificationsPlugin =>
     ({
-        checkPermissions: vi.fn(async () => ({ receive: `granted` as const })),
-        requestPermissions: vi.fn(async () => ({ receive: `granted` as const })),
+        checkPermissions: mock(async () => ({ receive: `granted` as const })),
+        requestPermissions: mock(async () => ({ receive: `granted` as const })),
         // The token is delivered through the `registration` listener AFTER register() resolves: the shape
         // that makes the promise-wrapping worth testing.
-        register: vi.fn(async () => {
+        register: mock(async () => {
             const handler = listeners.get(`registration`);
             setTimeout(() => handler?.({ value: `apns-token-1` } as never), 0);
         }),
-        addListener: vi.fn(async (event: string, handler: (payload: never) => void) => {
+        addListener: mock(async (event: string, handler: (payload: never) => void) => {
             listeners.set(event, handler);
             return { remove: async () => undefined };
         }),
@@ -24,25 +25,25 @@ const plugin = (overrides?: Partial<PushNotificationsPlugin>): PushNotifications
     }) as PushNotificationsPlugin;
 
 const shell = { current: undefined as PushNotificationsPlugin | undefined };
-vi.mock(`../shell/window/capacitor`, () => ({
+mock.module(`../shell/window/capacitor`, () => ({
     inNativeShell: () => shell.current !== undefined,
     pushPlugin: () => shell.current,
 }));
 
-const register = vi.fn();
-const unregister = vi.fn();
-vi.mock(`../lib/useApi`, () => ({ apiClient: { push: { register, unregister } } }));
+const register = mock();
+const unregister = mock();
+mock.module(`../lib/useApi`, () => ({ apiClient: { push: { register, unregister } } }));
 
 const storage = new Map<string, string>();
 
 beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     listeners.clear();
     storage.clear();
     shell.current = plugin();
     register.mockResolvedValue({ deviceId: `d1`, secret: `s1`, url: `https://platform.example/rpc/push/send` });
     unregister.mockResolvedValue({ ok: true });
-    vi.stubGlobal(`localStorage`, {
+    stubGlobal(`localStorage`, {
         getItem: (key: string) => storage.get(key) ?? null,
         setItem: (key: string, value: string) => storage.set(key, value),
         removeItem: (key: string) => storage.delete(key),
@@ -64,22 +65,28 @@ test(`minting registers the APNs token with the relay and hands the daemon the g
 });
 
 test(`a declined native prompt is terminal: iOS only asks once`, async () => {
-    shell.current = plugin({ requestPermissions: vi.fn(async () => ({ receive: `denied` as const })) });
+    shell.current = plugin({ requestPermissions: mock(async () => ({ receive: `denied` as const })) });
 
     await expect(nativePushDriver.mint(async () => ``)).resolves.toEqual({ outcome: `denied` });
     expect(register).not.toHaveBeenCalled();
 });
 
 test(`a push service that never answers surfaces advice instead of spinning forever`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
-        shell.current = plugin({ register: vi.fn(async () => undefined) }); // no registration event will fire
-        const minting = nativePushDriver.mint(async () => ``);
-        const failure = expect(minting).rejects.toThrow(/did not answer/);
-        await vi.advanceTimersByTimeAsync(10_500);
-        await failure;
+        shell.current = plugin({ register: mock(async () => undefined) }); // no registration event will fire
+        // The outcome is captured as a value rather than as `expect(...).rejects`: that matcher, attached to a
+        // promise still in flight while the clock is frozen, never returns.
+        const minting = nativePushDriver
+            .mint(async () => ``)
+            .then(
+                () => undefined,
+                (error: unknown) => error,
+            );
+        await advanceTimersByTimeAsync(10_500);
+        expect(await minting).toMatchObject({ message: expect.stringContaining(`did not answer`) });
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 

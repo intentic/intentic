@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // No mocks, no mount: every rule is a pure function of rows and a viewed set, so a group here is just a list of
 // keys.

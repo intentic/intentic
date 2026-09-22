@@ -4,8 +4,8 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect, spyOn } from "bun:test";
+import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 
@@ -90,7 +90,7 @@ test("a workspace turn follows the same registry lifecycle without inventing a b
     expect(snapshots).toEqual(["user", "turn"]);
     expect((await client.agents.list()).agents).toMatchObject([{ id: "workspace-conv", status: "idle", sessionId: "sess-workspace", costUsd: 0.25 }]);
     expect((await client.agents.list()).agents[0]).not.toHaveProperty("branch");
-    await vi.waitFor(() => expect(spend).toMatchObject([{ conversationId: "workspace-conv" }]), SETTLES);
+    await waitFor(() => expect(spend).toMatchObject([{ conversationId: "workspace-conv" }]), SETTLES);
     // Branch-only actions (diff, autoLand, land, discard) reject a workspace conversation explicitly, not silently.
     expect(await errorCode(client.agents.diff({ id: "workspace-conv" }))).toBe("BAD_REQUEST");
     expect(await errorCode(client.agents.autoLand({ id: "workspace-conv", autoLand: false }))).toBe("BAD_REQUEST");
@@ -400,7 +400,7 @@ test("a turn parked on a question lands without a force: it is waiting for the u
     );
     await client.agent.run({ prompt: "ask me something", conversationId: "conv1", isolated: true });
     // Waits for the park to reach the registry via the relay, using SETTLES to avoid a flaky wait wedging later tests.
-    await vi.waitFor(async () => expect((await client.agents.list()).agents[0]?.status).toBe("awaiting"), SETTLES);
+    await waitFor(async () => expect((await client.agents.list()).agents[0]?.status).toBe("awaiting"), SETTLES);
     // Landing without `force` succeeds, not refused, while parked on a question: only the user can resolve it.
     expect(await client.agents.land({ id: "conv1" })).toMatchObject({ landed: false });
     release?.();
@@ -437,7 +437,7 @@ test("a forced land leaves the running turn's bookkeeping to the turn", async ()
 
 test("archiving a named agent asks nothing of the rest of the fleet; clearing the lane still does", async () => {
     const daemon = services();
-    const probe = vi.spyOn(daemon.agents, "refreshStandings");
+    const probe = spyOn(daemon.agents, "refreshStandings");
     const client = clientFor(createApp(daemon));
     await runAgentTurn(client, { prompt: "fix it", conversationId: "conv1", isolated: true });
     await runAgentTurn(client, { prompt: "and this", conversationId: "conv2", isolated: true });
@@ -651,7 +651,7 @@ test("agents.place in a channel conversation delivers the line to the provider's
             placed: true,
         });
         // Same activity row shape an ordinary agent send would produce.
-        await vi.waitFor(
+        await waitFor(
             () =>
                 expect(activity.filter((event) => (event as { type?: string }).type === "message.send")).toMatchObject([
                     { provider: "discord", direction: "out", channelId: "123", content: "On it. checking now.", conversationId: "conv1" },

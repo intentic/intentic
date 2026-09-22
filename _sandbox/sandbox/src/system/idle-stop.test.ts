@@ -1,5 +1,6 @@
 import { pino } from "pino";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { startIdleStop, type IdleStopProbes } from "./idle-stop.js";
 
 const logger = pino({ level: "silent" });
@@ -17,20 +18,20 @@ const probesOf = (over: Partial<IdleStopProbes>): IdleStopProbes => ({
 // The interval is a minute, so advancing N minutes runs N checks.
 const minutes = async (count: number): Promise<void> => {
     for (let i = 0; i < count; i += 1) {
-        await vi.advanceTimersByTimeAsync(60 * 1000);
+        await advanceTimersByTimeAsync(60 * 1000);
     }
 };
 
 describe("startIdleStop", () => {
     beforeEach(() => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
     });
     afterEach(() => {
-        vi.useRealTimers();
+        jest.useRealTimers();
     });
 
     it("stops after the quiet window when nothing is connected or running", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({}), stop);
         await minutes(4);
         expect(stop).not.toHaveBeenCalled();
@@ -40,7 +41,7 @@ describe("startIdleStop", () => {
     });
 
     it("a connected tab resets the streak: even an idle one counts as a person", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         let connected = 1;
         const dispose = startIdleStop({ minutes: 3, logger }, probesOf({ connected: () => connected }), stop);
         await minutes(10);
@@ -54,7 +55,7 @@ describe("startIdleStop", () => {
     });
 
     it("an in-flight turn or live delegate keeps the machine up with nobody connected", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         let turns = 1;
         const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ turns: () => turns }), stop);
         await minutes(6);
@@ -66,7 +67,7 @@ describe("startIdleStop", () => {
     });
 
     it("an armed condition watch keeps the machine up: stopping it is how a watch never fires", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         let watchers = 1;
         const dispose = startIdleStop({ minutes: 2, logger }, probesOf({ watchers: () => watchers }), stop);
         await minutes(6);
@@ -78,7 +79,7 @@ describe("startIdleStop", () => {
     });
 
     it("a wake due inside the window keeps the machine up, since only a visit would restart it", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         // Due in three minutes, inside a five-minute window: stopping now is how that wake arrives late.
         const dueAt = Date.now() + 3 * 60 * 1000;
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(dueAt) }), stop);
@@ -88,15 +89,19 @@ describe("startIdleStop", () => {
     });
 
     it("a wake further out than the window is slept through: an always-awake machine costs more than the lateness", async () => {
-        const stop = vi.fn();
-        const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(Date.now() + 6 * 3_600_000) }), stop);
+        const stop = mock();
+        const dispose = startIdleStop(
+            { minutes: 5, logger },
+            probesOf({ nextOneTimeWakeAt: () => Promise.resolve(Date.now() + 6 * 3_600_000) }),
+            stop,
+        );
         await minutes(5);
         expect(stop).toHaveBeenCalledTimes(1);
         dispose();
     });
 
     it("nothing on any clock reads as 0, not as a wake due at the epoch", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ nextOneTimeWakeAt: () => Promise.resolve(0) }), stop);
         await minutes(5);
         expect(stop).toHaveBeenCalledTimes(1);
@@ -115,13 +120,13 @@ describe("startIdleStop", () => {
             settle: async (at) => {
                 resolve?.(at);
                 // Let the suspended check resume and reach its verdict.
-                await vi.advanceTimersByTimeAsync(0);
+                await advanceTimersByTimeAsync(0);
             },
         };
     };
 
     it("a tab that connects while the terminal probe is in flight is not stopped under", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         let connected = 0;
         const tmux = held();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ connected: () => connected, terminalActivityAt: tmux.probe }), stop);
@@ -135,7 +140,7 @@ describe("startIdleStop", () => {
     });
 
     it("a watch armed while the terminal probe is in flight is not stopped under", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         let watchers = 0;
         const tmux = held();
         const dispose = startIdleStop({ minutes: 5, logger }, probesOf({ watchers: () => watchers, terminalActivityAt: tmux.probe }), stop);
@@ -148,11 +153,13 @@ describe("startIdleStop", () => {
     });
 
     it("terminal output advances the streak's start, one window after the last line, not two", async () => {
-        const stop = vi.fn();
+        const stop = mock();
         let lastOutput = 0;
+        const startedAt = Date.now();
         const dispose = startIdleStop({ minutes: 3, logger }, probesOf({ terminalActivityAt: () => Promise.resolve(lastOutput) }), stop);
         await minutes(2);
-        lastOutput = Date.now();
+        // The stamp is on the fake timers' grid: advancing reads a millisecond ahead of the instant a check sees.
+        lastOutput = startedAt + 2 * 60 * 1000;
         await minutes(2);
         expect(stop).not.toHaveBeenCalled();
         await minutes(1);

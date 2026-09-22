@@ -1,5 +1,5 @@
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
 import {
     appBehind,
     comparedRouteCount,

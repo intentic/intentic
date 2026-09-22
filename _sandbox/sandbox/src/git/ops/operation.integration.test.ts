@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { abortOperation, operationInProgress } from "./operation.js";
 
 // Runs against real halted repos: reads git's own on-disk markers, and a fixture built from what this code expects

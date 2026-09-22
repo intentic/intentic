@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
 // Tests what a control does between click and answer, across three surfaces (state machine, Button,
 // directive) sharing one press lock contract.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createApp, h, nextTick, withDirectives, type App } from "vue";
 import { Button, vAction } from "@intentic/ui";
 import { createPressLock, firePress, type PressState } from "@intentic/ui/press";
@@ -10,7 +11,7 @@ const MOUNTED: App[] = [];
 let host: HTMLElement;
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     host = document.createElement(`div`);
     document.body.append(host);
 });
@@ -18,7 +19,7 @@ beforeEach(() => {
 afterEach(() => {
     MOUNTED.splice(0).forEach((app) => app.unmount());
     host.remove();
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 // A promise the test settles on demand, standing in for a round trip.
@@ -62,7 +63,7 @@ it(`draws nothing for a wait short enough to read as instant`, async () => {
     const work = deferred();
     lock.hold(work.promise);
     work.settle();
-    await vi.advanceTimersByTimeAsync(199);
+    await advanceTimersByTimeAsync(199);
     // A spinner shown too briefly is a flinch, not information.
     expect(states.some((state) => state.working)).toBe(false);
     expect(states.at(-1)).toEqual({ locked: false, working: false });
@@ -74,15 +75,15 @@ it(`shows the wait once it outlives the reveal delay, and holds it long enough t
     const work = deferred();
     lock.hold(work.promise);
 
-    await vi.advanceTimersByTimeAsync(200);
+    await advanceTimersByTimeAsync(200);
     expect(states.at(-1)).toEqual({ locked: true, working: true });
 
     work.settle();
-    await vi.advanceTimersByTimeAsync(10);
+    await advanceTimersByTimeAsync(10);
     // Still working and locked: a visibly spinning control must not answer a second press.
     expect(states.at(-1)).toEqual({ locked: true, working: true });
 
-    await vi.advanceTimersByTimeAsync(400);
+    await advanceTimersByTimeAsync(400);
     expect(states.at(-1)).toEqual({ locked: false, working: false });
 });
 
@@ -90,7 +91,7 @@ it(`releases the lock when the work fails, so a retry is possible`, async () => 
     const states: PressState[] = [];
     const lock = createPressLock((state) => states.push({ ...state }));
     lock.hold(Promise.reject(new Error(`nope`)));
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(states.at(-1)).toEqual({ locked: false, working: false });
 });
 
@@ -113,7 +114,7 @@ it(`disables the button for as long as its handler is unfinished, and re-enables
     expect(button().disabled).toBe(true);
 
     work.settle();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     await nextTick();
     expect(button().disabled).toBe(false);
 });
@@ -165,7 +166,7 @@ it(`hangs a spinner over a slot-bodied button once the wait is worth drawing, wi
     expect(host.querySelector(`.ui-press-spinner`)).toBeNull();
     expect(host.querySelector(`.invisible`)).toBeNull();
 
-    await vi.advanceTimersByTimeAsync(200);
+    await advanceTimersByTimeAsync(200);
     await nextTick();
     expect(host.querySelector(`.ui-press-spinner`)).not.toBeNull();
     // Hidden, not removed: the button keeps its width, so answering doesn't reflow the row it sits in.
@@ -207,7 +208,7 @@ it(`holds a hand-styled control the same way, and marks it busy for a screen rea
     expect(fired).toBe(1);
 
     work.settle();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     await nextTick();
     expect(button().dataset[`press`]).toBeUndefined();
     expect(button().getAttribute(`aria-busy`)).toBeNull();

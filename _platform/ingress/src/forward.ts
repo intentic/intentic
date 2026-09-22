@@ -82,7 +82,8 @@ const upgradeHead = (answer: IncomingMessage): string => {
 // answers.
 export const forwardUpgrade = (peer: Peer, request: IncomingMessage, socket: Duplex, head: Buffer): Promise<void> =>
     new Promise<void>((resolve, reject) => {
-        const upstream = httpRequest(upstreamOptions(peer, request));
+        // An upgrade takes its socket over, so it must never come from the keep-alive pool: bun never answers a 101 on a reused one.
+        const upstream = httpRequest({ ...upstreamOptions(peer, request), agent: false });
         upstream.on(`upgrade`, (answer, upstreamSocket, upstreamHead) => {
             socket.write(upgradeHead(answer));
             if (upstreamHead.length > 0) {

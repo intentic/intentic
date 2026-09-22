@@ -1,6 +1,6 @@
 {
     "compilerOptions": {
-        "types": ["node"],
+        "types": ["node", "bun"],
         "noEmit": true,
         "composite": false,
         "declaration": false,

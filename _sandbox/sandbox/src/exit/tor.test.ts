@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from "vitest";
+import { test, expect, beforeEach } from "bun:test";
 import { exitControlPort, exitProxyPort } from "./exit-paths.js";
 import { exitNodesLine, torrc } from "./tor.js";
 

@@ -1,5 +1,5 @@
 import { PROVIDERS, type WorkflowStep, workflowFaults, WorkflowSchema } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { workflowTemplates } from "./templates";
 
 // Pins every template as a parseable, fault-free workflow, since a template is never exercised before a user picks it.
@@ -129,7 +129,7 @@ test("every pinned provider is one the picker offers", () => {
     const known = PROVIDERS.map((provider) => provider.value);
     for (const { workflow } of workflowTemplates()) {
         for (const pinned of workflow.steps.filter((step) => step.agent !== undefined)) {
-            expect(known, `${workflow.id}/${pinned.id}`).toContain(pinned.agent);
+            expect<readonly (string | undefined)[]>(known, `${workflow.id}/${pinned.id}`).toContain(pinned.agent);
         }
     }
 });

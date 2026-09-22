@@ -1,10 +1,11 @@
-// @vitest-environment jsdom
 // The rail's rename is one state shared by every row, so it has to end with the row it was opened on.
 // Regression: a row that left mid-rename took its input with it and left nothing to blur the edit shut, so
 // reopening that chat from the board drew an empty "New agent" field in the lane instead of its card.
+import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../../agents/fleet/useAgents";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
@@ -16,7 +17,7 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Globals a mounted chat needs that jsdom lacks.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 

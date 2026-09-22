@@ -1,6 +1,6 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { IsolationPlan, TurnPlacement } from "../../agents/worktrees/isolation.js";
 import { syncHookOutput } from "../../testing.js";
 import { type DiagRequest, type DiagRunner, editDiagnosticsHooks, type ModulesProbe } from "./agent-diagnostics.js";

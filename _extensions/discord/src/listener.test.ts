@@ -1,5 +1,5 @@
 import type { Message } from "discord.js";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { authorOf, toHistory } from "./listener.js";
 
 // A fetched discord message, only the fields toHistory reads.

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { client, methods, type RequestPermissionResponse, type SessionNotification } from "@agentclientprotocol/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fakeDaemon } from "./__fixtures__/fake-daemon.js";
 import { bridgeAgentApp } from "./bridge.js";
 import type { BridgeConfig } from "./config.js";

@@ -1,5 +1,5 @@
 import type { BootReport } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { hostedWaitView, machineStartable, type HostedWaitInput } from "./hostedWait";
 
 // A wait with nothing known yet: every case below is this plus the one fact it is about.

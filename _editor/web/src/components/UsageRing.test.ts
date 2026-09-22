@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
 // Tests the usage ring and its card: the breakdown renders as a per-pool line and meter with its own reset, not
 // one run-on label, and the card opens beside the ring rather than over the column of rows being compared.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import { formatReset, type PlanHeadroom } from "../features/chat/session/usageStatus";
 import UsageRing from "./UsageRing.vue";
@@ -41,7 +41,7 @@ const mount = async (over: Partial<PlanHeadroom> = {}, flank?: `left` | `right`)
 
 const hover = async (anchor: HTMLElement): Promise<HTMLElement | null> => {
     anchor.dispatchEvent(new MouseEvent(`mouseenter`));
-    vi.advanceTimersByTime(200); // past the open delay a pass-by sweep is meant to fall inside
+    jest.advanceTimersByTime(200); // past the open delay a pass-by sweep is meant to fall inside
     await nextTick();
     await nextTick(); // measured and placed on the render after the one that created it
     return document.body.querySelector<HTMLElement>(`.ui-anchored`);
@@ -50,7 +50,7 @@ const hover = async (anchor: HTMLElement): Promise<HTMLElement | null> => {
 const card = async (over: Partial<PlanHeadroom> = {}): Promise<HTMLElement> => (await hover(await mount(over))) as HTMLElement;
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     ring = { left: 40, top: 100, width: 14, height: 14 };
     Element.prototype.getBoundingClientRect = function (this: Element): DOMRect {
         return rectOf(this.classList.contains(`ui-anchored`) ? { left: 0, top: 0, ...CARD } : ring);
@@ -59,7 +59,7 @@ beforeEach(() => {
 
 afterEach(() => {
     Element.prototype.getBoundingClientRect = originalMeasure;
-    vi.useRealTimers();
+    jest.useRealTimers();
     document.body.innerHTML = ``;
 });
 
@@ -122,7 +122,7 @@ it(`shows nothing for a pointer that only sweeps past, and closes the moment one
     const anchor = await mount();
     anchor.dispatchEvent(new MouseEvent(`mouseenter`));
     anchor.dispatchEvent(new MouseEvent(`mouseleave`));
-    vi.advanceTimersByTime(200);
+    jest.advanceTimersByTime(200);
     await nextTick();
     expect(document.body.querySelector(`.ui-anchored`)).toBeNull();
 

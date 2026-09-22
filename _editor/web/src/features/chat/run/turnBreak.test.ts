@@ -1,5 +1,5 @@
 import { TURN_BREAK_POLICIES } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { breakAnswers, breakLabel, effectivePolicy, sandboxPolicy } from "./turnBreak";
 
 // One question per ending, in one vocabulary. These pin the two things every surface depends on: which answer is in

@@ -1,7 +1,7 @@
 import { readFile, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { codexConfigToml, writeCodexConfig } from "./codex-config.js";
 
 test("with a translator baked, the config selects the translator provider on the local-bearer Responses endpoint", () => {

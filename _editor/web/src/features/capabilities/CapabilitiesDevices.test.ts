@@ -1,36 +1,42 @@
-// @vitest-environment jsdom
 // A machine reached by desktop sync alone is a real, live device that no capability tile accounts for. This page used
 // to show no trace of it while the Devices board listed it as live — one machine, two screens, two answers. These
 // mount the Linux PC tile with exactly that machine in the daemon's device list.
+import "@intentic/testing/dom";
 import type { Device } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import { computed, createApp, defineComponent, h, nextTick, ref } from "vue";
+import * as actualVueRouter from "vue-router";
+import * as actualUseDevices from "../sandbox/devices/useDevices";
 
 const NOW = 1_700_000_000_000;
 
-const push = vi.fn();
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+const push = mock();
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
     useRoute: () => ({ params: { entry: `linux` }, query: {} }) as never,
-    useRouter: () => ({ push, replace: vi.fn() }) as never,
+    useRouter: () => ({ push, replace: mock() }) as never,
 }));
 
 // No capabilities at all: the tile exists, and nothing is connected on it. The machine below is the only row it can
 // possibly draw, so anything on screen came from the device list.
-vi.mock(`./connect/useCapabilities`, () => ({
+mock.module(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities: ref([]),
         error: ref(undefined),
-        add: vi.fn(),
-        remove: { mutateAsync: vi.fn(), isPending: ref(false) },
-        rename: { mutateAsync: vi.fn(), isPending: ref(false) },
-        refetch: vi.fn(),
-        dismissRecommendation: { mutateAsync: vi.fn(), isPending: ref(false) },
+        add: mock(),
+        remove: { mutateAsync: mock(), isPending: ref(false) },
+        rename: { mutateAsync: mock(), isPending: ref(false) },
+        refetch: mock(),
+        dismissRecommendation: { mutateAsync: mock(), isPending: ref(false) },
     }),
-    browseMarketplace: vi.fn(),
+    browseMarketplace: mock(),
+    // The connect forms read these at link time though no case here opens one; a mock missing a name anything in
+    // the graph imports is refused.
+    readRemoteRefs: mock(async () => ({ refs: [] })),
+    probeCapability: mock(),
 }));
 
 // The Linux PC tile is contributed by the devices extension, not the static catalog, so the tile under test only
@@ -50,7 +56,7 @@ const devicesExtension = {
         },
     },
 };
-vi.mock(`../extensions/useExtensions`, () => ({
+mock.module(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
         enabled: ref([devicesExtension]),
@@ -58,34 +64,34 @@ vi.mock(`../extensions/useExtensions`, () => ({
         settled: ref(true),
     }),
 }));
-vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-vi.mock(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
-    viewProcessLogs: vi.fn(),
+mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+mock.module(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
+    viewProcessLogs: mock(),
 }));
-vi.mock(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: vi.fn(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
+mock.module(`../sandbox/devices/useVpn`, () => ({
+    importForticlient: mock(),
+    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
 }));
-vi.mock(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: vi.fn(), unmount: vi.fn() }),
+mock.module(`../sandbox/devices/useNetdisk`, () => ({
+    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
 }));
-vi.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 // The daemon's device registry, the list both screens now read. Only `useDevices` and the revoke are replaced;
 // everything else in that module keeps working for whatever else the page mounts.
 const fleet = ref<Device[]>([]);
 // Which machine the tile asked the daemon to cut off; no device connection needed, unlike everything else here.
 const revoked: string[] = [];
-vi.mock(import(`../sandbox/devices/useDevices`), async (importOriginal) => ({
-    ...(await importOriginal()),
+mock.module(`../sandbox/devices/useDevices`, () => ({
+    ...actualUseDevices,
     useDevices: () => ({
         devices: computed(() => fleet.value),
         readAt: computed(() => NOW),
         error: computed(() => undefined),
         isLoading: ref(false),
-        refetch: vi.fn(),
+        refetch: mock(),
     }),
     revokeSyncDevice: async (machine: string) => void revoked.push(machine),
 }));

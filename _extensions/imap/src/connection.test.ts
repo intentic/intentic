@@ -1,5 +1,5 @@
 import type { FetchMessageObject } from "imapflow";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { CATCH_UP_MAX, configKeyOf, desiredAccounts, mailboxOf, syncNewMail, type SyncOptions, type SyncSource } from "./connection.js";
 
 const config = { provider: "imap", host: "imap.example.com", port: "993", username: "me@example.com", password: "pw" };
@@ -123,6 +123,6 @@ test("syncNewMail caps a huge backlog to the newest messages and says so", async
     await syncNewMail(source, mark, opts);
     expect(dispatched).toHaveLength(CATCH_UP_MAX);
     expect(dispatched[0]).toBe(120);
-    expect(mark.lastUid).toBe(uids.at(-1));
+    expect(mark.lastUid).toBe(uids.at(-1)!);
     expect(warned).toEqual(["imap catch-up capped to the newest messages"]);
 });

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { z } from "zod";
 import type { ManifestProblem } from "./manifest-problems.js";
 import { nearestKey, objectParse, unknownKeyProblems } from "./unknown-keys.js";

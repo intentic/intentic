@@ -1,14 +1,26 @@
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
+import { ref } from "vue";
+import { mocked } from "@intentic/testing/bun";
 
 // Simulates a real page refresh, which resetChat() can't: a fresh module graph means useChat's
 // restore runs at module scope before any daemon has answered. The only way to test that window is
 // to seed the stores, then import the singleton fresh.
 
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+// Declared outside the factory with a path-only signature: the real `sandboxJson<T>` is generic, and an
+// implementation answering one concrete shape cannot satisfy a generic one.
+const sandboxJsonMock = mock(async (_path: string): Promise<unknown> => ({}));
+// Every name the graph imports from the daemon client, since bun links an ESM import against exactly what this
+// factory returns; only the two driven below are ever called.
+mock.module("../../sandbox/client/sandboxClient", () => ({
+    sandboxRequest: mock(),
+    sandboxJson: (path: string) => sandboxJsonMock(path),
+    sandboxRequestVia: mock(),
+    sandboxError: mock(async () => new Error(`unused`)),
+    SandboxHttpError: class SandboxHttpError extends Error {},
+}));
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
+mock.module("../../sandbox/client/useSandbox", () => {
     // Already bound when the module graph loads, the ordinary case for a refresh of an open sandbox.
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
@@ -68,9 +80,9 @@ session.set(
 );
 local.set(`ui-chat-accounts-sb1`, JSON.stringify({ claude: `second` }));
 
-const { sandboxJson, sandboxRequest } = await import("../../sandbox/client/sandboxClient");
-vi.mocked(sandboxRequest).mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
-vi.mocked(sandboxJson).mockImplementation((path: string) =>
+const { sandboxRequest } = await import("../../sandbox/client/sandboxClient");
+mocked(sandboxRequest).mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
+sandboxJsonMock.mockImplementation((path: string) =>
     Promise.resolve(
         path === `/translator/accounts`
             ? { codex: [], grok: [], kimi: [], gemini: [] }

@@ -1,15 +1,15 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { geminiOneShot } from "./gemini-one-shot.js";
 
 // Pins the shape of the OpenCode session this helper opens (the road to Google), since both properties are invisible
 // from the answer and cost money if they regress.
 
-const created = vi.fn<(input: unknown) => Promise<{ data?: { id: string } }>>();
-const prompt = vi.fn<(input: unknown) => Promise<{ data?: { parts: { type: string; text?: string }[] } }>>();
-const removed = vi.fn<(input: unknown) => Promise<unknown>>();
+const created = mock<(input: unknown) => Promise<{ data?: { id: string } }>>();
+const prompt = mock<(input: unknown) => Promise<{ data?: { parts: { type: string; text?: string }[] } }>>();
+const removed = mock<(input: unknown) => Promise<unknown>>();
 
 const services = (): Services =>
     unstubbed<Services>(`services`, {

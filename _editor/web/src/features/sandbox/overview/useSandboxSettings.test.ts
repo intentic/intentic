@@ -1,17 +1,18 @@
-// @vitest-environment jsdom
 // Pins the optimistic write and rollback the settings page relies on; jsdom mounts a component so vue-query's injection
 // is in place.
+import "@intentic/testing/dom";
 import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { waitFor, stubGlobal, mocked } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 
-vi.stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-vi.mock("../client/sandboxClient", () => ({ sandboxJson: vi.fn() }));
-vi.mock("../client/useSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`], useSandbox: () => ({ reachable: ref(true) }) }));
+stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+mock.module("../client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../client/useSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`], useSandbox: () => ({ reachable: ref(true) }) }));
 
 const { sandboxJson } = await import("../client/sandboxClient");
-const jsonMock = vi.mocked(sandboxJson);
+const jsonMock = mocked(sandboxJson);
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useSandboxSettings } = await import("./useSandboxSettings");
 
@@ -49,18 +50,18 @@ const mounted = <T>(composable: () => T): T => {
 
 beforeEach(() => {
     queryClient.clear();
-    vi.resetAllMocks();
+    jest.resetAllMocks();
 });
 
 test("a save paints into the cache before the daemon answers, so the control never shows stale state", async () => {
     // The save never resolves, so anything the cache reports meanwhile is optimistic by definition.
     daemon(() => NEVER);
     const { save, settings } = mounted(() => useSandboxSettings());
-    await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
+    await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 
     save.mutate({ ...DEFAULTS, iqSearch: true });
 
-    await vi.waitFor(() => expect(settings.value?.iqSearch).toBe(true));
+    await waitFor(() => expect(settings.value?.iqSearch).toBe(true));
     expect(save.isPending.value).toBe(true);
 });
 
@@ -76,32 +77,32 @@ test("a field the daemon strips is NAMED, not just snapped back", async () => {
         return Promise.resolve(reads === 1 ? DEFAULTS : { ...DEFAULTS, iqSearchHoldout: undefined }) as Promise<never>;
     });
     const { save, settings, dropped } = mounted(() => useSandboxSettings());
-    await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
+    await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 
     save.mutate({ ...DEFAULTS, iqSearchHoldout: 0.1 });
 
-    await vi.waitFor(() => expect(settings.value?.iqSearchHoldout).toBe(0));
-    await vi.waitFor(() => expect(dropped.value).toContain(`iqSearchHoldout`));
+    await waitFor(() => expect(settings.value?.iqSearchHoldout).toBe(0));
+    await waitFor(() => expect(dropped.value).toContain(`iqSearchHoldout`));
 });
 
 test("a rejected save rolls back, so a switch never claims a setting the sandbox refused", async () => {
     // Rejects after a delay, not instantly, so the optimistic state is observable before the rollback.
     daemon(() => new Promise((_resolve, reject) => setTimeout(() => reject(new Error(`Request failed (500).`)), 200)));
     const { save, settings } = mounted(() => useSandboxSettings());
-    await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
+    await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 
     save.mutate({ ...DEFAULTS, iqSearch: true });
 
     // Asserted on the rendered value, not mutation status, since onSettled's invalidate keeps it pending until the
     // refetch (which never lands here).
-    await vi.waitFor(() => expect(settings.value?.iqSearch).toBe(true));
-    await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
+    await waitFor(() => expect(settings.value?.iqSearch).toBe(true));
+    await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 });
 
 test("patch sends the whole settings object with just the named fields changed", async () => {
     daemon(() => NEVER);
     const { patch, settings } = mounted(() => useSandboxSettings());
-    await vi.waitFor(() => expect(settings.value).toEqual(DEFAULTS));
+    await waitFor(() => expect(settings.value).toEqual(DEFAULTS));
 
     patch({ iqSearch: true, hashlineEdits: true });
 
@@ -110,7 +111,7 @@ test("patch sends the whole settings object with just the named fields changed",
         const call = jsonMock.mock.calls.findLast(([, init]) => init?.method === `POST`);
         return JSON.parse(call?.[1]?.body as string) as SandboxSettings;
     };
-    await vi.waitFor(async () => expect(await posted()).toEqual({ ...DEFAULTS, iqSearch: true, hashlineEdits: true }));
+    await waitFor(async () => expect(await posted()).toEqual({ ...DEFAULTS, iqSearch: true, hashlineEdits: true }));
 });
 
 test("patch writes nothing before the settings have loaded", async () => {

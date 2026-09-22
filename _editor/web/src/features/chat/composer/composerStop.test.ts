@@ -1,19 +1,16 @@
-// @vitest-environment jsdom
 // The composer row ends in one primary button, asserted through the mounted pane. Stop takes that slot while
 // there is nothing to send; the first keystroke hands it back to Send, and the two never swap order.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, ref } from "vue";
-import { providerAccounts } from "../accounts/providerAccounts";
-import { resetChat, useChat } from "../run/useChat";
-import { queryClient } from "../../../lib/queryPersistence";
-import { useLayout } from "../../../shell/window/useLayout";
-import { router } from "../../../router";
-import ChatPanel from "../panel/ChatPanel.vue";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as useSandboxOriginal from "../../sandbox/client/useSandbox";
+import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 
 // The import-time globals a mounted chat surface needs.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
@@ -23,8 +20,7 @@ vi.hoisted(() => {
 });
 
 // Fleet roster and workflow ledger are irrelevant here; empty mocks keep polling out of it.
-vi.mock(`../../agents/fleet/useAgents`, async () => {
-    const { computed } = await import(`vue`);
+mock.module(`../../agents/fleet/useAgents`, () => {
     return {
         useAgents: () => ({
             fleet: computed(() => []),
@@ -33,21 +29,20 @@ vi.mock(`../../agents/fleet/useAgents`, async () => {
             loadArchived: () => {},
             restore: () => {},
             busyIds: ref([]),
-            setResumeAfterOutage: vi.fn().mockResolvedValue(undefined),
+            setResumeAfterOutage: mock().mockResolvedValue(undefined),
         }),
     };
 });
-vi.mock(`../../agents/fleet/useWorkflowRuns`, async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
+mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+    ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 // The composer only renders once the sandbox is reachable; mocked online here.
-vi.mock(`../../sandbox/client/useSandbox`, async (importOriginal) => {
-    const { computed } = await import(`vue`);
+mock.module(`../../sandbox/client/useSandbox`, () => {
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
     const sandboxes = ref([{ id: `sandbox-1`, name: `test` }]);
     return {
-        ...(await importOriginal<Record<string, unknown>>()),
+        ...useSandboxOriginal,
         useSandbox: () => ({
             sandboxes,
             activeSandboxId,
@@ -73,6 +68,15 @@ vi.mock(`../../sandbox/client/useSandbox`, async (importOriginal) => {
         }),
     };
 });
+
+// Imported after the mocks, not above them: a static import links the panel's whole graph to the real modules
+// before a single mock.module has run.
+const { providerAccounts } = await import("../accounts/providerAccounts");
+const { resetChat, useChat } = await import("../run/useChat");
+const { queryClient } = await import("../../../lib/queryPersistence");
+const { useLayout } = await import("../../../shell/window/useLayout");
+const { router } = await import("../../../router");
+const { default: ChatPanel } = await import("../panel/ChatPanel.vue");
 
 let app: App | undefined;
 

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { COMMAND_CLASS_LABELS, COMMAND_CLASS_PATTERNS } from "./command-classes.js";
 import { COMMAND_RULE_CATALOG, DEFAULT_SAFETY_POLICY, hardRuleClasses } from "./safety-policy.js";
 import { CommandClassSchema, CommandLocusSchema } from "../schemas/agent.js";

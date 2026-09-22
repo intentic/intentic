@@ -1,13 +1,14 @@
-// @vitest-environment jsdom
 // "Switch Google account" as it reaches Google. Google answers with the account already approved for this client
 // unless it is told not to, and this module holds a credential of its own besides — so a switch that asks the
 // ordinary way is handed back the very account the reader just rejected, which is what made the app's switch press
 // land on the same refusal every time.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { freshImport, hoisted } from "@intentic/testing/bun";
 
-// Configured client id, overriding vitest.setup.ts's empty default, so the storage key below is the real one.
+// Configured client id, overriding bun.setup.ts's empty default, so the storage key below is the real one.
 // Assigned, not `??=`, since the setup file already ran.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.window.env = {
         production: false,
         api: { url: `http://localhost` },
@@ -18,14 +19,13 @@ vi.hoisted(() => {
 });
 
 // An ordinary browser: the desktop webview's own posture is useGoogleIdentity.desktop.test.ts's subject.
-vi.mock(`../../app/environments/desktop`, () => ({ desktopVersion: () => undefined }));
+mock.module(`../../app/environments/desktop`, () => ({ desktopVersion: () => undefined }));
 
 // The module is one instance holding one credential and one mint, so each test takes its own copy rather than the
 // state the last one left: a mint nothing settled is still in flight, and GIS still initialized for it.
 type Identity = ReturnType<(typeof import("./useGoogleIdentity"))[`useGoogleIdentity`]>;
 const fresh = async (): Promise<Identity> => {
-    vi.resetModules();
-    const { useGoogleIdentity } = await import("./useGoogleIdentity");
+    const { useGoogleIdentity } = await freshImport<typeof import("./useGoogleIdentity")>("./useGoogleIdentity", import.meta.url);
     return useGoogleIdentity();
 };
 
@@ -41,10 +41,10 @@ const credential = (email: string): string => {
 const HELD = credential(`first@example.com`);
 const PICKED = credential(`second@example.com`);
 
-const initialize = vi.fn();
-const prompt = vi.fn();
-const cancel = vi.fn();
-const disableAutoSelect = vi.fn();
+const initialize = mock();
+const prompt = mock();
+const cancel = mock();
+const disableAutoSelect = mock();
 
 // The credential callback GIS was last initialized with; calling it is what a click on Google's chooser does.
 const choose = (response: { credential: string }): void => {
@@ -61,7 +61,7 @@ beforeEach(() => {
     prompt.mockReset();
     cancel.mockReset();
     disableAutoSelect.mockReset();
-    window.google = { accounts: { id: { initialize, renderButton: vi.fn(), prompt, cancel, disableAutoSelect } } };
+    window.google = { accounts: { id: { initialize, renderButton: mock(), prompt, cancel, disableAutoSelect } } };
 });
 
 afterEach(() => {

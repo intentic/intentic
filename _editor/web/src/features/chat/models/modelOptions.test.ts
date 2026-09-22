@@ -1,5 +1,5 @@
 /* WHEN A VENDOR NAMES TWO MODELS THE SAME. */
-import { beforeEach, expect, it } from "vitest";
+import { it, expect, beforeEach } from "bun:test";
 import { modelOptionsFor, perProvider, providerModels } from "../accounts/providerCatalog";
 
 beforeEach(() => {

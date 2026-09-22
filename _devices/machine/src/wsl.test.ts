@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { wslFrom } from "./wsl.js";
 
 // The one fact that keeps a Windows install and the distros it hosts from collapsing into a single row: they all

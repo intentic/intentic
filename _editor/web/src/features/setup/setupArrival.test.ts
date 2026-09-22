@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { arrivalFor, type ArrivalInput } from "./setupArrival";
 
 // A blank first arrival on a platform offering everything; each test overrides the one field it is about.

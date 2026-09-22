@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { createEngine, type Engine, parseFeatures } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 import type { QueryRequest } from "../types.js";
@@ -108,7 +108,7 @@ test("packed lines are the file's real lines at their real numbers", async () =>
     // The indexed chunk's stored text carries a synthetic `path § label` first line that must never leak into a packed
     // slice.
     for (const hit of top.hits) {
-        expect(hit.text).toBe(source[hit.line - 1]);
+        expect(hit.text).toBe(source[hit.line - 1]!);
     }
     expect(top.hits.some((hit) => hit.text.includes(" § "))).toBe(false);
 });

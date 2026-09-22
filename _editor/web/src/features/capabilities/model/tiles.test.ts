@@ -1,7 +1,7 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { entryHaystack, contributedTiles, entryIcon, instancesOf, isDefaultName, suggestName, withIdentityPicker } from "./tiles";
 
 // Join between a tile and the connections it's answerable for. Each case is one somebody hit: a tile owning two

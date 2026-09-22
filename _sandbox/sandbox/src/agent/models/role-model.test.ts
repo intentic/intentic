@@ -1,24 +1,24 @@
-import type { AgentHarness, AgentProvider, ModelPin } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type ModelPin, capabilitiesOf } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import type { Services } from "../../composition.js";
 import type { PerfFields } from "../../platform/resources/perf.js";
+import * as harnessCredentialsOriginal from "../providers/harness-credentials.js";
 
-const ready = vi.fn<() => Promise<Record<string, boolean>>>();
+const ready = mock<() => Promise<Record<string, boolean>>>();
 // Only the readiness probe is faked. The rest of the module stands, because the walk's window check reads its
 // model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined — which the
 // check's own catch then swallowed as "window unknown".
-vi.mock("../providers/harness-credentials.js", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("../providers/harness-credentials.js")>()),
+mock.module("../providers/harness-credentials.js", () => ({
+    ...harnessCredentialsOriginal,
     harnessReadyProviders: () => ready(),
 }));
 
 // Mocked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took.
-const oneShot = vi.fn<(ask: { model: string }) => Promise<string>>();
-const geminiOneShot = vi.fn<(ask: { model: string }) => Promise<string>>();
-const cursorOneShot = vi.fn<(ask: { model: string }) => Promise<string>>();
-vi.mock("../providers/adapter-registry.js", async () => {
-    const { capabilitiesOf } = await import("@intentic/sandbox-contract");
+const oneShot = mock<(ask: { model: string }) => Promise<string>>();
+const geminiOneShot = mock<(ask: { model: string }) => Promise<string>>();
+const cursorOneShot = mock<(ask: { model: string }) => Promise<string>>();
+mock.module("../providers/adapter-registry.js", () => {
     const runners: Record<string, (ask: { model: string }) => Promise<string>> = {
         "claude-code": (ask) => oneShot(ask),
         "opencode-gemini": (ask) => geminiOneShot(ask),
@@ -97,11 +97,10 @@ const PAST_THE_MEMO_MS = REFUSED_FOR_MS + 60 * 1000;
 let clock = 1_700_000_000_000;
 
 beforeEach(() => {
-    vi.useFakeTimers({ toFake: [`Date`] });
     clock += BETWEEN_TESTS_MS;
-    vi.setSystemTime(clock);
+    jest.setSystemTime(new Date(clock));
     // Reset all mocks so queued one-shot failures cannot leak between tests.
-    vi.resetAllMocks();
+    jest.resetAllMocks();
     timed.length = 0;
     ready.mockResolvedValue({ claude: true, gemini: true, codex: true, cursor: true });
     oneShot.mockResolvedValue(`fix: tree truncation`);
@@ -110,7 +109,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 test("spends the first model in the order and reports nothing skipped", async () => {
@@ -236,7 +235,7 @@ test("asks it again once the memo has run out: an allowance resets and nothing a
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
     await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
 
-    vi.setSystemTime(clock + PAST_THE_MEMO_MS);
+    jest.setSystemTime(new Date(clock + PAST_THE_MEMO_MS));
     oneShot.mockClear();
     const answer = await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
 
@@ -249,7 +248,7 @@ test("an answer clears the memo, so a recovered model keeps its place at the top
     oneShot.mockRejectedValueOnce(new Error(`usage limit reached`));
     await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
 
-    vi.setSystemTime(clock + PAST_THE_MEMO_MS);
+    jest.setSystemTime(new Date(clock + PAST_THE_MEMO_MS));
     await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());
     oneShot.mockClear();
     const answer = await askRoleModel(fakeServices(pinned), ROLE, DRAFT, signal());

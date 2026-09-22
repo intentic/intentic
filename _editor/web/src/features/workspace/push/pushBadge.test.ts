@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { pushBadge } from "./pushBadge";
 import type { PushQuestion, StandingVerdict } from "./usePushFlow";
 

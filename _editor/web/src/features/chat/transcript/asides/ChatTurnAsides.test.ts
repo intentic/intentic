@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // Pins what an assistant turn leaves in the lane: a hidden run collapsed to one mark and count, a settled thought
 // beside it on the same bar, and the same rows the shown mode draws once the run is opened. Needs jsdom since all of
 // it is render behavior, not throws.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";

@@ -1,4 +1,5 @@
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { createApp } from "../../app.js";
 import { clientFor, postJson } from "../../harness/route-client.testing.js";
 import { services, withTranslator } from "../../harness/route-services.testing.js";
@@ -94,7 +95,7 @@ test("takes a credential that can serve no turn out of the rotation when the acc
 
     await expect(client.translator.accounts()).resolves.toEqual({ codex: [], grok: [], kimi: [], gemini: [] });
     // Fired alongside the read, not awaited by it: the list must not wait on a PATCH to the proxy.
-    await vi.waitFor(() => expect(benched).toBe(1));
+    await waitFor(() => expect(benched).toBe(1));
 });
 
 test("a listing failure says so rather than claiming the sandbox has no subscriptions", async () => {

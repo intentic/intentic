@@ -51,7 +51,7 @@ whole chain that would otherwise need a credential nobody can commit.
   from `@intentic/testing/http-fake`. A workspace import in `src/` type-checks, passes this package's suite and
   resolves fine from the checkout; it then dies in the container on `ERR_MODULE_NOT_FOUND` the moment the
   onboarding journey stands the world up, which is how the nightly `onboarding` job failed for a night. The
-  tests and `vitest.config.ts` import freely — they never enter the image.
+  tests import freely — they never enter the image.
 - `refuseKeys` makes named keys answer 429, which is what drives the platform's pool walk without a real quota.
 
 ## Key files

@@ -1,5 +1,5 @@
 import { type RegistryFile, RegistryFileSchema } from "@intentic/registry";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { GithubReader, GithubRepo } from "./github.js";
 import { scanRegistry } from "./scan.js";
 

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { createExpiryTracker } from "./expiry.js";
 
 // Pins that the incremental answer matches a fresh full diff, one shared diff per head move instead of one per landing;

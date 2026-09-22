@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { intentPackageJson, libsLinkSpec } from "./intent-repo.js";
 
 describe("intentPackageJson", () => {

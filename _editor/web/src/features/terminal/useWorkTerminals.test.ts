@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
 // jsdom: both composables under test need an app mounted since useQuery injects.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { waitFor, stubGlobal, mocked } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 
 // Pins two halves of hiding work by default: the popover lists live work named by owning conversation, newest first,
@@ -9,19 +10,19 @@ import { createApp, defineComponent, h, nextTick, ref } from "vue";
 // counting what the strip stopped tabbing.
 
 const store = new Map<string, string>();
-vi.stubGlobal(`localStorage`, {
+stubGlobal(`localStorage`, {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => store.set(key, value),
     removeItem: (key: string) => store.delete(key),
 });
-vi.mock("../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn() }));
-vi.mock("../sandbox/client/useSandbox", () => ({
+mock.module("../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../sandbox/client/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));
 
 const { sandboxJson } = await import("../sandbox/client/sandboxClient");
-const jsonMock = vi.mocked(sandboxJson);
+const jsonMock = mocked(sandboxJson);
 const { queryClient } = await import("../../lib/queryPersistence");
 const { clearPendingTerminals } = await import("./terminalsQuery");
 const { noteAgentTerminal, showWorkTerminals, useWorkTerminals } = await import("./useWorkTerminals");
@@ -69,7 +70,7 @@ beforeEach(() => {
     queryClient.clear();
     clearPendingTerminals();
     showWorkTerminals.value = false;
-    vi.resetAllMocks();
+    jest.resetAllMocks();
 });
 
 test("the popover lists the agent's shells AND the daemon's jobs, named after the conversation that owns them", async () => {
@@ -77,7 +78,7 @@ test("the popover lists the agent's shells AND the daemon's jobs, named after th
     noteAgentTerminal(`agent-aaaa1111`, `Redesign the chat rail`);
 
     const { rows } = mounted(() => useWorkTerminals());
-    await vi.waitFor(() => expect(rows.value).toHaveLength(3));
+    await waitFor(() => expect(rows.value).toHaveLength(3));
 
     // The user's own shell is not work; it keeps its tab.
     expect(rows.value.map((row) => row.session)).not.toContain(`web-1`);
@@ -94,7 +95,7 @@ test("work that has exited leaves the running list, whether it succeeded or fail
     );
 
     const { rows } = mounted(() => useWorkTerminals());
-    await vi.waitFor(() => expect(rows.value.map((row) => row.session)).toEqual([`job-capability-demo`]));
+    await waitFor(() => expect(rows.value.map((row) => row.session)).toEqual([`job-capability-demo`]));
 });
 
 /* What a finished job leaves behind IS its pane: a red check's output is in the terminal it ran in and nowhere
@@ -109,7 +110,7 @@ test("a job that has ended is offered back; a finished agent shell is not", asyn
     );
 
     const { finished } = mounted(() => useWorkTerminals());
-    await vi.waitFor(() => expect(finished.value.map((row) => row.session)).toEqual([`job-root--verify`]));
+    await waitFor(() => expect(finished.value.map((row) => row.session)).toEqual([`job-root--verify`]));
 });
 
 test("only the last handful of finished jobs is offered: older than that, the answer is in the activity, not a pane", async () => {
@@ -118,7 +119,7 @@ test("only the last handful of finished jobs is offered: older than that, the an
     daemonLists(...Array.from({ length: 11 }, (_, index) => job(`check-${index}`, false, { activityAt: now - index * 60_000 })));
 
     const { finished } = mounted(() => useWorkTerminals());
-    await vi.waitFor(() => expect(finished.value).toHaveLength(6));
+    await waitFor(() => expect(finished.value).toHaveLength(6));
 
     expect(finished.value.map((row) => row.name)).toEqual([`check-0`, `check-1`, `check-2`, `check-3`, `check-4`, `check-5`]);
 });
@@ -132,7 +133,7 @@ test("whatever spoke last is on top: the only ordering that says anything once e
     );
 
     const { rows } = mounted(() => useWorkTerminals());
-    await vi.waitFor(() => expect(rows.value).toHaveLength(3));
+    await waitFor(() => expect(rows.value).toHaveLength(3));
 
     expect(rows.value.map((row) => row.session)).toEqual([`agent-aaaa1111`, `job-infra-check`, `job-capability-demo`]);
 });
@@ -141,7 +142,7 @@ test("the rail's badge stops counting work terminals while they don't tab, and c
     daemonLists(shell(`web-1`), agent(`aaaa1111`), job(`capability-demo`));
 
     const activity = mounted(() => useTerminalActivity());
-    await vi.waitFor(() => expect(activity.count.value).toBe(1));
+    await waitFor(() => expect(activity.count.value).toBe(1));
     expect(activity.summary.value?.split(`, `)).toHaveLength(1);
     expect(activity.summary.value).toMatch(/^1 /);
 

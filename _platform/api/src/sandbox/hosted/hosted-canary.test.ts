@@ -1,16 +1,17 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { runHostedCanary } from "./hosted-canary.js";
 import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacity.js";
-import { testIngressConfig } from "../../testing.js";
+import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
 
-vi.mock(`./hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../testing.js`)).fakeHostedAppLock }));
+mock.module(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 // Catches a lane that's intact but broken: the health sweep only notices a machine going missing, not one that never
 // checks in at all.
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
+const logger = { info: mock(), warn: mock(), error: mock() } as never;
 const nap = () => Promise.resolve();
 
 const config = (over: Record<string, unknown> = {}): Config =>
@@ -41,44 +42,44 @@ const config = (over: Record<string, unknown> = {}): Config =>
     }) as unknown as Config;
 
 // lastSeenAt is written by the daemon's check-in; setting it in a fixture means a machine that came up.
-const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) => {
+const prismaWith = (lastSeenAt: Date | null, over: Record<string, Record<string, ReturnType<typeof mock>>> = {}) => {
     const sandbox = { id: `canary-sbx`, name: `hosted canary`, token: `tok`, tunnelId: `abcdef012345`, ownerId: `canary-user` };
     const prisma = {
-        user: { findUnique: vi.fn().mockResolvedValue({ id: `canary-user` }), create: vi.fn().mockResolvedValue({ id: `canary-user` }) },
+        user: { findUnique: mock().mockResolvedValue({ id: `canary-user` }), create: mock().mockResolvedValue({ id: `canary-user` }) },
         sandbox: {
-            findMany: vi.fn().mockResolvedValue([]),
-            create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => Object.assign(sandbox, data)),
-            findUnique: vi.fn(async () => ({ ...sandbox, lastSeenAt })),
-            findUniqueOrThrow: vi.fn().mockResolvedValue(sandbox),
-            update: vi.fn().mockResolvedValue(sandbox),
-            delete: vi.fn().mockResolvedValue(sandbox),
+            findMany: mock().mockResolvedValue([]),
+            create: mock(async ({ data }: { data: Record<string, unknown> }) => Object.assign(sandbox, data)),
+            findUnique: mock(async () => ({ ...sandbox, lastSeenAt })),
+            findUniqueOrThrow: mock().mockResolvedValue(sandbox),
+            update: mock().mockResolvedValue(sandbox),
+            delete: mock().mockResolvedValue(sandbox),
         },
         // The row write runs under the owner's slot lock (hosted.ts withHostedSlot): the callback runs against
         // this same fake, the lock is a no-op, and `hostedMachine.count` below is the canary owner's use, none.
-        $transaction: vi.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
-        $executeRaw: vi.fn().mockResolvedValue(0),
-        $queryRaw: vi.fn().mockResolvedValue([]),
+        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $executeRaw: mock().mockResolvedValue(0),
+        $queryRaw: mock().mockResolvedValue([]),
         hostedCleanup: {
-            create: vi.fn().mockResolvedValue({}),
-            findUnique: vi.fn().mockResolvedValue({}),
-            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+            create: mock().mockResolvedValue({}),
+            findUnique: mock().mockResolvedValue({}),
+            deleteMany: mock().mockResolvedValue({ count: 1 }),
         },
         // The slot count reads the owner's plan (hosted-plan.ts hostedSlotsOf): the canary's account has none.
-        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
+        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
         // The counts are how the run asks whether the lane has any machines left before it spends one
         // (hosted-capacity.ts). An empty fleet with no stock: this platform's whole capacity is whatever the
         // case's own config and refusals say it is.
         hostedMachine: {
-            create: vi.fn().mockResolvedValue({}),
-            findUnique: vi.fn(async ({ where }: { where: { appName?: string } }) => (where.appName ? null : { appName: `intentic-sbx-canary` })),
-            count: vi.fn().mockResolvedValue(0),
+            create: mock().mockResolvedValue({}),
+            findUnique: mock(async ({ where }: { where: { appName?: string } }) => (where.appName ? null : { appName: `intentic-sbx-canary` })),
+            count: mock().mockResolvedValue(0),
         },
         hostedPoolMachine: {
-            findMany: vi.fn().mockResolvedValue([]),
-            count: vi.fn().mockResolvedValue(0),
-            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+            findMany: mock().mockResolvedValue([]),
+            count: mock().mockResolvedValue(0),
+            deleteMany: mock().mockResolvedValue({ count: 0 }),
         },
-        hostedBuild: { count: vi.fn().mockResolvedValue(0) },
+        hostedBuild: { count: mock().mockResolvedValue(0) },
         ...over,
     };
     return prisma as unknown as PrismaClient;
@@ -89,7 +90,7 @@ const json = (payload: unknown, status = 200) => new Response(JSON.stringify(pay
 // Every provider surface one canary run touches: the hub's namespace/account, Fly's cold build, then teardown.
 const stubProviders = (over: { machine?: () => Response; starter?: () => Response } = {}) => {
     const calls: { method: string; url: string }[] = [];
-    vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+    stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
         const method = init?.method ?? `GET`;
         const target = String(url);
         calls.push({ method, url: target });
@@ -121,7 +122,7 @@ const stubProviders = (over: { machine?: () => Response; starter?: () => Respons
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     // Resets capacity memory (module-level, not fixture-level) so one test's refusal doesn't leak into the next.
     forgetProviderCapacity();
 });
@@ -141,11 +142,11 @@ describe(`the provisioning canary`, () => {
         expect(calls.some((entry) => entry.method === `DELETE`)).toBe(true);
     });
 
-/* A WARM CLAIM ADOPTS THE POOL MACHINE'S IDENTITY (hosted.ts claimPoolMachine): the row's token, digest and tunnel id all move. */
+    /* A WARM CLAIM ADOPTS THE POOL MACHINE'S IDENTITY (hosted.ts claimPoolMachine): the row's token, digest and tunnel id all move. */
     it(`probes the address the row ends up with, not the one it was minted with`, async () => {
         const adopted = `99887766aabb`;
         const prisma = prismaWith(new Date());
-        (prisma.sandbox as unknown as { findUniqueOrThrow: ReturnType<typeof vi.fn> }).findUniqueOrThrow.mockResolvedValue({
+        (prisma.sandbox as unknown as { findUniqueOrThrow: ReturnType<typeof mock> }).findUniqueOrThrow.mockResolvedValue({
             id: `canary-sbx`,
             ownerId: `canary-user`,
             tunnelId: adopted,
@@ -195,8 +196,8 @@ describe(`the provisioning canary`, () => {
     });
 
     it(`stands down entirely while the lane is full`, async () => {
-        const fetchSpy = vi.fn();
-        vi.stubGlobal(`fetch`, fetchSpy);
+        const fetchSpy = mock();
+        stubGlobal(`fetch`, fetchSpy);
         noteProviderAtCapacity(`iad`, `insufficient capacity`);
         const result = await runHostedCanary(prismaWith(new Date()), config(), logger, nap);
         expect(result).toMatchObject({ ok: true, detail: `skipped: the lane is at capacity` });
@@ -204,8 +205,8 @@ describe(`the provisioning canary`, () => {
     });
 
     it(`does nothing at all when it is switched off, or the lane is`, async () => {
-        const fetchSpy = vi.fn();
-        vi.stubGlobal(`fetch`, fetchSpy);
+        const fetchSpy = mock();
+        stubGlobal(`fetch`, fetchSpy);
         expect((await runHostedCanary(prismaWith(null), config({ canaryEmail: `` }), logger, nap)).detail).toBe(`canary off`);
         expect((await runHostedCanary(prismaWith(null), config({ flyApiToken: `` }), logger, nap)).detail).toBe(`canary off`);
         expect(fetchSpy).not.toHaveBeenCalled();

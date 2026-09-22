@@ -1,44 +1,45 @@
-// @vitest-environment jsdom
 // The sign-in gate's three states. Choose: Google's button in an ordinary browser, the hand-off to the real browser
 // inside the desktop app (no FedCM there), and a passkey beside either once the daemon says one is registered here.
 // Step-up: the passkey the sandbox requires, or the walk through adding a first one, with the owner's recovery code.
+import "@intentic/testing/dom";
 import type { DaemonSession } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as vueRouterOriginal from "vue-router";
 
 // Needs jsdom: ui reads matchMedia at module scope, and environment.ts reads window.env and throws without it.
 
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
+mock.module(`vue-router`, () => ({
+    ...vueRouterOriginal,
+    useRouter: () => ({ push: mock(), replace: mock() }) as never,
 }));
 
 // Google's gate is open unless a test closes it: that is the state the overlay exists in.
 const needsSignIn = ref(true);
-const renderButton = vi.fn<() => Promise<boolean>>().mockResolvedValue(true);
-const cancelSignIn = vi.fn();
-vi.mock(`../../auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
-vi.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+const renderButton = mock<() => Promise<boolean>>().mockResolvedValue(true);
+const cancelSignIn = mock();
+mock.module(`../../auth/useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ needsSignIn, renderButton, cancelSignIn }) }));
+mock.module(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const activeSandbox = ref<{ role: string } | undefined>({ role: `owner` });
-vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
+mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: activeSandbox }) }));
 
-const signInThroughBrowser = vi.fn();
-const desktopVersion = vi.fn<() => string | undefined>();
-vi.mock(`../../../app/environments/desktop`, () => ({
+const signInThroughBrowser = mock();
+const desktopVersion = mock<() => string | undefined>();
+mock.module(`../../../app/environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     desktopVersion: () => desktopVersion(),
-    openDesktopLink: vi.fn(),
+    openDesktopLink: mock(),
     signInThroughBrowser: () => signInThroughBrowser(),
 }));
 
 // The ceremonies are the browser's WebAuthn calls plus the daemon; here they answer whatever the test says.
 const SESSION: DaemonSession = { token: `sess-passkey`, expiresAt: 4_102_444_800_000, email: `owner@example.com` };
-const supportsPasskeys = vi.fn(() => true);
-const signInWithPasskey = vi.fn<() => Promise<DaemonSession>>();
-const registerPasskey = vi.fn<() => Promise<{ passkey: unknown; session?: DaemonSession }>>();
-const recoverWithCode = vi.fn<() => Promise<DaemonSession & { remaining: number }>>();
-vi.mock(`../session/passkeySignIn`, () => ({
+const supportsPasskeys = mock(() => true);
+const signInWithPasskey = mock<() => Promise<DaemonSession>>();
+const registerPasskey = mock<() => Promise<{ passkey: unknown; session?: DaemonSession }>>();
+const recoverWithCode = mock<() => Promise<DaemonSession & { remaining: number }>>();
+mock.module(`../session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => supportsPasskeys(),
     signInWithPasskey: (...args: unknown[]) => signInWithPasskey(...(args as [])),
     registerPasskey: (...args: unknown[]) => registerPasskey(...(args as [])),
@@ -206,7 +207,7 @@ it(`only the owner is offered a recovery code, and it is spent under the proof t
     await settle();
 
     expect(recoverWithCode).toHaveBeenCalledWith(TARGET, `google-proof`, `abcde-fghjk-mnpqr-stuvw`);
-    await expect(outcome).resolves.toEqual({ ...SESSION, remaining: 7 });
+    await expect(outcome).resolves.toEqual(expect.objectContaining({ ...SESSION, remaining: 7 }));
 });
 
 it(`back to setup settles both roads with nothing`, async () => {

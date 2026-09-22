@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { SandboxSettingsSchema, type SandboxSettings } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { ManifestUnreadableError } from "../store/json-file.js";
 import { fileSandboxSettingsStore } from "./settings-store.js";
 

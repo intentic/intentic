@@ -1,5 +1,5 @@
 import { LOCAL_MODEL_WINDOW_DEFAULT, type TurnNote } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { applyTrim, trimFrame, trimState, type TurnTrim, turnTrim } from "./context-trim.js";
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../settings/loaded-skills.js";
 import { PERSONA_NOTE_TITLE } from "../../../personas/personas.js";

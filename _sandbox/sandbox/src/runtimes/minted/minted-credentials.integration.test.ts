@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, spyOn, jest } from "bun:test";
 import { createLogger } from "../../logger.js";
 import { fileMintedStore, readMintedCredentials } from "./minted-credentials.js";
 
@@ -16,7 +16,7 @@ const storeIn = async () => {
 };
 
 afterEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 test("a minted key becomes a row, and the row has nowhere to carry the key", async () => {
@@ -51,7 +51,7 @@ test("a sign-in that named nobody falls back to the provider's name", async () =
 // Clock pinned so the millisecond collision between two connects is the every-run case, not a rare flake; with equal
 // stamps, "oldest first" falls back to readdir's arbitrary order.
 test("several keys live side by side, oldest first, and one disconnect leaves the rest", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
     const { store } = await storeIn();
     const first = await store.connect({ apiKey: "one", variant: "meta", email: "First" });
     const second = await store.connect({ apiKey: "two", variant: "meta", email: "Second" });
@@ -67,7 +67,7 @@ test("several keys live side by side, oldest first, and one disconnect leaves th
 // Two sign-ins on two estates can be approved in the same second, each reading the same newest row to stamp past;
 // distinct stamps, not just readdir order, are what must survive.
 test("two connects in flight together take distinct stamps, in the order they were called", async () => {
-    vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
+    spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
     const { store } = await storeIn();
     await Promise.all([
         store.connect({ apiKey: "one", variant: "meta", email: "First" }),

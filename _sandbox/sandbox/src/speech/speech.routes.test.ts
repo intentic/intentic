@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createLogger } from "../logger.js";
 import { createPerfTracker } from "../platform/resources/perf.js";
 import { testConfig } from "../testing.js";

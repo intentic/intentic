@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // jsdom because the subject is the ladder: which rungs a refusal offers, and the sentence claiming them beside it,
 // both template decisions across five states.
+import "@intentic/testing/dom";
 import type { LandConflict } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, jest } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -48,7 +48,7 @@ afterEach(() => {
     host?.remove();
     app = undefined;
     host = undefined;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 const text = (el: HTMLElement): string => (el.textContent ?? ``).replace(/\s+/g, ` `).trim();

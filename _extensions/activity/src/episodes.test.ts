@@ -1,6 +1,6 @@
 import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
 import { formatDayMonth } from "@intentic/extension-ui/format";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { byDay, DIRECT, matches, SCHEDULE, sourceKeyOf, toEpisodes, toSources } from "./episodes.js";
 
 // Fixtures mirror real event shapes: agent.routes.ts's record(), outbound.ts's sniffer, listeners.ts's inbound.

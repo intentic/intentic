@@ -1,11 +1,12 @@
-// @vitest-environment jsdom
 //
 // THE DEV REBUILD CARD. The build runs on another machine, detached, and ends by replacing the container this page is
 // talking to — so what is pinned here is that the card keeps saying something the whole way through: while it builds,
 // while the sandbox restarts underneath it, and after a remount that threw the component away mid-build.
+import "@intentic/testing/dom";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK, devRebuildLogPath } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
+import { advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { forgetHubWork, hubWorkKey, hubWorkRunning } from "../../../shell/hub/hubWork";
@@ -14,8 +15,8 @@ const hostId = ref<string | undefined>(`host-1`);
 // What the card asks the door rule about: its own checkout, since one PC answers for this container through several
 // doors and only the checkout's path picks between them.
 const askedAbout: (string | undefined)[] = [];
-const runDeviceCommand = vi.hoisted(() => vi.fn());
-vi.mock(`../devices/useDevices`, () => ({
+const runDeviceCommand = hoisted(() => mock());
+mock.module(`../devices/useDevices`, () => ({
     useHostHolding: (_slug: () => string | undefined, path: () => string | undefined) => {
         askedAbout.push(path());
         return hostId;
@@ -23,14 +24,14 @@ vi.mock(`../devices/useDevices`, () => ({
     useDevices: () => ({ devices: ref([]) }),
     runDeviceCommand,
 }));
-vi.mock(`../client/sandboxClient`, () => ({ SandboxHttpError: class extends Error {} }));
-vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
+mock.module(`../client/sandboxClient`, () => ({ SandboxHttpError: class extends Error {} }));
+mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
 // What the restart will interrupt, and whether it hands it back: both are read at the moment of asking, so both are
 // driven from here. `turnInFlight` stays real — what counts as mid-turn is not this card's opinion.
 const fleet = ref<{ status: string }[]>([]);
-vi.mock(`../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
+mock.module(`../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet }) }));
 const settings = ref<{ autoResumeOnRestart: boolean } | undefined>(undefined);
-vi.mock(`../overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
+mock.module(`../overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
 const { default: DevRebuild } = await import("./DevRebuild.vue");
 // The same module instance the card uses, so a test can put a run in flight without driving the confirm dialog first.
@@ -65,18 +66,18 @@ const started = { ok: true, message: `The rebuild is running on that device.` };
 
 const POLL_MS = 4_000;
 const settleUi = async (ms = 0): Promise<void> => {
-    await vi.advanceTimersByTimeAsync(ms);
+    await advanceTimersByTimeAsync(ms);
     await nextTick();
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     askedAbout.length = 0;
     runDeviceCommand.mockReset();
     // Nothing has rebuilt anything yet: the card's own probe on mount finds no log.
     runDeviceCommand.mockResolvedValue(log(`-`));
     localStorage.clear();
-    vi.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
+    spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue({
         top: 100,
         left: 100,
         width: 120,
@@ -92,8 +93,8 @@ beforeEach(() => {
 afterEach(() => {
     fleet.value = [];
     settings.value = undefined;
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
     // A run this test left in flight is module state like the run itself, and would be counted by the next test's
     // row.
     forgetHubWork();
@@ -101,7 +102,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 it(`renders button and reveals command overlay with cost on focus`, async () => {
@@ -332,7 +333,8 @@ it(`keeps following a build that runs for hours while its log keeps growing`, as
     runDeviceCommand.mockResolvedValueOnce(started).mockResolvedValue(log(`3`, `#10 [builder 6/9] RUN cargo install cargo-xwin`));
     await useDevRebuild(slug).start(`host-1`);
 
-    await settleUi(95 * 60_000);
+    // A second past the ninety-five minutes: a timer due exactly at a window's edge is left for the next advance.
+    await settleUi(95 * 60_000 + 1_000);
 
     expect(el.textContent).toContain(`Building the image`);
     expect(el.textContent).toContain(`layer 6 of 9`);

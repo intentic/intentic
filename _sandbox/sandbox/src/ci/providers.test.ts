@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { GitHost } from "../capabilities/cli/git-access.js";
 import { ciClientFor, type FetchFn, githubRun, githubStatus, gitlabHookRun, gitlabRun, gitlabStatus } from "./providers.js";
 import type { CiProject } from "./projects.js";

@@ -2,7 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MINTED_PROVIDERS, type MintedProvider, type MintedVariant, mintedVariants, type Model, ModelSchema } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { z } from "zod";
 import { jsonFile } from "../../store/json-file.js";
 import { createMintedCatalog } from "./minted-catalog.js";
@@ -78,7 +78,7 @@ describe.each(estates)("$name's catalog read", ({ provider, variant }) => {
     test("a refused key falls back to the seed floor rather than emptying the picker", async () => {
         const { catalog } = await catalogFor(provider, variant, () => new Response("unauthorized", { status: 401 }));
         expect(catalog.models.map((model) => model.id)).toEqual(seedModelsOf(provider).map((model) => model.id));
-        expect(catalog.default).toBe(seedModelsOf(provider)[0]?.id);
+        expect(catalog.default).toBe(seedModelsOf(provider)[0]!.id);
     });
 
     test("a provider with no key connected is not asked at all, and still offers its floor", async () => {
@@ -96,7 +96,11 @@ describe.each(estates)("$name's catalog read", ({ provider, variant }) => {
     });
 
     test("a body that is not a catalog is treated as no answer, never as an empty one", async () => {
-        const { catalog } = await catalogFor(provider, variant, () => new Response("<html>gateway</html>", { headers: { "content-type": "text/html" } }));
+        const { catalog } = await catalogFor(
+            provider,
+            variant,
+            () => new Response("<html>gateway</html>", { headers: { "content-type": "text/html" } }),
+        );
         expect(catalog.models.length).toBeGreaterThan(0);
     });
 });

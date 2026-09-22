@@ -1,19 +1,20 @@
-// @vitest-environment jsdom
 // Pins the per-state verbs (add to the image, ask an agent, dismiss) for a runtime install the daemon can report but
 // never resolve without one.
+import "@intentic/testing/dom";
 import type { EnvironmentRecurring } from "@intentic/api-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Fetch is stubbed to fail, mirroring an offline sandbox, so every mark paints its glyph tier.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
 });
 
 // Starting a turn opens a chat through app-wide singletons; this captures the press instead.
 const started: string[] = [];
-vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt: string) => started.push(prompt) }));
+mock.module(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt: string) => started.push(prompt) }));
 
 const { default: RuntimeInstalls } = await import("./RuntimeInstalls.vue");
 

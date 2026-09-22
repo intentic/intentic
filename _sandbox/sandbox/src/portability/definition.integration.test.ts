@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { type Capability, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { defaultGit, gitClone } from "@intentic/scaffold";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileAutomationsStore } from "../automations/automations-store.js";
 import type { Services } from "../composition.js";
 import { fakeFiles } from "../harness/route-fakes.testing.js";

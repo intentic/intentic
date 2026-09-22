@@ -3,18 +3,19 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect, mock } from "bun:test";
+import { waitFor, stubGlobal, unstubAllGlobals, SETTLES } from "@intentic/testing/bun";
 import { LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
 import type { CapabilityCtx } from "../capability.js";
+import * as childProcessOriginal from "node:child_process";
 
 // Pins that apply returns while the download is still running, status reports progress meanwhile, and an interrupted
 // download resumes from its part file instead of refetching.
 
 // Must define `promisify.custom`, like the real execFile does; without it promisify falls back to the bare-callback
 // convention and every `.stdout` read comes back undefined instead of throwing.
-vi.mock("node:child_process", async (importOriginal) => {
-    const actual = await importOriginal<typeof import("node:child_process")>();
+mock.module("node:child_process", async () => {
+    const actual = childProcessOriginal;
     const execFile = (_file: string, _args: readonly string[], done: (error: Error | null, stdout: string, stderr: string) => void): void => {
         done(null, "", "");
     };
@@ -45,24 +46,24 @@ const landed = async (root: string): Promise<{ bytes: number; same: boolean }> =
 const whole = { bytes: WEIGHTS.byteLength, same: true };
 
 interface Panels {
-    readonly start: ReturnType<typeof vi.fn>;
-    readonly stop: ReturnType<typeof vi.fn>;
+    readonly start: ReturnType<typeof mock>;
+    readonly stop: ReturnType<typeof mock>;
 }
 
 interface Context {
     readonly ctx: CapabilityCtx;
     readonly panels: Panels;
-    readonly syncEndpoints: ReturnType<typeof vi.fn>;
+    readonly syncEndpoints: ReturnType<typeof mock>;
 }
 
 // `panelRunning` is what the serving watcher polls alongside /health; a test wanting it to keep looking must say the
 // panel is up. Defaults to dead, so unrelated tests don't leave one running.
 const context = (root: string, panelRunning = false): Context => {
-    const panels: Panels = { start: vi.fn(async () => undefined), stop: vi.fn(async () => undefined) };
-    const syncEndpoints = vi.fn(async () => undefined);
+    const panels: Panels = { start: mock(async () => undefined), stop: mock(async () => undefined) };
+    const syncEndpoints = mock(async () => undefined);
     const ctx = {
         workspace: { root },
-        logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
+        logger: { warn: mock(), info: mock(), error: mock() },
         panels: { ...panels, running: () => panelRunning },
         capabilities: { list: async () => [] },
         endpointModels: { forget: async () => undefined },
@@ -77,7 +78,7 @@ const serve = (body: ReadableStream<Uint8Array>, headers: Record<string, string>
     new Response(body, { status, headers });
 
 const stubFetch = (onModel: (init: RequestInit | undefined) => Response, healthy = false): void => {
-    vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
+    stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
         if (url.startsWith(MODEL_URL)) {
             return onModel(init);
@@ -101,7 +102,12 @@ const wholeFile = (): Response =>
 
 // Runs apply to the end of its stream. `rung`/`typed` are parameters because the window is a parameter of the entry;
 // download tests omit them for the default.
-const drain = async (id: string, ctx: CapabilityCtx, rung: LocalModelConfig["context"] = LOCAL_MODEL_WINDOW_DEFAULT, typed?: number): Promise<void> => {
+const drain = async (
+    id: string,
+    ctx: CapabilityCtx,
+    rung: LocalModelConfig["context"] = LOCAL_MODEL_WINDOW_DEFAULT,
+    typed?: number,
+): Promise<void> => {
     const config: LocalModelConfig = {
         model: "custom",
         gpu: "off",
@@ -143,17 +149,17 @@ test("apply returns while the weights are still arriving, and the entry reports 
     await drain("held-open", ctx);
     expect(existsSync(modelPath(root))).toBe(false);
 
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
         const status = await statusOf(ctx, "held-open");
         expect(status.state).toBe("pending");
         expect(status.detail).toMatch(/downloading .* \/ .*GB/);
     }, SETTLES);
 
     release();
-    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
     expect(await landed(root)).toEqual(whole);
     expect(existsSync(`${modelPath(root)}.part`)).toBe(false);
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
@@ -181,12 +187,12 @@ test("an interrupted download resumes from the part file rather than fetching it
     });
 
     await drain("resumed", ctx);
-    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
 
     expect(ranges).toEqual([`bytes=${already}-`]);
     // Full equality only holds if the on-disk prefix was kept and appended to, not overwritten.
     expect(await landed(root)).toEqual(whole);
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
@@ -196,11 +202,11 @@ test("the translator is re-synced once the server actually serves, not when the 
     stubFetch(wholeFile, true);
 
     await drain("serving", ctx);
-    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
-    await vi.waitFor(() => expect(syncEndpoints).toHaveBeenCalledTimes(1), SETTLES);
+    await waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await waitFor(() => expect(syncEndpoints).toHaveBeenCalledTimes(1), SETTLES);
 
     await localModelHandler.remove?.(ctx, "serving", { model: "custom", gpu: "off", url: MODEL_URL });
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
@@ -211,11 +217,11 @@ test("a server that never serves leaves the routing table alone", async () => {
     stubFetch(wholeFile);
 
     await drain("never-serves", ctx);
-    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
-    await vi.waitFor(() => expect(existsSync(modelPath(root))).toBe(true), SETTLES);
+    await waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await waitFor(() => expect(existsSync(modelPath(root))).toBe(true), SETTLES);
     expect(syncEndpoints).not.toHaveBeenCalled();
 
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
@@ -227,7 +233,7 @@ test("the server is started with the window the entry chose, and a quantized cac
     stubFetch(wholeFile);
 
     await drain("bounded", ctx, "131072");
-    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
 
     const command = panels.start.mock.calls[0]?.[1]?.command as string;
     expect(command).toContain("--ctx-size 131072");
@@ -238,7 +244,7 @@ test("the server is started with the window the entry chose, and a quantized cac
     // `--ctx-size 0` means "read it from the model": the one value every entry figure can't survive.
     expect(command).not.toContain("--ctx-size 0");
 
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
@@ -248,11 +254,11 @@ test("a custom window reaches the server as the number that was typed", async ()
     stubFetch(wholeFile);
 
     await drain("typed", ctx, "custom", 98_304);
-    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
 
     expect(panels.start.mock.calls[0]?.[1]?.command as string).toContain("--ctx-size 98304");
 
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
@@ -266,12 +272,12 @@ test("a custom window with no number falls back to the default rung, out loud", 
     for await (const line of localModelHandler.apply(ctx, "unfinished", { model: "custom", gpu: "off", url: MODEL_URL, context: "custom" })) {
         lines.push((line as { message?: string }).message ?? "");
     }
-    await vi.waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
+    await waitFor(() => expect(panels.start).toHaveBeenCalledTimes(1), SETTLES);
 
     expect(panels.start.mock.calls[0]?.[1]?.command as string).toContain(`--ctx-size ${LOCAL_MODEL_WINDOW_DEFAULT}`);
     expect(lines.join("\n")).toMatch(/64k tokens/);
 
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });
 
@@ -291,6 +297,6 @@ test("a window under the agent floor is served, and says what it is still good f
     expect(said).toMatch(/full agent turn/i);
     expect(said).toMatch(/entry/i);
 
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     await rm(root, { recursive: true, force: true });
 });

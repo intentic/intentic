@@ -1,5 +1,5 @@
 import type { SetupReport } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { setupReportView } from "./setupReport";
 
 const report = (overrides: Partial<SetupReport>): SetupReport => ({

@@ -2,7 +2,8 @@ import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import {
     isProcessAlive,
     livePid,
@@ -47,7 +48,7 @@ describe("spawnDetached", () => {
 
         // Answered without waiting the window out, which is the whole point; the child's own line lands right after.
         expect(pid).toBeGreaterThan(0);
-        await expect.poll(() => readFileSync(log, "utf8"), { timeout: 5_000 }).toContain("dropped nothing");
+        await waitFor(() => expect(readFileSync(log, "utf8")).toContain("dropped nothing"), { timeout: 5_000 });
     });
 
     it("detaches the agent from the caller, so it is still there once the caller is done with it", async () => {

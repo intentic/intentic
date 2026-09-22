@@ -1,6 +1,6 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { type ForticlientConnection, VAULTED } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import {
     buildConfig,
     cleanName,

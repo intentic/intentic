@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { createWorkspaceProvider } from "./workspace.js";
 

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { type DeviceSandboxResources, resourcesSummary } from "@intentic/ui/device";
 import { askFrom, capFromField, cpuBounds, formFrom, formProblems, gpuDropped, locksOf, memoryBounds } from "@intentic/ui/sandbox-resources";
 

@@ -1,30 +1,33 @@
-// @vitest-environment jsdom
 // Pins that work terminals (agent/job) tab only while revealed and let go once finished. The pane is mocked wholesale:
 // no real terminal or canvas, which jsdom lacks.
-import { beforeEach, expect, test, vi } from "vitest";
+import "@intentic/testing/dom";
+import { test, expect, beforeEach, mock } from "bun:test";
+import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { ref } from "vue";
 
 const store = new Map<string, string>();
-vi.stubGlobal(`localStorage`, {
+stubGlobal(`localStorage`, {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => store.set(key, value),
     removeItem: (key: string) => store.delete(key),
 });
-vi.mock("../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn() }));
+mock.module("../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
 // Every remembered key is filed under the sandbox it belongs to; the ids below are this test's sandbox.
-vi.mock("../sandbox/overview/activeSandbox", () => ({
+mock.module("../sandbox/overview/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId: ref(`sbx-1`),
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
 }));
-vi.mock("../sandbox/client/useSandbox", () => ({
+mock.module("../sandbox/client/useSandbox", () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId: ref(`sbx-1`) }),
 }));
-vi.mock("./terminalSession", () => ({
+mock.module("./terminalSession", () => ({
     createTerminalSession: (name: string) => ({ kind: `terminal`, name }),
-    mountTerminalSession: vi.fn(),
-    parkTerminalSession: vi.fn(),
-    disposeTerminalSession: vi.fn(),
+    mountTerminalSession: mock(),
+    parkTerminalSession: mock(),
+    disposeTerminalSession: mock(),
+    retypeTerminalSession: mock(),
+    retintTerminalSession: mock(),
 }));
 
 const { createTerminalTabs } = await import("./useTerminal");
@@ -118,7 +121,7 @@ test("a job tabs while it is being watched and lets go once it has finished and 
     expect(tabs.activeName.value).toBe(`job-capability-demo`);
 
     tabs.switchTab(`web-1`);
-    await vi.waitFor(() => expect(names()).toEqual([`web-1`]));
+    await waitFor(() => expect(names()).toEqual([`web-1`]));
 });
 
 // Reveal and the first list carrying the session land in the same pass, so retiring then would leave the click doing

@@ -1,11 +1,13 @@
-// @vitest-environment jsdom
 // Pins which rows the Subagents list draws for a chip-filtered agent, and which facts appear on a child's row.
 // Needs jsdom: mounts a real Vue app to the DOM.
+import "@intentic/testing/dom";
 import type { SubagentSession } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
+import * as vueQueryOriginal from "@tanstack/vue-query";
+import * as subagentsQueryOriginal from "./subagentsQuery";
 
 const child = (over: Partial<SubagentSession>): SubagentSession => ({
     id: `call-1`,
@@ -24,19 +26,19 @@ const sessions = ref<SubagentSession[]>([]);
 const opened: string[] = [];
 
 // Stubs the roster/fleet caches so the test drives the list, not the network; `subagentLive` stays real.
-vi.mock("./subagentsQuery", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("./subagentsQuery")>()),
+mock.module("./subagentsQuery", () => ({
+    ...subagentsQueryOriginal,
     useSubagentsQuery: () => ({ sessions: computed(() => sessions.value), running: computed(() => sessions.value), refetch: async () => undefined }),
 }));
-vi.mock("../../agents/fleet/useAgents", () => ({
+mock.module("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
         agentById: (id: string) => (id === `c1` ? { id, title: `analyse the gap`, model: `x-test-model` } : undefined),
         open: (agent: { id: string }) => void opened.push(agent.id),
     }),
 }));
 // Stubs useQuery (the transcript read); irrelevant to which rows the rail draws.
-vi.mock("@tanstack/vue-query", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("@tanstack/vue-query")>()),
+mock.module("@tanstack/vue-query", () => ({
+    ...vueQueryOriginal,
     useQuery: () => ({ data: ref([]) }),
 }));
 

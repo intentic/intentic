@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
 // The meter beside the model pill, while Auto is armed. Effort is part of the one reading Auto does, and the ladder
 // would be the FALLBACK model's rather than the one that will run — so there is no meter at all. Same rule
 // ChatModelPicker keeps for the rest of the run settings under Auto; this is the control that lives outside it.
+import "@intentic/testing/dom";
 import { type AgentProvider, capabilitiesOf } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import type { Conversation } from "../session/conversation";
@@ -24,7 +24,7 @@ const conversationOf = (auto: boolean): Conversation =>
         effort: computed(() => HELD),
         auto: ref(auto),
         capabilities: computed(() => capabilitiesOf(PROVIDER, `claude-code`)),
-        setEffort: vi.fn(),
+        setEffort: mock(),
     }) as unknown as Conversation;
 
 let app: App | undefined;

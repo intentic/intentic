@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { chordOf } from "./live-view.js";
 import { xButton, xInputOver } from "./xinput.js";
 

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { PrismaClient } from "@intentic/prisma";
 import { Hono } from "hono";
 import type { Logger } from "pino";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import { type Config, configSchema } from "../config.js";
 import { testIngressConfig } from "../testing.js";
 import { fleetHttpRoutes } from "./fleet.routes.js";
@@ -10,7 +10,7 @@ import { fleetHttpRoutes } from "./fleet.routes.js";
 // The provisioning door is the only way into this account that is not a browser, so what it refuses matters more than
 // what it does: a revoked token, a runaway loop, and the hosted lane it must never reach.
 
-const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
+const logger = { child: () => logger, info: mock(), warn: mock(), error: mock(), debug: mock() } as unknown as Logger;
 const NOW = new Date(`2026-09-21T12:00:00Z`);
 
 const config: Config = configSchema.parse({
@@ -47,7 +47,7 @@ const fakePrisma = (seed: Seed = {}) => {
     const updates: Record<string, unknown>[] = [];
     const prisma = {
         apiToken: {
-            findUnique: vi.fn(async ({ where }: { where: { hash: string } }) =>
+            findUnique: mock(async ({ where }: { where: { hash: string } }) =>
                 where.hash === digestOf(LIVE_TOKEN)
                     ? {
                           id: `tok-1`,
@@ -60,23 +60,23 @@ const fakePrisma = (seed: Seed = {}) => {
                       }
                     : null,
             ),
-            update: vi.fn(async () => ({})),
+            update: mock(async () => ({})),
         },
         sandbox: {
-            count: vi.fn(async () => seed.recentSandboxes ?? 0),
-            findMany: vi.fn(async () => [
+            count: mock(async () => seed.recentSandboxes ?? 0),
+            findMany: mock(async () => [
                 { id: `sbx-1`, name: `storefront`, daemonUrl: `https://storefront.sbx.test`, lastSeenAt: NOW },
                 { id: `sbx-2`, name: `never-came-up`, daemonUrl: null, lastSeenAt: null },
             ]),
-            create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+            create: mock(async ({ data }: { data: Record<string, unknown> }) => {
                 created.push(data);
                 return { id: `sbx-new`, name: data[`name`], token: data[`token`], setupCode: null, setupCodeExpiresAt: null, setupPayload: null, hosted: null };
             }),
-            update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+            update: mock(async ({ data }: { data: Record<string, unknown> }) => {
                 updates.push(data);
                 return {};
             }),
-            delete: vi.fn(async ({ where }: { where: { id: string } }) => {
+            delete: mock(async ({ where }: { where: { id: string } }) => {
                 deleted.push(where.id);
                 return {};
             }),

@@ -1,15 +1,16 @@
 import { type AgentSummary, type CommandRun, fixAttemptId, type PushRun, pushFixConversationId } from "@intentic/sandbox-contract";
-import { beforeEach, expect, test, vi } from "vitest";
-// oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
-import "./usePushFlow";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { computed, ref, shallowRef } from "vue";
+import { freshImport, stubGlobal, mocked } from "@intentic/testing/bun";
 import { checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, pushNudgePrompt, refusalSummary } from "../health/fixProposal";
 import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 
 // No case here mounts a component: a push must finish, send, and raise its question even after the panel that
-// started it is gone. Each mock owns its state, so `vi.resetModules` gives every case a clean flow and clean seams.
+// started it is gone. Each mock owns its state and resets it below, and the flow itself is evaluated afresh, so
+// every case opens on a clean flow and clean seams. Nothing above imports the flow: a mock that ADDS a name the
+// real module does not export only reaches a graph the mocks were registered before.
 
-vi.mock(`./usePrepush`, async () => {
-    const { computed, ref } = await import(`vue`);
+mock.module(`./usePrepush`, () => {
     const run = ref<CommandRun>({ status: `idle`, command: `pnpm check`, output: `` });
     let settle: ((run: CommandRun) => void) | undefined;
     return {
@@ -18,13 +19,13 @@ vi.mock(`./usePrepush`, async () => {
             error: computed(() => undefined),
             running: computed(() => run.value.status === `running`),
             terminal: computed(() => run.value.session),
-            start: vi.fn(async () => {
+            start: mock(async () => {
                 run.value = { status: `running`, command: `pnpm check`, output: ``, session: `job-checks` };
                 return await new Promise<CommandRun>((resolve) => (settle = resolve));
             }),
-            cancel: vi.fn(),
-            forget: vi.fn(),
-            showTerminal: vi.fn(),
+            cancel: mock(),
+            forget: mock(),
+            showTerminal: mock(),
         }),
         // The suite finishing, as the daemon's poll would report it: the settle keeps the window the run opened in
         // (prepush.ts's own `settle` does the same), since that terminal is where the whole of the output is.
@@ -51,7 +52,7 @@ vi.mock(`./usePrepush`, async () => {
 });
 
 /* The watcher's stamp, which decides whether a verdict is still about the tree in front of the user. */
-vi.mock(`../changes/live/useWorkspaceLive`, () => {
+mock.module(`../changes/live/useWorkspaceLive`, () => {
     let lastAt = 1;
     return {
         workspaceChangedSince: (at: number) => lastAt === 0 || lastAt > at,
@@ -61,23 +62,21 @@ vi.mock(`../changes/live/useWorkspaceLive`, () => {
     };
 });
 
-vi.mock(`../changes/useChanges`, async () => {
-    const { ref } = await import(`vue`);
+mock.module(`../changes/useChanges`, () => {
     // One of each, shared like the real module's singletons; a fresh spy per call would give the flow a different
     // `syncAll` than the one under assertion.
     const actionBusy = ref(false);
     const failures = ref(new Map<string, { action: string; detail: string }>());
-    const syncAll = vi.fn(async () => {});
+    const syncAll = mock(async () => {});
     return { COMMIT_SCOPE: `commit`, useChanges: () => ({ actionBusy, failures, syncAll }) };
 });
 
 // Push runs live behind useChanges (mocked above); this seam only tracks the terminal a refused push ran in,
 // one per repo, like the daemon.
-vi.mock(`./usePushRun`, async () => {
-    const { computed } = await import(`vue`);
+mock.module(`./usePushRun`, () => {
     const sessions = new Map<string, string>();
     return {
-        usePushRun: (repo: string) => ({ terminal: computed(() => sessions.get(repo)), showTerminal: vi.fn() }),
+        usePushRun: (repo: string) => ({ terminal: computed(() => sessions.get(repo)), showTerminal: mock() }),
         resetPushRuns: () => sessions.clear(),
         // Sets where a repo's push is running, as the daemon would name it.
         pushTerminal: (repo: string, session: string | undefined): void => {
@@ -92,8 +91,7 @@ vi.mock(`./usePushRun`, async () => {
 
 // The flow gates on a `push.starting` rule, so this carries a real rule table, not a bare command field, and
 // exercises the real reader (prepushCommandOf).
-vi.mock(`../../sandbox/overview/useSandboxSettings`, async () => {
-    const { ref } = await import(`vue`);
+mock.module(`../../sandbox/overview/useSandboxSettings`, () => {
     const rules = [
         {
             id: `pre-push`,
@@ -115,37 +113,34 @@ vi.mock(`../../sandbox/overview/useSandboxSettings`, async () => {
 // Resolves against what this sandbox can reach, so the proposal names a model that can actually be sent;
 // provider readiness is a different suite's business.
 /* What the repositories declare for themselves, which this flow reads to decide whether a push is checked at all. */
-vi.mock(`../../sandbox/environment/useRepoChecks`, async () => {
-    const { computed } = await import(`vue`);
+mock.module(`../../sandbox/environment/useRepoChecks`, () => {
     return { useRepoChecks: () => ({ repos: computed(() => []) }) };
 });
 
-vi.mock(`../../chat/session/access`, () => ({ providerReady: () => true }));
+mock.module(`../../chat/session/access`, () => ({ providerReady: () => true }));
 
-vi.mock(`../../sandbox/client/useSandbox`, async () => {
-    const { ref } = await import(`vue`);
+mock.module(`../../sandbox/client/useSandbox`, () => {
     return { useSandbox: () => ({ activeSandboxId: ref(`sb-1`) }) };
 });
 
-vi.mock(`../../agents/fleet/sessionSuggestion`, () => ({
-    composeSession: vi.fn((draft: { prompt: string }) => ({
+mock.module(`../../agents/fleet/sessionSuggestion`, () => ({
+    composeSession: mock((draft: { prompt: string }) => ({
         draft,
-        selectModel: vi.fn(),
+        selectModel: mock(),
         account: { value: undefined },
         harness: { value: undefined },
     })),
-    startSession: vi.fn(),
+    startSession: mock(),
 }));
 
 // The fleet as the stream keeps it and the archive as it is pulled: what a press is planned against. Shared refs,
 // like the real module's, so a case sets the roster and the flow reads that same one.
-vi.mock(`../../agents/fleet/useAgents-registry`, async () => {
-    const { shallowRef } = await import(`vue`);
-    return { registry: shallowRef<AgentSummary[]>([]), archived: shallowRef<AgentSummary[]>([]), loadArchived: vi.fn(async () => {}) };
+mock.module(`../../agents/fleet/useAgents-registry`, () => {
+    return { registry: shallowRef<AgentSummary[]>([]), archived: shallowRef<AgentSummary[]>([]), loadArchived: mock(async () => {}) };
 });
-vi.mock(`../../agents/fleet/useAgents-archive`, () => ({ archive: vi.fn(async () => {}) }));
-vi.mock(`../../agents/fleet/agentActions`, () => ({ stopAgent: vi.fn(async () => {}) }));
-vi.mock(`../../agents/fleet/useAgents-actions`, () => ({ open: vi.fn() }));
+mock.module(`../../agents/fleet/useAgents-archive`, () => ({ archive: mock(async () => {}) }));
+mock.module(`../../agents/fleet/agentActions`, () => ({ stopAgent: mock(async () => {}) }));
+mock.module(`../../agents/fleet/useAgents-actions`, () => ({ open: mock() }));
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
 // A fix agent as the roster reports it; `status` is what each case is about.
@@ -163,10 +158,8 @@ const agent = (id: string, over: Partial<AgentSummary> = {}): AgentSummary => ({
 const PUSH = [{ repo: `intentic`, pull: false, push: true }];
 
 const load = async () => {
-    vi.clearAllMocks();
-    vi.resetModules();
-    // Sequential, and seams before the flow, not style: importing concurrently raced the factories into different
-    // instances of their state, so warming the registry first keeps both sides the same.
+    jest.clearAllMocks();
+    // Seams before the flow: each is asked for its state and put back to the start before the flow captures it.
     const prepush = await import(`./usePrepush`);
     const changes = await import(`../changes/useChanges`);
     const pushRuns = (await import(`./usePushRun`)) as unknown as {
@@ -176,20 +169,20 @@ const load = async () => {
     pushRuns.resetPushRuns();
     const suggestion = await import(`../../agents/fleet/sessionSuggestion`);
     const live = (await import(`../changes/live/useWorkspaceLive`)) as unknown as { writeToTree: () => void; quietTree: () => void };
-    // As with the seams above: the stamp survives `resetModules`, so each case opens on a tree nobody has written to.
+    // As with the seams above: the stamp is the mock's own, so each case opens on a tree nobody has written to.
     live.quietTree();
     const fleet = await import(`../../agents/fleet/useAgents-registry`);
     const fleetArchive = await import(`../../agents/fleet/useAgents-archive`);
     const actions = await import(`../../agents/fleet/agentActions`);
     const opener = await import(`../../agents/fleet/useAgents-actions`);
-    const module = await import(`./usePushFlow`);
+    const module = await freshImport<typeof import("./usePushFlow")>("./usePushFlow", import.meta.url);
     const seam = prepush as unknown as { finish: (fields: Partial<CommandRun>) => void; reset: () => void };
     seam.reset();
     // The flow captures useChanges on its first call; singletons carry over from the last case.
     const git = changes.useChanges();
     git.actionBusy.value = false;
     git.failures.value = new Map();
-    // As above: the fleet mocks' refs survive `resetModules`, so each case starts from an empty roster.
+    // As above: the fleet mocks' refs are the mocks' own, so each case starts from an empty roster.
     fleet.registry.value = [];
     fleet.archived.value = [];
     return {
@@ -203,6 +196,8 @@ const load = async () => {
         open: opener.open,
         pushTerminal: pushRuns.pushTerminal,
         flow: module.usePushFlow(),
+        // The same module a second caller would reach; the flow is module-level, so it hands back one instance.
+        usePushFlow: module.usePushFlow,
     };
 };
 
@@ -213,7 +208,7 @@ const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 
 // This suite runs on `node`, with no storage; the remembered duration is the only thing that touches it, so
 // it gets a minimal stand-in instead of jsdom.
 const stored = new Map<string, string>();
-vi.stubGlobal(`localStorage`, {
+stubGlobal(`localStorage`, {
     getItem: (key: string) => stored.get(key) ?? null,
     setItem: (key: string, value: string) => void stored.set(key, value),
     clear: () => stored.clear(),
@@ -242,7 +237,7 @@ test(`a green check sends the push with nobody watching`, async () => {
 // The case the rewrite is for: a verdict lands on a flow whose panel is long gone, and a second caller
 // (notice, rail) sees the same question, not a fresh empty one.
 test(`a red check raises a question that outlives the surface that asked`, async () => {
-    const { flow, git, suggestion, finish } = await load();
+    const { flow, git, suggestion, finish, usePushFlow } = await load();
     flow.askSync(`Push`, `3 commits`, PUSH);
     finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
     await flush();
@@ -260,7 +255,6 @@ test(`a red check raises a question that outlives the surface that asked`, async
     });
     expect(suggestion.composeSession).not.toHaveBeenCalled();
 
-    const { usePushFlow } = await import(`./usePushFlow`);
     expect(usePushFlow().question.value).toEqual(flow.question.value);
 });
 
@@ -496,7 +490,7 @@ test(`handing the failure to an agent starts the session and drops the push`, as
         isolated: true,
         conversationId: proposal?.base,
     });
-    expect(suggestion.startSession).toHaveBeenCalledWith(vi.mocked(suggestion.composeSession).mock.results[0]?.value);
+    expect(suggestion.startSession).toHaveBeenCalledWith(mocked(suggestion.composeSession).mock.results[0]?.value);
     expect(git.syncAll).not.toHaveBeenCalled();
     expect(flow.question.value).toBeUndefined();
     expect(flow.pending.value).toBeUndefined();
@@ -509,7 +503,7 @@ test(`starting a fix with a picked model re-points the session before starting`,
     await flush();
 
     await flow.startFix({ provider: `cursor`, model: `composer-2.5`, label: `Composer 2.5` });
-    const composed = vi.mocked(suggestion.composeSession).mock.results[0]?.value as { selectModel: ReturnType<typeof vi.fn> };
+    const composed = mocked(suggestion.composeSession).mock.results[0]?.value as { selectModel: ReturnType<typeof mock> };
     expect(composed.selectModel).toHaveBeenCalledWith({ provider: `cursor`, value: `composer-2.5` });
     expect(suggestion.startSession).toHaveBeenCalledWith(composed);
     expect(flow.question.value).toBeUndefined();
@@ -595,7 +589,7 @@ test(`a press that cannot set the attempt aside says why and keeps the question`
     await flush();
     const base = flow.proposedFix.value!.base;
     fleet.registry.value = [agent(base, { status: `running` })];
-    vi.mocked(stopAgent).mockRejectedValueOnce(new Error(`no running turn for that conversation`));
+    mocked(stopAgent).mockRejectedValueOnce(new Error(`no running turn for that conversation`));
 
     await flow.startFix(undefined, `start-over`);
     expect(flow.fixError.value).toBe(`no running turn for that conversation`);

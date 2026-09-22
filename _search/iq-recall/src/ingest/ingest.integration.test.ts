@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { appendFile, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { makeRecallFixture } from "../testing.js";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import { openRecallDb } from "../store/db.js";

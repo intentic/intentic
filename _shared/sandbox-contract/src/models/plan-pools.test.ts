@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { bindingWindow, gatesModel, gatingWindows, scopedWindow, windowLive, windowPeriod } from "./plan-pools.js";
 import type { AccountUsage, UsageWindow } from "../schemas/providers/plan-limits.js";
 

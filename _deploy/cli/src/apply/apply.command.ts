@@ -128,6 +128,8 @@ export const apply = buildCommand<ApplyFlags>({
         process.once("SIGTERM", onSignal);
         // tmux kill-session (or closing a tab) sends SIGHUP; release the lock instead of orphaning it for the TTL.
         process.once("SIGHUP", onSignal);
+        // bun's Process augmentation hides EventEmitter's own removeListener; the base view still takes a signal name.
+        const signals: NodeJS.EventEmitter = process;
         try {
             // Mints secrets under the lock (backfill on) so two concurrent runs never bake divergent admin passwords.
             await ensureGeneratedSecrets(generatedSecretStore(graph, dir, ssh, true, out.log), collectSecrets(graph).generated, process.env);
@@ -246,9 +248,9 @@ export const apply = buildCommand<ApplyFlags>({
                 }
             }
         } finally {
-            process.removeListener("SIGINT", onSignal);
-            process.removeListener("SIGTERM", onSignal);
-            process.removeListener("SIGHUP", onSignal);
+            signals.removeListener("SIGINT", onSignal);
+            signals.removeListener("SIGTERM", onSignal);
+            signals.removeListener("SIGHUP", onSignal);
             // Flushes buffered secret-prefix bytes so the last output line isn't dropped; runs on the error path too.
             redactor.flush();
             await lock.release();

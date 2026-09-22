@@ -1,10 +1,10 @@
-// @vitest-environment jsdom
 // Tests that the picker discloses what a runtime can't do (from the record, limitationsOf) without spending
 // permanent space: one row with a count, full text on hover. Not about which words the record chose. And that
 // the run settings under it ARE the shared control (PickerRunSettings), drawn without the meter this surface
 // already keeps beside its model pill.
+import "@intentic/testing/dom";
 import { type AgentHarness, type AgentProvider, capabilitiesOf, limitationsOf } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { IconStub } from "@intentic/ui/testing";
@@ -12,7 +12,7 @@ import { IconStub } from "@intentic/ui/testing";
 // ModelPicker is tested on its own; stubbed to its footer slot so only the footer mounts here. Its props are kept
 // because the lead row (Auto) is a prop, not footer markup, and this binding is what decides whether it exists.
 const pickerProps = ref<Record<string, unknown>>({});
-vi.mock(`./ModelPicker.vue`, () => ({
+mock.module(`./ModelPicker.vue`, () => ({
     default: defineComponent({
         inheritAttrs: false,
         setup: (_props, { slots, attrs }) => {
@@ -22,8 +22,8 @@ vi.mock(`./ModelPicker.vue`, () => ({
     }),
 }));
 // Account catalogs live in the shared block; stubbed empty so the footer shows only the runtime's own rows.
-vi.mock(`../accounts/PickerAccounts.vue`, () => ({ default: defineComponent({ setup: () => () => h(`div`) }) }));
-vi.mock(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => false) }) }));
+mock.module(`../accounts/PickerAccounts.vue`, () => ({ default: defineComponent({ setup: () => () => h(`div`) }) }));
+mock.module(`../accounts/pickerAccounts`, () => ({ usePickerAccounts: () => ({ hasContent: computed(() => false) }) }));
 const { default: ChatModelPicker } = await import("./ChatModelPicker.vue");
 const { providerModels } = await import("../accounts/providerCatalog");
 const { effortsFor } = await import("./run-settings/effortScale");
@@ -55,13 +55,13 @@ const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }
         generating: computed(() => false),
         account: ref(undefined),
         capabilities: computed(() => capabilitiesOf(pair.provider, pair.harness)),
-        selectModel: vi.fn(),
-        selectAccount: vi.fn(),
-        selectHarness: vi.fn(),
-        setEffort: vi.fn(),
-        setThinking: vi.fn(),
-        setFast: vi.fn(),
-        setAuto: vi.fn(),
+        selectModel: mock(),
+        selectAccount: mock(),
+        selectHarness: mock(),
+        setEffort: mock(),
+        setThinking: mock(),
+        setFast: mock(),
+        setAuto: mock(),
     }) as unknown as Conversation;
 
 let app: App | undefined;

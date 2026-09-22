@@ -1,10 +1,11 @@
-// @vitest-environment jsdom
 // Pins the floating composer's two contracts: it draws exactly where no composer is already on screen, and what the
 // pill grows into is the chat's own composer rather than a second one. The hover rules are here because both
 // directions were wrong at first — an opening that stole the caret could never close again.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { resetChat, useChat } from "../run/useChat";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { chatBarPeek } from "./chatPanelLayout";
@@ -17,9 +18,10 @@ import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import ChatQuickBar from "./ChatQuickBar.vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
 
 // jsdom has neither, and both the pane's pinned-prompt observer and its reveal reach for them.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
@@ -29,12 +31,11 @@ vi.hoisted(() => {
 });
 
 // An empty roster and an empty ledger: neither the fleet nor a workflow run is what these tests are about.
-vi.mock(`../../agents/fleet/useAgents`, async () => {
-    const { computed } = await import(`vue`);
+mock.module(`../../agents/fleet/useAgents`, () => {
     return { useAgents: () => ({ fleet: computed(() => []), agentById: () => undefined }) };
 });
-vi.mock(`../../agents/fleet/useWorkflowRuns`, async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
+mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+    ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 
@@ -69,16 +70,15 @@ const hoverOut = (): void => void bar()?.dispatchEvent(new Event(`pointerleave`)
 // The transcript's only affordance: the eye in the corner of the box it looks into.
 const handle = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`.chat-quick-eye`);
 const hoverHandle = (): void => void handle()?.dispatchEvent(new Event(`pointerenter`));
-const escape = (): void =>
-    void bar()?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
+const escape = (): void => void bar()?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
 // Past both delays the pill uses, so a test never has to restate either one.
 const waitOutHover = async (): Promise<void> => {
-    vi.advanceTimersByTime(1_000);
+    jest.advanceTimersByTime(1_000);
     await settle();
 };
 
 beforeEach(async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
@@ -94,7 +94,7 @@ beforeEach(async () => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 it(`draws where no composer is already on screen, and nowhere else`, async () => {
@@ -240,9 +240,7 @@ it(`rests as one control and nothing else, so its only press is the composer`, a
 // here would read as the way to answer, and the answer is not a message.
 it(`turns into a door while a card waits for an answer, rather than a box that cannot send one`, async () => {
     const chat = useChat();
-    chat.active.value.restoreMessages([
-        { role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } },
-    ]);
+    chat.active.value.restoreMessages([{ role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } }]);
     await mount(ChatQuickBar);
 
     expect(line()).toContain(`waiting for you`);
@@ -315,14 +313,14 @@ it(`folds the transcript away with the pointer, before the box itself goes`, asy
     await settle();
 
     hoverHandle();
-    vi.advanceTimersByTime(200);
+    jest.advanceTimersByTime(200);
     await settle();
     expect(chatBarPeek.value).toBe(true);
 
     // The turns stay mounted just long enough to fade with the card behind them — they are the panel's, so they cannot
     // fade after the flag that draws them has dropped — and the box is still standing when they are gone.
     hoverOut();
-    vi.advanceTimersByTime(130);
+    jest.advanceTimersByTime(130);
     await settle();
     expect([chatBarPeek.value, opened()]).toEqual([false, true]);
 
@@ -344,7 +342,7 @@ it(`keeps the transcript on a press, and gives it back one Escape before the box
     expect(chatBarPeek.value).toBe(true);
 
     escape();
-    vi.advanceTimersByTime(130);
+    jest.advanceTimersByTime(130);
     await settle();
     expect([chatBarPeek.value, opened()]).toEqual([false, true]);
 

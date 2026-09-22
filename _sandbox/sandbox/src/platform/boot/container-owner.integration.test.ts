@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { type Logger, pino } from "pino";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { AGENT_SESSION_ENV, claimContainer } from "./container-owner.js";
 import { processIdentity, type ProcessIdentity } from "../resources/proc-stat.js";
 

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { RESUME_NOTES, resumeDisclosure, withResumeNote, withoutResumeNote } from "./resume.js";
 
 // Wrapping then unwrapping a resume note must return the exact original prompt; a mismatch leaks machine narration into

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { type ToolGroup, groupConsecutiveTools, groupDiffSummary } from "./toolGrouping";
 

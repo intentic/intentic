@@ -13,13 +13,16 @@ const MAX_BYTES = 256 * 1024;
 // Unresolvable: globs, substitutions, braces, a colon (remote path); a wrong guess falsely clears the class.
 const UNRESOLVABLE = /[*?$`{}[\]:]/;
 
+// Home as the shell about to run the command would expand it: `$HOME` when the environment sets it, the account's own.
+const homeDir = (): string => process.env["HOME"] ?? homedir();
+
 // The three spellings of home (`~`, `$HOME`, `${HOME}`) whose location isn't in doubt.
 const expandHome = (path: string): string => {
     if (path === "~" || path.startsWith("~/")) {
-        return join(homedir(), path.slice(1));
+        return join(homeDir(), path.slice(1));
     }
     const home = /^\$(?:HOME\b|\{HOME\})/.exec(path);
-    return home === null ? path : join(homedir(), path.slice(home[0].length));
+    return home === null ? path : join(homeDir(), path.slice(home[0].length));
 };
 
 // Resolves which file the command means, absolute, or undefined when that can't be known. A relative path resolves

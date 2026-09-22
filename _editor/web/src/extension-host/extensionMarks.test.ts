@@ -4,7 +4,7 @@ import { repoRoot } from "@intentic/constants/node";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { artSrc } from "@intentic/ui/brand-mark";
 import { isIconName } from "@intentic/ui/icons";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // Every first-party extension's mark names a glyph that exists. `icon` is an open string in the manifest, so a typo in
 // one of ours is not a schema, compile, or runtime error; <BrandMark> falls through to initials, which looks

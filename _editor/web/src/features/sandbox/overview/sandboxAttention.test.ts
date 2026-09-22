@@ -1,18 +1,18 @@
-// @vitest-environment jsdom
 // What the sandbox tells its owner it needs. One regression: a reader holding a usable free trial was told the agent
 // could not run a turn, which sent them off to connect an account they did not need — the same beat access.ts already
 // names for the chat's own gate, on a list that never consulted the endpoint half at all.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, trialStatus } from "../../chat/accounts/providerCatalog";
 
 // The four seams this list reads besides the accounts: each is a live query elsewhere, and none of them decides
 // whether a turn can run, which is the only question these tests ask.
-vi.mock(`../../capabilities/connect/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
-vi.mock(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
-vi.mock(`../environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending: { value: undefined }, proposal: { value: undefined } }) }));
-vi.mock(`./version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ updateAvailable: { value: false }, updateStaged: { value: undefined } }) }));
+mock.module(`../../capabilities/connect/useSecrets`, () => ({ useMissingSecretCount: () => ({ missingRequiredCount: { value: 0 } }) }));
+mock.module(`../devices/useDevices`, () => ({ useSyncHealth: () => ({ stoppedOn: { value: [] }, heldPorts: { value: [] } }) }));
+mock.module(`../environment/useEnvironment`, () => ({ useEnvironment: () => ({ pending: { value: undefined }, proposal: { value: undefined } }) }));
+mock.module(`./version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ updateAvailable: { value: false }, updateStaged: { value: undefined } }) }));
 
 const TRIAL_ENDPOINT = { id: TRIAL_PROVIDER, label: `Free trial`, kind: `endpoint` } as const;
 

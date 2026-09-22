@@ -1,5 +1,5 @@
 import type { Capability, CapabilityKind } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { checks, type PeerRegistryDeps } from "./invariant.js";
 
 /* Revocation is two calls, one on each record, and the one that matters for safety is the second. */

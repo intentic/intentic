@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { AgentTurnSchema } from "../schemas/agent.js";
 import { MENTION_LIMIT, mentionedPathTokens, mentionPaths } from "./mentions.js";
 

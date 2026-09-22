@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { type CodebaseHealth, createResidentEngine, type ResidentEngine } from "../index.js";
 import { makeFixtureWorkspace } from "../testing.js";
 

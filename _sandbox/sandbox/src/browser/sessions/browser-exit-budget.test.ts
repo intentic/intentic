@@ -1,5 +1,5 @@
 import type { Capability, ExitConfig, IntenticLine } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { startExitOnce } from "../../exit/exit-links.js";
 import { resolveProfileExit } from "./browser-exit.js";
 
@@ -10,7 +10,7 @@ import { resolveProfileExit } from "./browser-exit.js";
 // HOME decides where this exit's state lands; pinned to a temp dir so a run leaves nothing in the real one.
 process.env["HOME"] = "/tmp/browser-exit-budget-home";
 
-const started = vi.fn();
+const started = mock();
 
 // Handoff, not a polled flag: each parked dial queues its resolver, so nothing starves under a loaded suite.
 const dials: (() => void)[] = [];
@@ -30,7 +30,7 @@ const parked = (): Promise<() => void> => {
     return ready === undefined ? new Promise((resolve) => waiters.push(resolve)) : Promise.resolve(ready);
 };
 
-vi.mock("../../exit/exit-drivers.js", () => ({
+mock.module("../../exit/exit-drivers.js", () => ({
     exitDrivers: {
         tor: {
             missingTool: async () => undefined,

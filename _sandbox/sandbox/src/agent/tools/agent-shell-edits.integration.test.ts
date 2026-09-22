@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, test } from "vitest";
+import { test, expect, afterAll } from "bun:test";
 import { createShellEditTracker, type ShellEdit } from "./agent-shell-edits.js";
 
 /* Attribution by mtime across a command, against real files: the one thing worth a disk here is that a stat is what the tracker reads. */

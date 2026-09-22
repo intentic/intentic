@@ -1,5 +1,5 @@
 import type { DesiredStateGraph, Move } from "@intentic/graph";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { Provider } from "../provider.js";
 import type { EngineConfig } from "../types.js";
 import { applyMoves, rewriteGraphForMoves } from "./moves.js";

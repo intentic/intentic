@@ -1,5 +1,5 @@
 import type { Area, Persona } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import type { ProvenCaller } from "../auth/auth.js";
 import { memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { reachablePersonas, refuseUnlessReachable } from "./persona-reach.js";

@@ -1,23 +1,24 @@
-// @vitest-environment jsdom
 // Pins the refactor action's wiring: one per hotspot row, none for an ordinary key module, and a press carries
 // that row's own prompt. Arithmetic is covered in refactorAsk.test.ts.
-import { beforeAll, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeAll, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick, ref } from "vue";
 import type { WorkspaceHealth } from "@intentic/api-contract";
 import CodebaseHealth from "./CodebaseHealth.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Hoisted so the static import avoids the TDZ; matchMedia stays false, keeping the device desktop.
-const mocked = vi.hoisted(() => {
+const mocked = hoisted(() => {
     return { started: [] as string[], health: { value: undefined as WorkspaceHealth | undefined } };
 });
 const { started, health } = mocked;
 
-vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => mocked.started.push(prompt ?? ``) }));
-vi.mock(`./useCodebaseHealth`, () => ({
+mock.module(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => mocked.started.push(prompt ?? ``) }));
+mock.module(`./useCodebaseHealth`, () => ({
     useCodebaseHealth: () => ({ health: mocked.health, loading: ref(false), error: ref(null), refresh: () => {} }),
 }));
-vi.mock(`../explorer/useRepos`, () => ({ useRepos: () => ({ options: ref([`root`]) }) }));
+mock.module(`../explorer/useRepos`, () => ({ useRepos: () => ({ options: ref([`root`]) }) }));
 
 const mount = (): HTMLElement => {
     const el = document.createElement(`div`);

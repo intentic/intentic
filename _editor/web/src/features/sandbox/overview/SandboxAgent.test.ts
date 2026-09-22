@@ -1,37 +1,38 @@
-// @vitest-environment jsdom
 // Pins which groups render in which category, and how the `section`/`connect` query params interact.
 // jsdom: mounts the component tree and reads rendered DOM.
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
 
 // Settings already loaded and sandbox reachable, so the blocked notice never renders.
-vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
-vi.mock(`./useSandboxSettings`, () => ({
+mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ reachable: ref(true) }) }));
+mock.module(`./useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings: ref({}), error: ref(undefined), dropped: ref(undefined), patch: async () => undefined }),
 }));
 
-// vi.mock calls are hoisted, so each specifier must be a literal string; can't loop over the group list.
+// A mock.module specifier must be a literal string, so the group list cannot be looped over.
 const stub = (name: string) => ({ default: defineComponent({ render: () => h(`section`, { "data-group": name }) }) });
-vi.mock(`../secrets/AiAccountSection.vue`, () => stub(`AI account`));
-vi.mock(`../agent-settings/models/AgentModels.vue`, () => stub(`Models`));
-vi.mock(`../agent-settings/skills/AgentInstructions.vue`, () => stub(`Instructions`));
-vi.mock(`../agent-settings/skills/AgentSkills.vue`, () => stub(`Skills`));
-vi.mock(`../agent-settings/safety/AgentRules.vue`, () => stub(`Rules`));
-vi.mock(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
-vi.mock(`../agent-settings/skills/AgentMemoryImport.vue`, () => stub(`Memory import`));
-vi.mock(`../agent-settings/behaviour/AgentCodeSearch.vue`, () => stub(`Code search`));
-vi.mock(`../agent-settings/behaviour/AgentDependencies.vue`, () => stub(`Dependencies`));
-vi.mock(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Command output`));
-vi.mock(`../agent-settings/behaviour/AgentSubagents.vue`, () => stub(`Subagents`));
-vi.mock(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a turn breaks`));
-vi.mock(`../agent-settings/safety/AgentSafetyJudge.vue`, () => stub(`Safety judge`));
-vi.mock(`../agent-settings/safety/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
-vi.mock(`../agent-settings/safety/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
-vi.mock(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`Checks`));
-vi.mock(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
-vi.mock(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
+mock.module(`../secrets/AiAccountSection.vue`, () => stub(`AI account`));
+mock.module(`../agent-settings/models/AgentModels.vue`, () => stub(`Models`));
+mock.module(`../agent-settings/skills/AgentInstructions.vue`, () => stub(`Instructions`));
+mock.module(`../agent-settings/skills/AgentSkills.vue`, () => stub(`Skills`));
+mock.module(`../agent-settings/safety/AgentRules.vue`, () => stub(`Rules`));
+mock.module(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
+mock.module(`../agent-settings/skills/AgentMemoryImport.vue`, () => stub(`Memory import`));
+mock.module(`../agent-settings/behaviour/AgentCodeSearch.vue`, () => stub(`Code search`));
+mock.module(`../agent-settings/behaviour/AgentDependencies.vue`, () => stub(`Dependencies`));
+mock.module(`../agent-settings/behaviour/AgentCommandOutput.vue`, () => stub(`Command output`));
+mock.module(`../agent-settings/behaviour/AgentSubagents.vue`, () => stub(`Subagents`));
+mock.module(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a turn breaks`));
+mock.module(`../agent-settings/safety/AgentSafetyJudge.vue`, () => stub(`Safety judge`));
+mock.module(`../agent-settings/safety/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
+mock.module(`../agent-settings/safety/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
+mock.module(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`Checks`));
+mock.module(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
+mock.module(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
 
 // Categories the strip offers; the coverage test walks this array instead of a hand-copied list.
 const EVERY_SECTION = [`models`, `instructions`, `tools`, `safety`, `finishing`];
@@ -149,17 +150,17 @@ it(`shows accounts for a sign-in link even while another category is named`, asy
 it(`writes the picked category to the address, and the default writes no param`, async () => {
     const { el, router } = await mount();
     pill(el, `Finishing`).click();
-    await vi.waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
+    await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
     expect(shown(el)).toEqual([`Checks`, `Finished work`, `Changelog`, `When a turn breaks`]);
 
     pill(el, `Models`).click();
-    await vi.waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());
+    await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());
     expect(shown(el)).toEqual([`AI account`, `Models`]);
 });
 
 it(`lets a pill escape a sign-in link`, async () => {
     const { el, router } = await mount({ connect: `anthropic` });
     pill(el, `Instructions`).click();
-    await vi.waitFor(() => expect(router.currentRoute.value.query[`connect`]).toBeUndefined());
+    await waitFor(() => expect(router.currentRoute.value.query[`connect`]).toBeUndefined());
     expect(shown(el)).toEqual([`Instructions`, `Skills`, `Rules`, `Memory`, `Memory import`]);
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { reviewsToRead } from "./reviewsToRead";
 
 // Pins which reviews are read ahead and how deeply. A dropped lane leaves numbers unsettled on open;

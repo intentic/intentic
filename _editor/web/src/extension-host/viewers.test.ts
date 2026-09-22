@@ -1,6 +1,6 @@
 import type { IntenticApi, ViewerRegistration } from "@intentic/extension-api";
 import * as viewers from "@intentic/ext-viewers";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // Exercises ext-viewers by calling activate() against a minimal fake IntenticApi, proving it registers every viewer its
 // manifest declares.

@@ -1,6 +1,6 @@
 import type { HookCallbackMatcher, HookEvent, HookInput } from "@anthropic-ai/claude-agent-sdk";
 import { type Fence, type Persona, PersonaPowersSchema } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { personaScopeHooks, personaScopeOf } from "./persona-scope.js";
 import { turnPersona } from "./personas.js";
 

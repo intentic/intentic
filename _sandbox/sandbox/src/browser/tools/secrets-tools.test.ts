@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
 import { typeableSecret } from "./secrets-tools.js";
 

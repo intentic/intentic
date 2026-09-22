@@ -1,7 +1,8 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { createTurnGate } from "../../guard/turn-gate.js";
 import { humanizeModelId } from "../../agent/models/model-discovery.js";
 import { SEED_XAI_MODELS } from "./grok-models.js";
@@ -9,12 +10,12 @@ import { createOpenCodeService, geminiProviderConfig, registerSessionGate, relea
 
 // Captures server-spawn options instead of booting a real `opencode serve`; the client double also feeds an event
 // stream and records every permission answered.
-const { serverSpawns, permissionReplies, streamEvents } = vi.hoisted(() => ({
+const { serverSpawns, permissionReplies, streamEvents } = hoisted(() => ({
     serverSpawns: [] as { config?: unknown }[],
     permissionReplies: [] as { id: string; permissionID: string; directory: string | undefined; response: string | undefined }[],
     streamEvents: [] as unknown[],
 }));
-vi.mock("@opencode-ai/sdk", () => ({
+mock.module("@opencode-ai/sdk", () => ({
     createOpencodeServer: async (options: { config?: unknown }) => {
         serverSpawns.push(options);
         return { url: "http://127.0.0.1:0", close: (): void => {} };
@@ -66,11 +67,11 @@ const forbiddenFetch = (() => {
     throw new Error("discovery must not hit the network in this case");
 }) as unknown as typeof fetch;
 // The catalog the seed floor produces (ids humanized), for the not-connected assertions.
-const SEED_CATALOG = { models: SEED_XAI_MODELS.map((id) => ({ id, label: humanizeModelId(id) })), default: SEED_XAI_MODELS[0] };
+const SEED_CATALOG = { models: SEED_XAI_MODELS.map((id) => ({ id, label: humanizeModelId(id) })), default: SEED_XAI_MODELS[0]! };
 
 afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
-    // The three doubles are module-level (vi.hoisted); reset so one test's stream/permissions don't leak into the next.
+    // The three doubles are module-level (hoisted); reset so one test's stream/permissions don't leak into the next.
     streamEvents.length = 0;
     permissionReplies.length = 0;
     serverSpawns.length = 0;

@@ -25,13 +25,13 @@
     },
     "scripts": {
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
-        "test": "vitest run"
+        "test": "suites"
     },
     "devDependencies": {
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "vitest": "catalog:"
+        "@typescript/native-preview": "catalog:"
     }
 }

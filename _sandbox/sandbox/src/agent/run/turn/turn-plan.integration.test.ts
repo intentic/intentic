@@ -4,7 +4,7 @@ import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
 import { testConfig } from "../../../testing.js";
@@ -21,7 +21,7 @@ import { base, codexServices, context, harnessServices, ROOMY_MEMORY, servicesWi
 // The harness arm's credential resolution, which is a question about the owner's accounts rather than about the
 // tree: stubbed so the Claude case below can reach the part this file is actually asserting on. The native arms
 // never call it.
-vi.mock("../../providers/harness-credentials.js", () => ({
+mock.module("../../providers/harness-credentials.js", () => ({
     resolveHarnessCredentials: async () => ({ ok: true, credentials: { oauthToken: "***", account: "acc-1" } }),
 }));
 

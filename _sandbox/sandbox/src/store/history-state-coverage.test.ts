@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { packageRoot } from "@intentic/constants/node";
 import { HISTORY_STATE_FILES } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // Same guard as workspace-state-coverage but for /history: scans daemon source for every historyRoot-based path and
 // fails if it is not declared in HISTORY_STATE_FILES.

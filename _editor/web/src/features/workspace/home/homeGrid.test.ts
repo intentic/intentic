@@ -1,5 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { isGridKey, moveInGrid } from "./homeGrid";
 import { homeLayout, EMPTY_LAYOUT } from "./homeLayout";
 import type { HomeGroup, HomeGroupKey } from "./homeOrder";

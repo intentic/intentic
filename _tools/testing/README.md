@@ -5,13 +5,18 @@ The test-support seams every package's suites share: deep, self-naming stand-ins
 ## Responsibilities
 
 - Provide the fakes that stand in for wide interfaces, so a suite does not hand-roll a fifth one.
-- Provide the shared vitest configuration and the e2e gate.
+- Provide the bun test harness every package runs on, and the e2e gate.
 
 ## Key files
 
 - [src/index.ts](src/index.ts): the stand-ins.
-- [src/vitest.ts](src/vitest.ts): shared configuration — the two suite kinds and their ceilings, plus
-  `extensionProjects()`, the whole config every in-repo extension spreads (both suites, resolved against source).
+- [bin/suites.mjs](bin/suites.mjs): every package's `test` script — two `bun test` runs, the unit hang detector and
+  the integration budget, each reading the package's own bunfig.toml.
+- [src/bun-preload.ts](src/bun-preload.ts): loaded per file through bunfig.toml — the budget by suite name.
+- [src/bun.ts](src/bun.ts): the `vi.*` surface bun:test lacks — `waitFor`, `stubGlobal`/`stubEnv`,
+  `advanceTimersByTimeAsync`, `freshImport`.
+- [src/dom.ts](src/dom.ts): a jsdom window as globals, for the suite that imports it first.
+- [src/bun-vue.ts](src/bun-vue.ts): the `.vue` loader, so a component test mounts the real SFC.
 - [src/e2e.ts](src/e2e.ts): the opt-in gate `*.e2e.test.ts` suites sit behind.
 - [src/stripe-fake.ts](src/stripe-fake.ts): a Stripe that speaks Stripe's own form encoding, over real HTTP.
 - [src/fly-fake.ts](src/fly-fake.ts): a Fly Machines API that remembers what it was told, over `fetch`.

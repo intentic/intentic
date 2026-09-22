@@ -1,6 +1,6 @@
 // Every keystroke over a live browser picture goes to exactly one of two places (host or remote page); each case
 // here is one half of that split, and what stays with the host matters as much as what's forwarded.
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { keyIntent } from "./keyIntent";
 
 // A keydown as the host reports it; only the fields the decision reads.

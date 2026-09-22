@@ -1,13 +1,12 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-// Imported once for its load cost, so the first test doesn't pay it inside its own timeout; each test still
-// gets a fresh module via load() below (vi.resetModules).
-// oxlint-disable-next-line import/no-unassigned-import -- imported for its load cost alone, not for a binding
-import "./sandboxSession";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { waitFor, stubGlobal, unstubAllGlobals, hoisted, freshImport } from "@intentic/testing/bun";
+import * as endpointOriginal from "../secrets/endpoint";
+import { computed, ref } from "vue";
 
 // useSandboxSession picks the bearer for a call: a valid stored session needs no Google or network, a refusal
 // fails loudly instead of degrading to a raw ID token, and renewal near expiry uses the session itself.
 
-const state = vi.hoisted(() => ({
+const state = hoisted(() => ({
     idToken: `id-token` as string | undefined,
     // The only proof a background reader may spend; undefined by default, since a reload finds no live Google cache.
     cachedIdToken: undefined as string | undefined,
@@ -29,9 +28,9 @@ const state = vi.hoisted(() => ({
 }));
 
 // The passkey ceremonies are the gate's; here only the offer the sign-in moment asks for is answered.
-vi.mock("./passkeySignIn", () => ({ passkeyOffered: async () => state.passkeyOffered }));
+mock.module("./passkeySignIn", () => ({ passkeyOffered: async () => state.passkeyOffered }));
 
-vi.mock("../../auth/useGoogleIdentity", () => ({
+mock.module("../../auth/useGoogleIdentity", () => ({
     useGoogleIdentity: () => ({
         getIdToken: async (options?: { interactive?: boolean }) => {
             // interactive:false is a caller with no standing to interrupt: silence or nothing, never a prompt to count.
@@ -57,14 +56,13 @@ vi.mock("../../auth/useGoogleIdentity", () => ({
 }));
 // Stubs the reachability check at the seam rather than a real /health response; endpoint.ts tests that check
 // itself, and target resolution underneath is otherwise real.
-vi.mock("../secrets/endpoint", async () => ({
-    ...(await vi.importActual<typeof import("../secrets/endpoint")>(`../secrets/endpoint`)),
+mock.module("../secrets/endpoint", () => ({
+    ...endpointOriginal,
     healthAnswers: async () => state.daemonAnswers,
     sandboxIdOf: async () => `sb-1`,
 }));
 // A real ref, not a getter, since the module watches the active sandbox to settle a parked mint on a switch.
-vi.mock("../client/useSandbox", async () => {
-    const { computed, ref } = await vi.importActual<typeof import("vue")>(`vue`);
+mock.module("../client/useSandbox", () => {
     const activeSandboxId = ref(state.sandboxId);
     state.select = (id) => {
         activeSandboxId.value = id;
@@ -77,10 +75,15 @@ vi.mock("../client/useSandbox", async () => {
         }),
     };
 });
+// Loaded once for its cost, so the first case doesn't pay it inside its own timeout; each case still gets a fresh
+// module via load(). Dynamic and below the mocks: a static import links useEndpoint to the real useSandbox refs, and
+// a daemon base read off those is undefined, which reads as an unaddressed sandbox.
+await import("./sandboxSession");
+
 // A minimal Storage stand-in for the node test environment, backed by a Map.
 const stubStorage = (): void => {
     const map = new Map<string, string>();
-    vi.stubGlobal(`localStorage`, {
+    stubGlobal(`localStorage`, {
         getItem: (key: string) => map.get(key) ?? null,
         setItem: (key: string, value: string) => void map.set(key, value),
         removeItem: (key: string) => void map.delete(key),
@@ -103,10 +106,7 @@ const sessionResponse = (token = `sess-minted`): Response =>
     });
 
 // Fresh module per test, since the singleton carries the in-memory session mirror.
-const load = async (): Promise<typeof import("./sandboxSession")> => {
-    vi.resetModules();
-    return import("./sandboxSession");
-};
+const load = (): Promise<typeof import("./sandboxSession")> => freshImport("./sandboxSession", import.meta.url);
 
 beforeEach(() => {
     stubStorage();
@@ -127,13 +127,13 @@ afterEach(async () => {
     state.releaseMint = () => {};
     // One tick for a released establish to fall out of its module's inflight map.
     await new Promise((resolve) => setTimeout(resolve));
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 it(`serves a valid stored session with no Google mint and no network`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session());
-    const fetchMock = vi.fn();
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock();
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-stored`, kind: `session` });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -141,8 +141,8 @@ it(`serves a valid stored session with no Google mint and no network`, async () 
 });
 
 it(`establishes a session from a Google proof: one exchange, persisted, then served from cache`, async () => {
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => sessionResponse());
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async (_url: string, _init: RequestInit) => sessionResponse());
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
     // Checks the exchange request: the daemon's session route, the Google bearer, the TOFU connect token.
@@ -157,8 +157,8 @@ it(`establishes a session from a Google proof: one exchange, persisted, then ser
 });
 
 it(`shares one in-flight establish across concurrent calls`, async () => {
-    const fetchMock = vi.fn(async () => sessionResponse());
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async () => sessionResponse());
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { getSessionToken } = useSandboxSession();
     const [first, second] = await Promise.all([getSessionToken(), getSessionToken()]);
@@ -174,9 +174,9 @@ it.each([
     [404, /refused its session exchange \(404\)/],
     [500, /refused its session exchange \(500\)/],
 ])(`fails loudly on a %i exchange rather than spending a raw Google token`, async (status, message) => {
-    vi.stubGlobal(
+    stubGlobal(
         `fetch`,
-        vi.fn(async () => new Response(`refused`, { status })),
+        mock(async () => new Response(`refused`, { status })),
     );
     const { useSandboxSession } = await load();
     await expect(useSandboxSession().getSessionToken()).rejects.toThrow(message);
@@ -184,22 +184,22 @@ it.each([
 
 it(`serves a session nearing expiry immediately and renews it in the background with the session bearer`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session({ expiresAt: Date.now() + 3 * DAY_MS }));
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => sessionResponse(`sess-renewed`));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async (_url: string, _init: RequestInit) => sessionResponse(`sess-renewed`));
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toEqual({ token: `sess-stored`, kind: `session` });
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [, init] = fetchMock.mock.calls[0]!;
     expect(init.headers).toMatchObject({ authorization: `Bearer sess-stored` });
-    await vi.waitFor(() => expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``).token).toBe(`sess-renewed`));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``).token).toBe(`sess-renewed`));
     // No Google involvement at any point.
     expect(state.minted).toBe(0);
 });
 
 it(`re-establishes after an expired session, and after invalidateSession`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session({ expiresAt: Date.now() - 1000 }));
-    const fetchMock = vi.fn(async () => sessionResponse());
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async () => sessionResponse());
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { getSessionToken, invalidateSession } = useSandboxSession();
     expect(await getSessionToken()).toEqual({ token: `sess-minted`, kind: `session` });
@@ -223,9 +223,9 @@ it(`clearSessions forgets every sandbox's session and nothing else`, async () =>
 
 it(`a late establishment cannot repopulate credentials after clearSessions`, async () => {
     let answer: ((response: Response) => void) | undefined;
-    vi.stubGlobal(
+    stubGlobal(
         `fetch`,
-        vi.fn(
+        mock(
             () =>
                 new Promise<Response>((resolve) => {
                     answer = resolve;
@@ -235,7 +235,7 @@ it(`a late establishment cannot repopulate credentials after clearSessions`, asy
     const { useSandboxSession } = await load();
     const { getSessionToken, clearSessions } = useSandboxSession();
     const pending = getSessionToken();
-    await vi.waitFor(() => expect(answer).toBeTypeOf(`function`));
+    await waitFor(() => expect(answer).toBeTypeOf(`function`));
     clearSessions();
     answer?.(sessionResponse(`late-session`));
     await expect(pending).resolves.toBeUndefined();
@@ -244,8 +244,8 @@ it(`a late establishment cannot repopulate credentials after clearSessions`, asy
 
 it(`resolves undefined when the user dismisses the sign-in gate. nothing to exchange`, async () => {
     state.idToken = undefined;
-    const fetchMock = vi.fn();
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock();
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toBeUndefined();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -256,8 +256,8 @@ it(`resolves undefined when the user dismisses the sign-in gate. nothing to exch
 const otherBox = { sandboxId: `sb-2`, base: `https://other.test`, connectToken: `connect-2` };
 
 it(`a background read with no proof in hand asks Google for nothing and exchanges nothing`, async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock();
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toBeUndefined();
     expect(state.minted).toBe(0);
@@ -267,8 +267,8 @@ it(`a background read with no proof in hand asks Google for nothing and exchange
 // The other half of the rule: a poll that can establish still does, silently, without prompting for one.
 it(`a background read spends a proof already in hand`, async () => {
     state.cachedIdToken = `cached-token`;
-    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => sessionResponse(`sess-sb2`));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async (_url: string, _init: RequestInit) => sessionResponse(`sess-sb2`));
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toEqual({ token: `sess-sb2`, kind: `session` });
     expect(fetchMock.mock.calls[0]![1].headers).toMatchObject({ authorization: `Bearer cached-token` });
@@ -278,8 +278,8 @@ it(`a background read spends a proof already in hand`, async () => {
 // The probe is the same identity-checked /health the transport already uses, paid only on this path.
 it(`will not raise a sign-in for a daemon that is not answering`, async () => {
     state.daemonAnswers = false;
-    const fetchMock = vi.fn();
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock();
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken()).toBeUndefined();
     expect(state.minted).toBe(0);
@@ -288,8 +288,8 @@ it(`will not raise a sign-in for a daemon that is not answering`, async () => {
 
 it(`holds a failed background establishment for a cooldown, but never a foreground one`, async () => {
     state.cachedIdToken = `cached-token`;
-    const fetchMock = vi.fn(() => Promise.reject(new TypeError(`fetch failed`)));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(() => Promise.reject(new TypeError(`fetch failed`)));
+    stubGlobal(`fetch`, fetchMock);
     const { getSessionToken } = (await load()).useSandboxSession();
     await expect(getSessionToken(otherBox, { background: true })).rejects.toThrow(`fetch failed`);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -305,14 +305,14 @@ it(`holds a failed background establishment for a cooldown, but never a foregrou
 it(`a press does not adopt an establishment a poll started`, async () => {
     state.cachedIdToken = `cached-token`;
     const answers: ((response: Response) => void)[] = [];
-    const fetchMock = vi.fn(() => new Promise<Response>((resolve) => answers.push(resolve)));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(() => new Promise<Response>((resolve) => answers.push(resolve)));
+    stubGlobal(`fetch`, fetchMock);
     const { getSessionToken } = (await load()).useSandboxSession();
     void getSessionToken(otherBox, { background: true });
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     void getSessionToken(otherBox);
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     // ...while a second poll joins whichever one is out, rather than opening a third.
     void getSessionToken(otherBox, { background: true });
@@ -359,9 +359,9 @@ it(`…including when the other window's invalidate lands first`, async () => {
 // A background refusal says nothing about the credential either; clearing it would force a visible gate everywhere.
 it(`a background exchange refused with 401 keeps the Google proof`, async () => {
     state.cachedIdToken = `cached-token`;
-    vi.stubGlobal(
+    stubGlobal(
         `fetch`,
-        vi.fn(async () => new Response(`no`, { status: 401 })),
+        mock(async () => new Response(`no`, { status: 401 })),
     );
     const { useSandboxSession } = await load();
     expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toBeUndefined();
@@ -398,9 +398,9 @@ it(`a rejection that names a superseded session leaves the current one alone`, a
 
 it(`invalidating one sandbox does not discard a session another sandbox just minted`, async () => {
     let answer: ((response: Response) => void) | undefined;
-    vi.stubGlobal(
+    stubGlobal(
         `fetch`,
-        vi.fn(
+        mock(
             () =>
                 new Promise<Response>((resolve) => {
                     answer = resolve;
@@ -410,7 +410,7 @@ it(`invalidating one sandbox does not discard a session another sandbox just min
     const { useSandboxSession } = await load();
     const { getSessionToken, invalidateSession } = useSandboxSession();
     const pending = getSessionToken({ sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` });
-    await vi.waitFor(() => expect(answer).toBeTypeOf(`function`));
+    await waitFor(() => expect(answer).toBeTypeOf(`function`));
 
     invalidateSession(`sb-2`);
     answer?.(sessionResponse(`sess-sb1`));
@@ -423,15 +423,15 @@ it(`a switch away settles the sign-in left parked for the sandbox being left`, a
     state.mintParks = true; // The establish is waiting on Google, which is what puts the gate up.
     const { useSandboxSession } = await load();
     void useSandboxSession().getSessionToken();
-    await vi.waitFor(() => expect(state.minted).toBe(1));
+    await waitFor(() => expect(state.minted).toBe(1));
 
     state.select(`sb-2`);
-    await vi.waitFor(() => expect(state.canceled).toBe(1));
+    await waitFor(() => expect(state.canceled).toBe(1));
 });
 
 it(`a switch with nothing parked leaves the sign-in alone`, async () => {
     localStorage.setItem(`intentic.session.sb-1`, session());
-    vi.stubGlobal(`fetch`, vi.fn());
+    stubGlobal(`fetch`, mock());
     const { useSandboxSession } = await load();
     await useSandboxSession().getSessionToken();
 
@@ -459,13 +459,13 @@ const stepUpResponse = (enrolled: boolean): Response =>
 const PASSKEY_SESSION = { token: `sess-passkey`, expiresAt: Date.now() + 30 * DAY_MS, email: `o@x.com` };
 
 it(`a 428 on the exchange raises the step-up with the proof it took, and the ceremony's session becomes the bearer`, async () => {
-    const fetchMock = vi.fn(async () => stepUpResponse(true));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async () => stepUpResponse(true));
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { completeSignIn, useSignInPrompt } = await import("./signInPrompt");
     const { prompt } = useSignInPrompt();
     const pending = useSandboxSession().getSessionToken();
-    await vi.waitFor(() => expect(prompt.value).toMatchObject({ kind: `step-up`, enrolled: true, bearer: `id-token` }));
+    await waitFor(() => expect(prompt.value).toMatchObject({ kind: `step-up`, enrolled: true, bearer: `id-token` }));
     completeSignIn(PASSKEY_SESSION);
     expect(await pending).toEqual({ token: `sess-passkey`, kind: `session` });
     expect(JSON.parse(localStorage.getItem(`intentic.session.sb-1`) ?? ``)).toMatchObject({ token: `sess-passkey`, email: `o@x.com` });
@@ -475,11 +475,14 @@ it(`a 428 on the exchange raises the step-up with the proof it took, and the cer
 });
 
 it(`dismissing the step-up resolves nothing, stores nothing, and keeps the Google proof`, async () => {
-    vi.stubGlobal(`fetch`, vi.fn(async () => stepUpResponse(false)));
+    stubGlobal(
+        `fetch`,
+        mock(async () => stepUpResponse(false)),
+    );
     const { useSandboxSession } = await load();
     const { dismissSignIn, useSignInPrompt } = await import("./signInPrompt");
     const pending = useSandboxSession().getSessionToken();
-    await vi.waitFor(() => expect(useSignInPrompt().prompt.value).toMatchObject({ kind: `step-up`, enrolled: false }));
+    await waitFor(() => expect(useSignInPrompt().prompt.value).toMatchObject({ kind: `step-up`, enrolled: false }));
     dismissSignIn();
     expect(await pending).toBeUndefined();
     expect(localStorage.getItem(`intentic.session.sb-1`)).toBeNull();
@@ -488,8 +491,8 @@ it(`dismissing the step-up resolves nothing, stores nothing, and keeps the Googl
 
 it(`a background exchange answered 428 raises no gate and establishes nothing`, async () => {
     state.cachedIdToken = `cached-token`;
-    const fetchMock = vi.fn(async () => stepUpResponse(true));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async () => stepUpResponse(true));
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { useSignInPrompt } = await import("./signInPrompt");
     expect(await useSandboxSession().getSessionToken(otherBox, { background: true })).toBeUndefined();
@@ -500,13 +503,13 @@ it(`a background exchange answered 428 raises no gate and establishes nothing`, 
 it(`with nothing in hand the prompt offers a passkey once the daemon has one, and its session wins without an exchange`, async () => {
     state.mintParks = true;
     state.passkeyOffered = true;
-    const fetchMock = vi.fn();
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock();
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { completeSignIn, useSignInPrompt } = await import("./signInPrompt");
     const { prompt } = useSignInPrompt();
     const pending = useSandboxSession().getSessionToken();
-    await vi.waitFor(() => expect(prompt.value).toMatchObject({ kind: `choose`, passkey: true }));
+    await waitFor(() => expect(prompt.value).toMatchObject({ kind: `choose`, passkey: true }));
     completeSignIn(PASSKEY_SESSION);
     expect(await pending).toEqual({ token: `sess-passkey`, kind: `session` });
     // Google's parked mint is settled so nothing stays behind the gate, and no exchange ran: the passkey door minted.
@@ -517,20 +520,20 @@ it(`with nothing in hand the prompt offers a passkey once the daemon has one, an
 
 it(`dismissing Google's gate takes the passkey offer down with it`, async () => {
     state.mintParks = true;
-    vi.stubGlobal(`fetch`, vi.fn());
+    stubGlobal(`fetch`, mock());
     const { useSandboxSession } = await load();
     const { useSignInPrompt } = await import("./signInPrompt");
     const { prompt } = useSignInPrompt();
     const pending = useSandboxSession().getSessionToken();
-    await vi.waitFor(() => expect(prompt.value).toMatchObject({ kind: `choose`, passkey: false }));
+    await waitFor(() => expect(prompt.value).toMatchObject({ kind: `choose`, passkey: false }));
     state.releaseMint();
     expect(await pending).toBeUndefined();
     expect(prompt.value).toBeUndefined();
 });
 
 it(`adoptSession stores a session another ceremony minted, served from then on without a mint`, async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock();
+    stubGlobal(`fetch`, fetchMock);
     const { useSandboxSession } = await load();
     const { adoptSession, getSessionToken, presentedEmail } = useSandboxSession();
     adoptSession(`sb-1`, { ...PASSKEY_SESSION, email: `passkey@x.com` });

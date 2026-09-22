@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { openSpawnedChild, resetSubagents, settleSpawnedChild, type SubagentTurn } from "../../agent/subagents/subagents.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import type { ChildSupervisor } from "../../agent/subagents/children.js";

@@ -1,4 +1,5 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { uuid } from "./uuid";
 
 /* The reason this file exists is one line of the platform's small print: `crypto.randomUUID` is a secure-context api, so it is missing on plain http. */
@@ -6,21 +7,21 @@ import { uuid } from "./uuid";
 const V4 = /^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/;
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 it(`uses the platform's generator where the context is secure enough to have one`, () => {
-    const randomUUID = vi.fn(() => `f81d4fae-7dec-41d0-a765-00a0c91e6bf6`);
-    vi.stubGlobal(`crypto`, { ...globalThis.crypto, randomUUID });
+    const randomUUID = mock(() => `f81d4fae-7dec-41d0-a765-00a0c91e6bf6`);
+    stubGlobal(`crypto`, { ...globalThis.crypto, randomUUID });
 
     expect(uuid()).toBe(`f81d4fae-7dec-41d0-a765-00a0c91e6bf6`);
-    expect(randomUUID).toHaveBeenCalledOnce();
+    expect(randomUUID).toHaveBeenCalledTimes(1);
 });
 
 it(`still answers with a v4 uuid on plain http, where that generator is simply absent`, () => {
     // Exactly what a browser hands an insecure page: getRandomValues, and nothing else off `Crypto`.
     const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto);
-    vi.stubGlobal(`crypto`, { getRandomValues });
+    stubGlobal(`crypto`, { getRandomValues });
 
     const ids = Array.from({ length: 200 }, () => uuid());
     for (const id of ids) {

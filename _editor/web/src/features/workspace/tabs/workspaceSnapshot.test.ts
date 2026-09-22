@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
 
 /* Both halves of "where I was in the workspace" have the same contract: whatever is on disk, what comes back is something the view can actually render. */
 

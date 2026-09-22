@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, request as h1Request, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { type Duplex, duplexPair } from "node:stream";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import { openIngressSession, serveIngressSession } from "./ingress-protocol.js";
 
 // Drives the full ingress-to-daemon chain (front server, duplex pair, target) through node's real http client, in
@@ -220,9 +220,7 @@ const call = (
         const request = h1Request(
             { host: "127.0.0.1", port: edgePort, path, method: options.method ?? "GET", headers: { host: HOST, ...options.headers } },
             (response) => {
-                void bodyOf(response).then((body) =>
-                    resolve({ status: response.statusCode ?? 0, headers: response.headers, body }),
-                );
+                void bodyOf(response).then((body) => resolve({ status: response.statusCode ?? 0, headers: response.headers, body }));
             },
         );
         request.on("error", reject);
@@ -301,6 +299,8 @@ test("an upgrade splices raw bytes, carries the far end's own handshake head, an
             port: edgePort,
             path: "/socket",
             headers: { host: HOST, connection: "Upgrade", upgrade: "websocket", "sec-websocket-key": key },
+            // Its own connection, as a browser's WebSocket always is; bun's h1 client never reports a 101 on a pooled socket.
+            agent: false,
         });
         request.on("upgrade", (response, socket, head) => {
             expect(head.length).toBe(0);
@@ -336,6 +336,7 @@ test("a local server that declines to upgrade answers the browser itself", async
             port: edgePort,
             path: "/refuse",
             headers: { host: HOST, connection: "Upgrade", upgrade: "websocket", "sec-websocket-key": "x" },
+            agent: false,
         });
         request.on("upgrade", () => reject(new Error("the target refused, so nothing should have been spliced")));
         request.on("response", (response) => void bodyOf(response).then((body) => resolve({ status: response.statusCode ?? 0, body })));

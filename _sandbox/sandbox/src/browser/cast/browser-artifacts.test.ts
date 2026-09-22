@@ -1,6 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { syncHookOutput } from "../../testing.js";
 import { browserArtifactHooks, browserOutputDir, screenshotImage } from "./browser-artifacts.js";
 

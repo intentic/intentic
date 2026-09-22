@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { fileWebchatOutbox, outboxKeyOf, outboxStreamFor, outboxTurnStream } from "./webchat-outbox.js";
 

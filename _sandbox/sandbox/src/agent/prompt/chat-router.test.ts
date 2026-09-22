@@ -1,20 +1,20 @@
 import { type Area, type ModelOffer, modelPinKey, type Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../composition.js";
 
 /* THE ROUTER, at the seam it spends: askRoleModel is mocked so a test can hand back a reply and see what the router
    makes of it, and the offer is mocked so a test can state what is connected. One reading answers both halves, so what
    a test mostly pins is WHICH halves a given ask puts to a model, and what it never asks at all. */
 
-const ask = vi.fn<(prompt: string) => Promise<string>>();
+const ask = mock<(prompt: string) => Promise<string>>();
 // Which role each ask named, so a test can pin that both halves spend one list, and it is the routing one.
 const roles: string[] = [];
 // The rung the mocked walk lands on, and the key the answer reports it back as.
 const RUNG = { provider: "claude", model: "haiku" };
 const RUNG_KEY = modelPinKey(RUNG);
 
-vi.mock("../models/role-model.js", () => ({
+mock.module("../models/role-model.js", () => ({
     askRoleModel: async (
         _services: unknown,
         role: string,
@@ -26,8 +26,8 @@ vi.mock("../models/role-model.js", () => ({
     },
 }));
 
-const offer = vi.fn<() => ModelOffer>();
-vi.mock("../models/auto-offer.js", () => ({ autoOffer: async () => offer() }));
+const offer = mock<() => ModelOffer>();
+mock.module("../models/auto-offer.js", () => ({ autoOffer: async () => offer() }));
 
 const { candidateLine, routeAnswer, routeChat, routerPrompt } = await import("./chat-router.js");
 
@@ -47,7 +47,7 @@ const CARDS: readonly Persona[] = [
     { id: "docs", capabilities: [], workspace: { startIn: "docs" } },
 ];
 
-const warn = vi.fn();
+const warn = mock();
 // Named parts of the workspace, read only when the asker is fenced: the router picks from the personas their areas reach.
 const AREAS: readonly Area[] = [
     { id: "docs", folders: ["docs"] },

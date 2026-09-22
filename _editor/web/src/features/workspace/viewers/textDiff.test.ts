@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { diffSequence, pairEdits, similarity, wordDiff } from "@intentic/ui/diff";
 
 // The kit's diff machinery, tested here beside the readings built on it: the kit has no runner of its own.

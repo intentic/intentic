@@ -1,5 +1,5 @@
 import type { ExitConfig, IntenticLine } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { startExitOnce } from "./exit-links.js";
 
 // A turn's browser setup gives an exit a budget, then moves on; the abandoned start keeps running. A later call for the
@@ -29,7 +29,7 @@ const parked = (): Promise<() => void> => {
     return ready === undefined ? new Promise((resolve) => waiters.push(resolve)) : Promise.resolve(ready);
 };
 
-vi.mock("./exit-drivers.js", () => ({
+mock.module("./exit-drivers.js", () => ({
     exitDrivers: {
         tor: {
             missingTool: async () => undefined,

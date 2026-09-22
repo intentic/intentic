@@ -70,7 +70,7 @@ jobs:
   #                                 API version move a field under it.
   #
   # A tier this job has no credentials for stands down and names the variable it wanted, in the suite title
-  # vitest prints beside the ↓. So green here means the UNLOCKED tiers passed and the log says which those
+  # the runner prints beside its skip marker. So green here means the UNLOCKED tiers passed and the log says which those
   # were — and widening the run is a matter of adding the secret, never of editing this file. What a missing
   # credential must not do is fail the job.
   #

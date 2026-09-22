@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../../config.js";
 import { ABUSE_SUSPENSION_REASON, sweepHostedAbuse } from "./hosted-abuse.js";
@@ -7,7 +8,7 @@ import { ABUSE_SUSPENSION_REASON, sweepHostedAbuse } from "./hosted-abuse.js";
 // struck, the strike after the line suspends, a subscriber's is only reported, a machine already struck this window
 // is left alone, and a builder in the same app never counts against the sandbox.
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
+const logger = { info: mock(), warn: mock(), error: mock() } as never;
 
 const NOW = new Date(`2026-09-14T12:00:00.000Z`);
 const MINUTE_MS = 60_000;
@@ -59,31 +60,31 @@ interface Strike {
 const prismaWith = (
     rows: ReturnType<typeof machine>[],
     strikes: Strike[] = [],
-    over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {},
+    over: Record<string, Record<string, ReturnType<typeof mock>>> = {},
 ) => {
     const created: Record<string, unknown>[] = [];
     const prisma = {
-        hostedMachine: { findMany: vi.fn().mockResolvedValue(rows), update: vi.fn().mockResolvedValue({}) },
+        hostedMachine: { findMany: mock().mockResolvedValue(rows), update: mock().mockResolvedValue({}) },
         hostedStrike: {
-            findFirst: vi.fn(
+            findFirst: mock(
                 async ({ where }: { where: { appName: string; createdAt: { gte: Date } } }) =>
                     strikes.find((strike) => strike.appName === where.appName && strike.createdAt >= where.createdAt.gte) ?? null,
             ),
-            count: vi.fn(
+            count: mock(
                 async ({ where }: { where: { userId: string; action: { in: string[] }; createdAt: { gte: Date } } }) =>
                     strikes.filter(
                         (strike) =>
                             strike.userId === where.userId && where.action.in.includes(strike.action) && strike.createdAt >= where.createdAt.gte,
                     ).length,
             ),
-            create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+            create: mock(async ({ data }: { data: Record<string, unknown> }) => {
                 created.push(data);
                 return data;
             }),
         },
-        hostedUsage: { upsert: vi.fn().mockResolvedValue({}), aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }) },
-        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
-        user: { update: vi.fn().mockResolvedValue({}) },
+        hostedUsage: { upsert: mock().mockResolvedValue({}), aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) },
+        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
+        user: { update: mock().mockResolvedValue({}) },
         ...over,
     } as unknown as PrismaClient;
     return { prisma, created };
@@ -119,7 +120,7 @@ const stubFly = (samples: { cpu?: Sample[]; egress?: Sample[] }) => {
         }
         return new Response(JSON.stringify({ id: `m1`, state: stopped.has(href) ? `stopped` : `started` }));
     };
-    vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+    stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
         const href = String(url);
         calls.push({ method: init?.method ?? `GET`, url: href });
         if (href.startsWith(`https://api.fly.io/prometheus/`)) {
@@ -139,7 +140,7 @@ const stops = (calls: { method: string; url: string }[]) => calls.filter((call) 
 const queries = (calls: { method: string; url: string }[]) => calls.filter((call) => call.url.startsWith(`https://api.fly.io/prometheus/`));
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe(`the abuse watch`, () => {
@@ -226,7 +227,7 @@ describe(`the abuse watch`, () => {
 
     it(`reports a subscriber's saturated machine without stopping it`, async () => {
         const calls = stubFly({ cpu: [{ app: `intentic-sbx-a`, instance: `m1`, value: busyCpu(1) }] });
-        const { prisma, created } = prismaWith([machine()], [], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active` }) } });
+        const { prisma, created } = prismaWith([machine()], [], { hostedPlan: { findUnique: mock().mockResolvedValue({ status: `active` }) } });
         expect(await sweepHostedAbuse(prisma, config(), logger, NOW)).toEqual({ stopped: 0, suspended: 0, reported: 1 });
         expect(stops(calls)).toHaveLength(0);
         expect(created).toEqual([expect.objectContaining({ action: `reported` })]);

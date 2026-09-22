@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { EngineState } from "./engine-store.js";
 import { checks } from "./invariant.js";
 

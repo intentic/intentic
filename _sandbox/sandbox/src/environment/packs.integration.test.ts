@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot as findRepoRoot } from "@intentic/constants/node";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { bakedPackHash, listPacks, packFragment, readPack } from "./packs.js";
 
 const repoRoot = findRepoRoot(import.meta.url);

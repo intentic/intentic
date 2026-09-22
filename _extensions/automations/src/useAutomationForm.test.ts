@@ -1,6 +1,6 @@
 import type { Automation, AutomationTemplate } from "@intentic/sandbox-contract";
 import { ZoneSchema } from "@intentic/sandbox-contract/time";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { computed, nextTick } from "vue";
 import type { AvailableSource } from "./catalog";
 import { useAutomationForm } from "./useAutomationForm";
@@ -54,7 +54,10 @@ const REVIEW: AutomationTemplate = {
 };
 
 // Every automation needs a model ladder; round-trip tests check it survives an edit untouched.
-const LADDER = [{ provider: `claude`, model: `claude-sonnet-4-6` }, { provider: `codex`, model: `gpt-5.3-codex` }] satisfies Automation["models"];
+const LADDER = [
+    { provider: `claude`, model: `claude-sonnet-4-6` },
+    { provider: `codex`, model: `gpt-5.3-codex` },
+] satisfies Automation["models"];
 
 const SOURCES = computed<readonly AvailableSource[]>(() => [DISCORD, CI]);
 const TEMPLATES = computed<readonly AutomationTemplate[]>(() => [FIX_CI, REVIEW]);
@@ -68,7 +71,7 @@ describe(`the prompt follows the trigger`, () => {
         const { form } = formState();
         form.kind = `listener`;
         await nextTick();
-        expect(form.prompt).toBe(DISCORD.starterPrompt);
+        expect<string | undefined>(form.prompt).toBe(DISCORD.starterPrompt);
     });
 
     it(`re-writes the starter when the source changes under it`, async () => {
@@ -77,7 +80,7 @@ describe(`the prompt follows the trigger`, () => {
         await nextTick();
         form.provider = `ci`;
         await nextTick();
-        expect(form.prompt).toBe(CI.starterPrompt);
+        expect<string | undefined>(form.prompt).toBe(CI.starterPrompt);
     });
 
     it(`clears the starter when the trigger stops being a live one`, async () => {
@@ -118,10 +121,10 @@ describe(`a template's own text`, () => {
         const { form, loadTemplate } = formState();
         loadTemplate(review);
         await nextTick();
-        expect(form.guard).toBe(review.guard);
+        expect<string | undefined>(form.guard).toBe(review.guard);
         form.kind = `listener`;
         await nextTick();
-        expect(form.prompt).toBe(DISCORD.starterPrompt);
+        expect<string | undefined>(form.prompt).toBe(DISCORD.starterPrompt);
         // A diff-size jq left on a Discord listener is a row that never fires and never says why.
         expect(form.guard).toBe(``);
     });
@@ -149,7 +152,7 @@ describe(`editing a stored automation`, () => {
         });
         expect(staleStarter.value?.label).toBe(DISCORD.label);
         applyStarter();
-        expect(form.prompt).toBe(CI.starterPrompt);
+        expect<string | undefined>(form.prompt).toBe(CI.starterPrompt);
         expect(staleStarter.value).toBeUndefined();
     });
 });
@@ -183,14 +186,14 @@ describe(`editing preserves fields outside the changed control`, () => {
         const { form, load, build, effectiveZone } = formState();
         load(tokyo);
         expect(form.tz).toBe(`Asia/Tokyo`);
-        expect(effectiveZone.value).toBe(`Asia/Tokyo`);
+        expect<string>(effectiveZone.value).toBe(`Asia/Tokyo`);
         expect(build()).toEqual(tokyo);
 
         // Cleared means "follow the sandbox", which is stored as an ABSENT tz rather than the sandbox's id spelled
         // out: writing the resolved zone down would freeze it, and moving the setting later would strand this row.
         form.tz = ``;
         expect(build().trigger).toEqual({ kind: `schedule`, cron: `0 9 * * *` });
-        expect(effectiveZone.value).toBe(`Europe/Warsaw`);
+        expect<string>(effectiveZone.value).toBe(`Europe/Warsaw`);
     });
 
     it(`round-trips a one-time wake through the reader's own clock`, () => {

@@ -1,14 +1,14 @@
-// @vitest-environment jsdom
 // What a sent prompt's attachments are drawn AS. The rule under test is one line: a bubble is what the user said, and
 // what they brought with it is not one — so nothing in this row may wear the prompt's own surface.
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 
-vi.mock("../drafts/attachmentPeeks", () => ({
+mock.module("../drafts/attachmentPeeks", () => ({
     attachmentPeek: () => ({
         present: true,
         size: 2_400_000,

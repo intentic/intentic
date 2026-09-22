@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { pictureRect, viewportCoords } from "./viewportCoords";
 
 // The remote viewport both screencast surfaces map onto (screencast.ts VIEW_WIDTH/VIEW_HEIGHT): 8:5.

@@ -1,6 +1,7 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { effectScope } from "vue";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { stubGlobal } from "@intentic/testing/bun";
 
 // A link pressed in a popped-out panel goes to the window with the app in it, never itself; pinned via channel notes,
 // since a unit test can't have two real windows exchanging them.
@@ -28,7 +29,7 @@ class FakeChannel {
     }
 }
 
-vi.stubGlobal(`BroadcastChannel`, FakeChannel);
+stubGlobal(`BroadcastChannel`, FakeChannel);
 
 const { claimFloating, receiveFloatingNote } = await import("./floating");
 const { handOffToMainWindow, receiveMainWindowNote, sendLinkToMainWindow, useMainWindow } = await import("./mainWindow");
@@ -39,30 +40,30 @@ const FILE = { kind: `file`, path: `src/foo.ts`, line: 42, scope: { agent: `c-1`
 // Simulates the popped-out chat window, which has nowhere of its own to put a file.
 const popOut = (): (() => void) => {
     const scope = effectScope();
-    scope.run(() => claimFloating(`chat`, vi.fn()));
+    scope.run(() => claimFloating(`chat`, mock()));
     return () => scope.stop();
 };
 
 // Simulates a window with the app open, announcing itself; `at` is when its reader was last active there.
 const appWindow = (id: string, at = 1_000): void => receiveMainWindowNote({ kind: `here`, id, at });
 
-let open: ReturnType<typeof vi.fn>;
+let open: ReturnType<typeof mock>;
 
 // Advanced far past any prior test's claims and errands each run, so the module's roster starts effectively empty.
 let clock = 1_000_000;
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     clock += 10_000_000;
-    vi.setSystemTime(clock);
+    jest.setSystemTime(clock);
     posted.length = 0;
-    open = vi.fn(() => ({ focus: vi.fn() }) as unknown as Window);
-    vi.stubGlobal(`open`, open);
+    open = mock(() => ({ focus: mock() }) as unknown as Window);
+    stubGlobal(`open`, open);
 });
 
 afterEach(() => {
-    vi.useRealTimers();
-    vi.restoreAllMocks();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
 });
 
 describe(`a link pressed in a popped-out panel`, () => {
@@ -130,7 +131,7 @@ describe(`with the app's window closed`, () => {
         const dock = popOut();
         appWindow(`w-1`);
 
-        vi.advanceTimersByTime(4_000);
+        jest.advanceTimersByTime(4_000);
         handOffToMainWindow(FILE);
 
         expect(open).toHaveBeenCalledWith(`/workspace`, `intentic-main`);
@@ -141,7 +142,7 @@ describe(`with the app's window closed`, () => {
         const dock = popOut();
 
         handOffToMainWindow(FILE);
-        vi.advanceTimersByTime(60_000);
+        jest.advanceTimersByTime(60_000);
         appWindow(`w-much-later`);
 
         expect(posted.some((note) => note.kind === `errand`)).toBe(false);
@@ -225,7 +226,7 @@ describe(`the window with the app in it`, () => {
     };
 
     it(`answers a roll-call at once, so a window that has just popped out never has to wait out a beat`, () => {
-        const leave = mount(vi.fn());
+        const leave = mount(mock());
 
         receiveMainWindowNote({ kind: `roll` });
 
@@ -234,9 +235,9 @@ describe(`the window with the app in it`, () => {
     });
 
     it(`does the errand addressed to it, and raises itself so the reader sees it`, () => {
-        const show = vi.fn();
-        const focus = vi.fn();
-        vi.stubGlobal(`focus`, focus);
+        const show = mock();
+        const focus = mock();
+        stubGlobal(`focus`, focus);
         const leave = mount(show);
         receiveMainWindowNote({ kind: `roll` });
         const id = posted.at(-1)?.id ?? ``;
@@ -249,7 +250,7 @@ describe(`the window with the app in it`, () => {
     });
 
     it(`leaves another window's errand alone`, () => {
-        const show = vi.fn();
+        const show = mock();
         const leave = mount(show);
 
         receiveMainWindowNote({ kind: `errand`, to: `somebody-else`, errand: FILE });
@@ -259,7 +260,7 @@ describe(`the window with the app in it`, () => {
     });
 
     it(`says nothing while nothing is floating, and starts the moment something is`, () => {
-        const leave = mount(vi.fn());
+        const leave = mount(mock());
         expect(posted.some((note) => note.kind === `here`)).toBe(false);
 
         receiveFloatingNote({ kind: `here`, panel: `chat`, id: `f-1`, since: 1_000 });

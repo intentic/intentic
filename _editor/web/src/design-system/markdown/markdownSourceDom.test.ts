@@ -1,8 +1,9 @@
-// @vitest-environment jsdom
 // This module builds DOM, so it needs a document: jsdom rather than happy-dom, since happy-dom's parsing is not
 // faithful enough to assert against. The module lives in `@intentic/ui/markdown` and is tested here beside the block
 // splitter's suite.
-import { describe, expect, test, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, test, expect } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { useHighlighter } from "@intentic/ui/highlighter";
 import { blockBody, buildBlockElement, caretAtOffset, offsetOfCaret } from "@intentic/ui/markdown";
 
@@ -208,7 +209,7 @@ describe(`colour`, () => {
             // Highlighting is async while building is not: the first draw of a block is always the plain one.
             expect(buildBlockElement(SOURCE).dataset[`mdColoured`]).toBeUndefined();
             await useHighlighter().ensureLang(`json`);
-            await vi.waitFor(() => expect(buildBlockElement(SOURCE).dataset[`mdColoured`]).toBe(``), { timeout: 10_000, interval: 10 });
+            await waitFor(() => expect(buildBlockElement(SOURCE).dataset[`mdColoured`]).toBe(``), { timeout: 10_000, interval: 10 });
 
             const element = buildBlockElement(SOURCE);
             const lines = [...element.querySelectorAll(`.md-code-line`)];

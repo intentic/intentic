@@ -1,5 +1,5 @@
 import type { IntenticLine } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { chunksToLines, parseIntenticLine } from "./intentic-runner.js";
 
 const collect = async (lines: AsyncIterable<string>): Promise<string[]> => {

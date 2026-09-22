@@ -36,7 +36,8 @@ const SyncEnrollmentSchema = z.object({
 type SyncEnrollment = z.infer<typeof SyncEnrollmentSchema>;
 
 const enrollmentsPath = (historyRoot: string): string => join(historyRoot, "sync-enrollments.json");
-const authorizedKeysPath = (): string => join(homedir(), ".ssh", "authorized_keys");
+// HOME is the home directory of record, read per call so a test can point it at a temp dir.
+const authorizedKeysPath = (): string => join(process.env["HOME"] ?? homedir(), ".ssh", "authorized_keys");
 const digestOf = (token: string): string => createHash("sha256").update(token).digest("hex");
 const machineOf = (key: string): string => key.trim().split(" ")[2] ?? "unknown";
 

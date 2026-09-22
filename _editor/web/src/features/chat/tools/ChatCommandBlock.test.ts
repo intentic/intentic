@@ -1,10 +1,10 @@
-// @vitest-environment jsdom
 // Pins that the dark-mode color flip actually applies: the class the `<pre>` renders and the chat.css rule
 // keying off it are two halves of one contract, tested together since either alone fails silently.
+import "@intentic/testing/dom";
 import type { ProgramAsk } from "@intentic/sandbox-contract";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import ChatCommandBlock from "./ChatCommandBlock.vue";
 import { IconStub } from "@intentic/ui/testing";

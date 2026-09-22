@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // Pins boot order, read by shape off the files that hold it (like boot-shutdown.test.ts): the chain runs the steps it
 // declares, in the order it declares them, and the gate opens before any work a held data route has no reason to wait

@@ -1,17 +1,17 @@
-// @vitest-environment jsdom
 // The group's one load-bearing claim: this switch is somebody agreeing to run a command written in a file they may not
 // have read, so the row has to show the command itself, and a declaration that changed since they agreed has to read as
 // held rather than as running.
+import "@intentic/testing/dom";
 import type { RepoChecksSummary } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const repos = ref<RepoChecksSummary[] | undefined>([]);
-const adopt = vi.fn();
+const adopt = mock();
 
-vi.mock(`../../environment/useRepoChecks`, () => ({
+mock.module(`../../environment/useRepoChecks`, () => ({
     useRepoChecks: () => ({ repos, adopt, pending: ref(undefined), error: ref(undefined), isLoading: ref(false), busy: ref(false) }),
 }));
 

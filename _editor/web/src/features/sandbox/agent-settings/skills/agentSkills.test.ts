@@ -1,43 +1,44 @@
-// @vitest-environment jsdom
 // A row's controls (switch, edit, delete) come only from what the daemon reports for its origin, and every origin
 // gets a row, including a disabled built-in. Reading and editing happen on the row's own click, not a menu.
+import "@intentic/testing/dom";
 import type { CapabilitySummary, SandboxSettings, SkillSummary } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
+import { stubGlobal } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Needs jsdom: useDevice reads window.matchMedia and environment.ts reads window.env at import.
 
 // BrandMark fetches a mark from an icon CDN; stubbed to fail like an offline sandbox, falling to the glyph tier.
-vi.stubGlobal(`fetch`, () => Promise.resolve({ ok: false, text: () => Promise.resolve(``) }));
+stubGlobal(`fetch`, () => Promise.resolve({ ok: false, text: () => Promise.resolve(``) }));
 
 const skills = ref<SkillSummary[]>([]);
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const setEnabled = vi.fn();
-const removeMutate = vi.fn();
+const setEnabled = mock();
+const removeMutate = mock();
 
-vi.mock(`../../environment/useSkills`, () => ({
+mock.module(`../../environment/useSkills`, () => ({
     useSkills: () => ({
         skills,
         settings,
         error: ref(undefined),
         isLoading: ref(false),
-        save: { mutate: vi.fn() },
+        save: { mutate: mock() },
         remove: { mutate: removeMutate },
         setEnabled,
         readBody: async () => ({ id: `x`, name: `x`, body: `## Body.` }),
-        forgetBody: vi.fn(),
+        forgetBody: mock(),
     }),
 }));
 
 // Both empty: what each tier draws from them is skillVisual's own test; this file is about controls.
-vi.mock(`../../../capabilities/connect/useCapabilities`, () => ({
+mock.module(`../../../capabilities/connect/useCapabilities`, () => ({
     useCapabilities: () => ({ capabilities: ref<CapabilitySummary[]>([]) }),
 }));
-vi.mock(`../../../extensions/useExtensions`, () => ({
+mock.module(`../../../extensions/useExtensions`, () => ({
     useExtensions: () => ({ enabled: ref<ExtensionSummary[]>([]) }),
 }));
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { loopbackPreviewUrl } from "./previewLane";
 
 // The loopback twin is a pure rewrite of the public address; whether it answers is the probe's business.

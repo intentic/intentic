@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { checks } from "./invariant.js";
 
 /* The failure the owner pays for: a child the parent has been told is finished, still running against. */

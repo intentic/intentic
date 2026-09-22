@@ -1,19 +1,21 @@
-// @vitest-environment jsdom
 // The page mints one Google credential and spends it twice: once on the platform, once (from the same cache) on
 // the sandbox, replacing two separate Google prompts. These tests check that the token handed to the platform is
 // the one the browser itself minted, and that every failure path falls back to the redirect rather than a dead page.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as actualVueRouter from "vue-router";
+import * as actualDesktop from "../../app/environments/desktop";
 
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
-const push = vi.fn();
+const push = mock();
 // Where the guard that turned somebody away wrote the page they were headed to (router/signIn.ts).
 const query = ref<Record<string, string>>({});
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
-    useRouter: () => ({ push, replace: vi.fn() }) as never,
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
+    useRouter: () => ({ push, replace: mock() }) as never,
     useRoute: () =>
         ({
             get query() {
@@ -22,23 +24,26 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
         }) as never,
 }));
 
-const signInWithGoogle = vi.fn().mockResolvedValue(undefined);
-const signInWithGoogleCredential = vi.fn().mockResolvedValue(undefined);
-vi.mock(`./useAuth`, () => ({
+const signInWithGoogle = mock().mockResolvedValue(undefined);
+const signInWithGoogleCredential = mock().mockResolvedValue(undefined);
+mock.module(`./useAuth`, () => ({
     useAuth: () => ({ user: ref(null), signInWithGoogle, signInWithGoogleCredential }),
 }));
 
-const getIdToken = vi.fn<(options?: { gate?: boolean }) => Promise<string | undefined>>();
-const renderButton = vi.fn<() => Promise<boolean>>();
-vi.mock(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
+const getIdToken = mock<(options?: { gate?: boolean }) => Promise<string | undefined>>();
+const renderButton = mock<() => Promise<boolean>>();
+mock.module(`./useGoogleIdentity`, () => ({ useGoogleIdentity: () => ({ getIdToken, renderButton }) }));
 // Available desktop build for this visitor; undefined is the default, overridden only where a test needs one.
-const desktopInstaller = vi.fn<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
-vi.mock(`../../app/environments/desktop`, () => ({
+const desktopInstaller = mock<() => { platform: string; label: string; href: string } | undefined>(() => undefined);
+// Partial, over the real module: the page reaches for whatever the desktop lane grows next, and a mock listing its
+// exports by hand fails the link the day one is added.
+mock.module(`../../app/environments/desktop`, () => ({
+    ...actualDesktop,
     DESKTOP_SIGN_IN_LINK: ``,
     desktopVersion: () => undefined,
-    openDesktopLink: vi.fn(),
+    openDesktopLink: mock(),
 }));
-vi.mock(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => desktopInstaller() }));
+mock.module(`../../app/environments/desktopDownloads`, () => ({ desktopInstaller: () => desktopInstaller() }));
 
 const { default: Login } = await import("./Login.vue");
 

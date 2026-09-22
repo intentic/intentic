@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 // jsdom for the IMPORT, not the assertions: `ui` is a pure class-string builder, but @intentic/ui's only door is the
 // barrel, which loads useTheme and touches `document` at module scope.
 //
@@ -6,7 +5,8 @@
 // file tabs and `SegmentedControl variant="underline"`. Both are about the row not MOVING when the selection does,
 // which is invisible in a screenshot of either state on its own. Lives here rather than beside the recipe because
 // @intentic/ui has no test runner; turbo re-runs this whenever the kit changes, since web depends on it.
-import { expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect } from "bun:test";
 import { ui } from "@intentic/ui";
 
 const classesOf = (active: boolean, ...overrides: string[]): string[] => ui.tab(active, ...overrides).split(/\s+/).filter(Boolean);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { UsageError, bool, flag, limit, list, parseArgs, positional, required } from "./args.js";
 
 describe("parseArgs", () => {

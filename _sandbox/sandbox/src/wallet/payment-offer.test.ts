@@ -1,5 +1,5 @@
 import type { AgentEvent, WalletConfig } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { gatedPaidFetch, type PaidFetchRequest, type PaymentGateDeps } from "./payment-offer.js";
 import type { PaymentRow, WalletLedgerStore } from "./wallet-ledger.js";

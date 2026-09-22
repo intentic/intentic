@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { buildMessage, contentTypeOf, encodeHeader, encodeRaw } from "./mime.js";
 
 const decodeBody = (message: string): string => {

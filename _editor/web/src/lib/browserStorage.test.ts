@@ -1,10 +1,11 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { removeStoredValue, storedKeys, storedValue, storeValue } from "./browserStorage";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => unstubAllGlobals());
 
 test("blocked browser storage makes every operation a safe no-op", () => {
-    vi.stubGlobal(`localStorage`, {
+    stubGlobal(`localStorage`, {
         get length(): number {
             throw new Error(`blocked`);
         },

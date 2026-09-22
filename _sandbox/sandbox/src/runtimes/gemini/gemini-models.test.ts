@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { humanizeModelId } from "../../agent/models/model-discovery.js";
 import { discoverGeminiModels, isChatModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 

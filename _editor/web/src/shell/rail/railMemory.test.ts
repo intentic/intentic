@@ -1,5 +1,5 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, spyOn, jest } from "bun:test";
 import { nextTick, ref } from "vue";
 import { type RailTile, useRailMemory } from "./railMemory";
 
@@ -13,14 +13,14 @@ const KEY = `intentic.railTiles.local`;
 const tile = (id: string): RailTile => ({ id, to: `/ext/${id}`, label: id, icon: `robot` });
 const badged = (id: string, count: number): RailTile => ({ ...tile(id), badge: { count } }) as RailTile;
 
-let writes: ReturnType<typeof vi.spyOn>;
+let writes: ReturnType<typeof spyOn>;
 
 beforeEach(() => {
     localStorage.clear();
-    writes = vi.spyOn(Storage.prototype, `setItem`);
+    writes = spyOn(Storage.prototype, `setItem`);
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => jest.restoreAllMocks());
 
 it(`holds a remembered tile until its tile loads, then hands the tile over`, async () => {
     localStorage.setItem(KEY, JSON.stringify([tile(`agents`), tile(`pipelines`)]));

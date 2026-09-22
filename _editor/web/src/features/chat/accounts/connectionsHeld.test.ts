@@ -1,14 +1,23 @@
-// @vitest-environment jsdom
 // jsdom: the import chain reaches app-wide singletons that read browser globals (window.env) as they load.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
 
 // What a connection read learns about accounts the provider is holding reads off. A press was the only thing that ever
 // asked, so a frozen number explained itself only to whoever pressed the control it had already stopped answering —
 // and on arrival, the surface most likely to be read, the one line that says why said nothing at all.
 
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
-
-const { sandboxJson } = await import("../../sandbox/client/sandboxClient");
+// Declared outside the factory with a path-only signature: the real `sandboxJson<T>` is generic, and an
+// implementation answering one concrete shape cannot satisfy a generic one.
+const sandboxJsonMock = mock(async (_path: string, _init?: RequestInit): Promise<unknown> => ({}));
+// Every name the graph imports from the daemon client, since bun links an ESM import against exactly what this
+// factory returns; only sandboxJson is ever called.
+mock.module("../../sandbox/client/sandboxClient", () => ({
+    sandboxRequest: mock(),
+    sandboxJson: (path: string, init?: RequestInit) => sandboxJsonMock(path, init),
+    sandboxRequestVia: mock(),
+    sandboxError: mock(async () => new Error(`unused`)),
+    SandboxHttpError: class SandboxHttpError extends Error {},
+}));
 
 interface Posted {
     readonly path: string;
@@ -17,7 +26,7 @@ interface Posted {
 
 // Answers every list empty and records what the plan-limits route was asked for; `held` is what it answers with.
 const daemon = (held: unknown, posted: Posted[] = []): Posted[] => {
-    vi.mocked(sandboxJson).mockImplementation((path: string, init?: RequestInit) => {
+    sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
         if (path === `/usage/plan-limits/refresh`) {
             posted.push({ path, force: JSON.parse(String(init?.body ?? `{}`)).force });
             return Promise.resolve(held === undefined ? Promise.reject(new Error(`daemon is unreachable`)) : { ok: true, held });

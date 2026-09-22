@@ -1,12 +1,13 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { forgejoApi } from "./forgejo/forgejo-api.js";
-import { komodoApi } from "./komodo/komodo-api.js";
+import { type AlerterConfig, komodoApi } from "./komodo/komodo-api.js";
 import { cloudflareApi } from "./network/cloudflare-api.js";
 
 // Stub global fetch with a single canned response so the default adapters' response validation can be
 // exercised without the network. The adapters only use response.ok/status/json()/text().
 const stubFetch = (body: unknown, status = 200): void => {
-    vi.stubGlobal("fetch", async () => ({
+    stubGlobal("fetch", async () => ({
         ok: status >= 200 && status < 300,
         status,
         json: async () => body,
@@ -15,7 +16,7 @@ const stubFetch = (body: unknown, status = 200): void => {
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 const creds = { baseUrl: "https://git.example.com", user: "admin", password: "pw", owner: "admin", name: "my-app" };
@@ -66,7 +67,7 @@ test("cloudflare surfaces an API error envelope (success:false) as a failed call
 });
 
 test("komodo getAlerter parses a well-formed alerter config", async () => {
-    const config = {
+    const config: AlerterConfig = {
         enabled: true,
         endpoint: { type: "Discord", params: { url: "https://discord.test/wh" } },
         alert_types: ["DeploymentStateChange"],

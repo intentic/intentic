@@ -1,18 +1,22 @@
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 
 // The scheme is the one preference with THREE states and two of them spell the same attribute: `system` is the
 // default, and the only value that can move without anybody choosing. Light is what a browser that will not say
 // gets — `no-preference` matches neither query, which is what jsdom's own matchMedia already models.
 
-const load = () => import("@intentic/ui/theme");
+// The module reads the OS query, the announcement and storage once, at module scope, so each case needs its own
+// evaluation of it; freshImport takes a URL, which is what the package subpath resolves to.
+const THEME = import.meta.resolve("@intentic/ui/theme");
+const load = () => freshImport<typeof import("@intentic/ui/theme")>(THEME, import.meta.url);
 const root = () => document.documentElement;
 
 /** A `prefers-color-scheme` the test can flip; jsdom's own never matches and never changes. */
 const systemIs = (scheme: "light" | "dark") => {
     const listeners = new Set<(event: { matches: boolean }) => void>();
     let dark = scheme === `dark`;
-    vi.stubGlobal(`matchMedia`, (query: string) => ({
+    stubGlobal(`matchMedia`, (query: string) => ({
         get matches(): boolean {
             return dark && query.includes(`dark`);
         },
@@ -32,8 +36,7 @@ const systemIs = (scheme: "light" | "dark") => {
 beforeEach(() => {
     localStorage.clear();
     root().removeAttribute(`data-mode`);
-    vi.unstubAllGlobals();
-    vi.resetModules();
+    unstubAllGlobals();
 });
 
 describe(`the scheme nobody has chosen`, () => {
@@ -120,7 +123,7 @@ describe(`a scheme the desktop app announced`, () => {
     it(`outranks both the setting and the system`, async () => {
         systemIs(`light`);
         localStorage.setItem(`ui-color-scheme`, `light`);
-        vi.stubGlobal(`__INTENTIC_MODE__`, `dark`);
+        stubGlobal(`__INTENTIC_MODE__`, `dark`);
         const { useTheme } = await load();
 
         expect(useTheme().scheme.value).toBe(`dark`);

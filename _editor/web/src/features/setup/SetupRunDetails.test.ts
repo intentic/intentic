@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
 // Offers the desktop app install as an alternative to the terminal command; makes no sense inside the desktop
 // app itself. What the panel explains (the command, its removal line) is the same in both windows.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
 import { createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -9,10 +9,10 @@ import { IconStub } from "@intentic/ui/testing";
 
 // The one fact that decides this: whether the app has marked this webview as its own.
 const version = { value: undefined as string | undefined };
-vi.mock(`../../app/environments/desktop`, () => ({
+mock.module(`../../app/environments/desktop`, () => ({
     desktopVersion: () => version.value,
 }));
-vi.mock(`../../app/environments/desktopDownloads`, () => ({
+mock.module(`../../app/environments/desktopDownloads`, () => ({
     DESKTOP_DOWNLOADS: { windows: `https://intentic.dev/desktop/windows`, linuxAppImage: `https://intentic.dev/desktop/linux` },
 }));
 

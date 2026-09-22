@@ -6,7 +6,7 @@ import net from "node:net";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { LEAF_CRT, LEAF_KEY } from "@intentic/localhost-https/paths";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { answers, cachedScheme, detectScheme } from "./port-probe.js";
 
 // Runs against real sockets: a TLS listener refuses a plaintext probe, and a self-signed cert needs the repo's real dev

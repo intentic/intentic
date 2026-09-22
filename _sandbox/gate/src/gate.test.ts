@@ -1,5 +1,5 @@
-import { GateVerdictSchema } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { type GateVerdict, GateVerdictSchema } from "@intentic/sandbox-contract";
+import { test, expect } from "bun:test";
 import { clientTimeoutMs, dialOf, exitOf, parseArgs, readVerdict, WAIT_DEFAULT_S } from "./gate.js";
 
 test("a URL, some words, and nothing else is a call with the defaults", () => {
@@ -41,7 +41,10 @@ test("the wait rides beside the token without corrupting the URL", () => {
         headers: { authorization: "Bearer t" },
     });
     // A fire has no deadline, and a URL with no token sends no header rather than an empty one.
-    expect(dialOf("https://box.example/automations/a/fire?token=t")).toEqual({ url: "https://box.example/automations/a/fire", headers: { authorization: "Bearer t" } });
+    expect(dialOf("https://box.example/automations/a/fire?token=t")).toEqual({
+        url: "https://box.example/automations/a/fire",
+        headers: { authorization: "Bearer t" },
+    });
     expect(dialOf("https://box.example/automations/a/fire")).toEqual({ url: "https://box.example/automations/a/fire", headers: {} });
 });
 
@@ -57,7 +60,7 @@ test("readVerdict agrees with the contract's own schema", () => {
         { outcome: "pass", reason: 'verdict is "pass".', runId: "run-1", value: "pass" },
         { outcome: "fail", reason: 'verdict is "almost".', runId: "run-2", value: "almost" },
         { outcome: "blocked", reason: '"Judge" failed.', runId: "run-3" },
-    ];
+    ] satisfies GateVerdict[];
     for (const verdict of verdicts) {
         expect(GateVerdictSchema.safeParse(verdict).success).toBe(true);
         expect(readVerdict(verdict)).toEqual(verdict);

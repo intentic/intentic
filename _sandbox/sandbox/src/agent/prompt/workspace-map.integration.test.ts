@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { workspaceMapNote, workspaceMapOf } from "./workspace-map.js";
 
 // Pins properties nobody would notice breaking without a test: the starting position decides what's mapped, shape rules

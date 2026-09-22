@@ -1,25 +1,25 @@
-// @vitest-environment jsdom
 // jsdom: the subject mounts and holds a subscription for the component's lifetime; the property under test is that it
 // lets go.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { createApp, defineComponent, h, ref } from "vue";
 
 // Two facts pinned: the badge count follows the board's scope (both directions), and it says what it could not see
 // (silent boxes), since a badge is one digit and cannot be partly unknown.
 
 const attention = ref(0);
-vi.mock("../fleet/useAgents", () => ({ useAgents: () => ({ attention }) }));
+mock.module("../fleet/useAgents", () => ({ useAgents: () => ({ attention }) }));
 
 const silentBoxes = ref<{ sandbox: { name: string } }[]>([]);
-const release = vi.fn();
-const subscribe = vi.fn(() => release);
-vi.mock("../../sandbox/live/fleetAcross", () => ({ silentBoxes, subscribe }));
+const release = mock();
+const subscribe = mock(() => release);
+mock.module("../../sandbox/live/fleetAcross", () => ({ silentBoxes, subscribe }));
 
 const readingAcross = ref(false);
 const acrossAttention = ref(0);
 // The read-marker watch is fleetScope's own, tested there; here it is a spy the mount assertions can ignore.
-const watchRemoteSeen = vi.fn();
-vi.mock("../fleet/fleetScope", () => ({
+const watchRemoteSeen = mock();
+mock.module("../fleet/fleetScope", () => ({
     readingAcross,
     acrossAttention,
     watchRemoteSeen,

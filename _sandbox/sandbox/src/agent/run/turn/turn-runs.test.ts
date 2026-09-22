@@ -1,5 +1,6 @@
 import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock, jest } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import type { JournalEntry } from "./turn-journal.js";
 import { commandsOf, resetCommands } from "../../providers/agent-commands.js";
 import { type AttachEntry, type AttachHead, startTurnRun, type TurnFn, turnRunOf } from "./turn-runs.js";
@@ -92,7 +93,7 @@ describe(`turn runs`, () => {
         push({ kind: `session`, sessionId: `s1` });
         push({ kind: `delta`, text: `a` });
         push({ kind: `delta`, text: `b` });
-        await vi.waitFor(() => expect(turnRunOf(`c-replay`)!.rows[1]?.text).toBe(`ab`));
+        await waitFor(() => expect(turnRunOf(`c-replay`)!.rows[1]?.text).toBe(`ab`));
 
         const followed = collect(`c-replay`);
         push({ kind: `delta`, text: `c` });
@@ -115,7 +116,7 @@ describe(`turn runs`, () => {
 
         const first = collect(`c-multi`);
         push({ kind: `delta`, text: `a` });
-        await vi.waitFor(() => expect(turnRunOf(`c-multi`)!.rows).toHaveLength(2));
+        await waitFor(() => expect(turnRunOf(`c-multi`)!.rows).toHaveLength(2));
         const second = collect(`c-multi`);
         push({ kind: `delta`, text: `b` });
         close();
@@ -151,7 +152,7 @@ describe(`turn runs`, () => {
         });
 
         push({ kind: `delta`, text: `still unwinding` });
-        await vi.waitFor(() => expect(run.rows).toHaveLength(1));
+        await waitFor(() => expect(run.rows).toHaveLength(1));
         expect(settled).toBe(false);
 
         close();
@@ -165,7 +166,7 @@ describe(`turn runs`, () => {
         expect(startTurnRun(turnFn, turn(`c-busy`))).toBeUndefined();
 
         close();
-        await vi.waitFor(() => expect(first.done).toBe(true));
+        await waitFor(() => expect(first.done).toBe(true));
         const { turnFn: nextTurnFn, close: closeNext } = crankedTurn();
         const second = startTurnRun(nextTurnFn, turn(`c-busy`))!;
         expect(second.id).not.toBe(first.id);
@@ -177,14 +178,14 @@ describe(`turn runs`, () => {
         const { turnFn, fail } = crankedTurn();
         startTurnRun(turnFn, turn(`c-throw`), { opening });
         fail(new Error(`adapter exploded`));
-        await vi.waitFor(() => expect(turnRunOf(`c-throw`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(`c-throw`)!.done).toBe(true));
         expect(turnRunOf(`c-throw`)!.rows.at(-1)).toEqual({ role: `notice`, text: `adapter exploded`, run: turnRunOf(`c-throw`)!.id });
         expect((await collect(`c-throw`)).entries).toEqual([{ kind: `fact`, seq: 2, fact: { kind: `error`, message: `adapter exploded` } }]);
 
         const { turnFn: abortFn, fail: abort } = crankedTurn();
         startTurnRun(abortFn, turn(`c-abort`), { opening });
         abort(new DOMException(`aborted`, `AbortError`) as unknown as Error);
-        await vi.waitFor(() => expect(turnRunOf(`c-abort`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(`c-abort`)!.done).toBe(true));
         expect(turnRunOf(`c-abort`)!.rows.at(-1)).toEqual({ role: `notice`, text: `Stopped.`, run: turnRunOf(`c-abort`)!.id });
         expect((await collect(`c-abort`)).entries).toEqual([]);
     });
@@ -193,9 +194,9 @@ describe(`turn runs`, () => {
         const { turnFn, push, fail } = crankedTurn();
         startTurnRun(turnFn, turn(`c-park-stop`), { opening });
         push({ kind: `question`, requestId: `q1`, questions: [] });
-        await vi.waitFor(() => expect(turnRunOf(`c-park-stop`)!.rows).toHaveLength(2));
+        await waitFor(() => expect(turnRunOf(`c-park-stop`)!.rows).toHaveLength(2));
         fail(new DOMException(`aborted`, `AbortError`) as unknown as Error);
-        await vi.waitFor(() => expect(turnRunOf(`c-park-stop`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(`c-park-stop`)!.done).toBe(true));
         const parkStop = turnRunOf(`c-park-stop`)!;
         expect(parkStop.rows.slice(1)).toEqual([
             { role: `assistant`, text: ``, question: { requestId: `q1`, questions: [], status: `cancelled` }, run: parkStop.id },
@@ -208,9 +209,9 @@ describe(`turn runs`, () => {
         const run = startTurnRun(turnFn, turn(`c-note`), { opening })!;
         const followed = collect(`c-note`);
         push({ kind: `plan`, requestId: `p1`, text: `the plan` });
-        await vi.waitFor(() => expect(run.rows).toHaveLength(2));
+        await waitFor(() => expect(run.rows).toHaveLength(2));
         push({ kind: `resolved`, requestId: `p1`, reply: { kind: `plan`, requestId: `p1`, approve: true } });
-        await vi.waitFor(() => expect(run.rows[1]?.plan?.status).toBe(`approved`));
+        await waitFor(() => expect(run.rows[1]?.plan?.status).toBe(`approved`));
         run.note({ role: `notice`, text: `Plan approved.` });
         close();
         expect((await followed).entries.slice(-2)).toEqual([
@@ -233,25 +234,25 @@ describe(`turn runs`, () => {
         push({ kind: `tool_call`, id: `task-1`, name: `Agent`, category: `other`, status: `in_progress` });
         push({ kind: `delta`, text: `child prose`, parentToolUseId: `task-1` });
         close();
-        await vi.waitFor(() => expect(run.done).toBe(true));
+        await waitFor(() => expect(run.done).toBe(true));
         expect(run.rowsOf(`task-1`)).toEqual([{ role: `assistant`, text: `child prose` }]);
         expect(run.rowsOf(`nobody`)).toEqual([]);
     });
 
     it(`drops a finished run after retention: attach then finds nothing`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             const { turnFn, close } = crankedTurn();
             startTurnRun(turnFn, turn(`c-retain`));
             close();
-            await vi.waitFor(() => expect(turnRunOf(`c-retain`)!.done).toBe(true));
+            await waitFor(() => expect(turnRunOf(`c-retain`)!.done).toBe(true));
 
-            vi.advanceTimersByTime(45_000);
+            jest.advanceTimersByTime(45_000);
             expect(turnRunOf(`c-retain`)).toEqual(expect.any(Object));
-            vi.advanceTimersByTime(20_000);
+            jest.advanceTimersByTime(20_000);
             expect(turnRunOf(`c-retain`)).toBeUndefined();
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
@@ -273,18 +274,18 @@ describe(`turn runs`, () => {
         await Promise.resolve();
         expect(invoked).toBe(false);
         release();
-        await vi.waitFor(() => expect(run.done).toBe(true));
+        await waitFor(() => expect(run.done).toBe(true));
         expect(invoked).toBe(true);
     });
 
     it(`hands the settled rows and the steered positions to the transcript sink`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const transcript = vi.fn(async () => true);
+        const transcript = mock(async () => true);
         const run = startTurnRun(turnFn, turn(`c-sink`), { opening, transcript })!;
         push({ kind: `delta`, text: `a` });
         push({ kind: `steer`, text: `and`, sentAt: 2 });
         close();
-        await vi.waitFor(() => expect(transcript).toHaveBeenCalledOnce());
+        await waitFor(() => expect(transcript).toHaveBeenCalledTimes(1));
         // The run rides into the record with its rows: a run stays attachable for a while after it settles, and a
         // window that redrew from the record has to recognise those rows when its head arrives.
         expect(transcript).toHaveBeenCalledWith(
@@ -301,12 +302,12 @@ describe(`turn runs`, () => {
     // put those same words in the conversation once per press. Nothing at all reaches the record.
     it(`writes no record for a turn that was refused before it ran`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const transcript = vi.fn(async () => true);
+        const transcript = mock(async () => true);
         const run = startTurnRun(turnFn, turn(`c-unrun`), { opening, transcript })!;
         push({ kind: `error`, code: `sandbox-memory-low`, message: `Not enough sandbox memory to start this turn.` });
         close();
 
-        await vi.waitFor(() => expect(run.done).toBe(true));
+        await waitFor(() => expect(run.done).toBe(true));
         expect(transcript).not.toHaveBeenCalled();
         // The refusal still stands on the live run, so the press that failed says why; only the message is gone.
         expect(run.rows.map((row) => row.role)).toEqual([`notice`]);
@@ -341,9 +342,9 @@ describe(`turn runs`, () => {
         push({ kind: `session`, sessionId: `sess-7` });
         push({ kind: `done` });
         close();
-        await vi.waitFor(() => expect(turnRunOf(`c-journal`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(`c-journal`)!.done).toBe(true));
 
-        await vi.waitFor(() => expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]));
+        await waitFor(() => expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]));
         await new Promise((resolve) => setTimeout(resolve, 60));
         expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]);
     });
@@ -353,16 +354,16 @@ describe(`turn runs`, () => {
         const { calls, journal } = fakeJournal();
         startTurnRun(turnFn, turn(`c-journal-fail`), { journal });
         fail(new Error(`adapter exploded`));
-        await vi.waitFor(() => expect(turnRunOf(`c-journal-fail`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(`c-journal-fail`)!.done).toBe(true));
 
-        await vi.waitFor(() => expect(calls).toEqual([`record`, `clear:c-journal-fail`]));
+        await waitFor(() => expect(calls).toEqual([`record`, `clear:c-journal-fail`]));
     });
 
     it(`does not clear the recovery journal until the transcript append has committed`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const { calls, journal } = fakeJournal();
         let commit!: () => void;
-        const transcript = vi.fn(
+        const transcript = mock(
             () =>
                 new Promise<boolean>((resolve) => {
                     commit = () => resolve(true);
@@ -372,10 +373,10 @@ describe(`turn runs`, () => {
         push({ kind: `done` });
         close();
 
-        await vi.waitFor(() => expect(transcript).toHaveBeenCalledOnce());
-        await vi.waitFor(() => expect(calls).toEqual([`record`]));
+        await waitFor(() => expect(transcript).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(calls).toEqual([`record`]));
         commit();
-        await vi.waitFor(() => expect(calls).toEqual([`record`, `clear:c-transcript-commit`]));
+        await waitFor(() => expect(calls).toEqual([`record`, `clear:c-transcript-commit`]));
     });
 
     it(`journals a raised card, keeps the session beside it, and takes the card back off when it resolves`, async () => {
@@ -401,7 +402,7 @@ describe(`turn runs`, () => {
         push({ kind: `resolved`, requestId: `r-plan` });
         push({ kind: `done` });
         close();
-        await vi.waitFor(() => expect(turnRunOf(`c-parked`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(`c-parked`)!.done).toBe(true));
 
         const parked = entries.map((entry) => ({ session: entry.sessionId, cards: (entry.parked ?? []).map((card) => card.requestId) }));
         expect(parked).toEqual([

@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
 // Pins the rules the rail and most-added-first order rest on.
 // Needs jsdom: the module reads a stored preference and calls useLayout at import.
-import { describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect } from "bun:test";
 import { addedIn, bigger, shownStat, sumCode, sumShown, weightFill } from "./changeWeight";
 
 describe(`shownStat`, () => {

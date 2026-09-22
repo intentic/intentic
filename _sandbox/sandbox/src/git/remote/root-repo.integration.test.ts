@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { rootExcludes } from "../../history/history.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { changedFiles } from "../changes/changes.js";

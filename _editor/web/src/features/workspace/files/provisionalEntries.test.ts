@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import {
     clearUnsettledUploads,

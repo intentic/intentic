@@ -1,6 +1,7 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import type { Activation, ExtensionContext, HostQuery, IntenticApi, ViewRegistration } from "@intentic/extension-api";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, jest } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { activate } from "./extension";
 import { bindHost } from "./host";
 import { runningOf, workflowRunsQuery } from "./runsQuery";
@@ -41,7 +42,7 @@ afterEach(() => {
     for (const subscription of subscriptions.splice(0)) {
         subscription.dispose();
     }
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 const tile: Activation = { key: `workflows`, title: `Workflows` };
@@ -75,7 +76,7 @@ describe(`the Workflows tile`, () => {
         expect(registered?.id).toBe(`workflows`);
         // The running channel, not a count chip: a fan-out in flight is not an errand, and it still seats the tile.
         // Nothing else may be set, or the rail would draw a plate for it beside the mark.
-        await vi.waitFor(() => expect(registered?.badge?.(tile)).toEqual({ running: `1 running` }));
+        await waitFor(() => expect(registered?.badge?.(tile)).toEqual({ running: `1 running` }));
         expect(fetched[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
         expect(registered?.warm?.()[0]).toMatchObject({ queryKey: [`sandbox`, `box`, `workflow-runs`] });
     });
@@ -86,6 +87,6 @@ describe(`the Workflows tile`, () => {
 
         activate(api, { extensionId: `ext-workflows`, subscriptions });
 
-        await vi.waitFor(() => expect(views[0]?.badge?.(tile)).toBeUndefined());
+        await waitFor(() => expect(views[0]?.badge?.(tile)).toBeUndefined());
     });
 });

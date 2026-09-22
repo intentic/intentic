@@ -1,5 +1,5 @@
 import type { SharePayload } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { sharePage } from "./share-page.js";
 
 // Pins that turning a conversation into markup on an unauthenticated public page is an injection surface; prompts

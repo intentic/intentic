@@ -1,9 +1,9 @@
 import type { Disposable, ViewRegistration } from "@intentic/extension-api";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock, spyOn } from "bun:test";
 import { ref } from "vue";
 
 // The registry's rail table asks who is reading (a guest gets two tiles); this is about warming, so everyone is the owner.
-vi.mock(`../../../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(false) }) }));
+mock.module(`../../../features/sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest: ref(false) }) }));
 
 import { registerView } from "../../../core-views/registry";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -59,7 +59,7 @@ describe(`the extensions' wish list`, () => {
 
         expect(wish?.have()).toBe(true);
         // The view mounts and finds it sitting there instead of drawing a skeleton.
-        expect(queryClient.getQueryData(key)).toEqual([`a run`]);
+        expect<unknown>(queryClient.getQueryData(key)).toEqual([`a run`]);
     });
 
     it(`asks nothing on behalf of a view that wants nothing`, () => {
@@ -69,7 +69,7 @@ describe(`the extensions' wish list`, () => {
     });
 
     it(`contains one extension's broken wish list rather than losing everybody else's`, () => {
-        const noise = vi.spyOn(console, `error`).mockImplementation(() => undefined);
+        const noise = spyOn(console, `error`).mockImplementation(() => undefined);
         register(
             `ext-broken`,
             view(`broken`, () => {

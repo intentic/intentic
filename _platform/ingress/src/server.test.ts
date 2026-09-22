@@ -1,11 +1,11 @@
 import { EDGE_VERDICT_HEADER } from "@intentic/sandbox-contract/edge-verdict";
 import { INGRESS_GRANT_HEADER, mintReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
-import { serveIngressSession, type IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
+import { serveIngressSession, webSocketDuplex, type IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
 import { generateKeyPairSync } from "node:crypto";
 import { createServer, request as h1Request, type Server } from "node:http";
 import { type AddressInfo, connect as netConnect } from "node:net";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { createWebSocketStream, WebSocket } from "ws";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { WebSocket } from "ws";
 import type { Reachability } from "./revocation.js";
 import { createIngressServer, REPLAY_CACHE_TTL_SECS, type IngressServer } from "./server.js";
 
@@ -106,7 +106,11 @@ describe(`the ingress edge`, () => {
     test(`admits the preflight of a request it is about to refuse`, async () => {
         const answer = await get(portOf(ingress.server), `sandbox-${SANDBOX_ID}.${ZONE}`, `/events`, {
             method: `OPTIONS`,
-            headers: { origin: `https://app.example.test`, "access-control-request-method": `GET`, "access-control-request-headers": `authorization` },
+            headers: {
+                origin: `https://app.example.test`,
+                "access-control-request-method": `GET`,
+                "access-control-request-headers": `authorization`,
+            },
         });
         expect(answer.status).toBe(204);
         expect(answer.headers[`access-control-allow-origin`]).toBe(`*`);
@@ -150,7 +154,7 @@ describe(`the ingress edge`, () => {
             socket?.on(`open`, () => resolve());
             socket?.on(`error`, reject);
         });
-        daemon = await serveIngressSession(createWebSocketStream(socket), { targetPort: portOf(target) });
+        daemon = await serveIngressSession(webSocketDuplex(socket), { targetPort: portOf(target) });
         // Registration completes on the edge's own microtask queue, a moment after the socket opens.
         await new Promise<void>((resolve) => setTimeout(resolve, 100));
 

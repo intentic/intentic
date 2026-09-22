@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { TemplateManifest } from "@intentic/scaffold";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { appPanelKey, buildAppSpec, discoverApps } from "./app-previews.js";
 
 // Exercises both port conventions: web reads daemon-injected PORT, api reads API_PORT via the {port} marker.
@@ -94,7 +94,9 @@ describe("app-previews", () => {
 
     test("discoverApps takes the preview spec from the manifest for a scaffolded instance", async () => {
         const dir = await scaffoldRepo({ api: { name: "@shop/api" } });
-        expect(discoverApps(dir, MANIFEST)).toEqual([{ app: "api", kind: "api", pkg: "@shop/api", preview: MANIFEST.templates["api"]!.previews[0] }]);
+        expect(discoverApps(dir, MANIFEST)).toEqual([
+            { app: "api", kind: "api", pkg: "@shop/api", preview: MANIFEST.templates["api"]!.previews[0]! },
+        ]);
     });
 
     // astro dev ignores the daemon-injected PORT; vite 403s an unrecognized preview Host. The command passes both

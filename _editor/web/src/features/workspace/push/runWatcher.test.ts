@@ -1,11 +1,12 @@
 import type { CommandRun } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createRunWatcher, type RunSource } from "./runWatcher";
 
 /* THE WATCHER'S OWN PROMISES, the ones the pre-push check and the push both ride on: the reveal happens once, at the first state that names a terminal. */
 
-const openFocused = vi.fn();
-vi.mock(`../../terminal/useTerminalPanel`, () => ({ useTerminalPanel: () => ({ openFocused }) }));
+const openFocused = mock();
+mock.module(`../../terminal/useTerminalPanel`, () => ({ useTerminalPanel: () => ({ openFocused }) }));
 
 const IDLE: CommandRun = { status: `idle`, command: ``, output: `` };
 const running = (session?: string): CommandRun => ({ status: `running`, command: `pnpm check`, output: ``, ...(session === undefined ? {} : { session }) });
@@ -40,17 +41,17 @@ const scripted = (states: readonly (CommandRun | `throw`)[]) => {
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     openFocused.mockClear();
 });
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 // Every poll after the first sits behind the interval; this walks the clock past as many as a script needs.
 const settle = async <T,>(pending: Promise<T>, polls: number): Promise<T> => {
     for (let i = 0; i < polls; i += 1) {
-        await vi.advanceTimersByTimeAsync(700);
+        await advanceTimersByTimeAsync(700);
     }
     return pending;
 };
@@ -61,7 +62,7 @@ test(`start follows the run to its verdict and opens the terminal once, at the f
     expect(watcher.run.value).toEqual(IDLE);
 
     const pending = watcher.start();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(watcher.running.value).toBe(true);
     expect(watcher.terminal.value).toBeUndefined();
 
@@ -119,14 +120,14 @@ test(`showTerminal opens the run's terminal again on request, and nothing where 
     const { source } = scripted([passed]);
     const watcher = createRunWatcher(source);
     watcher.showTerminal();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(openFocused).not.toHaveBeenCalled();
     await watcher.start();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     openFocused.mockClear();
     watcher.showTerminal();
     // The panel is reached lazily (a dynamic import, see runWatcher.ts), so the open lands a tick later.
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(openFocused).toHaveBeenCalledWith(`job-checks`, { title: `Running your pre-push check`, detail: `pnpm check` });
 });
 
@@ -153,7 +154,7 @@ test(`a source with no panel to open follows the run and reveals nothing`, async
     const settled = await settle(watcher.start(), 1);
     expect(settled).toEqual(passed);
     watcher.showTerminal();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(openFocused).not.toHaveBeenCalled();
     expect(watcher.terminal.value).toBe(`job-checks`);
 });

@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { appendFile, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileActivityStore } from "./activity-store.js";
 
 const storePath = (): string => join(mkdtempSync(join(tmpdir(), "activity-")), "activity.jsonl");

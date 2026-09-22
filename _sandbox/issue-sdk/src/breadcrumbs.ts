@@ -61,7 +61,8 @@ export const createBreadcrumbs = (): Breadcrumbs => {
     // network error is recorded and re-thrown untouched.
     const originalFetch = window.fetch;
     if (typeof originalFetch === "function") {
-        window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        // bun-types' `fetch` carries `preconnect`, which no browser fetch has; the wrapper is the page's fetch and no more.
+        window.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
             const method = init?.method ?? (input instanceof Request ? input.method : "GET");
             const target = input instanceof Request ? input.url : String(input);
             try {
@@ -74,7 +75,7 @@ export const createBreadcrumbs = (): Breadcrumbs => {
                 add("fetch", `${method} ${pathOnly(target)} → ${error instanceof Error ? error.message : "network error"}`);
                 throw error;
             }
-        };
+        }) as typeof fetch;
         undo.push(() => {
             window.fetch = originalFetch;
         });

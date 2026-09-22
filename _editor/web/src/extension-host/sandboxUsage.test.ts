@@ -1,7 +1,8 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 
-const sandboxJson = vi.hoisted(() => vi.fn(async () => ({ ok: true })));
-vi.mock(`../features/sandbox/client/sandboxClient`, () => ({ sandboxJson }));
+const sandboxJson = hoisted(() => mock(async () => ({ ok: true })));
+mock.module(`../features/sandbox/client/sandboxClient`, () => ({ sandboxJson }));
 
 const { flushSandboxUsage, recordSandboxCall } = await import(`./sandboxUsage`);
 
@@ -41,7 +42,7 @@ test(`reports every extension in one request`, async () => {
 
     await flushSandboxUsage();
 
-    expect(sandboxJson).toHaveBeenCalledOnce();
+    expect(sandboxJson).toHaveBeenCalledTimes(1);
     const [, init] = sandboxJson.mock.calls[0] as unknown as [string, { body: string }];
     expect(JSON.parse(init.body)).toEqual({
         reports: {

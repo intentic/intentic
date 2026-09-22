@@ -1,5 +1,5 @@
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { LinkReading } from "../config.js";
 import { distrosFrom, linkFacts } from "./describe.js";
 

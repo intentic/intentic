@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { type AgentEvent, type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { unstubbed } from "@intentic/testing";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
@@ -89,7 +89,7 @@ test("a due cron wakes the agent once and records a completed run", async () => 
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect((await services.automations.get("inbox"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("inbox"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts).toEqual(["wake:inbox"]);
     expect((await services.automations.get("inbox"))?.runs[0]?.outcome).toBe("completed");
 });
@@ -100,7 +100,7 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(1), SETTLES);
     const skipped = (await services.automations.get("guarded"))?.runs[0];
     expect(skipped?.outcome).toBe("skipped");
     expect(skipped?.detail).toBe("nothing new");
@@ -110,7 +110,7 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     await automationIdle("guarded");
     await services.automations.upsert(automationConfig("guarded", { guard: "true" }));
     await scheduler.tick(pastDue() + 61_000);
-    await vi.waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(2), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(2), SETTLES);
     expect((await services.automations.get("guarded"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts).toEqual(["wake:guarded"]);
 });
@@ -143,7 +143,7 @@ test("a one-time wake fires when its moment arrives and switches itself off, so 
     expect((await services.automations.get("dentist"))?.enabled).toBe(true);
 
     await scheduler.tick(at);
-    await vi.waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
     // On time, so nothing is appended under the prompt: the note below is only for a wake that ran late.
     expect(prompts).toEqual(["wake:dentist"]);
     expect((await services.automations.get("dentist"))?.enabled).toBe(false);
@@ -164,7 +164,7 @@ test("a moment that passed while the sandbox was down still fires, and the wake 
     // Constructed now, so its first window opens long after the moment: the daemon has just come back up.
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick();
-    await vi.waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("wake:dentist\n\n--- About this wake ---\n");
     expect(prompts[0]).toContain(`due at ${new Date(at).toISOString()}`);
     expect(prompts[0]).toContain("360 minutes late");
@@ -177,14 +177,14 @@ test("a retired one-time wake still releases from the countdown queue: it was sw
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick();
-    await vi.waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
     // Switched off as it fired, with the hold as the only thing left of that fire: reading the switch as the owner's
     // answer here would drop the reminder on the floor.
     expect((await services.automations.get("dentist"))?.enabled).toBe(false);
     expect(prompts).toEqual([]);
 
     await scheduler.tick(Date.now() + 2_000);
-    await vi.waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts).toHaveLength(1);
     expect(await services.heldWakes.list()).toEqual([]);
 });
@@ -293,7 +293,7 @@ test("event automations never tick; fireAutomation hands the payload to the guar
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect((await services.automations.get("sched"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("sched"))?.runs).toHaveLength(1), SETTLES);
     expect((await services.automations.get("hook"))?.runs).toEqual([]);
     expect(prompts).toEqual(["wake:sched"]);
 
@@ -381,7 +381,7 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
     expect(prompts).toEqual([]);
     expect((await services.automations.get("gated"))?.runs).toEqual([]);
     expect((await services.heldWakes.list())[0]?.automationId).toBe("gated");
@@ -417,7 +417,7 @@ test("a holdForSeconds fire is held with a deadline, and the tick releases it on
     // Past the deadline and quiet: the wake runs once, with the held payload.
     live.length = 0;
     await scheduler.tick(Date.now() + 2_000);
-    await vi.waitFor(async () => expect((await services.automations.get("fixer"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("fixer"))?.runs).toHaveLength(1), SETTLES);
     expect(await services.heldWakes.list()).toEqual([]);
     expect(prompts).toEqual(["wake:fixer\n\n--- Event payload ---\nchecks broke"]);
 });
@@ -431,7 +431,7 @@ test("cancelling is just removing the hold, and disabling the automation mid-cou
     await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1, enabled: false }));
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(Date.now() + 2_000);
-    await vi.waitFor(async () => expect(await services.heldWakes.list()).toEqual([]), SETTLES);
+    await waitFor(async () => expect(await services.heldWakes.list()).toEqual([]), SETTLES);
     expect(prompts).toEqual([]);
 });
 
@@ -499,7 +499,7 @@ test("disabled automations and not-yet-due crons never fire; agent errors land a
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts, [{ kind: "error", message: "no credits" }, { kind: "done" }]));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect((await services.automations.get("broken"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("broken"))?.runs).toHaveLength(1), SETTLES);
     expect((await services.automations.get("broken"))?.runs[0]).toMatchObject({ outcome: "error", detail: "no credits" });
     expect((await services.automations.get("off"))?.runs).toEqual([]);
     expect((await services.automations.get("later"))?.runs).toEqual([]);
@@ -647,7 +647,7 @@ test("an admission-floor hold parks a wake whose automation asked for nothing, a
     const prompts: string[] = [];
     const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
     await scheduler.tick(pastDue());
-    await vi.waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
     expect((await services.heldWakes.list())[0]?.autoRunAt).toBeUndefined();
     expect(prompts).toEqual([]);
 

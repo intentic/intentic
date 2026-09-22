@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 // jsdom: the subject is what reaches the screen; data is pinned in chatCapacity.test.ts. This covers two ways the
 // column stops being readable at its width:
 //
@@ -6,8 +5,9 @@
 //    column too narrow for it
 // 2. a provider that has fallen off the list, so "spent" and "never connected" render as the same nothing, with
 //    no Usage tab in this window to check
+import "@intentic/testing/dom";
 import type { OauthAccount, TranslatorAccounts } from "@intentic/sandbox-contract";
-import { afterEach, expect, it } from "vitest";
+import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

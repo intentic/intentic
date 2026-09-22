@@ -1,4 +1,4 @@
-import { describe, expect, it, test } from "vitest";
+import { describe, it, test, expect } from "bun:test";
 import { frontmatterHtml, splitFrontmatter, splitMarkdownBlocks } from "@intentic/ui/markdown";
 
 // The metadata block a document may open with. No DOM here: this is the parser and the markup it builds, not the

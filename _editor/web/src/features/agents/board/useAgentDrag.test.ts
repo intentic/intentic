@@ -1,9 +1,10 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
+import { mocked, hoisted } from "@intentic/testing/bun";
 
 // The board's presses, one per card: asserts scoping only, that two in-flight actions are two states the board can
 // show, not one slot the second overwrites. Browser-needing modules and agentActions are stubbed, since the whole
 // question is what the board looks like while calls are held open.
-const stub = vi.hoisted(() => ({
+const stub = hoisted(() => ({
     fleet: { value: [] as unknown[] },
     notice: { value: undefined as string | undefined },
     // The deferred halves of the two calls under test, so a test can leave one out and settle the other.
@@ -16,7 +17,7 @@ const stub = vi.hoisted(() => ({
     nothingLanded: `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`,
 }));
 
-vi.mock("../fleet/useAgents", () => ({
+mock.module("../fleet/useAgents", () => ({
     useAgents: () => ({
         fleet: stub.fleet,
         refresh: async () => undefined,
@@ -24,19 +25,19 @@ vi.mock("../fleet/useAgents", () => ({
         stopWatching: async () => undefined,
     }),
 }));
-vi.mock("../fleet/fleetScope", () => ({ otherFleet: { value: [] } }));
-vi.mock("../../../shell/notifications/notifications", () => ({
+mock.module("../fleet/fleetScope", () => ({ otherFleet: { value: [] } }));
+mock.module("../../../shell/notifications/notifications", () => ({
     useNotifications: () => ({
         say: (message: string) => stub.said.push(message),
     }),
 }));
-vi.mock("../../sandbox/live/fleetAcross", () => ({ refreshAcross: () => undefined }));
-vi.mock("../fleet/agentActions", () => ({
-    askAgentToResolve: vi.fn(() => new Promise((settle) => stub.asks.push(settle))),
-    landAgent: vi.fn(() => new Promise((settle) => stub.lands.push(settle))),
-    discardAgent: vi.fn(async () => undefined),
-    invalidateAgentAction: vi.fn(async () => undefined),
-    stopAgent: vi.fn(async () => undefined),
+mock.module("../../sandbox/live/fleetAcross", () => ({ refreshAcross: () => undefined }));
+mock.module("../fleet/agentActions", () => ({
+    askAgentToResolve: mock(() => new Promise((settle) => stub.asks.push(settle))),
+    landAgent: mock(() => new Promise((settle) => stub.lands.push(settle))),
+    discardAgent: mock(async () => undefined),
+    invalidateAgentAction: mock(async () => undefined),
+    stopAgent: mock(async () => undefined),
     NOTHING_LANDED: stub.nothingLanded,
 }));
 
@@ -48,7 +49,7 @@ afterEach(() => {
     stub.lands.length = 0;
     stub.said.length = 0;
     stub.notice.value = undefined;
-    vi.mocked(askAgentToResolve).mockClear();
+    mocked(askAgentToResolve).mockClear();
 });
 
 // TWO KINDS OF "the turn didn't go", ONE OF WHICH IS GOOD NEWS. The board's notice strip is a red bar that shifts the

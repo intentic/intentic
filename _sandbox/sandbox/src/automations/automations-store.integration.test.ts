@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { type AutomationsStore, consecutiveFailures, fileAutomationsStore } from "./automations-store.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 
@@ -43,6 +43,9 @@ test("setEnabled changes only the switch on the current record", async () => {
     );
     await store.recordRun("support", { at: 1, outcome: "completed" });
     const before = await store.get("support");
+    if (before === undefined) {
+        throw new Error("the automation just upserted must read back");
+    }
 
     expect(await store.setEnabled("missing", false)).toBe(false);
     expect(await store.setEnabled("support", false)).toBe(true);

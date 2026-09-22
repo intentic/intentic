@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../../config.js";
 import { forgetHostedImage, parseImageRef, resolveHostedImage } from "./hosted-image.js";
 
@@ -6,7 +7,7 @@ import { forgetHostedImage, parseImageRef, resolveHostedImage } from "./hosted-i
 // moment it is re-pushed, so these pin the one property the pool depends on: what this returns is a name that
 // cannot change under a machine that is already holding it.
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
+const logger = { info: mock(), warn: mock(), error: mock() } as never;
 
 const DIGEST = `sha256:a2efc11a3e6b517557ad0b46cbae6f2b6270b632d93e09cb8b816c7ad8487125`;
 
@@ -15,7 +16,7 @@ const config = (image: string): Config => ({ hosted: { image } }) as unknown as 
 // A registry that answers the manifest HEAD straight away, with no auth challenge.
 const stubRegistry = (digest: string | null, status = 200) => {
     const calls: string[] = [];
-    vi.stubGlobal(`fetch`, (url: URL | string) => {
+    stubGlobal(`fetch`, (url: URL | string) => {
         calls.push(String(url));
         return Promise.resolve(new Response(null, { status, headers: digest === null ? {} : { "docker-content-digest": digest } }));
     });
@@ -23,7 +24,7 @@ const stubRegistry = (digest: string | null, status = 200) => {
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     forgetHostedImage();
 });
 
@@ -57,7 +58,7 @@ describe(`resolveHostedImage`, () => {
     // ghcr answers an anonymous manifest HEAD with a challenge; the realm it names is where the token comes from.
     it(`answers a bearer challenge and retries, rather than giving up on a registry that wants a token`, async () => {
         const seen: string[] = [];
-        vi.stubGlobal(`fetch`, (url: URL | string) => {
+        stubGlobal(`fetch`, (url: URL | string) => {
             const target = String(url);
             seen.push(target);
             if (target.startsWith(`https://ghcr.io/token`)) {
@@ -74,7 +75,7 @@ describe(`resolveHostedImage`, () => {
 
     /* Image resolution falls back to the configured tag when the registry is unavailable. */
     it(`falls back to the configured tag when the registry cannot be reached`, async () => {
-        vi.stubGlobal(`fetch`, () => Promise.reject(new Error(`ENOTFOUND`)));
+        stubGlobal(`fetch`, () => Promise.reject(new Error(`ENOTFOUND`)));
         expect(await resolveHostedImage(config(`ghcr.io/intentic/sandbox:stable`), logger)).toBe(`ghcr.io/intentic/sandbox:stable`);
     });
 

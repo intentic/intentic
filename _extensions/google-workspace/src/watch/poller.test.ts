@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { pruneAnnounced } from "./watermark.js";
 import { addressedTo, newMessageIds } from "./poller.js";
 

@@ -1,11 +1,11 @@
-// @vitest-environment jsdom
 // What a new conversation is born pointing at. The reported bug: on a sandbox with nothing connected but the free
 // trial, pressing "New agent" opened a chat on Claude — unrunnable, so the composer was replaced by a "connect a
 // model" wall — and only a later unrelated read moved it onto the trial. Two rules for one question: the seed here
 // stopped at the native list, while the watcher that repoints an open chat (useChat-accounts.ts) included the trial.
+import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { receivePreferenceChange } from "@intentic/ui/preference";
-import { beforeEach, expect, it } from "vitest";
+import { it, expect, beforeEach } from "bun:test";
 import { rememberedProviderFor, turnDefaults } from "./turnDefaults";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../accounts/providerAccounts";
 import { acpProviders, endpointProviders, endpointsLoaded, perProvider, trialStatus } from "../accounts/providerCatalog";

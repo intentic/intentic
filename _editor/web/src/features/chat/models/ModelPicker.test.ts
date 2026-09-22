@@ -1,25 +1,27 @@
-// @vitest-environment jsdom
 // The model picker replaces the old sign-in-wall card; everything it offered lives in the list now:
 // - the cheapest way in leads the locked rows, not sorted last by alphabet
 // - every locked row still states its price
 // - the door to connecting one lives here, since nothing else in the picker offers it
+import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as vueRouterOriginal from "vue-router";
+import { RouterLinkStub } from "../../../testing/routerLinkStub";
 
 // Catalogs are daemon-owned and refreshed on open; mocked to no-ops so the mount reflects only seeded state.
-vi.mock(`./useChat-catalog`, () => ({
+mock.module(`./useChat-catalog`, () => ({
     loadAllProviderModels: () => Promise.resolve(),
     loadProviderModels: () => Promise.resolve(),
 }));
-vi.mock(`../accounts/useChat-accounts`, () => ({ refreshConnections: () => Promise.resolve() }));
+mock.module(`../accounts/useChat-accounts`, () => ({ refreshConnections: () => Promise.resolve() }));
 // The runtime-health probe is the daemon's; silent here, which is its own "not probed yet" state.
-vi.mock(`../../sandbox/overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined }) }));
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
-    useRouter: () => ({ push: vi.fn() }) as never,
-    RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
+mock.module(`../../sandbox/overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ runtimeIssue: () => undefined }) }));
+mock.module(`vue-router`, () => ({
+    ...vueRouterOriginal,
+    useRouter: () => ({ push: mock() }) as never,
+    RouterLink: RouterLinkStub as never,
 }));
 
 const { providerAccounts, translatorAccounts } = await import("../accounts/providerAccounts");

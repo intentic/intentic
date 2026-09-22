@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { queryClient } from "../../../../lib/queryPersistence";
 import { changeEpochOf, isRecentlyChanged, markWorkspaceChanged } from "./useWorkspaceLive";
 
@@ -10,14 +10,14 @@ describe(`markWorkspaceChanged`, () => {
     const modulesKey = [`workspace`, `modules`, `sb`];
 
     beforeEach(() => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         queryClient.setQueryData(key, { entries: [] });
         queryClient.setQueryData(modulesKey, { repos: [] });
     });
 
     afterEach(() => {
-        vi.runAllTimers();
-        vi.useRealTimers();
+        jest.runAllTimers();
+        jest.useRealTimers();
         queryClient.clear();
     });
 
@@ -54,7 +54,7 @@ describe(`markWorkspaceChanged`, () => {
         markWorkspaceChanged([`b.txt`]);
         expect(changeEpochOf(`b.txt`)).toBeGreaterThan(before);
         expect(isRecentlyChanged(`b.txt`)).toBe(true);
-        vi.advanceTimersByTime(2001);
+        jest.advanceTimersByTime(2001);
         expect(isRecentlyChanged(`b.txt`)).toBe(false);
     });
 });

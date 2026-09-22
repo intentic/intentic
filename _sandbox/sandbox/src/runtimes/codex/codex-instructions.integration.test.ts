@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { codexInstructionConfig, instructionsPath } from "./codex-instructions.js";
 
 // What Codex is actually sent when this sandbox has a system prompt. Integration, not unit: the replacement is a path,

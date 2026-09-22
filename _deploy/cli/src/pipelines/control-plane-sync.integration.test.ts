@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DesiredStateGraph, SecretSource } from "@intentic/graph";
 import { fakeForgejoApi } from "@intentic/providers";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { APPLY_WORKFLOW_PATH } from "./adopt-pipelines.js";
 import { syncControlPlaneSecrets } from "./control-plane-sync.js";
 

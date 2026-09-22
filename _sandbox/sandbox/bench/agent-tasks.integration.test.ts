@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { countWord, stripComments, taskFor } from "./agent-tasks.js";
 
 // The bench's grading must be right, since a wrong scorer turns every printed number into a lie; nothing here spawns an

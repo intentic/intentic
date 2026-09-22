@@ -1,7 +1,8 @@
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import { type Persona, pinnedModelLabel } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, ref } from "vue";
 
 // Pins the composer's half of routing: that nothing is read until the message is sent, that ONE call answers whichever
@@ -9,7 +10,7 @@ import { effectScope, type EffectScope, ref } from "vue";
 // what a send does with the answer. The daemon's own choosing is not what this tests.
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-vi.mock(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
+mock.module(`../../sandbox/overview/useSandboxSettings`, () => ({ useSandboxSettings: () => ({ settings }) }));
 
 // `backend` names its own model, `social` names none: the two cases that decide whether a routed persona answers the
 // model question itself.
@@ -17,27 +18,27 @@ const personas = ref<Persona[]>([
     { id: `backend`, label: `Backend`, capabilities: [], brief: `Backend work.`, context: { repos: [`api`] }, models: [{ provider: `claude`, model: `claude-opus-5`, effort: `max` }] },
     { id: `social`, capabilities: [] },
 ]);
-vi.mock(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
+mock.module(`../../sandbox/personas/usePersonas`, () => ({ usePersonas: () => ({ personas }) }));
 
 // A guest is never routed onto a persona: its chat wears one of its own from the start.
 const isGuest = ref(false);
-vi.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
+mock.module(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
-const sandboxJson = vi.fn<(path: string, init?: RequestInit) => Promise<unknown>>();
-vi.mock(`../../sandbox/client/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
+const sandboxJson = mock<(path: string, init?: RequestInit) => Promise<unknown>>();
+mock.module(`../../sandbox/client/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
 
 // Claude connected, nothing else: the backend persona's ladder resolves to its one pin.
-vi.mock(`../accounts/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
+mock.module(`../accounts/roleModel`, () => ({ roleSources: ref([{ provider: `claude`, ready: true, models: [] }]) }));
 
 const { SEND_WAIT_MS, chatRouteWait, useChatRoute } = await import("./chatRoute");
 type Chat = Parameters<typeof useChatRoute>[0] extends () => infer C ? C : never;
 
 // Only the fields routing reads and writes; a real Conversation drags a transcript and stream along. `notice`/`reword`
 // stand in for the transcript rows the chat writes about the reading.
-const wearModel = vi.fn();
-const notice = vi.fn<(text: string, extra?: { noticeWait?: string }) => number>(() => 7);
-const reword = vi.fn<(id: number, text: string, extra?: { noticeWait?: string }) => void>();
-const setAuto = vi.fn();
+const wearModel = mock();
+const notice = mock<(text: string, extra?: { noticeWait?: string }) => number>(() => 7);
+const reword = mock<(id: number, text: string, extra?: { noticeWait?: string }) => void>();
+const setAuto = mock();
 const chatWith = (over: Record<string, unknown> = {}): Chat => {
     const auto = ref(true);
     setAuto.mockImplementation((value: boolean) => {
@@ -77,12 +78,12 @@ let scope: EffectScope;
 const route = (chat: Chat): ReturnType<typeof useChatRoute> => scope.run(() => useChatRoute(() => chat))!;
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     scope = effectScope();
 });
 afterEach(() => {
     scope.stop();
-    vi.useRealTimers();
+    jest.useRealTimers();
     settings.value = SandboxSettingsSchema.parse({});
     isGuest.value = false;
     sandboxJson.mockReset();
@@ -100,7 +101,7 @@ test("both questions open: one call asks for both, and nothing is read until the
     const routing = route(chat);
 
     // A whole session of typing, and nothing has been asked of any model.
-    await vi.advanceTimersByTimeAsync(60_000);
+    await advanceTimersByTimeAsync(60_000);
     expect(sandboxJson).not.toHaveBeenCalled();
 
     await routing.beforeSend(text, false);
@@ -260,7 +261,7 @@ test("a send is not held past the wait, and each half says what the chat keeps i
     sandboxJson.mockReturnValue(new Promise(() => undefined));
     const chat = chatWith();
     const pending = route(chat).beforeSend(WORK, false);
-    await vi.advanceTimersByTimeAsync(SEND_WAIT_MS + 1);
+    await advanceTimersByTimeAsync(SEND_WAIT_MS + 1);
     await pending;
     expect(wearModel).not.toHaveBeenCalled();
     expect(chatRouteWait(chat)).toBeUndefined();
@@ -269,7 +270,7 @@ test("a send is not held past the wait, and each half says what the chat keeps i
     settings.value = { ...settings.value, personaRouting: false };
     const alone = chatWith();
     const second = route(alone).beforeSend(WORK, false);
-    await vi.advanceTimersByTimeAsync(SEND_WAIT_MS + 1);
+    await advanceTimersByTimeAsync(SEND_WAIT_MS + 1);
     await second;
     expect(verdict()).toBe(`Couldn't choose a model for this chat in time, so it runs on the one it already had.`);
 });

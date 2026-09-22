@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { CHORE_KINDS, CHORES } from "./chores.js";
 
 // Pins the chore book's order, derived from `kind`: no interleaving, no chore lost, no kind mistagged.

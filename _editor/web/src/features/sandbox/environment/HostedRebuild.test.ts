@@ -1,16 +1,16 @@
-// @vitest-environment jsdom
 //
 // THE HOSTED REBUILD BUTTON, in its three states. What is pinned is the shape a person meets: a button to
 // start, a sentence while the platform builds, the failure's reason and log when it did not, and the one fact
 // worth saying up front, that build minutes are awake minutes.
+import "@intentic/testing/dom";
 import type { HostedBuildState } from "@intentic/api-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 const build = ref<HostedBuildState | undefined>(undefined);
 const applied = ref<string | undefined>(undefined);
-const rebuild = vi.fn().mockResolvedValue({ state: `building`, hash: `h1`, startedAt: `2026-09-04T10:00:00.000Z` });
-vi.mock(`../secrets/useHostedBuild`, () => ({ useHostedBuild: () => ({ build, applied, rebuild, isLoading: ref(false) }) }));
+const rebuild = mock().mockResolvedValue({ state: `building`, hash: `h1`, startedAt: `2026-09-04T10:00:00.000Z` });
+mock.module(`../secrets/useHostedBuild`, () => ({ useHostedBuild: () => ({ build, applied, rebuild, isLoading: ref(false) }) }));
 
 const { default: HostedRebuild } = await import("./HostedRebuild.vue");
 

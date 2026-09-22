@@ -1,5 +1,5 @@
 import { fakeForgejoApi } from "@intentic/providers";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { parse } from "yaml";
 import {
     applyWorkflowYaml,

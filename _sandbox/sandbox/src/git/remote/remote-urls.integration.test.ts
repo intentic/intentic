@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GitRunner } from "@intentic/scaffold";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { remoteUrlsOf } from "./remote-urls.js";
 
 // Tests the cache's `.git/config`-mtime validity rule with a counting fake runner; integration, not unit, since the

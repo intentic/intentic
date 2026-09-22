@@ -1,5 +1,5 @@
 import type { Rule } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { conditionHolds, landingVerdict, matching, reposOf } from "./rules.js";
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rule => ({

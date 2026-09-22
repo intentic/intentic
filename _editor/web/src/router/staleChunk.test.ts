@@ -1,14 +1,14 @@
-// @vitest-environment jsdom
 // jsdom: the router half of stale-chunk recovery — a failed dynamic import after redeploy gets the reload
 // the user would do by hand. The asyncView half (same staleChunk module) is covered in asyncView.test.ts.
-import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeAll, beforeEach, afterEach, mock, spyOn } from "bun:test";
 import { router } from "./index";
 import { importOrReload } from "./staleChunk";
 
-// vitest.setup.ts installs the browser globals before this file loads, so the static import above is safe.
+// bun.setup.ts installs the browser globals before this file loads, so the static import above is safe.
 
 // location is replaced globally; jsdom's real location is unforgeable, and the handler reads it at call time.
-const assign = vi.fn();
+const assign = mock();
 
 beforeAll(() => {
     Object.defineProperty(globalThis, `location`, {
@@ -55,7 +55,7 @@ const settle = async (): Promise<void> => {
     await Promise.resolve();
 };
 
-const reported = vi.spyOn(console, `error`).mockImplementation(() => undefined);
+const reported = spyOn(console, `error`).mockImplementation(() => undefined);
 
 afterEach(() => {
     reported.mockClear();
@@ -85,7 +85,7 @@ it(`reports any other import failure instead of dropping it, and reloads nothing
     );
     await settle();
     expect(assign).not.toHaveBeenCalled();
-    expect(reported).toHaveBeenCalledOnce();
+    expect(reported).toHaveBeenCalledTimes(1);
 });
 
 // A module that loaded is proof the chunks are current: whatever it then threw is this window's bug, and reloading on
@@ -97,5 +97,5 @@ it(`reports what the loaded module throws rather than reading it as a redeploy`,
     );
     await settle();
     expect(assign).not.toHaveBeenCalled();
-    expect(reported).toHaveBeenCalledOnce();
+    expect(reported).toHaveBeenCalledTimes(1);
 });

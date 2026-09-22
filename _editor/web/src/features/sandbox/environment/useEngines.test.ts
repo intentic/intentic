@@ -1,15 +1,16 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import type { EngineRow, EnginesView } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { waitFor, stubGlobal, mocked } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 
-vi.stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-vi.mock("../client/sandboxClient", () => ({ sandboxJson: vi.fn() }));
-vi.mock("../client/useSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`], useSandbox: () => ({ reachable: ref(true) }) }));
+stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+mock.module("../client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../client/useSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`], useSandbox: () => ({ reachable: ref(true) }) }));
 
 const { sandboxJson } = await import("../client/sandboxClient");
-const jsonMock = vi.mocked(sandboxJson);
+const jsonMock = mocked(sandboxJson);
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useEngines } = await import("./useEngines");
 
@@ -55,7 +56,7 @@ const mounted = <T>(composable: () => T): { result: T; unmount: () => void } => 
 
 beforeEach(() => {
     queryClient.clear();
-    vi.resetAllMocks();
+    jest.resetAllMocks();
 });
 
 test("in-flight update persists when navigating across views (unmount and remount)", async () => {
@@ -72,7 +73,7 @@ test("in-flight update persists when navigating across views (unmount and remoun
     });
 
     const first = mounted(() => useEngines());
-    await vi.waitFor(() => expect(first.result.engines.value.length).toBe(2));
+    await waitFor(() => expect(first.result.engines.value.length).toBe(2));
 
     const codex = first.result.engines.value[0] as EngineRow;
     const updatePromise = first.result.update(codex);
@@ -103,7 +104,7 @@ test("in-flight update persists when navigating across views (unmount and remoun
     resolveUpdate({ engines: updatedView });
     await updatePromise;
 
-    await vi.waitFor(() => expect(second.result.isEngineUpdating(codex)).toBe(false));
+    await waitFor(() => expect(second.result.isEngineUpdating(codex)).toBe(false));
     expect(second.result.engines.value[0]?.running.version).toBe("0.153.2");
     second.unmount();
 });
@@ -120,7 +121,7 @@ test("updateAll updates all updatable engines sequentially", async () => {
     });
 
     const { result, unmount } = mounted(() => useEngines());
-    await vi.waitFor(() => expect(result.updatable.value.length).toBe(2));
+    await waitFor(() => expect(result.updatable.value.length).toBe(2));
 
     await result.updateAll();
 

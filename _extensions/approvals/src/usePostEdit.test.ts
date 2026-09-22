@@ -1,5 +1,6 @@
 import type { PostApprovalSummary } from "@intentic/sandbox-contract";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
+import { runAllTimersAsync } from "@intentic/testing/bun";
 import { usePostEdit } from "./usePostEdit";
 
 // Save-as-you-type; the debounce is faked. What matters: nothing leaves without the last keystroke, and reading a post
@@ -17,10 +18,10 @@ const post = (overrides: Partial<PostApprovalSummary> = {}): PostApprovalSummary
 });
 
 let written: { post: PostApprovalSummary; changes: unknown }[];
-const write = vi.fn(async (target: PostApprovalSummary, changes: unknown) => void written.push({ post: target, changes }));
+const write = mock(async (target: PostApprovalSummary, changes: unknown) => void written.push({ post: target, changes }));
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     written = [];
     write.mockClear();
 });
@@ -34,7 +35,7 @@ describe("usePostEdit", () => {
         edit.content.value = `rewritten`;
         edit.touch();
         expect(write).not.toHaveBeenCalled();
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
         // One write, the last value typed, not the first.
         expect(written).toHaveLength(1);
         expect(written[0]?.changes).toEqual({ content: `rewritten` });
@@ -72,7 +73,7 @@ describe("usePostEdit", () => {
         const edit = usePostEdit(write);
         await edit.open(post());
         edit.touch();
-        await vi.runAllTimersAsync();
+        await runAllTimersAsync();
         await edit.close();
         expect(write).not.toHaveBeenCalled();
     });

@@ -1,4 +1,4 @@
-import { describe, expect, it, test } from "vitest";
+import { describe, it, test, expect } from "bun:test";
 import {
     accessFor,
     capabilitiesOf,

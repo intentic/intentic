@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { sessionsContract } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { routesClient } from "../harness/route-client.testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { type SessionsRoutesDeps, createSessionsRoutes } from "./sessions.routes.js";
@@ -25,7 +25,7 @@ test("sessions.list returns the full list, and routes to search when a query is 
 // Restores read from the workspace root, which reaches an isolated conversation's transcript too, since its turns ran
 // in a linked worktree of the same repo.
 test("sessions.get restores a transcript, and a session the store cannot read is NOT_FOUND", async () => {
-    const read = vi.fn(async (dir: string, id: string) => {
+    const read = mock(async (dir: string, id: string) => {
         if (id !== "s1") {
             throw new Error("no such session");
         }

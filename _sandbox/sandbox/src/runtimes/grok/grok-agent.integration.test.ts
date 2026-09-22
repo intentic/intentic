@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { createGrokAgent, type GrokRunner, type GrokTurn } from "./grok-agent.js";
 

@@ -1,11 +1,11 @@
 import type { LimitResetStatus } from "@intentic/sandbox-contract";
-import { beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, mock } from "bun:test";
 
 // Pins what the strip may ask and how often: once per account, never on a timer, and a failure isn't cached as an
 // answer. The daemon's probe rate-limits reads hard enough to cost neighboring meters their freshness.
 
-const answers = vi.fn();
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJsonVia: (...args: unknown[]) => answers(...args) }));
+const answers = mock();
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJsonVia: (...args: unknown[]) => answers(...args) }));
 
 const { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } = await import("./limitReset");
 

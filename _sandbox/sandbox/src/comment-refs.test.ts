@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // Every file a comment names still exists under that name; a reference is recognized by shape (a known stem, a long or
 // hyphenated/camelCase stem, or a PascalCase component name), not a list of known-bad names.
@@ -97,5 +97,5 @@ test("every module a comment names still exists under that name", async () => {
         [...new Set(dead)].toSorted(),
         "These comments name a file that does not exist: point them at the current name, or reword so the name is not a claim about this tree.",
     ).toEqual([]);
-    // 20s budget: this suite reads every source file in the repo, slower than vitest's 5s default assumes.
+    // 20s budget: this suite reads every source file in the repo, slower than a per-test default allows for.
 }, 20_000);

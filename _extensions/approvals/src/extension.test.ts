@@ -1,6 +1,7 @@
 import type { ApprovalsList, AutomationApproval, PostApprovalSummary } from "@intentic/sandbox-contract";
 import type { Activation, ExtensionContext, HostQuery, IntenticApi, ViewRegistration } from "@intentic/extension-api";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, jest } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { activate } from "./extension";
@@ -62,7 +63,7 @@ afterEach(() => {
     for (const subscription of subscriptions.splice(0)) {
         subscription.dispose();
     }
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 const tile: Activation = { key: `approvals`, title: `Approvals` };
@@ -106,7 +107,7 @@ describe(`the Approvals tile`, () => {
         expect(registered?.id).toBe(`approvals`);
         // One proposal plus one waiting wake count; the done post and delayed hold don't. Waits for the badge's
         // content, not just its existence, since a first poll could catch an empty value.
-        await vi.waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 2, tooltip: `2 waiting on you`, tone: `info` }));
+        await waitFor(() => expect(registered?.badge?.(tile)).toMatchObject({ count: 2, tooltip: `2 waiting on you`, tone: `info` }));
         // Both queries the badge itself already filled, so the page opens on data, not a spinner.
         expect(registered?.warm?.().map((query) => query.queryKey)).toEqual([
             [`sandbox`, `box`, `approvals`],
@@ -118,7 +119,7 @@ describe(`the Approvals tile`, () => {
         const { api, views } = fakeHost({ approvals: [post(`a`, { status: `failed` })], invalid: [] }, []);
         bindHost(api);
         activate(api, { extensionId: `ext-approvals`, subscriptions });
-        await vi.waitFor(() => expect(views[0]?.badge?.(tile)).toMatchObject({ count: 1, tone: `danger` }));
+        await waitFor(() => expect(views[0]?.badge?.(tile)).toMatchObject({ count: 1, tone: `danger` }));
     });
 
     it(`says nothing at all when nothing is owed, and so holds no seat`, async () => {
@@ -129,6 +130,6 @@ describe(`the Approvals tile`, () => {
 
         // Waits rather than asserts immediately: the badge is sandbox-scoped module state that outlives activation, and
         // this is the poll clearing it, the direction that actually matters.
-        await vi.waitFor(() => expect(views[0]?.badge?.(tile)).toBeUndefined());
+        await waitFor(() => expect(views[0]?.badge?.(tile)).toBeUndefined());
     });
 });

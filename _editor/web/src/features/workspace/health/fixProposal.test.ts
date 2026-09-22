@@ -1,5 +1,5 @@
 import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { checkFixPrompt, checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, refusalSummary } from "./fixProposal";
 
 // Every case runs the check's words and the push's words side by side, so a sentence or prompt shape that

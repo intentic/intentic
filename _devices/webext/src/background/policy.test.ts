@@ -1,5 +1,5 @@
 import { WebExtScopesSchema } from "@intentic/sandbox-contract/webext";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { decide, needsConfirm, originPattern, sandboxOwnOrigin, siteOf } from "./policy.js";
 
 // The decisions this extension makes on its own, tested away from the browser that supplies the inputs.

@@ -20,7 +20,6 @@ export const Transition = m["Transition"];
 export const TransitionGroup = m["TransitionGroup"];
 export const TriggerOpTypes = m["TriggerOpTypes"];
 export const VueElement = m["VueElement"];
-export const __esModule = m["__esModule"];
 export const assertNumber = m["assertNumber"];
 export const callWithAsyncErrorHandling = m["callWithAsyncErrorHandling"];
 export const callWithErrorHandling = m["callWithErrorHandling"];

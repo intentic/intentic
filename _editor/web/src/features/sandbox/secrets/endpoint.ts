@@ -77,13 +77,16 @@ export const settledEndpoint = (endpoint: Endpoint | undefined, resolvedAt: numb
 const TUNNEL_PROBE_TIMEOUT_MS = 5000;
 
 // Unauthenticated (`/health` bypasses the gate), so a candidate is identity-checked before any credential reaches
+// Only the call form this module makes; `typeof fetch` would also demand `preconnect`, which no caller here uses.
+type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 // it. Every failure mode returns `false`: they all mean the same thing, try the next candidate, none worth surfacing to
 // the user.
 export const healthAnswers = async (
     base: string,
     expectedSandboxId: string,
     budgetMs = TUNNEL_PROBE_TIMEOUT_MS,
-    fetchImpl: typeof fetch = fetch,
+    fetchImpl: FetchLike = fetch,
 ): Promise<boolean> => {
     try {
         const response = await fetchImpl(`${base}/health`, { cache: `no-store`, signal: AbortSignal.timeout(budgetMs) });
@@ -99,13 +102,13 @@ export const healthAnswers = async (
 
 // Same check as `healthAnswers`, picking the timeout budget by candidate kind. Kept separate because
 // `sandboxSession` also probes an already-chosen address, not a list of candidates.
-export const probeEndpoint = (endpoint: Endpoint, expectedSandboxId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> =>
+export const probeEndpoint = (endpoint: Endpoint, expectedSandboxId: string, fetchImpl: FetchLike = fetch): Promise<boolean> =>
     healthAnswers(endpoint.base, expectedSandboxId, endpoint.kind === `public` ? TUNNEL_PROBE_TIMEOUT_MS : PROBE_TIMEOUT_MS, fetchImpl);
 
 // Returns the first candidate that answers; the tunnel is trusted without a probe only when nothing follows it
 // (the registry's own address). Loopback forms are never trusted untested: a port answering there is not proof it is
 // this sandbox.
-export const selectEndpoint = async (sandbox: Addressing, fetchImpl: typeof fetch = fetch): Promise<Endpoint> => {
+export const selectEndpoint = async (sandbox: Addressing, fetchImpl: FetchLike = fetch): Promise<Endpoint> => {
     const candidates = await candidatesFor(sandbox);
     const expected = sandbox.token === undefined || sandbox.token === `` ? `` : await sandboxIdOf(sandbox.token);
     for (const [index, candidate] of candidates.entries()) {

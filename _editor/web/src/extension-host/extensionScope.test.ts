@@ -1,7 +1,8 @@
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { sandboxRef } from "@intentic/extension-api";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 
 // The switch, at the loader's grain: pointing the browser at another sandbox drops everything this host was holding on
 // the last one's behalf, and a load pass overtaken by a switch cannot put any of it back.
@@ -10,7 +11,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 // mid-pass; a pass that carried on would interleave two sandboxes' extensions instead of replacing one with the other.
 // Timing-dependent by nature, hence pinned here.
 
-const state = vi.hoisted(() => ({
+const state = hoisted(() => ({
     activated: [] as string[],
     deactivatedAll: 0,
     // The compiled-in modules the loader finds. Populated per test, so an extension activates without the blob import a
@@ -22,7 +23,7 @@ const state = vi.hoisted(() => ({
     settingsLoad: (): Promise<void> => Promise.resolve(),
 }));
 
-vi.mock(`./apiImpl`, () => ({
+mock.module(`./apiImpl`, () => ({
     createExtensionApi: (summary: { id: string }) => {
         state.activated.push(summary.id);
         return { api: {}, context: { extensionId: summary.id, subscriptions: [] } };
@@ -30,11 +31,11 @@ vi.mock(`./apiImpl`, () => ({
     deactivateExtension: () => {},
     deactivateAllExtensions: () => void (state.deactivatedAll += 1),
 }));
-vi.mock(`./builtins`, () => ({ builtinModules: state.builtins }));
-vi.mock(`../features/extensions/useExtensionSettings`, () => ({
+mock.module(`./builtins`, () => ({ builtinModules: state.builtins }));
+mock.module(`../features/extensions/useExtensionSettings`, () => ({
     extensionSettingsStore: () => ({ load: () => state.settingsLoad() }),
 }));
-vi.mock(`../features/sandbox/client/sandboxClient`, () => ({
+mock.module(`../features/sandbox/client/sandboxClient`, () => ({
     sandboxJson: () => state.list(),
     sandboxRequest: () => Promise.resolve(new Response(``)),
     sandboxError: (response: Response) => new Error(String(response.status)),

@@ -6,7 +6,7 @@ import { startFakeModel, type ScriptedStep } from "@intentic/fake-model";
 import { hasTool, type ResponsesRequest, systemInstructions, toolOutputs, userMessages } from "@intentic/fake-model/responses";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
-import { beforeAll, describe, expect, test } from "vitest";
+import { describe, test, expect, beforeAll } from "bun:test";
 import type { AgentRequest } from "../agent/run/agent.js";
 import { createCodexAgent } from "../runtimes/codex/codex-agent.js";
 import { writeCodexConfig } from "../runtimes/codex/codex-config.js";
@@ -97,7 +97,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         }
     });
 
-    describe.each(MODELS)("$id ($surface)", ({ id: MODEL }) => {
+    describe.each([...MODELS])("$id ($surface)", ({ id: MODEL }) => {
         test("a plain turn reaches the model, streams prose back, and ends once", async () => {
             const { events, requests } = await runTurn(MODEL, [{ text: "the answer is 42" }]);
 

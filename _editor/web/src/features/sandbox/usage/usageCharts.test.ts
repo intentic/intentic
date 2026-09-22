@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
 // needs jsdom: pins rendered geometry (percentages, stack order, rounded data-end) that a NaN width or inverted
 // stack would get wrong silently, with no thrown error or type failure.
-import { afterEach, describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, afterEach } from "bun:test";
 import { type App, createApp, h } from "vue";
 import { BarChart } from "@intentic/ui";
 import UsageColumnChart from "./UsageColumnChart.vue";
@@ -9,7 +9,7 @@ import UsageSparkline from "./UsageSparkline.vue";
 import { type RankedEntry, rankedBars, type SpendBucket, type UsageTotals } from "./usageChart";
 
 // Importing `<BarChart>` pulls in `useDevice`, which reads `window.matchMedia` at module scope; jsdom doesn't
-// ship it, vitest.setup.ts polyfills it package-wide.
+// ship it, bun.setup.ts polyfills it package-wide.
 
 const totals = (over: Partial<UsageTotals> = {}): UsageTotals => ({
     costUsd: 0,

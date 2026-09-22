@@ -1,6 +1,6 @@
 import { createServer, request as h1Request, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo, Socket } from "node:net";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { HOP_HEADER } from "./cluster.js";
 import { forwardRequest, forwardUpgrade, PeerUnreachable } from "./forward.js";
 import type { Peer } from "./peers.js";
@@ -86,6 +86,8 @@ describe(`forwarding to a peer`, () => {
                 host: `127.0.0.1`,
                 port: portOf(edge),
                 path: `/ws`,
+                // A browser opens a WebSocket on its own connection; a pooled one never carries a 101 under bun.
+                agent: false,
                 headers: { host: `sandbox-abcdef012345.zone.test`, connection: `Upgrade`, upgrade: `echo` },
             });
             request.on(`upgrade`, (response, socket: Socket) => {
@@ -113,6 +115,7 @@ describe(`forwarding to a peer`, () => {
                 host: `127.0.0.1`,
                 port: portOf(edge),
                 path: `/ws`,
+                agent: false,
                 headers: { host: `nobody-abcdef012345.zone.test`, connection: `Upgrade`, upgrade: `echo` },
             });
             request.on(`response`, (response) => resolve(response.statusCode ?? 0));
@@ -137,10 +140,13 @@ describe(`forwarding to a peer`, () => {
         });
         await new Promise<void>((resolve) => lonely.listen(0, `127.0.0.1`, resolve));
         const status = await new Promise<number>((resolve, reject) => {
-            const request = h1Request({ host: `127.0.0.1`, port: portOf(lonely), path: `/`, headers: { host: `sandbox-abcdef012345.zone.test` } }, (response) => {
-                response.resume();
-                resolve(response.statusCode ?? 0);
-            });
+            const request = h1Request(
+                { host: `127.0.0.1`, port: portOf(lonely), path: `/`, headers: { host: `sandbox-abcdef012345.zone.test` } },
+                (response) => {
+                    response.resume();
+                    resolve(response.statusCode ?? 0);
+                },
+            );
             request.on(`error`, reject);
             request.end();
         });

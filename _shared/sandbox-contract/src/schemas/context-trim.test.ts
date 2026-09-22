@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { contextTrimLine } from "./context-trim.js";
 
 // The one thing a reader ever sees of this mechanism. It has to answer three questions in one line: why the turn ran

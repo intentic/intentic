@@ -1,6 +1,7 @@
 import { DesktopError } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { ScopeError } from "../policy.js";
 import { fakeDesktop } from "../testing.js";
 import { act, describeAction } from "./device.js";
@@ -77,14 +78,14 @@ test("pointer actions need a coordinate, and say so in the tool's own words", as
 });
 
 test("wait is bounded, so a mis-typed number cannot hold the machine", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const { desktop } = fakeDesktop();
         const pending = act(desktop, { action: "wait", ms: 600_000 }, scopes());
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         await expect(pending).resolves.toBeUndefined();
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 

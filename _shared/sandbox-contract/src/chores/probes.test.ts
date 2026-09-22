@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { choreById } from "./chores.js";
 import { probeSpec } from "./probes.js";
 import { IDIOM_RULES } from "./stack.js";

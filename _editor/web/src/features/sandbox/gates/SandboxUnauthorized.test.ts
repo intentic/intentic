@@ -1,34 +1,34 @@
-// @vitest-environment jsdom
 // The no-access gate's one button, which is a sign-in surface even though it shows no Google button: what
 // "Switch Google account" has to mean on each of the two windows. It meant neither before — the app's window raised a
 // second dialog in front of the browser hand-off, and the browser re-asked Google, which answered with the account
 // already approved there. Both roads landed back on this screen with the same two addresses on it.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Needs jsdom: ui reads matchMedia at module scope, and environment.ts reads window.env and throws without it.
 
-const clearCredential = vi.fn();
-const getIdToken = vi.fn<(options?: { pick?: boolean }) => Promise<string | undefined>>();
-vi.mock(`../../auth/useGoogleIdentity`, () => ({
+const clearCredential = mock();
+const getIdToken = mock<(options?: { pick?: boolean }) => Promise<string | undefined>>();
+mock.module(`../../auth/useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({ clearCredential, getIdToken: (options?: { pick?: boolean }) => getIdToken(options) }),
 }));
-vi.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+mock.module(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 
-const invalidateSession = vi.fn();
-const getSessionToken = vi.fn<() => Promise<unknown>>();
-vi.mock(`../session/sandboxSession`, () => ({
+const invalidateSession = mock();
+const getSessionToken = mock<() => Promise<unknown>>();
+mock.module(`../session/sandboxSession`, () => ({
     useSandboxSession: () => ({ presentedEmail: ref(`someone.else@example.com`), invalidateSession, getSessionToken }),
 }));
-vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ name: `workspace`, role: `owner` }) }) }));
+mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ name: `workspace`, role: `owner` }) }) }));
 
-const signInThroughBrowser = vi.fn<(options?: { pickAccount?: boolean }) => void>();
-const desktopVersion = vi.fn<() => string | undefined>();
-vi.mock(`../../../app/environments/desktop`, () => ({
+const signInThroughBrowser = mock<(options?: { pickAccount?: boolean }) => void>();
+const desktopVersion = mock<() => string | undefined>();
+mock.module(`../../../app/environments/desktop`, () => ({
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     desktopVersion: () => desktopVersion(),
-    openDesktopLink: vi.fn(),
+    openDesktopLink: mock(),
     signInThroughBrowser: (options?: { pickAccount?: boolean }) => signInThroughBrowser(options),
 }));
 

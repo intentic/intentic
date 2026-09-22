@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { fenceAllows, fenceCovers, fenceIntersection, fenceReaches, foldPath, pathInsideFolder } from "./fence-paths.js";
 
 describe("foldPath", () => {

@@ -2,7 +2,7 @@
 // doesn't compiles to a real, hidden HTML element instead of being removed.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { parse } from "vue/compiler-sfc";
 
 const SRC = join(import.meta.dirname, `..`);

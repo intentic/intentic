@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { EDITOR_ICONS, EDITOR_ICON_CSS } from "./monacoIcons";
 
 const root = join(dirname(createRequire(import.meta.url).resolve(`monaco-editor-core/package.json`)), `esm/vs`);

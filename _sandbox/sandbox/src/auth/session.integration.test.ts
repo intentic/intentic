@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SignJWT } from "jose";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createSessions } from "./session.js";
 
 const secretPath = async (): Promise<string> => join(await mkdtemp(join(tmpdir(), "session-")), "session-secret");

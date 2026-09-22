@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { globToRegExp } from "./glob.js";
 
 test("globToRegExp matches like ripgrep -g", () => {

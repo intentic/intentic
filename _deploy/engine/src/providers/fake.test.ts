@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import { makeContext } from "../reconcile/reconcile.js";
 import { createStore } from "../store.js";

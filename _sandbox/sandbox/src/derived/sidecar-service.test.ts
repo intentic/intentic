@@ -1,5 +1,5 @@
 import type { Logger } from "pino";
-import { describe, expect, test, vi } from "vitest";
+import { describe, test, expect, mock } from "bun:test";
 import type { ExecFn } from "./fileq.js";
 import { startSidecarService, type SidecarService } from "./sidecar-service.js";
 
@@ -96,7 +96,7 @@ describe("the sidecar trigger", () => {
             error.code = "ENOENT";
             throw error;
         };
-        const warn = vi.fn();
+        const warn = mock();
         const h = harness({ exec: failing });
         // Recreate with a spying logger: the harness's default logger swallows.
         h.stop();

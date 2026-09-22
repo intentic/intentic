@@ -1,8 +1,9 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock, spyOn } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 
-vi.mock("../session/sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }) }));
+mock.module("../session/sandboxSession", () => ({ useSandboxSession: () => ({ getSessionToken: async () => ({ token: `session-token`, kind: `session` }) }) }));
 // The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls through to daemonUrl.
-vi.mock("./useSandbox", () => ({
+mock.module("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
 }));
 
@@ -12,15 +13,15 @@ const { resetDaemonRoutes, setDaemonRoutes } = await import("../overview/useDaem
 const { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } = await import("@intentic/sandbox-contract");
 
 // A daemon that accepts but never answers; settles only when the caller's signal aborts, like real fetch.
-const fetchMock = vi.fn(
+const fetchMock = mock(
     (request: Request) =>
         new Promise<Response>((_resolve, reject) => {
             request.signal.addEventListener(`abort`, () => reject(request.signal.reason as Error));
         }),
 );
-vi.stubGlobal(`fetch`, fetchMock);
+stubGlobal(`fetch`, fetchMock);
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => unstubAllGlobals());
 
 it("a caller-passed timeout signal reaches fetch and rejects the hung request", async () => {
     await expect(sandboxJson(`/system/host-tunnel`, { method: `POST`, signal: AbortSignal.timeout(20) })).rejects.toMatchObject({
@@ -31,10 +32,10 @@ it("a caller-passed timeout signal reaches fetch and rejects the hung request", 
 // Spies on AbortSignal.timeout to shorten the real deadline at its source, exercising the production constant
 // rather than a reconstructed one.
 // Restubs fetch since afterEach clears global stubs; shortens the timeout at its source for each test.
-const hungDaemon = (): ReturnType<typeof vi.spyOn> => {
-    vi.stubGlobal(`fetch`, fetchMock);
+const hungDaemon = (): ReturnType<typeof spyOn> => {
+    stubGlobal(`fetch`, fetchMock);
     const real = AbortSignal.timeout.bind(AbortSignal);
-    return vi.spyOn(AbortSignal, `timeout`).mockImplementation(() => real(5));
+    return spyOn(AbortSignal, `timeout`).mockImplementation(() => real(5));
 };
 
 it("bounds a daemon call that never answers, with no signal from the caller at all", async () => {

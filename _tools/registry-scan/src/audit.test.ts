@@ -7,7 +7,7 @@ import {
     type RegistryFile,
     RegistryFileSchema,
 } from "@intentic/registry";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { admissionProblems, attestSecurityAudit, securityAuditRequest, securityAuditTargets } from "./audit.js";
 
 const sha = (char: string): string => char.repeat(40);

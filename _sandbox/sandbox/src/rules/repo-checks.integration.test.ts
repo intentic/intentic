@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { REPO_CHECKS_FILE } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { declaredRepoChecks, readRepoDeclaration } from "./repo-checks.js";
 
 // Reading the file a repository actually carries: what a real workspace hands the daemon, including the two ways a

@@ -1,7 +1,8 @@
 import { FLY_VOLUME_GB_USD, FREE_TIER, type HostedTier, hostedTier, PAID_TIERS } from "@intentic/constants";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { ORPCError } from "@orpc/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@intentic/prisma";
 import type { StripeGateway } from "../sandbox/hosted/hosted-plan-stripe.js";
@@ -880,7 +881,7 @@ describe(`admin actions`, () => {
         });
         const updates: Record<string, unknown>[] = [];
         const stopped: string[] = [];
-        vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+        stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
             const href = String(url);
             if (href.endsWith(`/stop`)) {
                 stopped.push(href);
@@ -900,7 +901,7 @@ describe(`admin actions`, () => {
             },
             hostedMachine: { findMany: async () => [{ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, sandbox: { ownerId: `u2` } }] },
         } as unknown as PrismaClient;
-        const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
+        const logger = { info: mock(), warn: mock(), error: mock() } as unknown as Logger;
         try {
             const suspended = await suspendUserHosted(prisma, hostedOn, logger, { id: `u2`, email: `victim@example.com` }, `mining`);
             expect(suspended.ok).toBe(true);
@@ -911,7 +912,7 @@ describe(`admin actions`, () => {
             expect((await liftUserHosted(prisma, logger, { id: `u2`, email: `victim@example.com` })).ok).toBe(true);
             expect(updates[1]).toEqual({ hostedSuspendedAt: null, hostedSuspendedReason: null });
         } finally {
-            vi.unstubAllGlobals();
+            unstubAllGlobals();
         }
     });
 

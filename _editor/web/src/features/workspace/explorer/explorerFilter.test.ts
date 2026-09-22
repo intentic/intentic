@@ -1,6 +1,6 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { STATE_DIR } from "@intentic/constants";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { type ExplorerFilters, explorerShows, isTechnicalEntry, technicalHidden } from "./explorerFilter";
 
 const file = (name: string): WorkspaceTreeEntry => ({ name, path: name, type: `file` });

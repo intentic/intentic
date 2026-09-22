@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, spyOn, jest } from "bun:test";
+import { definePreference, receivePreferenceChange } from "@intentic/ui/preference";
 
 // Pins the defect this primitive exists for: a popped-out panel is a whole other window with its own modules and
 // `<html>`, so a setting change on one window used to repaint only that window. There was no shared "account
@@ -11,16 +12,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // re-persisted when it was somebody else's choice being adopted (since `read` normalizes, and echoing a reading back
 // would overwrite the value a window was just given).
 
-const load = () => import("@intentic/ui/preference");
-
 beforeEach(() => {
     localStorage.clear();
-    vi.resetModules();
 });
 
 describe(`a choice made in this window`, () => {
-    it(`applies, persists, and reads back`, async () => {
-        const { definePreference } = await load();
+    it(`applies, persists, and reads back`, () => {
         const applied: string[] = [];
         const size = definePreference<string>({
             key: `ui-size`,
@@ -37,8 +34,7 @@ describe(`a choice made in this window`, () => {
         expect(applied).toEqual([`compact`, `large`]);
     });
 
-    it(`applies synchronously, so no frame is drawn in the old theme`, async () => {
-        const { definePreference } = await load();
+    it(`applies synchronously, so no frame is drawn in the old theme`, () => {
         let attribute: string | undefined;
         const scheme = definePreference<string>({
             key: `ui-scheme`,
@@ -55,8 +51,7 @@ describe(`a choice made in this window`, () => {
         expect(attribute).toBe(`dark`);
     });
 
-    it(`removes the key when the value writes as null`, async () => {
-        const { definePreference } = await load();
+    it(`removes the key when the value writes as null`, () => {
         localStorage.setItem(`ui-imported`, `something`);
         const imported = definePreference<string | undefined>({
             key: `ui-imported`,
@@ -71,8 +66,7 @@ describe(`a choice made in this window`, () => {
 });
 
 describe(`a change made in another window`, () => {
-    it(`lands on the ref and on the DOM`, async () => {
-        const { definePreference, receivePreferenceChange } = await load();
+    it(`lands on the ref and on the DOM`, () => {
         const applied: string[] = [];
         const skin = definePreference<string>({
             key: `ui-skin`,
@@ -87,8 +81,7 @@ describe(`a change made in another window`, () => {
         expect(applied).toEqual([`none`, `sanctum`]);
     });
 
-    it(`is adopted rather than written back, so this window cannot overwrite what it was told`, async () => {
-        const { definePreference, receivePreferenceChange } = await load();
+    it(`is adopted rather than written back, so this window cannot overwrite what it was told`, () => {
         // The clamp stands in for every `read` that normalizes, such as a column width bounded by this window's own
         // viewport. A window that echoed its reading back would ratchet a wide window's column down to fit a screen it
         // isn't on.
@@ -104,8 +97,7 @@ describe(`a change made in another window`, () => {
         expect(localStorage.getItem(`ui-width`)).toBeNull(); // …and did not write its own reading over the stored value.
     });
 
-    it(`ignores a key no preference here holds`, async () => {
-        const { definePreference, receivePreferenceChange } = await load();
+    it(`ignores a key no preference here holds`, () => {
         const nesting = definePreference<boolean>({ key: `ui-file-nesting`, read: (raw) => raw !== `off`, write: (v) => (v ? `on` : `off`) });
 
         // A window's own view state, namespaced away from preferences (windowStore.ts) precisely so that syncing one
@@ -115,8 +107,7 @@ describe(`a change made in another window`, () => {
         expect(nesting.value).toBe(true);
     });
 
-    it(`takes every preference back to what it reads with nothing stored, when the whole store went`, async () => {
-        const { definePreference, receivePreferenceChange } = await load();
+    it(`takes every preference back to what it reads with nothing stored, when the whole store went`, () => {
         localStorage.setItem(`ui-skin`, `sanctum`);
         localStorage.setItem(`ui-text-size`, `large`);
         const skin = definePreference<string>({ key: `ui-skin`, read: (raw) => raw ?? `none`, write: (value) => value });
@@ -131,19 +122,18 @@ describe(`a change made in another window`, () => {
 });
 
 describe(`storage that is not there at all`, () => {
-    it(`still holds the reader's choice for the life of the window`, async () => {
-        const { definePreference } = await load();
+    it(`still holds the reader's choice for the life of the window`, () => {
         // Private mode / disabled site data, where merely touching the store throws.
         const boom = (): never => {
             throw new Error(`site data is off`);
         };
-        vi.spyOn(Storage.prototype, `getItem`).mockImplementation(boom);
-        vi.spyOn(Storage.prototype, `setItem`).mockImplementation(boom);
+        spyOn(Storage.prototype, `getItem`).mockImplementation(boom);
+        spyOn(Storage.prototype, `setItem`).mockImplementation(boom);
 
         const size = definePreference<string>({ key: `ui-size`, read: (raw) => raw ?? `compact`, write: (value) => value });
         size.value = `large`;
 
         expect(size.value).toBe(`large`);
-        vi.restoreAllMocks();
+        jest.restoreAllMocks();
     });
 });

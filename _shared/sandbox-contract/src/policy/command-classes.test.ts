@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { classifyCommand, type CommandContext, type CommandSpan, matchCommand } from "./command-classes.js";
 
 // Every call states a locus (now required); these default to `device`, the wider reading, so an assertion made here

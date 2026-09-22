@@ -1,6 +1,6 @@
 import { GateVerdictSchema } from "@intentic/sandbox-contract";
 import { WAIT_DEFAULT_S } from "@intentic/gate";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { annotationOf, defaultRequest, outputLines, parseInputs, runAnnotationOf, runOutputLines, runStepExitOf, runSummaryOf, stepExitOf, summaryOf } from "./action.js";
 
 const GATE_URL = "https://box.example/workflows/wf/gate?token=t";

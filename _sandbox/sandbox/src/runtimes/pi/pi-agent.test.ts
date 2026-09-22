@@ -1,6 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
@@ -254,18 +255,18 @@ test("a rejected prompt surfaces Pi's own reason", async () => {
 });
 
 test("a silent agent trips the inactivity watchdog: the process is killed and the turn ends with an error", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const timeouts: PiTimeouts = { inactivityMs: 50, maxTurnMs: 10_000 };
         const pi = fakePi([[]]); // prompt accepted, then nothing — ever
         const turn = collect(createPiAgent(pi.spawn, timeouts)(CONFIG, request()));
-        await vi.advanceTimersByTimeAsync(200);
-        vi.useRealTimers();
+        await advanceTimersByTimeAsync(200);
+        jest.useRealTimers();
         const events = await turn;
         expect(events.find((event) => event.kind === "error")).toMatchObject({ message: expect.stringContaining("timed out") });
         expect(pi.killed()).toBe(true);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 

@@ -1,10 +1,10 @@
-// @vitest-environment jsdom
 //
 // Needs jsdom: the follow's import chain reaches the app's router and theme, both of which touch the document.
-import { describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, mock } from "bun:test";
 import type { DevRebuildRun } from "../environment/useDevRebuild";
 
-vi.mock(`../../../router`, () => ({ router: { push: vi.fn(), currentRoute: { value: { name: `chat`, params: {} } } } }));
+mock.module(`../../../router`, () => ({ router: { push: mock(), currentRoute: { value: { name: `chat`, params: {} } } } }));
 
 const { rebuildReceipt } = await import("./restartWatch");
 

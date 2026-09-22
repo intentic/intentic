@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import {
     CODEX_ADVISORY,
     CODEX_MODEL_INVALID,

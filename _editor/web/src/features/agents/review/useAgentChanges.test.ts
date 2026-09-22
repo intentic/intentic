@@ -1,6 +1,7 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
+import { mocked, hoisted } from "@intentic/testing/bun";
 
-const stub = vi.hoisted(() => ({
+const stub = hoisted(() => ({
     // The app's one self-retiring receipt lane, so a test can tell an outcome from a failure by which channel it took.
     said: [] as string[],
     // The shared sentence both land presses take, held here so a test proves this one passes it through rather than
@@ -8,7 +9,7 @@ const stub = vi.hoisted(() => ({
     nothingLanded: `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`,
 }));
 
-vi.mock("@intentic/ui/async", () => ({
+mock.module("@intentic/ui/async", () => ({
     useAsyncAction: () => ({
         busy: { value: false },
         notice: { value: undefined },
@@ -17,29 +18,29 @@ vi.mock("@intentic/ui/async", () => ({
         run: (task: () => Promise<void>) => task(),
     }),
 }));
-vi.mock("../../../shell/notifications/notifications", () => ({
+mock.module("../../../shell/notifications/notifications", () => ({
     useNotifications: () => ({ say: (message: string) => stub.said.push(message) }),
 }));
-vi.mock("../../../lib/queryPersistence", () => ({ queryClient: { fetchQuery: vi.fn() }, UNPERSISTED: `unpersisted` }));
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn() }));
-vi.mock("../../sandbox/client/useSandboxQuery", () => ({
+mock.module("../../../lib/queryPersistence", () => ({ queryClient: { fetchQuery: mock() }, UNPERSISTED: `unpersisted` }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../../sandbox/client/useSandboxQuery", () => ({
     useSandboxQuery: () => ({
         query: {
             data: { value: undefined },
             isFetching: { value: false },
-            refetch: vi.fn(),
+            refetch: mock(),
         },
         error: { value: undefined },
     }),
 }));
-vi.mock("../fleet/agentActions", () => ({
-    askAgentToResolve: vi.fn(),
-    discardAgent: vi.fn(),
-    invalidateAgentAction: vi.fn(async () => undefined),
-    landAgent: vi.fn(),
+mock.module("../fleet/agentActions", () => ({
+    askAgentToResolve: mock(),
+    discardAgent: mock(),
+    invalidateAgentAction: mock(async () => undefined),
+    landAgent: mock(),
     NOTHING_LANDED: stub.nothingLanded,
 }));
-vi.mock("../fleet/useAgents", () => ({ useAgents: () => ({ archive: vi.fn(), setAutoLand: vi.fn() }) }));
+mock.module("../fleet/useAgents", () => ({ useAgents: () => ({ archive: mock(), setAutoLand: mock() }) }));
 
 import { ref } from "vue";
 import { landAgent } from "../fleet/agentActions";
@@ -70,11 +71,11 @@ it("isolates viewed files when agent ids name object prototype properties", () =
 it("says so when a land carried nothing, and stays quiet when it carried work", async () => {
     const changes = useAgentChanges(ref(`c1`));
 
-    vi.mocked(landAgent).mockResolvedValue({ landed: true, changed: true });
+    mocked(landAgent).mockResolvedValue({ landed: true, changed: true });
     await changes.land();
     expect(stub.said).toEqual([]);
 
-    vi.mocked(landAgent).mockResolvedValue({ landed: true, changed: false });
+    mocked(landAgent).mockResolvedValue({ landed: true, changed: false });
     await changes.land();
     expect(stub.said).toEqual([stub.nothingLanded]);
 });

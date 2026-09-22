@@ -1,6 +1,6 @@
 import { env } from "@intentic/graph";
 import type { IntentSet } from "@intentic/need-resolver";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Catalog } from "./lib/catalog.js";
 import { forgejoCatalog } from "./lib/catalog.js";
 import { resolveState } from "./state.js";

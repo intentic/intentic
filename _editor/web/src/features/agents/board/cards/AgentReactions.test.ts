@@ -1,35 +1,39 @@
-// @vitest-environment jsdom
 // jsdom: the subject is what the strip draws and what a press sends, neither of which is readable off the code.
 // What it pins: the names ride with the chip (the whole point of a reaction over a private bookmark), and a press
 // states an intent rather than flipping whatever the daemon happens to hold.
+import "@intentic/testing/dom";
 import type { AgentReaction } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { it, expect, afterEach, mock } from "bun:test";
+import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { PICKER_EMOJI, QUICK_EMOJI } from "./reactions";
 
-const reacted = vi.fn(async () => ({}) as never);
-const refresh = vi.fn(async () => {});
+const reacted = mock(async () => ({}) as never);
+const refresh = mock(async () => {});
 const me = ref<string | undefined>(`ada@example.com`);
 
-vi.mock("@intentic/ui", async () => {
-    const vue = await import("vue");
+// The factory is synchronous: a mock.module factory runs in place, and awaiting inside one that replaces a module
+// already in this file's graph never returns.
+mock.module("@intentic/ui", () => {
     return {
         ui: { iconButton: () => `` },
         // Draws its slot when open, since whether the picker is open — and what it then offers — is half of what this
         // component does; anchoring and placement are the overlay's own business, tested where it lives.
-        ResponsiveOverlay: vue.defineComponent({
+        ResponsiveOverlay: defineComponent({
             name: `ResponsiveOverlay`,
             props: { modelValue: Boolean },
-            setup: (props, { slots }) => () => (props.modelValue ? vue.h(`div`, { "data-picker": `` }, slots[`default`]?.()) : null),
+            setup:
+                (props, { slots }) =>
+                () =>
+                    props.modelValue ? h(`div`, { "data-picker": `` }, slots[`default`]?.()) : null,
         }),
-        useDevice: () => ({ mobile: vue.ref(false) }),
+        useDevice: () => ({ mobile: ref(false) }),
     };
 });
-vi.mock("../../fleet/agentActions", () => ({ reactToAgent: reacted }));
-vi.mock("../../fleet/useAgents", () => ({ useAgents: () => ({ refresh, notice: ref(undefined) }) }));
-vi.mock("../../../sandbox/live/fleetAcross", () => ({ refreshAcross: vi.fn() }));
-vi.mock("../../../sandbox/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
+mock.module("../../fleet/agentActions", () => ({ reactToAgent: reacted }));
+mock.module("../../fleet/useAgents", () => ({ useAgents: () => ({ refresh, notice: ref(undefined) }) }));
+mock.module("../../../sandbox/live/fleetAcross", () => ({ refreshAcross: mock() }));
+mock.module("../../../sandbox/session/sandboxSession", () => ({ useSandboxSession: () => ({ presentedEmail: me }) }));
 
 const { default: AgentReactions } = await import("./AgentReactions.vue");
 
@@ -57,7 +61,8 @@ afterEach(() => {
 });
 
 // The chip is a button whose accessible name carries the same line the hover prints.
-const chips = (el: HTMLElement): HTMLButtonElement[] => [...el.querySelectorAll(`button`)].filter((button) => /\d$/.test(button.textContent?.trim() ?? ``));
+const chips = (el: HTMLElement): HTMLButtonElement[] =>
+    [...el.querySelectorAll(`button`)].filter((button) => /\d$/.test(button.textContent?.trim() ?? ``));
 
 it(`names everyone behind a mark, and says which one is yours`, () => {
     const el = mount([

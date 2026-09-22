@@ -1,12 +1,12 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, test, expect, mock } from "bun:test";
 import { createHeartbeat, DEAD_AFTER_MS } from "./heartbeat.js";
 
 // The clock is injected, so these read as "what happens after N seconds of silence" rather than as timer
 // plumbing — which is the only question the heartbeat answers.
 const world = (deadAfterMs = DEAD_AFTER_MS) => {
     let clock = 0;
-    const ping = vi.fn();
-    const onDead = vi.fn();
+    const ping = mock();
+    const onDead = mock();
     const heartbeat = createHeartbeat({ ping, onDead, deadAfterMs, now: () => clock });
     return { heartbeat, ping, onDead, advance: (ms: number) => (clock += ms) };
 };

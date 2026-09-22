@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileRuntimeInstallsStore } from "./runtime-installs.js";
 
 const store = () => fileRuntimeInstallsStore(join(mkdtempSync(join(tmpdir(), "runtime-installs-")), "runtime-installs.json"));

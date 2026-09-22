@@ -1,10 +1,11 @@
-// @vitest-environment jsdom
 // Pins the chat bar's close surfaces (card ×, right-click menus) through the real mounted component: which
 // chat a menu acts on, where right-click is heard, which rows disable, and that a mass close never confirms.
-import { beforeAll, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeAll, beforeEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
 // Statically imported: this graph (app, PrimeVue, router, chat store) compiles too slowly for a hook's timeout,
-// but is fine at module load. vitest.setup.ts installs the browser globals it needs before any file loads.
+// but is fine at module load. bun.setup.ts installs the browser globals it needs before any file loads.
 import ChatTabs from "./ChatTabs.vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
@@ -22,10 +23,10 @@ import { router } from "../../../router";
 
 // Globals a mounted chat needs that jsdom lacks: matchMedia (kept desktop via matches:false), window.env,
 // ResizeObserver. window.open is stubbed to null; assertions only check that the pop-out row calls it.
-const { open } = vi.hoisted(() => {
+const { open } = hoisted(() => {
     // scrollIntoView runs on every focus write and jsdom has none; without this stub a tab switch rejects.
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
-    const openWindow = vi.fn(() => null);
+    const openWindow = mock(() => null);
     globalThis.window.open = openWindow;
     return { open: openWindow };
 });
@@ -126,8 +127,8 @@ it(`closes a tab from the × it wears, without selecting it on the way`, async (
     target!.click();
     await flush();
 
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
-    expect(chat.activeId.value).toBe(ids[0]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!, ids[1]!]);
+    expect(chat.activeId.value).toBe(ids[0]!);
 });
 
 // Same close as the ×, from the press a browser tab answers to; the card's own click gestures (select, split)
@@ -141,8 +142,8 @@ it(`closes the card a middle-click lands on, leaving the focus where it was`, as
     tabs()[2]!.dispatchEvent(new MouseEvent(`auxclick`, { bubbles: true, cancelable: true, button: 1 }));
     await flush();
 
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
-    expect(chat.activeId.value).toBe(ids[0]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!, ids[1]!]);
+    expect(chat.activeId.value).toBe(ids[0]!);
 });
 
 // The last card wears no × (there would be no chat left to show), so the gesture standing in for it does nothing
@@ -178,15 +179,15 @@ it(`closes the set the RIGHT-CLICKED tab names, not the active tab's`, async () 
     ]);
     await clickRow(`Close to the Right`);
 
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0], ids[1]]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!, ids[1]!]);
     // The active tab was one of the closed ones, so focus falls to the last survivor.
-    expect(chat.activeId.value).toBe(ids[1]);
+    expect(chat.activeId.value).toBe(ids[1]!);
 
     // Right-click the first tab: "Close Others" keeps that one, not the active one.
     await openMenuOn(0);
     await clickRow(`Close Others`);
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]]);
-    expect(chat.activeId.value).toBe(ids[0]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!]);
+    expect(chat.activeId.value).toBe(ids[0]!);
 });
 
 it(`teaches the shortcut a close command is bound to, and disables the rows with nothing left to take`, async () => {
@@ -274,7 +275,7 @@ it(`closes every finished tab and leaves the working ones, disabled when nothing
 
     await openBarMenu();
     await clickRow(`Close Finished`);
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1], ids[3]]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[1]!, ids[3]!]);
 
     await openBarMenu();
     expect(row(`Close Finished`).className).toContain(`p-disabled`);
@@ -291,5 +292,5 @@ it(`mass closes past a running agent with no confirm: closing detaches from the 
     await clickRow(`Close Others`);
 
     expect(document.querySelector(`.p-dialog`)).toBeNull();
-    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]]);
+    expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([ids[0]!]);
 });

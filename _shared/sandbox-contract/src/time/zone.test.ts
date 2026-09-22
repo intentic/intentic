@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { asCivilDay, asZone, civilDayIn, cronOptions, isZone, sameClock, utcDayOf, UTC, zoneLabel } from "./zone.js";
 import type { Zone } from "./zone.js";
 
@@ -28,7 +28,7 @@ describe(`isZone`, () => {
     });
 
     test(`asZone passes real ids through and swallows the rest`, () => {
-        expect(asZone(`America/New_York`)).toBe(`America/New_York`);
+        expect<string | undefined>(asZone(`America/New_York`)).toBe(`America/New_York`);
         expect(asZone(`Mars/Olympus`)).toBeUndefined();
         expect(asZone(undefined)).toBeUndefined();
     });
@@ -39,9 +39,9 @@ describe(`civilDayIn`, () => {
     test(`an instant falls on different days depending on the zone asked`, () => {
         // 2026-09-20T23:30Z: already the 21st in Warsaw, still the 20th in UTC and New York.
         const lateEvening = Date.UTC(2026, 8, 20, 23, 30);
-        expect(civilDayIn(lateEvening, WARSAW)).toBe(`2026-09-21`);
-        expect(civilDayIn(lateEvening, UTC)).toBe(`2026-09-20`);
-        expect(civilDayIn(lateEvening, NEW_YORK)).toBe(`2026-09-20`);
+        expect<string>(civilDayIn(lateEvening, WARSAW)).toBe(`2026-09-21`);
+        expect<string>(civilDayIn(lateEvening, UTC)).toBe(`2026-09-20`);
+        expect<string>(civilDayIn(lateEvening, NEW_YORK)).toBe(`2026-09-20`);
     });
 
     test(`utcDayOf is civilDayIn UTC, spelled so every UTC bucket is greppable`, () => {
@@ -49,7 +49,7 @@ describe(`civilDayIn`, () => {
     });
 
     test(`asCivilDay takes the shape and nothing else`, () => {
-        expect(asCivilDay(`2026-09-20`)).toBe(`2026-09-20`);
+        expect<string | undefined>(asCivilDay(`2026-09-20`)).toBe(`2026-09-20`);
         expect(asCivilDay(`2026-09-20T00:00:00Z`)).toBeUndefined();
         expect(asCivilDay(`20/09/2026`)).toBeUndefined();
     });

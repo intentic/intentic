@@ -1,8 +1,9 @@
-import { access, mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pack } from "tar-stream";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { extractTarToWorkspace, PathEscapeError } from "./workspace-archive.js";
 import { UploadTooLargeError } from "./workspace-files-upload.js";
 
@@ -36,7 +37,7 @@ test("extractTarToWorkspace materializes a nested tree under the root", async ()
     );
     expect(await readFile(join(root, "a/b/c.txt"), "utf8")).toBe("hi");
     expect(await readFile(join(root, "root.txt"), "utf8")).toBe("x");
-    await expect(access(join(root, "empty"))).resolves.toBeUndefined();
+    expect(existsSync(join(root, "empty"))).toBe(true);
     await rm(root, { recursive: true, force: true });
 });
 
@@ -69,7 +70,7 @@ test("extractTarToWorkspace skips the workspace ROOT's own .git and keeps extrac
             { name: "src/main.ts", content: "ok" },
         ]),
     );
-    await expect(access(join(root, ".git"))).rejects.toThrow();
+    expect(existsSync(join(root, ".git"))).toBe(false);
     expect(await readFile(join(root, "src/main.ts"), "utf8")).toBe("ok");
     await rm(root, { recursive: true, force: true });
 });

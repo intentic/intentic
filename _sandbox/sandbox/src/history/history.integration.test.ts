@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, spyOn, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createWorkspaceHistory, type HistoryGitRunner, repoGitDir } from "./history.js";
@@ -136,14 +137,14 @@ test("groups are cached between reads and recomputed only after a changed snapsh
 test("notifyUserWrite debounces a burst of pings into ONE user-triggered snapshot", async () => {
     const { history, calls } = await fakeHistory();
     // Fake timers for the debounce only; a same-tree snapshot after resuming real timers serves as the barrier.
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         history.notifyUserWrite();
         history.notifyUserWrite();
         history.notifyUserWrite();
-        await vi.advanceTimersByTimeAsync(2_100);
+        await advanceTimersByTimeAsync(2_100);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
     await history.snapshot("interval");
     const commits = calls.filter((call) => call.includes("commit-tree"));
@@ -224,7 +225,7 @@ test("integration: snapshot, diff, and restore a workspace with a nested repo an
     expect(await sh(intent, "rev-parse", "HEAD")).toBe(nestedHead);
 
     const snapshots = await history.list();
-    expect(snapshots.map((snapshot) => snapshot.id)).toContain(first);
+    expect(snapshots.map((snapshot) => snapshot.id)).toContain(first ?? "");
     expect(snapshots.map((snapshot) => snapshot.trigger)).toContain("restore");
 });
 
@@ -302,11 +303,11 @@ test("integration: heal rewrites an accidentally deleted pointer; deletions reap
 
     // Grace window elapses; only Date.now is mocked, git still runs for real.
     const realNow = Date.now();
-    vi.spyOn(Date, "now").mockReturnValue(realNow + 120_000);
+    spyOn(Date, "now").mockReturnValue(realNow + 120_000);
     try {
         await history.snapshot("interval");
     } finally {
-        vi.restoreAllMocks();
+        jest.restoreAllMocks();
     }
     expect(existsSync(repoGitDir(historyRoot, "lingering"))).toBe(false);
     expect(existsSync(join(lingering, ".git"))).toBe(false);

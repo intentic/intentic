@@ -1,6 +1,6 @@
 import { join } from "node:path";
 
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
 import { markCheckRunning } from "../workspace/deps/checks-in-flight.js";

@@ -1,5 +1,5 @@
 import { PROVIDER_BRAND_PATHS } from "@intentic/constants";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { accessFor, capabilitiesOf, harnessChoosable, PROVIDER_ACCESS, PROVIDER_VENDOR, PROVIDERS, providerLabel } from "./agent-catalog.js";
 import {
     ACCESS_COST,
@@ -40,12 +40,12 @@ describe("every provider in the table", () => {
         if (spec.auth.kind === "translator") {
             // The CLIProxyAPI's own name for this provider, addressed by the daemon's management API.
             expect(cliProxyIdOf(id), `${id} is routed but names no CLIProxyAPI provider`).toBe(spec.auth.cliProxy);
-            expect(KeyedProviderSchema.options, `${id} is routed but missing from KeyedProvider`).toContain(id);
+            expect<readonly string[]>(KeyedProviderSchema.options, `${id} is routed but missing from KeyedProvider`).toContain(id);
             expect(Object.keys(TranslatorAccountsSchema.shape), `${id} has no slot in TranslatorAccounts`).toContain(id);
             return;
         }
         if (spec.auth.kind === "minted") {
-            expect(MINTED_PROVIDERS, `${id} is minted but missing from MINTED_PROVIDERS`).toContain(id);
+            expect<readonly string[]>(MINTED_PROVIDERS, `${id} is minted but missing from MINTED_PROVIDERS`).toContain(id);
             // The head of this list is what a login/start naming no variant gets; empty means a dead connect button.
             expect(spec.auth.variants.length, `${id} is minted but offers no estate to sign in to`).toBeGreaterThan(0);
             for (const variant of spec.auth.variants) {

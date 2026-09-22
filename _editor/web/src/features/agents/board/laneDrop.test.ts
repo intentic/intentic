@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // No mocks: laneDrop reads the lane machine from agentStatus, a pure leaf; the fleet store import is type-only and
 // erased.

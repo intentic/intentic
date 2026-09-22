@@ -1,5 +1,5 @@
 import type { TranscriptCredentialOffer } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { credentialLane, offerStatus } from "./cardStatus";
 
 // Pins offerStatus only where the credential card could drift from the shared spend-card logic, and credentialLane, the

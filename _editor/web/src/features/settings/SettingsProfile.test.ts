@@ -1,23 +1,24 @@
-// @vitest-environment jsdom
 // Needs jsdom: the profile row is a live-control affordance (hover camera overlay, inline rename) that a real DOM is
 // needed to assert on.
+import "@intentic/testing/dom";
 import { vAction } from "@intentic/ui";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const user = ref<{ name: string; image: string | null } | undefined>({ name: `Artur Kurowski`, image: null });
-const updateProfile = vi.fn<(input: { name?: string; image?: string }) => Promise<void>>().mockResolvedValue(undefined);
-vi.mock(`../auth/useAuth`, () => ({
+const updateProfile = mock<(input: { name?: string; image?: string }) => Promise<void>>().mockResolvedValue(undefined);
+mock.module(`../auth/useAuth`, () => ({
     useAuth: () => ({ user, updateProfile }),
 }));
 
-const fileToSquareDataUrl = vi.fn<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
-vi.mock(`../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
+const fileToSquareDataUrl = mock<(file: File, fit: `cover` | `contain`) => Promise<string>>().mockResolvedValue(`data:image/webp;base64,NEW`);
+mock.module(`../../lib/imageDataUrl`, () => ({ fileToSquareDataUrl }));
 
 // Plan chip words are pinned in hostedHours.test.ts; mocked here to avoid needing a query client.
 const planBadge = ref<{ label: string; variant: string; detail: string } | undefined>(undefined);
-vi.mock(`./hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
+mock.module(`./hosted-plan/useHostedPlan`, () => ({ useHostedPlan: () => ({ planBadge }) }));
 
 const { default: SettingsProfile } = await import(`./SettingsProfile.vue`);
 
@@ -45,7 +46,7 @@ const pickFile = async (el: HTMLElement): Promise<void> => {
     const field = fileField(el);
     Object.defineProperty(field, `files`, { value: [new File([`x`], `avatar.png`, { type: `image/png` })], configurable: true });
     field.dispatchEvent(new Event(`change`));
-    await vi.waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledTimes(1));
 };
 
 beforeEach(() => {
@@ -93,7 +94,7 @@ it(`renames from the name's own field, without sending the avatar`, async () => 
     field.dispatchEvent(new Event(`input`));
     field.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
 
-    await vi.waitFor(() => expect(updateProfile).toHaveBeenCalledWith({ name: `Artur K.` }));
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledWith({ name: `Artur K.` }));
     expect(updateProfile.mock.calls[0]?.[0]).not.toHaveProperty(`image`);
 });
 

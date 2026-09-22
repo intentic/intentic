@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // WhatsApp's link-a-device code: the one thing on this row read off screen and typed elsewhere, pinned here since
 // it previously had nowhere to render.
+import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import { createApp, h } from "vue";
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
@@ -10,7 +10,7 @@ import type { ConnectionState } from "../model/connections";
 import { IconStub } from "@intentic/ui/testing";
 
 // Row reaches a router only through the rebuild hand-off, which none of these cases takes.
-vi.mock(`vue-router`, () => ({ useRouter: () => ({ push: () => undefined }), RouterLink: { template: `<a><slot /></a>` } }));
+mock.module(`vue-router`, () => ({ useRouter: () => ({ push: () => undefined }), RouterLink: { template: `<a><slot /></a>` } }));
 
 const { default: CapabilityInstanceRow } = await import("./CapabilityInstanceRow.vue");
 

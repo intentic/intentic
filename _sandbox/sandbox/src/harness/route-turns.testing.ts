@@ -1,7 +1,7 @@
 import type { AttachFrame, sandboxContract, TranscriptRow, TurnFact } from "@intentic/sandbox-contract";
 import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold";
 import type { ContractRouterClient } from "@orpc/contract";
-import { expect } from "vitest";
+import { expect } from "bun:test";
 import { collect } from "./route-client.testing.js";
 
 // The route harness's turn runner: drives a chat turn over the detached-run protocol exactly as the browser does, and

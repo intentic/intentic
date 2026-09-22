@@ -1,23 +1,10 @@
-// @vitest-environment jsdom
 // jsdom, since every claim here is about what the published page renders — including what it does not render.
 // This is the one surface an outsider touches, so "nothing here reaches back into the workspace" is checked
 // against real output, not the source.
 import type { TranscriptRow, SharePayload } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it } from "bun:test";
 import { type App, createApp } from "vue";
 import { IconStub } from "@intentic/ui/testing";
-
-// jsdom has no matchMedia, which useDevice reads at import time; hoisted so it runs before the imports evaluate.
-vi.hoisted(() => {
-    globalThis.matchMedia ??= ((query: string) => ({
-        matches: false,
-        media: query,
-        onchange: null,
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-    })) as unknown as typeof globalThis.matchMedia;
-});
 
 const { default: ShareApp } = await import("./ShareApp.vue");
 const { ELEMENT_ID } = await import("./payload");

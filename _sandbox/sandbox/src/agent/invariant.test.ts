@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { checks } from "./invariant.js";
 import type { JournalEntry, TurnJournal } from "./run/turn/turn-journal.js";
 

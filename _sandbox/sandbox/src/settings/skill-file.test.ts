@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { parseSkillFile, skillDocument } from "./skill-file.js";
 
 test("a composed skill round-trips through the parser", () => {

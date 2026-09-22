@@ -1,5 +1,5 @@
 import { linuxDesktopEntry, windowsRunAddArgs, type CliLauncher } from "@intentic/local-agent";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { MACHINE_AUTOSTART } from "./autostart.js";
 
 // Builders are tested in @intentic/local-agent; this only checks that this agent's spec picks the right argv

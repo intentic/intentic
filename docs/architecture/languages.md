@@ -101,7 +101,7 @@ Only the app is at the root; everything else is namespaced, so two packages can 
 catalog a key reads `<area>.<file>.<what it says>`: the feature directory, the component that draws it, and a name
 made from the English. `src/core-views` is `views.`, `src/shell` is `shell.`, `src/components` is `common.`.
 
-A component test mounts without the app's boot, so `vitest.setup.ts` registers `appCatalog` for every suite; an
+A component test mounts without the app's boot, so `bun.setup.ts` registers `appCatalog` for every suite; an
 extension test that calls `activate` itself registers its own with `registerExtensionMessages`. Without that, a text
 assertion reads a dotted key instead of the words.
 

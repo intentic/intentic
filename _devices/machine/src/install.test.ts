@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import { addToWindowsPathValue, SELF_UPDATE_GUARD_ENV, selfUpdateBeforeSetup, type SelfUpdateIo } from "./install.js";
 import type { UpgradeOutcome } from "./upgrade.js";
 
@@ -64,7 +64,7 @@ describe("selfUpdateBeforeSetup", () => {
     });
 
     it("says nothing and continues when already current", async () => {
-        const out = vi.fn();
+        const out = mock();
         const t = io();
         await selfUpdateBeforeSetup(t.io, {}, ["sync", "setup"], out);
         expect(t.upgraded()).toBe(true);

@@ -1,18 +1,21 @@
-// @vitest-environment jsdom
 // jsdom: the subject is what the explorer renders after a reload (open folders restored, revealed
 // file), not just composable state.
+import "@intentic/testing/dom";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
 import type { RowAction } from "./rowActions";
 import type { OpenMode } from "../tabs/workspaceTabs";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { ACTIVE_KEY, activeSandboxId } from "../../sandbox/overview/activeSandbox";
 import { useEntryDrag } from "./transfer/useEntryDrag";
+import * as actualSandboxClient from "../../sandbox/client/sandboxClient";
 
 // jsdom implements no scrollIntoView; spied rather than stubbed so calls can be inspected.
-const scrolled = vi.hoisted(() => {
+const scrolled = hoisted(() => {
     const calls: string[] = [];
     return calls;
 });
@@ -25,23 +28,27 @@ globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Elem
 const VIEWPORT = 600;
 Object.defineProperty(globalThis.HTMLElement.prototype, `clientHeight`, { configurable: true, get: () => VIEWPORT });
 
-// Set before the imports below: useSandbox reads storage at import time and keys open folders by it.
 const SANDBOX = `sb1`;
-localStorage.setItem(`intentic.activeSandboxId`, SANDBOX);
+localStorage.setItem(ACTIVE_KEY, SANDBOX);
+// Written to the ref as well: it is read out of storage once, as its module is evaluated, which every
+// static import below has already done by the time this line runs.
+activeSandboxId.value = SANDBOX;
 
 // Records calls instead of hitting the network (no sandbox is registered in tests); every call answers ok unless a test
 // parks it (`hold`) or refuses it (`refuse`). Parking is what lets a test read the tree in the gap the daemon's answer
 // used to fill — the gap this surface exists to cover.
-const daemon = vi.hoisted(() => ({
+const daemon = hoisted(() => ({
     calls: [] as { path: string; init?: RequestInit }[],
     hold: undefined as undefined | Promise<void>,
     release: undefined as undefined | (() => void),
     refuse: undefined as undefined | string,
 }));
-vi.mock("../../sandbox/client/sandboxClient", async (importOriginal) => {
-    const original = await importOriginal<typeof import("../../sandbox/client/sandboxClient")>();
+// Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
+// spread the stand-in. The factory is synchronous, since awaiting in one that replaces a loaded module never returns.
+const realSandboxClient = { ...actualSandboxClient };
+mock.module("../../sandbox/client/sandboxClient", () => {
     return {
-        ...original,
+        ...realSandboxClient,
         sandboxJson: async (path: string, init?: RequestInit): Promise<unknown> => {
             daemon.calls.push({ path, init });
             if (daemon.hold !== undefined) {
@@ -410,16 +417,16 @@ describe(`empty folders (barren branches)`, () => {
     const entryNamed = (el: HTMLElement, name: string): HTMLElement =>
         [...el.querySelectorAll(`li`)].find((row) => row.querySelector(`span`)?.textContent?.trim() === name)?.querySelector(`button`) as HTMLElement;
     const settle = async (): Promise<void> => {
-        await vi.advanceTimersByTimeAsync(10_100);
+        await advanceTimersByTimeAsync(10_100);
         await nextTick();
     };
 
     beforeEach(() => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         daemon.calls.length = 0;
     });
     afterEach(() => {
-        vi.useRealTimers();
+        jest.useRealTimers();
         useNotifications().dismissReceipt();
     });
 
@@ -485,7 +492,7 @@ describe(`empty folders (barren branches)`, () => {
             .find((row) => row.querySelector(`span`)?.textContent?.trim() === `web / demo / assets`)
             ?.querySelector(`button:last-of-type`) as HTMLElement;
         keep.click();
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
 
         const uploads = daemon.calls.filter((call) => call.path.startsWith(`/workspace/upload`));
         expect(uploads.length).toBe(1);
@@ -498,7 +505,7 @@ describe(`empty folders (barren branches)`, () => {
         await settle();
 
         button(el, `Clean up`).click();
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
 
         expect(document.body.textContent).not.toContain(`Delete folder?`);
         const deletes = daemon.calls.filter((call) => call.init?.method === `DELETE`);
@@ -523,7 +530,7 @@ describe(`empty folders (barren branches)`, () => {
         expect(sole.map((span) => span.textContent?.trim())).toEqual([`old is empty`, `src`]);
 
         button(el, `Clean up`).click();
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
 
         // Receipt has no room to shade name and location separately, so it spells the whole path.
         expect(useNotifications().receipt.value?.title).toBe(`src / old removed`);
@@ -534,7 +541,7 @@ describe(`empty folders (barren branches)`, () => {
         await settle();
 
         button(el, `Clean up`).click();
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
 
         // Receipt only counts; naming happens on the sweep line before the click.
         expect(useNotifications().receipt.value?.title).toContain(`2`);
@@ -550,7 +557,7 @@ describe(`empty folders (barren branches)`, () => {
         chainRow.click();
         await nextTick();
         chainRow.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Delete`, bubbles: true }));
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
 
         expect(document.body.textContent).not.toContain(`Delete folder?`);
         expect(useNotifications().receipt.value?.title).toContain(`web / demo / assets`);

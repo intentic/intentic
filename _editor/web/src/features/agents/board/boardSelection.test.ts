@@ -1,10 +1,11 @@
-// @vitest-environment jsdom
 // The card the docked chat points at stays visible even when the Finished window would drop it, or the ring has nowhere
 // to land. Driven through real surfaces (a tab click, a history row, a link) since they all land on the same write. The
 // board's other selection (multi-pane splits) is tested at the foot of the file.
+import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetChat, useChat } from "../../chat/run/useChat";
 import { openAgentConversation } from "../../chat/panel/useChat-reveal";
@@ -17,7 +18,7 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals as startAgent.test.ts; scrollIntoView is jsdom's biggest gap and this file's subject,
 // recorded here for the assertions.
-const { reveals } = vi.hoisted(() => {
+const { reveals } = hoisted(() => {
     const recorded: { card: string | undefined; block: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
         recorded.push({

@@ -1,11 +1,12 @@
-// @vitest-environment jsdom
 // Pins that the strip never shows a pill with no session behind it across a sandbox switch, even though the remembered
 // arrangement returns instantly and the session list arrives late. Pane mocked wholesale; no real terminal needed.
-import { beforeEach, expect, test, vi } from "vitest";
+import "@intentic/testing/dom";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { stubGlobal, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 
 const store = new Map<string, string>();
-vi.stubGlobal(`localStorage`, {
+stubGlobal(`localStorage`, {
     getItem: (key: string) => store.get(key) ?? null,
     setItem: (key: string, value: string) => store.set(key, value),
     removeItem: (key: string) => store.delete(key),
@@ -13,20 +14,22 @@ vi.stubGlobal(`localStorage`, {
 
 // The switch itself: the one ref the whole app scopes by.
 const activeSandboxId = ref<string | undefined>(`sbx-a`);
-vi.mock("../sandbox/overview/activeSandbox", () => ({
+mock.module("../sandbox/overview/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
 }));
-vi.mock("../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn() }));
-vi.mock("../sandbox/client/useSandbox", () => ({
+mock.module("../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../sandbox/client/useSandbox", () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId }),
 }));
-vi.mock("./terminalSession", () => ({
+mock.module("./terminalSession", () => ({
     createTerminalSession: (name: string) => ({ kind: `terminal`, name }),
-    mountTerminalSession: vi.fn(),
-    parkTerminalSession: vi.fn(),
-    disposeTerminalSession: vi.fn(),
+    mountTerminalSession: mock(),
+    parkTerminalSession: mock(),
+    disposeTerminalSession: mock(),
+    retypeTerminalSession: mock(),
+    retintTerminalSession: mock(),
 }));
 
 const { createTerminalTabs, disposeAllSessions } = await import("./useTerminal");
@@ -130,43 +133,43 @@ test("the split arrangement survives a switch, and a list that failed on the way
 
 // A refused list is the one failure nothing else recovers from; everything else reacts to a list that arrived.
 test("a list refused on the way in is asked again, and the terminals arrive on their own", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const back = panel([shell(`web-1`), shell(`web-2`)]);
         back.failNextLists();
         await expect(back.attach()).resolves.toBe(false);
         expect(back.names()).toEqual([]);
 
-        await vi.advanceTimersByTimeAsync(600);
+        await advanceTimersByTimeAsync(600);
 
         expect(back.names()).toEqual([`web-1`, `web-2`]);
         expect(back.tabs.groups.value).toEqual([[`web-1`], [`web-2`]]);
         expect(back.tabs.activeName.value).toBe(`web-1`);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 // Few, spaced tries; after that, only the strip's own refresh or the daemon's next frame retries.
 test("the re-asking is bounded", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const back = panel([shell(`web-1`)]);
         back.failNextLists(99);
         await expect(back.attach()).resolves.toBe(false);
 
-        await vi.advanceTimersByTimeAsync(60_000);
+        await advanceTimersByTimeAsync(60_000);
 
         // Attach's own list plus a handful of retries, not a poll forever.
         expect(back.asked()).toBe(4);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 // A retry on a torn-down panel could steal a session's host from whatever replaced it.
 test("the re-asking stops when the panel closes", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const back = panel([shell(`web-1`)]);
         back.failNextLists(99);
@@ -174,11 +177,11 @@ test("the re-asking stops when the panel closes", async () => {
         const asked = back.asked();
 
         back.tabs.detach();
-        await vi.advanceTimersByTimeAsync(60_000);
+        await advanceTimersByTimeAsync(60_000);
 
         expect(back.asked()).toBe(asked);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -214,18 +217,18 @@ test("an empty strip says whether this sandbox has actually answered", async () 
 });
 
 test("a sandbox that never answers is reported as such, not as empty", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const { tabs, attach, failNextLists } = panel([shell(`web-1`)]);
         failNextLists(99);
         await expect(attach()).resolves.toBe(false);
         expect(tabs.answer.value).toBe(`waiting`);
 
-        await vi.advanceTimersByTimeAsync(60_000);
+        await advanceTimersByTimeAsync(60_000);
 
         expect(tabs.answer.value).toBe(`refused`);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 

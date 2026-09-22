@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import type { Services } from "../composition.js";
 import { readAutostart, recordAutostart, runAutostart } from "./autostart.js";
 
@@ -14,7 +14,7 @@ const services = (): Services =>
     ({
         workspace: { root },
         config: { zone: "sbx.test", connectToken: "", sandbox: { publicUrl: "" } },
-        processes: { start: vi.fn((key: string, spec: { command: string; cwd: string }) => Promise.resolve(void started.push({ key, spec }))) },
+        processes: { start: mock((key: string, spec: { command: string; cwd: string }) => Promise.resolve(void started.push({ key, spec }))) },
     }) as unknown as Services;
 
 const app = async (repo: string, name: string, pkg: string | undefined): Promise<void> => {

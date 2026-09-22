@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { secretValues } from "./cleaners.mjs";
 
 test("secretValues reads the descriptor-backed store and preserves its reference name", () => {

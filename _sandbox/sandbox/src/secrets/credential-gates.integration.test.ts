@@ -2,7 +2,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CredentialGate } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { fileCredentialGates, gateForName, gateSubjectOf, gateTargetOf } from "./credential-gates.js";
 
 // Verifies the store tells an absent policy from an unreadable one (its one departure from the house `jsonFile`

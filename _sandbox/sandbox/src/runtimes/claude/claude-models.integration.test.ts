@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLAUDE_SEED_MODELS, type Model } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Config } from "../../env.config.js";
 import type { ClaudeStore } from "./claude-credentials.js";
 import { createClaudeCatalog } from "./claude-models.js";
@@ -19,13 +19,11 @@ const discoveryFails = async (): Promise<Model[]> => {
     throw new Error("claude code cli unavailable");
 };
 // Both REST stubs keep the suite hermetic: the real fetch would reach api.anthropic.com from a unit test.
-const apiReturns =
-    (models: { id: string; display_name: string }[]): typeof fetch =>
-    async () =>
-        new Response(JSON.stringify({ data: models }), { status: 200 });
-const apiFails: typeof fetch = async () => {
+const apiReturns = (models: { id: string; display_name: string }[]): typeof fetch =>
+    (async () => new Response(JSON.stringify({ data: models }), { status: 200 })) as unknown as typeof fetch;
+const apiFails = (async () => {
     throw new Error("network unreachable");
-};
+}) as unknown as typeof fetch;
 
 const catalogIn = async (persisted?: Model[]): Promise<{ models: Model[]; default: string }> => {
     const dir = await mkdtemp(join(tmpdir(), "claude-models-"));
@@ -175,7 +173,7 @@ test("falls back to the seed floor when nothing has been persisted yet", async (
     const catalog = await catalogIn();
 
     // Seed floor is versioned like every rung, so a daemon that reached neither source offers nameable models.
-    expect(catalog.models).toEqual(CLAUDE_SEED_MODELS);
+    expect(catalog.models).toEqual([...CLAUDE_SEED_MODELS]);
     expect(catalog.default).toBe(CLAUDE_SEED_MODELS[0]!.id);
 });
 
@@ -183,7 +181,7 @@ test("treats a corrupt or older-build persisted file as absent rather than servi
     // Missing label matches a pre-widening file shape; the schema parse rejects the whole file, not just the row.
     const catalog = await catalogIn([{ id: "claude-fictional-9" } as Model]);
 
-    expect(catalog.models).toEqual(CLAUDE_SEED_MODELS);
+    expect(catalog.models).toEqual([...CLAUDE_SEED_MODELS]);
 });
 
 test("a persisted file carrying tier aliases can't put an unnameable row back in the picker", async () => {
@@ -215,12 +213,11 @@ const storeOf = (...ids: string[]): ClaudeStore =>
         read: async (id: string) => ({ id, accessToken: `token-${id}`, refreshToken: `refresh-${id}`, expiresAt: Date.now() + 3_600_000 }),
     }) as unknown as ClaudeStore;
 // Answers 200 for one bearer token only; every other is refused the way Anthropic refuses an org's OAuth REST.
-const apiServing =
-    (token: string, models: { id: string; display_name: string }[]): typeof fetch =>
-    async (_url, init) =>
+const apiServing = (token: string, models: { id: string; display_name: string }[]): typeof fetch =>
+    (async (_url: RequestInfo | URL, init?: RequestInit) =>
         new Headers(init?.headers).get("authorization") === `Bearer ${token}`
             ? new Response(JSON.stringify({ data: models }), { status: 200 })
-            : new Response(JSON.stringify({ error: { type: "permission_error" } }), { status: 403 });
+            : new Response(JSON.stringify({ error: { type: "permission_error" } }), { status: 403 })) as unknown as typeof fetch;
 
 test("a CLI alias carrying a versioned id can't shrink the persisted catalog while REST is refused", async () => {
     // The CLI publishes Fable with a full id; with REST out, that one row used to be filed as the whole catalog.

@@ -15,14 +15,6 @@
             "types": "./src/index.ts",
             "default": "./src/index.ts"
         },
-        "./vitest": {
-            "types": "./src/vitest.ts",
-            "default": "./src/vitest.ts"
-        },
-        "./aliases": {
-            "types": "./src/aliases.ts",
-            "default": "./src/aliases.ts"
-        },
         "./e2e": {
             "types": "./src/e2e.ts",
             "default": "./src/e2e.ts"
@@ -38,16 +30,37 @@
         "./http-fake": {
             "types": "./src/http-fake.ts",
             "default": "./src/http-fake.ts"
+        },
+        "./bun": {
+            "types": "./src/bun.ts",
+            "default": "./src/bun.ts"
+        },
+        "./dom": {
+            "types": "./src/dom.ts",
+            "default": "./src/dom.ts"
+        },
+        "./bun-preload": {
+            "types": "./src/bun-preload.ts",
+            "default": "./src/bun-preload.ts"
+        },
+        "./bun-vue": {
+            "types": "./src/bun-vue.ts",
+            "default": "./src/bun-vue.ts"
         }
     },
     "scripts": {
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
-        "test": "vitest run"
+        "test": "suites"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "vitest": "catalog:"
+        "jsdom": "catalog:",
+        "vue": "catalog:"
+    },
+    "bin": {
+        "suites": "./bin/suites.mjs"
     }
 }

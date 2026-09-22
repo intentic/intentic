@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { PROMPT_CACHE_1H_MS, PROMPT_CACHE_5M_MS, ttlFromCacheCreation, ttlFromCredential, withCacheTtl } from "./prompt-cache.js";
 
 type ContextFrame = Parameters<typeof withCacheTtl>[0];

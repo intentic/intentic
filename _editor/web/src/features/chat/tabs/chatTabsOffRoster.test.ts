@@ -1,12 +1,13 @@
-// @vitest-environment jsdom
 // Pins the fallback text a card shows for a chat off the fleet roster (title, model, cost), checked as text
 // since jsdom lays nothing out.
-import { beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, mock } from "bun:test";
+import { mocked, hoisted } from "@intentic/testing/bun";
 
 // Stubs the daemon at the seam the list reaches it through, so the archive probe is asserted as a call.
-vi.mock("../../sandbox/client/sandboxClient", () => {
-    const sandboxJson = vi.fn(async () => ({ agents: [] }));
-    const sandboxRequest = vi.fn();
+mock.module("../../sandbox/client/sandboxClient", () => {
+    const sandboxJson = mock(async () => ({ agents: [] }));
+    const sandboxRequest = mock();
     return {
         sandboxJson,
         sandboxRequest,
@@ -14,6 +15,12 @@ vi.mock("../../sandbox/client/sandboxClient", () => {
         sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) => sandboxJson(),
         sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
             init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
+        // Named by the graph but never called here; bun links an ESM import against exactly what this returns.
+        sandboxJsonAt: mock(),
+        sandboxJsonQuietly: mock(),
+        sandboxBlob: mock(),
+        sandboxError: mock(async () => new Error(`unused`)),
+        SandboxHttpError: class SandboxHttpError extends Error {},
     };
 });
 
@@ -28,7 +35,7 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same globals a mounted chat needs as chatTabsReveal.test.ts: matchMedia, window.env, scrollIntoView.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
 });
 
@@ -78,11 +85,11 @@ it(`draws the model from the conversation when the fleet cannot resolve it`, asy
 it(`asks the daemon for the archive when an open chat is off the roster`, async () => {
     const chat = useChat();
     chat.active.value.registered.value = true;
-    vi.mocked(sandboxJson).mockClear();
+    mocked(sandboxJson).mockClear();
 
     await mountList();
 
-    expect(vi.mocked(sandboxJson).mock.calls.some(([path]) => path === `/agents/archived`)).toBe(true);
+    expect(mocked(sandboxJson).mock.calls.some(([path]) => path === `/agents/archived`)).toBe(true);
 });
 
 it(`prints no spend at all, so a restored chat cannot print a zero`, async () => {

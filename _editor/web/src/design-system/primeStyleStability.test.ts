@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { Button, installUi } from "@intentic/ui";
-import { afterEach, expect, it } from "vitest";
+import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 let app: App | undefined;

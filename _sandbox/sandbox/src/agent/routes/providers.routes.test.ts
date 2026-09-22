@@ -1,5 +1,5 @@
 import { type Capability, NATIVE_PROVIDERS, type NativeProvider, providersContract, TRIAL_ENDPOINT_ID, TRIAL_LABEL } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { ProvidersRoutesDeps } from "./providers.routes.js";
 import { routesClient } from "../../harness/route-client.testing.js";
 import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";

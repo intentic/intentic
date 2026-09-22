@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { autoSandboxName } from "./setupName";
 
 test("the first sandbox is named without a suffix: there is nothing to tell it apart from", () => {

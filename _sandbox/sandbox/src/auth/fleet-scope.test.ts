@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import type { ProvenCaller } from "./auth.js";
 import { framedEvent, refuseUnlessVisible, visibleTo } from "./fleet-scope.js";
 
@@ -60,7 +60,7 @@ describe("framedEvent", () => {
 
     test("the roster frame keeps only the guest's own conversations", () => {
         const framed = framedEvent(guest, undefined, { kind: "agents", agents: [mine, theirs] as never, rev: 3 });
-        expect(framed).toEqual({ kind: "agents", agents: [mine], rev: 3 });
+        expect(framed).toEqual({ kind: "agents", agents: [mine], rev: 3 } as never);
     });
 
     // A guest is fenced like anyone else and reads its own area, so its frames are cut to that fence rather than

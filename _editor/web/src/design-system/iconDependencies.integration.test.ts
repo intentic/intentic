@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { repoRoot } from "@intentic/constants/node";
 
 it(`keeps third-party icon packages out of the whole resolved dependency graph`, () => {

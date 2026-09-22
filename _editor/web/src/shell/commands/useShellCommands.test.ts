@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
-import { expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect } from "bun:test";
 import { createApp, h } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
-// vitest.setup.ts installs window.env and ui's useDevice media queries at module scope before this file loads.
+// bun.setup.ts installs window.env and ui's useDevice media queries at module scope before this file loads.
 import { receiveFloatingNote } from "../window/floating";
 import { boundCommand, commands, commandShortcut } from "./useCommands";
 import { useShellCommands } from "./useShellCommands";

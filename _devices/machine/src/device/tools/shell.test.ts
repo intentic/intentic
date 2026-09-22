@@ -1,5 +1,5 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { ScopeError } from "../policy.js";
 import { crossInterpreter, destructiveClasses, runCommand, targetOf } from "./shell.js";
 
@@ -116,7 +116,14 @@ test("hands a distro the script as one argument of sh, starting in the distro's 
     expect(wsl.cwd).toBeUndefined();
     expect(wsl.env["WSL_UTF8"]).toBe("1");
     // The default distro is wsl.exe's to pick; a folder given starts the command there.
-    expect(crossInterpreter({ kind: "wsl", distro: undefined }, "ls", "/home/radarsu/proj", cross).args).toEqual(["--cd", "/home/radarsu/proj", "--exec", "sh", "-lc", "ls"]);
+    expect(crossInterpreter({ kind: "wsl", distro: undefined }, "ls", "/home/radarsu/proj", cross).args).toEqual([
+        "--cd",
+        "/home/radarsu/proj",
+        "--exec",
+        "sh",
+        "-lc",
+        "ls",
+    ]);
 });
 
 test("refuses to cross into WSL from anything but Windows", () => {
@@ -140,13 +147,19 @@ test("runs PowerShell through interop from a distro, and maps a drive path to it
 });
 
 test("falls back to Windows PowerShell 5.1, and says when no PowerShell is reachable", () => {
-    const legacy = ["/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"];
-    expect(crossInterpreter({ kind: "windows" }, "Get-Date", undefined, { platform: "linux", inWsl: true, exists: (path) => legacy.includes(path) }).command).toBe(legacy[0]);
-    expect(() => crossInterpreter({ kind: "windows" }, "Get-Date", undefined, { platform: "linux", inWsl: true, exists: () => false })).toThrow(/interop/);
+    const legacy = "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe";
+    expect(
+        crossInterpreter({ kind: "windows" }, "Get-Date", undefined, { platform: "linux", inWsl: true, exists: (path) => path === legacy }).command,
+    ).toBe(legacy);
+    expect(() => crossInterpreter({ kind: "windows" }, "Get-Date", undefined, { platform: "linux", inWsl: true, exists: () => false })).toThrow(
+        /interop/,
+    );
 });
 
 test("refuses to cross to Windows from a device that is not a distro", () => {
-    expect(() => crossInterpreter({ kind: "windows" }, "Get-Date", undefined, { platform: "linux", inWsl: false, exists: () => true })).toThrow(/Only a WSL distro/);
+    expect(() => crossInterpreter({ kind: "windows" }, "Get-Date", undefined, { platform: "linux", inWsl: false, exists: () => true })).toThrow(
+        /Only a WSL distro/,
+    );
 });
 
 // The crossing is a way of running, not a way around the switches: the classifier reads the script before any argv

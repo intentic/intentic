@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pidFileBody } from "@intentic/local-agent";
 import type { PortSummary } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock, jest } from "bun:test";
+import { stubGlobal } from "@intentic/testing/bun";
 import type { MirroredPort } from "./config.js";
 import type { ForwardExecutor } from "./mirror.js";
 
@@ -76,7 +77,7 @@ describe("strandedForwards", () => {
 });
 
 afterEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 const jsonResponse = (status: number, body: unknown): Response =>
@@ -121,7 +122,7 @@ const named = { title: "Vite dev server", purpose: "Started in one of your termi
 
 describe("fetchWorkspacePorts", () => {
     it("sends the sync token and returns only forwardable workspace-kind ports", async () => {
-        const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+        const fetchMock = mock<typeof fetch>().mockResolvedValue(
             jsonResponse(200, {
                 ports: [
                     { port: 47145, host: "::1", forwardable: true, kind: "workspace", command: "vite", forwarded: false, ...named },
@@ -131,7 +132,7 @@ describe("fetchWorkspacePorts", () => {
                 ],
             }),
         );
-        vi.stubGlobal("fetch", fetchMock);
+        stubGlobal("fetch", fetchMock);
 
         const ports = await fetchWorkspacePorts("https://sandbox-abc.example.dev/", "ist_tok");
 
@@ -144,17 +145,17 @@ describe("fetchWorkspacePorts", () => {
     });
 
     it("maps a rejected token to the re-pair message", async () => {
-        vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("unauthorized", { status: 401 })));
+        stubGlobal("fetch", mock<typeof fetch>().mockResolvedValue(new Response("unauthorized", { status: 401 })));
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toThrow(/re-run setup/);
     });
 
     it("types 401/403 as SyncAuthError: what the watcher counts toward revocation self-teardown", async () => {
-        vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("unauthorized", { status: 401 })));
+        stubGlobal("fetch", mock<typeof fetch>().mockResolvedValue(new Response("unauthorized", { status: 401 })));
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toBeInstanceOf(SyncAuthError);
-        vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("forbidden", { status: 403 })));
+        stubGlobal("fetch", mock<typeof fetch>().mockResolvedValue(new Response("forbidden", { status: 403 })));
         await expect(fetchWorkspacePorts("https://s.example.dev", "ist_old")).rejects.toBeInstanceOf(SyncAuthError);
         // A 5xx (tunnel blip) must not read as revocation; the watcher retries those forever.
-        vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response("bad gateway", { status: 502 })));
+        stubGlobal("fetch", mock<typeof fetch>().mockResolvedValue(new Response("bad gateway", { status: 502 })));
         const blip = await fetchWorkspacePorts("https://s.example.dev", "ist_old").catch((error: unknown) => error);
         expect(blip).toBeInstanceOf(Error);
         expect(blip).not.toBeInstanceOf(SyncAuthError);

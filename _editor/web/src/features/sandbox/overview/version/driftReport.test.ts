@@ -1,7 +1,7 @@
 // What the card's list is built from: route names folded into areas of the product, ranked by consequence.
 // Pure, so this pins the naming and the order without a daemon or a mount.
 import { SANDBOX_ROUTE_NAMES } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { driftAreas } from "./driftReport";
 
 it(`names an area as the product names it, not as the contract does`, () => {

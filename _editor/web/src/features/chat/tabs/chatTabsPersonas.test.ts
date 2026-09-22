@@ -1,8 +1,9 @@
-// @vitest-environment jsdom
 // Pins the persona rail: rows are people (ChatPersonaRail), not sessions. Mounted via ChatTabList since the
 // lane/persona switch is part of what's tested.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../../agents/fleet/useAgents";
 import { useChatGrouping } from "../transcript/chatGrouping";
@@ -14,7 +15,7 @@ import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 

@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // index.html has to be able to draw one frame on its own, because everything else about this app is downstream of a
 // bundle that has not arrived yet. On a cold start — a new machine, an empty HTTP cache, a webview profile being

@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { createLogger } from "../logger.js";
 import { testConfig } from "../testing.js";
 import { backfillSearchIndex, type BackfillSource } from "./search-backfill.js";
@@ -29,8 +29,12 @@ test("indexes what is behind, and skips what is already current", async () => {
             kind: "conversation",
             prune: false,
             sources: [
-                source("c1", "1", "the login redirect", async () => expect.fail("a current source must not be read")),
-                source("c2", "1", "the changelog", async () => expect.fail("a current source must not be read")),
+                source("c1", "1", "the login redirect", async () => {
+                    throw new Error("a current source must not be read");
+                }),
+                source("c2", "1", "the changelog", async () => {
+                    throw new Error("a current source must not be read");
+                }),
             ],
         },
         logger,
@@ -108,7 +112,7 @@ test("pruning drops unlisted sources for sessions and never for conversations", 
 test("an aborted pass stops where it is", async () => {
     const index = openSearchIndex(IN_MEMORY);
     const controller = new AbortController();
-    const read = vi.fn(async () => {
+    const read = mock(async () => {
         controller.abort();
         return [{ text: "only the first", speaker: "user" as const }];
     });

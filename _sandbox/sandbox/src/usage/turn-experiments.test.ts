@@ -1,5 +1,5 @@
 import type { UsageTurn } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { MIN_ARM_TURNS, readTurnExperiments } from "./turn-experiments.js";
 import type { UsageStore } from "./usage-store.js";
 

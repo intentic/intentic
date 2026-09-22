@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { analyzeCode, modelLineOf } from "./analysis.js";
 import { grammars } from "./grammars.js";
 

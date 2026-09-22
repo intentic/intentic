@@ -1,5 +1,5 @@
 import type { InventoryEntry } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { readManagedRegion, scaffoldDeployConfig, writeManagedRegion } from "./deploy-config.js";
 
 const hostEntry: InventoryEntry = { kind: "backend", provider: "host", name: "self", values: { address: "1.2.3.4", user: "deploy", port: 22 } };

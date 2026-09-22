@@ -1,5 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { contentMatches, nameMatches, RESULTS_CAP, whereOf } from "./homeResults";
 
 const file = (path: string): WorkspaceTreeEntry => ({ name: path.slice(path.lastIndexOf(`/`) + 1), path, type: `file` });

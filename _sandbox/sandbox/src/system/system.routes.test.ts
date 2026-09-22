@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
 import type { ManagedProcesses } from "../processes/managed-processes.js";

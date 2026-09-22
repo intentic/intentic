@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // The invariant every `cli.ts` on this shell depends on. A CLI's entry file may import THIS module statically
 // only while this module itself pulls nothing in at runtime: the first runtime import here is loaded before any

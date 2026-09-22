@@ -1,5 +1,5 @@
 import { nextTick, ref } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 
 /* Switching sandboxes as a change of SCREEN, not just of daemon: what each sandbox was last showing is what it comes back to. */
 
@@ -30,11 +30,11 @@ type AfterEach = (to: Landing, from: Landing, failure?: unknown) => void;
 
 const activeSandboxId = ref<string | undefined>(`sb1`);
 const currentRoute = ref<Landing>(shellRoute(`/workspace`));
-const replace = vi.fn();
+const replace = mock();
 const hooks: AfterEach[] = [];
 
-vi.mock("./useSandbox", () => ({ useSandbox: () => ({ activeSandboxId }) }));
-vi.mock("../../../router", () => ({
+mock.module("./useSandbox", () => ({ useSandbox: () => ({ activeSandboxId }) }));
+mock.module("../../../router", () => ({
     router: { afterEach: (hook: AfterEach) => void hooks.push(hook), currentRoute, replace },
 }));
 

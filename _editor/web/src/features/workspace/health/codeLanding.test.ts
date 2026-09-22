@@ -1,6 +1,6 @@
 import { useHighlighter } from "@intentic/ui/highlighter";
 import type * as Monaco from "monaco-editor-core";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { analyzeInApp } from "../files/appGrammars";
 import { landingChange, type ImportSide } from "./codeLanding";
 

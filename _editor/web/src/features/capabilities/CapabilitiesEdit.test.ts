@@ -1,23 +1,25 @@
-// @vitest-environment jsdom
 // Mounts the vpn tile over a live tunnel: filled from the connection not the tile, states whose settings are on
 // screen, and a credential never shown survives a save untouched.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import type { CapabilitySummary } from "@intentic/api-contract";
 import { VAULTED } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
+import * as actualVueRouter from "vue-router";
 
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
 // Which connection the form is over lives in the URL (`edit`), mirroring how the page reads the tile off the path.
 let query: Record<string, string> = {};
-const replace = vi.fn();
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+const replace = mock();
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
     useRoute: () => ({ params: { entry: `vpn` }, query }) as never,
     // `resolve` as well as `push`: a row's menu carries the address of what it opens (menuLink.ts).
-    useRouter: () => ({ push: vi.fn(), replace, resolve: (to: string) => ({ href: to }) }) as never,
+    useRouter: () => ({ push: mock(), replace, resolve: (to: string) => ({ href: to }) }) as never,
 }));
 
 // `secrets: ['config']` marks the WireGuard key as stored but withheld, distinguishing a real secret from an empty
@@ -31,41 +33,45 @@ const office = (): CapabilitySummary => ({
     secrets: [`config`],
 });
 
-const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async () => {});
-vi.mock(`./connect/useCapabilities`, () => ({
+const add = mock<(input: AddCapabilityInput) => Promise<void>>(async () => {});
+mock.module(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
         error: ref(undefined),
         add: (input: AddCapabilityInput) => add(input),
-        remove: { mutateAsync: vi.fn(), isPending: ref(false) },
-        rename: { mutateAsync: vi.fn(), isPending: ref(false) },
-        refetch: vi.fn(),
-        dismissRecommendation: { mutateAsync: vi.fn(), isPending: ref(false) },
+        remove: { mutateAsync: mock(), isPending: ref(false) },
+        rename: { mutateAsync: mock(), isPending: ref(false) },
+        refetch: mock(),
+        dismissRecommendation: { mutateAsync: mock(), isPending: ref(false) },
     }),
-    browseMarketplace: vi.fn(),
+    browseMarketplace: mock(),
+    // The connect forms read these at link time though no case here opens one; a mock missing a name anything in
+    // the graph imports is refused.
+    readRemoteRefs: mock(async () => ({ refs: [] })),
+    probeCapability: mock(),
 }));
-vi.mock(`../extensions/useExtensions`, () => ({
+mock.module(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({ contributionOf: () => undefined, enabled: ref([]), extensions: ref([]), settled: ref(true) }),
 }));
-vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-vi.mock(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
-    viewProcessLogs: vi.fn(),
+mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+mock.module(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
+    viewProcessLogs: mock(),
 }));
-vi.mock(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
+mock.module(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
 }));
 // VpnConnections dials as well as lists, so `error` must be present or the render throws.
-vi.mock(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: vi.fn(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
+mock.module(`../sandbox/devices/useVpn`, () => ({
+    importForticlient: mock(),
+    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
 }));
-vi.mock(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: vi.fn(), unmount: vi.fn() }),
+mock.module(`../sandbox/devices/useNetdisk`, () => ({
+    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
 }));
-vi.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
 
@@ -100,7 +106,7 @@ const start = (editing: string | undefined): HTMLElement => {
 // Submits the way the button does: Add is a PrimeVue component that dispatches this event.
 const submitForm = async (el: HTMLElement): Promise<void> => {
     el.querySelector(`form`)!.dispatchEvent(new Event(`submit`, { bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(add).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(1));
     await nextTick();
 };
 

@@ -1,14 +1,15 @@
-// @vitest-environment jsdom
 // Navigation completes while the chunk is still in flight; the outline only shows past the reveal delay, then
 // swaps to the real view. Owns the failure path: a dead chunk gets the stale-window reload, anything else a notice with
 // retry.
-import { afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeAll, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, type Component, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter, RouterView, type Router } from "vue-router";
 import { asyncView } from "./asyncView";
 
 // window.location is unforgeable in jsdom; the reload is observed via a replaced global, per staleChunk.test.
-const assign = vi.fn();
+const assign = mock();
 beforeAll(() => {
     Object.defineProperty(globalThis, `location`, {
         configurable: true,
@@ -18,7 +19,7 @@ beforeAll(() => {
 
 const mounted: { app: App; el: HTMLElement }[] = [];
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     sessionStorage.clear();
     assign.mockClear();
 });
@@ -27,7 +28,7 @@ afterEach(() => {
         app.unmount();
         el.remove();
     }
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 // Real router, real route: the claim under test is navigation, not just rendering.
@@ -68,7 +69,7 @@ it(`completes the navigation before the chunk arrives, reveals the outline only 
     // A wait under the reveal delay paints no placeholder; a warm chunk must not flash grey.
     expect(el.querySelector(`[data-outline]`)).toBeNull();
 
-    await vi.advanceTimersByTimeAsync(250);
+    await advanceTimersByTimeAsync(250);
     expect(el.querySelector(`[data-outline]`)).not.toBeNull();
 
     land({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) });
@@ -78,7 +79,7 @@ it(`completes the navigation before the chunk arrives, reveals the outline only 
 });
 
 it(`a revisit renders synchronously: the chunk is fetched once and kept`, async () => {
-    const load = vi.fn(() => Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }));
+    const load = mock(() => Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }));
     const view = asyncView(load);
     const { router, el } = await mountAt(view);
 
@@ -114,7 +115,7 @@ it(`answers a dead chunk with one reload landed on the destination, and a notice
 
 it(`says a non-chunk failure instead of reloading, and the retry re-fetches`, async () => {
     let broken = true;
-    const load = vi.fn(() =>
+    const load = mock(() =>
         broken ? Promise.reject(new Error(`boom`)) : Promise.resolve({ default: defineComponent({ render: () => h(`div`, { "data-view": `` }) }) }),
     );
     const { router, el } = await mountAt(asyncView(load));

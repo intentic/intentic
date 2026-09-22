@@ -1,20 +1,27 @@
-// @vitest-environment jsdom
 // Pins that setup asks for neither a name (moved to the workspace) nor a machine (decided by surface, setupArrival.ts).
 // Defaults to a platform that hosts nothing, the world that leaves the command lane on screen.
+import "@intentic/testing/dom";
 import type { SandboxSummary } from "@intentic/api-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { waitFor, advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
 import PrimeVue from "primevue/config";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as actualVueRouter from "vue-router";
+import { RouterLinkStub } from "../../testing/routerLinkStub";
+import * as actualUi from "@intentic/ui";
+import * as actualDesktop from "../../app/environments/desktop";
+import * as actualDesktopDownloads from "../../app/environments/desktopDownloads";
 
 // Both useDevice (matchMedia) and environment.ts (window.env) read globals at module scope on import.
 
-const push = vi.fn();
-const replace = vi.fn();
+const push = mock();
+const replace = mock();
 // Query string the page was opened with; unset means a cold, linkless visit.
 const query = ref<Record<string, string>>({});
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+// The factory is synchronous: awaiting inside one that replaces a module this file has already imported never returns.
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
     useRoute: () =>
         ({
             get query() {
@@ -23,35 +30,37 @@ vi.mock(import(`vue-router`), async (importOriginal) => ({
         }) as never,
     useRouter: () => ({ push, replace }) as never,
     // RouterLink stub: the real component resolves its href from a router this bare mount never installs.
-    RouterLink: (await import(`../../testing/routerLinkStub`)).RouterLinkStub as never,
+    RouterLink: RouterLinkStub as never,
 }));
 
 // Desktop unless a test flips it; the phone default is its own behavior (auto-picks the hosted rung).
 const mobileDevice = ref(false);
-vi.mock(import(`@intentic/ui`), async (importOriginal) => {
-    const actual = await importOriginal();
+// Snapshotted before the mock below replaces the module: a namespace is a live binding, so calling through it
+// afterwards would re-enter the stand-in rather than reach the real one.
+const realUi = { ...actualUi };
+mock.module(`@intentic/ui`, () => {
     return {
-        ...actual,
-        useDevice: (() => ({ ...actual.useDevice(), mobile: mobileDevice })) as typeof actual.useDevice,
+        ...realUi,
+        useDevice: (() => ({ ...realUi.useDevice(), mobile: mobileDevice })) as typeof actualUi.useDevice,
         // Stubbed without Shiki's async highlighter; tests only check whether the command renders.
-        Code: defineComponent({ props: { code: String }, render: () => null }) as unknown as typeof actual.Code,
+        Code: defineComponent({ props: { code: String }, render: () => null }) as unknown as typeof actualUi.Code,
     };
 });
 
 // sandboxes feeds the auto-name count, list is the mount-time read, create is this page's one write.
 const sandboxes = ref<SandboxSummary[]>([]);
-const list = vi.fn<() => Promise<SandboxSummary[]>>();
-const create = vi.fn<(name: string) => Promise<SandboxSummary>>();
-const hostedProvision = vi.fn<(sandboxId: string, token: string) => Promise<SandboxSummary>>();
-const hostedRelease = vi.fn<(sandboxId: string) => Promise<SandboxSummary>>();
+const list = mock<() => Promise<SandboxSummary[]>>();
+const create = mock<(name: string) => Promise<SandboxSummary>>();
+const hostedProvision = mock<(sandboxId: string, token: string) => Promise<SandboxSummary>>();
+const hostedRelease = mock<(sandboxId: string) => Promise<SandboxSummary>>();
 // The 3s poll's read; the wait card is driven entirely by what it returns.
-const refresh = vi.fn<() => Promise<SandboxSummary[]>>();
+const refresh = mock<() => Promise<SandboxSummary[]>>();
 // The discard rule's one observable act: leaving without committing deletes the draft this page minted.
-const remove = vi.fn<(id: string) => Promise<void>>();
+const remove = mock<(id: string) => Promise<void>>();
 // The attach lane's one write; named so a test can assert the probe was never even attempted.
-const attach = vi.fn<(id: string, url: string) => Promise<void>>();
+const attach = mock<(id: string, url: string) => Promise<void>>();
 // activeSandboxId/reachable belong to the chat store, read at module scope; omitting them crashes the import.
-vi.mock(`../sandbox/client/useSandbox`, () => ({
+mock.module(`../sandbox/client/useSandbox`, () => ({
     useSandbox: () => ({
         sandboxes,
         list,
@@ -60,7 +69,7 @@ vi.mock(`../sandbox/client/useSandbox`, () => ({
         hostedRelease,
         refresh,
         remove,
-        select: vi.fn(),
+        select: mock(),
         attach,
         activeSandboxId: ref<string | undefined>(undefined),
         reachable: ref(false),
@@ -69,27 +78,27 @@ vi.mock(`../sandbox/client/useSandbox`, () => ({
 
 // Mint never settles, keeping step 3 locked; hostedOffer defaults to false so classic lanes stay hosted-free.
 type Minted = { code: string; hostname: string; expiresAt: string };
-const setupCode = vi.fn<() => Promise<Minted>>(() => new Promise<Minted>(() => {}));
-const hostedOffer = vi.fn().mockResolvedValue({ enabled: false, remaining: 0 });
+const setupCode = mock<() => Promise<Minted>>(() => new Promise<Minted>(() => {}));
+const hostedOffer = mock().mockResolvedValue({ enabled: false, remaining: 0 });
 // Address minting is on by default; the world every lane below assumes unless a test says otherwise.
-const addressOffer = vi.fn().mockResolvedValue({ enabled: true });
+const addressOffer = mock().mockResolvedValue({ enabled: true });
 // Power poll and restart default harmlessly; a wait that can't ask falls back to its plain step list.
-const hostedStatus = vi.fn().mockResolvedValue({ machine: `unknown` });
-const hostedRestart = vi.fn().mockResolvedValue({ ok: true });
+const hostedStatus = mock().mockResolvedValue({ machine: `unknown` });
+const hostedRestart = mock().mockResolvedValue({ ok: true });
 // The wait's own recovery: the platform is asked to start a machine the provider reports down.
-const wake = vi.fn().mockResolvedValue({ ok: true });
-vi.mock(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake } } }));
-vi.mock(`../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToken: vi.fn().mockResolvedValue(`0f310c3c4db4`) }));
-vi.mock(`../../app/analytics`, () => ({ track: vi.fn() }));
-vi.mock(`../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
-vi.mock(`../auth/useGoogleIdentity`, () => ({
-    useGoogleIdentity: () => ({ getIdToken: vi.fn().mockResolvedValue(`id-token`), warmIdToken: vi.fn() }),
+const wake = mock().mockResolvedValue({ ok: true });
+mock.module(`../../lib/useApi`, () => ({ apiClient: { sandbox: { setupCode, hostedOffer, addressOffer, hostedStatus, hostedRestart, wake } } }));
+mock.module(`../sandbox/session/sandboxIdFromToken`, () => ({ sandboxIdFromToken: mock().mockResolvedValue(`0f310c3c4db4`) }));
+mock.module(`../../app/analytics`, () => ({ track: mock() }));
+mock.module(`../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+mock.module(`../auth/useGoogleIdentity`, () => ({
+    useGoogleIdentity: () => ({ getIdToken: mock().mockResolvedValue(`id-token`), warmIdToken: mock() }),
 }));
 // The page's wall clock as a knob: every verdict the wait card reaches by elapsed time reads this, so a test
 // about one has to be able to move it. Frozen at 0 unless a test says otherwise, which is how it behaved before.
 const nowAt = ref(0);
-vi.mock(`../../../../ui/src/composables/useNow`, () => ({ useNow: () => nowAt }));
-vi.mock(`../extensions/useCloudflareZones`, () => ({
+mock.module(`../../../../ui/src/composables/useNow`, () => ({ useNow: () => nowAt }));
+mock.module(`../extensions/useCloudflareZones`, () => ({
     useCloudflareZones: () => ({
         cfToken: ref(``),
         cfTokenValid: ref(false),
@@ -103,29 +112,29 @@ vi.mock(`../extensions/useCloudflareZones`, () => ({
 // with the command, so it is a knob every test below can turn. Undefined by default: the Mac-shaped world,
 // where the command is still the path, which is what most of these tests were written against.
 // Typed off the real export rather than restated, so the knob cannot drift from the function it stands in for.
-const desktopInstaller = vi.fn<typeof import("../../app/environments/desktopDownloads").desktopInstaller>(() => undefined);
+const desktopInstaller = mock<typeof import("../../app/environments/desktopDownloads").desktopInstaller>(() => undefined);
 // Only the four reads that ask something of the machine are stubbed; the rest of the module comes through as
 // itself. A listed-exports-only mock made every new export the page reaches for an import-time crash in a file
 // that tests none of it (DESKTOP_SETUP_EVENT, which useDesktopSetup subscribes to, arrived exactly that way).
 // A browser unless a test sets a version: only the presence of one says "running inside the app", which is the
 // arrival that installs on this computer.
 const desktopApp = ref<string | undefined>(undefined);
-vi.mock(import(`../../app/environments/desktop`), async (importOriginal) => ({
-    ...(await importOriginal()),
+mock.module(`../../app/environments/desktop`, () => ({
+    ...actualDesktop,
     desktopSetupLink: () => ``,
     desktopVersion: () => desktopApp.value,
-    openDesktopLink: vi.fn(),
+    openDesktopLink: mock(),
 }));
-vi.mock(import(`../../app/environments/desktopDownloads`), async (importOriginal) => ({
-    ...(await importOriginal()),
+mock.module(`../../app/environments/desktopDownloads`, () => ({
+    ...actualDesktopDownloads,
     desktopInstaller: () => desktopInstaller(),
 }));
 // Steps 2-3's own components, stubbed out: none of their concerns belong to step 1's tests.
-vi.mock(`./SetupCompose.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./SetupHandoff.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./SetupRunDetails.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./SetupSyncOption.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`../capabilities/connect/CloudflareTokenField.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./SetupCompose.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./SetupHandoff.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./SetupRunDetails.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./SetupSyncOption.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`../capabilities/connect/CloudflareTokenField.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Setup } = await import("./Setup.vue");
 
@@ -155,8 +164,9 @@ const mount = async (): Promise<HTMLElement> => {
     app.directive(`tooltip`, {});
     app.mount(el);
     // A macrotask flush: the mount's chained awaits (list, then the hosted offer) outrun a fixed tick count.
-    await vi.waitFor(() => expect(list).toHaveBeenCalledTimes(1));
-    await new Promise((resolve) => setTimeout(resolve));
+    // setImmediate rather than setTimeout, since a case below mounts under fake timers.
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+    await realYield();
     await nextTick();
     await nextTick();
     return el;
@@ -169,7 +179,7 @@ const buttonLabelled = (text: string): HTMLButtonElement | undefined =>
 // Stepping off the hosted rung deletes a disk, so it asks first; this is what the old single click amounted to.
 // The dialog teleports to body, which is why the lookup above is document-wide.
 const pressHandBack = async (): Promise<void> => {
-    await vi.waitFor(() => expect(buttonLabelled(`Delete the machine`)?.tagName).toBe(`BUTTON`));
+    await waitFor(() => expect(buttonLabelled(`Delete the machine`)?.tagName).toBe(`BUTTON`));
     buttonLabelled(`Delete the machine`)!.click();
 };
 
@@ -217,9 +227,9 @@ beforeEach(() => {
 });
 
 // Moves the faked clock and the page's own reading of it together; `useNow` is mocked, so nothing else moves it.
-// Only meaningful under fake timers that include `Date`, which is what the page dates its own waits by.
+// Only meaningful under fake timers, which is what the page dates its own waits by.
 const tick = async (ms: number): Promise<void> => {
-    await vi.advanceTimersByTimeAsync(ms);
+    await advanceTimersByTimeAsync(ms);
     nowAt.value = Date.now();
 };
 
@@ -233,7 +243,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 it(`creates the sandbox on arrival, with no name asked for`, async () => {
@@ -256,7 +266,7 @@ it(`discards the sandbox it made when the reader leaves without committing`, asy
 it(`keeps the sandbox once a machine has been started for it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+    await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     leave();
     expect(remove).not.toHaveBeenCalled();
 });
@@ -285,8 +295,8 @@ it(`says nothing about the sandbox until the arrival read answers`, async () => 
     expect(el.textContent).not.toContain(`Connect it by domain`);
     // Once it answers: a row now exists, and its address begins minting.
     answer([]);
-    await vi.waitFor(() => expect(create).toHaveBeenCalledTimes(1));
-    await new Promise((resolve) => setTimeout(resolve));
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    await realYield();
     await nextTick();
     expect(el.textContent).toContain(`Preparing your intentic domain`);
 });
@@ -352,7 +362,7 @@ it(`starts a machine of ours for a browser, on arrival`, async () => {
     const el = await mount();
     // The row is created the ordinary way: the lane only decides what machine is attached to it.
     expect(create).toHaveBeenCalledWith(`workspace`);
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+    await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     await nextTick();
     // The wait names each step rather than a single generic sentence.
     expect(el.textContent).toContain(`Starting the machine`);
@@ -396,7 +406,7 @@ it(`starts nothing, and offers the other rung, when the platform is out of machi
 it(`offers the rung it did not take, without taking it`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+    await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     expect(el.textContent).toContain(`Other ways to set up`);
     buttonLabelled(`Run it on my own computer`)!.click();
     await nextTick();
@@ -410,7 +420,7 @@ it(`offers the rung it did not take, without taking it`, async () => {
 it(`says what is happening rather than asking, when the arrival answered`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+    await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     expect(el.textContent).toContain(`We're starting a machine for you`);
     expect(el.textContent).not.toContain(`Pick where it runs`);
 });
@@ -428,7 +438,7 @@ it(`starts a machine for a phone too`, async () => {
     mobileDevice.value = true;
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+    await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     expect(el.textContent).toContain(`Starting the machine`);
     expect(buttonLabelled(`Start my machine`)).toBeUndefined();
 });
@@ -462,7 +472,7 @@ it(`ignores a rung the platform is not offering`, async () => {
     const el = await mount();
     expect(hostedProvision).not.toHaveBeenCalled();
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);
-    await vi.waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
+    await waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
 });
 
 // The hostname is a consequence of the chosen rung, so it renders on that rung's own card.
@@ -472,7 +482,7 @@ it(`reports the address on the run card rather than above the choice`, async () 
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
-    await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    await waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
     // Both the address and its escape hatch sit after the picker: a stranger reaches the choice first.
     expect(afterThePicker(MINTED.hostname)).toBe(true);
     expect(afterThePicker(`Use a different address`)).toBe(true);
@@ -483,7 +493,7 @@ it(`offers the app first on a machine we ship a build for, with the command one 
     desktopInstaller.mockReturnValue({ platform: `windows`, label: `Windows`, href: `https://intentic.dev/desktop/windows` });
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
-    await vi.waitFor(() => expect(linkLabelled(`Download for Windows`)).toEqual(expect.any(Object)));
+    await waitFor(() => expect(linkLabelled(`Download for Windows`)).toEqual(expect.any(Object)));
     expect(linkLabelled(`Download for Windows`)!.getAttribute(`href`)).toBe(`https://intentic.dev/desktop/windows`);
     // Nothing about a terminal on the first frame, not the paste instruction, not the `sudo` switch.
     expect(el.textContent).not.toContain(`Paste it into a terminal`);
@@ -504,11 +514,10 @@ it(`keeps the command first where there is no build for the reader's machine`, a
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
     // The mint watcher debounces by 500ms (Setup.vue `mintTimer`). On a loaded CI runner that real wait
-    // plus the async mint can exceed vi.waitFor's default 1s budget, so the clock is walked forward
-    // instead. Only setTimeout is faked: mount's own macrotask flush is already past.
-    vi.useFakeTimers({ toFake: [`setTimeout`, `clearTimeout`] });
-    await vi.advanceTimersByTimeAsync(500);
-    await vi.waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
+    // plus the async mint can exceed waitFor's default 1s budget, so the clock is walked forward instead.
+    jest.useFakeTimers();
+    await advanceTimersByTimeAsync(500);
+    await waitFor(() => expect(el.textContent).toContain(`Paste it into a terminal`));
     expect(linkLabelled(`Download for Windows`)).toBeUndefined();
     expect(linkLabelled(`Download for Linux`)).toBeUndefined();
     // No alternatives row here: the command is already the one path on screen.
@@ -520,7 +529,7 @@ it(`keeps the sandbox and says why when the machine is refused`, async () => {
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     hostedProvision.mockRejectedValue(new Error(`no capacity right now`));
     const el = await mount();
-    await vi.waitFor(() => expect(el.textContent).toContain(`no capacity right now`));
+    await waitFor(() => expect(el.textContent).toContain(`no capacity right now`));
     // The row the page made on arrival carries on: not deleted, not made again in another lane.
     expect(create).toHaveBeenCalledTimes(1);
     expect(remove).not.toHaveBeenCalled();
@@ -551,13 +560,13 @@ it(`hands back an untouched machine on arrival in the app, and mints a code for 
     sandboxes.value = [hosted];
     list.mockResolvedValue([hosted]);
     const el = await mount();
-    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
+    await waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
     // The row is kept and nothing is started in its place: the machine is given back, not replaced.
     expect(create).not.toHaveBeenCalled();
     expect(hostedProvision).not.toHaveBeenCalled();
     expect(el.textContent).not.toContain(`Starting the machine`);
     // The proof the local lane is live: while a machine sits on the row, no setup code is ever minted.
-    await vi.waitFor(() => expect(setupCode).toHaveBeenCalledWith({ sandboxId: `h1` }));
+    await waitFor(() => expect(setupCode).toHaveBeenCalledWith({ sandboxId: `h1` }));
 });
 
 // Handing a machine back is safe only while nothing has run on it; a redeemed code means work no one may lose.
@@ -586,12 +595,11 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
     list.mockResolvedValue([hosted]);
     refresh.mockResolvedValue([{ ...hosted, announceRefusal: { announced: `old.example.dev`, expected: `sandbox-abc.sbx.test` } }]);
     // The poll is what learns this: the row the page was mounted with knew nothing. It runs every 3s, and the
-    // clock is walked to that tick rather than waited on. Only the interval is faked: the mount's own macrotask
-    // flush and vi.waitFor's polling stay on real time.
-    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
+    // clock is walked to that tick rather than waited on; waitFor and the mount's flush stay on the real clock.
+    jest.useFakeTimers();
     const el = await mount();
-    await vi.advanceTimersByTimeAsync(3_000);
-    await vi.waitFor(() => expect(el.textContent).toContain(`old.example.dev`));
+    await advanceTimersByTimeAsync(3_000);
+    await waitFor(() => expect(el.textContent).toContain(`old.example.dev`));
     expect(el.textContent).toContain(`sandbox-abc.sbx.test`);
     // The step list disappears here: a ticking list beside a failure message would contradict it.
     expect(el.textContent).not.toContain(`Putting it on the internet`);
@@ -599,7 +607,7 @@ it(`names a refused check-in on the wait card, with a way out`, async () => {
     // The address is built into this machine, so the way out is a new one rather than another boot.
     const restart = [...el.querySelectorAll<HTMLElement>(`button`)].find((button) => button.textContent?.includes(`Start it over`));
     restart!.click();
-    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
+    await waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
     expect(hostedProvision).toHaveBeenCalledWith(`h1`, `tok`);
     expect(hostedRestart).not.toHaveBeenCalled();
 });
@@ -619,10 +627,10 @@ const hostedWaiting = (): SandboxSummary => {
 it(`starts a machine the provider says is down, instead of asking the reader to`, async () => {
     hostedWaiting();
     hostedStatus.mockResolvedValue({ machine: `stopped` });
-    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
+    jest.useFakeTimers();
     const el = await mount();
-    await vi.advanceTimersByTimeAsync(3_000);
-    await vi.waitFor(() => expect(wake).toHaveBeenCalledWith({ sandboxId: `h1` }));
+    await advanceTimersByTimeAsync(3_000);
+    await waitFor(() => expect(wake).toHaveBeenCalledWith({ sandboxId: `h1` }));
     // And keeps narrating a boot, because a boot is exactly what that just started.
     expect(el.textContent).toContain(`Starting the machine`);
     expect(el.textContent).not.toContain(`isn't running`);
@@ -636,7 +644,7 @@ it(`stops starting a machine that will not stay up, and then says so`, async () 
     hostedStatus.mockResolvedValue({ machine: `stopped` });
     // Date rides the fake clock here: the reflex throttles itself by wall time, and the card's verdict is a
     // reading of it, so a test about either has to own it.
-    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`, `Date`] });
+    jest.useFakeTimers();
     const el = await mount();
     // Machine state is read every fourth 3s poll, and starts are 30s apart: three of them fit in a minute and a
     // half, and nothing buys a fourth.
@@ -644,10 +652,10 @@ it(`stops starting a machine that will not stay up, and then says so`, async () 
     expect(wake).toHaveBeenCalledTimes(3);
     await tick(90_000);
     expect(wake).toHaveBeenCalledTimes(3);
-    await vi.waitFor(() => expect(el.textContent).toContain(`isn't running`));
+    await waitFor(() => expect(el.textContent).toContain(`isn't running`));
     // And the button is the reader's now: the heavier recovery this page never attempts on anyone's behalf.
     buttonLabelled(`Start it over`)!.click();
-    await vi.waitFor(() => expect(hostedRestart).toHaveBeenCalledWith({ sandboxId: `h1` }));
+    await waitFor(() => expect(hostedRestart).toHaveBeenCalledWith({ sandboxId: `h1` }));
 });
 
 // The one wording a reader can prove wrong: "that's ours to fix, nothing on your side causes this", said over a
@@ -656,17 +664,17 @@ it(`says what a refused start actually was, and offers the way out that works`, 
     hostedWaiting();
     hostedStatus.mockResolvedValue({ machine: `stopped` });
     wake.mockRejectedValue(Object.assign(new Error(`free hours are used up this month`), { code: `PAYMENT_REQUIRED`, status: 402 }));
-    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
+    jest.useFakeTimers();
     const el = await mount();
-    await vi.advanceTimersByTimeAsync(3_000);
+    await advanceTimersByTimeAsync(3_000);
     // No clock is waited out for this: somebody decided it, so it is true the moment it is known.
-    await vi.waitFor(() => expect(el.textContent).toContain(`free hours`));
+    await waitFor(() => expect(el.textContent).toContain(`free hours`));
     expect(el.textContent).not.toContain(`isn't running`);
     expect(buttonLabelled(`Start it over`)).toBeUndefined();
     // The offered way out is the one that works right now, and taking it hands the stopped machine back.
     buttonLabelled(`Set it up on my own computer`)!.click();
     await pressHandBack();
-    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
+    await waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
 });
 
 // A switch moves the machine, never the sandbox: same id, same name, no delete-and-recreate.
@@ -727,16 +735,16 @@ it(`hands the machine back when another rung is chosen, keeping the same sandbox
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
     // The arrival started it; the reader opens the rung it did not take and steps off.
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+    await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     buttonLabelled(`Run it on my own computer`)!.click();
     await nextTick();
     const mine = (): HTMLButtonElement =>
         [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`)) as HTMLButtonElement;
     // Rungs disable while the machine is made and the allowance re-read; clicking before that settles does nothing.
-    await vi.waitFor(() => expect(mine().disabled).toBe(false));
+    await waitFor(() => expect(mine().disabled).toBe(false));
     mine().click();
     await pressHandBack();
-    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`new`));
+    await waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`new`));
     expect(create).toHaveBeenCalledTimes(1); // the row survived the switch
     expect(remove).not.toHaveBeenCalled();
 });
@@ -753,7 +761,7 @@ it(`asks before deleting the machine a rung switch would hand back, and says wha
         [...el.querySelectorAll(`[role="radio"]`)].find((card) => card.textContent?.includes(label)) as HTMLButtonElement;
 
     rung(`My own computer`).click();
-    await vi.waitFor(() => expect(buttonLabelled(`Delete the machine`)?.tagName).toBe(`BUTTON`));
+    await waitFor(() => expect(buttonLabelled(`Delete the machine`)?.tagName).toBe(`BUTTON`));
     // The sentence the reader is answering; a question that only said "are you sure" would not have saved them.
     expect(document.body.textContent).toContain(`Every file, repo and conversation on that machine is deleted`);
     expect(hostedRelease).not.toHaveBeenCalled();
@@ -778,8 +786,8 @@ it(`offers the hosted rung again once its machine has been handed back`, async (
 
     rung(`My own computer`).click();
     await pressHandBack();
-    await vi.waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
-    await vi.waitFor(() => expect(rung(`Start instantly`).disabled).toBe(false));
+    await waitFor(() => expect(hostedRelease).toHaveBeenCalledWith(`h1`));
+    await waitFor(() => expect(rung(`Start instantly`).disabled).toBe(false));
     expect(el.textContent).not.toContain(`Already using yours`);
 });
 
@@ -794,9 +802,10 @@ it(`switches during provisioning and ignores the machine's late response`, async
     const mine = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`))!;
     expect(mine.disabled).toBe(false);
     mine.click();
-    await vi.waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
-    expect(hostedRelease).toHaveBeenCalledExactlyOnceWith(`new`);
-    await vi.waitFor(() => expect(setupCode).toHaveBeenCalledWith({ sandboxId: `new` }));
+    await waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
+    expect(hostedRelease).toHaveBeenCalledTimes(1);
+    expect(hostedRelease).toHaveBeenCalledWith(`new`);
+    await waitFor(() => expect(setupCode).toHaveBeenCalledWith({ sandboxId: `new` }));
     provisioning.resolve(sandboxRow({ id: `new`, hosted: { region: `iad`, warm: true }, lastSeenAt: new Date().toISOString() }));
     await nextTick();
     await nextTick();
@@ -815,9 +824,9 @@ it(`can retry cancellation while the provision request is still pending`, async 
     await nextTick();
     const mine = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`))!;
     mine.click();
-    await vi.waitFor(() => expect(el.textContent).toContain(`Couldn't remove the machine`));
+    await waitFor(() => expect(el.textContent).toContain(`Couldn't remove the machine`));
     mine.click();
-    await vi.waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
+    await waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
     expect(hostedRelease).toHaveBeenCalledTimes(2);
     provisioning.reject(new Error(`cancelled`));
     await nextTick();
@@ -825,7 +834,7 @@ it(`can retry cancellation while the provision request is still pending`, async 
 });
 
 it(`ignores a ready hosted poll returned after switching to the local install`, async () => {
-    vi.useFakeTimers({ toFake: [`setInterval`, `clearInterval`] });
+    jest.useFakeTimers();
     const hosted = sandboxRow({ id: `h1`, hosted: { region: `iad`, warm: true } });
     list.mockResolvedValue([hosted]);
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 0 });
@@ -833,12 +842,12 @@ it(`ignores a ready hosted poll returned after switching to the local install`, 
     refresh.mockReturnValue(poll.promise);
     hostedRelease.mockResolvedValue(sandboxRow({ id: `h1`, token: `local-token` }));
     const el = await mount();
-    await vi.advanceTimersByTimeAsync(3000);
+    await advanceTimersByTimeAsync(3000);
     expect(refresh).toHaveBeenCalledTimes(1);
     const mine = [...el.querySelectorAll<HTMLButtonElement>(`[role="radio"]`)].find((card) => card.textContent?.includes(`My own computer`))!;
     mine.click();
     await pressHandBack();
-    await vi.waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
+    await waitFor(() => expect(mine.getAttribute(`aria-checked`)).toBe(`true`));
     poll.resolve([{ ...hosted, lastSeenAt: new Date().toISOString(), bootReport: { reach: `reachable`, at: new Date().toISOString() } }]);
     await nextTick();
     await nextTick();
@@ -867,7 +876,7 @@ it(`states what an addressless platform can do, without spinning and without ope
 it(`refuses to probe an address we handed out, and points back at the command`, async () => {
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
-    await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    await waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
     buttonLabelled(`Use a different address`)!.click();
     await nextTick();
     buttonLabelled(`a domain it already answers on`)!.click();
@@ -890,7 +899,7 @@ it(`refuses to probe an address we handed out, and points back at the command`, 
 it(`folds the WEB_ORIGIN cause away until the checks anyone can make have been tried`, async () => {
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
-    await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    await waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
     buttonLabelled(`Use a different address`)!.click();
     await nextTick();
     buttonLabelled(`a domain it already answers on`)!.click();
@@ -902,7 +911,7 @@ it(`folds the WEB_ORIGIN cause away until the checks anyone can make have been t
     await nextTick();
     // Nothing is listening in a unit run, so the probe's own verdict is the `unreachable` this notice is for.
     buttonLabelled(`Connect`)!.click();
-    await vi.waitFor(() => expect(el.textContent).toContain(`Nothing answered at that address.`));
+    await waitFor(() => expect(el.textContent).toContain(`Nothing answered at that address.`));
 
     expect(el.textContent).toContain(`Check the sandbox is running`);
     expect(el.textContent).not.toContain(`WEB_ORIGIN`);
@@ -915,7 +924,7 @@ it(`folds the WEB_ORIGIN cause away until the checks anyone can make have been t
 it(`still attaches a domain of the reader's own`, async () => {
     setupCode.mockResolvedValue(MINTED);
     const el = await mount();
-    await vi.waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
+    await waitFor(() => expect(el.textContent).toContain(MINTED.hostname));
     buttonLabelled(`Use a different address`)!.click();
     await nextTick();
     buttonLabelled(`a domain it already answers on`)!.click();
@@ -955,7 +964,7 @@ it(`keeps the hosted lane when the platform hosts but mints no addresses`, async
     addressOffer.mockResolvedValue({ enabled: false });
     hostedOffer.mockResolvedValue({ enabled: true, remaining: 1 });
     const el = await mount();
-    await vi.waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
+    await waitFor(() => expect(hostedProvision).toHaveBeenCalledWith(`new`, `tok`));
     expect(el.textContent).toContain(`Starting the machine`);
     expect(el.textContent).not.toContain(`Connect your sandbox`);
     expect(el.querySelectorAll(`[role="radio"]`)).toHaveLength(0);

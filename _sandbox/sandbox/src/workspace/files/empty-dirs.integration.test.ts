@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { scanBarrenDirs } from "./empty-dirs.js";
 import { walkWorkspaceTree } from "./workspace-tree.js";
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { attr, child, descendant, descendants, parseXml, textOf } from "./xml-tree";
 
 /* The parse every document viewer stands on. */

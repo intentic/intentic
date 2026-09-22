@@ -195,7 +195,7 @@ const nameMismatches = packages.flatMap(({ name, pkg }) => {
 
 // Basename collisions within one package; exemptions are names whose job is to repeat (a barrel, invariant.ts, a
 // manifest, a route/handler file, a test).
-const COLLISION_OK = /^(index\.ts|invariant\.ts|README\.md|package\.json|tsconfig.*\.json|vitest\.config\.ts)$|\.(routes|contract|handler|test|spec)\.[cm]?tsx?$/;
+const COLLISION_OK = /^(index\.ts|invariant\.ts|README\.md|package\.json|tsconfig.*\.json|bunfig\.toml)$|\.(routes|contract|handler|test|spec)\.[cm]?tsx?$/;
 const collisions = new Map();
 for (const { name } of packages) {
     const seen = new Map();

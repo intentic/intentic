@@ -109,7 +109,7 @@ jobs:
       # without. Nothing the tier loads lives outside the subtree.
       - run: pnpm install --frozen-lockfile --filter=@intentic/desktop-smoke-windows...
       # The tier reads window titles through @intentic/desktop-automation, so both packages are built rather than run from
-      # source — the export condition that resolves a workspace package to its TypeScript is a vitest/tsgo
+      # source — the export condition that resolves a workspace package to its TypeScript is a bun/tsgo
       # arrangement, not something plain node applies.
       # `id`, because the teardown at the bottom runs on `always()` and the harness it runs is what this step
       # produces: `dist/` is untracked, the checkout above deletes it, and nothing else puts it back.

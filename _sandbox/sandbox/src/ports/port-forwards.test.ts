@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { createPortForwards } from "./port-forwards.js";
 
 // The table is indifferent to what its slots are CALLED: production salts them with the connect token
@@ -8,16 +8,17 @@ const SLOTS = ["a", "b", "c", "d", "e", "f", "g", "h"];
 
 // Fake timers so LRU timestamps are deterministic (real Date.now can tie within one ms).
 beforeEach(() => {
-    vi.useFakeTimers({ now: 0 });
+    jest.useFakeTimers();
+    jest.setSystemTime(0);
 });
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 const tick = (): void => {
-    vi.setSystemTime(Date.now() + 1000);
+    jest.setSystemTime(Date.now() + 1000);
 };
 
-const httpProbe = vi.fn(async () => "http" as const);
+const httpProbe = mock(async () => "http" as const);
 
 test("forwarding maps ports onto slots in order and is idempotent per port", async () => {
     const forwards = createPortForwards(SLOTS, httpProbe);

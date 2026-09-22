@@ -1,8 +1,8 @@
 import { type AgentTurn, isVerifyNudge, type Rule } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { waitFor, SETTLES } from "@intentic/testing/bun";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { SETTLES } from "@intentic/testing/vitest";
 import { createFrameLedger, type FrameLedger } from "./agent-verification.js";
 import { createViewFrameLedger, type ViewFrameLedger } from "./agent-viewing.js";
 import { nudgeUnverifiedWork, startVerifyNudgeRuntime, type VerifyNudgeRuntime } from "./verify-nudge.js";
@@ -10,7 +10,13 @@ import { nudgeUnverifiedWork, startVerifyNudgeRuntime, type VerifyNudgeRuntime }
 // Tests the proof follow-up made off the frame ledger on a runtime with no Stop hooks, and the guards around spending a
 // turn to deliver it.
 
-const rule: Rule = { id: "verify", label: "Prove the edits", moment: "turn.ending", action: { kind: "builtin", name: "verify-edits" }, enabled: true };
+const rule: Rule = {
+    id: "verify",
+    label: "Prove the edits",
+    moment: "turn.ending",
+    action: { kind: "builtin", name: "verify-edits" },
+    enabled: true,
+};
 const seed: AgentTurn = { prompt: "fix the parser", agent: "codex", model: "gpt-5.1-codex", effort: "high" };
 
 const edited = (path: string): FrameLedger => {
@@ -57,7 +63,7 @@ test("a turn that changed code and proved nothing is sent a follow-up, as its ow
     const message = await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") });
 
     expect(message).toContain("/work/src/parser.ts");
-    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
     // Runs where the work ran and picks the thread back up; a new provider or session asks the wrong agent.
     expect(started[0]).toMatchObject({ conversationId: "c1", agent: "codex", model: "gpt-5.1-codex", effort: "high", sessionId: "session-7" });
     expect(started[0]?.prompt).toBe(message);
@@ -92,7 +98,7 @@ test("the follow-up carries the whole identity of the turn it nudges, and invent
     };
     await nudgeUnverifiedWork({ conversationId: "c1", seed: persona, rules: [rule], ledger: edited(PARSER) });
 
-    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
     expect(started[0]).toMatchObject({
         agent: "codex",
         model: "gpt-5.1-codex",
@@ -112,7 +118,7 @@ test("a nudged turn with no job gives the follow-up no job", async () => {
     const { started } = runtimeWith();
     await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited(PARSER) });
 
-    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
     expect(started[0]?.runRole).toBeUndefined();
 });
 
@@ -133,7 +139,9 @@ test("no rule standing means no follow-up, however unproven the work", async () 
 test("a rule narrowed to paths this turn never touched stays quiet", async () => {
     const { started } = runtimeWith();
     const narrowed: Rule = { ...rule, when: { paths: ["docs/**"] } };
-    expect(await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [narrowed], ledger: edited("/work/src/parser.ts"), cwd: "/work" })).toBeUndefined();
+    expect(
+        await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [narrowed], ledger: edited("/work/src/parser.ts"), cwd: "/work" }),
+    ).toBeUndefined();
     expect(started).toHaveLength(0);
 });
 
@@ -142,7 +150,7 @@ test("a rule narrowed to paths this turn never touched stays quiet", async () =>
 test("a nudge never answers a nudge", async () => {
     const { started } = runtimeWith();
     await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") });
-    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
 
     // The follow-up turn ends just as unproven as the one that triggered it, and is left alone.
     expect(await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") })).toBeUndefined();
@@ -150,7 +158,7 @@ test("a nudge never answers a nudge", async () => {
 
     // The conversation is free again from the turn after that.
     await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") });
-    await vi.waitFor(() => expect(started).toHaveLength(2), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(2), SETTLES);
 });
 
 // The other ledger on the same road: `verify-ui-edits` reads what the turn drew against whether it looked, reaching a
@@ -186,7 +194,7 @@ test("a turn that changed a rendered surface and never looked is sent a follow-u
     });
     expect(message).toContain("/work/src/App.vue");
     expect(message).toMatch(/never looked/i);
-    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
 });
 
 test("a turn that looked after its last surface edit is left alone", async () => {
@@ -223,7 +231,7 @@ test("both builtins standing produce a single follow-up carrying both", async ()
     expect(message).toMatch(/no check.*passed/i);
     expect(message).toContain("/work/src/App.vue");
     expect(message).toMatch(/never looked/i);
-    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
 });
 
 // A conversation whose follow-up never started must not be left guarding one that isn't coming.
@@ -236,5 +244,5 @@ test("a follow-up that cannot start releases the conversation instead of blockin
         },
     });
     await nudgeUnverifiedWork({ conversationId: "c1", seed, rules: [rule], ledger: edited("/work/src/parser.ts") });
-    await vi.waitFor(() => expect(attempts.length).toBeGreaterThan(0), SETTLES);
+    await waitFor(() => expect(attempts.length).toBeGreaterThan(0), SETTLES);
 });

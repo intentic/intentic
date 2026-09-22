@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { deletedReceipt, deleteHeader, joinPath, newNameError } from "./entryNames";
 
 describe(`a new name being typed`, () => {

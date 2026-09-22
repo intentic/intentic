@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { unstubbed } from "./index.js";
 
 interface Wide {

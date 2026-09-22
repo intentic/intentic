@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // The canvases live under two `v-if`s (the stage's `current?.running`, the picture's `kind === 'video'`), so the
 // pane hands the sink `null` every time a browser stops or the picture path changes. Production caught this as
 // "Cannot read properties of null (reading 'style')" from both `attach` and `close`.
-import { expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect } from "bun:test";
 import { videoSink } from "./videoSink";
 
 const canvas = (): HTMLCanvasElement => document.createElement(`canvas`);

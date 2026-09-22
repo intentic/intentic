@@ -1,21 +1,21 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import type { MenuItem } from "primevue/menuitem";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import { type EntryMenuInput, type EntryVerbs, entryMenuItems } from "./entryMenu";
 
 const file: WorkspaceTreeEntry = { name: `a.ts`, path: `src/a.ts`, type: `file` };
 const dir: WorkspaceTreeEntry = { name: `src`, path: `src`, type: `dir`, children: [] };
 
 const verbs = (): EntryVerbs => ({
-    newFile: vi.fn(),
-    newFolder: vi.fn(),
-    rename: vi.fn(),
-    extract: vi.fn(),
-    keepFolder: vi.fn(),
-    remove: vi.fn(),
-    cut: vi.fn(),
-    copy: vi.fn(),
-    paste: vi.fn(),
+    newFile: mock(),
+    newFolder: mock(),
+    rename: mock(),
+    extract: mock(),
+    keepFolder: mock(),
+    remove: mock(),
+    cut: mock(),
+    copy: mock(),
+    paste: mock(),
 });
 const input = (over: Partial<EntryMenuInput> = {}): EntryMenuInput => ({
     target: file,
@@ -62,7 +62,17 @@ describe(`the entry menu`, () => {
 
     it(`offers Extract to one archive, and to nothing the sandbox can't unpack`, () => {
         const zip: WorkspaceTreeEntry = { name: `site.zip`, path: `drops/site.zip`, type: `file` };
-        expect(labels(entryMenuItems(input({ target: zip })))).toEqual([`New File`, `New Folder`, `—`, `Extract`, `Rename`, `Delete`, `—`, `Cut`, `Copy`]);
+        expect(labels(entryMenuItems(input({ target: zip })))).toEqual([
+            `New File`,
+            `New Folder`,
+            `—`,
+            `Extract`,
+            `Rename`,
+            `Delete`,
+            `—`,
+            `Cut`,
+            `Copy`,
+        ]);
         expect(labels(entryMenuItems(input({ target: zip, multi: true, count: 2 })))).not.toContain(`Extract`);
         expect(labels(entryMenuItems(input({ target: { ...zip, name: `site.7z`, path: `drops/site.7z` } })))).not.toContain(`Extract`);
         // A folder can be named like an archive without being one.
@@ -132,6 +142,6 @@ describe(`the entry menu`, () => {
         const spec = input();
         const remove = entryMenuItems(spec).find((item) => item.label === `Delete`);
         remove?.command?.({ originalEvent: new Event(`click`), item: remove });
-        expect(spec.verbs.remove).toHaveBeenCalledOnce();
+        expect(spec.verbs.remove).toHaveBeenCalledTimes(1);
     });
 });

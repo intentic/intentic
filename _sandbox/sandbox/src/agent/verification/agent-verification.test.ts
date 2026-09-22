@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { classifyCommand, createFrameLedger, createVerificationLedger } from "./agent-verification.js";
 
 describe("command classification", () => {
@@ -14,7 +14,7 @@ describe("command classification", () => {
         ["cargo test", "test"],
         ["go build ./...", "build"],
         ["cd _editor/web && pnpm typecheck", "typecheck"],
-    ])("%s proves %s", (command, kind) => {
+    ] as const)("%s proves %s", (command, kind) => {
         expect(
             command
                 .split(/(?:&&|\|\||;|\|)/)

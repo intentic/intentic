@@ -1,10 +1,11 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
+import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { admits, createFreshnessResolver, gapBetween, isPrerelease, parseVersion, type PinnedPackage } from "./registry-freshness.js";
 
 const pin = (version: string, range: PinnedPackage["range"] = "", name = "vue"): PinnedPackage => ({ ecosystem: "npm", name, version, range });
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 // what "behind" means
@@ -54,7 +55,7 @@ test.each(["latest", "*", "", "vNext"])("something that is not a version reads a
 // the resolver, against a stubbed registry
 
 const npmStub = (latest: string, deprecated?: string, calls: { count: number } = { count: 0 }) => {
-    const fetcher = vi.fn(async (url: string | URL) => {
+    const fetcher = mock(async (url: string | URL) => {
         calls.count += 1;
         const text = String(url).includes("/-/package/") ? JSON.stringify({ latest }) : JSON.stringify(deprecated === undefined ? {} : { deprecated });
         return { ok: true, text: async () => text } as unknown as Response;
@@ -64,13 +65,13 @@ const npmStub = (latest: string, deprecated?: string, calls: { count: number } =
 
 test("a pin the registry has moved past reports the newer version and the gap", async () => {
     const { fetcher } = npmStub("1.125.0");
-    vi.stubGlobal("fetch", fetcher);
+    stubGlobal("fetch", fetcher);
     expect(await createFreshnessResolver()(pin("1.90.0", "", "@types/vscode"))).toEqual({ latest: "1.125.0", gap: "minor" });
 });
 
 test("a pin the range already reaches has nothing to report", async () => {
     const { fetcher } = npmStub("7.4.0");
-    vi.stubGlobal("fetch", fetcher);
+    stubGlobal("fetch", fetcher);
     expect(await createFreshnessResolver()(pin("7.1.7", "^", "vite"))).toBeUndefined();
 });
 
@@ -78,23 +79,23 @@ test("a pin the range already reaches has nothing to report", async () => {
 test("a deprecated package is reported even when it is on the newest version", async () => {
     const deprecation = "request has been deprecated";
     const { fetcher } = npmStub("2.88.2", deprecation);
-    vi.stubGlobal("fetch", fetcher);
+    stubGlobal("fetch", fetcher);
     const answer = await createFreshnessResolver()(pin("2.88.2", "", "request"));
     expect(answer?.deprecated).toBe(deprecation);
 });
 
 test("a registry that answers nothing useful produces no claim", async () => {
-    vi.stubGlobal(
+    stubGlobal(
         "fetch",
-        vi.fn(async () => ({ ok: false, text: async () => "" }) as unknown as Response),
+        mock(async () => ({ ok: false, text: async () => "" }) as unknown as Response),
     );
     expect(await createFreshnessResolver()(pin("1.0.0"))).toBeUndefined();
 });
 
 test("a registry that throws produces no claim rather than an error the agent has to handle", async () => {
-    vi.stubGlobal(
+    stubGlobal(
         "fetch",
-        vi.fn(async () => {
+        mock(async () => {
             throw new Error("ENOTFOUND");
         }),
     );
@@ -103,7 +104,7 @@ test("a registry that throws produces no claim rather than an error the agent ha
 
 test("a specifier with no readable version is never looked up", async () => {
     const { fetcher, calls } = npmStub("9.9.9");
-    vi.stubGlobal("fetch", fetcher);
+    stubGlobal("fetch", fetcher);
     expect(await createFreshnessResolver()(pin("latest"))).toBeUndefined();
     expect(calls.count).toBe(0);
 });
@@ -112,7 +113,7 @@ test("a specifier with no readable version is never looked up", async () => {
 
 test("the same package asked twice costs one round of requests", async () => {
     const { fetcher, calls } = npmStub("2.0.0");
-    vi.stubGlobal("fetch", fetcher);
+    stubGlobal("fetch", fetcher);
     const resolve = createFreshnessResolver();
     await resolve(pin("1.0.0"));
     const after = calls.count;
@@ -122,7 +123,7 @@ test("the same package asked twice costs one round of requests", async () => {
 
 test("twenty simultaneous asks for one package are one lookup, which a manifest write depends on", async () => {
     const { fetcher, calls } = npmStub("2.0.0");
-    vi.stubGlobal("fetch", fetcher);
+    stubGlobal("fetch", fetcher);
     const resolve = createFreshnessResolver();
     await Promise.all(Array.from({ length: 20 }, () => resolve(pin("1.0.0"))));
     // Two documents per package: dist-tags and the pinned version, no more.
@@ -136,9 +137,9 @@ test("a lookup that overruns the caller's grace still answers the next caller", 
     const gate = new Promise<void>((resolve) => {
         release = resolve;
     });
-    vi.stubGlobal(
+    stubGlobal(
         "fetch",
-        vi.fn(async (url: string | URL) => {
+        mock(async (url: string | URL) => {
             await gate;
             return { ok: true, text: async () => (String(url).includes("/-/package/") ? JSON.stringify({ latest: "2.0.0" }) : "{}") } as unknown as Response;
         }),
@@ -146,15 +147,15 @@ test("a lookup that overruns the caller's grace still answers the next caller", 
     const resolve = createFreshnessResolver({ graceMs: 5 });
     expect(await resolve(pin("1.0.0"))).toBeUndefined();
     release!();
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
         expect(await resolve(pin("1.0.0"))).toEqual({ latest: "2.0.0", gap: "major" });
     });
 });
 
 // An unreachable registry is asked once, not on every edit that names the package.
 test("silence is remembered too", async () => {
-    const fetcher = vi.fn(async () => ({ ok: false, text: async () => "" }) as unknown as Response);
-    vi.stubGlobal("fetch", fetcher);
+    const fetcher = mock(async () => ({ ok: false, text: async () => "" }) as unknown as Response);
+    stubGlobal("fetch", fetcher);
     const resolve = createFreshnessResolver();
     await resolve(pin("1.0.0"));
     const after = fetcher.mock.calls.length;

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { PersistedAgent } from "../../agents/registry/agents-store.js";
 import type { Services } from "../../composition.js";

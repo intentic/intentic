@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { useAsyncAction, useConcurrentActions } from "@intentic/ui/async";
 
 /* Pinned here since @intentic/ui has no test runner of its own, and the surface that breaks is in this app: the

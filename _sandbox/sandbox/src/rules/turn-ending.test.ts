@@ -2,7 +2,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { GitRunner } from "@intentic/scaffold";
 import type { Rule } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import type { ChecksProbe } from "../agent/verification/agent-verification.js";
 import { syncHookOutput } from "../testing.js";
 import type { RuleCommandRun } from "./rule-command.js";

@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
 import { syncHookOutput } from "../../testing.js";
 import { resolveCommandSecrets, type SecretAccess, secretCommandHooks, type SecretUseReport } from "./agent-secrets.js";

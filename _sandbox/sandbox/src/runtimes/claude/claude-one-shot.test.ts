@@ -1,17 +1,23 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
-import { claudeOneShot } from "./claude-one-shot.js";
+import * as harnessCredentialsOriginal from "../../agent/providers/harness-credentials.js";
+import * as claudeAgentSdkOriginal from "@anthropic-ai/claude-agent-sdk";
 
 // Only query is faked; the rest of the SDK is real, since failure-sentences.ts's own logic is what's under test. The
 // fake yields a generator (not a plain iterable), since the finally block closes it via .return().
-const { query } = vi.hoisted(() => ({ query: vi.fn() }));
-vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => ({ ...(await importOriginal<object>()), query }));
+const { query } = hoisted(() => ({ query: mock() }));
+mock.module("@anthropic-ai/claude-agent-sdk", async () => ({ ...claudeAgentSdkOriginal, query }));
 // Credential resolution is covered elsewhere; here it returns ok, so only the run is under test.
-vi.mock("../../agent/providers/harness-credentials.js", async (importOriginal) => ({
-    ...(await importOriginal<object>()),
+mock.module("../../agent/providers/harness-credentials.js", async () => ({
+    ...harnessCredentialsOriginal,
     resolveHarnessCredentials: async () => ({ ok: true, credentials: {} }),
 }));
+
+// Loaded after the mocks, which the credential seam needs anyway: it is the edge back to the provider registry, and
+// entering the graph here rather than through the registry would leave claude-provider.js reading a half-built module.
+const { claudeOneShot } = await import("./claude-one-shot.js");
 
 const answering = (result: { readonly result: string; readonly is_error?: boolean }): void => {
     query.mockReturnValue(

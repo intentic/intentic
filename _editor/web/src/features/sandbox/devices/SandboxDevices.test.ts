@@ -1,12 +1,18 @@
-// @vitest-environment jsdom
 // jsdom because the subject is what a row puts on screen, not the derivation behind it (see deviceFacts.test.ts).
+import "@intentic/testing/dom";
 import type { Device } from "@intentic/sandbox-contract";
 import type { RouteLocationRaw } from "vue-router";
 import PrimeVue from "primevue/config";
 import { groupNeedsAttention, groupSummary, menuVerbs, primaryVerb, sandboxGroups } from "@intentic/ui";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock, jest } from "bun:test";
+import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, defineComponent, h, nextTick, reactive, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as sandboxContractOriginal from "@intentic/sandbox-contract";
+import * as vueRouterOriginal from "vue-router";
+import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import * as usePeerConnectOriginal from "./usePeerConnect";
+import * as useDevicesOriginal from "./useDevices";
 
 // Import chain touches the app's environment and a media query at module eval; jsdom covers both (see
 // daemonRestart.test.ts).
@@ -30,7 +36,7 @@ const revokeCalls: string[] = [];
 // The one control that starts a turn rather than a command, recorded the same way: pins that it's offered and
 // what it hands the agent.
 const startedTurns: string[] = [];
-vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
+mock.module(`../../agents/fleet/agentActions`, () => ({ startAgent: (prompt?: string) => startedTurns.push(prompt ?? ``) }));
 // Container verbs, recorded the same way: which op left for which machine, and for `reshape`, what the form
 // asked for.
 const verbCalls: { hostId: string; slug: string; op: string; resources?: unknown }[] = [];
@@ -43,11 +49,11 @@ const agentCalls: { hostId: string; op: string }[] = [];
 // What each side answers the flow with; the default is an ordinary update, and a test that wants a refusal replaces it.
 const AGENT_UPDATED = { message: `Upgraded the agent: 1.183.0 → 1.186.0.`, settled: true };
 let agentAnswer: (hostId: string) => Promise<{ message: string | undefined; settled: boolean }> = () => Promise.resolve(AGENT_UPDATED);
-vi.mock(`./useDevices`, async () => {
-    // deviceQuiet is real, so a row's freshness reads the same rule the app uses.
-    const real = await import(`./useDevices`);
+mock.module(`./useDevices`, () => {
+    // deviceQuiet is real, so a row's freshness reads the same rule the app uses. Imported statically: a module
+    // loaded inside a mock factory deadlocks bun's synchronous link of the graph that named it.
     return {
-        ...real,
+        ...useDevicesOriginal,
         useDevices: () => ({ devices, readAt, error: ref(undefined), isLoading: devicesLoading, refetch: () => {} }),
         manageDeviceSandbox: (hostId: string, slug: string, op: string, payload?: { resources?: unknown }) => {
             verbCalls.push({ hostId, slug, op, ...(payload?.resources === undefined ? {} : { resources: payload.resources }) });
@@ -73,9 +79,9 @@ vi.mock(`./useDevices`, async () => {
 // Reconnecting an unreachable machine mints a credential rather than running anything, so the pairing door is
 // recorded, not opened: which machine this page asked a command for is the whole of what it decides.
 const pairingsAsked: string[] = [];
-vi.mock(`./usePeerConnect`, async () => ({
+mock.module(`./usePeerConnect`, () => ({
     // The door's own descriptor is real, so the dialog is mounted on the same one the app opens.
-    ...(await import(`./usePeerConnect`)),
+    ...usePeerConnectOriginal,
     usePeerConnect: () => ({
         peerFor: () => undefined,
         pairToken: ref(`pair_abc`),
@@ -92,26 +98,26 @@ vi.mock(`./usePeerConnect`, async () => ({
 }));
 // Revoking another device's access is owner-only, matching the daemon's own floor.
 const owner = ref(true);
-vi.mock(`../secrets/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
+mock.module(`../secrets/useRole`, () => ({ useRole: () => ({ isOwner: owner }) }));
 // sandboxKey is reached at module eval by the real useDevices, so it's mocked here too.
 // Which sandbox is serving the page, by the hostname of its daemon: what marks a row as "the one you're using".
 const daemon = ref<string | undefined>();
-vi.mock(`../client/useSandbox`, () => ({
+mock.module(`../client/useSandbox`, () => ({
     useSandbox: () => ({ daemonUrl: daemon }),
     sandboxKey: (name: string) => [name],
 }));
 // The release this sandbox knows about; mocked like useDevices since the subject is what a row says, and
 // staleness is part of that.
 const latest = ref<string | undefined>(`1.183.0`);
-vi.mock(`../overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
+mock.module(`../overview/version/useSandboxVersion`, () => ({ useSandboxVersion: () => ({ latest }) }));
 // The owner's per-device switches, so a row can say "Manage sandboxes is off" before a click; mocked since the
 // real hook needs vue-query's injected client.
 const capabilities = ref<{ id: string; kind: string; config: Record<string, string> }[]>([]);
-vi.mock(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
+mock.module(`../../capabilities/connect/useCapabilities`, () => ({ useCapabilities: () => ({ capabilities }) }));
 // ContainerHealthCard needs the active sandbox's boot report, which this file's useSandbox stub omits.
-vi.mock(`./health/ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./sync/DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./health/ContainerHealthCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./sync/DesktopSyncCard.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`../access/ControlTokensSection.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // Which machine is on screen lives in the URL, so the harness carries a real (reactive) one: the tab reads
 // `?device=`, and its own auto-select writes it back through `replace`.
 const route = reactive<{ query: Record<string, string> }>({ query: {} });
@@ -120,37 +126,39 @@ const navigate = (to: RouteLocationRaw): void => {
     // `?device=` is the only param the tab reads, and it is always a string.
     route.query = Object.fromEntries(Object.entries(asked ?? {}).filter((entry): entry is [string, string] => typeof entry[1] === `string`));
 };
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+mock.module(`vue-router`, () => ({
+    ...vueRouterOriginal,
     useRoute: () => route as never,
     useRouter: () => ({ push: navigate, replace: navigate }) as never,
-    RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
+    RouterLink: RouterLinkStub as never,
 }));
 
 // Counts how often the list re-derives, through the one function every row's derivation passes through
 // (agentStalled).
 let derivations = 0;
-vi.mock(import(`@intentic/sandbox-contract`), async (importOriginal) => {
-    const real = await importOriginal();
-    return {
-        ...real,
-        agentStalled: ((...args: Parameters<typeof real.agentStalled>) => {
-            derivations += 1;
-            return real.agentStalled(...args);
-        }) as never,
-    };
-});
+// Taken before the mock: the namespace reflects the mock once it is installed, so the wrapper would call itself.
+const realAgentStalled = sandboxContractOriginal.agentStalled;
+mock.module(`@intentic/sandbox-contract`, () => ({
+    ...sandboxContractOriginal,
+    agentStalled: ((...args: Parameters<typeof realAgentStalled>) => {
+        derivations += 1;
+        return realAgentStalled(...args);
+    }) as never,
+}));
 
 // This sandbox's runners on a machine; mocked since the real hook is a vue-query read this bare app has no
 // client for.
 const runnersList = ref<{ id: string; host?: string; online: boolean; parity?: string; facts?: { cpus: number; memoryMb: number; load: number } }[]>(
     [],
 );
-vi.mock(`./runners/useRunners`, () => ({
+mock.module(`./runners/useRunners`, () => ({
     useRunners: () => ({ runners: runnersList, ready: runnersList, isLoading: ref(false), refetch: () => {} }),
     createRunner: () => Promise.resolve(`made`),
     removeRunner: () => Promise.resolve(`removed`),
     forgetRunner: () => Promise.resolve(),
+    // <DeviceRunners> names both; bun links an ESM import against exactly what this factory returns.
+    updateRunner: () => Promise.resolve(`updated`),
+    syncRunnerSettings: () => Promise.resolve(),
 }));
 
 const { boardRoute, deviceRoute } = await import("./deviceLinks");
@@ -228,7 +236,7 @@ afterEach(() => {
     app = undefined;
     document.body.innerHTML = ``;
     // The app's clock is a module singleton; a test that faked time would hand the next one a frozen one.
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 it(`says what a device is when it has no report to show`, () => {
@@ -270,7 +278,16 @@ const headline = (el: HTMLElement): string => el.querySelector(`h2`)?.parentElem
 // A machine is usually addressed by its own name, so the masthead would otherwise print `rog` as the title and
 // `rog` again as the door id directly under it.
 it(`drops a lone machine's door id when its name already is it`, () => {
-    const el = mount([{ key: `rog`, label: `rog`, hostId: `rog`, online: true, platform: `linux`, facts: { os: `Arch Linux`, arch: `x64`, shell: `/bin/zsh`, home: `/home/ada`, roots: [] } }]);
+    const el = mount([
+        {
+            key: `rog`,
+            label: `rog`,
+            hostId: `rog`,
+            online: true,
+            platform: `linux`,
+            facts: { os: `Arch Linux`, arch: `x64`, shell: `/bin/zsh`, home: `/home/ada`, roots: [] },
+        },
+    ]);
     expect(headline(el)).toBe(`rogArch Linuxx64`);
     // Dropping the line must not drop the hover it carried: the shell is still one reach away.
     expect(hovers(el)).toContain(`/bin/zsh · /home/ada`);
@@ -869,7 +886,12 @@ it(`names the loop, not a download, when only the running build is behind the in
 // button, which is where a reader reaching for it already is — never a line under every environment.
 const settled = () => {
     const row = behind();
-    return { ...row, hostId: `host-1`, online: true, report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } } };
+    return {
+        ...row,
+        hostId: `host-1`,
+        online: true,
+        report: { ...row.report!, agent: { running: true, pid: 4242, build: `1.183.0`, installed: `1.183.0` } },
+    };
 };
 
 it(`offers the verbs on a connected device whose agent needs nothing, and says nothing beside them`, () => {
@@ -934,15 +956,15 @@ it(`offers to pair a first device once the read lands empty`, () => {
 // Nothing on this tab hangs off a clock: rows are derived from the reading that landed, so time passing alone must
 // re-render nothing. A regression here silently re-derives the whole list every tick for data that arrives every ten.
 it(`does not re-derive the whole list as time passes`, async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_700_000_000_000);
+    jest.useFakeTimers();
+    jest.setSystemTime(1_700_000_000_000);
     mount([managed(true), { ...managed(false), key: `desktop`, label: `desktop` }]);
     await nextTick();
 
     const derivedOnce = derivations;
     expect(derivedOnce).toBeGreaterThan(0);
 
-    await vi.advanceTimersByTimeAsync(3_000);
+    await advanceTimersByTimeAsync(3_000);
     await nextTick();
     expect(derivations).toBe(derivedOnce);
 });
@@ -1672,7 +1694,7 @@ it(`updates every environment of one computer from a single press, native side f
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update agents`)?.click();
-    await vi.waitFor(() => expect(agentCalls).toHaveLength(2));
+    await waitFor(() => expect(agentCalls).toHaveLength(2));
     expect(agentCalls).toEqual([
         { hostId: `rog`, op: `upgrade` },
         { hostId: `rog::wsl:Arch`, op: `upgrade` },
@@ -1692,8 +1714,8 @@ it(`states each side's own refusal when a machine-wide update is turned down twi
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update agents`)?.click();
-    await vi.waitFor(() => expect(agentCalls).toHaveLength(2));
-    await vi.waitFor(() => expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog::wsl:Arch.`));
+    await waitFor(() => expect(agentCalls).toHaveLength(2));
+    await waitFor(() => expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog::wsl:Arch.`));
     expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog.`);
 });
 

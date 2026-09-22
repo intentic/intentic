@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ProviderRefusal } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileProviderRefusalStore } from "./provider-refusals.js";
 
 // Path's parent directory doesn't exist yet; the store must create it on write.

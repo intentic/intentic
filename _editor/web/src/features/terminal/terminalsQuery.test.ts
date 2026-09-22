@@ -1,22 +1,23 @@
-// @vitest-environment jsdom
 // jsdom: reaching the rail's badge means mounting a component, since useQuery injects there. The rest of the suite runs
 // on node.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { waitFor, stubGlobal, mocked } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 
 // Pins that the rail's badge and the tab strip read the same shared list: a pending web-* session (socket not yet
 // connected) and a kill issued but not yet confirmed both used to make the two drift.
 
-vi.stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-vi.mock("../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn() }));
-vi.mock("../sandbox/client/useSandbox", () => ({
+stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+mock.module("../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../sandbox/client/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));
 
 const { sandboxJson } = await import("../sandbox/client/sandboxClient");
-const jsonMock = vi.mocked(sandboxJson);
+const jsonMock = mocked(sandboxJson);
 const { queryClient } = await import("../../lib/queryPersistence");
 const { addPendingTerminal, clearPendingTerminals, dropPendingTerminal, listTerminals, refreshTerminals, removeTerminal, useTerminalsQuery } =
     await import("./terminalsQuery");
@@ -55,7 +56,7 @@ const mounted = <T>(composable: () => T): T => {
 beforeEach(() => {
     queryClient.clear();
     clearPendingTerminals();
-    vi.resetAllMocks();
+    jest.resetAllMocks();
 });
 
 test("a shell the daemon hasn't listed yet still lists, so a relist mid-handshake can't drop the new tab", async () => {
@@ -88,7 +89,7 @@ test("a session that ends before the daemon ever sees it takes its claim with it
 test("the rail's badge counts a brand-new shell immediately, not at its next poll", async () => {
     daemonLists([shell(`web-old`)]);
     const activity = mounted(() => useTerminalActivity());
-    await vi.waitFor(() => expect(activity.count.value).toBe(1));
+    await waitFor(() => expect(activity.count.value).toBe(1));
 
     // The click: the tab is on the strip now, though the daemon still knows nothing about it.
     addPendingTerminal(shell(`web-new`));
@@ -100,7 +101,7 @@ test("the rail's badge counts a brand-new shell immediately, not at its next pol
 test("a kill drops off the badge when it is issued, not a daemon round-trip later", async () => {
     daemonLists([shell(`web-a`), shell(`web-b`)]);
     const activity = mounted(() => useTerminalActivity());
-    await vi.waitFor(() => expect(activity.count.value).toBe(2));
+    await waitFor(() => expect(activity.count.value).toBe(2));
 
     removeTerminal(`web-a`);
 
@@ -110,7 +111,7 @@ test("a kill drops off the badge when it is issued, not a daemon round-trip late
 test("the panel's relists share the badge's cache entry rather than re-asking the daemon per surface", async () => {
     daemonLists([shell(`web-a`)]);
     const activity = mounted(() => useTerminalsQuery());
-    await vi.waitFor(() => expect(activity.sessions.value).toHaveLength(1));
+    await waitFor(() => expect(activity.sessions.value).toHaveLength(1));
     expect(reads).toBe(1);
 
     // The strip's relist here is served from the read it just reacted to, not echoed at the daemon.

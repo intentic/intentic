@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { fenceHoldsPersona, personaHome } from "./persona-home.js";
 
 // Where a card lives, and therefore who may wear it. This is the whole of the rule the Access tab draws and the

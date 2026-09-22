@@ -1,5 +1,5 @@
 import { AgentSummarySchema, AgentTurnSchema } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import {
     conversationIdFor,
     exitOfRun,

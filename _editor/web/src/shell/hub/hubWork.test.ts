@@ -1,6 +1,6 @@
 // THE LEDGER BEHIND A HUB ROW'S TURNING MARK. What is pinned here is the part a component cannot hold: a run
 // survives the section that started it, the row it belongs to, and how a row with several runs describes itself.
-import { afterEach, expect, it } from "vitest";
+import { it, expect, afterEach } from "bun:test";
 import { beginHubWork, forgetHubWork, hubWorkKey, hubWorkRunning, trackHubWork } from "./hubWork";
 
 const DEVICES = hubWorkKey(`sandbox`, `devices`);

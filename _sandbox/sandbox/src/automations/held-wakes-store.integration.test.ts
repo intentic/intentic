@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 
 test("add mints an id and persists the payload; list is oldest-first; get and remove round-trip", async () => {

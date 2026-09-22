@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { SshExecutor } from "../core/ssh.js";
 import { unstubbed } from "@intentic/testing";
 import type { KomodoApi } from "./komodo-api.js";

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import {
     acquireStreamSlot,
     resetStreamBudget,
@@ -146,20 +147,20 @@ describe(`acquireStreamSlot`, () => {
     it(`leaves the transport rather than waiting forever on a permit that is not coming`, async () => {
         // The tunnel has no cap, so a stuck window demotes to it and opens instead of waiting; waiting instead reads as
         // a frozen workspace.
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             setStreamCapacity(() => 1);
-            const overflowed = vi.fn();
+            const overflowed = mock();
             setStreamOverflow(overflowed);
             await take();
 
             const queued = take();
-            await vi.advanceTimersByTimeAsync(10_000);
-            expect(overflowed).toHaveBeenCalledOnce();
+            await advanceTimersByTimeAsync(10_000);
+            expect(overflowed).toHaveBeenCalledTimes(1);
             // Admitted, not refused: the caller opens on a transport with nothing to ration.
             expect(await queued).toEqual(expect.any(Function));
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
@@ -167,10 +168,10 @@ describe(`acquireStreamSlot`, () => {
         // Told apart by re-reading the signal; confusing a caller's own abort with an overflow would demote the
         // endpoint
         // on every closed conversation.
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             setStreamCapacity(() => 1);
-            const overflowed = vi.fn();
+            const overflowed = mock();
             setStreamOverflow(overflowed);
             await take();
             const controller = new AbortController();
@@ -178,10 +179,10 @@ describe(`acquireStreamSlot`, () => {
             controller.abort();
 
             expect(await queued).toBeUndefined();
-            await vi.advanceTimersByTimeAsync(10_000);
+            await advanceTimersByTimeAsync(10_000);
             expect(overflowed).not.toHaveBeenCalled();
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 

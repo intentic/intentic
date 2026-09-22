@@ -13,8 +13,9 @@ import {
     withResumeNote,
 } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { watch } from "vue";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toRaw, watch } from "vue";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync, mocked, hoisted } from "@intentic/testing/bun";
 import { Conversation } from "./conversation";
 import { providerAccounts, selectedAccountId, usageByAccount } from "../accounts/providerAccounts";
 import { turnDefaults } from "../run/turnDefaults";
@@ -36,9 +37,9 @@ import type { AttachHead } from "../run/turnStream";
 
 // sandboxError mocks the real one's refusal-message parsing, without sandboxClient's app-wide singletons. reachSpy
 // records which sandbox each call targeted, since that argument is invisible in the request path.
-const { reachSpy } = vi.hoisted(() => ({ reachSpy: vi.fn<(at: string | undefined, path: string) => void>() }));
-vi.mock("../../sandbox/client/sandboxClient", () => {
-    const sandboxRequest = vi.fn();
+const { reachSpy } = hoisted(() => ({ reachSpy: mock<(at: string | undefined, path: string) => void>() }));
+mock.module("../../sandbox/client/sandboxClient", () => {
+    const sandboxRequest = mock();
     return {
         sandboxRequest,
         // sandboxRequestVia on the real client's terms: `undefined` reach is the active box. Delegates to the shared
@@ -52,17 +53,17 @@ vi.mock("../../sandbox/client/sandboxClient", () => {
     };
 });
 const { sandboxRequest } = await import("../../sandbox/client/sandboxClient");
-const sandboxRequestMock = vi.mocked(sandboxRequest);
+const sandboxRequestMock = mocked(sandboxRequest);
 // Every path this conversation addressed at a given box, in order.
 const pathsAimedAt = (at: string | undefined): string[] => reachSpy.mock.calls.filter(([box]) => box === at).map(([, path]) => path);
 
-// Stubs useChat-catalog's reload so a model-invalid error doesn't pull in the whole chat store. vi.hoisted so the
+// Stubs useChat-catalog's reload so a model-invalid error doesn't pull in the whole chat store. hoisted so the
 // mock factory can see the spy.
-const { loadProviderModelsMock, loadTrialStatusMock } = vi.hoisted(() => ({
-    loadProviderModelsMock: vi.fn(async () => {}),
-    loadTrialStatusMock: vi.fn(async () => {}),
+const { loadProviderModelsMock, loadTrialStatusMock } = hoisted(() => ({
+    loadProviderModelsMock: mock(async () => {}),
+    loadTrialStatusMock: mock(async () => {}),
 }));
-vi.mock("../models/useChat-catalog", () => ({ loadProviderModels: loadProviderModelsMock, loadTrialStatus: loadTrialStatusMock }));
+mock.module("../models/useChat-catalog", () => ({ loadProviderModels: loadProviderModelsMock, loadTrialStatus: loadTrialStatusMock }));
 
 // turnDefaults is a module singleton; reseed before each test.
 const seedTurnDefaults = (): void => {
@@ -78,16 +79,16 @@ const accountPicks = { ...selectedAccountId.value };
 beforeEach(() => {
     runsMinted = 0;
     seedTurnDefaults();
-    vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
+    stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
         callback(0);
         return 0;
     });
-    vi.stubGlobal(`cancelAnimationFrame`, () => {});
+    stubGlobal(`cancelAnimationFrame`, () => {});
 });
 
 afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.clearAllMocks();
+    unstubAllGlobals();
+    jest.clearAllMocks();
     seedTurnDefaults();
     selectedAccountId.value = { ...accountPicks };
 });
@@ -374,7 +375,7 @@ describe(`Conversation`, () => {
     // a delta only reaches `messages` when the clock ticks and would hide the difference under test.
     it(`applies a burst of frames in one write, so render cost does not scale with frame count`, async () => {
         const runWith = async (calls: number): Promise<{ writes: number; tools: number }> => {
-            vi.stubGlobal(`requestAnimationFrame`, (): number => 0);
+            stubGlobal(`requestAnimationFrame`, (): number => 0);
             const conversation = new Conversation(`c1`);
             let writes = 0;
             // messages is what the renderer reads; `flush: sync` counts actual writes, not batched scheduler passes.
@@ -618,7 +619,7 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
         const turn = conversation.send(`go`, settings);
-        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await waitFor(() => expect(conversation.streaming.value).toBe(true));
 
         // Allowed mid-stream (retires nothing), but the transcript tail belongs to the streaming turn; a divider there
         // would read as part of the answer.
@@ -635,7 +636,7 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `x` }], { stayOpen: true }));
         const turn = conversation.send(`go`, settings);
-        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await waitFor(() => expect(conversation.streaming.value).toBe(true));
         conversation.selectProvider(`grok`);
         expect(conversation.provider.value).toBe(`claude`);
         conversation.stop();
@@ -657,7 +658,7 @@ describe(`Conversation`, () => {
             ),
         );
         const turn = conversation.send(`ask me`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
         conversation.selectAccount(`with-room`);
         expect(conversation.account.value).toBe(`with-room`);
@@ -685,7 +686,7 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
         const turn = conversation.send(`go`, settings);
-        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await waitFor(() => expect(conversation.streaming.value).toBe(true));
 
         conversation.selectAccount(`with-room`);
         expect(conversation.account.value).toBeUndefined();
@@ -1112,17 +1113,17 @@ describe(`Conversation`, () => {
 
         const turn = conversation.send(`2+3?`, settings);
         emit({ kind: `delta`, text: `5` });
-        await vi.waitFor(() => expect(conversation.messages.value[1]?.text).toBe(`5`));
+        await waitFor(() => expect(conversation.messages.value[1]?.text).toBe(`5`));
 
         await conversation.enqueue(`2+6?`);
         // The daemon took it, so it left the queue, and the run's own frame is what draws it.
         expect(conversation.queued.value).toHaveLength(0);
         emit({ kind: `steer`, text: `2+6?`, sentAt: 1_767_225_600_000 });
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(3));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(3));
 
         // Absorbed mid-turn: no usage boundary, so the model's words open a new bubble below.
         emit({ kind: `delta`, text: `8` });
-        await vi.waitFor(() => expect(conversation.messages.value[3]?.text).toBe(`8`));
+        await waitFor(() => expect(conversation.messages.value[3]?.text).toBe(`8`));
         emit({ kind: `usage`, costUsd: 0.1 });
         emit({ kind: `done` });
         controller.enqueue(sseFrame({ kind: `end` }));
@@ -1180,7 +1181,7 @@ describe(`Conversation`, () => {
         );
 
         const turn = conversation.send(`start`, settings);
-        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await waitFor(() => expect(conversation.streaming.value).toBe(true));
         await conversation.enqueue(`look at this`, [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }], {
             file: `src/app.ts`,
         });
@@ -1192,7 +1193,7 @@ describe(`Conversation`, () => {
             editorContext: { file: `src/app.ts` },
         });
         // Name attachment chips from the restored frame path.
-        await vi.waitFor(() =>
+        await waitFor(() =>
             expect(conversation.messages.value.at(-1)).toMatchObject({
                 role: `user`,
                 text: `look at this`,
@@ -1233,7 +1234,7 @@ describe(`Conversation`, () => {
         );
 
         const sending = conversation.enqueue(`fix the failing check`);
-        await vi.waitFor(() => expect(turnBodies()).toHaveLength(1));
+        await waitFor(() => expect(turnBodies()).toHaveLength(1));
         expect(conversation.queued.value.map((message) => message.text)).toEqual([`fix the failing check`]);
 
         ack({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
@@ -1269,7 +1270,7 @@ describe(`Conversation`, () => {
 
         const turn = conversation.send(`start`, settings);
         await conversation.enqueue(`also update the tests`);
-        expect(conversation.queued.value).toMatchObject([{ text: `also update the tests` }]);
+        expect(toRaw(conversation.queued.value)).toMatchObject([{ text: `also update the tests` }]);
         expect(turnBodies()).toHaveLength(1);
 
         // The turn ends on its own: the queue goes out as the next turn.
@@ -1277,7 +1278,7 @@ describe(`Conversation`, () => {
         controller.close();
         await turn;
 
-        await vi.waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        await waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
         expect(turnBodies()[1]).toMatchObject({ prompt: `also update the tests` });
         expect(conversation.queued.value).toHaveLength(0);
     });
@@ -1312,7 +1313,7 @@ describe(`Conversation`, () => {
         await turn;
 
         // Two thoughts about the same work are one request, not a turn each.
-        await vi.waitFor(() => expect(turnBodies()).toHaveLength(2));
+        await waitFor(() => expect(turnBodies()).toHaveLength(2));
         expect(turnBodies()[1]).toMatchObject({
             prompt: `also the tests\n\nand the docs`,
             attachments: [`.intentic/records/artifacts/attachments/u1/spec.md`],
@@ -1337,18 +1338,18 @@ describe(`Conversation`, () => {
         });
 
         const turn = conversation.send(`start`, settings);
-        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await waitFor(() => expect(conversation.streaming.value).toBe(true));
         await conversation.enqueue(`and the docs`);
         conversation.stop();
         await turn;
 
         // Stopping the agent is not a request for another turn: the message waits where the user can see it.
         expect(turnBodies()).toHaveLength(1);
-        expect(conversation.queued.value).toMatchObject([{ text: `and the docs` }]);
+        expect(toRaw(conversation.queued.value)).toMatchObject([{ text: `and the docs` }]);
 
         // Their next message takes it along.
         await conversation.enqueue(`actually, start with the docs`);
-        await vi.waitFor(() => expect(turnBodies()).toHaveLength(2));
+        await waitFor(() => expect(turnBodies()).toHaveLength(2));
         expect(turnBodies()[1]).toMatchObject({ prompt: `and the docs\n\nactually, start with the docs` });
         expect(conversation.queued.value).toHaveLength(0);
     });
@@ -1378,7 +1379,7 @@ describe(`Conversation`, () => {
         });
 
         const first = conversation.send(`start`, settings);
-        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await waitFor(() => expect(conversation.streaming.value).toBe(true));
         conversation.stop();
         await first;
 
@@ -1405,7 +1406,7 @@ describe(`Conversation`, () => {
         );
 
         const turn = conversation.send(`make a plan`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
         const [, planMessage] = conversation.messages.value;
         expect(planMessage).toMatchObject({ text: `intro`, plan: { requestId: `d1`, text: `the plan`, status: `pending` } });
@@ -1431,7 +1432,7 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
         const turn = conversation.send(`make a plan`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
         await conversation.decidePlan(planMessage!, false, `this bit is wrong`, [
@@ -1458,7 +1459,7 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
         const turn = conversation.send(`make a plan`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
 
         await conversation.decidePlan(planMessage!, false, ``, [
@@ -1506,7 +1507,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `question`, requestId: `q1`, questions }]));
 
         const turn = conversation.send(`ask me`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
         const questionMessage = conversation.messages.value[1]!;
         expect(questionMessage.question).toMatchObject({ requestId: `q1`, status: `pending` });
@@ -1523,7 +1524,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `question`, requestId: `q1`, questions }], { stayOpen: true }));
 
         const turn = conversation.send(`ask me`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         // Queued behind the card: a stopped turn must not fire it, the way an answered one would.
         await conversation.enqueue(`and then the docs`);
         await conversation.cancelQuestion(conversation.messages.value.find((message) => message.question !== undefined)!);
@@ -1541,7 +1542,7 @@ describe(`Conversation`, () => {
             { role: `notice`, text: `Stopped.` },
         ]);
         expect(turnBodies()).toHaveLength(1);
-        expect(conversation.queued.value).toMatchObject([{ text: `and then the docs` }]);
+        expect(toRaw(conversation.queued.value)).toMatchObject([{ text: `and then the docs` }]);
     });
 
     it(`denying a permission stops the turn, and allowing one leaves it running`, async () => {
@@ -1557,7 +1558,7 @@ describe(`Conversation`, () => {
         );
 
         const turn = conversation.send(`run it`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
         // Re-read per assertion: deciding a card replaces its message rather than mutating it.
         const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
@@ -1567,7 +1568,7 @@ describe(`Conversation`, () => {
         expect(sandboxRequestMock.mock.calls.map(([path]) => path)).not.toContain(`/agent/stop`);
 
         // The turn was parked on the first card and only asks the second once that answer un-parks it.
-        await vi.waitFor(() => expect(cards()).toHaveLength(2));
+        await waitFor(() => expect(cards()).toHaveLength(2));
         await conversation.decidePermission(cards()[1]!, `deny`);
         await turn;
 
@@ -1596,7 +1597,7 @@ describe(`Conversation`, () => {
         });
 
         const turn = conversation.send(`run it`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         const card = conversation.messages.value.find((message) => message.permission !== undefined)!;
 
         const allow = conversation.decidePermission(card, `once`);
@@ -1629,12 +1630,12 @@ describe(`Conversation`, () => {
         );
 
         const turn = conversation.send(`run it`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
 
         await conversation.decidePermission(cards()[0]!, `once`);
         // The second card is the turn carrying on past the first answer, so it only exists once that one landed.
-        await vi.waitFor(() => expect(cards()).toHaveLength(2));
+        await waitFor(() => expect(cards()).toHaveLength(2));
         await conversation.decidePermission(cards()[1]!, `once`);
 
         expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/reply`)).toHaveLength(2);
@@ -1660,7 +1661,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `credential_offer`, requestId: `c1`, offer }], { stayOpen: true }));
 
         const turn = conversation.send(`migrate the db`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
         const card = (): ChatMessage => conversation.messages.value.find((message) => message.credentialOffer !== undefined)!;
         expect(card().credentialOffer).toMatchObject({ requestId: `c1`, status: `pending`, offer: { approvers: [`bob@corp.com`] } });
@@ -1676,7 +1677,13 @@ describe(`Conversation`, () => {
 
     it(`a replayed release card freezes from the resolved frame and wears the approver's name`, async () => {
         const conversation = new Conversation(`c1`);
-        const offer = { subject: `reddit`, kind: `capability` as const, lane: `session` as const, approvers: [`bob@corp.com`], scope: `conversation` as const };
+        const offer = {
+            subject: `reddit`,
+            kind: `capability` as const,
+            lane: `session` as const,
+            approvers: [`bob@corp.com`],
+            scope: `conversation` as const,
+        };
         sandboxRequestMock.mockImplementation(
             sseResponse([
                 { kind: `credential_offer`, requestId: `c1`, offer },
@@ -1699,7 +1706,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
 
         const turn = conversation.send(`write it up in notion`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
 
         const card = (): ChatMessage => conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
         expect(card().capabilityOffer).toMatchObject({ requestId: `k1`, status: `pending`, offer: { entry: `notion`, name: `Notion` } });
@@ -1720,7 +1727,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
 
         const turn = conversation.send(`write it up in notion`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         const card = (): ChatMessage => conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
         await conversation.decideCapabilityOffer(card(), false);
 
@@ -1805,7 +1812,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `permission`, requestId: `p1`, toolName: `Bash` }], { stayOpen: true }));
 
         const turn = conversation.send(`clean the sandbox`, settings);
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         await conversation.decidePermission(
             conversation.messages.value.find((message) => message.permission !== undefined)!,
             `deny`,
@@ -2209,7 +2216,7 @@ describe(`Conversation`, () => {
     // Attach streams are pull: a resumed run only reaches a window that goes looking for it. The wait above must arm
     // that reattach probe on its own.
     it(`goes looking for the resumed run and renders it, without the user doing anything`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             const conversation = new Conversation(`c1`);
             sandboxRequestMock.mockImplementation(
@@ -2226,7 +2233,7 @@ describe(`Conversation`, () => {
                     head: () => ({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) }),
                 }),
             );
-            await vi.advanceTimersByTimeAsync(2_000);
+            await advanceTimersByTimeAsync(2_000);
 
             // The resumed answer lands under the original question once the wait ends.
             expect(conversation.failures.credentialRenewal.value).toBeUndefined();
@@ -2238,7 +2245,7 @@ describe(`Conversation`, () => {
                 { role: `assistant`, text: `Picking it back up.` },
             ]);
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
@@ -2343,7 +2350,7 @@ describe(`Conversation`, () => {
 
         // A third press lands the turn, still on the one word.
         await conversation.enqueue(`Continue`);
-        await vi.waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        await waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
         expect(turnBodies()[2]).toMatchObject({ prompt: `Continue` });
         expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `Continue` }]);
     });
@@ -2403,7 +2410,7 @@ describe(`Conversation`, () => {
         expect(conversation.queued.value.map((message) => message.text)).toEqual([`fix the tests`]);
 
         await conversation.enqueue(`go ahead`);
-        await vi.waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        await waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
         expect(turnBodies()[1]).toMatchObject({ prompt: `fix the tests\n\ngo ahead` });
     });
 
@@ -2520,7 +2527,7 @@ describe(`Conversation`, () => {
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `partial` }], { stayOpen: true }));
 
         const turn = conversation.send(`long task`, settings);
-        await vi.waitFor(() => expect(conversation.messages.value[1]?.text).toBe(`partial`));
+        await waitFor(() => expect(conversation.messages.value[1]?.text).toBe(`partial`));
         conversation.stop();
         await turn;
 
@@ -2568,7 +2575,7 @@ describe(`Conversation`, () => {
                 controller.enqueue(sseFrame(frame));
             }
         }
-        await vi.waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
         conversation.stop();
         await turn;
 
@@ -2980,7 +2987,7 @@ describe(`Conversation`, () => {
         ]);
     });
 
-/* THE WHOLE CHAT, TWICE, AND THEN FIVE TIMES. A run stays attachable for a while after it settles, so a window that
+    /* THE WHOLE CHAT, TWICE, AND THEN FIVE TIMES. A run stays attachable for a while after it settles, so a window that
    redrew from the record can still be handed that run's own rows back. They carry the run that wrote them, which is
    how the head lands over them rather than under. */
     it(`reattach reclaims the rows already on screen instead of drawing the run a second time`, async () => {
@@ -3000,7 +3007,7 @@ describe(`Conversation`, () => {
         ]);
     });
 
-/* And the same run STILL GOING: what this window redrew is older than the run is now, so the head carries rows it has
+    /* And the same run STILL GOING: what this window redrew is older than the run is now, so the head carries rows it has
    never seen under ones it is already showing. Both halves land where they belong, in one pass. */
     it(`reattach draws only the part of the run the transcript is not already showing`, async () => {
         const conversation = new Conversation(`c1`);
@@ -3022,7 +3029,7 @@ describe(`Conversation`, () => {
         ]);
     });
 
-/* THE BUG AS REPORTED: the same prompt again on every refresh. Each attach mirrors what it drew and the next paints
+    /* THE BUG AS REPORTED: the same prompt again on every refresh. Each attach mirrors what it drew and the next paints
    that back before attaching again, so an alignment that misses does not merely double the chat, it adds a copy per
    reload — and the run's last row has grown every time, which is exactly when a match on content cannot land. */
     it(`keeps one copy of a growing run however many times it is reattached`, async () => {
@@ -3039,7 +3046,7 @@ describe(`Conversation`, () => {
         ]);
     });
 
-/* The daemon refused the turn before running any of it, so the message was never part of the conversation. */
+    /* The daemon refused the turn before running any of it, so the message was never part of the conversation. */
     it(`holds an undelivered message in the queue when the Claude credential is revoked`, async () => {
         const conversation = new Conversation(`c1`);
         sandboxRequestMock.mockImplementation(
@@ -3050,7 +3057,7 @@ describe(`Conversation`, () => {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
-    startIn: undefined,
+            startIn: undefined,
             model: `opus`,
             effort: `medium`,
             thinking: false,
@@ -3082,7 +3089,7 @@ describe(`Conversation`, () => {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
-    startIn: undefined,
+            startIn: undefined,
             account: undefined,
             model: `opus`,
             effort: `medium`,
@@ -3115,7 +3122,7 @@ describe(`Conversation`, () => {
             agent: `endpoint/tiny`,
             harness: `native`,
             actsAs: undefined,
-    startIn: undefined,
+            startIn: undefined,
             account: undefined,
             model: `llama-3.2-3b`,
             effort: `medium`,
@@ -3138,7 +3145,7 @@ describe(`Conversation`, () => {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
-    startIn: undefined,
+            startIn: undefined,
             account: undefined,
             model: `opus`,
             effort: `medium`,
@@ -3164,7 +3171,7 @@ describe(`Conversation`, () => {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
-    startIn: undefined,
+            startIn: undefined,
             account: undefined,
             model: `opus`,
             effort: `medium`,
@@ -3235,7 +3242,7 @@ describe(`Conversation`, () => {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
-    startIn: undefined,
+            startIn: undefined,
             model: `opus`,
             effort: `medium`,
             thinking: false,
@@ -3265,7 +3272,7 @@ describe(`Conversation`, () => {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
-    startIn: undefined,
+            startIn: undefined,
             model: `opus`,
             effort: `medium`,
             thinking: false,
@@ -3278,7 +3285,7 @@ describe(`Conversation`, () => {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
-    startIn: undefined,
+            startIn: undefined,
             model: `opus`,
             effort: `medium`,
             thinking: false,
@@ -3344,7 +3351,7 @@ describe(`Conversation`, () => {
 
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `x` }], { stayOpen: true }));
         const turn = conversation.send(`real`, settings);
-        await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+        await waitFor(() => expect(conversation.streaming.value).toBe(true));
         await conversation.send(`while busy`, settings);
         expect(conversation.messages.value.filter((message) => message.role === `user`)).toHaveLength(1);
         conversation.stop();
@@ -3406,12 +3413,12 @@ describe(`the transcript's clock`, () => {
     it(`applies frames on its own timer when the window never delivers one`, async () => {
         const conversation = new Conversation(`c-parked`);
         // Frames requested but never delivered, as with a minimized window.
-        vi.stubGlobal(`requestAnimationFrame`, () => 0);
+        stubGlobal(`requestAnimationFrame`, () => 0);
         sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `hi` }], { stayOpen: true }));
 
         const turn = conversation.send(`go`, settings);
 
-        await vi.waitFor(() => expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `hi` }), { timeout: 2_000 });
+        await waitFor(() => expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `hi` }), { timeout: 2_000 });
 
         conversation.stop();
         await turn;
@@ -3762,7 +3769,7 @@ describe(`Conversation sent time`, () => {
             sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
 
             const sending = conversation.send(`long one`, settings);
-            await vi.waitFor(() => expect(conversation.streaming.value).toBe(true));
+            await waitFor(() => expect(conversation.streaming.value).toBe(true));
             conversation.stop();
             await sending;
 
@@ -3782,7 +3789,13 @@ describe(`older history`, () => {
 
     const opened = (): Conversation => {
         const conversation = new Conversation(`c1`);
-        conversation.restoreMessages([{ role: `user`, text: `turn 20` }, { role: `assistant`, text: `answer 20` }], { from: 40, more: true });
+        conversation.restoreMessages(
+            [
+                { role: `user`, text: `turn 20` },
+                { role: `assistant`, text: `answer 20` },
+            ],
+            { from: 40, more: true },
+        );
         return conversation;
     };
 
@@ -3805,7 +3818,16 @@ describe(`older history`, () => {
 
     it(`puts the older page above what is drawn and moves the cursor to it`, async () => {
         const conversation = opened();
-        sandboxRequestMock.mockResolvedValue(olderPage([{ role: `user`, text: `turn 19` }, { role: `assistant`, text: `answer 19` }], 38, true));
+        sandboxRequestMock.mockResolvedValue(
+            olderPage(
+                [
+                    { role: `user`, text: `turn 19` },
+                    { role: `assistant`, text: `answer 19` },
+                ],
+                38,
+                true,
+            ),
+        );
 
         await conversation.loadOlder();
 
@@ -3820,7 +3842,16 @@ describe(`older history`, () => {
     it(`gives the arriving rows ids of their own`, async () => {
         const conversation = opened();
         const standing = conversation.messages.value.map((message) => message.id);
-        sandboxRequestMock.mockResolvedValue(olderPage([{ role: `user`, text: `turn 19` }, { role: `assistant`, text: `answer 19` }], 38, true));
+        sandboxRequestMock.mockResolvedValue(
+            olderPage(
+                [
+                    { role: `user`, text: `turn 19` },
+                    { role: `assistant`, text: `answer 19` },
+                ],
+                38,
+                true,
+            ),
+        );
 
         await conversation.loadOlder();
 

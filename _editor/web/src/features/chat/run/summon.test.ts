@@ -1,25 +1,29 @@
 // Pins the summons channel's contract: a chat summoned anywhere is on screen everywhere. Queued messages never ride the
 // wire, and a summons for another sandbox's chats is ignored whole.
-import { effectScope, nextTick } from "vue";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { effectScope, nextTick, ref } from "vue";
+import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { mocked } from "@intentic/testing/bun";
 import type { Summons } from "./summon";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
-vi.mock("../../sandbox/client/sandboxClient", () => {
-    const sandboxRequest = vi.fn();
-    const sandboxJson = vi.fn();
+mock.module("../../sandbox/client/sandboxClient", () => {
+    const sandboxRequest = mock();
+    const sandboxJson = mock();
     // `undefined` is the active box; every call this suite makes targets it.
     return {
         sandboxRequest,
         sandboxJson,
         sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
             init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
-        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) => (init === undefined ? sandboxJson(path) : sandboxJson(path, init)),
+        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) =>
+            init === undefined ? sandboxJson(path) : sandboxJson(path, init),
+        // Named by the graph but never called here; bun links an ESM import against exactly what this returns.
+        sandboxError: mock(async () => new Error(`unused`)),
+        SandboxHttpError: class SandboxHttpError extends Error {},
     };
 });
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../../app/analytics", () => ({ track: mock() }));
+mock.module("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
@@ -43,7 +47,7 @@ const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
 const { sandboxRequest } = await import("../../sandbox/client/sandboxClient");
-const sandboxRequestMock = vi.mocked(sandboxRequest);
+const sandboxRequestMock = mocked(sandboxRequest);
 const { resetChat, useChat } = await import("./useChat");
 const { Conversation } = await import("../session/conversation");
 const { chatRun } = await import("./chatRun");
@@ -87,7 +91,7 @@ afterEach(() => {
     chatRun.value = undefined;
     // Resets ownership, or a popped-out case would leave every later test watching someone else's panel.
     dock();
-    vi.clearAllMocks();
+    jest.clearAllMocks();
 });
 
 it(`applies a broadcast reveal to a window that never saw the click`, () => {
@@ -321,9 +325,7 @@ it(`leaves a carried turn alone in a window only shadowing the chat`, () => {
     popOut();
     const clicked = new Conversation();
 
-    deliver(
-        wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: true, deliver: `fix it` }),
-    );
+    deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: true, deliver: `fix it` }));
 
     expect(turnsSentHere()).toBe(0);
 });

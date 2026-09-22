@@ -1,5 +1,5 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { controlTokenSeedScript, controlTokenStore } from "./parse.js";
 import { encodeCommand } from "./run.js";
 

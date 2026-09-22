@@ -1,25 +1,27 @@
-// @vitest-environment jsdom
 // An add that ends pending has not finished; the remaining step (a one-liner, a login, a rebuild) is named on the
 // entry just filled in. These pin what stays on screen for each of the three.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { AddCapabilityInput } from "@intentic/capability-catalog";
 import type { CapabilityStatus, CapabilitySummary } from "@intentic/api-contract";
 import { IconStub } from "@intentic/ui/testing";
+import * as actualVueRouter from "vue-router";
 
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
 // Which entry the page is on, read once at setup since the page is URL-driven and nothing here navigates.
 let entry = `linux`;
-const push = vi.fn();
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+const push = mock();
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
     useRoute: () => ({ params: { entry }, query: {} }) as never,
-    useRouter: () => ({ push, replace: vi.fn() }) as never,
+    useRouter: () => ({ push, replace: mock() }) as never,
 }));
 
 // Both entrys are contributed, not static; a device's permission switches come from the catalog, not the manifest.
-vi.mock(`../extensions/useExtensions`, () => ({
+mock.module(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
         extensions: ref([]),
@@ -63,45 +65,49 @@ vi.mock(`../extensions/useExtensions`, () => ({
 // then reads.
 const capabilities = ref<CapabilitySummary[]>([]);
 let applied: CapabilityStatus = { state: `pending` };
-const add = vi.fn<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
+const add = mock<(input: AddCapabilityInput) => Promise<void>>(async (input) => {
     capabilities.value = [
         ...capabilities.value,
         { id: input.id, kind: entry === `linux` ? `device` : `browser`, status: applied, config: input.config, secrets: [] },
     ];
 });
-vi.mock(`./connect/useCapabilities`, () => ({
+mock.module(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: () => undefined,
         capabilities,
         error: ref(undefined),
         add: (input: AddCapabilityInput) => add(input),
-        remove: { mutateAsync: vi.fn(), isPending: ref(false) },
-        rename: { mutateAsync: vi.fn(), isPending: ref(false) },
-        refetch: vi.fn(),
-        dismissRecommendation: { mutateAsync: vi.fn(), isPending: ref(false) },
+        remove: { mutateAsync: mock(), isPending: ref(false) },
+        rename: { mutateAsync: mock(), isPending: ref(false) },
+        refetch: mock(),
+        dismissRecommendation: { mutateAsync: mock(), isPending: ref(false) },
     }),
-    browseMarketplace: vi.fn(),
+    browseMarketplace: mock(),
+    // The connect forms read these at link time though no case here opens one; a mock missing a name anything in
+    // the graph imports is refused.
+    readRemoteRefs: mock(async () => ({ refs: [] })),
+    probeCapability: mock(),
 }));
 // Extension entry's signpost reads the registry cache; nothing here has browsed it.
-vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-vi.mock(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
-    viewProcessLogs: vi.fn(),
+mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+mock.module(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
+    viewProcessLogs: mock(),
 }));
 // No machine has checked in, matching a just-added device.
-vi.mock(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
+mock.module(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
 }));
 // VpnConnections dials as well as lists, so `error` must be present or the render throws.
-vi.mock(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: vi.fn(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
+mock.module(`../sandbox/devices/useVpn`, () => ({
+    importForticlient: mock(),
+    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
 }));
-vi.mock(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: vi.fn(), unmount: vi.fn() }),
+mock.module(`../sandbox/devices/useNetdisk`, () => ({
+    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
 }));
 // The two dialogs mint real credentials against a daemon; the stubs render only what's open and on what.
-vi.mock(`./connect/HostConnectDialog.vue`, () => ({
+mock.module(`./connect/HostConnectDialog.vue`, () => ({
     default: defineComponent({
         props: { visible: Boolean, id: String, platform: String, permissions: String },
         render() {
@@ -109,7 +115,7 @@ vi.mock(`./connect/HostConnectDialog.vue`, () => ({
         },
     }),
 }));
-vi.mock(`./connect/BrowserProfileDialog.vue`, () => ({
+mock.module(`./connect/BrowserProfileDialog.vue`, () => ({
     default: defineComponent({
         props: { visible: Boolean, capability: String, label: String, mode: String },
         render() {
@@ -146,7 +152,7 @@ const mount = (): HTMLElement => {
 // Submits the way the button does: Add is a PrimeVue component that dispatches this event.
 const submitForm = async (el: HTMLElement): Promise<void> => {
     el.querySelector(`form`)!.dispatchEvent(new Event(`submit`, { bubbles: true, cancelable: true }));
-    await vi.waitFor(() => expect(add).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(add).toHaveBeenCalledTimes(1));
     await nextTick();
 };
 

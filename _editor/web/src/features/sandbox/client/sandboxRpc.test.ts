@@ -1,9 +1,11 @@
 import { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER, type SystemEvent } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals, hoisted } from "@intentic/testing/bun";
 import { resetDaemonRoutes, setDaemonRoutes } from "../overview/useDaemonRoutes";
+import { ref } from "vue";
 
-const authState = vi.hoisted(() => ({ token: `session-token`, rejected: [] as string[] }));
-vi.mock("../session/sandboxSession", () => ({
+const authState = hoisted(() => ({ token: `session-token`, rejected: [] as string[] }));
+mock.module("../session/sandboxSession", () => ({
     useSandboxSession: () => ({
         // A bearer names which credential it is, so a 401 can be attributed without re-reading storage.
         getSessionToken: async () => ({ token: authState.token, kind: `session` }),
@@ -14,11 +16,16 @@ vi.mock("../session/sandboxSession", () => ({
     }),
 }));
 // The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls through to daemonUrl.
-vi.mock("./useSandbox", () => ({
-    useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
+// Refs, not plain holders, because `daemonBase` is a computed built once at useEndpoint's load: the last case
+// unaddresses the sandbox in place, a mock.module being file-wide and permanent.
+const sandbox = hoisted(() => ({
+    active: ref<{ token: string } | undefined>({ token: `connect` }),
+    activeSandboxId: ref<string | undefined>(`s1`),
+    daemonUrl: ref<string | undefined>(`https://daemon.test`),
 }));
+mock.module("./useSandbox", () => ({ useSandbox: () => sandbox }));
 
-const { sandboxRpc, daemonErrorMessage, daemonErrorStatus } = await import("./sandboxRpc");
+const { sandboxRpc, SandboxUnaddressedError, daemonErrorMessage, daemonErrorStatus } = await import("./sandboxRpc");
 
 // The daemon serves /events as an oRPC event iterator over text/event-stream; this reproduces that exact wire
 // shape so the typed client's own decoding is what's under test.
@@ -28,12 +35,12 @@ const eventStream = (frames: readonly unknown[]): Response =>
         headers: { "content-type": `text/event-stream` },
     });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => unstubAllGlobals());
 
 it(`decodes the daemon's event stream into typed contract frames`, async () => {
-    vi.stubGlobal(
+    stubGlobal(
         `fetch`,
-        vi.fn(async () =>
+        mock(async () =>
             eventStream([
                 { kind: `hello`, workspaceId: `ws-1`, routes: [`system.info`] },
                 { kind: `heartbeat` },
@@ -54,8 +61,8 @@ it(`decodes the daemon's event stream into typed contract frames`, async () => {
 it(`sends the session bearer and the TOFU connect token on the stream request`, async () => {
     authState.token = `session-token`;
     authState.rejected = [];
-    const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
+    stubGlobal(`fetch`, fetchMock);
     // One pull is all it takes: what this asserts on is the request that goes out, not the frames that come back.
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     const request = fetchMock.mock.calls[0]![0];
@@ -69,13 +76,12 @@ it(`sends the session bearer and the TOFU connect token on the stream request`, 
 it(`invalidates and retries exactly once when daemon middleware rejects a session`, async () => {
     authState.token = `session-token`;
     authState.rejected = [];
-    const fetchMock = vi
-        .fn<(request: Request) => Promise<Response>>()
+    const fetchMock = mock<(request: Request) => Promise<Response>>()
         .mockResolvedValueOnce(
             new Response(JSON.stringify({ error: `unauthorized` }), { status: 401, headers: { "content-type": `application/json` } }),
         )
         .mockResolvedValueOnce(eventStream([{ kind: `heartbeat` }]));
-    vi.stubGlobal(`fetch`, fetchMock);
+    stubGlobal(`fetch`, fetchMock);
 
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -86,9 +92,9 @@ it(`invalidates and retries exactly once when daemon middleware rejects a sessio
 
 it(`surfaces the daemon's status so a refusal can be told from a failure to connect`, async () => {
     // Hand-written routes answer `{ error }` with a bare status, not oRPC's envelope, and it must still survive.
-    vi.stubGlobal(
+    stubGlobal(
         `fetch`,
-        vi.fn(async () => new Response(JSON.stringify({ error: `not a member` }), { status: 403, headers: { "content-type": `application/json` } })),
+        mock(async () => new Response(JSON.stringify({ error: `not a member` }), { status: 403, headers: { "content-type": `application/json` } })),
     );
     const failure = await sandboxRpc.system.events({ clientId: `c1` }).catch((error: unknown) => error);
     expect(daemonErrorStatus(failure)).toBe(403);
@@ -99,8 +105,8 @@ it(`surfaces the daemon's status so a refusal can be told from a failure to conn
 // fails the whole request, not just the header, so it's only sent once advertised.
 it(`withholds the correlation header from a daemon that has not advertised it`, async () => {
     resetDaemonRoutes();
-    const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
+    stubGlobal(`fetch`, fetchMock);
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     expect(fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
 
@@ -113,8 +119,8 @@ it(`withholds the correlation header from a daemon that has not advertised it`, 
 
 it(`sends the correlation header once the daemon advertises the route that ships with it`, async () => {
     setDaemonRoutes([`system.events`, REQUEST_ID_EVIDENCE_ROUTE]);
-    const fetchMock = vi.fn(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
-    vi.stubGlobal(`fetch`, fetchMock);
+    const fetchMock = mock(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
+    stubGlobal(`fetch`, fetchMock);
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
     const sent = fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER);
     // The join key the daemon echoes back; only that it's present and distinct per call matters, not its shape.
@@ -124,16 +130,13 @@ it(`sends the correlation header once the daemon advertises the route that ships
     resetDaemonRoutes();
 });
 
+// Last, since it leaves the sandbox unaddressed for good.
 it(`names an unaddressed sandbox as its own condition, before any request goes out`, async () => {
-    vi.resetModules();
-    vi.doMock("./useSandbox", () => ({
-        useSandbox: () => ({ active: { value: undefined }, activeSandboxId: { value: undefined }, daemonUrl: { value: undefined } }),
-    }));
-    const unaddressed = await import("./sandboxRpc");
-    const fetchMock = vi.fn();
-    vi.stubGlobal(`fetch`, fetchMock);
-    // vi.resetModules() mints a fresh SandboxUnaddressedError; the outer import's class is a different one.
-    await expect(unaddressed.sandboxRpc.system.info()).rejects.toBeInstanceOf(unaddressed.SandboxUnaddressedError);
+    sandbox.active.value = undefined;
+    sandbox.activeSandboxId.value = undefined;
+    sandbox.daemonUrl.value = undefined;
+    const fetchMock = mock();
+    stubGlobal(`fetch`, fetchMock);
+    await expect(sandboxRpc.system.info()).rejects.toBeInstanceOf(SandboxUnaddressedError);
     expect(fetchMock).not.toHaveBeenCalled();
-    vi.doUnmock("./useSandbox");
 });

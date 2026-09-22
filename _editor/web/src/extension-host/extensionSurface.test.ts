@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { compile } from "tailwindcss";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // CI guard for the promise that every class a first-party extension screen uses is one core has declared
 // (styles/extension-surface.css), not one it happens to emit because that screen's source sits in this repo.

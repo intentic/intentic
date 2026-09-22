@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileComplexity } from "./complexity.js";
 
 // These counts pin BRANCH_KINDS against each grammar we load. A grammar upgrade that renames a node kind makes

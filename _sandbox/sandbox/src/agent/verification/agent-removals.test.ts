@@ -1,5 +1,5 @@
 import type { GitRunner } from "@intentic/scaffold";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { createRemovalLedger, type FileReader, verifyRemovalsMessage } from "./agent-removals.js";
 
 const NOW = Date.UTC(2026, 7, 28);

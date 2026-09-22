@@ -1,4 +1,4 @@
-// Decides whether a gated e2e suite runs at all; vitest.ts decides how long one may take. The opt-in switch
+// Decides whether a gated e2e suite runs at all; bun-preload.ts decides how long one may take. The opt-in switch
 // (`enabledBy`) and the credentials (`secrets`) are separate, so the switch on with no secret stands down rather than
 // fails; the missing one names itself in the suite's title. Does not gate a Docker daemon; CI's e2e jobs extend `.dind`
 // for that.

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gitCheckout, gitClone, gitFullHead, gitHead } from "@intentic/scaffold";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createApp } from "../app.js";
 import { extensionDir, extensionsRoot } from "../capabilities/extension-dirs.js";
 import { previousDir } from "../capabilities/git-checkout.js";

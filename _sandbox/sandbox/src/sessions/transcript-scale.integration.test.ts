@@ -2,7 +2,7 @@ import { mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { agentToolChildren, type AgentTranscriptDeps, agentTranscriptPage, PAGE_TEXT_CAP } from "./agent-transcript.js";
 import { fileTranscriptRecord, MAX_WINDOW_BYTES } from "./transcript-record.js";

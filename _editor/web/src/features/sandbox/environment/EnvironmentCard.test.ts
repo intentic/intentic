@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // Pins how EnvironmentCard behaves when the daemon predates the contents route (404, since supportsRoute
 // can't gate on it): show the recipe and hide the tab, not the inventory itself (contents.integration.test.ts).
+import "@intentic/testing/dom";
 import type { Environment } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -22,7 +22,7 @@ const applied = ref<Environment[`approved`] | undefined>(environment.approved);
 const recurring = ref<NonNullable<Environment[`recurring`]>>([]);
 // Set only on a sandbox whose base was compiled from a checkout; undefined is every published sandbox.
 const localImage = ref<Environment[`localImage`]>(undefined);
-vi.mock(`./useEnvironment`, () => ({
+mock.module(`./useEnvironment`, () => ({
     ENVIRONMENT_KEY: [`environment`],
     useEnvironment: () => ({
         state: ref(environment),
@@ -41,7 +41,7 @@ vi.mock(`./useEnvironment`, () => ({
 
 // Whether this sandbox's daemon knows the contents route; the one flag each test sets.
 const unsupported = ref(false);
-vi.mock(`./useEnvironmentContents`, () => ({
+mock.module(`./useEnvironmentContents`, () => ({
     useEnvironmentContents: () => ({
         groups: ref([]),
         awaiting: ref(0),
@@ -53,23 +53,23 @@ vi.mock(`./useEnvironmentContents`, () => ({
 }));
 // The active sandbox as the platform describes it; `hosted` selects the rebuild executor.
 const active = ref<{ id: string; role: string; hosted?: { region: string; warm: boolean } | null }>({ id: `sb1`, role: `owner` });
-vi.mock(`../client/useSandbox`, () => ({
+mock.module(`../client/useSandbox`, () => ({
     useSandbox: () => ({ active, daemonUrl: ref(undefined), reachable: ref(true) }),
     sandboxKey: (name: string) => [name],
 }));
-vi.mock(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {} }) }));
+mock.module(`@tanstack/vue-query`, () => ({ useQueryClient: () => ({ setQueryData: () => {} }) }));
 // Mocked as a module: agentActions reaches the shared query client and chat broadcast singletons, which
 // are out of this suite's subject and fail at import if left real.
-vi.mock(`../../agents/fleet/agentActions`, () => ({ startAgent: () => `` }));
+mock.module(`../../agents/fleet/agentActions`, () => ({ startAgent: () => `` }));
 // Each reaches the daemon on its own; mocked here only so mounting the card doesn't.
-vi.mock(`../../workspace/viewers/DiffView.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`../../workspace/viewers/DiffView.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`../../workspace/viewers/DiffToolbar.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 // Marks each executor with data-executor, so a test can tell which one rendered without mounting it.
-vi.mock(`../../capabilities/connect/HostRecreate.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `host` }) }) }));
-vi.mock(`./HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
+mock.module(`../../capabilities/connect/HostRecreate.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `host` }) }) }));
+mock.module(`./HostedRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `hosted` }) }) }));
 // Carries `recipePending` out with it: whether the checkout's rebuild knows a recipe is waiting is what makes it
 // describe itself as applying that recipe rather than as a second, unrelated rebuild.
-vi.mock(`./DevRebuild.vue`, () => ({
+mock.module(`./DevRebuild.vue`, () => ({
     default: defineComponent({
         props: { recipePending: { type: Boolean, default: false } },
         render(): ReturnType<typeof h> {

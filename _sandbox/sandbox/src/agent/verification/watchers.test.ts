@@ -1,6 +1,7 @@
 import type { AgentTurn } from "@intentic/sandbox-contract";
 import { pino } from "pino";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { memoryWatchJournal, type WatchJournal } from "./watch-journal.js";
 import { watchProjection } from "./watch-state.js";
 import {
@@ -105,14 +106,14 @@ const specOf = (over: Partial<WatcherSpec> = {}): WatcherSpec => ({
 describe("watchers", () => {
     let harness: Harness;
     beforeEach(() => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         harness = harnessOf();
     });
     afterEach(() => {
         harness.stop();
         // The card projection is module state; `stop` leaves an empty entry per held watch, unlike never-published.
         watchProjection.forget(["conv-1", "conv-2", "conv-3"]);
-        vi.useRealTimers();
+        jest.useRealTimers();
     });
 
     it("a first check that already passes arms nothing: no wake is owed", async () => {
@@ -126,10 +127,10 @@ describe("watchers", () => {
         const outcome = await armWatcher(specOf());
         expect(outcome.kind).toBe("armed");
         expect(armedWatcherCount()).toBe(1);
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(harness.started).toHaveLength(0);
         harness.check = { exitCode: 0, output: "conclusion: success" };
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(harness.started).toHaveLength(1);
         const wake = harness.started[0] as AgentTurn & { conversationId: string };
         expect(wake.conversationId).toBe("conv-1");
@@ -139,7 +140,7 @@ describe("watchers", () => {
         expect(wake.prompt).not.toMatch(/timed out/i);
         // Fired means gone: no second wake, no lingering record.
         expect(armedWatcherCount()).toBe(0);
-        await vi.advanceTimersByTimeAsync(60_000);
+        await advanceTimersByTimeAsync(60_000);
         expect(harness.started).toHaveLength(1);
     });
 
@@ -147,7 +148,7 @@ describe("watchers", () => {
         await armWatcher(specOf({ timeoutSeconds: 60 }));
         harness.check = { exitCode: undefined, output: "curl: (6) could not resolve host" };
         // Six 10s intervals reach the 60s deadline; the check there reports the timeout.
-        await vi.advanceTimersByTimeAsync(60_000);
+        await advanceTimersByTimeAsync(60_000);
         expect(harness.started).toHaveLength(1);
         const wake = harness.started[0] as AgentTurn & { conversationId: string };
         expect(wake.prompt).toMatch(/timed out/i);
@@ -161,7 +162,7 @@ describe("watchers", () => {
         const id = outcome.kind === "armed" ? outcome.id : "";
         expect(await cancelWatcher("conv-1", id)).toBe(true);
         harness.check = { exitCode: 0, output: "done" };
-        await vi.advanceTimersByTimeAsync(120_000);
+        await advanceTimersByTimeAsync(120_000);
         expect(harness.started).toHaveLength(0);
         expect(harness.steered).toHaveLength(0);
     });
@@ -177,7 +178,7 @@ describe("watchers", () => {
         harness.steerAnswer = true;
         await armWatcher(specOf());
         harness.check = { exitCode: 0, output: "done" };
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(harness.steered).toHaveLength(1);
         expect(harness.started).toHaveLength(0);
     });
@@ -186,25 +187,25 @@ describe("watchers", () => {
         harness.startAnswer = false;
         await armWatcher(specOf());
         harness.check = { exitCode: 0, output: "done" };
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(harness.started).toHaveLength(0);
         harness.startAnswer = true;
-        await vi.advanceTimersByTimeAsync(15_000);
+        await advanceTimersByTimeAsync(15_000);
         expect(harness.started).toHaveLength(1);
     });
 
     it("the wake reproduces the arming turn's identity and posture", async () => {
         await armWatcher(specOf({ turn: { agent: "codex", account: "acct-2", model: "gpt-6", isolated: true, unattended: true } }));
         harness.check = { exitCode: 0, output: "done" };
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(harness.started[0]).toMatchObject({ agent: "codex", account: "acct-2", model: "gpt-6", isolated: true, unattended: true });
     });
 
     it("a slow check reschedules from its completion: never overlapping itself", async () => {
         await armWatcher(specOf());
         expect(harness.checks).toHaveLength(1);
-        await vi.advanceTimersByTimeAsync(10_000);
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(harness.checks).toHaveLength(3);
     });
 
@@ -252,13 +253,13 @@ describe("watchers", () => {
         it("clears the card when the watch fires", async () => {
             await armWatcher(specOf());
             harness.check = { exitCode: 0, output: "conclusion: success" };
-            await vi.advanceTimersByTimeAsync(10_000);
+            await advanceTimersByTimeAsync(10_000);
             expect(watchProjection.of("conv-1")).toEqual([]);
         });
 
         it("clears the card when the deadline passes without the condition", async () => {
             await armWatcher(specOf({ timeoutSeconds: 60 }));
-            await vi.advanceTimersByTimeAsync(70_000);
+            await advanceTimersByTimeAsync(70_000);
             expect(watchProjection.of("conv-1")).toEqual([]);
         });
 
@@ -282,7 +283,7 @@ describe("watchers", () => {
             expect(watchProjection.of("conv-2")).toHaveLength(1);
             expect(armedWatcherCount()).toBe(1);
             // Disarmed means no wake, ever: the whole point of the press.
-            await vi.advanceTimersByTimeAsync(120_000);
+            await advanceTimersByTimeAsync(120_000);
             expect(harness.started.filter((turn) => turn.conversationId === "conv-1")).toHaveLength(0);
         });
 
@@ -303,11 +304,11 @@ describe("watchers", () => {
             const { journal } = harness;
             harness.stop();
             if (downSeconds !== undefined) {
-                await vi.advanceTimersByTimeAsync(downSeconds * 1000);
+                await advanceTimersByTimeAsync(downSeconds * 1000);
             }
             harness = harnessOf({ journal, ...runtime });
             await restoreWatchers();
-            await vi.advanceTimersByTimeAsync(0);
+            await advanceTimersByTimeAsync(0);
         };
 
         it("re-arms a watch the daemon died under, and it still fires", async () => {
@@ -317,7 +318,7 @@ describe("watchers", () => {
             // Still the agent's own check, on the agent's own cadence.
             expect(harness.checks).toEqual(["ci-status --done"]);
             harness.check = { exitCode: 0, output: "conclusion: success" };
-            await vi.advanceTimersByTimeAsync(10_000);
+            await advanceTimersByTimeAsync(10_000);
             expect(harness.started).toHaveLength(1);
             expect(harness.started[0]?.prompt).toContain("CI run 316 on intentic/intentic");
             expect(harness.started[0]?.prompt).toContain("conclusion: success");
@@ -355,7 +356,7 @@ describe("watchers", () => {
         it("still honours the deadline it was armed with, counted from the original arming", async () => {
             await armWatcher(specOf({ timeoutSeconds: 600 }));
             await restart();
-            await vi.advanceTimersByTimeAsync(600_000);
+            await advanceTimersByTimeAsync(600_000);
             expect(harness.started).toHaveLength(1);
             expect(harness.started[0]?.prompt).toMatch(/timed out/i);
         });
@@ -397,7 +398,7 @@ describe("watchers", () => {
         it("does not resurrect a watch that had already fired", async () => {
             await armWatcher(specOf({ timeoutSeconds: 600 }));
             harness.check = { exitCode: 0, output: "done" };
-            await vi.advanceTimersByTimeAsync(10_000);
+            await advanceTimersByTimeAsync(10_000);
             expect(harness.started).toHaveLength(1);
             await restart({ check: { exitCode: 0, output: "done" } });
             expect(armedWatcherCount()).toBe(0);
@@ -413,7 +414,7 @@ describe("watchers", () => {
             harness = harnessOf({ journal, check: { exitCode: 0, output: "done" } });
             harness.live.delete("conv-1");
             await restoreWatchers();
-            await vi.advanceTimersByTimeAsync(0);
+            await advanceTimersByTimeAsync(0);
             expect(armedWatcherCount()).toBe(0);
             expect(harness.started).toHaveLength(0);
             // And it is gone for good: the next boot must not re-litigate it.
@@ -429,7 +430,7 @@ describe("watchers", () => {
             harness = harnessOf({ journal, check: { exitCode: 0, output: "done" } });
             harness.trees.clear();
             await restoreWatchers();
-            await vi.advanceTimersByTimeAsync(0);
+            await advanceTimersByTimeAsync(0);
             expect(armedWatcherCount()).toBe(0);
             expect(harness.started).toHaveLength(0);
             // The check never ran: there was nowhere to run it.

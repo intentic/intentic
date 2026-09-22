@@ -1,6 +1,6 @@
 // Pins which account fallbackAccount may offer a refused turn, and every case where it must offer none.
 import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
-import { beforeEach, expect, it } from "vitest";
+import { it, expect, beforeEach } from "bun:test";
 import { fallbackAccount, fallbackLabel } from "./limitFallback";
 import { providerRefusals, setAccountUsage, usageByAccount } from "../accounts/providerAccounts";
 import { SPENT_PERCENT } from "./usageStatus";

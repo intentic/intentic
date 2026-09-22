@@ -1,5 +1,5 @@
 import type { CodeToken } from "@intentic/ui";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { commandLines, linePieces, splitLines } from "./commandPieces.js";
 
 // Stand-in for Shiki's output (colour boundaries) without loading a grammar; `htmlStyle` is opaque to the

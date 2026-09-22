@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { SANDBOX_RECOVERY_DAYS } from "@intentic/api-contract";
 import { daysLeft } from "./trashWindow";
 

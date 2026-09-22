@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probeSpec } from "@intentic/sandbox-contract/chores";
 import type { ChoreLedgerEntry, ProbeResult } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, test } from "vitest";
+import { describe, test, expect, afterEach } from "bun:test";
 import { createLogger } from "../logger.js";
 import { choreShape, packageSignals } from "./chore-signals.js";
 import { fileChoresStore, isStale } from "./chores-store.js";

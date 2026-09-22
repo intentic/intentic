@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { repoRoot } from "@intentic/constants/node";
 import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { testConfig } from "../../../testing.js";
@@ -12,24 +12,25 @@ import { TURN_ENDING_NOTE_HEADER } from "../../../rules/turn-ending-note.js";
 import type { AgentRequest } from "../agent.js";
 import { conversationExperimentArm, planTurn, ruleCommandIn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
+import * as harnessCredentialsOriginal from "../../providers/harness-credentials.js";
 
 // What a turn is allowed to run on, and what it's handed once it may; session-resume rules live with the route instead
 // (app.integration.test.ts). A refusal is a value (`ok: false` + code), assertable without a stream.
 
 // Takes the arguments through, since which account an arm asks for is itself under test below.
-const credentials = vi.fn<(...args: unknown[]) => Promise<Record<string, unknown>>>();
+const credentials = mock<(...args: unknown[]) => Promise<Record<string, unknown>>>();
 // Only the resolution is faked. The rest of the module stands, because the pre-dispatch context check reads its
 // model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined.
-vi.mock("../../providers/harness-credentials.js", async (importOriginal) => ({
-    ...(await importOriginal<typeof import("../../providers/harness-credentials.js")>()),
+mock.module("../../providers/harness-credentials.js", async () => ({
+    ...harnessCredentialsOriginal,
     resolveHarnessCredentials: (...args: unknown[]) => credentials(...args),
 }));
-const browserServers = vi.fn();
-vi.mock("../../../browser/tools/browser-tools.js", () => ({
+const browserServers = mock();
+mock.module("../../../browser/tools/browser-tools.js", () => ({
     ROUTED_BROWSER_SERVER: "browser",
     ANONYMOUS_BROWSER_SERVER: "web",
     browserServersOf: (...args: unknown[]) => browserServers(...args),
-    prepareBrowserOwner: vi.fn(),
+    prepareBrowserOwner: mock(),
 }));
 
 /* NOTHING HERE TOUCHES THE DISK, which is what keeps this suite under the unit budget: the shared fixture's ROOT is a path that does not exist. */

@@ -1,12 +1,15 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Freshness, FreshnessResolver, PinnedPackage } from "../../dependencies/registry-freshness.js";
 import type { WorkspacePins } from "../../dependencies/workspace-pins.js";
 import { syncHookOutput } from "../../testing.js";
 import { freshnessHooks, namesAddedByCommand, pinsInCommand, pinsInManifest, splitRange } from "./agent-freshness.js";
 
 // A registry that answers only for the packages named and counts how often it is asked.
-const registry = (answers: Record<string, Freshness>, asks: { count: number } = { count: 0 }): { resolve: FreshnessResolver; asks: { count: number } } => ({
+const registry = (
+    answers: Record<string, Freshness>,
+    asks: { count: number } = { count: 0 },
+): { resolve: FreshnessResolver; asks: { count: number } } => ({
     resolve: async (pinned: PinnedPackage) => {
         asks.count += 1;
         return answers[pinned.name];
@@ -79,7 +82,7 @@ test.each([
     ["~1.2.3", "~", "1.2.3"],
     ["1.2.3", "", "1.2.3"],
     [">=1.2.3", ">=", "1.2.3"],
-])("a range operator is kept, because it decides what behind even means: %s", (specifier, range, version) => {
+] as const)("a range operator is kept, because it decides what behind even means: %s", (specifier, range, version) => {
     expect(splitRange(specifier)).toEqual({ range, version });
 });
 
@@ -148,7 +151,10 @@ test("the PostToolUse pass reports what was too cold to answer before the call, 
 
 // What the workspace already pins.
 
-const pins = (index: Record<string, string[]>): WorkspacePins => (ecosystem, name) => new Set(ecosystem === "npm" ? (index[name] ?? []) : []);
+const pins =
+    (index: Record<string, string[]>): WorkspacePins =>
+    (ecosystem, name) =>
+        new Set(ecosystem === "npm" ? (index[name] ?? []) : []);
 
 test("a version this workspace already uses is a decision it has made, not a stale pin", async () => {
     const { resolve, asks } = registry({ typescript: behind("7.0.2", "major") });

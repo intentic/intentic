@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { rankPaths } from "./fuzzyPaths";
 
 const PATHS = [`alpha/src/widget.ts`, `alpha/src/registry.ts`, `beta/app.py`, `notes.md`];

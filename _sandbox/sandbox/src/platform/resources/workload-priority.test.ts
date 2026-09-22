@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { childPids } from "./workload-priority.js";
 
 test("childPids accepts procfs whitespace and rejects anything that is not a positive integer pid", () => {

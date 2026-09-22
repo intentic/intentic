@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { Sessions } from "./sessions.js";
 
 const stat = (size: number, mtimeMs: number): { size: number; mtimeMs: number } => ({ size, mtimeMs });

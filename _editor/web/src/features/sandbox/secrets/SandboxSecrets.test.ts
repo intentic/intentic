@@ -1,23 +1,25 @@
-// @vitest-environment jsdom
 // needs jsdom: renders the real page. Pins that the list stays short as accounts grow, what's owed rises to the
 // top, and a truncated or filtered account stays reachable, never silently dropped.
+import "@intentic/testing/dom";
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as vueRouterOriginal from "vue-router";
+import { RouterLinkStub } from "../../../testing/routerLinkStub";
 
 // Import chain touches window.matchMedia (@intentic/ui useDevice) and window.env (environment.ts) at import time.
 
 const inventory = ref<SecretInventoryEntry[]>([]);
-vi.mock(`../../capabilities/connect/useSecrets`, () => ({
+mock.module(`../../capabilities/connect/useSecrets`, () => ({
     useSecretInventory: () => ({
         inventory,
         missingRequiredCount: ref(0),
         inventoryPending: ref(false),
         refreshInventory: () => {},
     }),
-    useSecrets: () => ({ set: { mutateAsync: vi.fn() }, remove: { mutateAsync: vi.fn() } }),
+    useSecrets: () => ({ set: { mutateAsync: mock() }, remove: { mutateAsync: mock() } }),
     // Nothing gated, not the owner: keeps these cases about which rows show and how they're named. Gate behavior
     // itself is asserted in secretRows.test.ts.
     useCredentialGates: () => ({
@@ -25,29 +27,29 @@ vi.mock(`../../capabilities/connect/useSecrets`, () => ({
         gateFor: () => undefined,
         approverChoices: ref([]),
         isOwner: ref(false),
-        setGate: { mutateAsync: vi.fn() },
-        removeGate: { mutateAsync: vi.fn() },
+        setGate: { mutateAsync: mock() },
+        removeGate: { mutateAsync: mock() },
     }),
-    reveal: vi.fn(),
+    reveal: mock(),
 }));
 
 const capabilities = ref<CapabilitySummary[]>([]);
-vi.mock(`../../capabilities/connect/useCapabilities`, () => ({
+mock.module(`../../capabilities/connect/useCapabilities`, () => ({
     useCapabilities: () => ({ capabilities }),
-    useCapabilitySecret: () => ({ mutateAsync: vi.fn() }),
+    useCapabilitySecret: () => ({ mutateAsync: mock() }),
 }));
 
 const extensions = ref<ExtensionSummary[]>([]);
-vi.mock(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
+mock.module(`../../extensions/useExtensions`, () => ({ useExtensions: () => ({ enabled: extensions }) }));
 
 // Reached only by the CI push, which nothing here presses: mocked because the client has no environment here.
-vi.mock(`../client/sandboxClient`, () => ({ sandboxRequest: vi.fn(), sandboxJson: vi.fn() }));
+mock.module(`../client/sandboxClient`, () => ({ sandboxRequest: mock(), sandboxJson: mock() }));
 
 // The two "Manage..." controls are links now, so the mock carries a stand-in for them.
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
-    useRouter: () => ({ push: vi.fn() }) as never,
-    RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
+mock.module(`vue-router`, () => ({
+    ...vueRouterOriginal,
+    useRouter: () => ({ push: mock() }) as never,
+    RouterLink: RouterLinkStub as never,
 }));
 
 const { default: SandboxSecrets } = await import("./SandboxSecrets.vue");

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { mobileChatPath, onTabRoot, parseRoot, type TabRoot } from "./tabRoots";
 
 // Files left the tab bar for the Menu, so /workspace stopped being a root while Review's /workspace?panel=changes

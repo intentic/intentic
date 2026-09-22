@@ -1,13 +1,13 @@
-// @vitest-environment jsdom
-import { effectScope, nextTick } from "vue";
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { effectScope, nextTick, ref } from "vue";
+import { describe, it, expect, beforeEach, afterAll, afterEach, mock, jest } from "bun:test";
+import { stubGlobal, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { ChatEnvelope } from "./chatChannel";
 import type { Strip, TabFacts } from "../tabs/tabFacts";
 
 // Sandbox id is pinned, since every case here turns on which sandbox a strip is believed to name; useSandbox reaches
 // window.env through useApi, which no node suite has.
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });
@@ -27,8 +27,8 @@ class FakeChannel {
     }
 }
 
-vi.stubGlobal(`BroadcastChannel`, FakeChannel);
-vi.useFakeTimers();
+stubGlobal(`BroadcastChannel`, FakeChannel);
+jest.useFakeTimers();
 
 const { drawsChat, elsewherePreviews, elsewhereStrip, publishPreviews, publishStrip } = await import("./chatEcho");
 const { receiveChatNote } = await import("./chatChannel");
@@ -72,7 +72,7 @@ afterEach(() => {
     hear(EMPTY_STRIP);
     publishStrip(EMPTY_STRIP, `sb1`);
 });
-afterAll(() => vi.useRealTimers());
+afterAll(() => jest.useRealTimers());
 
 // What the board is told about a strip it can't see: with the chat popped out, this is the window hearing what the
 // drawing window says it's showing.
@@ -82,7 +82,7 @@ describe(`elsewhereStrip`, () => {
         await nextTick();
         posted.length = 0;
 
-        await vi.advanceTimersByTimeAsync(2_500);
+        await advanceTimersByTimeAsync(2_500);
 
         expect(posted).toContainEqual({ sandbox: `sb1`, note: { kind: `roll` } });
     });
@@ -192,7 +192,7 @@ describe(`elsewhereStrip`, () => {
 describe(`strip publisher ownership`, () => {
     it(`never labels the previous sandbox's cached strip with the next sandbox`, async () => {
         const scope = effectScope();
-        scope.run(() => claimFloating(`chat`, vi.fn()));
+        scope.run(() => claimFloating(`chat`, mock()));
         publishStrip(strip(draftTab(`private-to-sb1`, `first box`)), `sb1`);
         await nextTick();
         useSandbox().activeSandboxId.value = `sb2`;
@@ -220,7 +220,7 @@ describe(`strip publisher ownership`, () => {
         publishStrip(EMPTY_STRIP, `sb1`);
 
         const scope = effectScope();
-        scope.run(() => claimFloating(`chat`, vi.fn()));
+        scope.run(() => claimFloating(`chat`, mock()));
         await nextTick();
 
         expect(postedStrips().at(-1)).toEqual(EMPTY_STRIP);
@@ -229,7 +229,7 @@ describe(`strip publisher ownership`, () => {
 
     it(`answers a roll-call with its current strip once it holds the chat`, async () => {
         const scope = effectScope();
-        scope.run(() => claimFloating(`chat`, vi.fn()));
+        scope.run(() => claimFloating(`chat`, mock()));
         await nextTick();
         publishStrip(strip(draftTab(`c1`, `what the holder shows`)), `sb1`);
         posted.length = 0;
@@ -270,7 +270,7 @@ describe(`elsewherePreviews`, () => {
 
     it(`answers a roll-call with its words as well as its strip`, async () => {
         const scope = effectScope();
-        scope.run(() => claimFloating(`chat`, vi.fn()));
+        scope.run(() => claimFloating(`chat`, mock()));
         await nextTick();
         publishStrip(strip(draftTab(`c1`, `what the holder shows`)), `sb1`);
         publishPreviews({ c1: `what the holder shows` }, `sb1`);

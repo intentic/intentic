@@ -10,8 +10,8 @@ import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import type { TurnContext } from "./turn-plan.js";
 
 // Shared fixture both turn-plan suites build on, as a `*.testing.ts` module (not copied) so the integration-budget
-// checker can follow the import and judge each suite by what it uses. Mocks nothing here: `vi.mock` hoists per module,
-// so each suite keeps its own.
+// checker can follow the import and judge each suite by what it uses. Mocks nothing here: `mock.module` is global to
+// the run, so each suite declares its own.
 
 // Doesn't exist on disk, so the dependency probe finds nothing and no assertion depends on the host's checkout.
 export const ROOT = "/nowhere/turn-plan";

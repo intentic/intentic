@@ -1,5 +1,5 @@
 import { sandboxContract } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { SPEC_GROUPS, SPEC_SHELVES, specShelves } from "./groups.js";
 import { sandboxSpec, serializeSpec, type SandboxSpecDocument, type SpecOperation } from "./spec.js";
 

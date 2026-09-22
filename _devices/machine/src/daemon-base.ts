@@ -10,6 +10,9 @@ import { localDaemonUrlInsecure } from "@intentic/sandbox-run";
 // edge.
 const PROBE_TIMEOUT_MS = 1500;
 
+// The call surface this module uses; `typeof fetch` also carries bun's `preconnect`, which no injected impl has.
+export type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
 // Port and /health's answer derive from this id, read off the public URL's label (the only source here).
 const DAEMON_ID = /^[0-9a-f]{12}$/;
 
@@ -33,7 +36,7 @@ export const candidateBases = (sandboxUrl: string): readonly string[] => {
 
 // Every failure (nothing listening, wrong daemon, mid-boot, hung socket, bad body) collapses to false: they all mean
 // the same thing, try the next address.
-export const probeDaemonBase = async (base: string, expectedId: string, fetchImpl: typeof fetch = fetch): Promise<boolean> => {
+export const probeDaemonBase = async (base: string, expectedId: string, fetchImpl: FetchImpl = fetch): Promise<boolean> => {
     try {
         const response = await fetchImpl(`${base}/health`, { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
         if (!response.ok) {
@@ -55,7 +58,7 @@ export interface DaemonBase {
 
 // First candidate that answers as the sandbox meant, floor last and taken on trust (never probed); every probe failure
 // is absorbed, so this cannot reject.
-export const resolveDaemonBase = async (sandboxUrl: string, fetchImpl: typeof fetch = fetch): Promise<DaemonBase> => {
+export const resolveDaemonBase = async (sandboxUrl: string, fetchImpl: FetchImpl = fetch): Promise<DaemonBase> => {
     const candidates = candidateBases(sandboxUrl);
     const expected = daemonIdOf(sandboxUrl);
     for (const [index, candidate] of candidates.entries()) {
@@ -99,7 +102,7 @@ export interface DaemonBases {
 
 // `now` and `fetchImpl` are injected so the promotion interval and probe are testable without waiting a minute or
 // binding real ports.
-export const createDaemonBases = (log: Log, fetchImpl: typeof fetch = fetch, now: () => number = Date.now): DaemonBases => {
+export const createDaemonBases = (log: Log, fetchImpl: FetchImpl = fetch, now: () => number = Date.now): DaemonBases => {
     const held = new Map<string, Verdict>();
     return {
         resolve: async (pairing: DaemonTarget): Promise<string> => {

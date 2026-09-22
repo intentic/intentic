@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { effectScope, nextTick, ref, watchEffect } from "vue";
 import { useNow } from "@intentic/ui/async";
 
@@ -6,21 +6,21 @@ import { useNow } from "@intentic/ui/async";
 // and a consumer that arms after an idle spell reads a fresh instant rather than the one the clock stopped on.
 describe(`useNow`, () => {
     beforeEach(() => {
-        vi.useFakeTimers();
-        vi.setSystemTime(1_000_000);
+        jest.useFakeTimers();
+        jest.setSystemTime(1_000_000);
     });
-    afterEach(() => vi.useRealTimers());
+    afterEach(() => jest.useRealTimers());
 
     it(`ticks while a consumer is mounted and stops with the last one`, async () => {
         const scope = effectScope();
         const now = scope.run(() => useNow())!;
         expect(now.value).toBe(1_000_000);
 
-        vi.advanceTimersByTime(2_000);
+        jest.advanceTimersByTime(2_000);
         expect(now.value).toBe(1_002_000);
 
         scope.stop();
-        vi.advanceTimersByTime(5_000);
+        jest.advanceTimersByTime(5_000);
         expect(now.value).toBe(1_002_000);
         await nextTick();
     });
@@ -35,11 +35,11 @@ describe(`useNow`, () => {
         expect([a.value, b.value]).toEqual([1_000_000, 1_000_000]);
 
         first.stop();
-        vi.advanceTimersByTime(1_000);
+        jest.advanceTimersByTime(1_000);
         expect([a.value, b.value]).toEqual([1_001_000, 1_001_000]);
 
         second.stop();
-        vi.advanceTimersByTime(1_000);
+        jest.advanceTimersByTime(1_000);
         expect(b.value).toBe(1_001_000);
     });
 
@@ -63,7 +63,7 @@ describe(`useNow`, () => {
         await nextTick();
         expect(woken).toBe(1);
 
-        vi.advanceTimersByTime(3_000);
+        jest.advanceTimersByTime(3_000);
         await nextTick();
 
         // Three ticks of the shared clock, none of them this consumer's business.
@@ -79,17 +79,17 @@ describe(`useNow`, () => {
         const scope = effectScope();
         const now = scope.run(() => useNow(active))!;
 
-        vi.advanceTimersByTime(3_000);
+        jest.advanceTimersByTime(3_000);
         active.value = true;
         await nextTick();
         // Re-stamped at arm: the 3s that passed while off must not read as a frozen clock.
         expect(now.value).toBe(1_003_000);
-        vi.advanceTimersByTime(1_000);
+        jest.advanceTimersByTime(1_000);
         expect(now.value).toBe(1_004_000);
 
         active.value = false;
         await nextTick();
-        vi.advanceTimersByTime(2_000);
+        jest.advanceTimersByTime(2_000);
         expect(now.value).toBe(1_004_000);
         scope.stop();
     });
@@ -104,7 +104,7 @@ describe(`useNow`, () => {
         expect(now.value).toBe(1_000_000);
 
         gated.stop();
-        vi.advanceTimersByTime(1_000);
+        jest.advanceTimersByTime(1_000);
         expect(now.value).toBe(1_001_000);
         steady.stop();
         await nextTick();

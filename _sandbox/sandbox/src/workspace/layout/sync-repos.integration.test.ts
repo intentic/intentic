@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { syncAdvisory, syncWorkspaceRepos } from "./sync-repos.js";

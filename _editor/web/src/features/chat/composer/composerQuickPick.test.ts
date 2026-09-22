@@ -1,14 +1,14 @@
 // The `@` token's setting rows, pinned as a table: what an empty token lists, what a word matches, what a drill
 // shows, and that a kind the pill row refuses is nowhere.
 import type { AgentProvider, Persona } from "@intentic/sandbox-contract";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import type { PickerEntry } from "../models/modelPickerState";
 import { DRILLED_ROWS, FLAT_MODEL_ROWS, kindMeta, type QuickPickSources, quickRows } from "./composerQuickPick";
 import { QUICK_KINDS } from "./useMentions";
 
 // modelPickerState imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
-vi.mock("../models/useChat-catalog", () => ({ loadProviderModels: vi.fn(async () => {}) }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: mock() }));
+mock.module("../models/useChat-catalog", () => ({ loadProviderModels: mock(async () => {}) }));
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });
 const persona = (id: string, extra: Partial<Persona> = {}): Persona => ({ id, capabilities: [], ...extra });

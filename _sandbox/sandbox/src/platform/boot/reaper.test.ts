@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { type AgentSessionState, parseAgentSessions, reapableAgentSessionNames, type TerminalPolicy } from "./reaper.js";
 
 /* The terminal half of the reaper's policy: which agent sessions go, decided purely from what tmux lists and the owner stop clock. */

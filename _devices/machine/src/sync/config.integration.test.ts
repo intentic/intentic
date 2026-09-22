@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
 
 // config.ts derives its paths from homedir() at import time, so point HOME at a throwaway dir before importing
 // (dynamic import, after the env is set), landing the state file in temp rather than the real ~/.intentic/machine.

@@ -9,7 +9,7 @@ import type {
     ProbeResult,
     UiScan,
 } from "../schemas/maintenance.js";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { choreById, CHORES } from "./chores.js";
 import { assessReport, choreAnswer, choreAnswered, ledgerKey, unseenVerdicts } from "./verdict.js";
 

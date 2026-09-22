@@ -1,10 +1,10 @@
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { describe, test, expect, beforeEach, mock } from "bun:test";
 
 // The rpc client builds a link at import time, so the daemon call is the seam: the predicates are pure, and what the
 // module remembers is asserted through it.
-const derived = vi.fn();
-vi.mock("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: { workspace: { derived, derive: vi.fn() } } }));
+const derived = mock();
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: { workspace: { derived, derive: mock() } } }));
 
 const { derivedIsOnlyView, mayHaveDerivedText, readDerivedText } = await import("./derivedText");
 const { forgetDerivedText, rememberedDerivedText } = await import("./derivedCache");

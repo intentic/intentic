@@ -1,5 +1,5 @@
 import { LOCKED_STATE_ENTRIES, PLAN_DOCUMENTS_DIR, STATE_DIR } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { lockedFileEntries, lockedFile } from "./lockedFile";
 
 describe(`lockedFile`, () => {

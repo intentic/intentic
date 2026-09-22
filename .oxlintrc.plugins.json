@@ -1,6 +1,7 @@
 {
-    // THE STANDARD PLUS THE JS-PLUGIN RULES. Separate from .oxlintrc.agent.json for one reason only: these
-    // rules are JavaScript plugins, and loading one needs `@oxlint/plugins` in the tree.
+    // THE STANDARD PLUS anti-slop AND COGNITIVE COMPLEXITY. What keeps these out of the root config is their
+    // unmeasured backlog, not how they load: the root config already carries a JS plugin of its own, so
+    // `@oxlint/plugins` is a dependency `pnpm lint` itself needs.
     //
     // INSTALLED AND RUNNABLE (`pnpm lint:plugins`), NOT YET WHAT THE EDIT HOOK HOLDS EDITS TO. `@oxlint/plugins`
     // is pinned to the `oxlint` version exactly (the JS plugin ABI is explicitly not semver-stable, and a
@@ -9,6 +10,8 @@
     // is, and the answer decides whether these land as errors or as the next ratchet entry.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
     "extends": ["./.oxlintrc.agent.json"],
+    // `extends` merges `jsPlugins`, so the plugin the root config registers is loaded here too and only the
+    // two this file adds are listed.
     "jsPlugins": [{ "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" }, "oxlint-plugin-complexity"],
     "rules": {
         // COGNITIVE complexity, which is the metric that actually matches how hard a function is to read.

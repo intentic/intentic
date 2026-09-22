@@ -1,9 +1,10 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { isDevBuild } from "../../version.js";
 import { isNewer, latestVersion, refreshLatestVersion, startVersionCheck } from "./version-check.js";
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 test("isNewer compares dotted numeric versions", () => {
@@ -19,7 +20,7 @@ test("isNewer compares dotted numeric versions", () => {
 // reads a different one.
 test("the check reads the released pointer, /releases/latest", async () => {
     const asked: string[] = [];
-    vi.stubGlobal("fetch", async (url: string) => {
+    stubGlobal("fetch", async (url: string) => {
         asked.push(url);
         return new Response(JSON.stringify({ tag_name: "v9.9.9" }), { status: 200 });
     });
@@ -30,7 +31,7 @@ test("the check reads the released pointer, /releases/latest", async () => {
 
 test("a dev build never checks, so /info can't offer an update that would move it backwards", async () => {
     let fetched = false;
-    vi.stubGlobal("fetch", async () => {
+    stubGlobal("fetch", async () => {
         fetched = true;
         return new Response(JSON.stringify({ tag_name: "v9.9.9" }), { status: 200 });
     });
@@ -42,9 +43,9 @@ test("a dev build never checks, so /info can't offer an update that would move i
 });
 
 test("a failed refresh keeps the previous cached value", async () => {
-    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ tag_name: "v9.9.9" }), { status: 200 }));
+    stubGlobal("fetch", async () => new Response(JSON.stringify({ tag_name: "v9.9.9" }), { status: 200 }));
     await refreshLatestVersion();
-    vi.stubGlobal("fetch", async () => {
+    stubGlobal("fetch", async () => {
         throw new Error("offline");
     });
     await refreshLatestVersion();

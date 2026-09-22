@@ -1,5 +1,5 @@
 import { type AgentSummary, type AgentTurn, ciFixConversationId, fixAttemptId } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { type FixAttemptDeps, startFixAttempt } from "./fix-attempts.js";
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
@@ -23,9 +23,9 @@ const fakes = (roster: AgentSummary[] = [], archived: string[] = [], options: { 
     const deps: FixAttemptDeps = {
         roster: () => roster,
         archivedIds: () => archived,
-        stop: vi.fn(async (id: string) => void calls.push(`stop ${id}`)),
-        archive: vi.fn(async (id: string) => void calls.push(`archive ${id}`)),
-        start: vi.fn(async (turn: AgentTurn & { conversationId: string }) => {
+        stop: mock(async (id: string) => void calls.push(`stop ${id}`)),
+        archive: mock(async (id: string) => void calls.push(`archive ${id}`)),
+        start: mock(async (turn: AgentTurn & { conversationId: string }) => {
             calls.push(`start ${turn.conversationId}`);
             started.push(turn);
             return options.taken === true ? undefined : { run: true };

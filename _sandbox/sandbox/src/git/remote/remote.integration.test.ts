@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { createBranch, deleteBranch, listBranches } from "../ops/branches.js";
 import { fetchRemote, pullRemote, pushBranch, remoteState } from "./remote.js";
 

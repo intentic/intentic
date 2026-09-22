@@ -1,11 +1,12 @@
-// @vitest-environment jsdom
 // ONE STANDING, ONE READING, ON BOTH SURFACES THAT DRAW IT: the rail's rows (the popped-out chat) and the board's
 // cards. Regression: the rail spent its corner on a status glyph — one triangle for "Usage limit", "Didn't start" and
 // "Conflict" alike — and tucked the word itself a line lower, in a tone of its own, so the same stopped agent read one
 // way on /agents and another in the chat window.
+import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { agentStatusMeta } from "../../agents/fleet/agentStatus";
 import { resetAgents } from "../../agents/fleet/useAgents";
@@ -21,7 +22,7 @@ import { IconStub } from "@intentic/ui/testing";
 // The board's card reads browser globals through its import chain, so it's pulled in once the environment is up.
 const { default: AgentCard } = await import("../../agents/board/cards/AgentCard.vue");
 
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 

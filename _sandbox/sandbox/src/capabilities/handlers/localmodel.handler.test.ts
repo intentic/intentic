@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { packFragment, readPack } from "../../environment/packs.js";
 import { serverCommand } from "./localmodel.handler.js";
 import { registry } from "../registry.js";

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { collapseDriftPaths, containerBornAtMs, dpkgInstallsSince, installLive } from "./drift.js";
 
 /* dpkg's log is the apt channel's whole input, so the parse is pinned to real log lines. */

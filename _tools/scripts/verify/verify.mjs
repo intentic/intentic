@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
-import { vitestMaxWorkers } from "./vitest-workers.mjs";
+import { testWorkers } from "./test-workers.mjs";
 
 const root = repoRoot(import.meta.url);
 const { step, skip, finish } = createSteps("verify", root);
@@ -24,12 +24,12 @@ step("checkout gates", process.execPath, [join(root, "_tools/checks/run.mjs"), "
 // directly via node:test, which needs no install.
 step("script self-tests", process.execPath, ["--test", "_tools/scripts/**/*.test.mjs"]);
 
-// VITEST_MAX_WORKERS bounds a repo-wide run's memory, sized to the cgroup; INDEXNOW_ENABLED=0 stops the site build from
+// TEST_WORKERS bounds a repo-wide run's memory, sized to the cgroup; INDEXNOW_ENABLED=0 stops the site build from
 // polling live.
-const SUITE_ENV = { VITEST_MAX_WORKERS: vitestMaxWorkers(), INDEXNOW_ENABLED: "0" };
+const SUITE_ENV = { TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0" };
 
 // Typecheck and test both resolve imports through the emitted `.d.ts`, so both are skipped if the emit fails. They're
-// independent of each other: vitest strips types, so a suite can mean something on a tree that doesn't type-check.
+// independent of each other: bun strips types, so a suite can mean something on a tree that doesn't type-check.
 if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/build/emit-declarations.mjs")])) {
     step("typecheck", "pnpm", ["turbo", "run", "typecheck", "--continue=dependencies-successful"]);
     step("test", "pnpm", ["turbo", "run", "test", "--only", "--continue=dependencies-successful"], { env: SUITE_ENV });

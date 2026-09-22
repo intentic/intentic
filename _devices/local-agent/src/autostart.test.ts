@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { HOST_STATE_ROOT } from "@intentic/constants";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
     linuxDesktopEntry,
     macLaunchAgentXml,
@@ -255,6 +255,6 @@ describe("windowsRunAddArgs", () => {
 
     it("deletes exactly the value it adds, or uninstall leaves the agent resurrecting at every login", () => {
         const added = windowsRunAddArgs(SPEC, BINARY, STUB);
-        expect(windowsRunDeleteArgs(SPEC)).toEqual(["delete", added[1], "/v", added[3], "/f"]);
+        expect(windowsRunDeleteArgs(SPEC)).toEqual(["delete", added[1]!, "/v", added[3]!, "/f"]);
     });
 });

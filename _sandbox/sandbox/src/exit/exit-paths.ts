@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { interfaceNameOf } from "../tunnel/tunnel-paths.js";
 
 // Where a geo exit's on-disk state lives, its tunnel interface name, and its SOCKS proxy port. One directory per
-// sandbox (0700, root-only). Computed from homedir() at call time, not cached, so tests can point HOME at a temp dir.
+// sandbox (0700, root-only). Read from HOME at call time, not cached, so tests can point it at a temp dir.
 
-export const exitDir = (): string => join(homedir(), ".intentic-exit");
+export const exitDir = (): string => join(process.env["HOME"] ?? homedir(), ".intentic-exit");
 
 // Per-exit scratch (torrc, tor's DataDirectory, a decoded .ovpn, a generated wg conf); its own subdirectory per id,
 // since tor requires an unshared 0700 DataDirectory and erasing one exit must not touch another's files.

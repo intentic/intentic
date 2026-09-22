@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelRoleSpec } from "./model-roles.js";
 
 // The catalog draws the settings page directly, so its properties (every role in one block) must hold of the table

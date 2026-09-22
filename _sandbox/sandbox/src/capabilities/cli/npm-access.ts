@@ -9,7 +9,8 @@ import type { ConnectorHook } from "./connector-hooks.js";
 
 const NPM_AUTH_KEY = "//registry.npmjs.org/:_authToken=";
 
-const npmrcPath = (): string => join(homedir(), ".npmrc");
+// HOME is the home directory of record, read per call so a test can point it at a temp dir.
+const npmrcPath = (): string => join(process.env["HOME"] ?? homedir(), ".npmrc");
 
 // Keeps any other ~/.npmrc content untouched; exported pure so tests skip the HOME dance.
 export const upsertNpmAuth = (content: string, token: string): string => {

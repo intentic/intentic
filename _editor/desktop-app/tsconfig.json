@@ -2,7 +2,7 @@
     "compilerOptions": {
         "rootDir": "../..",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
-        "types": ["vite/client"],
+        "types": ["bun", "vite/client"],
         // Consume the design system straight from source, like the web app does.
         "paths": {
             "@intentic/ui": ["../../_editor/ui/src/index.ts"],

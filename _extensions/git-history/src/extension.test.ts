@@ -1,5 +1,5 @@
 import type { DocumentProviderRegistration, IntenticApi, RepoFacts, ViewRegistration } from "@intentic/extension-api";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import { activate } from "./extension.js";
 import { registerExtensionMessages } from "@intentic/extension-ui/i18n";
 import { extensionIdOf } from "@intentic/extension-manifest";
@@ -30,7 +30,7 @@ const capture = (repos: readonly RepoFacts[]) => {
     const views: ViewRegistration[] = [];
     const documents: DocumentProviderRegistration[] = [];
     const commands = new Map<string, () => unknown>();
-    const open = vi.fn();
+    const open = mock();
     const api = {
         views: {
             register: (view: ViewRegistration) => {

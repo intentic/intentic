@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type ActivityEvent, type AgentEvent, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { Hono } from "hono";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
@@ -108,7 +108,7 @@ test("dispatch (no stream) wakes the matching automation and returns ok", async 
     const res = await postJson(app, "/listeners/discord/dispatch", message({ id: "d1" }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    await vi.waitFor(async () => expect((await services.automations.get("d-plain"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("d-plain"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("wake:d-plain");
 });
 

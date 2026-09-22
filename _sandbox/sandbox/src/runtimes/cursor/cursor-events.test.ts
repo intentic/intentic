@@ -1,5 +1,5 @@
 import type { InteractionUpdate } from "@cursor/sdk";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createCursorEventMapper } from "./cursor-events.js";
 
 const CWD = "/work";

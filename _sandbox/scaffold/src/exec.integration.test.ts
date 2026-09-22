@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { defaultGit, gitSpawnStats, politeGit } from "./exec.js";
 
 // Pins defaultGit's two additions over execFile against a real repo: a larger output buffer and a retry on index.lock
@@ -134,7 +134,8 @@ test.skipIf(!existsSync(built))("the forker passes git's output, env and failure
             failedExecMs: seen.at(-1).execMs,
         }));
     `;
-    const { stdout } = await exec(process.execPath, ["--input-type=module", "-e", probe]);
+    // Named, not process.execPath: dist is the daemon's node artifact, and this suite's own runtime is bun.
+    const { stdout } = await exec("node", ["--input-type=module", "-e", probe]);
     const result = JSON.parse(stdout) as {
         head: string;
         gitDir: string;

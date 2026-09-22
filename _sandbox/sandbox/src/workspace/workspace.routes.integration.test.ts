@@ -13,7 +13,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 
 import { DEFAULT_TEMPLATE_REF, DEFAULT_TEMPLATE_SOURCE } from "@intentic/scaffold";
 
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
 import type { Services } from "../composition.js";

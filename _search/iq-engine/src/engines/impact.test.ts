@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { impactOf } from "./impact.js";
 import type { ImportGraph } from "./import-graph.js";
 

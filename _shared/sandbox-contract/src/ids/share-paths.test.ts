@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { SHARE_ID, shareId, shareStem } from "./share-paths.js";
 
 /* The id a shared conversation is filed under is two things at once: the readable half of a link somebody pastes. */

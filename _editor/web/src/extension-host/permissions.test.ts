@@ -1,5 +1,5 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 /* Unit tests for the sandbox-route matcher the host uses to gate api.sandbox.request/json (apiImpl.ts). */
 

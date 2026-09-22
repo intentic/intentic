@@ -6,7 +6,7 @@
 # WHY THIS EXISTS. Everything upstream of the image jobs runs in the DEVELOPMENT install: the root node_modules,
 # every devDependency present, every workspace package linked. The image runs a tree that
 # prepare-image-trees.sh pruned with `pnpm deploy --prod`. Those two graphs are not the same graph, and the
-# difference is invisible to `build`, `typecheck` and every vitest suite — all four of which stay green while
+# difference is invisible to `build`, `typecheck` and every test suite — all four of which stay green while
 # the daemon the image actually starts dies on its first import.
 #
 # That is not a hypothetical failure mode. On 2026-08-18 a host-side module imported the extension API's root

@@ -1,5 +1,5 @@
 import type { IssueReport } from "@intentic/sandbox-contract";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { type Capture, reportFrom, startCapture } from "./capture.js";
 
 let live: Capture | undefined;
@@ -51,7 +51,10 @@ test("a masked cross-origin error is still reported", () => {
 test("an unhandled rejection is captured, whatever it rejected with", async () => {
     const caught = armed();
     window.dispatchEvent(
-        new PromiseRejectionEvent("unhandledrejection", { promise: Promise.reject(new Error("nope")).catch(() => undefined), reason: "plain string" }),
+        new PromiseRejectionEvent("unhandledrejection", {
+            promise: Promise.reject(new Error("nope")).catch(() => undefined),
+            reason: "plain string",
+        }),
     );
     expect(caught).toEqual([{ kind: "crash", message: "plain string" }]);
 });

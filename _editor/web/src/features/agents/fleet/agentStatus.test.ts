@@ -1,5 +1,5 @@
 import type { AgentStatus, AgentWatch } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import {
     type AgentStanding,
     agentStatusMeta,

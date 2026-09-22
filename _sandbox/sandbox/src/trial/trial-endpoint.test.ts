@@ -1,6 +1,6 @@
 import type { Capability } from "@intentic/sandbox-contract";
 import { TRIAL_ENDPOINT_ID, TRIAL_MODEL_ID } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Config } from "../env.config.js";
 import type { PlatformTunnel } from "../platform/listeners/local-tunnel.js";

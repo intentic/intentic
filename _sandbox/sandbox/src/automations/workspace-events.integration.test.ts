@@ -2,21 +2,19 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentEvent, type Automation, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { freshImport, SETTLES, waitFor } from "@intentic/testing/bun";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { SETTLES } from "@intentic/testing/vitest";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
 import { mintConversationId, type WakeFn } from "./scheduler.js";
 
 // Chore queues and the turn chain are process-wide singletons; each test gets a fresh module so one test's unfinished
 // pump can't swallow the next test's event.
-const freshDispatch = async (): Promise<typeof import("./workspace-events.js")> => {
-    vi.resetModules();
-    return import("./workspace-events.js");
-};
+const freshDispatch = (): Promise<typeof import("./workspace-events.js")> =>
+    freshImport<typeof import("./workspace-events.js")>("./workspace-events.js", import.meta.url);
 
 // Same shape as scheduler.test's fake: reaches only automations/heldWakes/activity/workspace/logger.
 const fakeServices = (root: string): Services =>
@@ -78,10 +76,10 @@ test("a matching enabled chore wakes with the event as its payload", async () =>
     const prompts: string[] = [];
 
     expect(await dispatchWorkspaceEvent(services, event("a1"), fakeWake(prompts))).toEqual(["review"]);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("review:review");
     expect(prompts[0]).toContain(`"agentId":"a1"`);
-    await vi.waitFor(async () => expect((await services.automations.get("review"))?.runs[0]?.outcome).toBe("completed"), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("review"))?.runs[0]?.outcome).toBe("completed"), SETTLES);
 });
 
 test("disabled chores, other events and other repos never fire", async () => {
@@ -114,7 +112,7 @@ test("a chore never fires on the workspace event its own turn raised", async () 
     // Another automation's minted id is not this chore's echo, so it still fires.
     const anotherRow = mintConversationId("docs", Date.now());
     expect(await dispatchWorkspaceEvent(services, event(anotherRow), fakeWake(prompts))).toEqual(["review"]);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(`"agentId":"${anotherRow}"`);
 });
 
@@ -129,11 +127,11 @@ test("a burst QUEUES instead of dropping: every distinct agent gets reviewed, on
     await dispatchWorkspaceEvent(services, event("a2"), wake);
     await dispatchWorkspaceEvent(services, event("a3"), wake);
     // First turn holds the queue; nothing else has woken yet.
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(`"agentId":"a1"`);
 
     release();
-    await vi.waitFor(() => expect(prompts).toHaveLength(3), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(3), SETTLES);
     expect(prompts[1]).toContain(`"agentId":"a2"`);
     expect(prompts[2]).toContain(`"agentId":"a3"`);
 });
@@ -146,13 +144,13 @@ test("a second event for a waiting agent REPLACES it rather than queueing a dupl
     const { wake, release } = blockingWake(prompts);
 
     await dispatchWorkspaceEvent(services, event("a1"), wake);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // Both land behind the running turn; the second supersedes the first, so a2 is reviewed once, as "error".
     await dispatchWorkspaceEvent(services, event("a2", { outcome: "conflict" }), wake);
     await dispatchWorkspaceEvent(services, event("a2", { outcome: "error" }), wake);
 
     release();
-    await vi.waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
     expect(prompts[1]).toContain(`"outcome":"error"`);
 });
 
@@ -165,10 +163,10 @@ test("two different chores on one event do not run their turns at the same time"
     const { wake, release } = blockingWake(prompts);
 
     expect(await dispatchWorkspaceEvent(services, event("a1"), wake)).toEqual(["review", "docs"]);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
 
     release();
-    await vi.waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
 });
 
 test("a chore disabled while its backlog waits does not run", async () => {
@@ -179,12 +177,12 @@ test("a chore disabled while its backlog waits does not run", async () => {
     const { wake, release } = blockingWake(prompts);
 
     await dispatchWorkspaceEvent(services, event("a1"), wake);
-    await vi.waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     await dispatchWorkspaceEvent(services, event("a2"), wake);
     await services.automations.upsert(chore("review", { enabled: false }));
 
     release();
     // Queue re-reads the manifest per event, so a disabled chore's backlog is abandoned, not run.
-    await vi.waitFor(async () => expect((await services.automations.get("review"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("review"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts).toHaveLength(1);
 });

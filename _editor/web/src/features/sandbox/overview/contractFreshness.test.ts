@@ -1,5 +1,6 @@
 import { SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals, mocked } from "@intentic/testing/bun";
 import { contractUncompiled, readContractFreshness, resetContractFreshness, uncompiledRoutes } from "./contractFreshness";
 
 // The dev server hands over the contract as the sandbox loads it — compiled — and this app is the source side by
@@ -7,9 +8,9 @@ import { contractUncompiled, readContractFreshness, resetContractFreshness, unco
 
 // Answers the freshness endpoint with a given compiled shape map, or a status for the failure cases.
 const serve = (body: unknown, ok = true): void => {
-    vi.stubGlobal(
+    stubGlobal(
         `fetch`,
-        vi.fn(() => Promise.resolve({ ok, json: () => Promise.resolve(body) } as Response)),
+        mock(() => Promise.resolve({ ok, json: () => Promise.resolve(body) } as Response)),
     );
 };
 
@@ -17,7 +18,7 @@ const someRoute = Object.keys(SANDBOX_ROUTE_SHAPES)[0]!;
 
 beforeEach(() => resetContractFreshness());
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => unstubAllGlobals());
 
 it(`reports nothing uncompiled while the compiled contract matches this app's`, async () => {
     serve({ compiled: { ...SANDBOX_ROUTE_SHAPES } });
@@ -49,9 +50,9 @@ it(`leaves the question open when the dev server cannot answer`, async () => {
 });
 
 it(`leaves the question open when the fetch itself fails`, async () => {
-    vi.stubGlobal(
+    stubGlobal(
         `fetch`,
-        vi.fn(() => Promise.reject(new Error(`offline`))),
+        mock(() => Promise.reject(new Error(`offline`))),
     );
     await readContractFreshness();
     expect(contractUncompiled.value).toBe(false);
@@ -62,5 +63,5 @@ it(`asks once per page, however many disagreements arrive`, async () => {
     await readContractFreshness();
     await readContractFreshness();
     await readContractFreshness();
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    expect(mocked(fetch)).toHaveBeenCalledTimes(1);
 });

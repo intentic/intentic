@@ -1,6 +1,6 @@
 import { type AgentEvent, type AgentTurn, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
 import { listSubagentSessions, resetSubagents, waitForSubagent } from "./subagents.js";
 import type { Services } from "../../composition.js";
 import type { TurnFn } from "../../loops/loop-runner.js";
@@ -10,7 +10,16 @@ import { createRequest, resolveRequest } from "../tools/agent-requests.js";
 // run's, so it is imported under its own name rather than annotated with whichever was already in scope.
 import { startTurnRun, turnRunOf, type TurnFn as RunTurnFn } from "../run/turn/turn-runs.js";
 import { clearTurnTaint, conversationTaintSource, createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
-import { answerChild, armSupervisor, pendingQuestionOf, resetChildrenForTest, sendToChild, spawnChild, supervisorFor, type ChildSupervisor } from "./children.js";
+import {
+    answerChild,
+    armSupervisor,
+    pendingQuestionOf,
+    resetChildrenForTest,
+    sendToChild,
+    spawnChild,
+    supervisorFor,
+    type ChildSupervisor,
+} from "./children.js";
 
 // Drives the spawn engine through its real entry point; defends the seam's promises (isolated unattended conversation,
 // budgets enforced in the daemon, roster tracks the child's frames), not its plumbing.
@@ -56,7 +65,8 @@ const fakeServices = (over: Partial<SandboxSettings> = {}, fleet: readonly FakeR
             },
         }),
         agents: unstubbed<Services["agents"]>("agents", {
-            inFlightByRunner: () => new Map(fleet.flatMap((runner) => (runner.inFlight === undefined ? [] : [[runner.id, runner.inFlight] as const]))),
+            inFlightByRunner: () =>
+                new Map(fleet.flatMap((runner) => (runner.inFlight === undefined ? [] : [[runner.id, runner.inFlight] as const]))),
             // A held supervisor call mirrors its card here too; tests only need it reachable.
             observe: () => {},
         }),
@@ -84,7 +94,12 @@ beforeEach(() => {
 describe("what a child is", () => {
     it("runs as an isolated, unattended conversation on the provider the spec names", async () => {
         const turns: AgentTurn[] = [];
-        const result = await spawnChild(fakeServices(), parent, { prompt: "Port the parser to zig", provider: "cursor", model: "composer-2.5" }, fakeTurn(turns));
+        const result = await spawnChild(
+            fakeServices(),
+            parent,
+            { prompt: "Port the parser to zig", provider: "cursor", model: "composer-2.5" },
+            fakeTurn(turns),
+        );
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -135,7 +150,12 @@ describe("the child's life on the roster", () => {
             { kind: "text_end" },
             { kind: "done" },
         ];
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([], events));
+        const result = await spawnChild(
+            fakeServices(),
+            parent,
+            { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+            fakeTurn([], events),
+        );
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -168,7 +188,7 @@ describe("the child's life on the roster", () => {
             yield { kind: "resolved", requestId: "q1" };
             yield { kind: "done" };
         };
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, holdAt);
+        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" }, holdAt);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -181,7 +201,12 @@ describe("the child's life on the roster", () => {
 
     it("settles a turn that errored as failed, keeping the error", async () => {
         const events: AgentEvent[] = [{ kind: "error", message: "no Cursor subscription connected" }, { kind: "done" }];
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([], events));
+        const result = await spawnChild(
+            fakeServices(),
+            parent,
+            { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+            fakeTurn([], events),
+        );
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -194,7 +219,12 @@ describe("the child's life on the roster", () => {
 // parent needs explicit allowance, and a child beyond every gate marks the parent's own turn bit.
 describe("the spawn rulebook and the floors", () => {
     it("a deny rule refuses every door's spawn, a per-provider hold names the owner", async () => {
-        const denied = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "deny" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const denied = await spawnChild(
+            fakeServices({ actionRules: { "agents.spawn": "deny" } }),
+            parent,
+            { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+            fakeTurn([]),
+        );
         expect(denied).toMatchObject({ ok: false, message: expect.stringContaining("refused") });
         const held = await spawnChild(
             fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }),
@@ -204,7 +234,12 @@ describe("the spawn rulebook and the floors", () => {
         );
         expect(held).toMatchObject({ ok: false, message: expect.stringContaining("owner") });
         // A per-provider hold doesn't reach a provider the owner didn't name.
-        const other = await spawnChild(fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const other = await spawnChild(
+            fakeServices({ actionRules: { "agents.spawn.cursor": "hold" } }),
+            parent,
+            { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+            fakeTurn([]),
+        );
         expect(other.ok).toBe(true);
         if (other.ok) {
             await settled(other.id);
@@ -216,9 +251,14 @@ describe("the spawn rulebook and the floors", () => {
         taint.mark("webchat");
         publishTurnTaint(parent.conversationId, taint);
         try {
-            const held = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+            const held = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([]));
             expect(held).toMatchObject({ ok: false, message: expect.stringContaining("webchat") });
-            const allowed = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "allow" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+            const allowed = await spawnChild(
+                fakeServices({ actionRules: { "agents.spawn": "allow" } }),
+                parent,
+                { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+                fakeTurn([]),
+            );
             expect(allowed.ok).toBe(true);
             if (allowed.ok) {
                 await settled(allowed.id);
@@ -281,7 +321,7 @@ describe("the escalation ladder", () => {
             yield { kind: "done" };
         };
         const services = fakeServices();
-        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, askThenFinish);
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" }, askThenFinish);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -310,7 +350,7 @@ describe("the escalation ladder", () => {
             await gate.promise;
             yield { kind: "done" };
         };
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, holdOnPermission);
+        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" }, holdOnPermission);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -325,12 +365,15 @@ describe("the escalation ladder", () => {
     });
 
     it("refuses a child waiting on nothing", async () => {
-        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const result = await spawnChild(fakeServices(), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([]));
         if (!result.ok) {
             throw new Error(result.message);
         }
         await settled(result.id);
-        await expect(answerChild(fakeServices(), parent, result.id, {})).resolves.toMatchObject({ ok: false, message: expect.stringContaining("not waiting") });
+        await expect(answerChild(fakeServices(), parent, result.id, {})).resolves.toMatchObject({
+            ok: false,
+            message: expect.stringContaining("not waiting"),
+        });
     });
 
     // Only the parent that started a child may reach it (children.ts' security spine); asserted while the child is
@@ -349,7 +392,7 @@ describe("the escalation ladder", () => {
             yield { kind: "done" };
         };
         const services = fakeServices();
-        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, askThenFinish);
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" }, askThenFinish);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -415,7 +458,7 @@ describe("the escalation ladder", () => {
             yield { kind: "done" };
         };
         const services = fakeServices();
-        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen);
+        const result = await spawnChild(services, parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" }, holdOpen);
         if (!result.ok) {
             throw new Error(result.message);
         }
@@ -442,9 +485,12 @@ describe("the shell door's arming", () => {
 
     it("answers with exactly the supervisor a qualifying turn recorded", async () => {
         const calls: string[] = [];
-        armSupervisor("conv-armed", supervisor((prompt) => calls.push(prompt)));
+        armSupervisor(
+            "conv-armed",
+            supervisor((prompt) => calls.push(prompt)),
+        );
         const armed = supervisorFor("conv-armed");
-        await armed?.spawn({ prompt: "go", provider: "claude", model: "claude-sonnet-4-6", });
+        await armed?.spawn({ prompt: "go", provider: "claude", model: "claude-sonnet-4-6" });
         expect(calls).toEqual(["go"]);
     });
 
@@ -453,7 +499,10 @@ describe("the shell door's arming", () => {
     });
 
     it("forgets every arming on reset, the daemon-death story", () => {
-        armSupervisor("conv-armed", supervisor(() => {}));
+        armSupervisor(
+            "conv-armed",
+            supervisor(() => {}),
+        );
         resetChildrenForTest();
         expect(supervisorFor("conv-armed")).toBeUndefined();
     });
@@ -469,27 +518,27 @@ describe("the budgets, enforced in the daemon", () => {
             yield { kind: "done" };
         };
         const services = fakeServices({ subagentsAtOnce: 1 });
-        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen);
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" }, holdOpen);
         expect(first.ok).toBe(true);
-        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen);
+        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" }, holdOpen);
         expect(second).toMatchObject({ ok: false, message: expect.stringContaining("already running") });
         gate.resolve();
         if (first.ok) {
             await settled(first.id);
         }
-        const third = await spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen);
+        const third = await spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6" }, holdOpen);
         expect(third.ok).toBe(true);
         gate.resolve();
     });
 
     it("refuses past the lifetime budget", async () => {
         const services = fakeServices({ subagentsPerTurn: 1 });
-        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([]));
         expect(first.ok).toBe(true);
         if (first.ok) {
             await settled(first.id);
         }
-        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const second = await spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([]));
         expect(second).toMatchObject({ ok: false, message: expect.stringContaining("lifetime budget") });
     });
 
@@ -505,9 +554,9 @@ describe("the budgets, enforced in the daemon", () => {
         const services = fakeServices({ subagentsAtOnce: 1 });
 
         const results = await Promise.all([
-            spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen),
-            spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen),
-            spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6", }, holdOpen),
+            spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" }, holdOpen),
+            spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" }, holdOpen),
+            spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6" }, holdOpen),
         ]);
 
         expect(results.filter((result) => result.ok)).toHaveLength(1);
@@ -534,7 +583,7 @@ describe("the budgets, enforced in the daemon", () => {
         await expect(spawnChild(services, parent, exploding, fakeTurn([]))).rejects.toThrow("boom");
 
         // Proof: the next spawn fits, when a stranded seat under a ceiling of one would refuse it.
-        const after = await spawnChild(services, parent, { prompt: "ok", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const after = await spawnChild(services, parent, { prompt: "ok", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([]));
         expect(after.ok).toBe(true);
     });
 
@@ -543,27 +592,32 @@ describe("the budgets, enforced in the daemon", () => {
         const services = fakeServices({ subagentsAtOnce: 5, subagentsPerTurn: 2 });
 
         const results = await Promise.all([
-            spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([])),
-            spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([])),
-            spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([])),
-            spawnChild(services, parent, { prompt: "four", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "three", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([])),
+            spawnChild(services, parent, { prompt: "four", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([])),
         ]);
 
         expect(results.filter((result) => result.ok)).toHaveLength(2);
         await Promise.all(results.map(async (result) => (result.ok ? settled(result.id) : undefined)));
         // Proves the concurrent pair was really recorded, not merely let through: a later spawn is refused too.
-        const later = await spawnChild(services, parent, { prompt: "five", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const later = await spawnChild(services, parent, { prompt: "five", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([]));
         expect(later).toMatchObject({ ok: false, message: expect.stringContaining("lifetime budget") });
     });
 
     // Keyed by the child's own conversation id, since a child gets the spawn tool too.
     it("refuses a chain deeper than the owner's setting", async () => {
         const services = fakeServices({ subagentDepth: 1 });
-        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const first = await spawnChild(services, parent, { prompt: "one", provider: "claude", model: "claude-sonnet-4-6" }, fakeTurn([]));
         if (!first.ok) {
             throw new Error(first.message);
         }
-        const fromChild = await spawnChild(services, { conversationId: first.id, cwd: "/work" }, { prompt: "two", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+        const fromChild = await spawnChild(
+            services,
+            { conversationId: first.id, cwd: "/work" },
+            { prompt: "two", provider: "claude", model: "claude-sonnet-4-6" },
+            fakeTurn([]),
+        );
         expect(fromChild).toMatchObject({ ok: false, message: expect.stringContaining("depth") });
         await settled(first.id);
     });
@@ -582,16 +636,24 @@ describe("placing a child on the fleet", () => {
 
     // Lets a fan-out of many children spread across connected machines without choosing per agent.
     it("sends a child to a ready runner with no one asking", async () => {
-        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toEqual({ kind: "runner", id: "rig" });
+        expect(
+            await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" }),
+        ).toEqual({ kind: "runner", id: "rig" });
     });
 
     it("keeps the work here when there is no fleet", async () => {
-        expect(await placementOf(fakeServices(), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toBeUndefined();
+        expect(await placementOf(fakeServices(), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" })).toBeUndefined();
     });
 
     // Six slots used of eight cores counts as full; the free sandbox wins over waiting.
     it("keeps the work here when every machine is full", async () => {
-        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true, inFlight: 6 }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toBeUndefined();
+        expect(
+            await placementOf(fakeServices({}, [{ id: "rig", online: true, inFlight: 6 }]), {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+            }),
+        ).toBeUndefined();
     });
 
     it("honours a machine the caller named over the one with more room", async () => {
@@ -599,9 +661,15 @@ describe("placing a child on the fleet", () => {
             { id: "rig", online: true },
             { id: "other", online: true, cpus: 32 },
         ];
-        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", on: "rig" })).toEqual({ kind: "runner", id: "rig" });
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", on: "rig" })).toEqual({
+            kind: "runner",
+            id: "rig",
+        });
         // Nobody asking gets the roomier machine, confirming the line above is a real preference.
-        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", })).toEqual({ kind: "runner", id: "other" });
+        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" })).toEqual({
+            kind: "runner",
+            id: "other",
+        });
     });
 
     // Only the Claude Code runtime family's credentials travel (runner-scheduler.credentialsTravel); a Cursor child
@@ -611,19 +679,33 @@ describe("placing a child on the fleet", () => {
         expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "cursor" })).toBeUndefined();
         expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "codex" })).toBeUndefined();
         // The same provider under the claude-code harness routes through the translator, so it does travel.
-        expect(await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "codex", harness: "claude-code" })).toEqual({
+        expect(
+            await placementOf(fakeServices({}, fleet), { prompt: "go", model: "claude-sonnet-4-6", provider: "codex", harness: "claude-code" }),
+        ).toEqual({
             kind: "runner",
             id: "rig",
         });
     });
 
     it("still honours a machine named for a runtime that authenticates locally: the person knows their fleet", async () => {
-        const placed = await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", model: "claude-sonnet-4-6", provider: "cursor", on: "rig" });
+        const placed = await placementOf(fakeServices({}, [{ id: "rig", online: true }]), {
+            prompt: "go",
+            model: "claude-sonnet-4-6",
+            provider: "cursor",
+            on: "rig",
+        });
         expect(placed).toEqual({ kind: "runner", id: "rig" });
     });
 
     it("`here` pins a child to this sandbox even with a fleet standing by", async () => {
-        expect(await placementOf(fakeServices({}, [{ id: "rig", online: true }]), { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", on: "here" })).toBeUndefined();
+        expect(
+            await placementOf(fakeServices({}, [{ id: "rig", online: true }]), {
+                prompt: "go",
+                provider: "claude",
+                model: "claude-sonnet-4-6",
+                on: "here",
+            }),
+        ).toBeUndefined();
     });
 });
 
@@ -661,7 +743,12 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("raises a card on the parent's turn and runs the spawn once it is allowed", async () => {
         const live = liveParent();
         try {
-            const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+            const spawning = spawnChild(
+                fakeServices({ actionRules: { "agents.spawn": "hold" } }),
+                parent,
+                { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+                fakeTurn([]),
+            );
             const requestId = await cardOn();
             // Names the move and provider, so answering it isn't a guess about what it does.
             const card = turnRunOf(parent.conversationId)?.rows.find((row) => row.permission !== undefined)?.permission;
@@ -685,12 +772,18 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     it("a denial refuses the spawn and tells the model not to retry", async () => {
         const live = liveParent();
         try {
-            const spawning = spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
+            const spawning = spawnChild(
+                fakeServices({ actionRules: { "agents.spawn": "hold" } }),
+                parent,
+                { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+                fakeTurn([]),
+            );
             const requestId = await cardOn();
             resolveRequest({ kind: "permission", requestId, decision: "deny" });
             const result = await spawning;
-            expect(result).toMatchObject({ ok: false, message: expect.stringContaining("declined") });
-            expect(result.ok === false && result.message).toContain("Do not retry");
+            const message = result.ok === false ? result.message : "";
+            expect(message).toContain("declined");
+            expect(message).toContain("Do not retry");
         } finally {
             live.release();
         }
@@ -699,8 +792,14 @@ describe("a held supervisor call asks the owner where there is one to ask", () =
     // With no live turn to draw a card on (a backgrounded shell, an ended turn), it still refuses and names which case
     // it is.
     it("with no live turn there is nowhere to ask, and it says so", async () => {
-        const held = await spawnChild(fakeServices({ actionRules: { "agents.spawn": "hold" } }), parent, { prompt: "go", provider: "claude", model: "claude-sonnet-4-6", }, fakeTurn([]));
-        expect(held).toMatchObject({ ok: false, message: expect.stringContaining("outside a live turn") });
-        expect(held.ok === false && held.message).toContain("agents.spawn");
+        const held = await spawnChild(
+            fakeServices({ actionRules: { "agents.spawn": "hold" } }),
+            parent,
+            { prompt: "go", provider: "claude", model: "claude-sonnet-4-6" },
+            fakeTurn([]),
+        );
+        const message = held.ok === false ? held.message : "";
+        expect(message).toContain("outside a live turn");
+        expect(message).toContain("agents.spawn");
     });
 });

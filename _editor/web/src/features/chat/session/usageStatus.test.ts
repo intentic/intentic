@@ -1,5 +1,5 @@
 import type { AccountUsage, OauthAccount, ProviderRefusal, TranslatorAccounts, UsageWindow } from "@intentic/sandbox-contract";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import { providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../accounts/providerAccounts";
 import {
     bindingWindow,
@@ -211,8 +211,8 @@ describe(`formatReset`, () => {
         // on the reader's clock, so an instant 30 days on is "Oct 20" in Europe and "Oct 21" at UTC+14. Both are
         // right, and hardcoding either makes this test pass only where its author sat.
         const expected = new Intl.DateTimeFormat(`en`, { month: `short`, day: `numeric` }).formatToParts(at);
-        expect(printed).toContain(expected.find((part) => part.type === `month`)?.value);
-        expect(printed).toContain(expected.find((part) => part.type === `day`)?.value);
+        expect(printed).toContain(expected.find((part) => part.type === `month`)!.value);
+        expect(printed).toContain(expected.find((part) => part.type === `day`)!.value);
         // The claim that actually distinguishes this case from the one above: a date, not a weekday.
         expect(printed).toMatch(/\d+,/u);
     });

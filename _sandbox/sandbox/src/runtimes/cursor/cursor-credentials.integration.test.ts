@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, jest } from "bun:test";
 import { createLogger } from "../../logger.js";
 import { displayLabel, fileCursorStore, liveCursorAccounts, toAccount } from "./cursor-credentials.js";
 
@@ -12,11 +12,11 @@ const newStore = () => fileCursorStore(mkdtempSync(join(tmpdir(), "cursor-store-
 // Clock pinned: assertions are about a key's remaining life, not wall-clock time.
 const NOW = 1_800_000_000_000;
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(NOW);
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
 });
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 test("an account round-trips, and its row names the identity Cursor reported", async () => {

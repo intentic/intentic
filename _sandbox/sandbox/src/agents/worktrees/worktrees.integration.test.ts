@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { STATE_DIR } from "@intentic/constants";
 import { gitInit } from "@intentic/scaffold";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { noIsolation } from "../../testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { repoGitDir } from "../../history/history.js";

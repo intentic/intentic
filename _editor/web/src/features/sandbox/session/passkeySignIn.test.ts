@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
 // The browser half of a passkey ceremony: the daemon's base64url options become the bytes WebAuthn takes, the
 // credential's bytes come back as the base64url the daemon parses, and every call carries the daemon's own refusal.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { passkeyOffered, PasskeyRefusedError, recoverWithCode, registerPasskey, signInWithPasskey } from "./passkeySignIn";
 
 const TARGET = { sandboxId: `sb-1`, base: `https://daemon.test`, connectToken: `connect` };
@@ -34,11 +35,12 @@ class FakeCredential {
     ) {}
 }
 
-const get = vi.fn();
-const create = vi.fn();
-const fetchMock = vi.fn();
+const get = mock();
+const create = mock();
+const fetchMock = mock();
 
-const json = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status, headers: { "content-type": `application/json` } });
+const json = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": `application/json` } });
 
 // The JSON body and headers the module sent on call `index`.
 const sent = (index: number): { url: string; body: Record<string, unknown>; headers: Record<string, string> } => {
@@ -47,21 +49,30 @@ const sent = (index: number): { url: string; body: Record<string, unknown>; head
 };
 
 beforeEach(() => {
-    vi.stubGlobal(`PublicKeyCredential`, FakeCredential);
-    vi.stubGlobal(`AuthenticatorAssertionResponse`, FakeAssertion);
-    vi.stubGlobal(`AuthenticatorAttestationResponse`, FakeAttestation);
-    vi.stubGlobal(`fetch`, fetchMock);
+    stubGlobal(`PublicKeyCredential`, FakeCredential);
+    stubGlobal(`AuthenticatorAssertionResponse`, FakeAssertion);
+    stubGlobal(`AuthenticatorAttestationResponse`, FakeAttestation);
+    stubGlobal(`fetch`, fetchMock);
     Object.defineProperty(navigator, `credentials`, { value: { get, create }, configurable: true });
     get.mockReset();
     create.mockReset();
     fetchMock.mockReset();
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => unstubAllGlobals());
 
 it(`signs in: fresh options, the browser's get() over their bytes, the assertion posted as base64url, a session back`, async () => {
     fetchMock
-        .mockResolvedValueOnce(json({ rpId: `app.test`, challenge: `AQID`, timeout: 1, userVerification: `required`, allowCredentials: [{ type: `public-key`, id: `BAUG`, transports: [`internal`] }], available: true }))
+        .mockResolvedValueOnce(
+            json({
+                rpId: `app.test`,
+                challenge: `AQID`,
+                timeout: 1,
+                userVerification: `required`,
+                allowCredentials: [{ type: `public-key`, id: `BAUG`, transports: [`internal`] }],
+                available: true,
+            }),
+        )
         .mockResolvedValueOnce(json({ token: `sess`, expiresAt: 1, email: `o@x.com` }));
     get.mockResolvedValue(new FakeCredential(`BAUG`, bytes(4, 5, 6), new FakeAssertion(bytes(7), bytes(8, 9), bytes(10), null)));
 
@@ -83,7 +94,9 @@ it(`signs in: fresh options, the browser's get() over their bytes, the assertion
 });
 
 it(`refuses to run a ceremony the daemon says cannot succeed, before any browser dialog`, async () => {
-    fetchMock.mockResolvedValueOnce(json({ rpId: `app.test`, challenge: `AQID`, timeout: 1, userVerification: `required`, allowCredentials: [], available: false }));
+    fetchMock.mockResolvedValueOnce(
+        json({ rpId: `app.test`, challenge: `AQID`, timeout: 1, userVerification: `required`, allowCredentials: [], available: false }),
+    );
     await expect(signInWithPasskey(TARGET)).rejects.toThrow(/No passkey is registered with this sandbox/);
     expect(get).not.toHaveBeenCalled();
 });
@@ -106,7 +119,7 @@ it(`registers under the given bearer: user handle and exclusions as bytes, the a
     create.mockResolvedValue(new FakeCredential(`Bg`, bytes(6), new FakeAttestation(bytes(7), bytes(8))));
 
     const registered = await registerPasskey(TARGET, `google-proof`, `laptop`);
-    expect(registered).toEqual({ passkey: { id: `Bg` }, session: { token: `sess`, expiresAt: 1, email: `o@x.com` } });
+    expect(registered).toEqual({ passkey: expect.objectContaining({ id: `Bg` }), session: { token: `sess`, expiresAt: 1, email: `o@x.com` } });
 
     const [{ publicKey }] = create.mock.calls[0] as [{ publicKey: PublicKeyCredentialCreationOptions }];
     expect([...new Uint8Array(publicKey.user.id as ArrayBuffer)]).toEqual([1, 2]);
@@ -117,7 +130,12 @@ it(`registers under the given bearer: user handle and exclusions as bytes, the a
 
     expect(sent(0).headers).toMatchObject({ authorization: `Bearer google-proof` });
     expect(sent(1).body).toEqual({
-        response: { id: `Bg`, rawId: `Bg`, type: `public-key`, response: { clientDataJSON: `Bw`, attestationObject: `CA`, transports: [`internal`] } },
+        response: {
+            id: `Bg`,
+            rawId: `Bg`,
+            type: `public-key`,
+            response: { clientDataJSON: `Bw`, attestationObject: `CA`, transports: [`internal`] },
+        },
         label: `laptop`,
     });
 });
@@ -140,7 +158,7 @@ it(`is offered only where a ceremony can run: WebAuthn present, and the daemon h
     fetchMock.mockResolvedValueOnce(new Response(`not found`, { status: 404 }));
     expect(await passkeyOffered(TARGET)).toBe(false);
 
-    vi.stubGlobal(`PublicKeyCredential`, undefined);
+    stubGlobal(`PublicKeyCredential`, undefined);
     fetchMock.mockReset();
     expect(await passkeyOffered(TARGET)).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();

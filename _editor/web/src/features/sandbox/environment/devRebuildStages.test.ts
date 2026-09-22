@@ -1,6 +1,6 @@
 // The stage is read off a BOUNDED tail, so every case here is a window onto the middle of a build: never the first
 // line, and often with the previous stage's last lines still in it.
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { readRebuildProgress, rebuildFraction, stageStart } from "./devRebuildStages";
 
 it(`reads turbo's task prefix as the compile, naming the package it is on`, () => {

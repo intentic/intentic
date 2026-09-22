@@ -1,5 +1,5 @@
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { beforeEach, describe, expect, test } from "vitest";
+import { describe, test, expect, beforeEach } from "bun:test";
 import { childVerification, childVerificationNote, forgetChild, noteChildWork, resetChildVerification } from "./child-verification.js";
 
 // The feeder is fed frames, the shapes every adapter normalizes to (agent/tool-calls.ts); a case here holds for any

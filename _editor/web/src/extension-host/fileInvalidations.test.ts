@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import { ExtensionManifestSchema } from "@intentic/extension-manifest";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // Checks the extension half of "a push that lands on nothing": an invalidated name nothing is registered under fails
 // silently, and the view just keeps its stale state.

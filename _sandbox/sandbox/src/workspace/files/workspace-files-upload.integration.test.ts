@@ -1,7 +1,8 @@
-import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { UploadTooLargeError, writeWorkspaceFileStream } from "./workspace-files-upload.js";
 
 const streamOf = (bytes: Uint8Array): ReadableStream<Uint8Array> => new Blob([new Uint8Array(bytes)]).stream();
@@ -19,7 +20,7 @@ test("writeWorkspaceFileStream refuses a body past the limit and removes the par
     const dir = await mkdtemp(join(tmpdir(), "wf-"));
     const target = join(dir, "big.bin");
     await expect(writeWorkspaceFileStream(target, streamOf(new Uint8Array(2048)), 1024)).rejects.toBeInstanceOf(UploadTooLargeError);
-    await expect(access(target)).rejects.toThrow();
+    expect(existsSync(target)).toBe(false);
     await rm(dir, { recursive: true, force: true });
 });
 
@@ -40,6 +41,6 @@ test("writeWorkspaceFileStream counts the offset against the limit and keeps the
     const target = join(dir, "split.bin");
     await writeWorkspaceFileStream(target, streamOf(new Uint8Array(512)), 1024);
     await expect(writeWorkspaceFileStream(target, streamOf(new Uint8Array(600)), 1024, 512)).rejects.toBeInstanceOf(UploadTooLargeError);
-    await expect(access(target)).resolves.toBeUndefined();
+    expect(existsSync(target)).toBe(true);
     await rm(dir, { recursive: true, force: true });
 });

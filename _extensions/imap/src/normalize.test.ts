@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { attachmentsOf, excerptOf, expungeMessage, flagsMessage, htmlText, mailMessage } from "./normalize.js";
 
 const base = {

@@ -1,8 +1,8 @@
 import type { Logger } from "pino";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { createBootTracker } from "./boot.js";
 
-const silent = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
+const silent = { info: mock(), warn: mock(), error: mock() } as unknown as Logger;
 
 const tracker = () => {
     const boot = createBootTracker(silent);
@@ -90,7 +90,7 @@ test("a snapshot is a copy: a later transition cannot rewrite a frame already se
 
 test("unsubscribing stops delivery", async () => {
     const boot = tracker();
-    const listener = vi.fn();
+    const listener = mock();
     boot.subscribe(listener)();
     await boot.step("links", async () => undefined);
     expect(listener).not.toHaveBeenCalled();

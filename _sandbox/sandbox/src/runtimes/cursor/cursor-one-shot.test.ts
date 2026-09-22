@@ -1,21 +1,21 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { unstubbed } from "@intentic/testing";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
 import type { Services } from "../../composition.js";
 import { cursorOneShot } from "./cursor-one-shot.js";
 
-const created = vi.fn<(options: unknown) => Promise<{ send: typeof send; close: () => void }>>();
-const send = vi.fn<(prompt: string, options: unknown) => Promise<{ wait: typeof wait; cancel: () => Promise<void> }>>();
-const wait = vi.fn<() => Promise<{ status: string; error?: { message?: string } }>>();
-const cancel = vi.fn<() => Promise<void>>();
-const close = vi.fn<() => void>();
+const created = mock<(options: unknown) => Promise<{ send: typeof send; close: () => void }>>();
+const send = mock<(prompt: string, options: unknown) => Promise<{ wait: typeof wait; cancel: () => Promise<void> }>>();
+const wait = mock<() => Promise<{ status: string; error?: { message?: string } }>>();
+const cancel = mock<() => Promise<void>>();
+const close = mock<() => void>();
 
 // One class per kind, not one per call: the runtime tells a spent allowance from any other failure by `instanceof`,
 // and a factory minting a fresh class each time would answer no to every check.
 class RateLimitError extends Error {}
 class AuthenticationError extends Error {}
 
-vi.mock("./cursor-sdk.js", () => ({
+mock.module("./cursor-sdk.js", () => ({
     CURSOR_SDK_MISSING: `missing sdk`,
     cursorSdk: async () => ({ Agent: { create: created }, RateLimitError, AuthenticationError }),
 }));
@@ -41,7 +41,7 @@ const ask = (): Promise<string> =>
     });
 
 beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     created.mockImplementation(async () => ({ send, close }));
     send.mockImplementation(async (_prompt, options) => {
         const onDelta = (options as { onDelta?: (input: { update: { type: string; text: string } }) => void }).onDelta;
@@ -65,7 +65,7 @@ test("asks on Cursor's own runtime with no tools rather than a list of names to 
     );
     expect(created.mock.calls[0]?.[0]).not.toHaveProperty(`disallowedTools`);
     expect(send).toHaveBeenCalledWith(`fix: name the change`, expect.objectContaining({ onDelta: expect.any(Function) }));
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledTimes(1);
 });
 
 test("a reply carrying no text is a rung that did not answer", async () => {
@@ -73,13 +73,13 @@ test("a reply carrying no text is a rung that did not answer", async () => {
     wait.mockResolvedValue({ status: `success` });
 
     await expect(ask()).rejects.toThrow(/did not answer/);
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledTimes(1);
 });
 
 // Two accounts and the ledger between them, written by the helper and read back by its own next attempt.
 const fleet = () => {
     const ledger: Record<string, Record<string, { at: number; message: string }>> = {};
-    const refresh = vi.fn(async () => undefined);
+    const refresh = mock(async () => undefined);
     const deps = unstubbed<Services>(`services`, {
         cursorStore: unstubbed<Services[`cursorStore`]>(`cursorStore`, {
             credentials: async () => [

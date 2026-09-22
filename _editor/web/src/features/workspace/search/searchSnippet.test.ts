@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import type { WorkspaceSearchHit } from "@intentic/api-contract";
 import { useHighlighter } from "@intentic/ui";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { snippetPieces, snippetWindow } from "./searchSnippet";
 
 // Needs jsdom: the @intentic/ui barrel (useHighlighter) touches window.matchMedia at import. Nothing under test

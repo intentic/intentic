@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { RESOURCE_METRICS_FILE, type ResourceSampler, type ResourceSnapshot, startResourceMetrics } from "./resource-metrics.js";
 
 const roots: string[] = [];
@@ -24,8 +24,8 @@ test("samples immediately into the durable logs tree as JSONL", async () => {
         queue: { heavy: { slots: 2, held: 1, longestHoldSeconds: 12 } },
         owners: { turnRuns: { frames: 3 } },
     };
-    const sampler: ResourceSampler = { sample: vi.fn(async () => snapshot), stop: vi.fn() };
-    const metrics = startResourceMetrics({ historyRoot, logger: { warn: vi.fn(), error: vi.fn() }, intervalMs: 3_600_000, sampler });
+    const sampler: ResourceSampler = { sample: mock(async () => snapshot), stop: mock() };
+    const metrics = startResourceMetrics({ historyRoot, logger: { warn: mock(), error: mock() }, intervalMs: 3_600_000, sampler });
 
     // The explicit sample joins any eager one still in flight, so startup is deterministic without a poll.
     await metrics.sample();
@@ -39,16 +39,16 @@ test("samples immediately into the durable logs tree as JSONL", async () => {
             .split("\n")
             .map((line) => JSON.parse(line)),
     ).toEqual([snapshot]);
-    expect(sampler.stop).toHaveBeenCalledOnce();
+    expect(sampler.stop).toHaveBeenCalledTimes(1);
 });
 
 test("an empty history root is the explicit persistence opt-out", async () => {
-    const sampler: ResourceSampler = { sample: vi.fn(), stop: vi.fn() };
-    const metrics = startResourceMetrics({ historyRoot: "", logger: { warn: vi.fn(), error: vi.fn() }, sampler });
+    const sampler: ResourceSampler = { sample: mock(), stop: mock() };
+    const metrics = startResourceMetrics({ historyRoot: "", logger: { warn: mock(), error: mock() }, sampler });
     await metrics.sample();
     metrics.stop();
     expect(sampler.sample).not.toHaveBeenCalled();
-    expect(sampler.stop).toHaveBeenCalledOnce();
+    expect(sampler.stop).toHaveBeenCalledTimes(1);
 });
 
 // OOM alarm: fires on the delta between samples, never on the first sample after a restart.
@@ -73,9 +73,9 @@ test("an OOM kill logs at error, naming how many and which roles shrank", async 
         withCgroup("2026-08-09T00:01:00.000Z", 2, { browser: 13, terminal: 4 }),
     ];
     let index = 0;
-    const sampler: ResourceSampler = { sample: vi.fn(async () => samples[index++] ?? samples[1]!), stop: vi.fn() };
-    const error = vi.fn();
-    const metrics = startResourceMetrics({ historyRoot, logger: { warn: vi.fn(), error }, intervalMs: 3_600_000, sampler });
+    const sampler: ResourceSampler = { sample: mock(async () => samples[index++] ?? samples[1]!), stop: mock() };
+    const error = mock();
+    const metrics = startResourceMetrics({ historyRoot, logger: { warn: mock(), error }, intervalMs: 3_600_000, sampler });
 
     await metrics.sample();
     // First sample has nothing to diff against; comparing to zero would replay every historical kill.
@@ -83,7 +83,7 @@ test("an OOM kill logs at error, naming how many and which roles shrank", async 
 
     await metrics.sample();
     metrics.stop();
-    expect(error).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledTimes(1);
     expect(error.mock.calls[0]?.[0]).toMatchObject({ event_oom_kill: 2, lostByRole: { browser: 4 } });
     // A role that did not shrink is not named.
     expect(error.mock.calls[0]?.[0]?.lostByRole).not.toHaveProperty("terminal");
@@ -94,9 +94,9 @@ test("a steady OOM counter is silent: the alarm is the delta, not the level", as
     roots.push(historyRoot);
     // Absolute count stays 5 forever after one historical kill; alarming on the level would fire every minute.
     const snapshot = withCgroup("2026-08-09T00:00:00.000Z", 5, { browser: 2 });
-    const sampler: ResourceSampler = { sample: vi.fn(async () => snapshot), stop: vi.fn() };
-    const error = vi.fn();
-    const metrics = startResourceMetrics({ historyRoot, logger: { warn: vi.fn(), error }, intervalMs: 3_600_000, sampler });
+    const sampler: ResourceSampler = { sample: mock(async () => snapshot), stop: mock() };
+    const error = mock();
+    const metrics = startResourceMetrics({ historyRoot, logger: { warn: mock(), error }, intervalMs: 3_600_000, sampler });
 
     await metrics.sample();
     await metrics.sample();

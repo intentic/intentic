@@ -1,31 +1,33 @@
 import { STATE_DIR } from "@intentic/constants";
 import { sandboxRouteName, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { nextTick } from "vue";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nextTick, ref, toRaw } from "vue";
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
+import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { chatRun } from "./chatRun";
 
-vi.mock("../../sandbox/client/sandboxClient", () => {
-    const sandboxRequest = vi.fn();
-    const sandboxJson = vi.fn();
-    return {
-        sandboxRequest,
-        sandboxJson,
-        // sandboxRequestVia delegates to the same spies (`at` is always the active box in these tests).
-        sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
-            init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
-        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) =>
-            init === undefined ? sandboxJson(path) : sandboxJson(path, init),
-        sandboxError: vi.fn(async (response: Response) => {
-            const body = (await response.json()) as { message?: string; error?: string };
-            return new Error(body.message ?? body.error ?? `Request failed (${response.status}).`);
-        }),
-    };
-});
+// Declared outside the factory with concrete signatures: the real `sandboxJson<T>` is generic, and an
+// implementation answering one concrete shape cannot satisfy a generic one.
+const sandboxRequestMock = mock(async (_path: string, _init?: RequestInit): Promise<Response> => new Response());
+const sandboxJsonMock = mock(async (_path: string, _init?: RequestInit): Promise<unknown> => ({}));
+mock.module("../../sandbox/client/sandboxClient", () => ({
+    sandboxRequest: (path: string, init?: RequestInit) => sandboxRequestMock(path, init),
+    sandboxJson: (path: string, init?: RequestInit) => sandboxJsonMock(path, init),
+    // The `Via` forms delegate to the same spies (`at` is always the active box in these tests).
+    sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
+        init === undefined ? sandboxRequestMock(path) : sandboxRequestMock(path, init),
+    sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) =>
+        init === undefined ? sandboxJsonMock(path) : sandboxJsonMock(path, init),
+    sandboxError: mock(async (response: Response) => {
+        const body = (await response.json()) as { message?: string; error?: string };
+        return new Error(body.message ?? body.error ?? `Request failed (${response.status}).`);
+    }),
+    // Named by the graph but never thrown here; bun links an ESM import against exactly what this returns.
+    SandboxHttpError: class SandboxHttpError extends Error {},
+}));
 // Avoids the window.env chain; send() only needs track() mocked.
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
 // Avoids the window.env chain; tab persistence only reads activeSandboxId + reachable.
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     // sandboxKey included: hydrate's transcript cache read is keyed by sandbox, and needs it defined.
@@ -59,10 +61,7 @@ const storage = {
     },
 };
 
-const { sandboxJson, sandboxRequest } = await import("../../sandbox/client/sandboxClient");
 const { queryClient } = await import("../../../lib/queryPersistence");
-const sandboxRequestMock = vi.mocked(sandboxRequest);
-const sandboxJsonMock = vi.mocked(sandboxJson);
 
 // Both connection reads go through sandboxJson; a real failure throws rather than resolving empty (see
 // refreshAccounts). `accounts` is keyed by the provider route prefix.
@@ -105,8 +104,8 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-    vi.useRealTimers();
-    vi.clearAllMocks();
+    jest.useRealTimers();
+    jest.clearAllMocks();
     endpointProviders.value = [];
     endpointsLoaded.value = false;
     trialStatus.value = { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
@@ -119,7 +118,7 @@ afterEach(async () => {
 
 describe(`useChat provider reconciliation`, () => {
     it(`settles a repeated ChatGPT sign-in when the same account was replaced in place`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         resetChat();
         const chat = useChat();
         const existing = { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] };
@@ -141,7 +140,7 @@ describe(`useChat provider reconciliation`, () => {
 
         await chat.connectTranslator(`codex`);
         expect(chat.translatorConnectFlow.value?.state).toBe(`codex-attempt-1`);
-        await vi.advanceTimersByTimeAsync(3_000);
+        await advanceTimersByTimeAsync(3_000);
 
         expect(chat.translatorConnectFlow.value).toBeUndefined();
         expect(chat.translatorAccounts.value.codex).toEqual(existing.codex);
@@ -149,14 +148,19 @@ describe(`useChat provider reconciliation`, () => {
     });
 
     it(`takes the Google sign-in down on the paste's own answer, not three seconds later on a poll tick`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         resetChat();
         const chat = useChat();
         const landed = { codex: [], grok: [], kimi: [], gemini: [{ name: `antigravity-user.json`, label: `user@example.com` }] };
         let subscriptions: Subscriptions = { ...NO_SUBSCRIPTIONS };
         sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
             if (path === `/translator/gemini/connect` && init?.method === `POST`) {
-                return Promise.resolve({ url: `https://accounts.google.com/o/oauth2/v2/auth`, code: ``, state: `gemini-attempt-1`, flow: `redirect` });
+                return Promise.resolve({
+                    url: `https://accounts.google.com/o/oauth2/v2/auth`,
+                    code: ``,
+                    state: `gemini-attempt-1`,
+                    flow: `redirect`,
+                });
             }
             if (path === `/translator/gemini/complete`) {
                 subscriptions = landed;
@@ -175,16 +179,16 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.translatorAccounts.value.gemini).toEqual(landed.gemini);
         expect(chat.error.value).toBeNull();
         // And the poll armed for that attempt is retired with it, rather than reporting on a state already spent.
-        await vi.advanceTimersByTimeAsync(10_000);
+        await advanceTimersByTimeAsync(10_000);
         expect(sandboxJsonMock.mock.calls.some(([path]) => String(path).startsWith(`/translator/gemini/connect?state=`))).toBe(false);
     });
 
     it(`marks a redirect grant redeemed, and keeps the poll its credential still has to land through`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         resetChat();
         const chat = useChat();
         chat.setManagedProvider(`zai`);
-        const minted = { id: `zai-1`, label: `Z.ai`, connectedAt: new Date().toISOString() };
+        const minted = { id: `zai-1`, label: `Z.ai`, connectedAt: Date.now() };
         let accounts: unknown[] = [];
         const ok = (body: unknown): Response => ({ ok: true, status: 200, json: () => Promise.resolve(body) }) as Response;
         sandboxRequestMock.mockImplementation((path: string) => {
@@ -218,18 +222,23 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.nativeConnectFlow.value?.redeemed).toBe(true);
 
         // Re-stamping the attempt must not retire its own poll, which is the only thing that can land the mint.
-        await vi.advanceTimersByTimeAsync(3_000);
+        await advanceTimersByTimeAsync(3_000);
         expect(chat.nativeConnectFlow.value).toBeUndefined();
         expect(chat.managedAccounts.value).toEqual([minted]);
     });
 
     it(`leaves the Google sign-in up when the account read that should show the new row didn't answer`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         resetChat();
         const chat = useChat();
         sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
             if (path === `/translator/gemini/connect` && init?.method === `POST`) {
-                return Promise.resolve({ url: `https://accounts.google.com/o/oauth2/v2/auth`, code: ``, state: `gemini-attempt-2`, flow: `redirect` });
+                return Promise.resolve({
+                    url: `https://accounts.google.com/o/oauth2/v2/auth`,
+                    code: ``,
+                    state: `gemini-attempt-2`,
+                    flow: `redirect`,
+                });
             }
             if (path === `/translator/gemini/complete`) {
                 return Promise.resolve({});
@@ -381,7 +390,10 @@ describe(`account usage hydration`, () => {
         });
         await loadAccountStatus();
 
-        expect(usageByAccount.value[`claude:a1`]).toMatchObject({ windows: [{ kind: `seven_day`, utilization: 12, gates: `all` }], measuredAt: 500 });
+        expect(toRaw(usageByAccount.value[`claude:a1`])).toMatchObject({
+            windows: [{ kind: `seven_day`, utilization: 12, gates: `all` }],
+            measuredAt: 500,
+        });
         // Absent, not zero: an account with no persisted reading has no entry at all.
         expect(usageByAccount.value[`claude:a2`]).toBeUndefined();
     });
@@ -403,7 +415,7 @@ describe(`account usage hydration`, () => {
         });
         await loadAccountStatus();
 
-        expect(usageByAccount.value[`claude:a1`]).toMatchObject({
+        expect(toRaw(usageByAccount.value[`claude:a1`])).toMatchObject({
             windows: [{ kind: `seven_day`, utilization: 80, gates: `all` }],
             measuredAt: 9_000,
         });
@@ -434,7 +446,7 @@ describe(`native account connection`, () => {
         expect(chat.accountBusy.value).toBeUndefined();
     });
 
-/* THE CARD FOLLOWS THE CHAT ONLY ONTO A PROVIDER IT CAN CONNECT, which a fresh sandbox is the whole reason for. */
+    /* THE CARD FOLLOWS THE CHAT ONLY ONTO A PROVIDER IT CAN CONNECT, which a fresh sandbox is the whole reason for. */
     it(`keeps the account card on a connectable provider while the chat runs on the free trial`, async () => {
         const chat = useChat();
         await refreshConnections(true);
@@ -446,7 +458,7 @@ describe(`native account connection`, () => {
 
         chat.showActiveProvider();
 
-        expect(chat.managedProvider.value).toBe(turnDefaults.provider.value);
+        expect(chat.managedProvider.value).toBe(turnDefaults.provider.value!);
         expect(chat.managedProvider.value).not.toBe(TRIAL_PROVIDER);
     });
 
@@ -462,7 +474,7 @@ describe(`native account connection`, () => {
         expect(chat.managedProvider.value).toBe(`cursor`);
     });
 
-/* AND A CALL THAT IS MADE STAYS ON ITS ROUTE. */
+    /* AND A CALL THAT IS MADE STAYS ON ITS ROUTE. */
     it(`keeps an account route on its route for a provider id carrying a slash`, () => {
         expect(providerBase(TRIAL_PROVIDER)).toBe(`/accounts/${encodeURIComponent(TRIAL_PROVIDER)}`);
         expect(sandboxRouteName(`POST`, `${providerBase(TRIAL_PROVIDER)}/login/start`)).toBe(`accounts.start`);
@@ -634,11 +646,11 @@ describe(`per-tab drafts`, () => {
         const tabs = chat.conversations.value;
         expect(tabs).toHaveLength(2);
         expect(tabs[0]!.draft.value).toBe(`draft one`);
-        expect(tabs[0]!.attachments.value).toMatchObject([
+        expect(toRaw(tabs[0]!.attachments.value)).toMatchObject([
             { name: `pic.png`, path: `.intentic/records/artifacts/attachments/u1/pic.png`, status: `done` },
         ]);
         expect(tabs[1]!.draft.value).toBe(`draft two`);
-        expect(chat.active.value).toBe(tabs[1]);
+        expect(chat.active.value).toBe(tabs[1]!);
     });
 
     it(`restores messages queued behind a running turn, with their attachments`, async () => {
@@ -653,7 +665,7 @@ describe(`per-tab drafts`, () => {
         await nextTick();
 
         resetChat();
-        expect(chat.queued.value).toMatchObject([
+        expect(toRaw(chat.queued.value)).toMatchObject([
             { text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/records/artifacts/attachments/u1/spec.md` }] },
         ]);
     });
@@ -666,7 +678,7 @@ describe(`per-tab drafts`, () => {
     });
 
     it(`stamps a composer the first time it holds something unsent, and clears it when that goes`, async () => {
-        const clock = vi.spyOn(Date, `now`).mockReturnValue(1_000);
+        const clock = spyOn(Date, `now`).mockReturnValue(1_000);
         try {
             const chat = useChat();
             expect(chat.active.value.draftAt.value).toBeUndefined();
@@ -690,7 +702,7 @@ describe(`per-tab drafts`, () => {
     });
 
     it(`restores the age of a draft rather than re-stamping it as freshly written`, async () => {
-        const clock = vi.spyOn(Date, `now`).mockReturnValue(1_000);
+        const clock = spyOn(Date, `now`).mockReturnValue(1_000);
         try {
             useChat().draft.value = `half a sentence`;
             await nextTick(); // flush the stamp and the persistence watch
@@ -873,7 +885,7 @@ describe(`closing tabs`, () => {
 
     // Four tabs, third active, each holding text so an untouched draft doesn't collapse them into one (setConversations
     // allows only one).
-    const openFour = (): readonly string[] => {
+    const openFour = (): readonly [string, string, string, string] => {
         const chat = useChat();
         const ids: string[] = [];
         for (let at = 0; at < 4; at++) {
@@ -882,7 +894,7 @@ describe(`closing tabs`, () => {
             ids.push(conversation.conversationId);
         }
         chat.setActive(ids[2]!);
-        return ids;
+        return ids as [string, string, string, string];
     };
 
     it(`closes one tab and leaves the active one alone`, () => {
@@ -979,7 +991,7 @@ describe(`closing tabs`, () => {
 
         chat.closeTabs(new Set([`c999`]));
 
-        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([...ids]);
         expect(chat.activeId.value).toBe(ids[2]);
     });
 
@@ -1460,7 +1472,7 @@ describe(`opening a fleet agent`, () => {
     it(`replays a finished Gemini agent's transcript, no native runtime means its session is the SDK store's`, async () => {
         const conversation = openAgentConversation({ id: `a1`, sessionId: `sess-g`, provider: `gemini`, harness: `native` });
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a1/transcript`);
         expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Gemini.` });
         expect(conversation.session.value?.id).toBe(`current-sdk-session`);
@@ -1469,7 +1481,7 @@ describe(`opening a fleet agent`, () => {
     it(`replays a Codex agent routed under the Claude Code harness`, async () => {
         const conversation = openAgentConversation({ id: `a2`, sessionId: `sess-c`, provider: `codex`, harness: `claude-code` });
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a2/transcript`);
         expect(conversation.session.value?.id).toBe(`current-sdk-session`);
     });
@@ -1518,7 +1530,7 @@ describe(`opening a fleet agent`, () => {
     it(`replays a NATIVE Codex agent: the daemon holds what it streamed, whatever ran the turn`, async () => {
         const conversation = openAgentConversation({ id: `a3`, sessionId: `sess-n`, provider: `codex`, harness: `native` });
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a3/transcript`);
     });
 
@@ -1532,7 +1544,7 @@ describe(`opening a fleet agent`, () => {
         const conversation = openAgentConversation({ id: `a4`, sessionId: `sess-s`, provider: `claude`, harness: `native` });
         expect(conversation.account.value).toBeUndefined();
 
-        await vi.waitFor(() => expect(conversation.session.value?.account).toBe(`acct-work`));
+        await waitFor(() => expect(conversation.session.value?.account).toBe(`acct-work`));
 
         expect(conversation.account.value).toBe(`acct-work`);
     });
@@ -1547,7 +1559,7 @@ describe(`opening a fleet agent`, () => {
             account: `acct-personal`,
         });
 
-        await vi.waitFor(() => expect(conversation.session.value?.id).toBe(`current-sdk-session`));
+        await waitFor(() => expect(conversation.session.value?.id).toBe(`current-sdk-session`));
         expect(conversation.session.value?.account).toBe(`acct-work`);
         expect(conversation.account.value).toBe(`acct-personal`);
 
@@ -1579,7 +1591,7 @@ describe(`a tab whose agent the fleet no longer has`, () => {
         chat.draft.value = `real work`;
         const ghost = openAgentConversation({ id: `discarded-agent`, provider: `claude`, harness: `claude-code` });
 
-        await vi.waitFor(() => expect(ghost.registered.value).toBe(false));
+        await waitFor(() => expect(ghost.registered.value).toBe(false));
         chat.setActive(first);
 
         expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([first]);
@@ -1590,7 +1602,7 @@ describe(`a tab whose agent the fleet no longer has`, () => {
         const kept = openAgentConversation({ id: `discarded-with-work`, provider: `claude`, harness: `claude-code`, title: `Ship the thing` });
         kept.restoreMessages([{ role: `user`, text: `do the thing` }]);
 
-        await vi.waitFor(() => expect(kept.registered.value).toBe(false));
+        await waitFor(() => expect(kept.registered.value).toBe(false));
 
         expect(chat.conversations.value).toContain(kept);
         expect(kept.messages.value).toHaveLength(1);
@@ -1601,7 +1613,7 @@ describe(`a tab whose agent the fleet no longer has`, () => {
         setDaemonRoutes([`agents.list`]);
         const stale = openAgentConversation({ id: `still-there`, provider: `claude`, harness: `claude-code` });
 
-        await vi.waitFor(() => expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/still-there/transcript`));
+        await waitFor(() => expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/still-there/transcript`));
         await nextTick();
 
         expect(stale.registered.value).toBe(true);
@@ -1646,7 +1658,7 @@ describe(`chat panes`, () => {
     });
 
     // Three tabs with content, so none is the untouched draft the strip would reap; the first is focused.
-    const openThree = (): readonly string[] => {
+    const openThree = (): readonly [string, string, string] => {
         const chat = useChat();
         const ids: string[] = [];
         for (let at = 0; at < 3; at++) {
@@ -1655,7 +1667,7 @@ describe(`chat panes`, () => {
             ids.push(conversation.conversationId);
         }
         chat.setActive(ids[0]!);
-        return ids;
+        return ids as [string, string, string];
     };
 
     it(`starts as one pane, holding the focused chat`, () => {
@@ -1703,7 +1715,7 @@ describe(`chat panes`, () => {
         chat.closePane(ids[1]!);
 
         expect(chat.panes.value).toEqual([ids[0]]);
-        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([...ids]);
         expect(chat.activeId.value).toBe(ids[0]);
     });
 
@@ -1740,7 +1752,7 @@ describe(`chat panes`, () => {
 
         expect(chat.panes.value).toEqual([ids[0]]);
         expect(chat.activeId.value).toBe(ids[0]);
-        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual(ids);
+        expect(chat.conversations.value.map((c) => c.conversationId)).toEqual([...ids]);
     });
 
     it(`leaves a single pane alone`, () => {
@@ -1900,17 +1912,17 @@ describe(`hydrating a conversation whose turn is still running`, () => {
     // The typewriter and frame buffer drain via requestAnimationFrame; run it synchronously so a landed frame is
     // visible before an assertion reads the transcript.
     beforeEach(() => {
-        vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
+        stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => {
             callback(0);
             return 0;
         });
-        vi.stubGlobal(`cancelAnimationFrame`, () => {});
+        stubGlobal(`cancelAnimationFrame`, () => {});
         storage.clear();
         resetChat();
     });
 
     afterEach(() => {
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // What a window that died between a press and the daemon's ack leaves behind: the words still in the tab's queue,
@@ -1929,10 +1941,10 @@ describe(`hydrating a conversation whose turn is still running`, () => {
 
         hydrateOnce(conversation);
 
-        await vi.waitFor(() =>
-            expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent`).map(([, init]) => JSON.parse(init!.body as string))).toMatchObject(
-                [{ prompt: `the check failed, fix it` }],
-            ),
+        await waitFor(() =>
+            expect(
+                sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent`).map(([, init]) => JSON.parse(init!.body as string)),
+            ).toMatchObject([{ prompt: `the check failed, fix it` }]),
         );
         expect(conversation.queued.value).toHaveLength(0);
     });
@@ -1950,7 +1962,7 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         const conversation = openAgentConversation({ id: `hydrated-twice`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(reads).toBe(1);
@@ -1982,9 +1994,9 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         });
 
         hydrateOnce(conversation);
-        await vi.waitFor(() => expect(attaches).toBe(1));
+        await waitFor(() => expect(attaches).toBe(1));
         void conversation.reattach();
-        await vi.waitFor(() => expect(conversation.messages.value.some((message) => message.plan !== undefined)).toBe(true));
+        await waitFor(() => expect(conversation.messages.value.some((message) => message.plan !== undefined)).toBe(true));
 
         releaseProbe();
         // Mock resolving isn't the redraw; that's a further microtask, so assert after both awaits.
@@ -2029,9 +2041,9 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `stopped-elsewhere`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         // `stopped` and nothing more: a bare record says the turn didn't finish and nothing else.
-        await vi.waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `stopped` }));
+        await waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `stopped` }));
     });
 
     // A spent-allowance ending is a wait, not a crash: the daemon holds the turn, so the offer must read as a held
@@ -2042,9 +2054,9 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `spent-overnight`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         // Seconds on the wire, milliseconds here: pick-up compares every instant against Date.now().
-        await vi.waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: 4_200_000, held: { ran: false } }));
+        await waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: 4_200_000, held: { ran: false } }));
     });
 
     // A booking the daemon already made rides the record as its own instant, so a tab reopened hours later counts down
@@ -2055,8 +2067,8 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `booked-for-the-reset`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
-        await vi.waitFor(() =>
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() =>
             expect(conversation.pickUp.value).toEqual({
                 reason: `limit`,
                 readyAt: 9_000_000,
@@ -2072,7 +2084,7 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `finished-cleanly`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         expect(conversation.pickUp.value).toBeUndefined();
     });
 
@@ -2086,7 +2098,7 @@ describe(`opening a session whose last turn stopped short`, () => {
         conversation.pickUp.value = spent;
         hydrateOnce(conversation);
 
-        await vi.waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
         expect(conversation.pickUp.value).toEqual(spent);
     });
 
@@ -2096,7 +2108,7 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `stopped-but-empty`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await vi.waitFor(() => expect(sandboxRequestMock.mock.calls.some(([path]) => String(path).endsWith(`/transcript`))).toBe(true));
+        await waitFor(() => expect(sandboxRequestMock.mock.calls.some(([path]) => String(path).endsWith(`/transcript`))).toBe(true));
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(conversation.messages.value).toHaveLength(0);
         expect(conversation.pickUp.value).toBeUndefined();

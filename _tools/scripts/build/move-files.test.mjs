@@ -65,7 +65,7 @@ test("an import of a moved file is re-aimed, and an untouched one is left byte-i
     const source = [
         `import { plan } from "./turn-plan.js";`,
         `import { services } from "../composition.js";`,
-        `vi.mock("./turn-plan.js", () => ({}));`,
+        `mock.module("./turn-plan.js", () => ({}));`,
         `const late = await import("./turn-plan.js");`,
         `const label = "./turn-plan.js is not an import";`,
     ].join("\n");
@@ -73,18 +73,18 @@ test("an import of a moved file is re-aimed, and an untouched one is left byte-i
     const { text, changes } = rewriteSpecifiers(source, "_sandbox/sandbox/src/agent/agent.ts", finalOf, tracked);
     assert.equal(changes.length, 3, "the three import contexts, and not the string that merely looks like one");
     assert.match(text, /from "\.\/run\/turn-plan\.js"/);
-    assert.match(text, /vi\.mock\("\.\/run\/turn-plan\.js"/);
+    assert.match(text, /mock\.module\("\.\/run\/turn-plan\.js"/);
     assert.match(text, /await import\("\.\/run\/turn-plan\.js"\)/);
     assert.match(text, /from "\.\.\/composition\.js"/, "a specifier whose target did not move is untouched");
     assert.match(text, /const label = "\.\/turn-plan\.js is not an import"/, "a string in no import context is not a specifier");
 });
 
-test("a module named twice in one call — the type argument and the specifier — moves in both places", () => {
-    const source = `const { plan } = await vi.importActual<typeof import("./turn-plan.js")>("./turn-plan.js");`;
+test("a module named twice on one line — the type annotation and the specifier — moves in both places", () => {
+    const source = `const { plan }: typeof import("./turn-plan.js") = await import("./turn-plan.js");`;
     const finalOf = (path) => (path === "_sandbox/sandbox/src/agent/turn-plan.ts" ? "_sandbox/sandbox/src/agent/run/turn-plan.ts" : path);
     const { text, changes } = rewriteSpecifiers(source, "_sandbox/sandbox/src/agent/agent.test.ts", finalOf, tracked);
-    assert.equal(changes.length, 2, "the type argument and the call's own string are both the module's name");
-    assert.equal(text, `const { plan } = await vi.importActual<typeof import("./run/turn-plan.js")>("./run/turn-plan.js");`);
+    assert.equal(changes.length, 2, "the type annotation and the import's own string are both the module's name");
+    assert.equal(text, `const { plan }: typeof import("./run/turn-plan.js") = await import("./run/turn-plan.js");`);
 });
 
 test("the moved file's own imports follow it to its new depth", () => {

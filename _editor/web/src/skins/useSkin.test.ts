@@ -1,30 +1,47 @@
-// @vitest-environment jsdom
 // Pins that the skin follows the scheme until somebody pins it, and that pinning it sets and clears data-skin.
 // jsdom: the composable writes directly to the document. A skin used to fetch a webfont as it was applied and these
 // also pinned that; every face is served from the app's own origin now, so there is no link left to assert on.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { freshImport, stubGlobal } from "@intentic/testing/bun";
 
-// Each test re-imports fresh via vi.resetModules(), since the subject is a module-scope singleton; useSkin must keep
-// reaching useTheme through @intentic/ui/theme, not the barrel, or each reset drags in the whole component graph.
+// Both modules are module-scope singletons. The theme is evaluated once, over a `prefers-color-scheme` this file can
+// flip live, and the skin gets its own evaluation per case, since what it reads from storage as it loads is half of
+// what these pin. useSkin must keep reaching useTheme through @intentic/ui/theme, not the barrel, or each evaluation
+// drags in the whole component graph.
 
-const load = () => import("./useSkin");
-const root = () => document.documentElement;
+/** What the OS says. jsdom has no `matchMedia`, and the preload's stand-in never changes. */
+const listeners = new Set<(event: { matches: boolean }) => void>();
+let dark = false;
+stubGlobal(`matchMedia`, (query: string) => ({
+    get matches(): boolean {
+        return dark && query.includes(`dark`);
+    },
+    addEventListener: (_name: string, listener: (event: { matches: boolean }) => void): void => void listeners.add(listener),
+    removeEventListener: (_name: string, listener: (event: { matches: boolean }) => void): void => void listeners.delete(listener),
+}));
 
-/** What the OS says, before the module under test reads it. jsdom has no `matchMedia` of its own. */
 const systemIs = (scheme: "light" | "dark"): void => {
-    vi.stubGlobal(`matchMedia`, (query: string) => ({
-        matches: scheme === `dark` && query.includes(`dark`),
-        addEventListener: (): void => {},
-        removeEventListener: (): void => {},
-    }));
+    dark = scheme === `dark`;
+    for (const listener of listeners) {
+        listener({ matches: dark });
+    }
 };
 
+// Imported after the stub above, so the one instance this file holds reads and follows it.
+const { useTheme } = await import("@intentic/ui/theme");
+
+const load = () => freshImport<typeof import("./useSkin")>("./useSkin", import.meta.url);
+const root = () => document.documentElement;
+
 beforeEach(() => {
+    // The scheme is handed back to the system first, then what that wrote is cleared: the theme is one instance for
+    // the whole file, so a case that pinned it would otherwise carry into the next.
+    useTheme().set(`system`);
+    systemIs(`light`);
     localStorage.clear();
     root().removeAttribute(`data-skin`);
     root().removeAttribute(`data-mode`);
-    vi.unstubAllGlobals();
-    vi.resetModules();
 });
 
 describe(`useSkin`, () => {

@@ -1,13 +1,14 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { DEV_REBUILD_EXIT_MARK, DEV_REBUILD_QUIET_MARK } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
 
 // A rebuild runs on another machine, detached, and ends by replacing the container this page is talking to. What is
 // pinned here is that the run survives all of that: the component being thrown away, the daemon going quiet mid-build,
 // and a reload afterwards — because none of those are the build stopping.
 
-const { runDeviceCommand, SandboxHttpError } = vi.hoisted(() => ({
-    runDeviceCommand: vi.fn(),
+const { runDeviceCommand, SandboxHttpError } = hoisted(() => ({
+    runDeviceCommand: mock(),
     // The real class's shape: an answer FROM the daemon, carrying the status the composable branches on.
     SandboxHttpError: class extends Error {
         constructor(
@@ -18,8 +19,8 @@ const { runDeviceCommand, SandboxHttpError } = vi.hoisted(() => ({
         }
     },
 }));
-vi.mock(`../devices/useDevices`, () => ({ runDeviceCommand }));
-vi.mock(`../client/sandboxClient`, () => ({ SandboxHttpError }));
+mock.module(`../devices/useDevices`, () => ({ runDeviceCommand }));
+mock.module(`../client/sandboxClient`, () => ({ SandboxHttpError }));
 
 const { rebuildRunning, useDevRebuild } = await import("./useDevRebuild");
 
@@ -47,19 +48,19 @@ const nextSlug = (): string => `box-${(counter += 1)}`;
 const POLL_MS = 4_000;
 const nextPoll = async (times = 1): Promise<void> => {
     for (let index = 0; index < times; index += 1) {
-        await vi.advanceTimersByTimeAsync(POLL_MS);
+        await advanceTimersByTimeAsync(POLL_MS);
     }
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     runDeviceCommand.mockReset();
     localStorage.clear();
 });
 
 afterEach(() => {
-    vi.runOnlyPendingTimers();
-    vi.useRealTimers();
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
 });
 
 it(`follows the machine's log from the moment the build is under way`, async () => {
@@ -72,7 +73,7 @@ it(`follows the machine's log from the moment the build is under way`, async () 
     expect(runDeviceCommand).toHaveBeenNthCalledWith(1, HOST, `dev-rebuild`);
 
     await nextPoll(0);
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(runDeviceCommand).toHaveBeenNthCalledWith(2, HOST, `dev-rebuild-log`);
     expect(run.lines).toEqual([`#8 [builder 2/9] RUN pnpm install`]);
     expect(run.quietFor).toBe(3);
@@ -85,13 +86,15 @@ it(`counts the wait in seconds while the build runs, and stops the clock when it
     await useDevRebuild(slug).start(HOST);
 
     await nextPoll(15);
+    // One tick past the last poll window: a timer due exactly at a window's edge is left for the next advance.
+    await advanceTimersByTimeAsync(1_000);
     expect(elapsed.value).toBeGreaterThanOrEqual(60);
 
     runDeviceCommand.mockResolvedValue(log(`0`, `done`, `${DEV_REBUILD_EXIT_MARK} 0`));
     await nextPoll(1);
     expect(run.phase).toBe(`done`);
     const settled = elapsed.value;
-    await vi.advanceTimersByTimeAsync(30_000);
+    await advanceTimersByTimeAsync(30_000);
     expect(elapsed.value).toBe(settled);
 });
 
@@ -254,7 +257,7 @@ it(`resumes from the marker a reload left behind, and reports the outcome`, asyn
 
     const { run, elapsed } = useDevRebuild(slug);
     useDevRebuild(slug).adopt(HOST);
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
 
     expect(run.phase).toBe(`done`);
     // Dated from the marker, so the reader is told how long the whole rebuild took, not how long since the reload.
@@ -268,14 +271,14 @@ it(`adopts a rebuild nobody here started only while its log is still growing`, a
     runDeviceCommand.mockResolvedValue(log(`6`, `#5 [builder 1/9]`));
     const live = useDevRebuild(fresh);
     live.adopt(HOST);
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(live.run.phase).toBe(`building`);
 
     const stale = nextSlug();
     runDeviceCommand.mockResolvedValue(log(`90000`, `an old build`));
     const quiet = useDevRebuild(stale);
     quiet.adopt(HOST);
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(quiet.run.phase).toBe(`idle`);
     expect(quiet.run.lines).toEqual([]);
 });
@@ -285,7 +288,7 @@ it(`says nothing about a machine with no rebuild log at all`, async () => {
     runDeviceCommand.mockResolvedValue(log(`-`));
     const { run } = useDevRebuild(slug);
     useDevRebuild(slug).adopt(HOST);
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(run.phase).toBe(`idle`);
 });
 

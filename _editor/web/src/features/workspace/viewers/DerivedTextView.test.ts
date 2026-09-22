@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // What a reader actually sees of a file's shadow: the text, and the three things that make it trustworthy — which
 // reader made it, what it had to cut, and whether the file has moved on since. Asserted in the DOM, since "shown
 // with the text" rather than "carried in the response" is the whole point of this surface.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
@@ -16,7 +16,7 @@ const STOPPED = { enabled: false, queued: 0, deriving: [], sweeping: false, brok
 const answers: { read: WorkspaceDerived; derive?: WorkspaceDerived; hold?: boolean } = {
     read: { present: false, path: `bundle.zip`, derivable: true, state: `off`, queue: STOPPED },
 };
-const derived = vi.fn();
+const derived = mock();
 let release: ((value: WorkspaceDerived) => void) | undefined;
 const answer = (value: WorkspaceDerived): Promise<WorkspaceDerived> =>
     answers.hold === true
@@ -24,7 +24,7 @@ const answer = (value: WorkspaceDerived): Promise<WorkspaceDerived> =>
               release = resolve;
           })
         : Promise.resolve(value);
-vi.mock("../files/derivedText", () => ({
+mock.module("../files/derivedText", () => ({
     readDerivedText: () => answer(answers.read),
     deriveText: (path: string) => {
         derived(path);
@@ -35,7 +35,7 @@ vi.mock("../files/derivedText", () => ({
 // `derivedEpoch` is a real ref, since a plain field would not re-trigger the watch and the test would pass on a
 // component that never re-reads — which is the bug being covered.
 const derivedEpoch = ref(0);
-vi.mock("../changes/live/useWorkspaceLive", () => ({
+mock.module("../changes/live/useWorkspaceLive", () => ({
     changeEpochOf: () => 0,
     derivedEpochOf: () => derivedEpoch.value,
     sidecarQueue: { value: undefined },

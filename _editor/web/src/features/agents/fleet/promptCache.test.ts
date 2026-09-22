@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { cacheCooling, cacheWarm, type CacheStanding } from "./promptCache";
 
 // No mocks: promptCache is a pure-function leaf over agentStatus, like the projections it sits beside.

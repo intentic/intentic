@@ -1,20 +1,20 @@
-// @vitest-environment jsdom
 // Pins that the posture (`agents.spawn`) writes into the shared `actionRules` record without clobbering other
 // keys (e.g. the outbound sniffer's `<provider>.<type>` rules), unlike the three plain-number ceilings beside it.
+import "@intentic/testing/dom";
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { postureOf, postures, SPAWN_KEY, withPosture } from "../safety/spawnPosture";
 import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = vi.fn((fields: Partial<SandboxSettings>) => {
+const patch = mock((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-vi.mock(`../../overview/useSandboxSettings`, () => ({
+mock.module(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 

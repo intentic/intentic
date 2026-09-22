@@ -1,36 +1,39 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 
-const highlighter = vi.hoisted(() => ({ ensureLang: vi.fn() }));
-const diagnostics = vi.hoisted(() => ({ reportClient: vi.fn(), describeError: vi.fn(() => ({ message: `boom`, fields: {} })) }));
-const appUpdate = vi.hoisted(() => ({ reportIncompleteBundle: vi.fn() }));
+const highlighter = hoisted(() => ({ ensureLang: mock() }));
+const diagnostics = hoisted(() => ({ reportClient: mock(), describeError: mock(() => ({ message: `boom`, fields: {} })) }));
+const appUpdate = hoisted(() => ({ reportIncompleteBundle: mock() }));
 
-vi.mock("@intentic/ui", () => ({
+// Listed by hand rather than spread over the barrel: pulling it in here would cost mermaid, shiki and vue-flow.
+mock.module("@intentic/ui", () => ({
     useHighlighter: () => highlighter,
+    useTheme: () => ({ scheme: { value: `light` } }),
 }));
 
 // The editors' type follows the app's base text size, and their colours follow the scheme; both are facts about
 // a document, and these cases are about grammar registration, so they run without one. Stubbed on the SUBPATHS,
 // which is how the modules under test reach them: a plain state module takes the kit's own entry point rather
 // than the barrel, so that holding a preference does not drag mermaid, shiki and vue-flow in with it.
-vi.mock("@intentic/ui/text-size", () => ({ useTextSize: () => ({ scale: { value: 1 } }) }));
-vi.mock("@intentic/ui/theme", () => ({ useTheme: vi.fn() }));
+mock.module("@intentic/ui/text-size", () => ({ useTextSize: () => ({ scale: { value: 1 } }) }));
+mock.module("@intentic/ui/theme", () => ({ useTheme: mock() }));
 // The two app-wide channels a failure reaches, stubbed because the real ones talk to the daemon and to the
 // notification host: what matters here is that a grammar that never arrived reaches both.
-vi.mock("../../../app/clientDiagnostics", () => diagnostics);
-vi.mock("../../../app/appUpdate", () => appUpdate);
+mock.module("../../../app/clientDiagnostics", () => diagnostics);
+mock.module("../../../app/appUpdate", () => appUpdate);
 
 const { useMonaco } = await import("./useMonaco");
 
 const monaco = {
     languages: {
-        getLanguages: vi.fn(() => []),
-        register: vi.fn(),
+        getLanguages: mock(() => []),
+        register: mock(),
     },
 };
 
 describe(`ensureLanguage`, () => {
     beforeEach(() => {
-        vi.clearAllMocks();
+        jest.clearAllMocks();
     });
 
     it(`falls back to plaintext when a lazy grammar chunk fails`, async () => {

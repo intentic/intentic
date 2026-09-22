@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import { ATTACHMENTS_DIR, type MemberRole } from "@intentic/sandbox-contract";
 import { createApp } from "../../app.js";

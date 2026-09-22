@@ -3,7 +3,7 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import type { ExtensionSummary, SecretInventoryEntry } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { matchesSecret, type SecretSources, secretRow, secretRows } from "./secretRows";
 
 const entry = (over: Partial<SecretInventoryEntry> & Pick<SecretInventoryEntry, `key` | `kind`>): SecretInventoryEntry => ({
@@ -90,9 +90,12 @@ it(`leaves another page's errand off this tab, while still sorting it to the top
         },
     );
     expect(rows.map((row) => row.attention)).toEqual([false, false]);
-    expect(rows[0]?.state).toMatchObject({ label: expect.any(String), tone: expect.any(String), rank: expect.any(Number) });
-    expect(rows[0]?.state?.label).not.toBe(rows[1]?.state?.label);
-    expect(rows[0]!.state!.rank).toBeLessThan(rows[1]!.state!.rank);
+    const [top, below] = [rows[0]?.state, rows[1]?.state];
+    // Shape read by hand, not through an asymmetric matcher: bun writes the matchers it satisfied into the received
+    // object, and the rank below is read off that same state.
+    expect([typeof top?.label, typeof top?.tone, typeof top?.rank]).toEqual([`string`, `string`, `number`]);
+    expect(top?.label).not.toBe(below?.label);
+    expect(top!.rank).toBeLessThan(below!.rank);
 });
 
 it(`finds a credential by the things its row actually shows`, () => {
@@ -126,7 +129,13 @@ it(`says who has to approve a gated row, and does not count it as an errand`, ()
 
 it(`lets a real debt outrank the gate note on one row`, () => {
     const missing = secretRow(
-        entry({ key: `CF_TOKEN`, kind: `env`, status: `missing`, requiredBy: [{ resourceId: `s`, type: `d` }], gate: { approvers: [`bob@corp.com`], scope: `use` } }),
+        entry({
+            key: `CF_TOKEN`,
+            kind: `env`,
+            status: `missing`,
+            requiredBy: [{ resourceId: `s`, type: `d` }],
+            gate: { approvers: [`bob@corp.com`], scope: `use` },
+        }),
         sources(),
     );
     expect(missing.note).toBe(`not set`);

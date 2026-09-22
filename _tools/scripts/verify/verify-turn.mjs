@@ -20,7 +20,7 @@ import { changedPaths } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
-import { vitestMaxWorkers } from "./vitest-workers.mjs";
+import { testWorkers } from "./test-workers.mjs";
 
 const root = repoRoot(import.meta.url);
 const { say, step, skip, fail, finish } = createSteps("verify:turn", root);
@@ -136,7 +136,7 @@ if (affected.size > 0) {
     if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/build/emit-declarations.mjs")])) {
         const filters = global !== undefined ? [] : [...affected].flatMap((name) => ["--filter", name]);
         step("typecheck and test", "pnpm", ["turbo", "run", "typecheck", "test", "--only", "--continue=dependencies-successful", ...filters], {
-            env: { VITEST_MAX_WORKERS: vitestMaxWorkers(), INDEXNOW_ENABLED: "0" },
+            env: { TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0" },
         });
     } else {
         skip("typecheck and test", "the declarations it reads were not emitted");

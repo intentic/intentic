@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { REGISTRY_FACTS_FILE, REGISTRY_FILE } from "@intentic/registry";
 import { gitClone } from "@intentic/scaffold";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { makeWorkspaceDir, readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";
 import type { CapabilityCtx } from "./capability.js";
 import { browseMarketplace } from "./marketplace.js";

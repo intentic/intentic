@@ -1,5 +1,5 @@
 import { createMemoryHistory, createRouter, type RouteRecordRaw } from "vue-router";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 /* The workspace deep-link route must remain resolvable by Vue Router. */
 

@@ -5336,8 +5336,24 @@
           "what": ": the stand-ins."
         },
         {
-          "path": "_tools/testing/src/vitest.ts",
-          "what": ": shared configuration."
+          "path": "_tools/testing/bin/suites.mjs",
+          "what": ": every package's `test` script."
+        },
+        {
+          "path": "_tools/testing/src/bun-preload.ts",
+          "what": ": loaded per file through bunfig.toml."
+        },
+        {
+          "path": "_tools/testing/src/bun.ts",
+          "what": ": the `vi.*` surface bun:test lacks."
+        },
+        {
+          "path": "_tools/testing/src/dom.ts",
+          "what": ": a jsdom window as globals, for the suite that imports it first."
+        },
+        {
+          "path": "_tools/testing/src/bun-vue.ts",
+          "what": ": the `.vue` loader, so a component test mounts the real SFC."
         },
         {
           "path": "_tools/testing/src/e2e.ts",

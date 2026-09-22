@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect } from "bun:test";
 import { placeAnchored } from "@intentic/ui";
 
-// @intentic/ui reaches window.matchMedia at import; jsdom plus vitest.setup.ts's stub cover it.
+// @intentic/ui reaches window.matchMedia at import; jsdom plus bun.setup.ts's stub cover it.
 
 // Geometry behind every anchored panel (composer pickers, tab strip history), lives in @intentic/ui (no
 // test runner), pinned here. Tests that placement uses the given `view`, not a module-scope window, since the app draws

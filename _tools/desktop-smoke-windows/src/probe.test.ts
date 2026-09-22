@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { answerConfirm, type ConfirmOps } from "./probe.js";
 
 // Answers the confirmation against a fake desktop, exercising the race where a window mapping between focus and Return

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { createBody, newPullProgress, parseInspect, pullProgressLine } from "./docker.js";
 
 // Lines as the engine streams them for `POST /images/create`.

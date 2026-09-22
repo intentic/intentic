@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { decodeQuotedPrintable, extractCodes, extractLinks, imapSince, mailboxOf, matchesSite, parseSearch, siteToken } from "./email-codes.js";
 
 // Pure parsing and extraction logic between the curl transport and the tool's answer; no network, no mocks needed.

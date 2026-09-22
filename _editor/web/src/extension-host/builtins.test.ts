@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import type {
     CapabilityFacts,
     DocumentProviderRegistration,
@@ -11,14 +11,14 @@ import { extensionIdOf } from "@intentic/extension-manifest";
 import { registerCatalog } from "@intentic/ui/i18n";
 import { isIconName } from "@intentic/ui/icons";
 import * as activity from "@intentic/ext-activity";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // Exercises each compiled-in extension package the way loadBuiltins does: activate() against a minimal fake
 // IntenticApi, without the app singletons createExtensionApi pulls in. Proves the packages register a working view
 // whose detect() behaves.
 
 // The builtins list's import chain pulls every extension package, and theirs pulls app-wide singletons that read
-// browser globals at module scope: hence jsdom, stood up by vitest.setup.ts before this file loads.
+// browser globals at module scope: hence jsdom, stood up by bun.setup.ts before this file loads.
 
 const { builtinModules } = await import("./builtins");
 // The core views register outside builtinModules but land in the same rail column, so the glyph check below has to see

@@ -1,5 +1,5 @@
 import { type Persona, type TurnBriefingNoteId, type TurnNote, TURN_BRIEFING_FIXTURES, TURN_BRIEFING_NOTES } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { TURN_ENDING_NOTE_TITLE } from "../../rules/turn-ending-note.js";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";

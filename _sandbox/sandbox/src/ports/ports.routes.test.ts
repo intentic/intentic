@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { portsContract, portUrl } from "@intentic/sandbox-contract";
 import { portSlotsFromToken, sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { workspacePaths } from "../workspace/workspace.js";
 import { testConfig } from "../testing.js";
 import { errorCode, routesClient } from "../harness/route-client.testing.js";
@@ -48,7 +48,7 @@ test("ports.list scans on demand, hides the daemon's own listeners, and marks fo
         purpose: "Running in app, outside any terminal this app can show.",
         origin: "unknown",
         kind: "workspace",
-    };
+    } as const;
     expect(await client.list()).toEqual({
         ports: [{ port: 3000, host: "127.0.0.1", forwardable: true, pid: 7, command: "vite", cwd: "/work/app", forwarded: false, ...named }],
     });

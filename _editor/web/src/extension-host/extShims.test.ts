@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 // @ts-expect-error: plain .mjs build script, no declarations
 import { extShims, shimsDir } from "../../scripts/generate-ext-shims.mjs";
 
@@ -11,7 +11,7 @@ import { extShims, shimsDir } from "../../scripts/generate-ext-shims.mjs";
 
 // Generated during collection, not inside the test body: extShims() imports every package it shims, carrying a module
 // graph rather than a function call. Left inside the test, that cost would sit on the test's clock and could push a
-// contended full-repo run past its budget. See vitest.config.ts.
+// contended full-repo run past its budget.
 const shims = await extShims();
 
 test("every committed ext-shim matches what the generator produces", async () => {

@@ -1,5 +1,5 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach, mock, jest, type Mock } from "bun:test";
 import { beginEntryDrag, consumeSuppressedClick, useEntryDrag } from "./useEntryDrag";
 
 // jsdom lays nothing out: the element the drag is over is whatever the test says it is.
@@ -33,7 +33,7 @@ beforeEach(() => {
     document.body.replaceChildren();
     under = null;
     document.elementFromPoint = () => under;
-    current = { paths: [`README.md`], onDrop: vi.fn<(dir: string) => void>() };
+    current = { paths: [`README.md`], onDrop: mock<(dir: string) => void>() };
 });
 
 afterEach(() => {
@@ -117,15 +117,15 @@ describe(`a pointer drag of an entry`, () => {
     // A drag released over nothing draggable leaves a click no row ever fires: over the editor, off the window, or
     // taken by the OS. Nothing consumes the claim, so only the deadline can end it.
     it(`lets an unrelated click through once the drag's own click never came`, () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             press();
             move(30, 30);
             release();
-            vi.advanceTimersByTime(1_000);
+            jest.advanceTimersByTime(1_000);
             expect(consumeSuppressedClick(), `a click a second later is a new gesture`).toBe(false);
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
@@ -135,14 +135,14 @@ describe(`a pointer drag of an entry`, () => {
         press();
         move(30, 30);
         release();
-        current = { paths: [], onDrop: vi.fn<(dir: string) => void>() };
+        current = { paths: [], onDrop: mock<(dir: string) => void>() };
         press();
         release();
         expect(consumeSuppressedClick(), `a locked row's own click`).toBe(false);
     });
 
     it(`counts several, and refuses a secondary button or nothing to carry`, () => {
-        current = { paths: [`a`, `b`, `c`], onDrop: vi.fn<(dir: string) => void>() };
+        current = { paths: [`a`, `b`, `c`], onDrop: mock<(dir: string) => void>() };
         press();
         move(30, 30);
         expect(label.value).toBe(`3 items`);
@@ -150,7 +150,7 @@ describe(`a pointer drag of an entry`, () => {
         press(10, 10, 2);
         move(30, 30);
         expect(dragging.value, `a right-press is a menu`).toBe(false);
-        current = { paths: [], onDrop: vi.fn<(dir: string) => void>() };
+        current = { paths: [], onDrop: mock<(dir: string) => void>() };
         press();
         move(30, 30);
         expect(dragging.value).toBe(false);

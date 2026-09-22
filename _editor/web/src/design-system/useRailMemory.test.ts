@@ -1,5 +1,5 @@
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach } from "bun:test";
 import { effectScope, nextTick, ref } from "vue";
 import { useRailMemory } from "@intentic/ui";
 

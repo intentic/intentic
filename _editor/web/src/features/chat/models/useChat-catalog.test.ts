@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
-import { beforeEach, expect, test, vi } from "vitest";
+import "@intentic/testing/dom";
+import { test, expect, beforeEach, mock } from "bun:test";
+import { mocked } from "@intentic/testing/bun";
 
 // What a catalog read does to the chats already open on that provider. A routed channel de-lists a model for as long as
 // it is out of capacity or quota for it, so "not in this list" is a state that ends, and the pick it moves a chat off
@@ -7,11 +8,14 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 // The catalog read is the whole subject; every other daemon call belongs to a different one. Every export the modules
 // under test import is named here, not just the two this suite drives, or their own imports link to nothing.
-vi.mock("../../sandbox/client/sandboxClient", () => ({
-    sandboxRequest: vi.fn(),
-    sandboxJson: vi.fn(async () => ({})),
-    sandboxRequestVia: vi.fn(),
-    sandboxError: vi.fn(),
+// Declared outside the factory with a path-only signature: the real `sandboxJson<T>` is generic, and an
+// implementation answering one concrete shape cannot satisfy a generic one.
+const sandboxJsonMock = mock(async (_path: string): Promise<unknown> => ({}));
+mock.module("../../sandbox/client/sandboxClient", () => ({
+    sandboxRequest: mock(),
+    sandboxJson: (path: string) => sandboxJsonMock(path),
+    sandboxRequestVia: mock(),
+    sandboxError: mock(),
     // Carries the status, like the real one: the provider read branches on it, and `instanceof` is only true for the
     // class the module under test imported, which is this one.
     SandboxHttpError: class extends Error {
@@ -24,9 +28,8 @@ vi.mock("../../sandbox/client/sandboxClient", () => ({
     },
 }));
 
-const { sandboxJson, sandboxRequest, SandboxHttpError } = await import("../../sandbox/client/sandboxClient");
-const sandboxRequestMock = vi.mocked(sandboxRequest);
-const sandboxJsonMock = vi.mocked(sandboxJson);
+const { sandboxRequest, SandboxHttpError } = await import("../../sandbox/client/sandboxClient");
+const sandboxRequestMock = mocked(sandboxRequest);
 const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels } = await import("./useChat-catalog");
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract");
 const { acpProviders, endpointProviders, endpointsLoaded, nativeReady } = await import("../accounts/providerCatalog");

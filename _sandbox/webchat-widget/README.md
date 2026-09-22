@@ -42,7 +42,7 @@ overrides it for a site that fronts the sandbox behind its own proxy.
 
 ```sh
 ./node_modules/.bin/vite build     # → dist/widget.js (watch the gzip line in the output)
-./node_modules/.bin/vitest run
+pnpm test
 ```
 
 The daemon takes this package as a **prod dependency** and resolves `dist/widget.js` through its export, so

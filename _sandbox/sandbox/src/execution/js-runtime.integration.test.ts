@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { type JsExecutionPlan, runJs } from "./js-runtime.js";
 
 /* The RUNNER honouring a plan, real `node` subprocesses on purpose: the permission flags ARE the fence, and only the real runtime can vouch for them. */

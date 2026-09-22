@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { documentOf, documentTitle, isDocumentPath, isPlanDocumentPath } from "./documents.js";
 import { PLAN_DOCUMENTS_DIR } from "../state/workspace-state.js";
 

@@ -5,7 +5,7 @@
         "rootDir": "./src",
         "tsBuildInfoFile": "./.cache/tsbuildinfo",
         "resolveJsonModule": true,
-        "types": ["node"]
+        "types": ["bun", "node"]
     },
     "include": ["./src/**/*.ts", "./src/**/*.vue", "./intentic-extension.json"],
     "extends": "@intentic/tsconfig/tsconfig.vue.json"

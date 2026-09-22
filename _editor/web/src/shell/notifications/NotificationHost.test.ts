@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, nextTick, ref } from "vue";
 import { hold, useNotifications } from "./notifications";
 import NotificationHost from "./NotificationHost.vue";
@@ -14,7 +15,7 @@ afterEach(() => {
     release = undefined;
     useNotifications().dismissReceipt();
     document.body.innerHTML = ``;
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 const mountHost = async (): Promise<HTMLElement> => {
@@ -35,7 +36,7 @@ const buttonLabelled = (root: HTMLElement, label: string): HTMLButtonElement =>
 // A receipt dismissed by Undo while hovered never fires mouseleave, so the dwell flag is stuck true; every later
 // receipt is born paused until the card is hovered and released again.
 it(`retires a receipt raised after an earlier one was dismissed under the pointer`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { say, receipt } = useNotifications();
     const root = await mountHost();
 
@@ -54,12 +55,12 @@ it(`retires a receipt raised after an earlier one was dismissed under the pointe
     expect(receipt.value?.title).toBe(`Path copied`);
 
     // Past the longest dwell either tone can ask for.
-    await vi.advanceTimersByTimeAsync(20_000);
+    await advanceTimersByTimeAsync(20_000);
     expect(receipt.value).toBeUndefined();
 });
 
 it(`holds a receipt for as long as the pointer is on it`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { say, receipt } = useNotifications();
     const root = await mountHost();
 
@@ -68,14 +69,14 @@ it(`holds a receipt for as long as the pointer is on it`, async () => {
     cardOf(root).dispatchEvent(new MouseEvent(`mouseenter`));
     await nextTick();
 
-    await vi.advanceTimersByTimeAsync(20_000);
+    await advanceTimersByTimeAsync(20_000);
     expect(receipt.value?.title).toBe(`3 files deleted`);
 
     // Leaving starts the dwell instead of ending the receipt immediately.
     cardOf(root).dispatchEvent(new MouseEvent(`mouseleave`));
     await nextTick();
     expect(receipt.value?.title).toBe(`3 files deleted`);
-    await vi.advanceTimersByTimeAsync(20_000);
+    await advanceTimersByTimeAsync(20_000);
     expect(receipt.value).toBeUndefined();
 });
 

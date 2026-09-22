@@ -1,25 +1,40 @@
-// @vitest-environment jsdom
-import { beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, mock } from "bun:test";
+import { ref } from "vue";
 
 // Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
 // Mocks the router, analytics and sandbox client so only the wire between the stream router and the fleet store is
 // exercised.
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-vi.mock("../client/useSandbox", async () => {
-    const { ref } = await import("vue");
-    return {
-        useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
-        sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
-    };
-});
-vi.mock("../client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
+const activeSandboxId = ref<string | undefined>(undefined);
+const reachable = ref(false);
+mock.module("../client/useSandbox", () => ({
+    useSandbox: () => ({ activeSandboxId, reachable }),
+    sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
+}));
+// Declared outside the factory with a path-only signature: the real `sandboxJson<T>` is generic, and an
+// implementation returning one concrete shape cannot satisfy it.
+const sandboxJsonMock = mock(async (..._args: unknown[]): Promise<unknown> => ({}));
+// Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
+// this factory returns; only the two below are ever called here.
+mock.module("../client/sandboxClient", () => ({
+    sandboxJson: (...args: unknown[]) => sandboxJsonMock(...args),
+    sandboxRequest: mock(),
+    sandboxRequestVia: mock(),
+    sandboxJsonAt: mock(),
+    sandboxJsonQuietly: mock(),
+    sandboxJsonVia: mock(),
+    sandboxBlob: mock(),
+    sandboxUpload: mock(),
+    sandboxError: mock(async () => new Error(`unused`)),
+    SandboxHttpError: class SandboxHttpError extends Error {},
+}));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { resetAgents, useAgents } from "../../agents/fleet/useAgents";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
-import { sandboxJson } from "../client/sandboxClient";
 import { queryClient } from "../../../lib/queryPersistence";
 import { applySystemEvent } from "./systemEvents";
 
@@ -46,7 +61,7 @@ const ids = (): string[] =>
 
 beforeEach(() => {
     resetAgents();
-    vi.mocked(sandboxJson).mockReset();
+    sandboxJsonMock.mockReset();
 });
 
 it(`takes the roster of a daemon that started counting again`, () => {
@@ -63,7 +78,7 @@ it(`ignores a roster read answering for the daemon it has already left`, async (
     setAgents([summary(`a1`, 1_000)], 800);
     // Two reads answer for two daemons: the stale one under test, and the hello's own pull on the new line.
     const answers: (() => void)[] = [];
-    vi.mocked(sandboxJson).mockImplementation(
+    sandboxJsonMock.mockImplementation(
         async () =>
             new Promise((resolve) => {
                 const rev = answers.length === 0 ? 900 : 1;
@@ -89,12 +104,12 @@ it(`ignores a roster read answering for the daemon it has already left`, async (
 // are gone, and one hydrated from disk can be hours old.
 it(`distrusts everything the cache holds when the stream reconnects`, () => {
     const key = [`held-across-a-reconnect`];
-    queryClient.setQueryData(key, { from: `before the gap` });
+    queryClient.setQueryData<{ from: string }>(key, { from: `before the gap` });
     expect(queryClient.getQueryState(key)?.isInvalidated, `nothing has happened to it yet`).toBe(false);
 
     hello();
 
     expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
     // Still held, so an active screen repaints from it while the refetch runs rather than blanking.
-    expect(queryClient.getQueryData(key)).toEqual({ from: `before the gap` });
+    expect(queryClient.getQueryData<{ from: string }>(key)).toEqual({ from: `before the gap` });
 });

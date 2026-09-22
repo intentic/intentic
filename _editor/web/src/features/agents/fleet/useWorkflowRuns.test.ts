@@ -1,14 +1,14 @@
 import type { WorkflowRun } from "@intentic/sandbox-contract";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import type { FleetAgent } from "./useAgents-fleet";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane } from "./useWorkflowRuns";
 
 // Importing these functions pulls in the sandbox client and fleet store, which read `window.env` at import time;
 // mocked here even though this file never touches them.
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
-vi.mock("../../sandbox/client/useSandboxQuery", () => ({ useSandboxQuery: vi.fn() }));
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
+mock.module("../../sandbox/client/useSandboxQuery", () => ({ useSandboxQuery: mock() }));
 
 // The grouping rule alone: the pure half of a run row shared by the board's lanes, the board's archive, and the
 // floating rail.

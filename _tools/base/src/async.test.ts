@@ -1,27 +1,28 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { Coalescer, createBackoff, Delayer, narrate, pollUntil, retry, sleep, SingleFlight } from "./async.js";
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
 });
 
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 describe(`Delayer`, () => {
     it(`runs once after the caller goes quiet`, async () => {
         const delayer = new Delayer<string>(50);
-        const task = vi.fn(() => `done`);
+        const task = mock(() => `done`);
 
         const first = delayer.trigger(task);
-        await vi.advanceTimersByTimeAsync(5);
+        await advanceTimersByTimeAsync(5);
         const second = delayer.trigger(task);
-        await vi.advanceTimersByTimeAsync(49);
+        await advanceTimersByTimeAsync(49);
         expect(task).not.toHaveBeenCalled();
 
-        await vi.advanceTimersByTimeAsync(1);
-        expect(task).toHaveBeenCalledOnce();
+        await advanceTimersByTimeAsync(1);
+        expect(task).toHaveBeenCalledTimes(1);
         await expect(first).resolves.toBe(`done`);
         await expect(second).resolves.toBe(`done`);
     });
@@ -32,31 +33,31 @@ describe(`Delayer`, () => {
 
         const latest = delayer.trigger(() => `latest`);
 
-        await vi.advanceTimersByTimeAsync(10);
+        await advanceTimersByTimeAsync(10);
         await expect(latest).resolves.toBe(`latest`);
     });
 
     it(`rejects the window's promise when the task throws`, async () => {
         const delayer = new Delayer<string>(10);
-        // Asserted before the clock advances, or vitest reports the rejection as unhandled during the tick.
-        const settled = expect(
-            delayer.trigger(() => {
+        // Caught before the clock advances, or the runner reports the rejection as unhandled during the tick.
+        const settled = delayer
+            .trigger((): string => {
                 throw new Error(`task failed`);
-            }),
-        ).rejects.toThrow(`task failed`);
+            })
+            .catch((error: unknown) => error);
 
-        await vi.advanceTimersByTimeAsync(10);
+        await advanceTimersByTimeAsync(10);
 
-        await settled;
+        expect(await settled).toMatchObject({ message: `task failed` });
     });
 
     it(`drops the pending run when disposed`, async () => {
         const delayer = new Delayer<string>(10);
-        const task = vi.fn(() => `done`);
+        const task = mock(() => `done`);
         void delayer.trigger(task);
 
         delayer.dispose();
-        await vi.advanceTimersByTimeAsync(100);
+        await advanceTimersByTimeAsync(100);
 
         expect(task).not.toHaveBeenCalled();
         expect(delayer.isPending).toBe(false);
@@ -65,82 +66,85 @@ describe(`Delayer`, () => {
 
 describe(`Coalescer`, () => {
     it(`flushes on the window opened by the first item, however long the burst runs`, () => {
-        const flush = vi.fn();
+        const flush = mock();
         const coalescer = new Coalescer<string>(50, flush);
 
         coalescer.add(`a`);
-        vi.advanceTimersByTime(40);
+        jest.advanceTimersByTime(40);
         coalescer.add(`b`);
-        vi.advanceTimersByTime(10);
+        jest.advanceTimersByTime(10);
 
-        expect(flush).toHaveBeenCalledExactlyOnceWith([`a`, `b`]);
+        expect(flush).toHaveBeenCalledTimes(1);
+        expect(flush).toHaveBeenCalledWith([`a`, `b`]);
     });
 
     it(`opens a fresh window for what arrives after a flush`, () => {
-        const flush = vi.fn();
+        const flush = mock();
         const coalescer = new Coalescer<string>(50, flush);
         coalescer.add(`first`);
-        vi.advanceTimersByTime(50);
+        jest.advanceTimersByTime(50);
 
         coalescer.add(`second`);
-        vi.advanceTimersByTime(50);
+        jest.advanceTimersByTime(50);
 
         expect(flush).toHaveBeenNthCalledWith(2, [`second`]);
     });
 
     it(`keeps working when add is detached from the instance`, () => {
-        const flush = vi.fn();
+        const flush = mock();
         const { add } = new Coalescer<string>(50, flush);
 
         add(`detached`);
-        vi.advanceTimersByTime(50);
+        jest.advanceTimersByTime(50);
 
-        expect(flush).toHaveBeenCalledExactlyOnceWith([`detached`]);
+        expect(flush).toHaveBeenCalledTimes(1);
+        expect(flush).toHaveBeenCalledWith([`detached`]);
     });
 
     it(`never flushes an empty batch`, () => {
-        const flush = vi.fn();
+        const flush = mock();
         const idle = new Coalescer<string>(50, flush);
 
-        vi.advanceTimersByTime(100);
+        jest.advanceTimersByTime(100);
 
         expect(flush).not.toHaveBeenCalled();
         expect(idle.isPending).toBe(false);
     });
 
     it(`emits what it holds on flushNow, and drops it on dispose`, () => {
-        const flush = vi.fn();
+        const flush = mock();
         const coalescer = new Coalescer<string>(50, flush);
         coalescer.add(`held`);
 
         coalescer.flushNow();
-        expect(flush).toHaveBeenCalledExactlyOnceWith([`held`]);
+        expect(flush).toHaveBeenCalledTimes(1);
+        expect(flush).toHaveBeenCalledWith([`held`]);
 
         coalescer.add(`dropped`);
         coalescer.dispose();
-        vi.advanceTimersByTime(100);
-        expect(flush).toHaveBeenCalledOnce();
+        jest.advanceTimersByTime(100);
+        expect(flush).toHaveBeenCalledTimes(1);
     });
 });
 
 describe(`SingleFlight`, () => {
     it(`shares one run between concurrent callers for the same key`, async () => {
         const flight = new SingleFlight<string, number>();
-        const task = vi.fn(async () => {
+        const task = mock(async () => {
             await new Promise((resolve) => setTimeout(resolve, 10));
             return 42;
         });
 
         const both = Promise.all([flight.run(`account`, task), flight.run(`account`, task)]);
-        await vi.advanceTimersByTimeAsync(10);
+        await advanceTimersByTimeAsync(10);
 
-        expect(task).toHaveBeenCalledOnce();
+        expect(task).toHaveBeenCalledTimes(1);
         await expect(both).resolves.toEqual([42, 42]);
     });
 
     it(`runs different keys independently`, async () => {
         const flight = new SingleFlight<string, number>();
-        const task = vi.fn(async () => 1);
+        const task = mock(async () => 1);
 
         await Promise.all([flight.run(`one`, task), flight.run(`other`, task)]);
 
@@ -149,7 +153,7 @@ describe(`SingleFlight`, () => {
 
     it(`lets the next caller retry after a failed run`, async () => {
         const flight = new SingleFlight<string, number>();
-        const task = vi.fn().mockRejectedValueOnce(new Error(`transient`)).mockResolvedValueOnce(7);
+        const task = mock().mockRejectedValueOnce(new Error(`transient`)).mockResolvedValueOnce(7);
 
         await expect(flight.run(`account`, task)).rejects.toThrow(`transient`);
 
@@ -159,7 +163,7 @@ describe(`SingleFlight`, () => {
 
     it(`hands back the run in flight, and nothing once it has settled`, async () => {
         const flight = new SingleFlight<string, number>();
-        const task = vi.fn(async () => {
+        const task = mock(async () => {
             await new Promise((resolve) => setTimeout(resolve, 10));
             return 1;
         });
@@ -167,11 +171,11 @@ describe(`SingleFlight`, () => {
         const joined = flight.joined(`account`);
         expect(joined).toBe(started);
 
-        await vi.advanceTimersByTimeAsync(10);
+        await advanceTimersByTimeAsync(10);
         await started;
 
         expect(flight.joined(`account`)).toBeUndefined();
-        expect(task).toHaveBeenCalledOnce();
+        expect(task).toHaveBeenCalledTimes(1);
     });
 
     it(`has nothing to join for a key that was never run`, () => {
@@ -181,23 +185,23 @@ describe(`SingleFlight`, () => {
 
 describe(`retry`, () => {
     it(`returns the first success without waiting again`, async () => {
-        const task = vi.fn().mockRejectedValueOnce(new Error(`once`)).mockResolvedValueOnce(`ok`);
+        const task = mock().mockRejectedValueOnce(new Error(`once`)).mockResolvedValueOnce(`ok`);
 
         const pending = retry(task, 10, 3);
-        await vi.advanceTimersByTimeAsync(10);
+        await advanceTimersByTimeAsync(10);
 
         await expect(pending).resolves.toBe(`ok`);
         expect(task).toHaveBeenCalledTimes(2);
     });
 
     it(`throws what the final attempt threw`, async () => {
-        const task = vi.fn().mockRejectedValue(new Error(`still failing`));
+        const task = mock().mockRejectedValue(new Error(`still failing`));
 
-        const pending = retry(task, 10, 3);
-        const settled = expect(pending).rejects.toThrow(`still failing`);
-        await vi.advanceTimersByTimeAsync(30);
+        // Caught before the clock advances, or the runner reports the rejection as unhandled during the tick.
+        const settled = retry(task, 10, 3).catch((error: unknown) => error);
+        await advanceTimersByTimeAsync(30);
 
-        await settled;
+        expect(await settled).toMatchObject({ message: `still failing` });
         expect(task).toHaveBeenCalledTimes(3);
     });
 });
@@ -208,9 +212,9 @@ describe(`sleep`, () => {
         void sleep(100).then(() => {
             done = true;
         });
-        await vi.advanceTimersByTimeAsync(99);
+        await advanceTimersByTimeAsync(99);
         expect(done).toBe(false);
-        await vi.advanceTimersByTimeAsync(1);
+        await advanceTimersByTimeAsync(1);
         expect(done).toBe(true);
     });
 
@@ -220,9 +224,9 @@ describe(`sleep`, () => {
         void sleep(10_000, { signal: controller.signal }).then(() => {
             done = true;
         });
-        await vi.advanceTimersByTimeAsync(5);
+        await advanceTimersByTimeAsync(5);
         controller.abort();
-        await vi.advanceTimersByTimeAsync(0);
+        await advanceTimersByTimeAsync(0);
         expect(done).toBe(true);
 
         const aborted = new AbortController();
@@ -232,11 +236,11 @@ describe(`sleep`, () => {
 
     it(`leaves no listener behind on either path`, async () => {
         const controller = new AbortController();
-        const added = vi.spyOn(controller.signal, `addEventListener`);
-        const removed = vi.spyOn(controller.signal, `removeEventListener`);
+        const added = spyOn(controller.signal, `addEventListener`);
+        const removed = spyOn(controller.signal, `removeEventListener`);
 
         const pending = sleep(10, { signal: controller.signal });
-        await vi.advanceTimersByTimeAsync(10);
+        await advanceTimersByTimeAsync(10);
         await pending;
 
         expect(added).toHaveBeenCalledTimes(1);
@@ -247,24 +251,24 @@ describe(`sleep`, () => {
 describe(`pollUntil`, () => {
     it(`probes before consulting the clock, then every interval until the check passes`, async () => {
         let answers = 0;
-        const check = vi.fn(() => ++answers >= 3);
+        const check = mock(() => ++answers >= 3);
         const outcome = pollUntil(check, { intervalMs: 50, timeoutMs: 10_000 });
-        expect(check).toHaveBeenCalledOnce();
-        await vi.advanceTimersByTimeAsync(100);
+        expect(check).toHaveBeenCalledTimes(1);
+        await advanceTimersByTimeAsync(100);
         await expect(outcome).resolves.toBe(true);
         expect(check).toHaveBeenCalledTimes(3);
     });
 
     it(`answers false at the deadline and on abort, and propagates a throwing check`, async () => {
         const missed = pollUntil(() => false, { intervalMs: 50, timeoutMs: 120 });
-        await vi.advanceTimersByTimeAsync(200);
+        await advanceTimersByTimeAsync(200);
         await expect(missed).resolves.toBe(false);
 
         const controller = new AbortController();
         const aborted = pollUntil(() => false, { intervalMs: 50, timeoutMs: 10_000, signal: controller.signal });
-        await vi.advanceTimersByTimeAsync(10);
+        await advanceTimersByTimeAsync(10);
         controller.abort();
-        await vi.advanceTimersByTimeAsync(0);
+        await advanceTimersByTimeAsync(0);
         await expect(aborted).resolves.toBe(false);
 
         await expect(
@@ -283,9 +287,9 @@ describe(`pollUntil`, () => {
     });
 
     it(`runs onRetry only when another probe is coming`, async () => {
-        const onRetry = vi.fn();
+        const onRetry = mock();
         const missed = pollUntil(() => false, { intervalMs: 50, timeoutMs: 120, onRetry });
-        await vi.advanceTimersByTimeAsync(200);
+        await advanceTimersByTimeAsync(200);
         await expect(missed).resolves.toBe(false);
         expect(onRetry).toHaveBeenCalledTimes(3);
 
@@ -296,7 +300,7 @@ describe(`pollUntil`, () => {
 
     it(`runs on an injected clock, so a long wait costs a test nothing`, async () => {
         let clock = 0;
-        const wait = vi.fn(async (ms: number) => {
+        const wait = mock(async (ms: number) => {
             clock += ms;
         });
         let answers = 0;
@@ -390,7 +394,7 @@ describe(`narrate`, () => {
         expect((await first).value).toEqual({ kind: `line`, text: `a` });
         expect((await stream.next()).value).toEqual({ kind: `line`, text: `b` });
         const rest = drain(stream as AsyncGenerator<Frame>);
-        await vi.advanceTimersByTimeAsync(50);
+        await advanceTimersByTimeAsync(50);
         expect(await rest).toEqual([{ kind: `done`, ok: true, detail: `done` }]);
     });
 });

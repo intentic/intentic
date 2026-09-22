@@ -1,5 +1,5 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { setupRedirect } from "./setupGate";
 
 const sandbox = (overrides: Partial<SandboxSummary> & Pick<SandboxSummary, "id">): SandboxSummary => ({

@@ -1,5 +1,5 @@
 import type { UsageTurn } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { failingStreak } from "./role-model-health.js";
 
 const NOW = Date.parse("2026-09-08T12:00:00Z");

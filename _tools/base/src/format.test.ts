@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { clamp, escapeHtml, estimateTokens, plural, sizeLabel } from "./format.js";
 
 test("whole bytes below a kilobyte, one decimal above", () => {

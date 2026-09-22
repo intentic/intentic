@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "./lifecycle.js";
 
 describe(`DisposableStore`, () => {
@@ -44,18 +44,18 @@ describe(`DisposableStore`, () => {
     it(`disposes a late arrival immediately instead of holding it`, () => {
         const store = new DisposableStore();
         store.dispose();
-        const stop = vi.fn();
+        const stop = mock();
 
         store.add(toDisposable(stop));
 
-        expect(stop).toHaveBeenCalledOnce();
+        expect(stop).toHaveBeenCalledTimes(1);
         expect(store.size).toBe(0);
     });
 
     it(`releases one member early without touching the rest`, () => {
         const store = new DisposableStore();
-        const one = toDisposable(vi.fn());
-        const other = vi.fn();
+        const one = toDisposable(mock());
+        const other = mock();
         store.add(one);
         store.push(other);
 
@@ -84,7 +84,7 @@ describe(`DisposableStore`, () => {
 
 describe(`Disposable`, () => {
     it(`releases what a subclass registered`, () => {
-        const stop = vi.fn();
+        const stop = mock();
         class Subsystem extends Disposable {
             constructor() {
                 super();
@@ -94,26 +94,26 @@ describe(`Disposable`, () => {
 
         new Subsystem().dispose();
 
-        expect(stop).toHaveBeenCalledOnce();
+        expect(stop).toHaveBeenCalledTimes(1);
     });
 });
 
 describe(`MutableDisposable`, () => {
     it(`releases the previous value when a new one is assigned`, () => {
         const slot = new MutableDisposable();
-        const first = vi.fn();
+        const first = mock();
         slot.value = toDisposable(first);
-        const second = vi.fn();
+        const second = mock();
 
         slot.value = toDisposable(second);
 
-        expect(first).toHaveBeenCalledOnce();
+        expect(first).toHaveBeenCalledTimes(1);
         expect(second).not.toHaveBeenCalled();
     });
 
     it(`leaves the value alone when the same one is assigned again`, () => {
         const slot = new MutableDisposable();
-        const stop = vi.fn();
+        const stop = mock();
         const only = toDisposable(stop);
         slot.value = only;
 
@@ -126,11 +126,11 @@ describe(`MutableDisposable`, () => {
     it(`disposes a value assigned after the slot itself was disposed`, () => {
         const slot = new MutableDisposable();
         slot.dispose();
-        const stop = vi.fn();
+        const stop = mock();
 
         slot.value = toDisposable(stop);
 
-        expect(stop).toHaveBeenCalledOnce();
+        expect(stop).toHaveBeenCalledTimes(1);
         expect(slot.value).toBeUndefined();
     });
 });

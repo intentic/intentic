@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DesiredStateGraph, ResourceNode } from "@intentic/graph";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { collectAccess, formatAccessSummary, writeAccessFile } from "./access.js";
 
 const node = (id: string, type: string, inputs: ResourceNode["inputs"]): ResourceNode => ({ id, type, inputs, dependsOn: [] });

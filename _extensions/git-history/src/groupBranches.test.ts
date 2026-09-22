@@ -1,5 +1,5 @@
 import type { GitBranch, GitRemoteBranch } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { groupBranches } from "./groupBranches.js";
 
 const local = (name: string, over: Partial<GitBranch> = {}): GitBranch => ({

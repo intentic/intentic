@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from "vitest";
+import { test, expect, beforeEach } from "bun:test";
 import { handleMcpMessage } from "./mcp.js";
 import { store } from "./store.js";
 

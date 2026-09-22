@@ -1,5 +1,5 @@
 import type { Observed, ProviderContext } from "@intentic/engine";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { createDiscordProvider } from "./discord.js";
 import type { DiscordApi, DiscordChannel, DiscordGuild, DiscordWebhook } from "./discord-api.js";
 import { CHANNEL_TYPE_CATEGORY, CHANNEL_TYPE_TEXT } from "./discord-api.js";
@@ -9,7 +9,7 @@ const ZONE = "example.com";
 const GUILD_NAME = `intentic – ${ZONE}`;
 const GUILD_ID = "guild-123";
 
-const ctx: ProviderContext = { id: "discord", log: vi.fn(), env: {}, output: () => undefined };
+const ctx: ProviderContext = { id: "discord", log: mock(), env: {}, output: () => undefined };
 
 const baseInputs = { botToken: BOT_TOKEN, zone: ZONE, apps: ["my-app"] };
 

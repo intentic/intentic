@@ -1,7 +1,7 @@
 import { createServer, type Server } from "node:http";
 import { RequestError } from "@agentclientprotocol/sdk";
 import type { AttachFrame } from "@intentic/sandbox-contract";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { createDaemonClient } from "./daemon-client.js";
 
 /* The HTTP layer over a real node:http server: the turn is started and then watched (two requests). */
@@ -62,5 +62,7 @@ test("a 401 surfaces as ACP auth_required; other failures name the status", asyn
         response.end("nope");
     });
     const client = createDaemonClient(url, "ict_revoked");
-    await expect(client.listSessions()).rejects.toSatisfy((error) => error instanceof RequestError && error.code === -32000);
+    const failure = await client.listSessions().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(RequestError);
+    expect((failure as RequestError).code).toBe(-32000);
 });

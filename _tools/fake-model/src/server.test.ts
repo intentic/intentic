@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { baseInstructions, developerMessages, hasTool, type ResponsesRequest, systemInstructions, toolNames, toolOutputs, userMessages } from "./responses.js";
 import { startFakeModel } from "./server.js";
 

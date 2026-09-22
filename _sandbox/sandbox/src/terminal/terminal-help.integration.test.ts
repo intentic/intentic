@@ -1,8 +1,8 @@
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promisify } from "node:util";
-import { afterAll, expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect, afterAll } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { liveWindow, selectWindow } from "./terminal-help.js";
 import { captureScrollback } from "./terminal-session.js";
 
@@ -26,7 +26,7 @@ afterAll(kill);
 // assertions test tmux's answer, not this machine's load.
 const addWindow = async (name: string, command: string, settled: "dead" | "waiting"): Promise<void> => {
     await execFileAsync("tmux", ["new-window", "-t", `=${SESSION}:`, "-n", name, command]);
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
         const { stdout } = await execFileAsync("tmux", ["list-panes", "-s", "-t", `=${SESSION}`, "-F", "#{window_name} #{pane_dead}"]);
         const pane = stdout.split("\n").find((line) => line.startsWith(`${name} `));
         expect(pane).toBe(`${name} ${settled === "dead" ? "1" : "0"}`);
@@ -56,7 +56,7 @@ test.skipIf(!HAS_TMUX)("the owner lands on the window still waiting, not on the 
 
     // Answers it as the owner would; nothing left waiting triggers the tool's own refusal case, not a handover.
     await execFileAsync("tmux", ["send-keys", "-t", `=${SESSION}:publish`, "123456", "Enter"]);
-    await vi.waitFor(async () => expect(await liveWindow(SESSION)).toBeUndefined(), SETTLES);
+    await waitFor(async () => expect(await liveWindow(SESSION)).toBeUndefined(), SETTLES);
 });
 
 // No session at all, the first thing the tool asks on a fresh turn; answers nothing to hand over, not a throw.

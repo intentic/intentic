@@ -1,5 +1,6 @@
 import { localDaemonPort } from "@intentic/sandbox-run";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, jest } from "bun:test";
+import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { DaemonBase } from "../daemon-base.js";
 import type { HostLink } from "./config.js";
 import { connect, type Dial } from "./connection.js";
@@ -82,14 +83,14 @@ const dialing = (answers: DaemonBase[]): { readonly dial: Dial; readonly sockets
 
 const quiet = (): void => {};
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => jest.useRealTimers());
 
 test(`dials the container on loopback when it proves to be this sandbox, and says so`, async () => {
     const { dial, sockets, asked } = dialing([{ base: LOCAL, local: true }]);
     const said: string[] = [];
     const connection = connect(link, `1.0.0`, (line) => void said.push(line), dial);
 
-    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    await waitFor(() => expect(sockets).toHaveLength(1));
     // Asked at the link's address; dialled at the resolved one.
     expect(asked).toEqual([PUBLIC]);
     expect(sockets[0]?.url).toBe(LOCAL_SOCKET);
@@ -109,7 +110,7 @@ test(`the public address is the floor, dialled as it is and without a loopback c
     const said: string[] = [];
     const connection = connect(link, `1.0.0`, (line) => void said.push(line), dial);
 
-    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    await waitFor(() => expect(sockets).toHaveLength(1));
     expect(sockets[0]?.url).toBe(PUBLIC_SOCKET);
     sockets[0]?.opens();
     // The sandbox is named by the prefix every line of this link's carries, not by the open's own words.
@@ -124,12 +125,12 @@ test(`the public address is the floor, dialled as it is and without a loopback c
 // with five links wrote "disconnected (1002); 7172 failed attempts" for two days without naming one of them, and
 // nothing in the log could tell the dead links from the live one.
 test(`a drop names the sandbox that went away, not just the close code`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { dial, sockets } = dialing([{ base: PUBLIC, local: false }]);
     const said: string[] = [];
     const connection = connect(link, `1.0.0`, (line) => void said.push(line), dial);
 
-    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    await waitFor(() => expect(sockets).toHaveLength(1));
     sockets[0]?.opens();
     sockets[0]?.drops(1002);
 
@@ -142,20 +143,20 @@ test(`a drop names the sandbox that went away, not just the close code`, async (
 // Reconnect must ask again: the container behind the socket can be gone (recreated, stopped, moved), so
 // redialing the same port would fail for the rest of the login.
 test(`asks again on every reconnect, so a container that went away falls back to the public address`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { dial, sockets, asked } = dialing([
         { base: LOCAL, local: true },
         { base: PUBLIC, local: false },
     ]);
     const connection = connect(link, `1.0.0`, quiet, dial);
 
-    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    await waitFor(() => expect(sockets).toHaveLength(1));
     sockets[0]?.opens();
     sockets[0]?.drops(1006);
 
     // Past the backoff ceiling: the retry has fired by now.
-    await vi.advanceTimersByTimeAsync(31_000);
-    await vi.waitFor(() => expect(sockets).toHaveLength(2));
+    await advanceTimersByTimeAsync(31_000);
+    await waitFor(() => expect(sockets).toHaveLength(2));
 
     expect(asked).toEqual([PUBLIC, PUBLIC]);
     expect(sockets[0]?.url).toBe(LOCAL_SOCKET);
@@ -182,7 +183,7 @@ test(`a stop during resolution opens no socket`, async () => {
         },
     };
     const connection = connect(link, `1.0.0`, quiet, dial);
-    await vi.waitFor(() => expect(answer).toEqual(expect.any(Function)));
+    await waitFor(() => expect(answer).toEqual(expect.any(Function)));
 
     connection.stop();
     await connection.done;
@@ -196,17 +197,17 @@ test(`a stop during resolution opens no socket`, async () => {
 // A refused enrollment is a decision: the agent must end rather than resolve an address for a door that is
 // locked.
 test(`a refused enrollment ends the agent instead of redialling`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { dial, sockets, asked } = dialing([{ base: LOCAL, local: true }]);
     const said: string[] = [];
     const connection = connect(link, `1.0.0`, (line) => void said.push(line), dial);
 
-    await vi.waitFor(() => expect(sockets).toHaveLength(1));
+    await waitFor(() => expect(sockets).toHaveLength(1));
     sockets[0]?.opens();
     sockets[0]?.drops(1008);
     await connection.done;
 
-    await vi.advanceTimersByTimeAsync(60_000);
+    await advanceTimersByTimeAsync(60_000);
     expect(sockets).toHaveLength(1);
     expect(asked).toHaveLength(1);
     expect(said.join(`\n`)).toContain(`revoked`);

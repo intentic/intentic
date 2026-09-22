@@ -1,13 +1,13 @@
-// @vitest-environment jsdom
 // Pins that the footer draws a control only where the run would honour it, and that every control it draws
 // writes an explicit value: an entry never carries an absence for the harness to interpret, because the panel
 // has no way to show one.
-import { afterEach, expect, test, vi } from "vitest";
+import "@intentic/testing/dom";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Stubbed: the model list has its own suite; this stub renders the footer slot and can answer with a pick.
-vi.mock(`../../../chat/models/ModelPicker.vue`, () => ({
+mock.module(`../../../chat/models/ModelPicker.vue`, () => ({
     __esModule: true,
     default: defineComponent({
         props: { provider: String, model: String, unpickable: Function },
@@ -18,7 +18,11 @@ vi.mock(`../../../chat/models/ModelPicker.vue`, () => ({
                 h(`div`, [
                     h(`button`, { class: `pick-claude`, onClick: () => emit(`pick`, { provider: `claude`, value: `claude-opus-5` }) }, `Claude`),
                     h(`button`, { class: `pick-codex`, onClick: () => emit(`pick`, { provider: `codex`, value: `gpt-5.6` }) }, `Codex`),
-                    h(`button`, { class: `pick-gemini`, onClick: () => emit(`pick`, { provider: `gemini`, value: `gemini-3-flash-lite` }) }, `Gemini`),
+                    h(
+                        `button`,
+                        { class: `pick-gemini`, onClick: () => emit(`pick`, { provider: `gemini`, value: `gemini-3-flash-lite` }) },
+                        `Gemini`,
+                    ),
                     slots[`footer`]?.(),
                 ]);
         },
@@ -27,12 +31,14 @@ vi.mock(`../../../chat/models/ModelPicker.vue`, () => ({
 let unpickable: ((entry: { provider: string; value: string }) => boolean) | undefined;
 
 // Only used as the floor when adding, where there's no entry to read a provider off.
-vi.mock(`../../../chat/run/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
+mock.module(`../../../chat/run/useChat`, () => ({ useChat: () => ({ provider: ref(`claude`), model: ref(`claude-haiku-4-5`) }) }));
 // Empty: puts every model on the static effort scale with no `fast` badge; the badge case sets its own catalog below.
 const catalog = ref<Record<string, readonly { value: string; label: string; badges?: readonly string[]; efforts?: readonly string[] }[]>>({});
-vi.mock(`../../../chat/accounts/providerCatalog`, () => ({
+mock.module(`../../../chat/accounts/providerCatalog`, () => ({
     providerModels: catalog,
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
+    // <ProviderLogo> names it; bun links an ESM import against exactly what this factory returns.
+    providerGlyph: () => `cpu`,
 }));
 
 const { default: ModelPinPickerBody } = await import("./ModelPinPickerBody.vue");

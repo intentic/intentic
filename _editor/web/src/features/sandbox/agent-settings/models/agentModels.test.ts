@@ -1,14 +1,15 @@
-// @vitest-environment jsdom
 // Pins that the on-screen order is what's written back, a knob moved on one entry lands only on that entry, and each
 // row writes only its own job's list, never a shared one. Mounted, since what's tested is the click-through round trip.
+import "@intentic/testing/dom";
 import type { SandboxSettings } from "@intentic/api-contract";
 import { MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelPin } from "@intentic/sandbox-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
+import * as uiOriginal from "@intentic/ui";
 
 // useDevice reads window.matchMedia at import; environment.ts reads window.env.
 
@@ -21,11 +22,11 @@ const RUN = `pipeline-fix` as const;
 const entry = (provider: string, model: string, rest: Record<string, unknown> = {}): ModelPin => ({ provider, model, ...rest }) as ModelPin;
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = vi.fn((fields: Partial<SandboxSettings>) => {
+const patch = mock((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-vi.mock(`../../overview/useSandboxSettings`, () => ({
+mock.module(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({
         settings,
         patch,
@@ -44,20 +45,22 @@ const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
 };
 const connected = ref<readonly string[]>([`codex`, `claude`]);
 
-vi.mock(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
+mock.module(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
 // Empty `providerModels`: puts every model on the static effort scale, the state every fixture here assumes.
-vi.mock(`../../../chat/accounts/providerCatalog`, () => ({
+mock.module(`../../../chat/accounts/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
     modelOptionsFor: (provider: string) => CATALOGS[provider] ?? [],
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
+    // <ProviderLogo> names it; bun links an ESM import against exactly what this factory returns.
+    providerGlyph: () => `cpu`,
 }));
 
 // Stubbed rather than mounted: what's under test is the wiring between a row and its list, not the real catalog. Props
 // are handed over live, so a test can watch an entry change under the open panel.
 let opened: { readonly pin?: unknown; readonly knobs?: boolean; readonly taken?: unknown } | undefined;
 let answer: { pick: (pin: unknown) => void; configure: (pin: unknown) => void } | undefined;
-vi.mock(`./ModelPinPicker.vue`, () => ({
+mock.module(`./ModelPinPicker.vue`, () => ({
     // `__esModule` so the SFC interop reads `.default` the way it would off the real component.
     __esModule: true,
     default: defineComponent({
@@ -75,8 +78,8 @@ vi.mock(`./ModelPinPicker.vue`, () => ({
 // hands it and what it does with a save, not the document surface, which is `@intentic/ui`'s own.
 let doc: { readonly modelValue?: string; readonly stored?: string; readonly maxChars?: number } | undefined;
 let saveDoc: ((text: string) => void) | undefined;
-vi.mock(`@intentic/ui`, async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
+mock.module(`@intentic/ui`, () => ({
+    ...uiOriginal,
     MarkdownDocument: defineComponent({
         props: { modelValue: String, stored: String, maxChars: Number, placeholder: String, label: String, editable: Boolean, saving: Boolean },
         emits: [`update:modelValue`, `save`],

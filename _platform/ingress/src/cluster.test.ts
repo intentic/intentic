@@ -1,5 +1,5 @@
 import type { IngressSession } from "@intentic/sandbox-contract/ingress-protocol";
-import { describe, expect, test, vi } from "vitest";
+import { describe, test, expect, mock } from "bun:test";
 import { createCluster, createInternalServer, HoldsMessageSchema, HOLDS_PATH, REMOTE_TTL_MS, type Cluster, type HoldsMessage } from "./cluster.js";
 import { createStaticPeers, peerKey, type Peer, type PeerDiscovery } from "./peers.js";
 import { createTunnelRegistry, DISPLACED_CODE } from "./registry.js";
@@ -12,7 +12,7 @@ const X = `aaaaaaaaaaaa`;
 const Y = `bbbbbbbbbbbb`;
 
 const session = (): IngressSession =>
-    ({ forwardRequest: vi.fn(), forwardUpgrade: vi.fn(), close: vi.fn() }) as unknown as IngressSession;
+    ({ forwardRequest: mock(), forwardUpgrade: mock(), close: mock() }) as unknown as IngressSession;
 
 const from = (peer: Peer, op: HoldsMessage[`op`], ids: string[]): HoldsMessage => ({ from: peer, instance: peer.host, op, ids });
 
@@ -45,8 +45,8 @@ const world = (options: { readonly peers?: PeerDiscovery; readonly holdsOf?: (pe
     const sent: { readonly url: string; readonly body: HoldsMessage }[] = [];
     // `registry` reports to `cluster` before `cluster` exists; the callback only fires once `cluster` is assigned.
     const registry = createTunnelRegistry({ onChange: (event) => cluster.onRegistryChange(event) });
-    const log = vi.fn();
-    const fetchImpl = vi.fn((url: string | URL | Request, init?: RequestInit) => {
+    const log = mock();
+    const fetchImpl = mock((url: string | URL | Request, init?: RequestInit) => {
         const address = String(url);
         if (init?.method === `POST`) {
             sent.push({ url: address, body: HoldsMessageSchema.parse(JSON.parse(String(init.body))) });
@@ -103,7 +103,7 @@ describe(`createCluster`, () => {
     test(`a delta add displaces a local session for the same id`, () => {
         const { cluster, registry } = world();
         const held = session();
-        const close = vi.fn();
+        const close = mock();
         registry.register(X, { session: held, close });
 
         cluster.receive(from(A, `add`, [X]));
@@ -115,7 +115,7 @@ describe(`createCluster`, () => {
 
     test(`a set replaces the peer's entries and leaves a local session alone`, () => {
         const { cluster, registry, log } = world();
-        const close = vi.fn();
+        const close = mock();
         const held = session();
         registry.register(X, { session: held, close });
         cluster.receive(from(A, `add`, [Y]));
@@ -155,7 +155,7 @@ describe(`createCluster`, () => {
         const { registry, sent } = world();
         sent.length = 0;
         const held = session();
-        registry.register(X, { session: held, close: vi.fn() });
+        registry.register(X, { session: held, close: mock() });
         registry.unregister(X, held);
 
         expect(sent.map((message) => [new URL(message.url).hostname, message.body.op, message.body.ids])).toEqual([
@@ -170,8 +170,8 @@ describe(`createCluster`, () => {
 
     test(`a tick pushes the full held-id list to every peer`, async () => {
         const { cluster, registry, sent } = world();
-        registry.register(X, { session: session(), close: vi.fn() });
-        registry.register(Y, { session: session(), close: vi.fn() });
+        registry.register(X, { session: session(), close: mock() });
+        registry.register(Y, { session: session(), close: mock() });
         sent.length = 0;
 
         await cluster.tick();
@@ -213,7 +213,7 @@ describe(`createCluster`, () => {
 
     test(`a machine with no address of its own receives but never advertises`, () => {
         const { cluster, registry, sent } = world({ self: { ...SELF, host: `` } });
-        registry.register(X, { session: session(), close: vi.fn() });
+        registry.register(X, { session: session(), close: mock() });
         cluster.receive(from(A, `add`, [Y]));
 
         expect(sent).toEqual([]);
@@ -225,7 +225,7 @@ describe(`createCluster`, () => {
         cluster.receive(from(A, `add`, [X]));
         cluster.close();
         sent.length = 0;
-        registry.register(Y, { session: session(), close: vi.fn() });
+        registry.register(Y, { session: session(), close: mock() });
         await cluster.tick();
 
         expect(cluster.holder(X)).toBeUndefined();
@@ -236,8 +236,8 @@ describe(`createCluster`, () => {
 describe(`the internal surface`, () => {
     const serve = async () => {
         const registry = createTunnelRegistry();
-        registry.register(X, { session: session(), close: vi.fn() });
-        const receive = vi.fn();
+        registry.register(X, { session: session(), close: mock() });
+        const receive = mock();
         // SAFETY: the surface calls exactly `receive` on the cluster; the rest is never touched here.
         const cluster = { receive } as unknown as Cluster;
         const server = createInternalServer({ cluster, registry, self: SELF, instanceId: `self` });

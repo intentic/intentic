@@ -1,11 +1,11 @@
-// @vitest-environment jsdom
 //
 // WHERE A DEVICE LOG OPENS. The run outlives the pane that draws it — a rebuild keeps going while the reader is in
 // another section, and its lines are kept outside the component — so a revisit mounts on a log that is already long.
 // It used to open at line one, which is the one part of a build nobody is waiting on.
+import "@intentic/testing/dom";
 import { DeviceRunLog } from "@intentic/ui";
 import { IconStub } from "@intentic/ui/testing";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 const mounted: { app: App; host: HTMLElement }[] = [];

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { parseEnvBlock, splitCommand } from "./acp-spawn.js";
 
 test("splitCommand splits on whitespace (no shell quoting by design)", () => {

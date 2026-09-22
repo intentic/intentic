@@ -1,5 +1,5 @@
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { errands, errandOf, errandPrompt } from "./errands";
 
 /* Errand classification keeps app-generated prose out of user turns. */

@@ -1,6 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { INTENTIC_PROMPT } from "./intentic-prompt.js";
 import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";
 
@@ -415,7 +415,9 @@ test("says a connected machine has several environments, and how a command picks
     expect(prompt).toContain('`wsl:archlinux` is the WSL distro "archlinux" on it (/usr/bin/zsh, home /home/radarsu)');
     expect(prompt).toContain('`in: "wsl:archlinux"` runs it in that distro');
     expect(prompt).toContain('`in: "windows"` from inside a distro runs PowerShell on the Windows side');
-    expect(prompt).toContain("C:\\Users\\radar is /mnt/c/Users/radar from a distro; /home/radarsu is \\\\wsl.localhost\\archlinux\\home\\radarsu from Windows");
+    expect(prompt).toContain(
+        "C:\\Users\\radar is /mnt/c/Users/radar from a distro; /home/radarsu is \\\\wsl.localhost\\archlinux\\home\\radarsu from Windows",
+    );
     // A machine with one OS install gets no such sentence: every command lands in the only place it could.
     const lone = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: ["ada-laptop"] } }) as string;
     expect(lone).not.toContain("ONE computer");
@@ -523,7 +525,7 @@ test("the smallest window swaps the base, carrying the persona and the owner's r
 
     // And the adapter sends exactly that, rather than composing the base back underneath it.
     const sent = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: placement.systemPrompt, trim: MINIMAL });
-    expect(sent).toBe(placement.systemPrompt);
+    expect(sent).toBe(placement.systemPrompt!);
 });
 
 // The owner's own words are not this product's to trim: a custom prompt is sent whole at any window.

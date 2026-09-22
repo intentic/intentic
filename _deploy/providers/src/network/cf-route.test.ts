@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import { unstubbed } from "@intentic/testing";
 import { createCfRouteProvider } from "./cf-route.js";

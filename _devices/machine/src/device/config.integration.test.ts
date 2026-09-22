@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
-import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { test, expect, beforeAll, afterAll, mock } from "bun:test";
+import * as osOriginal from "node:os";
 
 // Decides which sandboxes may drive this device; upsertLink must merge, not overwrite (setup once dropped an existing
 // link when connecting a second sandbox). homedir is stubbed, not the path parameterised, since the real path is
@@ -29,7 +30,7 @@ const link = (url: string, id: string, shell: DeviceScopes["shell"] = "off") => 
 
 beforeAll(async () => {
     home = await mkdtemp(join(tmpdir(), "intentic-machine-config-"));
-    vi.doMock("node:os", async () => ({ ...(await vi.importActual<typeof import("node:os")>("node:os")), homedir: () => home }));
+    mock.module("node:os", () => ({ ...osOriginal, homedir: () => home }));
     config = await import("./config.js");
 });
 

@@ -1,6 +1,6 @@
 import { apply } from "@intentic/engine";
 import type { DesiredStateGraph } from "@intentic/graph";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult } from "../core/ssh.js";
 import { createHostProvider } from "../host/host.js";
 import { unstubbed } from "@intentic/testing";

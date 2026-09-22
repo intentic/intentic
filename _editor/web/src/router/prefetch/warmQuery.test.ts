@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { queryClient } from "../../lib/queryPersistence";
 import { heldInCache, warmQuery } from "./warmQuery";
 
@@ -18,11 +18,11 @@ describe(`a warm wish`, () => {
         await wish.read();
 
         expect(wish.have()).toBe(true);
-        expect(queryClient.getQueryData(KEY)).toEqual({ chores: 3 });
+        expect<unknown>(queryClient.getQueryData(KEY)).toEqual({ chores: 3 });
     });
 
     it(`joins a read already in flight instead of opening a second one beside it`, async () => {
-        const queryFn = vi.fn(() => Promise.resolve(`body`));
+        const queryFn = mock(() => Promise.resolve(`body`));
         const wish = warmQuery(`w`, `rail`, { queryKey: KEY, queryFn });
 
         // The loader's read and a click landing on the same key mid-flight.
@@ -38,12 +38,12 @@ describe(`a warm wish`, () => {
         await queryClient.invalidateQueries({ queryKey: KEY });
 
         // Present but stale is NOT in hand: the click would pay the refetch, which is the cost this removes.
-        expect(queryClient.getQueryData(KEY)).toBe(`body`);
+        expect<unknown>(queryClient.getQueryData(KEY)).toBe(`body`);
         expect(wish.have()).toBe(false);
     });
 
     it(`asks once and gives up, rather than multiplying its own requests against a daemon having a moment`, async () => {
-        const queryFn = vi.fn(() => Promise.reject(new Error(`daemon said no`)));
+        const queryFn = mock(() => Promise.reject(new Error(`daemon said no`)));
         const wish = warmQuery(`w`, `rail`, { queryKey: KEY, queryFn });
 
         await expect(wish.read()).rejects.toThrow(`daemon said no`);
@@ -54,7 +54,7 @@ describe(`a warm wish`, () => {
     });
 
     it(`carries its surface's own caching terms rather than a second opinion`, async () => {
-        const queryFn = vi.fn(() => Promise.resolve(`body`));
+        const queryFn = mock(() => Promise.resolve(`body`));
         const wish = warmQuery(`w`, `now`, { queryKey: KEY, queryFn, staleTime: Infinity });
 
         await wish.read();

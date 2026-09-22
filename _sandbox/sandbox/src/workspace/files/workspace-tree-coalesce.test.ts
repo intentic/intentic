@@ -1,6 +1,6 @@
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { WorkspaceTree } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, jest } from "bun:test";
 import { coalescingWorkspaceTree } from "./workspace-tree-coalesce.js";
 
 // A tree distinguishable by which walk produced it; the shape itself is the walker's business, not this module's.
@@ -42,7 +42,7 @@ test("two roots never share a walk", async () => {
 });
 
 test("a settled walk answers again inside its window and is re-walked after it", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         let walks = 0;
         const tree = coalescingWorkspaceTree(() => {
@@ -50,15 +50,15 @@ test("a settled walk answers again inside its window and is re-walked after it",
             return Promise.resolve(treeOf(`walk-${walks}`));
         }, 500);
         expect(await tree(WORKSPACE_ROOT)).toEqual(treeOf("walk-1"));
-        vi.setSystemTime(Date.now() + 499);
+        jest.setSystemTime(Date.now() + 499);
         expect(await tree(WORKSPACE_ROOT)).toEqual(treeOf("walk-1"));
         expect(walks).toBe(1);
         // The window is an expiry, not a lease to renew: reuse must not push it forward.
-        vi.setSystemTime(Date.now() + 1);
+        jest.setSystemTime(Date.now() + 1);
         expect(await tree(WORKSPACE_ROOT)).toEqual(treeOf("walk-2"));
         expect(walks).toBe(2);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -77,7 +77,7 @@ test("a failed walk is not cached, so the next caller retries", async () => {
 // directly observable, so the assertion is on what the prune is FOR: a walk for one root evicts the expired others,
 // and each of them walks again rather than answering from something still held.
 test("an expired root's tree is dropped rather than held for the life of the daemon", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const walked: string[] = [];
         const tree = coalescingWorkspaceTree((root) => {
@@ -88,7 +88,7 @@ test("an expired root's tree is dropped rather than held for the life of the dae
         for (const root of dead) {
             await tree(root);
         }
-        vi.setSystemTime(Date.now() + 501);
+        jest.setSystemTime(Date.now() + 501);
         await tree(WORKSPACE_ROOT);
         walked.length = 0;
         for (const root of dead) {
@@ -96,6 +96,6 @@ test("an expired root's tree is dropped rather than held for the life of the dae
         }
         expect(walked).toEqual(dead);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });

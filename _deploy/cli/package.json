@@ -37,10 +37,10 @@
         "build": "tsgo",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
-        "test": "vitest run",
-        "test:watch": "vitest",
-        "e2e": "INTENTIC_E2E=1 vitest run cli.e2e",
-        "e2e:hermetic": "INTENTIC_E2E_HERMETIC=1 vitest run hermetic.e2e"
+        "test": "suites",
+        "test:watch": "suites --watch",
+        "e2e": "INTENTIC_E2E=1 suites cli.e2e",
+        "e2e:hermetic": "INTENTIC_E2E_HERMETIC=1 suites hermetic.e2e"
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
@@ -64,13 +64,13 @@
         "@intentic/sdk": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@types/ssh2": "catalog:",
         "@typescript/native-preview": "catalog:",
         "ssh2": "catalog:",
         "testcontainers": "catalog:",
         "tsx": "catalog:",
-        "vitest": "catalog:",
         "yaml": "catalog:"
     }
 }

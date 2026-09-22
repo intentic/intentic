@@ -1,45 +1,47 @@
-// @vitest-environment jsdom
 // Idle closes on one click; busy (via `command`, since `running` is always true for web-* shells) asks and
 // names it. The sweep shares this field; the pane is mocked, only the dialog is under test.
+import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
 import Tooltip from "primevue/tooltip";
 import { IconStub } from "@intentic/ui/testing";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
-vi.hoisted(() => {
+hoisted(() => {
     // xterm needs a canvas jsdom doesn't implement; the pane is mocked, but PrimeVue's overlays still touch it.
     globalThis.HTMLCanvasElement.prototype.getContext ??= (() => null) as never;
 });
 
 const activeSandboxId = ref<string | undefined>(`sbx-a`);
-vi.mock(`../sandbox/overview/activeSandbox`, () => ({
+mock.module(`../sandbox/overview/activeSandbox`, () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
 }));
-vi.mock(`../sandbox/client/sandboxClient`, () => ({ sandboxJson: vi.fn() }));
-vi.mock(`../sandbox/client/useSandbox`, () => ({
+mock.module(`../sandbox/client/sandboxClient`, () => ({ sandboxJson: mock(), sandboxRequestVia: mock() }));
+mock.module(`../sandbox/client/useSandbox`, () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId }),
 }));
-vi.mock(`./terminalSession`, () => ({
-    createTerminalSession: (name: string) => ({ name, term: { input: vi.fn() } }),
-    mountTerminalSession: vi.fn(),
-    parkTerminalSession: vi.fn(),
-    disposeTerminalSession: vi.fn(),
-    retypeTerminalSession: vi.fn(),
-    copySelection: vi.fn(),
-    pasteIntoTerminal: vi.fn(),
+mock.module(`./terminalSession`, () => ({
+    createTerminalSession: (name: string) => ({ name, term: { input: mock() } }),
+    mountTerminalSession: mock(),
+    parkTerminalSession: mock(),
+    disposeTerminalSession: mock(),
+    retypeTerminalSession: mock(),
+    retintTerminalSession: mock(),
+    copySelection: mock(),
+    pasteIntoTerminal: mock(),
 }));
 // Query cache reaches the network on its own schedule; stubbed down to the two writes the strip makes.
-vi.mock(`./terminalsQuery`, () => ({
-    useTerminalsQuery: () => ({ sessions: ref([]), refetch: vi.fn() }),
-    addPendingTerminal: vi.fn(),
-    dropPendingTerminal: vi.fn(),
-    clearPendingTerminals: vi.fn(),
-    listTerminals: vi.fn(async () => []),
-    refreshTerminals: vi.fn(async () => undefined),
-    removeTerminal: vi.fn(),
+mock.module(`./terminalsQuery`, () => ({
+    useTerminalsQuery: () => ({ sessions: ref([]), refetch: mock() }),
+    addPendingTerminal: mock(),
+    dropPendingTerminal: mock(),
+    clearPendingTerminals: mock(),
+    listTerminals: mock(async () => []),
+    refreshTerminals: mock(async () => undefined),
+    removeTerminal: mock(),
 }));
 
 const { default: TerminalPanel } = await import("./TerminalPanel.vue");

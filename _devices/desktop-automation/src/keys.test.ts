@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { parseChord, windowsChord, wtypeArgs, xdotoolChord } from "./keys.js";
 import { DesktopError } from "./types.js";
 

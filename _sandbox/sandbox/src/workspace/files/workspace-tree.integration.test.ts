@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { WorkspaceTreeEntry } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace-tree.js";
 
 const paths = (entries: readonly WorkspaceTreeEntry[]): string[] =>

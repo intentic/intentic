@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { CURSOR_SDK_MISSING, cursorSdk, forgetCursorSdk } from "./cursor-sdk.js";
 
 // Resolution has real stakes: pruned from every image, so getting it wrong stops the daemon entirely. A dev checkout

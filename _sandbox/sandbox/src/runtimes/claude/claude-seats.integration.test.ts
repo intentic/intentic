@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { ensureFreshToken, fileClaudeStore } from "./claude-credentials.js";
 import { fileClaudeSeatStore } from "./claude-seats.js";
 

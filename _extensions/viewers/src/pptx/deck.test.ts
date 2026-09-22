@@ -1,10 +1,9 @@
-// @vitest-environment jsdom
 // The parse is what decides whether a slide is readable: everything a shape does not say for itself is said by its
 // layout, its master or the theme, and every one of those walks is asserted here against real OOXML rather than a
 // convenient shape of it. Fixtures are built part by part, because "what a .pptx actually contains" is the thing
 // under test.
 import { strToU8, zipSync } from "fflate";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { readDeck } from "./deck";
 import type { ImageBox, TableBox, TextBox, UnsupportedBox } from "./deck-model";
 
@@ -29,8 +28,7 @@ const shape = (options: { ph?: string; idx?: string; xfrm?: string; body?: strin
         <p:txBody><a:bodyPr/>${options.body ?? ""}</p:txBody>
     </p:sp>`;
 
-const xfrm = (x: number, y: number, cx: number, cy: number): string =>
-    `<a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`;
+const xfrm = (x: number, y: number, cx: number, cy: number): string => `<a:xfrm><a:off x="${x}" y="${y}"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`;
 
 const slide = (body: string): string => `<p:sld ${NS}><p:cSld><p:spTree>${body}</p:spTree></p:cSld></p:sld>`;
 
@@ -84,9 +82,13 @@ const deckBytes = ({ slides, notes = {}, order, size = [12_192_000, 6_858_000] }
         "ppt/presentation.xml": strToU8(
             `<p:presentation ${NS}><p:sldIdLst>${numbers
                 .map((number, index) => `<p:sldId id="${256 + index}" r:id="rId${number}"/>`)
-                .join("")}</p:sldIdLst><p:sldSz cx="${size[0]}" cy="${size[1]}"/><p:defaultTextStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:defaultTextStyle></p:presentation>`,
+                .join(
+                    "",
+                )}</p:sldIdLst><p:sldSz cx="${size[0]}" cy="${size[1]}"/><p:defaultTextStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:defaultTextStyle></p:presentation>`,
         ),
-        "ppt/_rels/presentation.xml.rels": strToU8(rels(slides.map((_, index) => [`rId${index + 1}`, "slide", `slides/slide${index + 1}.xml`] as const))),
+        "ppt/_rels/presentation.xml.rels": strToU8(
+            rels(slides.map((_, index) => [`rId${index + 1}`, "slide", `slides/slide${index + 1}.xml`] as const)),
+        ),
         "ppt/slideLayouts/slideLayout1.xml": strToU8(LAYOUT),
         "ppt/slideLayouts/_rels/slideLayout1.xml.rels": strToU8(rels([["rId1", "slideMaster", "../slideMasters/slideMaster1.xml"]])),
         "ppt/slideMasters/slideMaster1.xml": strToU8(MASTER),
@@ -134,7 +136,10 @@ describe("reading a deck", () => {
     it("follows the deck's own slide order, not the part names", () => {
         const deck = readDeck(
             deckBytes({
-                slides: [slide(shape({ ph: "title", body: `<a:p><a:r><a:t>First part</a:t></a:r></a:p>` })), slide(shape({ ph: "title", body: `<a:p><a:r><a:t>Second part</a:t></a:r></a:p>` }))],
+                slides: [
+                    slide(shape({ ph: "title", body: `<a:p><a:r><a:t>First part</a:t></a:r></a:p>` })),
+                    slide(shape({ ph: "title", body: `<a:p><a:r><a:t>Second part</a:t></a:r></a:p>` })),
+                ],
                 order: [2, 1],
             }),
         );
@@ -161,9 +166,7 @@ describe("reading a deck", () => {
     });
 
     it("resolves theme colours through the master's colour map, modifiers and all", () => {
-        const deck = readDeck(
-            deckBytes({ slides: [slide(shape({ ph: "body", idx: "1", body: `<a:p><a:r><a:t>One point</a:t></a:r></a:p>` }))] }),
-        );
+        const deck = readDeck(deckBytes({ slides: [slide(shape({ ph: "body", idx: "1", body: `<a:p><a:r><a:t>One point</a:t></a:r></a:p>` }))] }));
         const body = textBoxes(deck.slides[0]?.boxes ?? [])[0];
         // tx1 maps to dk1, which the theme states as a system colour whose last rendered value was 1F1F1F; the master
         // then takes 65% of its lightness and adds 35%, which lands a near-black grey at #6d6d6d. A renderer that

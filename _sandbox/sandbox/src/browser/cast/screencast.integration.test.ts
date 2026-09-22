@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import type { Browser, CDPSession } from "playwright";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import {
     applySelect,
     dispatchInput,
@@ -48,7 +48,7 @@ const bandPage = `<body style="margin:0">${Array.from(
     (_, index) => `<div style="height:${BAND_HEIGHT}px;background:rgb(${index * 4},0,60)">band ${index}</div>`,
 ).join("")}</body>`;
 
-test("the settle still photographs the page where it is now, not the top of the document", { timeout: 120_000 }, async () => {
+test("the settle still photographs the page where it is now, not the top of the document", async () => {
     const browser = await launch();
     if (browser === undefined) {
         return; // no browser on this box
@@ -103,11 +103,11 @@ test("the settle still photographs the page where it is now, not the top of the 
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 120_000 });
 
 // Taking the still re-rasters the page, feeding back as motion that re-arms the debounce, a loop on a static page.
 // Counts frames over an interval, not any one, since each frame alone looks fine.
-test("a page where nothing is happening settles into silence", { timeout: 120_000 }, async () => {
+test("a page where nothing is happening settles into silence", async () => {
     const browser = await launch();
     if (browser === undefined) {
         return; // no browser on this box
@@ -136,7 +136,7 @@ test("a page where nothing is happening settles into silence", { timeout: 120_00
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 120_000 });
 
 // `Page.stopScreencast` is a request, not a barrier: an in-flight frame can land after the stop. Delivered by hand,
 // since a test can't schedule a real late arrival; what's pinned is that it's dropped, not forwarded.
@@ -148,7 +148,7 @@ const deliverLateFrame = (session: CDPSession | undefined): void => {
     });
 };
 
-test("a paused view stays silent even when a frame arrives after the stop", { timeout: 120_000 }, async () => {
+test("a paused view stays silent even when a frame arrives after the stop", async () => {
     const browser = await launch();
     if (browser === undefined) {
         return; // no browser on this box
@@ -185,14 +185,14 @@ test("a paused view stays silent even when a frame arrives after the stop", { ti
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 120_000 });
 
 // Fields are focused by hand, not via `autofocus`, which only applies once the window gains focus, on Chromium's own
 // timetable, after `goto` resolves. Each test pins what the focused element does with the frame.
 
 // Client's Ctrl/Cmd+V becomes a `text` frame, since its clipboard can't reach the Chromium; it arrives as one insert,
 // not synthetic keystrokes. Real Chromium, since the question is what the focused element does.
-test("a text frame lands in whatever field the page has focused", { timeout: 120_000 }, async () => {
+test("a text frame lands in whatever field the page has focused", async () => {
     const browser = await launch();
     if (browser === undefined) {
         return; // no browser on this box
@@ -214,11 +214,11 @@ test("a text frame lands in whatever field the page has focused", { timeout: 120
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 120_000 });
 
 // A chord must arrive as a raw key event, not text, since Chromium derives select-all/cut/undo from that shape and
 // ignores one that looks typed. Real Chromium only, since it alone can tell those apart.
-test("editing chords land as editing commands in the page", { timeout: 120_000 }, async () => {
+test("editing chords land as editing commands in the page", async () => {
     const browser = await launch();
     if (browser === undefined) {
         return; // no browser on this box
@@ -261,11 +261,11 @@ test("editing chords land as editing commands in the page", { timeout: 120_000 }
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 120_000 });
 
 // An open <select> is a native menu the browser draws, not the compositor surface, so no frame shows it. Pinned against
 // real Chromium: options read from whatever has focus, even in an embedded form, and a pick fires a real change.
-test("a focused drop-down can be read out and picked from", { timeout: 120_000 }, async () => {
+test("a focused drop-down can be read out and picked from", async () => {
     const browser = await launch();
     if (browser === undefined) {
         return; // no browser on this box
@@ -325,11 +325,11 @@ test("a focused drop-down can be read out and picked from", { timeout: 120_000 }
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 120_000 });
 
 // Selection must be read back, since the clipboard it's copied to is the sandbox's, not the person's. Two hiding
 // places: a focused field, invisible to window.getSelection, and an embedded frame, the ordinary case for a sign-in.
-test("the selection is read back out of a field, and out of an embedded frame", { timeout: 120_000 }, async () => {
+test("the selection is read back out of a field, and out of an embedded frame", async () => {
     const browser = await launch();
     if (browser === undefined) {
         return; // no browser on this box
@@ -373,4 +373,4 @@ test("the selection is read back out of a field, and out of an embedded frame", 
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 120_000 });

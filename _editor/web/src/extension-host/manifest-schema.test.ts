@@ -8,7 +8,7 @@ import {
     manifestJsonSchema,
     serializeManifestJsonSchema,
 } from "@intentic/extension-manifest";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 // Generated authoring schema for intentic-extension.json; zod silently strips unknown keys, so without this an editor
 // can't catch a misspelt contribution point.
@@ -86,7 +86,7 @@ test(`no manifest in the repo has a key the schema drops`, () => {
     // Round-tripping (parse, compare against raw bytes) surfaces anything the schema quietly dropped.
     for (const file of repoManifests()) {
         const raw: unknown = JSON.parse(readFileSync(file, `utf8`));
-        expect(ExtensionManifestSchema.parse(raw), `${file} declares something the manifest schema does not`).toEqual(raw);
+        expect<unknown>(ExtensionManifestSchema.parse(raw), `${file} declares something the manifest schema does not`).toEqual(raw);
     }
 });
 

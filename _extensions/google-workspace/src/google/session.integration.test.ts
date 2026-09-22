@@ -1,7 +1,8 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Connection } from "./accounts.js";
 import { runtimeDir } from "./paths.js";
 import { openSession } from "./session.js";
@@ -20,18 +21,18 @@ const connection = (refreshToken: string): Connection => ({
 
 let root: string;
 let env: NodeJS.ProcessEnv;
-const fetchMock = vi.fn();
+const fetchMock = mock();
 
 beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "gw-session-"));
     env = { INTENTIC_WORKSPACE: root };
     fetchMock.mockReset();
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ access_token: "minted-token", expires_in: 3600 }) });
-    vi.stubGlobal("fetch", fetchMock);
+    stubGlobal("fetch", fetchMock);
 });
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 const clock = (): number => Date.parse("2026-08-09T12:00:00Z");

@@ -2,7 +2,7 @@
 // scattered matches capped — for every input. Matching cases are constructed from the path, not drawn and filtered,
 // so the generators actually run.
 import { array, assert, constantFrom, integer, nat, option, pre, property, stringMatching, tuple, uniqueArray } from "fast-check";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { fuzzyScore } from "./fuzzy.js";
 
 const segmentArb = stringMatching(/^[a-z0-9_-]{1,10}$/);

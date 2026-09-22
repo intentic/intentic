@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, sep } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createWorkspaceWatch, isWatchIgnored } from "./workspace-watch.js";
 
 const ROOT = join(sep, "work");

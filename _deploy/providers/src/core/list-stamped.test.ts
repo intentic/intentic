@@ -1,5 +1,5 @@
 import type { ScanSource } from "@intentic/engine";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { listStampedContainers } from "./list-stamped.js";
 import type { SshExecutor, SshSession } from "./ssh.js";
 
@@ -34,7 +34,7 @@ test("one connect serves every kind of the scan, filtered per kind with protecti
     const komodos = await listStampedContainers(executor, "komodo", scan, () => {});
     const backups = await listStampedContainers(executor, "backup", scan, () => {});
     expect(outlines.map((entry) => entry.id)).toEqual(["o1", "o2"]);
-    expect(komodos).toEqual([{ id: "deploy", inputs: scan[0]?.inputs, protected: true }]);
+    expect(komodos).toEqual([{ id: "deploy", inputs: scan[0]!.inputs, protected: true }]);
     expect(backups).toEqual([]);
     // The whole point: three providers' lists, ONE ssh connect.
     expect(connects()).toBe(1);

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { additionPatch, MAX_PATCH_BYTES, partialDiff } from "./diff-partial.js";
 
 // Tests the bargain with git, not git itself: given git's stdout, what reaches the browser and what the response says

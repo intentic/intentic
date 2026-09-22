@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { CONTAINER_REQUIREMENTS, containerDrift } from "./container-requirements.js";
 
 // Healthy baseline: every case below removes one piece of it to produce a gap.

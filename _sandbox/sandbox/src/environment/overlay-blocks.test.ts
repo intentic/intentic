@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { blockCommands, blockProse, blockTools, detailOf, purposeOf, splitBlocks } from "./overlay-blocks.js";
 import { parseVersion } from "./version-probe.js";
 

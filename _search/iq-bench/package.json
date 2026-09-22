@@ -9,8 +9,8 @@
         "build": "tsgo",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
-        "test": "vitest run",
-        "test:watch": "vitest",
+        "test": "suites",
+        "test:watch": "suites --watch",
         "bench:retrieval": "node dist/cli.js retrieval",
         "bench:impact": "node dist/cli.js impact",
         "bench:agents": "IQ_BENCH_AGENTS=1 node dist/cli.js agents"
@@ -24,8 +24,8 @@
     "devDependencies": {
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "vitest": "catalog:"
+        "@typescript/native-preview": "catalog:"
     }
 }

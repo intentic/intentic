@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createFakeProviders, reconcile } from "@intentic/engine";
 import { resolveState } from "@intentic/state-resolver";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { readArtifact, writeArtifact } from "../lib/artifact.js";
 import { loadIntent } from "../resolve/resolve.js";
 import { collectAccess, formatAccessSummary, writeAccessFile } from "./access.js";

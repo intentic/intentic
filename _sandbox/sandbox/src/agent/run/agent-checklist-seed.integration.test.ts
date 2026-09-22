@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { runAgent } from "./agent.js";
 import type { QueryFn } from "./sdk-stream.js";
 import { taskStoreDir } from "./task-store.js";

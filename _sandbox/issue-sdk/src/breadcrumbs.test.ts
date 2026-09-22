@@ -1,4 +1,5 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock, jest } from "bun:test";
+import { stubGlobal } from "@intentic/testing/bun";
 import { type Breadcrumbs, createBreadcrumbs } from "./breadcrumbs.js";
 
 // Patches globals on the host page; pins what it must not do: grow unbounded, leak request bodies, or leave a global
@@ -8,7 +9,7 @@ let live: Breadcrumbs | undefined;
 afterEach(() => {
     live?.detach();
     live = undefined;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 const start = (): Breadcrumbs => {
@@ -54,8 +55,8 @@ test("console.warn and console.error are recorded and still reach the original",
 });
 
 test("a failed request records the path and the status, never the body or the query", async () => {
-    const fetchMock = vi.fn(async () => new Response("nope", { status: 500 }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = mock(async () => new Response("nope", { status: 500 }));
+    stubGlobal("fetch", fetchMock);
     const crumbs = start();
     await window.fetch("https://api.example.com/v1/login?token=SECRET", { method: "POST", body: JSON.stringify({ password: "hunter2" }) });
     const crumb = crumbs.all()[0];
@@ -66,7 +67,10 @@ test("a failed request records the path and the status, never the body or the qu
 });
 
 test("a successful request is not recorded, and its response passes through untouched", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("ok", { status: 200 })));
+    stubGlobal(
+        "fetch",
+        mock(async () => new Response("ok", { status: 200 })),
+    );
     const crumbs = start();
     const response = await window.fetch("https://api.example.com/v1/ping");
     expect(response.status).toBe(200);
@@ -76,9 +80,9 @@ test("a successful request is not recorded, and its response passes through unto
 
 test("a network error is recorded and re-thrown untouched", async () => {
     const offline = new TypeError("Failed to fetch");
-    vi.stubGlobal(
+    stubGlobal(
         "fetch",
-        vi.fn(async () => {
+        mock(async () => {
             throw offline;
         }),
     );

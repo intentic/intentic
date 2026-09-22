@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { filterOutput } from "./agent-output-filter.mjs";
 
 // run() reads only `.out`; `stagesOf` is for tests that check the per-mechanism attribution.

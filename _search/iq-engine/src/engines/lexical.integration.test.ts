@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { rgSearch } from "./lexical.js";
 
 // Pins the spans the lexical engine reports for a match, not which lines match. Dispatch-level tests cover the verb;

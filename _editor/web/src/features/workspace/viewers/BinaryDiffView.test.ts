@@ -1,13 +1,14 @@
-// @vitest-environment jsdom
 // Pins that a binary diff renders an <img> with its fetched bytes in the DOM; needs jsdom since that's exactly
 // what's asserted.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Import chain reads browser globals at import time (useDevice: matchMedia; environment.ts: window.env), stubbed
-// package-wide by vitest.setup.ts.
-vi.hoisted(() => {
+// package-wide by the package preload.
+hoisted(() => {
     // jsdom's object URLs are opaque; naming them by byte length lets a test tell which blob an <img> holds.
     globalThis.URL.createObjectURL = (blob: Blob) => `blob:fake/${blob.size}`;
     globalThis.URL.revokeObjectURL = () => {};
@@ -19,7 +20,7 @@ vi.hoisted(() => {
 // Daemon fetch stubbed at the viewer's seam (bytes only, not auth). `same` returns one identical body for both
 // sides, the case this viewer must call out explicitly.
 const fetched: string[] = [];
-vi.mock("../../sandbox/client/sandboxClient", () => ({
+mock.module("../../sandbox/client/sandboxClient", () => ({
     sandboxBlob: (path: string) => {
         fetched.push(path);
         if (path.includes(`missing`)) {
@@ -185,7 +186,14 @@ describe(`BinaryDiffView`, () => {
     // The editing viewer reads a workspace path through its own backend; a diff side is bytes at a rev-spec, which it
     // cannot open, so the render-only viewer under it draws the panes.
     it(`passes over a path-fed editing viewer for the render-only one that can take a blob`, async () => {
-        const render = registerViewer({ owner: `intentic.viewers`, id: `docx`, extensions: [`docx`], fetch: `blob`, edit: false, component: async () => FakeDocViewer });
+        const render = registerViewer({
+            owner: `intentic.viewers`,
+            id: `docx`,
+            extensions: [`docx`],
+            fetch: `blob`,
+            edit: false,
+            component: async () => FakeDocViewer,
+        });
         const office = registerViewer({
             owner: `intentic.onlyoffice`,
             id: `office`,

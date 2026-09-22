@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 
 // `of()` and `ofSandbox()` must produce the same key shape, since sandboxQueryPredicate finds a box's entries by
 // reading the id off the last position. The scoping rule is mocked to a fixed id so keys can be spelled out in full.
-vi.mock("../features/sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-here`] }));
+mock.module("../features/sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-here`] }));
 
 const { AGENT_DIFF, AGENTS, GIT_CHANGES } = await import("./queryKeys");
 const { sandboxQueryPredicate } = await import("../features/sandbox/live/systemEventRouting");

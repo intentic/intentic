@@ -1,24 +1,24 @@
-// @vitest-environment jsdom
 // Pins that toggling a repo's changelog switch writes exactly that repo's name to `changelogRepos`, never
 // another. Mounted (not projected), since what's under test is the click-then-read round trip.
+import "@intentic/testing/dom";
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = vi.fn((fields: Partial<SandboxSettings>) => {
+const patch = mock((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-vi.mock(`../../overview/useSandboxSettings`, () => ({
+mock.module(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
 // Two repos, since the per-repo half is what's worth proving: one row must not write the other's name.
-vi.mock(`../../../workspace/explorer/useRepos`, () => ({
+mock.module(`../../../workspace/explorer/useRepos`, () => ({
     useRepos: () => ({
         options: computed(() => [`root`, `vendor/widget`]),
         nested: computed(() => [`vendor/widget`]),

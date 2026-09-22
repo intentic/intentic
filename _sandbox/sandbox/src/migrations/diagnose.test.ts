@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { diagnoseArchive } from "./diagnose.js";
 
 const files = (...paths: string[]): Map<string, Buffer> => new Map(paths.map((path) => [path, Buffer.from("x")]));

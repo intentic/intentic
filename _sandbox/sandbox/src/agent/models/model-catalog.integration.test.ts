@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock, jest } from "bun:test";
 import { jsonFile } from "../../store/json-file.js";
 import { ABSENT_FOR_MS, discoveredCatalog } from "./model-catalog.js";
 
@@ -31,7 +31,7 @@ const catalogOf = (discover: () => Promise<readonly string[]>, store?: ReturnTyp
     });
 
 test("a live answer is served, persisted, and then cached for the TTL", async () => {
-    const discover = vi.fn(async () => ["a", "b"]);
+    const discover = mock(async () => ["a", "b"]);
     const store = storeAt();
     const catalog = catalogOf(discover, store);
 
@@ -42,16 +42,26 @@ test("a live answer is served, persisted, and then cached for the TTL", async ()
     expect(await store.file.read()).toEqual(["a", "b"]);
 });
 
-// Only Date is faked: the store's own writes are real file I/O and must keep their real timers.
+// Only the clock moves: the store's own writes are real file I/O and must keep their real timers.
+let clock = 0;
+const clockStarts = (): void => {
+    clock = Date.now();
+    jest.setSystemTime(new Date(clock));
+};
+const clockAdvances = (ms: number): void => {
+    clock += ms;
+    jest.setSystemTime(new Date(clock));
+};
+
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 // A vendor that stops listing a model it served minutes ago is usually out of capacity for it, so the row is held for
 // the window rather than taken as retired. Without this the shrunk list becomes the served catalog AND the
 // last-known-good file, which is what moves an open chat's pinned model onto the catalog's default.
 test("holds a row the vendor has just stopped listing, behind the rows it still serves", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+    clockStarts();
     let listing = ["a", "b"];
     const store = storeAt();
     const catalog = catalogOf(async () => listing, store);
@@ -59,7 +69,7 @@ test("holds a row the vendor has just stopped listing, behind the rows it still 
 
     listing = ["b"];
     // Past the TTL, so this read is a second discovery rather than the cached answer.
-    vi.advanceTimersByTime(61_000);
+    clockAdvances(61_000);
 
     // Still offered, and still pinnable — but last, so the default follows what the vendor does serve.
     expect(await catalog.models()).toEqual({ models: ["b", "a"], default: "b" });
@@ -67,21 +77,21 @@ test("holds a row the vendor has just stopped listing, behind the rows it still 
 });
 
 test("lets a row go once the vendor has stopped listing it for the whole window", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+    clockStarts();
     let listing = ["a", "b"];
     const store = storeAt();
     const catalog = catalogOf(async () => listing, store);
     await catalog.models();
 
     listing = ["b"];
-    vi.advanceTimersByTime(ABSENT_FOR_MS + 1);
+    clockAdvances(ABSENT_FOR_MS + 1);
 
     expect(await catalog.models()).toEqual({ models: ["b"], default: "b" });
     expect(await store.file.read()).toEqual(["b"]);
 });
 
 test("a seeded answer is not cached, so the next read retries the vendor", async () => {
-    const discover = vi.fn(async () => []);
+    const discover = mock(async () => []);
     const catalog = catalogOf(discover);
 
     expect(await catalog.models()).toEqual({ models: ["seed"], default: "seed" });

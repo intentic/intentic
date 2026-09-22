@@ -1,13 +1,13 @@
-// @vitest-environment jsdom
 // Pins that a sub-agent delegation nests its own calls and thinking under the card (ChatToolCard renders
 // itself recursively) instead of a flat sibling list. Needs jsdom: a failed resolve renders wrong, not a throw.
-import { afterEach, describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import type { ChatSurface } from "./chatToolSurface";
 import { IconStub } from "@intentic/ui/testing";
 
-// Import chain reads window.matchMedia and window.env at module load; vitest.setup.ts stands both up before
+// Import chain reads window.matchMedia and window.env at module load; bun.setup.ts stands both up before
 // this file loads, same as the real page.
 
 const { default: ChatToolCard } = await import("./ChatToolCard.vue");

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { guardedUpdate } from "./guarded-update.js";
 import type { SshResult, SshSession } from "./ssh.js";
 

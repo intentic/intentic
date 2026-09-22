@@ -1,6 +1,6 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { type AskDeps, type AskedCapability, type AskInstance, createCapabilityGate } from "./capability-offer.js";
 

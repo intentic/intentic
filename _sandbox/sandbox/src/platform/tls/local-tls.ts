@@ -8,8 +8,9 @@ export const isLocalHost = (hostname: string): boolean => hostname === "localhos
 const bodiless = (status: number): boolean => status === 204 || status === 304;
 
 // fetch-shaped wrapper for the one thing undici can't do per-request: skip verification on a self-signed local host.
-// Everything else passes through the real fetch untouched.
-export const localTolerantFetch: typeof fetch = async (input, init) => {
+// Everything else passes through the real fetch untouched. Cast because callers want the call signature, not the
+// `preconnect` bun-types hangs off the global.
+export const localTolerantFetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const url = new URL(href);
     if (url.protocol !== "https:" || !isLocalHost(url.hostname)) {
@@ -40,4 +41,4 @@ export const localTolerantFetch: typeof fetch = async (input, init) => {
         }
         req.end();
     });
-};
+}) as unknown as typeof fetch;

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { Persona } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { filePersonasStore, type PersonasStore } from "./personas-store.js";
 
 // A store over a fresh temp path (the .intentic dir doesn't exist yet: the store must create it on write).

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ORPCError } from "@orpc/server";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { PersistedAgent } from "../../agents/registry/agents-store.js";
 import { scopedTarget, type WorkspaceScopeDeps, workspaceRootFor } from "./workspace-scope.js";
 

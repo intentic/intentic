@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { analyzeEvents, toolEvents } from "./analyze.js";
 
 const assistant = (blocks: Array<{ name: string; command?: string }>): string =>

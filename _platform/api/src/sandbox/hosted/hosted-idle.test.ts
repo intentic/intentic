@@ -1,11 +1,12 @@
 import { installFakeFly } from "@intentic/testing/fly-fake";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { reapIdleHosted } from "./hosted-idle.js";
 import { DAY_MS } from "../../durations.js";
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
+const logger = { info: mock(), warn: mock(), error: mock() } as never;
 
 const config = (over: Record<string, unknown> = {}): Config =>
     ({
@@ -31,20 +32,20 @@ const machine = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
-const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof vi.fn>>> = {}) =>
+const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof mock>>> = {}) =>
     ({
-        hostedMachine: { findMany: vi.fn().mockResolvedValue(rows), update: vi.fn().mockResolvedValue({}), delete: vi.fn().mockResolvedValue({}) },
+        hostedMachine: { findMany: mock().mockResolvedValue(rows), update: mock().mockResolvedValue({}), delete: mock().mockResolvedValue({}) },
         // Ending a machine writes two rows together (forgetHostedMachine); settled like the rest of the hosted suite.
-        sandbox: { update: vi.fn().mockResolvedValue({}) },
-        $transaction: vi.fn((operations: Promise<unknown>[]) => Promise.all(operations)),
-        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
+        sandbox: { update: mock().mockResolvedValue({}) },
+        $transaction: mock((operations: Promise<unknown>[]) => Promise.all(operations)),
+        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
         ...over,
     }) as unknown as PrismaClient;
 
 /* The shared in-memory Fly, seeded with the one machine this sweep looks at. What these cases turn on is whether
  * the app was torn down, so the fake's own call log is the assertion and its state is the setup. */
 const stubFly = (state: string) => {
-    const fly = installFakeFly((name, value) => vi.stubGlobal(name, value));
+    const fly = installFakeFly((name, value) => stubGlobal(name, value));
     const seeded = fly.seedSandbox(`intentic-sbx-a`);
     // The fake names its own machine; the row under test names `m1`, so this one answers to both.
     fly.machines.set(`m1`, { ...seeded.machine, id: `m1`, state });
@@ -53,7 +54,7 @@ const stubFly = (state: string) => {
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe(`collecting the machines nobody came back to`, () => {
@@ -70,20 +71,20 @@ describe(`collecting the machines nobody came back to`, () => {
 /* THE MINUTES GO WITH THE ROW unless they are charged first. */
     it(`charges a machine's open awake stretch to its owner's month before dropping its row`, async () => {
         stubFly(`stopped`);
-        const upsert = vi.fn().mockResolvedValue({});
+        const upsert = mock().mockResolvedValue({});
         const wokeAt = daysAgo(30);
-        const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], { hostedUsage: { upsert, aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }) } });
+        const prisma = prismaWith([machine({ wokeAt, idleWarnedAt: daysAgo(8) })], { hostedUsage: { upsert, aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) } });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 1, dropped: 0 });
         expect(upsert).toHaveBeenCalledWith(
             expect.objectContaining({ where: { sandboxId_month: { sandboxId: `s1`, month: wokeAt.toISOString().slice(0, 7) } } }),
         );
-        const deleteCall = (prisma.hostedMachine.delete as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!;
+        const deleteCall = (prisma.hostedMachine.delete as ReturnType<typeof mock>).mock.invocationCallOrder[0]!;
         expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteCall);
     });
 
 /* A provider-deleted machine must not leave a hosted row behind. */
     it(`drops the row of a machine Fly no longer has, whatever the clock says about it`, async () => {
-        vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ error: `machine not found` }), { status: 404 })));
+        stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ error: `machine not found` }), { status: 404 })));
         const prisma = prismaWith([machine({ sandbox: { ...machine().sandbox, lastSeenAt: daysAgo(15) } })]);
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 1 });
         expect(prisma.hostedMachine.delete).toHaveBeenCalledWith({ where: { id: `h1` } });
@@ -127,7 +128,7 @@ describe(`collecting the machines nobody came back to`, () => {
 
     it(`never touches a member's machine`, async () => {
         const fly = stubFly(`stopped`);
-        const prisma = prismaWith([machine()], { hostedPlan: { findUnique: vi.fn().mockResolvedValue({ status: `active`, items: [] }) } });
+        const prisma = prismaWith([machine()], { hostedPlan: { findUnique: mock().mockResolvedValue({ status: `active`, items: [] }) } });
         expect(await reapIdleHosted(prisma, config(), logger)).toEqual({ warned: 0, destroyed: 0, dropped: 0 });
         expect(fly.calls).toHaveLength(0);
     });
@@ -164,7 +165,7 @@ describe(`collecting the machines nobody came back to`, () => {
 
     it(`carries on past a machine that fails, and still collects the others`, async () => {
         let first = true;
-        vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+        stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
             if (first) {
                 first = false;
                 return Promise.reject(new Error(`fly is having a day`));

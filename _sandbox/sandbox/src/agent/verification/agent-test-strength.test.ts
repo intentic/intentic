@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { changedSourceIn } from "./agent-test-strength.js";
 
 // Which changed files count as the mutant; a wrong filter fails quietly, unlike the subprocess half. `packageOf` and

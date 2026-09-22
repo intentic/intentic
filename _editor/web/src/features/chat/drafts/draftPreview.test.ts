@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { draftPreview } from "./draftPreview";
 
 /* The name a card wears while nothing else has named it. */

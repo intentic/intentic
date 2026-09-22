@@ -1,8 +1,8 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, test, expect, mock } from "bun:test";
 import { createRevocation } from "./revocation.js";
 
 const answering = (status: number): typeof fetch =>
-    vi.fn(() => Promise.resolve(new Response(status === 404 ? `gone` : `ok`, { status }))) as unknown as typeof fetch;
+    mock(() => Promise.resolve(new Response(status === 404 ? `gone` : `ok`, { status }))) as unknown as typeof fetch;
 
 describe(`createRevocation`, () => {
     test(`asks the platform about the sandbox by its 12-hex id`, async () => {
@@ -32,7 +32,7 @@ describe(`createRevocation`, () => {
     });
 
     test(`registers the tunnel when the platform cannot be reached at all`, async () => {
-        const fetchImpl = vi.fn(() => Promise.reject(new Error(`ECONNREFUSED`))) as unknown as typeof fetch;
+        const fetchImpl = mock(() => Promise.reject(new Error(`ECONNREFUSED`))) as unknown as typeof fetch;
         const revocation = createRevocation({ platformUrl: `https://api.example.test`, fetchImpl });
         await expect(revocation.allows(`abcdef012345`)).resolves.toBe(true);
     });
@@ -72,7 +72,7 @@ describe(`createRevocation`, () => {
 // The lane lookup used for replay decisions (server.ts); shares the cache and fail-open with `allows`.
 describe(`createRevocation lookup`, () => {
     const answeringWith = (body: unknown, status = 200): typeof fetch =>
-        vi.fn(() =>
+        mock(() =>
             Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": `application/json` } })),
         ) as unknown as typeof fetch;
 
@@ -99,7 +99,7 @@ describe(`createRevocation lookup`, () => {
         await expect(
             createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: answeringWith({}, 404) }).lookup(`abcdef012345`),
         ).resolves.toEqual({ exists: false });
-        const down = vi.fn(() => Promise.reject(new Error(`ECONNREFUSED`))) as unknown as typeof fetch;
+        const down = mock(() => Promise.reject(new Error(`ECONNREFUSED`))) as unknown as typeof fetch;
         await expect(createRevocation({ platformUrl: `https://api.example.test`, fetchImpl: down }).lookup(`abcdef012345`)).resolves.toEqual({
             exists: true,
         });

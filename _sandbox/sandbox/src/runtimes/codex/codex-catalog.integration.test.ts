@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Model } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
 import { createCodexCatalog } from "./codex-catalog.js";
@@ -12,10 +12,8 @@ import { SEED_CODEX_MODELS } from "./codex-models.js";
 const translatorConfig = { translator: { url: "http://127.0.0.1:8788", token: "local-bearer" }, openaiApiKey: "" } as unknown as Config;
 const offlineConfig = { translator: { url: "", token: "" }, openaiApiKey: "" } as unknown as Config;
 
-const translatorServes =
-    (ids: string[]): typeof fetch =>
-    async () =>
-        new Response(JSON.stringify({ data: ids.map((id) => ({ id })) }), { status: 200 });
+const translatorServes = (ids: string[]): typeof fetch =>
+    (async () => new Response(JSON.stringify({ data: ids.map((id) => ({ id })) }), { status: 200 })) as unknown as typeof fetch;
 
 // What the Codex CLI's own model/list publishes, trimmed to the fields the catalog reads. Ordered as Codex orders it:
 // its default first.
@@ -57,7 +55,7 @@ test("dresses the subscription's ids in what the runtime publishes about them: s
         listModels: async () => CODEX_PUBLISHES,
     }).models();
 
-    expect(catalog.models).toEqual([CODEX_PUBLISHES[1], CODEX_PUBLISHES[2], { id: "gpt-5.4-mini", label: "GPT 5.4 Mini" }]);
+    expect(catalog.models).toEqual([CODEX_PUBLISHES[1]!, CODEX_PUBLISHES[2]!, { id: "gpt-5.4-mini", label: "GPT 5.4 Mini" }]);
 });
 
 test("serves the runtime's own catalog, in its own order, when no id source is configured", async () => {
@@ -83,5 +81,5 @@ test("keeps the id some accounts reject off the seed floor's default", async () 
     const catalog = await createCodexCatalog(offlineConfig, await codexHome(), { listModels: listsNothing }).models();
 
     expect(catalog.models.map((model) => model.id)).toEqual([...SEED_CODEX_MODELS]);
-    expect(catalog.default).toBe(SEED_CODEX_MODELS[0]);
+    expect(catalog.default).toBe(SEED_CODEX_MODELS[0]!);
 });

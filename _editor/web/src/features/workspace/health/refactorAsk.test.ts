@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { WorkspaceHotspot } from "@intentic/api-contract";
 import { hotspotAsk, type HotspotContext, moduleAsk } from "./refactorAsk";
 

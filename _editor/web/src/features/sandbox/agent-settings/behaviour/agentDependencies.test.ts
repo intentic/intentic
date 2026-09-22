@@ -1,24 +1,24 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import type { SandboxSettings, SavingsReport } from "@intentic/sandbox-contract";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = vi.fn((fields: Partial<SandboxSettings>) => {
+const patch = mock((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
 const savings = ref<SavingsReport | undefined>(undefined);
 
-vi.mock(`../../overview/useSandboxSettings`, () => ({
+mock.module(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
-vi.mock(`../../usage/useSavings`, () => ({
-    useSavings: () => ({ savings, isLoading: ref(false), refetch: vi.fn(), error: ref(undefined) }),
+mock.module(`../../usage/useSavings`, () => ({
+    useSavings: () => ({ savings, isLoading: ref(false), refetch: mock(), error: ref(undefined) }),
 }));
 
 const { default: AgentDependencies } = await import("./AgentDependencies.vue");

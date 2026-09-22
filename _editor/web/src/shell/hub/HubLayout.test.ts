@@ -1,12 +1,12 @@
-// @vitest-environment jsdom
 //
 // WHAT A HUB ROW SAYS ABOUT A RUN THE READER WALKED AWAY FROM. A hub mounts one section at a time, so a rebuild
 // started on Environment leaves nothing on screen once Devices is open; the row's mark is the whole of what is
 // left. Rendered rather than reasoned about, because both halves are render-time: the mark rides `#meta`, a slot
 // Row draws only when it is filled, and the section reports itself through an inject that has to survive being
 // passed down a slot.
+import "@intentic/testing/dom";
 import { IconStub } from "@intentic/ui/testing";
-import { afterEach, expect, it } from "vitest";
+import { it, expect, afterEach } from "bun:test";
 import { type App, computed, createApp, defineComponent, h, nextTick } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { beginHubWork, forgetHubWork, hubWorkKey, hubWorkRunning, useHubWork } from "./hubWork";

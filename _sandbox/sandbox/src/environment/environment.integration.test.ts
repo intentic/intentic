@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
 import type { Capability } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../workspace/files/workspace-files.js";

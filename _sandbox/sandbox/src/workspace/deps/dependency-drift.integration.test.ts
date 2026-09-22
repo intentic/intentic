@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { modulesNear, unresolvedDependencies, unresolvedSummary } from "./dependency-drift.js";
 
 const project = async (): Promise<string> => mkdtemp(join(tmpdir(), "drift-"));

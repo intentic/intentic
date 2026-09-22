@@ -1,5 +1,5 @@
 import { unstubbed } from "@intentic/testing";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import { context, servicesWith, turn } from "../../agent/run/turn/turn-plan.testing.js";
 import { testConfig } from "../../testing.js";

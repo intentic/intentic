@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, test, expect, mock } from "bun:test";
 import { createFlyPeers, createStaticPeers, parsePeerList, peerKey } from "./peers.js";
 
 const defaults = { port: 8080, internalPort: 8081 };
@@ -31,7 +31,7 @@ describe(`parsePeerList`, () => {
 
 describe(`createStaticPeers`, () => {
     test(`holds the list in a stable order and never changes`, () => {
-        const listener = vi.fn();
+        const listener = mock();
         const peers = createStaticPeers([
             { host: `b`, port: 1, internalPort: 2 },
             { host: `a`, port: 1, internalPort: 2 },
@@ -47,12 +47,12 @@ describe(`createFlyPeers`, () => {
     // The resolver is injected, so these read as "what DNS answered" rather than as timer plumbing.
     const world = (answers: readonly (readonly string[] | Error)[]) => {
         let call = 0;
-        const resolve = vi.fn(() => {
+        const resolve = mock(() => {
             // The last answer repeats forever, so a test may refresh more often than it scripted.
             const answer = answers[Math.min(call++, answers.length - 1)] ?? [];
             return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
         });
-        const log = vi.fn();
+        const log = mock();
         const peers = createFlyPeers({ appName: `edge`, selfAddress: `fdaa::1`, port: 8080, internalPort: 8081, resolve, log });
         const changes: (readonly string[])[] = [];
         peers.onChange((next) => changes.push(next.map((peer) => peer.host)));

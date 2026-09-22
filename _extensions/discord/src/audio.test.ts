@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createTranscriber, type ExecFn, to16kMonoPcm, wavOf, WHISPER_MISSING, whisperCliMissing } from "./audio.js";
 
 // 48kHz stereo s16le frames of a constant sample value.

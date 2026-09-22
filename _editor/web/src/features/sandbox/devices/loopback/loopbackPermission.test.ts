@@ -1,6 +1,7 @@
-// @vitest-environment jsdom
 // jsdom for a `window`/`navigator` to hang a Permissions API off; there is no storage in this module.
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 
 // Chrome 142 shipped `local-network-access`; 145 split it into `local-network` (LAN) and `loopback-network`
 // (this machine). The app dials 127.0.0.1 only, so it must ask under the narrow name where one exists.
@@ -24,10 +25,8 @@ const browserKnows = (states: Record<string, PermissionState>): { asked: string[
     return { asked };
 };
 
-const load = async () => {
-    vi.resetModules();
-    return (await import(`./loopbackPermission`)).loopbackPermission;
-};
+// A fresh module per case: the query is held for the life of the document.
+const load = async () => (await freshImport<typeof import("./loopbackPermission")>("./loopbackPermission", import.meta.url)).loopbackPermission;
 
 afterEach(() => {
     Reflect.deleteProperty(globalThis.navigator, `permissions`);
@@ -36,7 +35,7 @@ afterEach(() => {
 
 it(`asks about loopback alone where the browser draws the distinction`, async () => {
     // Chrome 145+: both names exist. Answering `denied` for the LAN one, or asking for it, would overreach.
-    const { asked } = browserKnows({ 'loopback-network': `granted`, 'local-network': `denied`, 'local-network-access': `denied` });
+    const { asked } = browserKnows({ "loopback-network": `granted`, "local-network": `denied`, "local-network-access": `denied` });
     const loopbackPermission = await load();
 
     expect(await loopbackPermission()).toBe(`granted`);
@@ -45,7 +44,7 @@ it(`asks about loopback alone where the browser draws the distinction`, async ()
 
 it(`falls back to the name a Chrome before the split knows`, async () => {
     // Chrome 142-144: one name covers both spaces, and is the only one to ask about.
-    const { asked } = browserKnows({ 'local-network-access': `prompt` });
+    const { asked } = browserKnows({ "local-network-access": `prompt` });
     const loopbackPermission = await load();
 
     expect(await loopbackPermission()).toBe(`prompt`);
@@ -67,7 +66,7 @@ it(`reads a browser with no Permissions API at all the same way`, async () => {
 // Asked once per document: a query per reconnect would be a query per network blip, and the held object stays
 // live so a site-settings revoke still reaches the next call.
 it(`asks the browser once and holds what it answered with`, async () => {
-    const { asked } = browserKnows({ 'loopback-network': `prompt` });
+    const { asked } = browserKnows({ "loopback-network": `prompt` });
     const loopbackPermission = await load();
 
     expect(await loopbackPermission()).toBe(`prompt`);
@@ -77,9 +76,19 @@ it(`asks the browser once and holds what it answered with`, async () => {
 
 // The desktop webview doesn't gate the reach, so Chrome is never queried.
 it(`takes the desktop webview's word without asking the browser`, async () => {
-    const { asked } = browserKnows({ 'loopback-network': `prompt` });
+    const { asked } = browserKnows({ "loopback-network": `prompt` });
     globalThis.window.__INTENTIC_DESKTOP__ = { version: `1.2.3`, installId: `i`, update: null, loopbackUngated: true };
 
     expect(await (await load())()).toBe(`ungated`);
     expect(asked).toEqual([]);
+});
+
+// An older app's webview still enforces the check and says nothing; reading that as ungated would show
+// Chrome's dialog with nothing on screen to place it.
+it(`still asks the browser inside a desktop webview that has not said it is ungated`, async () => {
+    const { asked } = browserKnows({ "loopback-network": `prompt` });
+    globalThis.window.__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `i`, update: null };
+
+    expect(await (await load())()).toBe(`prompt`);
+    expect(asked).toEqual([`loopback-network`]);
 });

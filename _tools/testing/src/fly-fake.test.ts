@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type FakeFly, installFakeFly } from "./fly-fake.js";
 
 /* A FIXTURE WITH RULES IN IT NEEDS ITS OWN TEST. This one is not a stub returning canned JSON: it refuses a fork
@@ -8,8 +9,7 @@ import { type FakeFly, installFakeFly } from "./fly-fake.js";
 
 const BASE = "https://api.machines.dev/v1";
 
-const install = (faults: Parameters<typeof installFakeFly>[1] = {}): FakeFly =>
-    installFakeFly((name, value) => vi.stubGlobal(name, value), faults);
+const install = (faults: Parameters<typeof installFakeFly>[1] = {}): FakeFly => installFakeFly((name, value) => stubGlobal(name, value), faults);
 
 const call = async (method: string, path: string, body?: unknown): Promise<{ status: number; json: Record<string, unknown> }> => {
     const response = await fetch(`${BASE}${path}`, {
@@ -21,7 +21,7 @@ const call = async (method: string, path: string, body?: unknown): Promise<{ sta
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe("what the fake refuses", () => {
@@ -139,8 +139,8 @@ describe("what the fake records", () => {
     });
 
     it("passes anything that is not Fly through to the real fetch", async () => {
-        const elsewhere = vi.fn(async () => new Response(`{"from":"elsewhere"}`));
-        installFakeFly((name, value) => vi.stubGlobal(name, value), { passThrough: elsewhere as unknown as typeof fetch });
+        const elsewhere = mock(async () => new Response(`{"from":"elsewhere"}`));
+        installFakeFly((name, value) => stubGlobal(name, value), { passThrough: elsewhere });
         const answered = await fetch("https://api.stripe.com/v1/subscriptions/sub_1");
         expect(await answered.json()).toEqual({ from: "elsewhere" });
         expect(elsewhere).toHaveBeenCalledTimes(1);

@@ -1,7 +1,7 @@
 // Pins two ways environmentVisual's brand lookup quietly fails: a name spelled differently from its product falling to
 // the box, and a slug matching someone else's brand by accident.
 import type { EnvironmentItem } from "@intentic/api-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { environmentVisual } from "./environmentVisual";
 
 const item = (name: string, ...tools: string[]): EnvironmentItem => ({

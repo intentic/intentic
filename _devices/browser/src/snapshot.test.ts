@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import {
     browserCandidates,
     executableFromCommand,

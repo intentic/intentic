@@ -3,7 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { stubEnv } from "@intentic/testing/bun";
 
 import { createApp } from "../app.js";
 
@@ -25,8 +26,8 @@ import { publishRuntimeChange } from "./runtime-watch.js";
 
 test("system.terminals reports an empty list, not an error, when there is no tmux server to ask", async () => {
     // Points at an empty socket dir; TMUX_TMPDIR picks it, and clearing $TMUX keeps the query off the real server.
-    vi.stubEnv("TMUX_TMPDIR", mkdtempSync(join(tmpdir(), "terminals-empty-")));
-    vi.stubEnv("TMUX", undefined);
+    stubEnv("TMUX_TMPDIR", mkdtempSync(join(tmpdir(), "terminals-empty-")));
+    stubEnv("TMUX", undefined);
     const client = clientFor(createApp(services()));
     expect(await client.system.terminals()).toEqual({ sessions: [] });
 });

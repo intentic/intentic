@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GitRunner } from "@intentic/scaffold";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { describe, test, expect, afterEach, mock } from "bun:test";
 import { lockfileBehind, reconcileLockfile } from "./lockfile-reconcile.js";
 
 // A fake tree: what `git status` and `git diff --name-only` answer, and whether a lockfile exists on disk.
@@ -53,16 +53,16 @@ describe("the lockfile leaves the worktree with the manifest it records", () => 
 
     test("reconcile runs the resolution in the worktree exactly when it is behind, and a failed one leaves the tree alone", async () => {
         const behind = await tree({ lockfile: true, dirty: ["package.json"] });
-        const install = vi.fn(async () => undefined);
+        const install = mock(async () => undefined);
         expect(await reconcileLockfile(behind.dir, undefined, behind.git, install)).toBe("regenerated");
         expect(install).toHaveBeenCalledWith(behind.dir);
 
         const current = await tree({ lockfile: true, dirty: ["src/a.ts"] });
-        const untouched = vi.fn(async () => undefined);
+        const untouched = mock(async () => undefined);
         expect(await reconcileLockfile(current.dir, undefined, current.git, untouched)).toBe("current");
         expect(untouched).toHaveBeenCalledTimes(0);
 
-        const failing = vi.fn(async () => {
+        const failing = mock(async () => {
             throw new Error("ERR_PNPM_NO_MATCHING_VERSION");
         });
         expect(await reconcileLockfile(behind.dir, undefined, behind.git, failing)).toBe("failed");

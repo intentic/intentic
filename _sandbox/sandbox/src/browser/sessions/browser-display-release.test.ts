@@ -1,11 +1,13 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
+import * as displayOriginal from "../cast/display.js";
 
 // The X display is shared by every conversation browsing the same account, so the release has to be refcounted by
 // server. Spying on display.js is the only way to observe it: releaseDisplay's own effect is killing a process.
 const released: string[] = [];
-vi.mock("../cast/display.js", () => ({
-    ensureDisplay: vi.fn(),
-    displayOf: vi.fn(),
+mock.module("../cast/display.js", () => ({
+    ...displayOriginal,
+    ensureDisplay: mock(),
+    displayOf: mock(),
     releaseDisplay: (key: string) => {
         released.push(key);
     },

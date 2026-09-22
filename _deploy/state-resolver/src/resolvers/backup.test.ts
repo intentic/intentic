@@ -1,6 +1,6 @@
 import { env } from "@intentic/graph";
 import type { BackupInput, HostInput } from "@intentic/need-resolver";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { backupId, forgejoId, komodoId } from "../lib/ids.js";
 import { IMAGES } from "../lib/images.js";
 import { resolveBackup } from "./backup.js";

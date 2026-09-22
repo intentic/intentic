@@ -1,5 +1,5 @@
 import { buildApplication, buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { captureCli } from "./testing.js";
 
 // Both ways a command reaches the terminal, in one app: through its context, and through the global it is a view of.
@@ -36,5 +36,6 @@ test("a code outside the contract is clamped to 2, and the real process is left 
     const before = process.exitCode;
     const outcome = await captureCli(app, ["no-such-verb"]);
     expect(outcome.exitCode).toBe(2);
-    expect(process.exitCode).toBe(before);
+    // Unset and 0 are one exit status, and unset is the one bun cannot be put back to.
+    expect(process.exitCode ?? 0).toBe(before ?? 0);
 });

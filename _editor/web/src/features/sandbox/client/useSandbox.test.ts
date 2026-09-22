@@ -1,12 +1,13 @@
 import type { SandboxSummary } from "@intentic/api-contract";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
+import { stubGlobal, mocked } from "@intentic/testing/bun";
 
-vi.stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-vi.mock("../../../lib/useApi", () => ({
-    apiClient: { sandbox: { list: vi.fn(), delete: vi.fn(), leave: vi.fn(), hostedProvision: vi.fn(), hostedRelease: vi.fn() } },
+stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
+mock.module("../../../lib/useApi", () => ({
+    apiClient: { sandbox: { list: mock(), delete: mock(), leave: mock(), hostedProvision: mock(), hostedRelease: mock() } },
 }));
 const { apiClient } = await import("../../../lib/useApi");
-const listMock = vi.mocked(apiClient.sandbox.list);
+const listMock = mocked(apiClient.sandbox.list);
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { resetDaemonBoot, setDaemonBoot } = await import("../overview/useDaemonBoot");
 const { signalConnection, useSandbox } = await import("./useSandbox");
@@ -34,7 +35,7 @@ const summary = (id: string): SandboxSummary => ({
 // fetch past staleTime to keep the mocks deterministic.
 beforeEach(() => {
     queryClient.clear();
-    vi.resetAllMocks();
+    jest.resetAllMocks();
 });
 
 describe(`sandbox list cache retention`, () => {
@@ -55,24 +56,26 @@ describe(`useSandbox list/mutation race`, () => {
         listMock.mockResolvedValue({ sandboxes: [row] });
         await sandbox.refresh();
         const provision = Promise.withResolvers<SandboxSummary>();
-        vi.mocked(apiClient.sandbox.hostedProvision).mockReturnValue(provision.promise);
+        mocked(apiClient.sandbox.hostedProvision).mockReturnValue(provision.promise);
         const provisioning = sandbox.hostedProvision(row.id, row.token!);
         const local = { ...row, token: `local-token` };
-        vi.mocked(apiClient.sandbox.hostedRelease).mockResolvedValue(local);
+        mocked(apiClient.sandbox.hostedRelease).mockResolvedValue(local);
         await sandbox.hostedRelease(row.id);
         provision.resolve({ ...row, hosted: { region: `iad`, warm: true } });
         await provisioning;
         expect(sandbox.sandboxes.value).toEqual([local]);
-        expect(apiClient.sandbox.hostedProvision).toHaveBeenCalledExactlyOnceWith({ sandboxId: row.id, token: row.token });
+        expect(apiClient.sandbox.hostedProvision).toHaveBeenCalledTimes(1);
+        expect(apiClient.sandbox.hostedProvision).toHaveBeenCalledWith({ sandboxId: row.id, token: row.token });
     });
 
     it(`shares a pending cancellation instead of rotating the local identity twice`, async () => {
         const sandbox = useSandbox();
         const release = Promise.withResolvers<SandboxSummary>();
-        vi.mocked(apiClient.sandbox.hostedRelease).mockReturnValue(release.promise);
+        mocked(apiClient.sandbox.hostedRelease).mockReturnValue(release.promise);
         const first = sandbox.hostedRelease(`a`);
         const second = sandbox.hostedRelease(`a`);
-        expect(apiClient.sandbox.hostedRelease).toHaveBeenCalledExactlyOnceWith({ sandboxId: `a` });
+        expect(apiClient.sandbox.hostedRelease).toHaveBeenCalledTimes(1);
+        expect(apiClient.sandbox.hostedRelease).toHaveBeenCalledWith({ sandboxId: `a` });
         const local = summary(`a`);
         release.resolve(local);
         expect(await Promise.all([first, second])).toEqual([local, local]);
@@ -90,7 +93,7 @@ describe(`useSandbox list/mutation race`, () => {
         listMock.mockImplementation(() => new Promise((resolve) => (resolveStale = resolve)));
         const stale = sandbox.refresh();
         // Let the user's removal complete fully before the stale read lands.
-        vi.mocked(apiClient.sandbox.delete).mockResolvedValue({ ok: true });
+        mocked(apiClient.sandbox.delete).mockResolvedValue({ ok: true });
         await sandbox.remove(b.id);
         expect(sandbox.sandboxes.value).toEqual([a]);
         // cancelQueries drops the stale fetch, so its late response is ignored and `b` never comes back.
@@ -108,7 +111,7 @@ describe(`useSandbox list/mutation race`, () => {
 
         // Hold delete open (slow teardown) so `b` stays in `removing`.
         let resolveDelete: (value: { ok: boolean }) => void;
-        vi.mocked(apiClient.sandbox.delete).mockImplementation(() => new Promise((resolve) => (resolveDelete = resolve)));
+        mocked(apiClient.sandbox.delete).mockImplementation(() => new Promise((resolve) => (resolveDelete = resolve)));
         const removal = sandbox.remove(b.id);
         expect(sandbox.sandboxes.value).toEqual([a]);
         // Flush a macrotask so the held-open delete has actually started before driving the mid-flight read below.

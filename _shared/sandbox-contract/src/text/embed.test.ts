@@ -1,5 +1,6 @@
 import { webcrypto } from "node:crypto";
-import { beforeAll, expect, test, vi } from "vitest";
+import { test, expect, beforeAll, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { EmbedError, embedFailure, embedUrl, fetchEmbedJson, solveProofOfWork } from "./embed.js";
 
 /* The wire every embed speaks before it speaks its own, against a fake fetch and the real WebCrypto. */
@@ -35,11 +36,11 @@ test("a refusal carries the server's own sentence and status, and a bodyless one
 });
 
 test("a JSON fetch answers the body or throws the refusal", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    stubGlobal("fetch", mock(async () => new Response(JSON.stringify({ ok: true }), { status: 200 })));
     expect(await fetchEmbedJson<{ ok: boolean }>("https://x/y")).toEqual({ ok: true });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 })));
+    stubGlobal("fetch", mock(async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 })));
     await expect(fetchEmbedJson("https://x/y")).rejects.toMatchObject({ message: "rate limited", status: 429 });
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 /* The one test that pays for real work: 12 bits is ~900 awaited digests. */

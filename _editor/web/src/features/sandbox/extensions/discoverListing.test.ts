@@ -1,6 +1,6 @@
 import type { RegistryEntry } from "@intentic/registry";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { checksOk, checksProblem, listingSections, listingState, splitListingName, toListing, updateCount } from "./discoverListing";
 
 const SHA = `a`.repeat(40);

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { whenAborted } from "./abort.js";
 
 test("a signal that aborted before anyone listened still runs the handler", () => {

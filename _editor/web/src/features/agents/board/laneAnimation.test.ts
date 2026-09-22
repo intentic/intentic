@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import { resetAgents } from "../fleet/useAgents";
@@ -72,10 +73,10 @@ beforeEach(() => {
         });
         return {
             onfinish: null,
-            cancel: vi.fn(),
-            play: vi.fn(),
-            pause: vi.fn(),
-            finish: vi.fn(),
+            cancel: mock(),
+            play: mock(),
+            pause: mock(),
+            finish: mock(),
         } as unknown as Animation;
     };
 });
@@ -83,7 +84,8 @@ beforeEach(() => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
+    unstubAllGlobals();
 });
 
 it(`animates cross-lane flight with elevation and fast-deceleration easing when an agent changes lanes`, async () => {
@@ -92,7 +94,7 @@ it(`animates cross-lane flight with elevation and fast-deceleration easing when 
 
     // Stubs distinct lane coordinates for the cross-lane vector probe.
     let laneCalls = 0;
-    vi.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
+    spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
         const lane = this.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`];
         laneCalls += 1;
         if (lane === `active`) {
@@ -124,21 +126,22 @@ it(`animates cross-lane flight with elevation and fast-deceleration easing when 
 });
 
 it(`skips translation physics when reduced motion is requested`, async () => {
-    vi.spyOn(window, `matchMedia`).mockImplementation((query: string) => ({
+    // Stubbed rather than spied on: the DOM shim carries `matchMedia` as an accessor, and a spy cannot stand in for one.
+    stubGlobal(`matchMedia`, (query: string) => ({
         matches: query === `(prefers-reduced-motion: reduce)`,
         media: query,
         onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        dispatchEvent: vi.fn(),
+        addListener: mock(),
+        removeListener: mock(),
+        addEventListener: mock(),
+        removeEventListener: mock(),
+        dispatchEvent: mock(),
     }));
 
     setAgents([agent(`a1`, `running`)], 1);
     await mountBoard();
 
-    vi.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
+    spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
         const lane = this.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`];
         if (lane === `active`) {
             return { left: 400, top: 100, right: 600, bottom: 200, width: 200, height: 100, x: 400, y: 100, toJSON: () => ({}) };
@@ -160,7 +163,7 @@ it(`animates sibling reflow within the same lane when a neighboring card leaves`
     await mountBoard();
 
     // Sibling a2 starts at top: 220, then shifts up to top: 100 once a1 finishes.
-    vi.spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
+    spyOn(Element.prototype, `getBoundingClientRect`).mockImplementation(function (this: Element) {
         const lane = this.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`];
         const label = this.getAttribute(`aria-label`) ?? ``;
         if (lane === `active`) {

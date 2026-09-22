@@ -1,14 +1,14 @@
-// @vitest-environment jsdom
 // Pins what a reviewer of a changed document reads: the marks over the text, the verdict when the text did not move,
 // and the reason when a version could not be rendered. The daemon call is stubbed at this view's own seam.
+import "@intentic/testing/dom";
 import type { DerivedDiff } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const answers = new Map<string, DerivedDiff | Error>();
 const asked: string[] = [];
-vi.mock("./derivedDiff", () => ({
+mock.module("./derivedDiff", () => ({
     readDerivedDiff: (source: { path: string }) => {
         asked.push(source.path);
         const answer = answers.get(source.path);

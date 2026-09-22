@@ -1,5 +1,5 @@
 import type { Persona } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { reachOf, reachSentence } from "./personaReach";
 
 /* The lens is arithmetic on paths, and every one of these is a way it could be wrong on a real workspace: a fence that greys out the road to its own folder. */

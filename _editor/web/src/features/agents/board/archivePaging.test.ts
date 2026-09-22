@@ -1,10 +1,11 @@
-// @vitest-environment jsdom
 // How much of the archive the board draws when the door opens: drawn whole, a thousand-session archive built a thousand
 // cards in one frame. Asserted through the real board, since what matters is DOM card count, the tail row, and the
 // header count reporting the pile rather than the page.
+import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetChat } from "../../chat/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
@@ -16,7 +17,7 @@ import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals boardSelection.test.ts installs: matchMedia keeps desktop, the unreported ResizeObserver
 // keeps three columns, and jsdom has no scrollIntoView.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 

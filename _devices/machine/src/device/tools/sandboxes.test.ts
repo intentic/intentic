@@ -1,5 +1,5 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { ScopeError } from "../policy.js";
 import {
     createSandbox,

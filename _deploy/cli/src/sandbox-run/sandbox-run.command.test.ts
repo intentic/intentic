@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { seeded } from "./sandbox-run.command.js";
 
 /* The seed protocol, as arithmetic on pairs: the probe container's own environment carries nothing the runner did not put there. */

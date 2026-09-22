@@ -1,15 +1,15 @@
-// @vitest-environment jsdom
 // The card that offers the registry's update, and the one shape where that offer is wrong: a sandbox whose base was
 // compiled from a checkout. Pulling there REPLACES what the checkout built instead of refreshing it, so the offer is
 // the rebuild from that checkout, and the trade is spelled out rather than made by a click.
+import "@intentic/testing/dom";
 import type { Environment } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const updateAvailable = ref(true);
 const localImage = ref<Environment[`localImage`]>(undefined);
-vi.mock(`./useSandboxVersion`, () => ({
+mock.module(`./useSandboxVersion`, () => ({
     useSandboxVersion: () => ({
         info: ref({ version: `1.53.0`, channel: `stable` }),
         installed: ref(`1.53.0`),
@@ -25,11 +25,11 @@ vi.mock(`./useSandboxVersion`, () => ({
         localImage,
     }),
 }));
-vi.mock(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
-vi.mock(`../../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ id: `sb1`, role: `owner` }) }) }));
-vi.mock(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
+mock.module(`../../../agents/fleet/useAgents`, () => ({ useAgents: () => ({ fleet: ref([]) }) }));
+mock.module(`../../client/useSandbox`, () => ({ useSandbox: () => ({ active: ref({ id: `sb1`, role: `owner` }) }) }));
+mock.module(`../../../../lib/useApi`, () => ({ apiClient: { sandbox: { hostedRestart: async () => undefined } } }));
 // Marked, not mounted: which executor the card chose is the whole subject, and each reaches a device on its own.
-vi.mock(`../../../capabilities/connect/HostRecreate.vue`, () => ({
+mock.module(`../../../capabilities/connect/HostRecreate.vue`, () => ({
     default: defineComponent({
         props: { action: { type: String, default: `` } },
         render(): ReturnType<typeof h> {
@@ -37,7 +37,7 @@ vi.mock(`../../../capabilities/connect/HostRecreate.vue`, () => ({
         },
     }),
 }));
-vi.mock(`../../environment/DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
+mock.module(`../../environment/DevRebuild.vue`, () => ({ default: defineComponent({ render: () => h(`div`, { "data-executor": `checkout` }) }) }));
 
 const { default: SandboxUpdateCard } = await import("./SandboxUpdateCard.vue");
 

@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, spyOn, jest } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import ThinkingRosette from "./ThinkingRosette.vue";
 
@@ -17,7 +18,8 @@ const mount = async (): Promise<HTMLElement> => {
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
+    unstubAllGlobals();
     document.body.innerHTML = ``;
 });
 
@@ -77,15 +79,14 @@ it(`animates inside the SVG rather than with a CSS animation`, async () => {
 // Slowed, not stopped. A still mark beside "Musing…" reads as a hung turn, which is the one thing this must never say.
 it(`stretches the breath for reduced motion instead of holding still`, async () => {
     const query = window.matchMedia(`(prefers-reduced-motion: reduce)`);
-    const remove = vi.spyOn(query, `removeEventListener`);
+    const remove = spyOn(query, `removeEventListener`);
     Object.defineProperty(query, `matches`, { value: true });
-    vi.spyOn(window, `matchMedia`).mockReturnValue(query);
+    // stubGlobal, not spyOn: the jsdom install defines every window member as an accessor, which spyOn refuses.
+    stubGlobal(`matchMedia`, () => query);
 
     const host = await mount();
 
-    expect(new Set([...host.querySelectorAll(`animate, animateTransform`)].map((node) => node.getAttribute(`dur`)))).toEqual(
-        new Set([`6.5s`]),
-    );
+    expect(new Set([...host.querySelectorAll(`animate, animateTransform`)].map((node) => node.getAttribute(`dur`)))).toEqual(new Set([`6.5s`]));
     app!.unmount();
     app = undefined;
     expect(remove).toHaveBeenCalledWith(`change`, expect.any(Function));

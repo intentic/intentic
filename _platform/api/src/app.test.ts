@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createApp } from "./app.js";
 import { configSchema, type Config } from "./config.js";
 import { testIngressConfig } from "./testing.js";
@@ -20,9 +21,9 @@ const config = configSchema.parse({
     log: { level: `silent`, pretty: `false` },
 });
 
-const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
+const logger = { child: () => logger, info: mock(), warn: mock(), error: mock(), debug: mock() } as unknown as Logger;
 
-const fakePrisma = (sandbox: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => sandbox as unknown as PrismaClient;
+const fakePrisma = (sandbox: Record<string, Record<string, ReturnType<typeof mock>>>) => sandbox as unknown as PrismaClient;
 
 const claim = (prisma: PrismaClient) =>
     createApp(config, prisma, logger).app.request(`/setup/claim`, {
@@ -52,16 +53,16 @@ const intenticRow = () => ({
 });
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe(`POST /setup/claim`, () => {
     it(`returns the mint-cached reachability grant + a pair token, with no provider call`, async () => {
-        vi.stubGlobal(`fetch`, () => {
+        stubGlobal(`fetch`, () => {
             throw new Error(`claim must call no provider — the grant is minted with the code`);
         });
-        const update = vi.fn();
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(intenticRow()), update } });
+        const update = mock();
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(intenticRow()), update } });
 
         const res = await claim(prisma);
         expect(res.status).toBe(200);
@@ -76,7 +77,8 @@ describe(`POST /setup/claim`, () => {
         // Two one-shot credentials must never share bytes: one enrolls file-sync, the other a machine agent.
         expect(values[`HOST_PAIR_TOKEN`]).not.toBe(values[`SYNC_PAIR_TOKEN`]);
         // The claim's one write clears the prior setupReport too, so a re-run never shows last time's failure.
-        expect(update).toHaveBeenCalledExactlyOnceWith({
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(update).toHaveBeenCalledWith({
             where: { id: `s1` },
             data: { setupCodeClaimedAt: expect.any(Date), setupReport: Prisma.DbNull },
         });
@@ -84,7 +86,7 @@ describe(`POST /setup/claim`, () => {
 
     it(`404s an expired code with no oracle`, async () => {
         const prisma = fakePrisma({
-            sandbox: { findUnique: vi.fn().mockResolvedValue({ ...intenticRow(), setupCodeExpiresAt: new Date(Date.now() - 1) }) },
+            sandbox: { findUnique: mock().mockResolvedValue({ ...intenticRow(), setupCodeExpiresAt: new Date(Date.now() - 1) }) },
         });
         const res = await claim(prisma);
         expect(res.status).toBe(404);
@@ -100,13 +102,14 @@ const report = (prisma: PrismaClient, body: unknown) =>
 
 describe(`POST /setup/report`, () => {
     it(`stores the stage and failures against the sandbox, stamping 'at' server-side`, async () => {
-        const update = vi.fn();
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(intenticRow()), update } });
+        const update = mock();
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(intenticRow()), update } });
 
         const failed = [{ check: `Docker`, problem: `the docker daemon is not running.`, remedy: `start Docker, then re-run.` }];
         const res = await report(prisma, { code: `abc`, stage: `preflight`, failed });
         expect(res.status).toBe(200);
-        expect(update).toHaveBeenCalledExactlyOnceWith({
+        expect(update).toHaveBeenCalledTimes(1);
+        expect(update).toHaveBeenCalledWith({
             where: { id: `s1` },
             // `at` is the platform's own clock: a machine with a wrong clock must not narrate from the past.
             data: { setupReport: { stage: `preflight`, failed, at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/) } },
@@ -114,8 +117,8 @@ describe(`POST /setup/report`, () => {
     });
 
     it(`accepts a bare stage transition as progress`, async () => {
-        const update = vi.fn();
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(intenticRow()), update } });
+        const update = mock();
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(intenticRow()), update } });
 
         const res = await report(prisma, { code: `abc`, stage: `pulling-image` });
         expect(res.status).toBe(200);
@@ -123,9 +126,9 @@ describe(`POST /setup/report`, () => {
     });
 
     it(`404s an expired code and writes nothing: possession of a live code is the auth`, async () => {
-        const update = vi.fn();
+        const update = mock();
         const prisma = fakePrisma({
-            sandbox: { findUnique: vi.fn().mockResolvedValue({ ...intenticRow(), setupCodeExpiresAt: new Date(Date.now() - 1) }), update },
+            sandbox: { findUnique: mock().mockResolvedValue({ ...intenticRow(), setupCodeExpiresAt: new Date(Date.now() - 1) }), update },
         });
         const res = await report(prisma, { code: `abc`, stage: `preflight` });
         expect(res.status).toBe(404);
@@ -133,7 +136,7 @@ describe(`POST /setup/report`, () => {
     });
 
     it(`400s a malformed report before touching the database`, async () => {
-        const findUnique = vi.fn();
+        const findUnique = mock();
         const prisma = fakePrisma({ sandbox: { findUnique } });
         expect((await report(prisma, { code: `abc`, stage: `not-a-stage` })).status).toBe(400);
         expect((await report(prisma, { stage: `preflight` })).status).toBe(400);
@@ -153,7 +156,7 @@ describe(`POST /sandbox/presentation`, () => {
     // and a bundle could not carry them: a migrated sandbox used to arrive under its auto-name wearing that name's
     // monogram. This is the read that lets an export capture them.
     it(`answers the row's name and logo for the token's digest`, async () => {
-        const findUnique = vi.fn().mockResolvedValue({ name: `radarsu-intentic`, image: `data:image/webp;base64,AA==` });
+        const findUnique = mock().mockResolvedValue({ name: `radarsu-intentic`, image: `data:image/webp;base64,AA==` });
         const res = await presentation(fakePrisma({ sandbox: { findUnique } }), `tok`);
 
         expect(res.status).toBe(200);
@@ -166,15 +169,15 @@ describe(`POST /sandbox/presentation`, () => {
     });
 
     it(`omits the logo rather than sending null when the row has none`, async () => {
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ name: `workspace`, image: null }) } });
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue({ name: `workspace`, image: null }) } });
         expect(await (await presentation(prisma, `tok`)).json()).toEqual({ name: `workspace` });
     });
 
     it(`refuses a missing token before touching the database, and 404s an unknown one`, async () => {
-        const findUnique = vi.fn();
+        const findUnique = mock();
         expect((await presentation(fakePrisma({ sandbox: { findUnique } }), undefined)).status).toBe(400);
         expect(findUnique).not.toHaveBeenCalled();
-        expect((await presentation(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null) } }), `nope`)).status).toBe(404);
+        expect((await presentation(fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(null) } }), `nope`)).status).toBe(404);
     });
 });
 
@@ -194,10 +197,11 @@ const farewell = (prisma: PrismaClient, token: string | undefined, removedBy?: u
 
 describe(`POST /sandbox/farewell`, () => {
     it(`stamps the removal on the row the token digests to, and drops the address`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
         const res = await farewell(fakePrisma({ sandbox: { updateMany } }), `tok`, `radarsu-rog`);
         expect(res.status).toBe(200);
-        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        expect(updateMany).toHaveBeenCalledWith({
             where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             // The address goes because it now serves nothing; the row stays, because deleting it is the owner's press.
             data: { removedAt: expect.any(Date), removedBy: `radarsu-rog`, daemonUrl: null },
@@ -205,13 +209,14 @@ describe(`POST /sandbox/farewell`, () => {
     });
 
     it(`accepts a removal that cannot name its machine`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
         await farewell(fakePrisma({ sandbox: { updateMany } }), `tok`);
-        expect(updateMany).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ data: expect.objectContaining({ removedBy: null }) }));
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ removedBy: null }) }));
     });
 
     it(`refuses a missing token before touching the database, and 404s an unknown one with no oracle`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+        const updateMany = mock().mockResolvedValue({ count: 0 });
         const prisma = fakePrisma({ sandbox: { updateMany } });
         expect((await farewell(prisma, undefined)).status).toBe(400);
         expect(updateMany).not.toHaveBeenCalled();
@@ -221,8 +226,8 @@ describe(`POST /sandbox/farewell`, () => {
 
 describe(`POST /sandbox/announce`, () => {
     it(`refuses an announcement whose token was revoked after its lookup`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 0 });
-        const findUnique = vi.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
+        const updateMany = mock().mockResolvedValue({ count: 0 });
+        const findUnique = mock().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
         const res = await announce(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, `https://sandbox-abc.intentic.dev`);
         expect(res.status).toBe(404);
         expect(updateMany).toHaveBeenCalledWith(
@@ -230,8 +235,8 @@ describe(`POST /sandbox/announce`, () => {
         );
     });
     it(`stamps daemonUrl + lastSeenAt on the row matched by the token's digest`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-        const findUnique = vi.fn().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
+        const findUnique = mock().mockResolvedValue({ id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null });
         const prisma = fakePrisma({ sandbox: { findUnique, updateMany } });
 
         const res = await announce(prisma, `tok`, `https://sandbox-abc.intentic.dev`);
@@ -256,12 +261,12 @@ describe(`POST /sandbox/announce`, () => {
     });
 
     it(`404s an unknown token with no oracle`, async () => {
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null) } });
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(null) } });
         expect((await announce(prisma, `nope`, `https://sandbox-abc.intentic.dev`)).status).toBe(404);
     });
 
     it(`rejects missing tokens and non-https URLs before touching the database`, async () => {
-        const findUnique = vi.fn();
+        const findUnique = mock();
         const prisma = fakePrisma({ sandbox: { findUnique } });
         expect((await announce(prisma, undefined, `https://sandbox-abc.intentic.dev`)).status).toBe(400);
         expect((await announce(prisma, `tok`, `http://insecure.example.com`)).status).toBe(400);
@@ -269,14 +274,15 @@ describe(`POST /sandbox/announce`, () => {
     });
 
     it(`refuses a daemonUrl that isn't the address derived from the sandbox's own token`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
         // setupPayload was stored by the setup mint, so the row's address is a pure derivation, known before boot.
         const row = { id: `s1`, token: `tok`, setupPayload: `{}`, daemonUrl: null, hosted: null };
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), updateMany } });
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(row), updateMany } });
 
         const res = await announce(prisma, `tok`, `https://evil.example`);
         expect(res.status).toBe(409);
-        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        expect(updateMany).toHaveBeenCalledWith({
             where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             data: { announceRefusal: { announced: `evil.example`, expected: HOSTNAME } },
         });
@@ -285,18 +291,18 @@ describe(`POST /sandbox/announce`, () => {
     });
 
     it(`derives the address for a hosted sandbox too, off its machine row`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
         const row = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: { id: `h1` } };
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), updateMany } });
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(row), updateMany } });
 
         expect((await announce(prisma, `tok`, `https://evil.example`)).status).toBe(409);
         expect((await announce(prisma, `tok`, `https://${HOSTNAME}`)).status).toBe(200);
     });
 
     it(`derives nothing on a platform with no reachability fabric`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
         const row = { id: `s1`, token: `tok`, setupPayload: `{}`, daemonUrl: null, hosted: null };
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(row), updateMany } });
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(row), updateMany } });
         const fabricless = configSchema.parse({
             database: { url: `postgres://x` },
             betterAuth: { secret: `s` },
@@ -314,13 +320,13 @@ describe(`POST /sandbox/announce`, () => {
     });
 
     it(`pins on first announce when nothing on the row predicts the address`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
         const bare = { id: `s1`, token: `tok`, setupPayload: null, daemonUrl: null, hosted: null };
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(bare), updateMany } });
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(bare), updateMany } });
         expect((await announce(prisma, `tok`, `https://self-hosted.example`)).status).toBe(200);
 
         const pinned = { ...bare, daemonUrl: `https://self-hosted.example` };
-        const after = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(pinned), updateMany } });
+        const after = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(pinned), updateMany } });
         expect((await announce(after, `tok`, `https://self-hosted.example`)).status).toBe(200);
         expect((await announce(after, `tok`, `https://evil.example`)).status).toBe(409);
     });
@@ -337,8 +343,8 @@ const bootReport = (prisma: PrismaClient, token: string | undefined, body: unkno
 // two can fail independently.
 describe(`POST /sandbox/boot-report`, () => {
     it(`refuses a boot report whose token was revoked after its lookup`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 0 });
-        const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
+        const updateMany = mock().mockResolvedValue({ count: 0 });
+        const findUnique = mock().mockResolvedValue({ id: `s1` });
         const res = await bootReport(fakePrisma({ sandbox: { findUnique, updateMany } }), `tok`, { reach: `reachable` });
         expect(res.status).toBe(404);
         expect(updateMany).toHaveBeenCalledWith(
@@ -346,15 +352,16 @@ describe(`POST /sandbox/boot-report`, () => {
         );
     });
     it(`stores the verdict against the sandbox, stamping 'at' server-side`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-        const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
+        const findUnique = mock().mockResolvedValue({ id: `s1` });
         const prisma = fakePrisma({ sandbox: { findUnique, updateMany } });
 
         const res = await bootReport(prisma, `tok`, { reach: `unreachable`, detail: `its tunnel has not come up.` });
         expect(res.status).toBe(200);
         // Matched by the token's digest, exactly like announce: the same secret, the same lookup.
         expect(findUnique).toHaveBeenCalledWith({ where: { tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) } });
-        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        expect(updateMany).toHaveBeenCalledWith({
             where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             data: {
                 bootReport: {
@@ -368,24 +375,25 @@ describe(`POST /sandbox/boot-report`, () => {
     });
 
     it(`accepts a bare verdict: the healthy path carries no detail`, async () => {
-        const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-        const prisma = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1` }), updateMany } });
+        const updateMany = mock().mockResolvedValue({ count: 1 });
+        const prisma = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue({ id: `s1` }), updateMany } });
         expect((await bootReport(prisma, `tok`, { reach: `reachable` })).status).toBe(200);
-        expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+        expect(updateMany).toHaveBeenCalledTimes(1);
+        expect(updateMany).toHaveBeenCalledWith({
             where: { id: `s1`, tokenDigest: createHash(`sha256`).update(`tok`).digest(`hex`) },
             data: { bootReport: { reach: `reachable`, at: expect.any(String) } },
         });
     });
 
     it(`refuses a missing token, an unknown one, and a verdict that isn't one`, async () => {
-        const findUnique = vi.fn().mockResolvedValue({ id: `s1` });
-        const prisma = fakePrisma({ sandbox: { findUnique, updateMany: vi.fn() } });
+        const findUnique = mock().mockResolvedValue({ id: `s1` });
+        const prisma = fakePrisma({ sandbox: { findUnique, updateMany: mock() } });
         expect((await bootReport(prisma, undefined, { reach: `reachable` })).status).toBe(400);
         expect((await bootReport(prisma, `tok`, { reach: `probably` })).status).toBe(400);
         // Neither reached the database: both are refusals of the request, not of the sandbox.
         expect(findUnique).not.toHaveBeenCalled();
 
-        const unknown = fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null), updateMany: vi.fn() } });
+        const unknown = fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(null), updateMany: mock() } });
         expect((await bootReport(unknown, `nope`, { reach: `reachable` })).status).toBe(404);
     });
 });
@@ -422,7 +430,7 @@ describe(`GET /api/reachability/:sandboxId`, () => {
     const id = `abcdef012345`;
 
     it(`200s a sandbox that exists, resolved by its indexed tunnel id`, async () => {
-        const findUnique = vi.fn().mockResolvedValue({ id: `s1`, hosted: null });
+        const findUnique = mock().mockResolvedValue({ id: `s1`, hosted: null });
         const res = await ask(fakePrisma({ sandbox: { findUnique } }), id);
 
         expect(res.status).toBe(200);
@@ -432,22 +440,22 @@ describe(`GET /api/reachability/:sandboxId`, () => {
 
     it(`names the lane: a hosted sandbox's app to replay to, or the tunnel it must dial`, async () => {
         const hosted = await ask(
-            fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-${id}` } }) } }),
+            fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-${id}` } }) } }),
             id,
         );
         expect(await hosted.json()).toEqual({ ok: true, lane: `hosted`, app: `intentic-sbx-${id}` });
 
-        const own = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
+        const own = await ask(fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
         expect(await own.json()).toEqual({ ok: true, lane: `tunnel` });
     });
 
     it(`404s a sandbox that does not exist`, async () => {
-        const res = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue(null) } }), id);
+        const res = await ask(fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue(null) } }), id);
         expect(res.status).toBe(404);
     });
 
     it(`404s anything that isn't a 12-hex id, without querying`, async () => {
-        const findUnique = vi.fn();
+        const findUnique = mock();
         const prisma = fakePrisma({ sandbox: { findUnique } });
         for (const bad of [`nope`, `ABCDEF012345`, `abcdef01234`, `abcdef0123456`, `../../etc/passwd`]) {
             // oxlint-disable-next-line eslint/no-await-in-loop -- one cheap request per shape; sequential reads clearer
@@ -457,7 +465,7 @@ describe(`GET /api/reachability/:sandboxId`, () => {
     });
 
     it(`answers with no credential presented`, async () => {
-        const res = await ask(fakePrisma({ sandbox: { findUnique: vi.fn().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
+        const res = await ask(fakePrisma({ sandbox: { findUnique: mock().mockResolvedValue({ id: `s1`, hosted: null }) } }), id);
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ ok: true, lane: `tunnel` });
     });
@@ -466,7 +474,7 @@ describe(`GET /api/reachability/:sandboxId`, () => {
 /* THE BODY IS BOUNDED BEFORE ANY ROUTE READS IT. */
 describe(`request body limit`, () => {
     it(`413s an oversized body before the route runs`, async () => {
-        const findUnique = vi.fn();
+        const findUnique = mock();
         const res = await createApp(config, fakePrisma({ sandbox: { findUnique } }), logger).app.request(`/sandbox/announce`, {
             method: `POST`,
             headers: { "content-type": `application/json`, "x-intentic-connect": `tok` },

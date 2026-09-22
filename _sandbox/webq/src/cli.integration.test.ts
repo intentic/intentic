@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { captureCli, type CliOutcome } from "@intentic/agent-cli/testing";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { app } from "./app.js";
 import { chromiumAvailable } from "./lib/browser.js";
 

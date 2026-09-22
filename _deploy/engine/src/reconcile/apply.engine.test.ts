@@ -1,6 +1,6 @@
 import { env, linearize } from "@intentic/graph";
 import { defineStack } from "@intentic/sdk";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createFakeProviders } from "../providers/fake.js";
 import { apply } from "./apply.js";
 import { collectOrphans } from "./orphans.js";

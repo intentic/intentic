@@ -2,6 +2,7 @@
 {
     "extends": "./tsconfig.json",
     "compilerOptions": {
+        "types": ["node", "bun"],
         "composite": false,
         "declaration": false,
         "declarationMap": false,

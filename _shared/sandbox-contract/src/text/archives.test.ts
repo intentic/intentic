@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { archiveFormat, archivePrefixOf, archiveRootOf, archiveStem, isBrowsableArchive, wrapsItsOwnName } from "./archives.js";
 
 describe(`archive names`, () => {

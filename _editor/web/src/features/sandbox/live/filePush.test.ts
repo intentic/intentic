@@ -1,18 +1,31 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { ref } from "vue";
+import { it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
 
 // Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-vi.mock("../client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
+mock.module("../client/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
-vi.mock("../client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
+// Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
+// this factory returns; only the two below are ever called here.
+mock.module("../client/sandboxClient", () => ({
+    sandboxJson: mock(),
+    sandboxRequest: mock(),
+    sandboxRequestVia: mock(),
+    sandboxJsonAt: mock(),
+    sandboxJsonQuietly: mock(),
+    sandboxJsonVia: mock(),
+    sandboxBlob: mock(),
+    sandboxUpload: mock(),
+    sandboxError: mock(async () => new Error(`unused`)),
+    SandboxHttpError: class SandboxHttpError extends Error {},
+}));
 
 import { STATE_DIR } from "@intentic/constants";
 import { registerFileBindings } from "../../../extension-host/fileBindings";
@@ -32,7 +45,7 @@ let disposables: { dispose: () => void }[];
 beforeEach(() => {
     invalidated = [];
     disposables = [];
-    vi.spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
+    spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
         const resolved = typeof filters === `function` ? filters() : filters;
         invalidated.push([...(resolved?.queryKey ?? [])]);
     });
@@ -45,8 +58,8 @@ afterEach(() => {
     }
 });
 
-const woken = (paths: readonly string[]): ReturnType<typeof vi.fn> => {
-    const listener = vi.fn();
+const woken = (paths: readonly string[]): ReturnType<typeof mock> => {
+    const listener = mock();
     disposables.push(onFilesChanged(paths, listener));
     return listener;
 };

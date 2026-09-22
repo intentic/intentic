@@ -1,5 +1,5 @@
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { syncHookOutput } from "../../testing.js";
 import { dependencyDirForCommand, depsNoticeHooks } from "./agent-deps.js";
 

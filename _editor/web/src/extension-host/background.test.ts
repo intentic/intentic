@@ -1,7 +1,8 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { IntenticApi } from "@intentic/extension-api";
 import { resetSandboxScope, sandboxLedger, sandboxPoll } from "@intentic/extension-api";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 
 // The background pair (extension-api/src/background.ts), tested from here since the SDK ships no test harness of its
 // own. Each rule below is invisible in the code that breaks it: a tile says something untrue, the console fills with
@@ -49,14 +50,14 @@ const fakeApi = (over: { reachable?: boolean; file?: unknown; watching?: boolean
 
 beforeEach(() => {
     resetSandboxScope();
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 describe(`sandboxPoll`, () => {
     it(`reads once on start and then on the interval, and stops when disposed`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         const { api } = fakeApi();
-        const read = vi.fn(async () => `answer`);
+        const read = mock(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 1_000, initial: () => ``, read });
 
         const running = poll.start();
@@ -64,17 +65,17 @@ describe(`sandboxPoll`, () => {
         expect(read).toHaveBeenCalledTimes(1);
         expect(poll.state.value).toBe(`answer`);
 
-        await vi.advanceTimersByTimeAsync(2_000);
+        await advanceTimersByTimeAsync(2_000);
         expect(read).toHaveBeenCalledTimes(3);
 
         running.dispose();
-        await vi.advanceTimersByTimeAsync(5_000);
+        await advanceTimersByTimeAsync(5_000);
         expect(read).toHaveBeenCalledTimes(3);
     });
 
     it(`skips the opening read when the caller has nothing to ask yet`, async () => {
         const { api } = fakeApi();
-        const read = vi.fn(async () => `answer`);
+        const read = mock(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 60_000, immediate: false, initial: () => ``, read });
 
         poll.start().dispose();
@@ -85,7 +86,7 @@ describe(`sandboxPoll`, () => {
 
     it(`asks nothing of an unreachable daemon`, async () => {
         const { api } = fakeApi({ reachable: false });
-        const read = vi.fn(async () => `answer`);
+        const read = mock(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 60_000, initial: () => ``, read });
 
         poll.refresh();
@@ -113,7 +114,7 @@ describe(`sandboxPoll`, () => {
                 return `first`;
             },
         });
-        const secondRead = vi.fn(async () => {
+        const secondRead = mock(async () => {
             active++;
             widest = Math.max(widest, active);
             active--;
@@ -146,7 +147,7 @@ describe(`sandboxPoll`, () => {
                 return `done`;
             },
         });
-        const read = vi.fn(async () => `answer`);
+        const read = mock(async () => `answer`);
         const waiting = sandboxPoll({ host: () => api, everyMs: 60_000, initial: () => ``, read });
 
         blocker.refresh();
@@ -163,7 +164,7 @@ describe(`sandboxPoll`, () => {
     it(`runs one trailing read when triggers land during an active read`, async () => {
         const { api } = fakeApi();
         let releaseFirst = (): void => {};
-        const read = vi.fn(async () => {
+        const read = mock(async () => {
             if (read.mock.calls.length === 1) {
                 await new Promise<void>((resolve) => {
                     releaseFirst = resolve;
@@ -272,9 +273,9 @@ describe(`sandboxPoll`, () => {
     // input to a drafts count is a write under a path the manifest declares, and the host was already pushing that
     // write.
     it(`re-reads when one of the extension's declared files is written, without waiting out the interval`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         const { api, writeLanded } = fakeApi({ watching: true });
-        const read = vi.fn(async () => `answer`);
+        const read = mock(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 600_000, initial: () => ``, read });
 
         const running = poll.start();
@@ -282,7 +283,7 @@ describe(`sandboxPoll`, () => {
         expect(read).toHaveBeenCalledTimes(1);
 
         writeLanded();
-        await vi.advanceTimersByTimeAsync(1_000);
+        await advanceTimersByTimeAsync(1_000);
         expect(read).toHaveBeenCalledTimes(2);
 
         running.dispose();
@@ -291,32 +292,32 @@ describe(`sandboxPoll`, () => {
     // A run writing a result file per story, a publish rewriting a staging tree: one logical event, many frames. The
     // widest badge scan in the workspace must not be re-run per frame.
     it(`coalesces a burst of writes into one read`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         const { api, writeLanded } = fakeApi({ watching: true });
-        const read = vi.fn(async () => `answer`);
+        const read = mock(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 600_000, immediate: false, initial: () => ``, read });
 
         const running = poll.start();
         for (let frame = 0; frame < 5; frame++) {
             writeLanded();
-            await vi.advanceTimersByTimeAsync(50);
+            await advanceTimersByTimeAsync(50);
         }
-        await vi.advanceTimersByTimeAsync(1_000);
+        await advanceTimersByTimeAsync(1_000);
 
         expect(read).toHaveBeenCalledTimes(1);
         running.dispose();
     });
 
     it(`stops listening for writes when the extension is disposed`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         const { api, writeLanded, watchers } = fakeApi({ watching: true });
-        const read = vi.fn(async () => `answer`);
+        const read = mock(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 600_000, immediate: false, initial: () => ``, read });
 
         poll.start().dispose();
         expect(watchers()).toBe(0);
         writeLanded();
-        await vi.advanceTimersByTimeAsync(1_000);
+        await advanceTimersByTimeAsync(1_000);
 
         expect(read).not.toHaveBeenCalled();
     });
@@ -324,13 +325,13 @@ describe(`sandboxPoll`, () => {
     // An extension may declare `engines.intentic` wider than the release that added the channel, so the SDK can find
     // itself on a host without it. A slower badge is the right degradation; a poll that fails to start is not.
     it(`still runs on its timer on a host that cannot announce file writes`, async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         const { api } = fakeApi();
-        const read = vi.fn(async () => `answer`);
+        const read = mock(async () => `answer`);
         const poll = sandboxPoll({ host: () => api, everyMs: 1_000, immediate: false, initial: () => ``, read });
 
         const running = poll.start();
-        await vi.advanceTimersByTimeAsync(2_500);
+        await advanceTimersByTimeAsync(2_500);
 
         expect(read).toHaveBeenCalledTimes(2);
         running.dispose();

@@ -1,10 +1,10 @@
-// @vitest-environment jsdom
 // The Word redline end to end: two documents built in code, parsed by docx-preview, aligned, and drawn into a DOM
 // with the marks the viewer's CSS keys on. Lives here rather than in the extension for the reason viewers.test.ts
 // does: the extension has no DOM in its own runner.
+import "@intentic/testing/dom";
 import { anchorsOf, compareDocx } from "@intentic/ext-viewers/docx-compare";
 import { docxBytes } from "@intentic/ext-viewers/testing";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 
 let host: HTMLElement | undefined;
 const mount = (): HTMLElement => {

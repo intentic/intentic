@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { curlLine, GATE_WAIT_S, gatePath, githubStep } from "./gateSnippets";
 
 /* The snippets are the one part of this feature that runs somewhere we cannot see: inside a stranger's pipeline, pasted once and read never. */

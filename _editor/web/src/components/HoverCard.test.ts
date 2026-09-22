@@ -1,15 +1,15 @@
-// @vitest-environment jsdom
 // The card two surfaces share (the chat tab strip, the Changes panel's origin chips), driven through the real
 // component since the rules worth pinning are invisible to a caller: placement relative to the anchor, declining
 // to open on content that says nothing, dropping a message that only repeats the title, and drawing a prompt's
 // pictures at the card's full width rather than inside its padding.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import HoverCard from "./HoverCard.vue";
 
 // The card only asks for a path's bytes and draws what comes back; the fetch is stubbed so its produced `src` is
 // what the test reads.
-vi.mock(`../features/chat/drafts/attachmentPreviews`, () => ({ attachmentPreview: (path: string) => `blob:${path}` }));
+mock.module(`../features/chat/drafts/attachmentPreviews`, () => ({ attachmentPreview: (path: string) => `blob:${path}` }));
 
 // show() measures `event.currentTarget`, so the anchor must be a live element; since jsdom lays nothing out, a
 // placement test hands in the box the anchor would have had.

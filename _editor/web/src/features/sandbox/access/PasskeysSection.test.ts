@@ -1,8 +1,9 @@
-// @vitest-environment jsdom
 // The Passkeys group on the Access tab: whose passkeys are listed, how one is added (and the upgraded session kept),
 // and the owner's require switch with the recovery codes it hands out once.
+import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -11,14 +12,14 @@ import { IconStub } from "@intentic/ui/testing";
 const OWN = { id: `own-1`, email: `owner@example.com`, label: `work laptop`, rpId: `app.test`, createdAt: Date.parse(`2026-09-01T00:00:00Z`), backedUp: true };
 const THEIRS = { id: `member-1`, email: `member@example.com`, label: `phone`, rpId: `app.test`, createdAt: Date.parse(`2026-09-02T00:00:00Z`), backedUp: false };
 
-const state = vi.hoisted(() => ({
+const state = hoisted(() => ({
     list: { passkeys: [] as unknown[], required: false, recovery: undefined as { remaining: number } | undefined },
     calls: [] as { path: string; init?: RequestInit }[],
     adopted: [] as unknown[],
     supported: true,
 }));
 
-vi.mock(`../client/sandboxClient`, () => ({
+mock.module(`../client/sandboxClient`, () => ({
     sandboxJson: async (path: string, init?: RequestInit) => {
         state.calls.push({ path, init });
         if (path === `/system/passkeys` && init === undefined) {
@@ -37,14 +38,14 @@ vi.mock(`../client/sandboxClient`, () => ({
         return { ok: true };
     },
 }));
-vi.mock(`../session/passkeySignIn`, () => ({
+mock.module(`../session/passkeySignIn`, () => ({
     browserSupportsPasskeys: () => state.supported,
     createPasskey: async (options: { challenge: string }) => ({ id: `new`, rawId: `new`, type: `public-key`, response: { clientDataJSON: options.challenge, attestationObject: `AA` } }),
 }));
-vi.mock(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ adoptSession: (...args: unknown[]) => state.adopted.push(args) }) }));
-vi.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+mock.module(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ adoptSession: (...args: unknown[]) => state.adopted.push(args) }) }));
+mock.module(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const role = ref<`owner` | `viewer`>(`owner`);
-vi.mock(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, role: role.value })) }) }));
+mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ active: computed(() => ({ id: `s1`, name: `work`, role: role.value })) }) }));
 
 const { default: PasskeysSection } = await import("./PasskeysSection.vue");
 

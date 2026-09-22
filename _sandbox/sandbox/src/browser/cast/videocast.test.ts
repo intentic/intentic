@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { readCodec, splitAccessUnits } from "./videocast.js";
 
 // Bytes between ffmpeg and a browser's decoder, checked as a pure function since a malformed split has no natural error

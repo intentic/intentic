@@ -16,7 +16,7 @@
         "watch": "esbuild src/app/environments/environment.local.ts --bundle --target=es2024 --define:__API_URL__=\\\"${API_URL:-https://localhost:6480}\\\" --outfile=public/assets/js/env.js && vite",
         "build": "vite build && esbuild src/app/environments/environment.deployment.ts --bundle --minify --target=es2024 --outfile=dist/assets/js/env.js",
         "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh web",
-        "test": "vitest run",
+        "test": "suites",
         "typecheck": "node --max-old-space-size=4096 ./node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.app.json"
     },
     "dependencies": {
@@ -70,20 +70,20 @@
         "zod": "catalog:"
     },
     "devDependencies": {
+        "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@tailwindcss/vite": "catalog:",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@vitejs/plugin-vue": "catalog:",
         "@xterm/headless": "catalog:",
-        "esbuild": "catalog:",
         "dompurify": "catalog:",
-        "mermaid": "catalog:",
+        "esbuild": "catalog:",
         "fast-check": "catalog:",
-        "jsdom": "catalog:",
+        "mermaid": "catalog:",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
-        "vitest": "catalog:",
         "vue-tsc": "catalog:"
     }
 }

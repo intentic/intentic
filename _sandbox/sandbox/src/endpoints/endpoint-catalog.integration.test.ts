@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createEndpointCatalog } from "./endpoint-catalog.js";
 
 // The id is the routing key, never rewritten; a local model's id is often the weights file's absolute path, which the

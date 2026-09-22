@@ -1,11 +1,12 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { FlyError } from "./fly.js";
 import { mintAppDeployToken, organizationIdOf, revokeDeployToken } from "./fly-tokens.js";
 
 // The one GraphQL endpoint, stubbed: every call records what it sent and answers what the case says.
 const stubGraphql = (answer: (body: { query: string; variables: Record<string, unknown> }) => unknown, status = 200) => {
     const calls: { query: string; variables: Record<string, unknown>; headers: Record<string, string> }[] = [];
-    vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
+    stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
         expect(String(url)).toBe(`https://api.fly.io/graphql`);
         const body = JSON.parse(String(init?.body)) as { query: string; variables: Record<string, unknown> };
         calls.push({ ...body, headers: init?.headers as Record<string, string> });
@@ -15,7 +16,7 @@ const stubGraphql = (answer: (body: { query: string; variables: Record<string, u
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe(`fly deploy tokens`, () => {
@@ -56,7 +57,7 @@ describe(`fly deploy tokens`, () => {
     it(`surfaces Fly's own refusal, and a rejected credential as the config's fault`, async () => {
         stubGraphql(() => ({ errors: [{ message: `Not authorized to access this app` }] }));
         await expect(organizationIdOf(`fly`, `intentic`)).rejects.toThrow(`Fly refused: Not authorized to access this app`);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
         stubGraphql(() => ({}), 401);
         await expect(organizationIdOf(`bad`, `intentic`)).rejects.toThrow(FlyError);
     });

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { componentStem, frameworksOf, IDIOM_RULES, idiomRule, UI_FRAMEWORKS, usesTailwind } from "./stack.js";
 
 // Guards shell-safety of interpolated patterns (checked unattended on a remote machine) and the stem normalizer below

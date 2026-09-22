@@ -1,19 +1,21 @@
-// @vitest-environment jsdom
 // ensureProviderCommands: asks for the given provider (not just Claude), retries while the list is
 // empty, never re-reads once populated, and drops an answer that arrives after a sandbox switch.
-import { beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 
-const reads = vi.hoisted(() => ({ paths: [] as string[], answer: [] as { name: string; description: string }[] }));
+const reads = hoisted(() => ({ paths: [] as string[], answer: [] as { name: string; description: string }[] }));
 
 // The one seam under test; other paths answering empty stand in for a mounted chat's other fetches.
-vi.mock(`../../sandbox/client/sandboxClient`, () => ({
-    sandboxJson: vi.fn((path: string) => {
+mock.module(`../../sandbox/client/sandboxClient`, () => ({
+    sandboxJson: mock((path: string) => {
         reads.paths.push(path);
         return path.startsWith(`/agent/commands`) ? Promise.resolve({ commands: reads.answer }) : Promise.resolve({});
     }),
-    sandboxRequest: vi.fn(() => Promise.resolve(new Response(`{}`))),
-    sandboxRequestVia: vi.fn(() => Promise.resolve(new Response(`{}`))),
-    sandboxError: vi.fn(() => new Error(`unused`)),
+    sandboxRequest: mock(() => Promise.resolve(new Response(`{}`))),
+    sandboxRequestVia: mock(() => Promise.resolve(new Response(`{}`))),
+    sandboxError: mock(() => new Error(`unused`)),
+    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 
 import { providerCommands } from "./providerCatalog";

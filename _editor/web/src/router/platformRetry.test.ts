@@ -1,10 +1,11 @@
 // The way off the "Intentic isn't reachable" screen. The screen is a URL, so a reader can reload it, restore the tab
 // or open it from history — each of those has to ask the platform again, or the URL itself becomes the trap.
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createMemoryHistory, createRouter, type RouteLocationNormalized } from "vue-router";
 
-const refresh = vi.fn<() => Promise<{ id: string } | null>>();
-vi.mock(`../features/auth/useAuth`, () => ({ useAuth: () => ({ refresh }) }));
+const refresh = mock<() => Promise<{ id: string } | null>>();
+mock.module(`../features/auth/useAuth`, () => ({ useAuth: () => ({ refresh }) }));
 
 const { ENTRY_BUDGET_MS, platformRetry, retryOnEntry } = await import(`./platformRetry`);
 
@@ -16,7 +17,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 it(`sends a reader back to the page they were headed for`, async () => {
@@ -64,11 +65,11 @@ it(`draws the screen when a reload finds the platform still down`, async () => {
 // A platform that accepts the connection and then says nothing is the worst case for a boot: nothing to render until
 // it answers. The screen is drawn on the budget instead, and keeps asking from there.
 it(`draws the screen rather than holding the boot while the platform hangs`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     refresh.mockReturnValue(new Promise(() => undefined));
 
     const entering = retryOnEntry(entry(`/workspace`));
-    await vi.advanceTimersByTimeAsync(ENTRY_BUDGET_MS);
+    await advanceTimersByTimeAsync(ENTRY_BUDGET_MS);
 
     await expect(entering).resolves.toBe(true);
 });

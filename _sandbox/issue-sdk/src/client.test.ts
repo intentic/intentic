@@ -1,5 +1,6 @@
 import type { IssuePublicConfig } from "@intentic/sandbox-contract";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock, jest } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createClient, type IssueClient } from "./client.js";
 
 // Mocks fetch throughout; pins the shape of each request and that no failure ever reaches the page.
@@ -24,9 +25,9 @@ interface Sent {
 // A daemon that answers the config fetch and records every report POSTed to it.
 const fakeDaemon = (over: Partial<IssuePublicConfig> = {}, reportStatus = 200): Sent[] => {
     const sent: Sent[] = [];
-    vi.stubGlobal(
+    stubGlobal(
         "fetch",
-        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        mock(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = String(input);
             if (url.endsWith("/config")) {
                 return new Response(JSON.stringify({ ...CONFIG, ...over }), { status: 200 });
@@ -48,8 +49,8 @@ let client: IssueClient | undefined;
 afterEach(() => {
     client?.stop();
     client = undefined;
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+    unstubAllGlobals();
+    jest.restoreAllMocks();
 });
 
 const started = async (options: Partial<Parameters<typeof createClient>[0]> = {}): Promise<IssueClient> => {
@@ -124,9 +125,9 @@ test("a refused or failed send resolves quietly", async () => {
     const live = await started();
     await expect(live.captureException(new Error("boom"))).resolves.toBeUndefined();
 
-    vi.stubGlobal(
+    stubGlobal(
         "fetch",
-        vi.fn(async () => {
+        mock(async () => {
             throw new TypeError("Failed to fetch");
         }),
     );
@@ -153,6 +154,9 @@ test("an ingest key rides every report when the host set one", async () => {
 });
 
 test("a sandbox that refuses the config fails the start, with the daemon's own sentence", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "origin not allowed" }), { status: 403 })));
+    stubGlobal(
+        "fetch",
+        mock(async () => new Response(JSON.stringify({ error: "origin not allowed" }), { status: 403 })),
+    );
     await expect(createClient({ automationId: "bugs", base: "https://sandbox.example" })).rejects.toThrow("origin not allowed");
 });

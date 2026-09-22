@@ -1,5 +1,6 @@
 import pino from "pino";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync, realYield } from "@intentic/testing/bun";
 import { createInvariantRegistry, type InvariantCheck } from "./invariants.js";
 
 /* The registry's own promise: a check may say the daemon is wrong, and a check may itself be wrong, and NEITHER of those is allowed to reach the daemon. */
@@ -36,17 +37,19 @@ test("a check that throws on its own account is recorded as broken, not as evide
 });
 
 test("a check that never settles is bounded rather than holding the pass open", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const registry = createInvariantRegistry(silent());
         registry.register("agents", [check("hangs", () => new Promise<void>(() => {}))]);
 
         const pass = registry.run("sweep");
-        await vi.advanceTimersByTimeAsync(6_000);
+        // The pass arms its deadline a microtask later, so the timer must exist before the clock moves past it.
+        await realYield();
+        await advanceTimersByTimeAsync(6_000);
 
         expect((await pass)[0]).toMatchObject({ owner: "agents", broken: true });
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -60,13 +63,13 @@ test("a passing check reports nothing", async () => {
 
 test("only the checks armed for the moment run", async () => {
     const registry = createInvariantRegistry(silent());
-    const atBoot = vi.fn();
-    const atSweep = vi.fn();
+    const atBoot = mock();
+    const atSweep = mock();
     registry.register("platform", [check("boot-only", atBoot, ["boot"]), check("sweep-only", atSweep, ["sweep"])]);
 
     await registry.run("boot");
 
-    expect(atBoot).toHaveBeenCalledOnce();
+    expect(atBoot).toHaveBeenCalledTimes(1);
     expect(atSweep).not.toHaveBeenCalled();
 });
 

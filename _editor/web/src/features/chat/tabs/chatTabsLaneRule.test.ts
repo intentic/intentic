@@ -1,9 +1,10 @@
-// @vitest-environment jsdom
 // The switcher places a chat by the fleet's rule (laneOf), never one of its own. Regression: a conversation the
 // fleet can't card was placed by message count instead — a refused turn read as Finished while the board's card
 // for the same standing reads Attention, and every freshly opened chat passed through Active on its way to its
 // real lane.
-import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { laneOf, NO_ATTENTION, standingFrom } from "../../agents/fleet/agentStatus";
@@ -17,7 +18,7 @@ import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
 });
 

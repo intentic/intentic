@@ -1,14 +1,16 @@
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 
 /* Compact (100%) is the shipped default — no attribute, scale 1. */
 
-const load = () => import("@intentic/ui/text-size");
+// Storage and the anti-flash attribute are read once, at module scope, so each case needs its own evaluation of it.
+const TEXT_SIZE = import.meta.resolve("@intentic/ui/text-size");
+const load = () => freshImport<typeof import("@intentic/ui/text-size")>(TEXT_SIZE, import.meta.url);
 
 beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute(`data-text-size`);
-    vi.resetModules();
 });
 
 describe(`useTextSize`, () => {

@@ -7,19 +7,30 @@ import type { LoopbackHost } from "./port-scan.js";
 
 export type PortScheme = "http" | "https";
 
+// One deadline per dial, held on a timer rather than on the socket: a socket that accepts and never speaks leaves
+// the request's own timeout unarmed, and the panel list asking must never wait on it.
+const PROBE_TIMEOUT_MS = 1_500;
+
 // Whether `scheme` answers at all; any HTTP status counts, since a watch server is up before it has routes. TLS
 // verification is off for self-signed dev certs.
 export const answers = (scheme: PortScheme, port: number, host: LoopbackHost = "127.0.0.1"): Promise<boolean> =>
     new Promise((resolve) => {
         const request = (scheme === "https" ? https : http).request(
-            { host, port, method: "GET", path: "/", timeout: 1500, rejectUnauthorized: false },
+            { host, port, method: "GET", path: "/", rejectUnauthorized: false },
             (response) => {
                 response.resume();
+                clearTimeout(deadline);
                 resolve(true);
             },
         );
-        request.on("timeout", () => request.destroy());
-        request.on("error", () => resolve(false));
+        const deadline = setTimeout(() => {
+            request.destroy();
+            resolve(false);
+        }, PROBE_TIMEOUT_MS);
+        request.on("error", () => {
+            clearTimeout(deadline);
+            resolve(false);
+        });
         request.end();
     });
 

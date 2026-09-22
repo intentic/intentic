@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // Pins that nginx.conf's response headers don't break Google sign-in: Referrer-Policy must still send Origin to
 // accounts.google.com's cross-origin request, and CSP must still allow its script and frame.

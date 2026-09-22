@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { findUrls, type RowAt, runStart } from "./terminalUrlLinks";
 
 // Pins the stitching rules on plain, right-trimmed row strings, exactly what the buffer-cell read hands the scan.

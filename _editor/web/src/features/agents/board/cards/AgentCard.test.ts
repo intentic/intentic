@@ -1,9 +1,10 @@
-// @vitest-environment jsdom
 // jsdom: the subject is what the card renders (a press, a stat), not something readable off the code.
 // Pins that the Land button reports progress only for its own action (not archiving), and that the stat row shows a
 // fact as soon as the agent has it, not only when a turn ends.
+import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import type { PendingAction } from "../laneDrop";
 import type { FleetAgent } from "../../fleet/useAgents-fleet";
@@ -14,7 +15,7 @@ import { IconStub } from "@intentic/ui/testing";
 // The words in a composer reach a card through this lookup, never through the card's own fields; stubbed so the
 // naming case below needs no tab store.
 const UNSENT_WORDS = `rename the landing page hero`;
-vi.mock("../../../chat/panel/useChat-strip", () => ({
+mock.module("../../../chat/panel/useChat-strip", () => ({
     chatStrip: { value: { active: undefined, panes: [], tabs: [] } },
     chatPreviews: { value: { a4: `rename the landing page hero` } },
     previewOf: (id: string) => (id === `a4` ? `rename the landing page hero` : undefined),
@@ -96,7 +97,7 @@ const mount = (
 afterEach(() => {
     app?.unmount();
     app = undefined;
-    vi.useRealTimers();
+    jest.useRealTimers();
     document.body.innerHTML = ``;
     providerAccounts.value = NO_ACCOUNTS;
 });
@@ -182,7 +183,7 @@ const body = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`.s
 // A land takes minutes, and for all of them the transcript is the one thing a reader wants from the card. Nothing
 // about it contends with the land, so the dim says "busy", not "gone": the card still opens.
 it(`opens the chat on a click while a land holds the card`, () => {
-    const opened = vi.fn();
+    const opened = mock();
     const el = mount(ready(`landing`), `land`, { onOpen: opened });
     // jsdom runs a dispatched click whatever `pointer-events` says, so the class is what witnesses it in a browser.
     expect(body(el).className).toContain(`opacity-60`);
@@ -220,7 +221,7 @@ it(`offers a close on a card the daemon has no entry for: the only way it can le
 });
 
 it(`asks the board to close it on the press`, () => {
-    const closed = vi.fn();
+    const closed = mock();
     buttonLabelled(mount(refused(), undefined, { onClose: closed }), `Close agent`)!.click();
     expect(closed).toHaveBeenCalledTimes(1);
 });
@@ -290,12 +291,12 @@ it(`draws a sent turn the daemon has not filed as work in flight, with what this
 });
 
 it(`ticks its own elapsed readout without a clock prop from the transition group`, async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000);
+    jest.useFakeTimers();
+    jest.setSystemTime(1_000);
     const card = mount(starting());
     expect(card.textContent).toContain(`0s`);
 
-    await vi.advanceTimersByTimeAsync(1_000);
+    await advanceTimersByTimeAsync(1_000);
     await nextTick();
     expect(card.textContent).toContain(`1s`);
 });
@@ -362,7 +363,7 @@ it(`offers the way back, and reports its own press`, () => {
 });
 
 it(`asks the board to re-land on the press`, () => {
-    const relanded = vi.fn();
+    const relanded = mock();
     relandButton(mount(discarded(0, 4), undefined, { onReland: relanded }))!.click();
     expect(relanded).toHaveBeenCalledTimes(1);
 });
@@ -402,7 +403,7 @@ it(`offers the way off a watch beside the readout that announces it`, () => {
 });
 
 it(`asks the board to disarm on the press`, () => {
-    const unwatched = vi.fn();
+    const unwatched = mock();
     stopWatchButton(mount(watching(), undefined, { onUnwatch: unwatched }))!.click();
     expect(unwatched).toHaveBeenCalledTimes(1);
 });

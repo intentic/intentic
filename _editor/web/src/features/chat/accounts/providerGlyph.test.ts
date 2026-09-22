@@ -1,6 +1,6 @@
 /* WHAT A PROVIDER WITH NO BRAND MARK LOOKS LIKE. */
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { beforeEach, expect, it } from "vitest";
+import { it, expect, beforeEach } from "bun:test";
 import { endpointProviders, providerGlyph } from "./providerCatalog";
 
 beforeEach(() => {

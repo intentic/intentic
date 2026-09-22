@@ -1,5 +1,5 @@
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { nestSiblings } from "./fileNesting";
 
 const file = (name: string): WorkspaceTreeEntry => ({ name, path: name, type: `file` });

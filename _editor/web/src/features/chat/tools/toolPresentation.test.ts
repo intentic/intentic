@@ -1,5 +1,5 @@
 import { PLAN_DOCUMENTS_DIR } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
 import { numberedFileBody, present, TEXT_CAP } from "./toolPresentation";
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { chordFromEvent, formatChord, matchesChord } from "./keybindings";
 
 // Pins the keymap's two invariants: `Mod` resolves to the right physical key per platform, and

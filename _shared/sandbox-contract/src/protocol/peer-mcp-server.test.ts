@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { z } from "zod";
 import { createMcpServer, type McpAuditEntry, textResult, tool } from "./peer-mcp-server.js";
 
@@ -37,7 +37,8 @@ const build = () => {
     return { handle, audits };
 };
 
-const call = (name: string, args: Record<string, unknown>, allowed = true) => build().handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, { allowed });
+const call = (name: string, args: Record<string, unknown>, allowed = true) =>
+    build().handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, { allowed });
 
 test("initialize names the peer and its build; ping answers empty; an unknown method is a JSON-RPC error", async () => {
     const { handle } = build();
@@ -52,7 +53,9 @@ test("initialize names the peer and its build; ping answers empty; an unknown me
 
 test("tools/list publishes each tool's schema as JSON Schema, without the dialect line", async () => {
     const { handle } = build();
-    const listed = (await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { allowed: true })) as { result: { tools: { name: string; inputSchema: Record<string, unknown> }[] } };
+    const listed = (await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { allowed: true })) as {
+        result: { tools: { name: string; inputSchema: Record<string, unknown> }[] };
+    };
     expect(listed.result.tools.map((entry) => entry.name)).toEqual(["echo", "fail"]);
     expect(listed.result.tools[0]?.inputSchema).toMatchObject({ type: "object", properties: { text: { type: "string" } } });
     expect(listed.result.tools[0]?.inputSchema).not.toHaveProperty("$schema");
@@ -77,7 +80,11 @@ test("a tuple is published without the boolean `items` llama.cpp's grammar conve
 });
 
 test("a call is checked against the same schema, and a bad argument is a readable result, not a fault", async () => {
-    expect(await call("echo", { text: "hi" })).toEqual({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "hi" }], isError: false } });
+    expect(await call("echo", { text: "hi" })).toEqual({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: "hi" }], isError: false },
+    });
     const bad = (await call("echo", { text: "" })) as { result: { content: { text: string }[]; isError: boolean } };
     expect(bad.result.isError).toBe(true);
     expect(bad.result.content[0]?.text).toContain("text");
@@ -93,8 +100,11 @@ test("a tool this peer does not have answers in the peer's own words", async () 
 
 test("a thrown refusal and a thrown failure are both results, and the audit line says which", async () => {
     const { handle, audits } = build();
-    const refused = (await handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "echo", arguments: { text: "hi" } } }, { allowed: false })) as {
-        result: { content: { text: string }[]; isError: boolean };
+    const refused = (await handle(
+        { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "echo", arguments: { text: "hi" } } },
+        { allowed: false },
+    )) as {
+        result: { content: { type: string; text: string }[]; isError: boolean };
     };
     expect(refused.result).toEqual({ content: [{ type: "text", text: "the switch is off" }], isError: true });
     await handle({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "fail", arguments: {} } }, { allowed: true });
@@ -117,5 +127,7 @@ test("an audit log that cannot be written never fails the answer", async () => {
             throw new Error("disk full");
         },
     });
-    expect(await handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "hi", arguments: {} } }, undefined)).toMatchObject({ result: { isError: false } });
+    expect(await handle({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "hi", arguments: {} } }, undefined)).toMatchObject({
+        result: { isError: false },
+    });
 });

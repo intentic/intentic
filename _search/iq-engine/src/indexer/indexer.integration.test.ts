@@ -1,7 +1,7 @@
 import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { test, expect, beforeAll, afterAll } from "bun:test";
 import type { SqliteDb } from "@intentic/base/sqlite";
 import { openIndex } from "../store/db.js";
 import { listFiles } from "../store/index-store.js";

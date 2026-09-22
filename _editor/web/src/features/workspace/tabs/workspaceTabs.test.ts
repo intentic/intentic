@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { closeTabs, type EditorStrip, emptyPane, moveTab, normalizeStrip, paneOf, placeTab, type WorkspaceTab } from "./workspaceTabs";
 
 const file = (path: string): WorkspaceTab => ({ kind: `file`, id: path, path });

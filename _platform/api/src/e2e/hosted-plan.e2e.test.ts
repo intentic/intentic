@@ -11,7 +11,8 @@ import { type FakeStripe, startFakeStripe } from "@intentic/testing/stripe-fake"
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { Logger } from "pino";
 import { GenericContainer, type StartedTestContainer, Wait } from "testcontainers";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, mock } from "bun:test";
+import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import type { Auth } from "../auth.js";
 import { configSchema, type Config } from "../config.js";
@@ -41,7 +42,7 @@ const STRIPE = { secretKey: `sk_test_e2e_hosted_plan`, webhookSecret: `whsec_e2e
 const ENTRY = PAID_TIERS[0] as HostedTier;
 const MONTHLY_HOURS = FREE_TIER.monthlyHours;
 
-const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
+const logger = { child: () => logger, info: mock(), warn: mock(), error: mock(), debug: mock() } as unknown as Logger;
 
 const configFor = (databaseUrl: string, stripeApiUrl: string): Config =>
     configSchema.parse({
@@ -133,7 +134,7 @@ const seedHostedSandbox = async (prisma: PrismaClient, fly: FakeFly, owner: Pers
 /* The shared in-memory Fly (@intentic/testing/fly-fake), with everything else — Stripe's stand-in, the api's own
  * requests — passed through to the real fetch it replaced. A local stub answered `started` to every call, which is
  * fine until a case moves a machine and needs the volume it landed on to exist. */
-const stubFly = (): FakeFly => installFakeFly((name, value) => vi.stubGlobal(name, value), { passThrough: globalThis.fetch });
+const stubFly = (): FakeFly => installFakeFly((name, value) => stubGlobal(name, value), { passThrough: globalThis.fetch });
 
 type App = ReturnType<typeof createApp>[`app`];
 
@@ -187,7 +188,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
     const state = (as?: Person) => rpc<HostedPlanState>(app, `/hosted-plan`, { as });
     const offer = () => rpc<HostedOffer>(app, `/sandbox/hosted-offer`, { as: alice });
-    const wake = () => rpc<Refusal & { ok?: boolean }>(app, `/sandbox/wake`, { as: alice, method: `POST`, body: { sandboxId } });
+    const wake = () => rpc<Partial<Refusal> & { ok?: boolean }>(app, `/sandbox/wake`, { as: alice, method: `POST`, body: { sandboxId } });
     const planRow = () => prisma.hostedPlan.findUnique({ where: { userId: alice.id } });
 
     /* THE DAEMON, PLAYED BY THE SUITE. A machine changed under a sandbox is finished only when the daemon says it came
@@ -199,7 +200,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
      * `lastSeenAt` mark it compares against, so an announce after it cannot be mistaken for the boot before it. The
      * seeded machine is stopped, which is what makes that start happen at all. */
     const announceOnBoot = async (): Promise<void> => {
-        await vi.waitFor(() => expect(fly.called(`POST`, `/start`).length).toBeGreaterThan(0), { timeout: 10_000, interval: 10 });
+        await waitFor(() => expect(fly.called(`POST`, `/start`).length).toBeGreaterThan(0), { timeout: 10_000, interval: 10 });
         const said = await app.request(`${API_ORIGIN}/sandbox/announce`, {
             method: `POST`,
             headers: { "content-type": `application/json`, "x-intentic-connect": connectToken },
@@ -242,7 +243,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
     });
 
     afterAll(async () => {
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
         await stripe?.close();
         await prisma?.$disconnect();
         await container?.stop();
@@ -371,7 +372,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         const call = lastCall(stripe, `POST`, `/subscriptions/${subscriptionId}`);
         expect(call?.authorized).toBe(true);
         expect(call?.params).toEqual({
-            "items[0][id]": stripe.subscriptions.get(subscriptionId)?.items[0]?.id,
+            "items[0][id]": stripe.subscriptions.get(subscriptionId)!.items[0]!.id,
             "items[0][quantity]": `2`,
             proration_behavior: `create_prorations`,
         });

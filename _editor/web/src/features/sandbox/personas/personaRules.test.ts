@@ -1,5 +1,5 @@
 import type { Persona } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { FULL_POWERS, personaSlug, personaStartDirs, personasStartingIn, powersDraftOf, storedPowers } from "./personaRules";
 
 // Rules shared by both persona-card surfaces: an id differing by a hyphen upserts a different persona, and a powers

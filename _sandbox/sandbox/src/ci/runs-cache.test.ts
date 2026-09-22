@@ -1,5 +1,5 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, jest } from "bun:test";
 import { createRunsCache } from "./runs-cache.js";
 
 const run = (over: Partial<PipelineRun> = {}): PipelineRun => ({
@@ -15,15 +15,15 @@ const run = (over: Partial<PipelineRun> = {}): PipelineRun => ({
     ...over,
 });
 
-beforeEach(() => vi.useFakeTimers());
-afterEach(() => vi.useRealTimers());
+beforeEach(() => jest.useFakeTimers());
+afterEach(() => jest.useRealTimers());
 
 test("a sweep serves within the TTL and reads stale after it", () => {
     const cache = createRunsCache(1000);
     expect(cache.sweep()).toBeUndefined();
     cache.replace([run()]);
     expect(cache.sweep()).toHaveLength(1);
-    vi.advanceTimersByTime(1001);
+    jest.advanceTimersByTime(1001);
     expect(cache.sweep()).toBeUndefined();
 });
 
@@ -36,9 +36,9 @@ test("an upsert replaces the same run in place and does NOT extend sweep freshne
         [2, "success"],
         [1, "failed"],
     ]);
-    vi.advanceTimersByTime(900);
+    jest.advanceTimersByTime(900);
     cache.upsert(run({ runId: 3, createdAt: 3000 }));
-    vi.advanceTimersByTime(200);
+    jest.advanceTimersByTime(200);
     // The upsert 100ms ago says nothing about the whole picture: the sweep is stale regardless.
     expect(cache.sweep()).toBeUndefined();
 });

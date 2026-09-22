@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { fileMembersStore } from "../auth.js";
 
 // The members file on disk: what a grant writes, and what a row the daemon would refuse reads as. The file is

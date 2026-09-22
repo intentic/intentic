@@ -1,5 +1,5 @@
 import type { Rule } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { turnEndingNote } from "./turn-ending-note.js";
 
 const command = (over: Partial<Rule> = {}): Rule => ({

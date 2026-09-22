@@ -1,5 +1,5 @@
 import type { Device } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { deviceAgentPanel } from "./deviceAgent";
 import { deviceRow } from "./deviceRows";
 

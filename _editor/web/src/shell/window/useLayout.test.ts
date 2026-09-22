@@ -1,8 +1,6 @@
-/**
- * @vitest-environment jsdom
- */
+import "@intentic/testing/dom";
 import { nextTick, ref } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 
 const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => {
     const entries = new Map<string, string>();
@@ -22,7 +20,7 @@ const session = store(`sessionStorage`);
 
 const activeSandboxId = ref<string | undefined>(`sb1`);
 
-vi.mock("../../features/sandbox/overview/activeSandbox", () => ({ activeSandboxId }));
+mock.module("../../features/sandbox/overview/activeSandbox", () => ({ activeSandboxId }));
 
 const { resetTerminalOpen, useLayout } = await import("./useLayout");
 

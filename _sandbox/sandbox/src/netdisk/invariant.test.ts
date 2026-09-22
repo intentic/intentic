@@ -1,5 +1,5 @@
 import type { Capability } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { checks } from "./invariant.js";
 import { parseMountinfo } from "./mountinfo.js";

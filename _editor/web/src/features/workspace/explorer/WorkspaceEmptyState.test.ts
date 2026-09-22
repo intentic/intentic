@@ -1,12 +1,12 @@
-// @vitest-environment jsdom
 //
 // THE ONE SILENCE THIS PANE COVERS. An empty workspace is somebody who has just finished setup and has no code in
 // yet: for them this pane is the whole product, and every way in has to be on it. The other silence — a workspace
 // with code and no file open — is the home's, and EditorPane picks between them on `empty`, so a working developer
 // closing their last tab never lands here. The failure worth a test is the newcomer offered only a file upload,
 // which is what this pane replaced.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
 import WorkspaceEmptyState from "./WorkspaceEmptyState.vue";

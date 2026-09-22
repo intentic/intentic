@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { toUrl } from "./address";
 
 // The address bar is the client's own now, so what a typed line becomes is decided here, not by an omnibox.

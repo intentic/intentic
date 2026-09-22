@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { codeLangForPath } from "@intentic/code-read";
 import { isDelimitedPath, isDocumentPath, isSpreadsheetPath, rendersAsBytes, resolveFile, TEXT_EDIT_MAX_BYTES } from "./fileType";
 

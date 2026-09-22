@@ -1,5 +1,5 @@
 import { EDGE_VERDICT_HEADER } from "@intentic/sandbox-contract";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach } from "bun:test";
 import { forgetEdgeVerdict, lastEdgeVerdict, noteEdgeVerdict } from "./edgeVerdict";
 
 // The edge's verdict reaches the connection machine through a module-level note, so what it forgets matters as much as

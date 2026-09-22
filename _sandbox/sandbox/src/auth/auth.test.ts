@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import type { ProofMethod } from "@intentic/sandbox-contract";
 import { mintOwnerTicket } from "@intentic/sandbox-contract/owner-ticket";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import {
     authorizeMaintainer,
     createAuthorizer,
@@ -56,6 +56,16 @@ const verifierFor =
         return { email };
     };
 
+// bun's `rejects` chain does not unwrap the promise for toSatisfy, so the rejection is captured and asserted on directly.
+const rejection = async (promise: Promise<unknown>): Promise<unknown> => {
+    try {
+        await promise;
+    } catch (error) {
+        return error;
+    }
+    throw new Error("expected the call to reject");
+};
+
 // The session verifier's fake: a token to the proof it was minted from, Google-proven unless the test says otherwise.
 const sessionFor =
     (map: Record<string, string>, methods: readonly ProofMethod[] = ["google"], credentialId?: string) =>
@@ -95,7 +105,12 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             owner: memOwner("a@x.com"),
             members: memMembers([{ email: "d@x.com", role: "guest", areas: ["support", "sales"] }, ...granted("m@x.com")]),
         });
-        await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({ email: "d@x.com", role: "guest", areas: ["support", "sales"], methods: ["google"] });
+        await expect(authz.authorize("tok-d", undefined)).resolves.toEqual({
+            email: "d@x.com",
+            role: "guest",
+            areas: ["support", "sales"],
+            methods: ["google"],
+        });
         await expect(authz.authorize("tok-m", undefined)).resolves.not.toHaveProperty("areas");
     });
 
@@ -143,7 +158,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
 
     test("rejects a missing bearer as an authentication failure, not Forbidden", async () => {
         const authz = createAuthorizer({ verify: verifierFor({}), owner: memOwner(), members: memMembers() });
-        await expect(authz.authorize("", undefined)).rejects.toSatisfy(
+        expect(await rejection(authz.authorize("", undefined))).toSatisfy(
             (error) => error instanceof Error && !(error instanceof ForbiddenError) && /missing bearer/.test(error.message),
         );
     });
@@ -156,7 +171,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
     test("with a connectToken, first-bind requires it (an auth failure, not Forbidden); later requests do not", async () => {
         const owner = memOwner();
         const authz = createAuthorizer({ verify: verifierFor({ "tok-a": "a@x.com" }), owner, members: memMembers(), connectToken: "secret" });
-        await expect(authz.authorize("tok-a", undefined)).rejects.toSatisfy(
+        expect(await rejection(authz.authorize("tok-a", undefined))).toSatisfy(
             (error) => error instanceof Error && !(error instanceof ForbiddenError) && /connection token/.test(error.message),
         );
         await expect(authz.authorize("tok-a", "wrong")).rejects.toThrow(/connection token/);
@@ -192,7 +207,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
             expectedOwner: "a@x.com",
         });
         // The connect-token gate runs first: a setup problem (401), not a Forbidden identity check.
-        await expect(authz.authorize("tok-b", undefined)).rejects.toSatisfy(
+        expect(await rejection(authz.authorize("tok-b", undefined))).toSatisfy(
             (error) => error instanceof Error && !(error instanceof ForbiddenError) && /connection token/.test(error.message),
         );
         // With the token present, the identity gate then rejects the wrong account as Forbidden.
@@ -208,7 +223,7 @@ describe("createAuthorizer (owner TOFU + shared access)", () => {
         });
         await expect(authz.authorizeOwner("tok-a")).resolves.toBeUndefined();
         await expect(authz.authorizeOwner("tok-m")).rejects.toBeInstanceOf(ForbiddenError);
-        await expect(authz.authorizeOwner("")).rejects.toSatisfy(
+        expect(await rejection(authz.authorizeOwner(""))).toSatisfy(
             (error) => error instanceof Error && !(error instanceof ForbiddenError) && /missing bearer/.test(error.message),
         );
     });
@@ -354,7 +369,12 @@ describe("require-passkey policy", () => {
         enrolled: async (email) => enrolled.includes(email.toLowerCase()),
         exists: async (credentialId) => existing.includes(credentialId),
     });
-    const withPolicy = (passkeys: PasskeyPolicy, sessions: Record<string, string>, methods: readonly ProofMethod[] = ["google"], credentialId?: string) =>
+    const withPolicy = (
+        passkeys: PasskeyPolicy,
+        sessions: Record<string, string>,
+        methods: readonly ProofMethod[] = ["google"],
+        credentialId?: string,
+    ) =>
         createAuthorizer({
             verify: verifierFor({ "tok-a": "a@x.com", "tok-m": "m@x.com" }),
             session: sessionFor(sessions, methods, credentialId),
@@ -370,8 +390,8 @@ describe("require-passkey policy", () => {
 
     test("on: a Google proof is refused with 428's error, saying whether the caller holds a passkey to answer with", async () => {
         const authz = withPolicy(policy(true, ["a@x.com"]), {});
-        await expect(authz.authorize("tok-a", undefined)).rejects.toSatisfy((error) => error instanceof PasskeyRequiredError && error.enrolled);
-        await expect(authz.authorize("tok-m", undefined)).rejects.toSatisfy((error) => error instanceof PasskeyRequiredError && !error.enrolled);
+        expect(await rejection(authz.authorize("tok-a", undefined))).toSatisfy((error) => error instanceof PasskeyRequiredError && error.enrolled);
+        expect(await rejection(authz.authorize("tok-m", undefined))).toSatisfy((error) => error instanceof PasskeyRequiredError && !error.enrolled);
         // Not a Forbidden: the identity is welcome, the proof is short.
         await expect(authz.authorize("tok-m", undefined)).rejects.not.toBeInstanceOf(ForbiddenError);
     });
@@ -379,7 +399,11 @@ describe("require-passkey policy", () => {
     test("on: the enrolment allowance opens the registration routes to a first passkey only", async () => {
         const authz = withPolicy(policy(true, ["a@x.com"]), {});
         // Holding none yet: the Google proof may register the first.
-        await expect(authz.authorize("tok-m", undefined, { enrolment: true })).resolves.toEqual({ email: "m@x.com", role: "collaborator", methods: ["google"] });
+        await expect(authz.authorize("tok-m", undefined, { enrolment: true })).resolves.toEqual({
+            email: "m@x.com",
+            role: "collaborator",
+            methods: ["google"],
+        });
         // Holding one: only that passkey opens the door, registration included, so a stolen Google account adds nothing.
         await expect(authz.authorize("tok-a", undefined, { enrolment: true })).rejects.toBeInstanceOf(PasskeyRequiredError);
     });
@@ -398,7 +422,11 @@ describe("require-passkey policy", () => {
             members: memMembers(),
             ownerTicket: ownerTicketVerifier(pair.publicKey.export({ type: "spki", format: "pem" }) as string, "0123456789ab"),
         });
-        const ticket = mintOwnerTicket(pair.privateKey.export({ type: "pkcs8", format: "pem" }) as string, { sandboxId: "0123456789ab", email: "a@x.com", issuedAtMs: Date.now() });
+        const ticket = mintOwnerTicket(pair.privateKey.export({ type: "pkcs8", format: "pem" }) as string, {
+            sandboxId: "0123456789ab",
+            email: "a@x.com",
+            issuedAtMs: Date.now(),
+        });
         await expect(ticketed.authorize(ticket, undefined)).rejects.toBeInstanceOf(PasskeyRequiredError);
     });
 

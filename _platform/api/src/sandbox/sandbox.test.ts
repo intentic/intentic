@@ -2,7 +2,8 @@ import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import { verifyReachabilityGrant } from "@intentic/sandbox-contract/ingress-contract";
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { call, ORPCError } from "@orpc/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { OrpcContext } from "../context.js";
 import { INGRESS_TEST_PUBLIC_KEY, testIngressConfig } from "../testing.js";
 import { RECOVERY_WINDOW_MS } from "../durations.js";
@@ -24,19 +25,19 @@ const sandboxRow = {
 };
 
 // Minimal prisma stub; each test supplies only the calls its route actually makes.
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => {
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof mock>>>) => {
     const prisma = {
         ...overrides,
-        $transaction: vi.fn((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
-        $queryRaw: vi.fn().mockResolvedValue([]),
+        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $queryRaw: mock().mockResolvedValue([]),
         sandbox: {
-            findUnique: vi.fn().mockResolvedValue({ tokenDigest: sha256Hex(`tok`) }),
-            findUniqueOrThrow: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: null }),
-            update: vi.fn().mockResolvedValue({}),
+            findUnique: mock().mockResolvedValue({ tokenDigest: sha256Hex(`tok`) }),
+            findUniqueOrThrow: mock().mockResolvedValue({ ...sandboxRow, hosted: null }),
+            update: mock().mockResolvedValue({}),
             ...overrides[`sandbox`],
         },
-        hostedCleanup: { upsert: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
-        sandboxTrash: { create: vi.fn().mockResolvedValue({}), ...overrides[`sandboxTrash`] },
+        hostedCleanup: { upsert: mock().mockResolvedValue({}), findMany: mock().mockResolvedValue([]) },
+        sandboxTrash: { create: mock().mockResolvedValue({}), ...overrides[`sandboxTrash`] },
     };
     return prisma as unknown as OrpcContext[`prisma`];
 };
@@ -53,14 +54,14 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
             hosted: { flyApiToken: `` },
         },
         user,
-        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        logger: { info: mock(), warn: mock(), error: mock() },
         // No proxy in front: the same-source address cap has nothing to read and skips itself.
         headers: new Headers(),
         ...overrides,
     }) as OrpcContext;
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 const expectOrpcCode = async (promise: Promise<unknown>, code: string) => {
@@ -78,7 +79,7 @@ describe(`sandbox routes`, () => {
     });
 
     it(`404s owner-only routes for sandboxes the caller does not own`, async () => {
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(null) } });
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(null) } });
         await expectOrpcCode(call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) }), `NOT_FOUND`);
         await expectOrpcCode(call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) }), `NOT_FOUND`);
         await expectOrpcCode(
@@ -90,8 +91,8 @@ describe(`sandbox routes`, () => {
 
     it(`attach records the owner-asserted URL and stamps lastSeenAt like an announce`, async () => {
         const daemonUrl = `https://sandbox.example.com`;
-        const update = vi.fn().mockResolvedValue({ ...sandboxRow, daemonUrl, lastSeenAt: new Date(`2026-07-26T10:00:00.000Z`) });
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
+        const update = mock().mockResolvedValue({ ...sandboxRow, daemonUrl, lastSeenAt: new Date(`2026-07-26T10:00:00.000Z`) });
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), update } });
 
         const summary = await call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl }, { context: context({ prisma }) });
         expect(update).toHaveBeenCalledWith({
@@ -104,7 +105,7 @@ describe(`sandbox routes`, () => {
     });
 
     it(`attach rejects a URL the browser could never call: http, junk, or a trailing slash`, async () => {
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: vi.fn() } });
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), update: mock() } });
         // Web app is HTTPS; an http:// daemon would be blocked as mixed content.
         await expectOrpcCode(
             call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `http://sandbox.example.com` }, { context: context({ prisma }) }),
@@ -112,8 +113,8 @@ describe(`sandbox routes`, () => {
         );
         await expectOrpcCode(call(sandboxRoutes.attach, { sandboxId: `s1`, daemonUrl: `nonsense` }, { context: context({ prisma }) }), `BAD_REQUEST`);
         // Trailing slash is normalized, not rejected: daemon calls append an absolute path.
-        const update = vi.fn().mockResolvedValue({ ...sandboxRow, daemonUrl: `https://sandbox.example.com` });
-        const normalizing = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
+        const update = mock().mockResolvedValue({ ...sandboxRow, daemonUrl: `https://sandbox.example.com` });
+        const normalizing = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), update } });
         await call(
             sandboxRoutes.attach,
             { sandboxId: `s1`, daemonUrl: `https://sandbox.example.com/` },
@@ -128,8 +129,8 @@ describe(`sandbox routes`, () => {
 
     it(`update writes only the provided fields and returns the summary with the logo`, async () => {
         const logo = `data:image/webp;base64,AA==`;
-        const update = vi.fn().mockResolvedValue({ ...sandboxRow, name: `renamed`, image: logo });
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
+        const update = mock().mockResolvedValue({ ...sandboxRow, name: `renamed`, image: logo });
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), update } });
 
         const summary = await call(sandboxRoutes.update, { sandboxId: `s1`, name: `renamed` }, { context: context({ prisma }) });
         expect(update).toHaveBeenCalledWith({ where: { id: `s1` }, data: { name: `renamed` }, include: { hosted: true } });
@@ -144,12 +145,12 @@ describe(`sandbox routes`, () => {
     });
 
     it(`maps a rejected Cloudflare token to BAD_REQUEST on zones`, async () => {
-        vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(``, { status: 403 })));
+        stubGlobal(`fetch`, () => Promise.resolve(new Response(``, { status: 403 })));
         await expectOrpcCode(call(sandboxRoutes.zones, { token: `bad-token` }, { context: context() }), `BAD_REQUEST`);
     });
 
     it(`leave drops only the caller's own grant, matched on the lowercased session email`, async () => {
-        const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
+        const deleteMany = mock().mockResolvedValue({ count: 1 });
         const prisma = fakePrisma({ sandboxMember: { deleteMany } });
 
         const result = await call(
@@ -164,9 +165,9 @@ describe(`sandbox routes`, () => {
 
     // Only ever mails the caller: there's no recipient input to abuse, and the link carries no credential.
     it(`emailSetupLink mails the caller's own address a link that resumes this sandbox`, async () => {
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, setupCode: `s3cr3t-code` }) } });
-        const sent = vi.fn().mockResolvedValue(new Response(`{}`));
-        vi.stubGlobal(`fetch`, (_url: string, init?: RequestInit) => sent(JSON.parse(String(init?.body))));
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue({ ...sandboxRow, setupCode: `s3cr3t-code` }) } });
+        const sent = mock().mockResolvedValue(new Response(`{}`));
+        stubGlobal(`fetch`, (_url: string, init?: RequestInit) => sent(JSON.parse(String(init?.body))));
         const config = { ...context().config, email: { apiKey: `re_test`, from: `intentic <no-reply@intentic.dev>` } };
 
         const result = await call(sandboxRoutes.emailSetupLink, { sandboxId: `s1` }, { context: context({ prisma, config }) });
@@ -181,9 +182,9 @@ describe(`sandbox routes`, () => {
     });
 
     it(`emailSetupLink logs the link instead of sending when email is unconfigured`, async () => {
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) } });
-        const warn = vi.fn();
-        vi.stubGlobal(`fetch`, () => {
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow) } });
+        const warn = mock();
+        stubGlobal(`fetch`, () => {
             throw new Error(`must not send`);
         });
 
@@ -201,11 +202,11 @@ describe(`sandbox routes`, () => {
 
     // Owner email is lowercased into the payload: the daemon binds that identity as owner.
     it(`setupCode signs the reachability grant into the payload, with no provider call`, async () => {
-        const update = vi.fn().mockResolvedValue(sandboxRow);
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update } });
+        const update = mock().mockResolvedValue(sandboxRow);
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), update } });
         const mixedCase = { id: `u1`, email: `Owner@Example.com`, name: `Owner`, image: null };
         // Reachability is signed in-process; a fetch here is the regression this stub catches.
-        vi.stubGlobal(`fetch`, () => {
+        stubGlobal(`fetch`, () => {
             throw new Error(`the mint must call no provider — a grant is signed in-process`);
         });
 
@@ -226,8 +227,8 @@ describe(`sandbox routes`, () => {
     // running: /setup/claim and /setup/report both find the sandbox BY its code, and the claim stamp is the only
     // evidence the wizard has that the command was ever pasted.
     it(`setupCode hands back the live code rather than rotating it, so a reload keeps the claim stamp`, async () => {
-        const first = vi.fn().mockResolvedValue(sandboxRow);
-        const firstPrisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: first } });
+        const first = mock().mockResolvedValue(sandboxRow);
+        const firstPrisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), update: first } });
         const minted = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma: firstPrisma }) });
 
         // The row as it stands after that mint, with a machine's claim already stamped on it.
@@ -238,8 +239,8 @@ describe(`sandbox routes`, () => {
             setupCodeClaimedAt: new Date(),
             setupPayload: (first.mock.calls.at(-1)![0] as { data: { setupPayload: string } }).data.setupPayload,
         };
-        const update = vi.fn().mockResolvedValue(claimed);
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(claimed), update } });
+        const update = mock().mockResolvedValue(claimed);
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(claimed), update } });
 
         const again = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma }) });
 
@@ -251,8 +252,8 @@ describe(`sandbox routes`, () => {
 
     // The other half: a code that no longer buys what the caller is asking for has to be replaced.
     it(`setupCode mints afresh once the code it holds has expired`, async () => {
-        const stale = vi.fn().mockResolvedValue(sandboxRow);
-        const stalePrisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: stale } });
+        const stale = mock().mockResolvedValue(sandboxRow);
+        const stalePrisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), update: stale } });
         const minted = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma: stalePrisma }) });
 
         const expired = {
@@ -261,8 +262,8 @@ describe(`sandbox routes`, () => {
             setupCodeExpiresAt: new Date(Date.now() - 1000),
             setupPayload: (stale.mock.calls.at(-1)![0] as { data: { setupPayload: string } }).data.setupPayload,
         };
-        const update = vi.fn().mockResolvedValue(expired);
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(expired), update } });
+        const update = mock().mockResolvedValue(expired);
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(expired), update } });
 
         const again = await call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: context({ prisma }) });
 
@@ -271,7 +272,7 @@ describe(`sandbox routes`, () => {
     });
 
     it(`setupCode 404s when this platform has no reachability fabric configured`, async () => {
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), update: vi.fn() } });
+        const prisma = fakePrisma({ sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), update: mock() } });
         const noFabric = context({ prisma });
         (noFabric.config as { ingress: { signingKey: string } }).ingress.signingKey = ``;
         await expectOrpcCode(call(sandboxRoutes.setupCode, { sandboxId: `s1` }, { context: noFabric }), `NOT_FOUND`);
@@ -279,7 +280,7 @@ describe(`sandbox routes`, () => {
 
     // Wizard needs this before drawing lanes, not after a mint 404s; same switch as setupCode.
     it(`addressOffer reports the fabric the mint requires, without minting`, async () => {
-        const prisma = fakePrisma({ sandbox: { findFirst: vi.fn(), update: vi.fn() } });
+        const prisma = fakePrisma({ sandbox: { findFirst: mock(), update: mock() } });
         expect(await call(sandboxRoutes.addressOffer, {}, { context: context({ prisma }) })).toEqual({ enabled: true });
 
         const noFabric = context({ prisma });
@@ -288,22 +289,23 @@ describe(`sandbox routes`, () => {
     });
 
     it(`delete drops the row and calls nothing: the row's absence IS the revocation`, async () => {
-        const deleteRow = vi.fn().mockResolvedValue({});
-        const trash = vi.fn().mockResolvedValue({});
-        vi.stubGlobal(`fetch`, () => {
+        const deleteRow = mock().mockResolvedValue({});
+        const trash = mock().mockResolvedValue({});
+        stubGlobal(`fetch`, () => {
             throw new Error(`delete must call no provider — revocation is the row going away`);
         });
         const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow), delete: deleteRow },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue(null) },
+            sandbox: { findFirst: mock().mockResolvedValue(sandboxRow), delete: deleteRow },
+            hostedMachine: { findUnique: mock().mockResolvedValue(null) },
             sandboxTrash: { create: trash },
         });
         const before = Date.now();
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma }) });
         const after = Date.now();
-        expect(deleteRow).toHaveBeenCalledExactlyOnceWith({ where: { id: `s1` } });
+        expect(deleteRow).toHaveBeenCalledTimes(1);
+        expect(deleteRow).toHaveBeenCalledWith({ where: { id: `s1` } });
         // The identity goes at once; what the owner can still ask for back is this row, and only until it expires.
-        expect(trash).toHaveBeenCalledOnce();
+        expect(trash).toHaveBeenCalledTimes(1);
         const { data } = trash.mock.calls[0]![0] as { data: { name: string; ownerId: string; appName: string | null; purgeAfter: Date } };
         expect(data).toMatchObject({ name: sandboxRow.name, ownerId: sandboxRow.ownerId });
         // Nothing to hold on the provider's side for a sandbox that ran on the owner's own computer.
@@ -313,7 +315,7 @@ describe(`sandbox routes`, () => {
     });
 
     it(`creates a second sandbox for an owner who already has one: there is no cap`, async () => {
-        const create = vi.fn().mockResolvedValue({ ...sandboxRow, id: `s2` });
+        const create = mock().mockResolvedValue({ ...sandboxRow, id: `s2` });
         const prisma = fakePrisma({ sandbox: { create } });
         const summary = await call(sandboxRoutes.create, { name: `second` }, { context: context({ prisma }) });
         expect(summary).toMatchObject({ id: `s2`, role: `owner` });
@@ -322,13 +324,13 @@ describe(`sandbox routes`, () => {
     // tunnelId is the key ingress registration and the DNS sweep look sandboxes up by; pinned against the shared
     // derivation, not a transcribed digest.
     it(`create stores the sandbox's derived tunnel id alongside the token's digest`, async () => {
-        const create = vi.fn().mockResolvedValue(sandboxRow);
+        const create = mock().mockResolvedValue(sandboxRow);
         const prisma = fakePrisma({ sandbox: { create } });
         await call(sandboxRoutes.create, { name: `first` }, { context: context({ prisma }) });
 
         const { data } = create.mock.calls[0]![0] as { data: { token: string; tokenDigest: string; tunnelId: string } };
         // secrets.key is empty, so the stored token is the plaintext connect token.
-        expect(data.tunnelId).toBe(sandboxIdFromToken(data.token));
+        expect(sandboxIdFromToken(data.token)).toBe(data.tunnelId);
         // Confirms tokenDigest's leading label is the tunnelId, which is what makes hostnames derivable from it.
         expect(data.tokenDigest.startsWith(data.tunnelId)).toBe(true);
     });
@@ -345,8 +347,8 @@ describe(`sandbox routes`, () => {
             secrets: { key: `` },
         } as OrpcContext[`config`];
         const prisma = fakePrisma({
-            sandbox: { findMany: vi.fn().mockResolvedValueOnce(rows) },
-            sandboxMember: { findMany: vi.fn().mockResolvedValue([]) },
+            sandbox: { findMany: mock().mockResolvedValueOnce(rows) },
+            sandboxMember: { findMany: mock().mockResolvedValue([]) },
         });
 
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma, config }) });
@@ -359,8 +361,8 @@ describe(`sandbox routes`, () => {
             secrets: { key: `` },
         } as OrpcContext[`config`];
         const prismaAgain = fakePrisma({
-            sandbox: { findMany: vi.fn().mockResolvedValueOnce(rows) },
-            sandboxMember: { findMany: vi.fn().mockResolvedValue([]) },
+            sandbox: { findMany: mock().mockResolvedValueOnce(rows) },
+            sandboxMember: { findMany: mock().mockResolvedValue([]) },
         });
         const { sandboxes: unflagged } = await call(sandboxRoutes.list, undefined, { context: context({ prisma: prismaAgain, config: tokenless }) });
         expect(unflagged.every((sandbox) => !sandbox.providedAddress)).toBe(true);
@@ -394,17 +396,17 @@ describe(`a metered owner whose month is spent`, () => {
     // `count` zero passes the slot gate, and the hour ceiling is what actually refuses.
     const spent = () =>
         fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
-            user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
-            hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
+            sandbox: { findFirst: mock().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
+            user: { findUnique: mock().mockResolvedValue({ hostedSuspendedAt: null, hostedSuspendedReason: null }) },
+            hostedPlan: { findUnique: mock().mockResolvedValue(null) },
             hostedUsage: {
-                findUnique: vi.fn().mockResolvedValue({ minutes: 40 * 60 }),
-                aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: 40 * 60 } }),
+                findUnique: mock().mockResolvedValue({ minutes: 40 * 60 }),
+                aggregate: mock().mockResolvedValue({ _sum: { minutes: 40 * 60 } }),
             },
             hostedMachine: {
-                findUnique: vi.fn().mockResolvedValue(null),
-                findMany: vi.fn().mockResolvedValue([]),
-                count: vi.fn().mockResolvedValue(0),
+                findUnique: mock().mockResolvedValue(null),
+                findMany: mock().mockResolvedValue([]),
+                count: mock().mockResolvedValue(0),
             },
         });
 
@@ -454,16 +456,16 @@ describe(`an owner whose hosted lane is suspended`, () => {
     } as unknown as OrpcContext[`config`];
 
     const suspended = () => {
-        const usage = vi.fn().mockResolvedValue({ minutes: 0 });
+        const usage = mock().mockResolvedValue({ minutes: 0 });
         const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
-            user: { findUnique: vi.fn().mockResolvedValue({ hostedSuspendedAt: new Date(), hostedSuspendedReason: `mining` }) },
-            hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
-            hostedUsage: { findUnique: usage, aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }) },
+            sandbox: { findFirst: mock().mockResolvedValue({ ...sandboxRow, hosted: { id: `h1`, appName: `app`, machineId: `m1`, wokeAt: null } }) },
+            user: { findUnique: mock().mockResolvedValue({ hostedSuspendedAt: new Date(), hostedSuspendedReason: `mining` }) },
+            hostedPlan: { findUnique: mock().mockResolvedValue(null) },
+            hostedUsage: { findUnique: usage, aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) },
             hostedMachine: {
-                findUnique: vi.fn().mockResolvedValue(null),
-                findMany: vi.fn().mockResolvedValue([]),
-                count: vi.fn().mockResolvedValue(0),
+                findUnique: mock().mockResolvedValue(null),
+                findMany: mock().mockResolvedValue([]),
+                count: mock().mockResolvedValue(0),
             },
         });
         return { prisma, usage };
@@ -501,11 +503,11 @@ describe(`an owner whose hosted lane is suspended`, () => {
 describe(`sandbox.list and the connect token`, () => {
     it(`decrypts the token onto the owner's rows and withholds it from a member's`, async () => {
         const prisma = fakePrisma({
-            sandbox: { findMany: vi.fn().mockResolvedValue([{ ...sandboxRow, hosted: null }]) },
+            sandbox: { findMany: mock().mockResolvedValue([{ ...sandboxRow, hosted: null }]) },
             sandboxMember: {
-                findMany: vi
-                    .fn()
-                    .mockResolvedValue([{ role: `viewer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, token: `theirs`, hosted: null } }]),
+                findMany: mock().mockResolvedValue([
+                    { role: `viewer`, sandbox: { ...sandboxRow, id: `s2`, ownerId: `u2`, token: `theirs`, hosted: null } },
+                ]),
             },
         });
         const { sandboxes } = await call(sandboxRoutes.list, undefined, { context: context({ prisma }) });
@@ -543,21 +545,21 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
     it(`charges the owner's month for the open stretch before the row goes`, async () => {
         const wokeAt = new Date(Date.now() - 90 * 60_000);
         const month = wokeAt.toISOString().slice(0, 7);
-        const upsert = vi.fn().mockResolvedValue({});
-        const deleteRow = vi.fn().mockResolvedValue({});
-        vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(``, { status: 202 })));
+        const upsert = mock().mockResolvedValue({});
+        const deleteRow = mock().mockResolvedValue({});
+        stubGlobal(`fetch`, () => Promise.resolve(new Response(``, { status: 202 })));
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: vi.fn().mockResolvedValue(sandboxRow),
-                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { ...hostedMachineRow, wokeAt } }),
+                findFirst: mock().mockResolvedValue(sandboxRow),
+                findUniqueOrThrow: mock().mockResolvedValue({ ...sandboxRow, hosted: { ...hostedMachineRow, wokeAt } }),
                 delete: deleteRow,
             },
             hostedMachine: {
-                findUnique: vi.fn().mockResolvedValue({ ...hostedMachineRow, wokeAt }),
-                update: vi.fn().mockResolvedValue({}),
-                delete: vi.fn().mockResolvedValue({}),
+                findUnique: mock().mockResolvedValue({ ...hostedMachineRow, wokeAt }),
+                update: mock().mockResolvedValue({}),
+                delete: mock().mockResolvedValue({}),
             },
-            hostedUsage: { upsert, aggregate: vi.fn().mockResolvedValue({ _sum: { minutes: null } }) },
+            hostedUsage: { upsert, aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) },
         });
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });
         expect(upsert).toHaveBeenCalledWith({
@@ -571,18 +573,18 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
 
     it(`stops a deleted sandbox's machine and keeps its app, so the disk is there to restore onto`, async () => {
         const calls: { method: string; url: string }[] = [];
-        vi.stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
+        stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
             calls.push({ method: init?.method ?? `GET`, url });
             return Promise.resolve(new Response(``, { status: 200 }));
         });
-        const trash = vi.fn().mockResolvedValue({});
+        const trash = mock().mockResolvedValue({});
         const prisma = fakePrisma({
             sandbox: {
-                findFirst: vi.fn().mockResolvedValue(sandboxRow),
-                findUniqueOrThrow: vi.fn().mockResolvedValue({ ...sandboxRow, hosted: { ...hostedMachineRow, wokeAt: null } }),
-                delete: vi.fn().mockResolvedValue({}),
+                findFirst: mock().mockResolvedValue(sandboxRow),
+                findUniqueOrThrow: mock().mockResolvedValue({ ...sandboxRow, hosted: { ...hostedMachineRow, wokeAt: null } }),
+                delete: mock().mockResolvedValue({}),
             },
-            hostedMachine: { findUnique: vi.fn().mockResolvedValue(hostedMachineRow), delete: vi.fn().mockResolvedValue({}) },
+            hostedMachine: { findUnique: mock().mockResolvedValue(hostedMachineRow), delete: mock().mockResolvedValue({}) },
             sandboxTrash: { create: trash },
         });
         await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });

@@ -3,16 +3,17 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./cursor-agent.js";
 import type { CursorHookService } from "./cursor-hooks.js";
 
-const create = vi.fn<(options: unknown) => Promise<unknown>>();
-const cancel = vi.fn<() => Promise<void>>();
+const create = mock<(options: unknown) => Promise<unknown>>();
+const cancel = mock<() => Promise<void>>();
 
-vi.mock("./cursor-sdk.js", () => ({
+mock.module("./cursor-sdk.js", () => ({
     CURSOR_SDK_MISSING: `missing sdk`,
     cursorSdk: async () => ({
         Agent: { create },
@@ -65,7 +66,7 @@ const agentThat = (send: (options: SendOptions) => void, wait: () => Promise<unk
 };
 
 beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     cancel.mockResolvedValue(undefined);
 });
 
@@ -76,20 +77,20 @@ test("a run that takes the turn and then says nothing at all ends as an outage r
         () => {},
         () => new Promise(() => {}),
     );
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const turn = collect(createCursorAgent(deps())(request()));
-        await vi.advanceTimersByTimeAsync(FIRST_DELTA_MS + 1);
-        vi.useRealTimers();
+        await advanceTimersByTimeAsync(FIRST_DELTA_MS + 1);
+        jest.useRealTimers();
         const events = await turn;
 
         // provider-outage is what routes it to the breaker's queue, which resumes it on the session below.
         expect(events.find((event) => event.kind === `error`)).toMatchObject({ code: `provider-outage` });
         expect(events[0]).toEqual({ kind: `session`, sessionId: `agent-stalled` });
         expect(events.at(-1)).toEqual({ kind: `done` });
-        expect(cancel).toHaveBeenCalledOnce();
+        expect(cancel).toHaveBeenCalledTimes(1);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
@@ -129,7 +130,7 @@ test("a question raised inside a tool is streamed while that tool is still waiti
         }
     })();
 
-    await vi.waitFor(() => expect(seen.map((event) => event.kind)).toContain(`question`));
+    await waitFor(() => expect(seen.map((event) => event.kind)).toContain(`question`));
     const card = seen.find((event): event is Extract<AgentEvent, { kind: `question` }> => event.kind === `question`);
     expect(card?.questions).toEqual([QUESTION]);
 
@@ -139,7 +140,7 @@ test("a question raised inside a tool is streamed while that tool is still waiti
     settleRun({ status: `success` });
     await turn;
     // The card's resolution is a pushed frame too, and the transcript replays the answered card from it.
-    expect(seen.filter((event) => event.kind === `resolved`)).toEqual([{ kind: `resolved`, requestId: card?.requestId, reply: expect.anything() }]);
+    expect(seen.filter((event) => event.kind === `resolved`)).toEqual([{ kind: `resolved`, requestId: card!.requestId, reply: expect.anything() }]);
     expect(seen.at(-1)).toEqual({ kind: `done` });
 });
 
@@ -165,15 +166,15 @@ test("an approved plan streams its executing phase on the queue the planning pha
         }
     })();
 
-    await vi.waitFor(() => expect(settle).toHaveLength(1));
+    await waitFor(() => expect(settle).toHaveLength(1));
     settle[0]?.({ status: `success` });
-    await vi.waitFor(() => expect(seen.map((event) => event.kind)).toContain(`plan`));
+    await waitFor(() => expect(seen.map((event) => event.kind)).toContain(`plan`));
     const plan = seen.find((event): event is Extract<AgentEvent, { kind: `plan` }> => event.kind === `plan`);
     // Planning holds the prose back rather than streaming it: the plan is what the phase captured.
     expect(plan?.text).toBe(`ship it`);
 
     expect(resolveRequest({ kind: `plan`, requestId: plan?.requestId ?? ``, approve: true })).toBe(`settled`);
-    await vi.waitFor(() => expect(settle).toHaveLength(2));
+    await waitFor(() => expect(settle).toHaveLength(2));
     settle[1]?.({ status: `success` });
     await turn;
 
@@ -192,18 +193,18 @@ test("a quiet stretch after the first delta is a tool call running long, and is 
         (options) => options.onDelta?.({ update: { type: `text-delta`, text: `looking` } as InteractionUpdate }),
         () => waited,
     );
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const turn = collect(createCursorAgent(deps())(request()));
-        await vi.advanceTimersByTimeAsync(FIRST_DELTA_MS * 3);
+        await advanceTimersByTimeAsync(FIRST_DELTA_MS * 3);
         expect(cancel).not.toHaveBeenCalled();
 
         settle({ status: `success` });
-        vi.useRealTimers();
+        jest.useRealTimers();
         const events = await turn;
         expect(events.some((event) => event.kind === `error`)).toBe(false);
         expect(events.at(-1)).toEqual({ kind: `done` });
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });

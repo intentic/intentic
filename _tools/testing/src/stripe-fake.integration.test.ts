@@ -1,9 +1,10 @@
 import { createHmac } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
+import { waitFor } from "./bun.js";
 import { type FakeStripe, signStripePayload, startFakeStripe } from "./stripe-fake.js";
 
 // Pins the stand-in's checkout/portal HTML pages: the platform's hermetic tier never drives them, only the browser tier
-// (_tools/e2e, no CI job) does. `integration` because it opens a real socket, not for vitest's timing budget.
+// (_tools/e2e, no CI job) does. `integration` because it opens a real socket, not for the runner's timing budget.
 
 let stripe: FakeStripe | undefined;
 
@@ -68,7 +69,7 @@ describe(`the Stripe stand-in's checkout page`, () => {
         expect(paid.headers.get(`location`)).toBe(`${RETURN}?plan=welcome`);
         expect(delivered).toEqual([]);
 
-        await expect.poll(() => delivered.length, { timeout: 5_000 }).toBe(1);
+        await waitFor(() => expect(delivered).toHaveLength(1), { timeout: 5_000 });
         expect(delivered[0]).toMatchObject({
             type: `checkout.session.completed`,
             object: { mode: `subscription`, client_reference_id: `user-1`, subscription: expect.stringMatching(/^sub_/) },
@@ -100,7 +101,7 @@ describe(`the Stripe stand-in's billing portal`, () => {
         const { stripe: fake, delivered } = await collecting();
         const url = await openCheckout(fake);
         await fetch(`${url}/pay`, { method: `POST`, redirect: `manual` });
-        await expect.poll(() => delivered.length).toBe(1);
+        await waitFor(() => expect(delivered).toHaveLength(1));
         const customerId = [...fake.customers.keys()][0] ?? ``;
         return { fake, delivered, customerId };
     };
@@ -138,7 +139,7 @@ describe(`the Stripe stand-in's test door`, () => {
         const { stripe: fake, delivered } = await collecting();
         const url = await openCheckout(fake);
         await fetch(`${url}/pay`, { method: `POST`, redirect: `manual` });
-        await expect.poll(() => delivered.length).toBe(1);
+        await waitFor(() => expect(delivered).toHaveLength(1));
         const subscriptionId = [...fake.subscriptions.keys()][0] ?? ``;
 
         const state = (await (await fetch(`${fake.origin}/__test/state`)).json()) as {

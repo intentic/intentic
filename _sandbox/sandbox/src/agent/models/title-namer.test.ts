@@ -1,12 +1,12 @@
-import { beforeEach, expect, type Mock, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, type Mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { cleanSessionTitle, nameAgentTitle, splitTitleAction } from "./title-namer.js";
 
-const ask = vi.fn<() => Promise<{ value: string }>>();
+const ask = mock<() => Promise<{ value: string }>>();
 // Whether a model is set for session titles; false means this pass must ask before spending anything.
-const modelSet = vi.fn<() => boolean>(() => true);
-vi.mock("./role-model.js", () => ({ askRoleModel: () => ask(), roleModelIsSet: async () => modelSet() }));
+const modelSet = mock<() => boolean>(() => true);
+mock.module("./role-model.js", () => ({ askRoleModel: () => ask(), roleModelIsSet: async () => modelSet() }));
 
 // Same instinct as cleanCommitSubject: an answer's wrapper is stripped rather than refusing a good name over stray
 // formatting.
@@ -90,7 +90,7 @@ beforeEach(() => {
 });
 
 test("asks nothing when no model is set for session titles", async () => {
-    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
+    const setTitle = mock<Services["agents"]["setTitle"]>();
     modelSet.mockReturnValue(false);
 
     await nameAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", "fix the auth tests");
@@ -100,7 +100,7 @@ test("asks nothing when no model is set for session titles", async () => {
 });
 
 test("names a still-derived conversation from the prompt that just opened its turn", async () => {
-    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
+    const setTitle = mock<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ value: "Fleet board broadcast · wire" });
     await nameAgentTitle(
         servicesWith({ title: "We should look at the fleet board and figure out why it…", titleSource: "derived" }, setTitle),
@@ -112,14 +112,14 @@ test("names a still-derived conversation from the prompt that just opened its tu
 
 test("leaves a conversation that already answers to a better name alone", async () => {
     // titleSource `plan` outranks a model name, skipping the call rather than paying for promoteTitle to reject it.
-    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
+    const setTitle = mock<Services["agents"]["setTitle"]>();
     await nameAgentTitle(servicesWith({ title: "Session titles · rethink", titleSource: "plan" }, setTitle), "c1", "rethink session titles");
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
 });
 
 test("a chain that never wrote a usable name leaves the derived title standing", async () => {
-    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
+    const setTitle = mock<Services["agents"]["setTitle"]>();
     ask.mockRejectedValue(new Error("gemini-3.5-flash: wrote a tool call instead of a session title"));
 
     await expect(
@@ -130,7 +130,7 @@ test("a chain that never wrote a usable name leaves the derived title standing",
 });
 
 test.each(STOLEN_TITLES)("a stored title reading %s counts as no name: the pass runs again and heals it", async (stolen) => {
-    const setTitle = vi.fn<Services["agents"]["setTitle"]>();
+    const setTitle = mock<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ value: "Auth test flakiness · fix" });
     await nameAgentTitle(servicesWith({ title: stolen, titleSource: "model" }, setTitle), "c1", "fix the auth tests");
     expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix");

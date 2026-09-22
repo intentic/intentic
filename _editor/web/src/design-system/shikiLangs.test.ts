@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { useHighlighter } from "@intentic/ui";
 import { LANGS } from "@intentic/code-read/langs";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { codeLangForPath } from "@intentic/code-read";
 
 // The grammar table's two silent-failure modes, neither visible to the compiler. `ShikiLang` types every surface that
@@ -39,5 +39,5 @@ test(`the overlay's Code block and the diff above it resolve to the same grammar
     // The card shows a proposal as a DiffView keyed by path and the approved result as <Code lang="docker">; they must
     // resolve to the same grammar.
     expect(codeLangForPath(`environment.custom.Dockerfile`)).toBe(`docker`);
-    expect(Object.keys(LANGS)).toContain(codeLangForPath(`environment.custom.Dockerfile`));
+    expect<(string | undefined)[]>(Object.keys(LANGS)).toContain(codeLangForPath(`environment.custom.Dockerfile`));
 });

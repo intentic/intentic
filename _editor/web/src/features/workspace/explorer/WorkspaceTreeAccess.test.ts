@@ -1,23 +1,31 @@
-// @vitest-environment jsdom
 // jsdom: the subject is a keystroke and its answer, a refusal in words or silence. Tests what a
 // member below the write tier sees in the explorer, not just the daemon's 403.
+import "@intentic/testing/dom";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick } from "vue";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { type App, computed, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { ACTIVE_KEY, activeSandboxId } from "../../sandbox/overview/activeSandbox";
+import * as actualSandboxClient from "../../sandbox/client/sandboxClient";
 
 globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 
 const SANDBOX = `sb-shared`;
-localStorage.setItem(`intentic.activeSandboxId`, SANDBOX);
+localStorage.setItem(ACTIVE_KEY, SANDBOX);
+// Written to the ref as well: it is read out of storage once, as its module is evaluated, which every
+// static import below has already done by the time this line runs.
+activeSandboxId.value = SANDBOX;
 
 // Records daemon calls; a refused gesture must not reach the daemon at all, not just get a 403.
-const daemon = vi.hoisted(() => ({ calls: [] as { path: string; init?: RequestInit }[] }));
-vi.mock("../../sandbox/client/sandboxClient", async (importOriginal) => {
-    const original = await importOriginal<typeof import("../../sandbox/client/sandboxClient")>();
+const daemon = hoisted(() => ({ calls: [] as { path: string; init?: RequestInit }[] }));
+// Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
+// spread the stand-in.
+const realSandboxClient = { ...actualSandboxClient };
+mock.module("../../sandbox/client/sandboxClient", () => {
     return {
-        ...original,
+        ...realSandboxClient,
         sandboxJson: async (path: string, init?: RequestInit): Promise<unknown> => {
             daemon.calls.push({ path, init });
             return { ok: true };
@@ -27,9 +35,8 @@ vi.mock("../../sandbox/client/sandboxClient", async (importOriginal) => {
 
 // Signed-in member's tier, switched per test; mocked directly since the subject is what the explorer does with it.
 // The tier that writes is `writer`, below the operating one: a collaborator is read-only in the tree.
-const role = vi.hoisted(() => ({ canWrite: false }));
-vi.mock("../../sandbox/secrets/useRole", async () => {
-    const { computed } = await import("vue");
+const role = hoisted(() => ({ canWrite: false }));
+mock.module("../../sandbox/secrets/useRole", () => {
     return {
         useRole: () => ({
             role: computed(() => (role.canWrite ? `writer` : `collaborator`)),

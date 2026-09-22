@@ -1,11 +1,11 @@
-// @vitest-environment jsdom
 // The one surface that answers "what is this chat actually told". Two promises are pinned here: the list is the
 // composition in the order the model reads it, and nothing is fetched until a reader asks — the payload is the whole
 // prompt, and a transcript that opened one per pane would pay for it every time.
+import "@intentic/testing/dom";
 import type { ConversationPrompt } from "@intentic/sandbox-contract";
 import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, ref, toValue } from "vue";
 import ChatSystemPrompt from "./ChatSystemPrompt.vue";
 
@@ -28,16 +28,16 @@ const PROMPT: ConversationPrompt = {
 let asked: { enabled?: unknown } | undefined;
 const data = ref<ConversationPrompt | undefined>(undefined);
 
-vi.mock(`../../../sandbox/client/useSandboxQuery`, () => ({
+mock.module(`../../../sandbox/client/useSandboxQuery`, () => ({
     useSandboxQuery: (options: { enabled?: unknown }) => {
         asked = options;
         return {
-            query: { data, isFetching: ref(false), isSuccess: ref(data.value !== undefined), refetch: vi.fn() },
+            query: { data, isFetching: ref(false), isSuccess: ref(data.value !== undefined), refetch: mock() },
             error: ref(undefined),
         };
     },
 }));
-vi.mock(`../../../sandbox/client/sandboxClient`, () => ({ sandboxJson: vi.fn() }));
+mock.module(`../../../sandbox/client/sandboxClient`, () => ({ sandboxJson: mock() }));
 
 let app: App | undefined;
 

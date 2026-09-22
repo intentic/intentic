@@ -1,9 +1,10 @@
-// @vitest-environment jsdom
 // Pins lane visibility as on-screen state (display, not just rendered), for a rail mounted once and never
 // remounted. Regression: `v-show` on a `v-for` over a constant list applies once at mount and freezes.
+import "@intentic/testing/dom";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../../agents/fleet/useAgents";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
@@ -15,7 +16,7 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Globals a mounted chat needs that jsdom lacks: matchMedia, window.env, ResizeObserver, scrollIntoView.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 

@@ -7,7 +7,7 @@ import {
     DeviceLocalDirSchema,
     devRebuildLogPath,
 } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { COMMAND_TIMEOUT_MS, type DeviceCommandFacts, DEVICE_COMMANDS, doorRoute, outcomeOf, streamOf, succeeded } from "./device-commands.js";
 
 // What the daemon knows when it builds a line. Only `sandboxId`, `mode`, `localDir` and `port` ever arrive from a

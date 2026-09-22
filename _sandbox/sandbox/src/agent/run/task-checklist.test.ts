@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { TaskChecklist } from "./task-checklist.js";
 
 // Every result string here is verbatim from a live 2.1.220 turn: the parser has no other contract.

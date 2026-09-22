@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { parseCpuStat, readCpuThrottle } from "./cpu-throttle.js";
 
 describe("cpu throttle", () => {

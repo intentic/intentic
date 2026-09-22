@@ -12,7 +12,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
@@ -120,7 +120,7 @@ test("a report from an allowed site is stored, grouped, and answered immediately
 
     expect(await issues.read(body.id)).toMatchObject({ count: 1, kind: "crash", origin: ORIGIN, release: "a1b2c3d", automationId: "bugs" });
     expect(appends[0]).toMatchObject({ provider: "issues", direction: "in", type: "issue.new" });
-    expect((await issues.read(body.id))?.runs).toEqual([{ conversationId: turns[0]?.conversationId, at: expect.any(Number), atCount: 1 }]);
+    expect((await issues.read(body.id))?.runs).toEqual([{ conversationId: turns[0]?.conversationId ?? "", at: expect.any(Number), atCount: 1 }]);
     expect((await issues.read(body.id))?.status).toBe("investigating");
 });
 

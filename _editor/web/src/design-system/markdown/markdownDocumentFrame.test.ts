@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
 // WHERE A MARKDOWN DOCUMENT'S EDGE COMES FROM. A document is a page, not a control, so it never wears a field frame:
 // dropped into a `ui-field-shell` on a card it draws a second border over a darker ground, which on the dark skins is
 // a hole punched in the section — card-in-card, the shape this prop exists to make unavailable. Mounted for real
 // (jsdom, plain Vue) because the whole question is what the DOM ends up holding.
-import { describe, expect, test } from "vitest";
+import "@intentic/testing/dom";
+import { describe, test, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 import { MarkdownDocument } from "@intentic/ui";
 
@@ -63,7 +63,7 @@ describe(`frame="none"`, () => {
         expect(root.querySelector(`.ui-doc-body`)).toBeNull();
         // `display: contents` on the wrapper: the surface stays a flex item of the root the caller sized.
         expect(root.firstElementChild?.className).toContain(`contents`);
-        expect(root.querySelector(`.md-editing`)?.parentElement).toBe(root.firstElementChild);
+        expect<Element | null | undefined>(root.querySelector(`.md-editing`)?.parentElement).toBe(root.firstElementChild);
         expect(footOf(root).className).not.toContain(`border-t`);
     });
 });

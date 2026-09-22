@@ -1,7 +1,5 @@
-/**
- * @vitest-environment jsdom
- */
-import { beforeEach, describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach } from "bun:test";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 
 describe(`workspaceReplaced`, () => {

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { SshExecutor, SshResult, SshSession } from "../core/ssh.js";
 import { unstubbed } from "@intentic/testing";
 import type { CloudflareApi, IngressRule } from "./cloudflare-api.js";
@@ -167,7 +167,7 @@ test("apply on an ingress-only change puts the config without restarting the run
     expect(ssh.commands.some((command) => command.includes("docker run") || command.includes("docker rm"))).toBe(false);
 });
 
-test("apply restarts the connector when its image drifted and waits until the edge reports serving", { timeout: 10_000 }, async () => {
+test("apply restarts the connector when its image drifted and waits until the edge reports serving", async () => {
     const statuses = ["down", "healthy"];
     let polls = 0;
     const ssh = fakeSsh("intentic-tunnel-tunnel-abc");
@@ -188,7 +188,7 @@ test("apply restarts the connector when its image drifted and waits until the ed
     await provider.apply(inputs, observed, ctx());
     expect(ssh.commands.some((command) => command.includes("docker run") && command.includes("--token tok-123"))).toBe(true);
     expect(polls).toBe(2);
-});
+}, { timeout: 10_000 });
 
 test("apply restarts the connector when it is not running", async () => {
     const ssh = fakeSsh();

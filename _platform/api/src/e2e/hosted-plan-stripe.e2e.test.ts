@@ -1,5 +1,6 @@
 import { e2eTier } from "@intentic/testing/e2e";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { type StripeClientConfig, type StripeGateway, stripeGateway, subscriptionIdOfEvent } from "../sandbox/hosted/hosted-plan-stripe.js";
 import { DAY_MS } from "../durations.js";
 
@@ -128,7 +129,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             };
             return events.data.map((event) => event.data.object).filter((object) => object.id === subscriptionId);
         };
-        await expect.poll(async () => (await objectsOfOurs()).length, { timeout: 30_000, interval: 2_000 }).toBeGreaterThanOrEqual(2);
+        await waitFor(async () => expect((await objectsOfOurs()).length).toBeGreaterThanOrEqual(2), { timeout: 30_000, interval: 2_000 });
         for (const object of await objectsOfOurs()) {
             // The id is all the webhook takes off an event; the state itself is read fresh.
             expect(subscriptionIdOfEvent(object)).toBe(subscriptionId);

@@ -1,5 +1,5 @@
 import { FREE_PROVIDERS, PROVIDER_SPECS } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { anythingConnected, CONNECT_LANES, firstUnmetLane, laneOfProvider, laneProviders } from "./connectLanes";
 
 /* The order a reader meets the ways in, and the rule that decides it: cost, not vendor. */

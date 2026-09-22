@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { FREE_TIER, type HostedShape, hostedTier, PAID_TIERS } from "@intentic/constants";
 import { e2eTier } from "@intentic/testing/e2e";
 import { FLY_VOLUME_LAYOUT } from "@intentic/sandbox-run/fly";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import {
     createApp,
     createMachine,

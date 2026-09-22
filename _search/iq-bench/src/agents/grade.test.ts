@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { parseClaudeStream } from "./claude.js";
 import { parseCodexStream } from "./codex.js";
 import { anchorHit, gradeAnchors } from "./grade.js";

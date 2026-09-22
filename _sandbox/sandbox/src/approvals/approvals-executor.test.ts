@@ -1,19 +1,20 @@
 import type { ActionApprovalSummary, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../composition.js";
+import * as actualDiscordPost from "./discord-post.js";
 
 // Tests when the executor wakes and which door each item goes through, both decided from the queue on disk.
 // The fake store below behaves like the real one (read, write, read back); only the two doors themselves are stubbed.
 
-const startTurn = vi.fn(async () => undefined);
-const sendDiscord = vi.fn(async () => ({ url: "https://discord.com/channels/1/2/3" }));
+const startTurn = mock(async () => undefined);
+const sendDiscord = mock(async () => ({ url: "https://discord.com/channels/1/2/3" }));
 
-vi.mock("../agent/routes/agent.routes.js", () => ({ streamAgent: vi.fn() }));
-vi.mock("../agent/run/turn/turn-resume.js", () => ({ startConversationTurn: (...args: unknown[]) => startTurn(...(args as [])) }));
-vi.mock("../system/runtime-watch.js", () => ({ publishRuntimeChange: vi.fn() }));
-vi.mock("./discord-post.js", async (importOriginal) => ({
+mock.module("../agent/routes/agent.routes.js", () => ({ streamAgent: mock() }));
+mock.module("../agent/run/turn/turn-resume.js", () => ({ startConversationTurn: (...args: unknown[]) => startTurn(...(args as [])) }));
+mock.module("../system/runtime-watch.js", () => ({ publishRuntimeChange: mock() }));
+mock.module("./discord-post.js", () => ({
     // Whether a post can go the fast way is itself under test; only the network call is replaced.
-    ...(await importOriginal<typeof import("./discord-post.js")>()),
+    ...actualDiscordPost,
     postToDiscord: (...args: unknown[]) => sendDiscord(...(args as [])),
 }));
 
@@ -63,7 +64,7 @@ const servicesWith = (...seed: ApprovalSummary[]) => {
                 { id: "travel", capabilities: [] },
             ],
         },
-        logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
+        logger: { error: mock(), warn: mock(), info: mock() },
         rows,
     } as unknown as Services & { rows: Map<string, ApprovalSummary> };
 };
@@ -90,7 +91,7 @@ test("the next wake is the soonest approved item, and there is none when nothing
 test("a due Discord post is sent by code, and never reaches an agent turn", async () => {
     const services = servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(sendDiscord).toHaveBeenCalledOnce();
+    expect(sendDiscord).toHaveBeenCalledTimes(1);
     expect(startTurn).not.toHaveBeenCalled();
     expect(services.rows.get("d")).toMatchObject({ status: "done", result: "https://discord.com/channels/1/2/3" });
 });
@@ -102,7 +103,7 @@ test("a browser-only platform gets one turn for the whole batch", async () => {
     );
     await createApprovalsExecutor(services).runDue(NOW);
     // One turn, not one per post: what a turn costs is that it exists.
-    expect(startTurn).toHaveBeenCalledOnce();
+    expect(startTurn).toHaveBeenCalledTimes(1);
     expect(turnOf(0).prompt).toContain("r1.json");
     expect(turnOf(0).prompt).toContain("r2.json");
     expect(turnOf(0).prompt).toContain(".intentic/config/approvals/");
@@ -153,7 +154,7 @@ test("a Discord post needs no persona: the daemon sends it with a stored key, no
         post({ id: "d", platform: "discord", actsAs: undefined, target: "123456789", status: "approved", scheduledAt: NOW - 1 }),
     );
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(sendDiscord).toHaveBeenCalledOnce();
+    expect(sendDiscord).toHaveBeenCalledTimes(1);
     expect(services.rows.get("d")?.status).toBe("done");
 });
 
@@ -165,7 +166,7 @@ test("a Discord post the fast path cannot carry falls back to the turn instead o
     );
     await createApprovalsExecutor(services).runDue(NOW);
     expect(sendDiscord).not.toHaveBeenCalled();
-    expect(startTurn).toHaveBeenCalledOnce();
+    expect(startTurn).toHaveBeenCalledTimes(1);
 });
 
 test("a refused Discord post lands as a failure the owner can read, not a silent drop", async () => {
@@ -180,7 +181,7 @@ test("an approved action is a turn of its own, briefed from the file and wearing
     const services = servicesWith(action({ id: "hotel", actsAs: "travel" }));
     await createApprovalsExecutor(services).runDue(NOW);
     expect(sendDiscord).not.toHaveBeenCalled();
-    expect(startTurn).toHaveBeenCalledOnce();
+    expect(startTurn).toHaveBeenCalledTimes(1);
     expect(turnOf(0).prompt).toContain("hotel.json");
     expect(turnOf(0).prompt).toContain("Book the hotel");
     expect(turnOf(0).actsAs).toBe("travel");
@@ -192,7 +193,7 @@ test("an approved action is a turn of its own, briefed from the file and wearing
 test("an action naming nobody runs with no accounts rather than failing: not every action needs a login", async () => {
     const services = servicesWith(action({ id: "chore", actsAs: undefined, summary: "Delete the stale branches" }));
     await createApprovalsExecutor(services).runDue(NOW);
-    expect(startTurn).toHaveBeenCalledOnce();
+    expect(startTurn).toHaveBeenCalledTimes(1);
     expect(turnOf(0).actsAs).toBeUndefined();
     expect(services.rows.get("chore")?.status).toBe("running");
 });
@@ -228,5 +229,5 @@ test("two passes at once cannot do the same thing twice", async () => {
     const services = servicesWith(post({ id: "d", platform: "discord", target: "123456789", status: "approved", scheduledAt: NOW - 1 }));
     const executor = createApprovalsExecutor(services);
     await Promise.all([executor.runDue(NOW), executor.runDue(NOW)]);
-    expect(sendDiscord).toHaveBeenCalledOnce();
+    expect(sendDiscord).toHaveBeenCalledTimes(1);
 });

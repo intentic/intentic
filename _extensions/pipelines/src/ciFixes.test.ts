@@ -1,5 +1,5 @@
 import { type AgentSummary, ciFixConversationId, fixAttemptId, type PipelineRun } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { branchFixes, branchKey, fixesByRun } from "./ciFixes";
 
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };

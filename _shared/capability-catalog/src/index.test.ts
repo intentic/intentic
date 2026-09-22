@@ -1,6 +1,6 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
 import { LOCAL_MODEL_INSTANT, LOCAL_MODEL_WINDOW_DEFAULT, LOCAL_MODEL_WINDOWS, LOCAL_MODELS, localModelChoice } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { CAPABILITY_CATALOG, contributionEntry } from "./index.js";
 
 // Real shapes from _extensions/connectors/intentic-extension.json, abridged to the card-relevant fields.
@@ -186,7 +186,7 @@ describe("the local model tile", () => {
             expect(option.label).toMatch(/\d+k · \d+ GB/);
         }
         expect(field("context")?.default).toBe(LOCAL_MODEL_WINDOW_DEFAULT);
-        expect(LOCAL_MODEL_WINDOWS).toContain(field("context")?.default);
+        expect<readonly unknown[]>(LOCAL_MODEL_WINDOWS).toContain(field("context")?.default);
     });
 
     // The smallest rung a full agent turn fits in, per the contract; under it, downloads and serves a useless model.

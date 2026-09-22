@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { parse } from "vue/compiler-sfc";
 
 const ROOT = repoRoot(import.meta.url);

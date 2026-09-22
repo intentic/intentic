@@ -1,4 +1,5 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { ref } from "vue";
 import { usePushNotifications } from "./usePushNotifications";
 
@@ -6,10 +7,10 @@ import { usePushNotifications } from "./usePushNotifications";
 // never be reached again, or blaming the sandbox for a decision the browser made.
 
 const reachable = ref(true);
-vi.mock(`../features/sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
+mock.module(`../features/sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
 
-const sandboxJson = vi.fn();
-vi.mock(`../features/sandbox/client/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
+const sandboxJson = mock();
+mock.module(`../features/sandbox/client/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
 
 // Two valid uncompressed P-256 points (0x04 || X || Y), base64url: only their bytes matter here.
 const KEY_A = `B${`A`.repeat(85)}Q`;
@@ -29,27 +30,27 @@ const rawKey = (base64Url: string): ArrayBuffer => {
 const subscription = (endpoint: string, key: string) => ({
     endpoint,
     options: { applicationServerKey: rawKey(key) },
-    unsubscribe: vi.fn(async () => true),
+    unsubscribe: mock(async () => true),
     toJSON: () => ({ endpoint, keys: { p256dh: `p256dh`, auth: `auth` } }),
 });
 
-const manager = { getSubscription: vi.fn(), subscribe: vi.fn() };
+const manager = { getSubscription: mock(), subscribe: mock() };
 
 // Tests run in the node environment, so the browser surface the composable feature-detects has to be stood up by hand,
 // including `window`, which `supported()` probes for PushManager and Notification.
 const stubBrowser = (permission: NotificationPermission, brave: boolean): void => {
     const notification = { permission, requestPermission: async () => permission };
-    vi.stubGlobal(`navigator`, {
-        serviceWorker: { register: vi.fn(async () => ({ pushManager: manager })) },
+    stubGlobal(`navigator`, {
+        serviceWorker: { register: mock(async () => ({ pushManager: manager })) },
         ...(brave ? { brave: { isBrave: async () => true } } : {}),
     });
-    vi.stubGlobal(`Notification`, notification);
+    stubGlobal(`Notification`, notification);
     // `supported()` only probes for the names, so a placeholder value is enough for PushManager.
-    vi.stubGlobal(`window`, { PushManager: {}, Notification: notification });
+    stubGlobal(`window`, { PushManager: {}, Notification: notification });
 };
 
 beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
     reachable.value = true;
     manager.getSubscription.mockResolvedValue(null);
     sandboxJson.mockImplementation(async (path: string) =>
@@ -117,12 +118,12 @@ test(`the state is read again once the daemon comes online, not only on mount`, 
     reachable.value = false;
 
     const push = usePushNotifications();
-    await vi.waitFor(() => expect(sandboxJson).not.toHaveBeenCalled());
+    await waitFor(() => expect(sandboxJson).not.toHaveBeenCalled());
     expect(push.state.value).toBe(`off`);
 
     reachable.value = true;
 
-    await vi.waitFor(() => expect(push.state.value).toBe(`on`));
+    await waitFor(() => expect(push.state.value).toBe(`on`));
 });
 
 test(`a stale read cannot overwrite the toggle the user just moved`, async () => {
@@ -139,7 +140,7 @@ test(`a stale read cannot overwrite the toggle the user just moved`, async () =>
     await push.enable();
     expect(push.state.value).toBe(`on`);
 
-    await vi.waitFor(() => expect(push.state.value).toBe(`on`));
+    await waitFor(() => expect(push.state.value).toBe(`on`));
 });
 
 test(`refresh reports "off" for a subscription bound to a superseded key`, async () => {

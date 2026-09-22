@@ -1,5 +1,6 @@
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, jest } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { TranscriptClock } from "./transcriptClock";
 import type { AttachEntry, AttachHead } from "../run/turnStream";
 
@@ -24,14 +25,14 @@ let frames: FrameRequestCallback[] = [];
 
 beforeEach(() => {
     // The clock also arms a fallback timer per tick; faking timers keeps one from firing into a finished test.
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     frames = [];
-    vi.stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => frames.push(callback));
+    stubGlobal(`requestAnimationFrame`, (callback: FrameRequestCallback): number => frames.push(callback));
 });
 
 afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.useRealTimers();
+    unstubAllGlobals();
+    jest.useRealTimers();
 });
 
 // One paint only: frames scheduled during the tick wait for the next call to this.

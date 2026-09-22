@@ -1,7 +1,7 @@
 // Which providers read as one thing: the model picker's lane and the Usage tab's filter pill must
 // agree. The ledger's case is harder, since it outlives deleted cards.
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { beforeEach, expect, it } from "vitest";
+import { it, expect, beforeEach } from "bun:test";
 import {
     endpointProviders,
     isLocalModelProvider,

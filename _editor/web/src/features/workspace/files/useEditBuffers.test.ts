@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import { resetEditBuffers, useEditBuffers } from "./useEditBuffers";
 
 // The contract FileViewer's non-destructive re-read relies on: after a save, baseline == on-disk text, so the

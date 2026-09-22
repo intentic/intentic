@@ -1,10 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { Conversation } from "../../session/conversation";
 import { clampEffort, effortsFor } from "./effortScale";
 import { providerModels } from "../../accounts/providerCatalog";
 
 // Nothing here sends a turn; stubbed only so importing Conversation doesn't pull in the daemon client.
-vi.mock("../../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
+// Every name the graph imports from the daemon client, since bun links an ESM import against exactly what this
+// factory returns; nothing here calls any of them.
+mock.module("../../../sandbox/client/sandboxClient", () => ({
+    sandboxRequest: mock(),
+    sandboxRequestVia: mock(),
+    sandboxError: mock(async () => new Error(`unused`)),
+}));
 
 // Effort scale is a property of the model, not the provider (Kimi K2.7 stops at 'high', K3 at 'max'), so a pick carried
 // across models is routinely off-scale. Every read goes through the clamp.
@@ -27,7 +33,7 @@ describe(`the effort scale`, () => {
         expect(values(effortsFor(`claude`, `claude-opus-5`, undefined))).toContain(`max`);
         expect(values(effortsFor(`claude`, `claude-opus-5`, false))).not.toContain(`max`);
 
-/* Absent and enabled settings use the same offer. */
+        /* Absent and enabled settings use the same offer. */
         expect(effortsFor(`claude`, `claude-opus-5`, undefined)).toEqual(effortsFor(`claude`, `claude-opus-5`, true));
         expect(effortsFor(`claude`, `claude-opus-5`, false)).not.toEqual(effortsFor(`claude`, `claude-opus-5`, undefined));
         // Dropping the top rung must not disturb the rest of the scale.

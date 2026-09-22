@@ -1,11 +1,12 @@
 import { createServer, type Server } from "node:http";
 import { localDaemonPort } from "@intentic/sandbox-run";
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
 import {
     candidateBases,
     createDaemonBases,
     daemonIdOf,
     type DaemonTarget,
+    type FetchImpl,
     PROMOTION_INTERVAL_MS,
     resolveDaemonBase,
 } from "./daemon-base.js";
@@ -52,7 +53,7 @@ const daemonOn = async (port: number, { answersAs, hang = false }: { answersAs?:
 };
 
 // Real fetch that records every URL asked, to prove what was NOT probed.
-const countingFetch = (): { readonly impl: typeof fetch; readonly asked: string[] } => {
+const countingFetch = (): { readonly impl: FetchImpl; readonly asked: string[] } => {
     const asked: string[] = [];
     return {
         asked,

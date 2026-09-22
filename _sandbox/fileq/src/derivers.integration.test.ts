@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
 import { archiveDeriver } from "./lib/derivers/archive.js";
 import { docxDeriver } from "./lib/derivers/docx.js";
 import { epubDeriver } from "./lib/derivers/epub.js";

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { INTERNAL_SERVERS, mcpServerOf, outsideSourceOf, sealResult } from "./outside-results.js";
 
 const ENVELOPE = /^<untrusted-content source="([^"]*)" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\2">$/;

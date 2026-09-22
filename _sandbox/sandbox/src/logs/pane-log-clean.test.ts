@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { createPaneRenderer } from "./pane-log-clean.js";
 
 // Feed raw byte chunks through the emulator and return the rendered plain text.

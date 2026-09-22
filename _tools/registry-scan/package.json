@@ -23,8 +23,8 @@
         "build": "tsgo",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
-        "test": "vitest run",
-        "test:watch": "vitest",
+        "test": "suites",
+        "test:watch": "suites --watch",
         "scan": "node dist/cli.js"
     },
     "dependencies": {
@@ -35,8 +35,8 @@
     "devDependencies": {
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "vitest": "catalog:"
+        "@typescript/native-preview": "catalog:"
     }
 }

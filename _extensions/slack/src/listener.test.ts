@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import type { SlackConnection } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
 import { createSlackListener, type SlackEnvelope, type SlackMessage, toHistory, tsToIso } from "./listener.js";
@@ -77,7 +78,7 @@ test("a plain channel message dispatches without a mention and without holding a
     const { ctx, dispatched, streamed } = fakeCtx();
     const connection = fakeConnection();
     createSlackListener(ctx, () => new Map([["app", connection]])).onEvent(connection, envelope(messageEvent()));
-    await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+    await waitFor(() => expect(dispatched).toHaveLength(1));
     expect(streamed).toEqual([]);
     expect(dispatched[0]).toMatchObject({
         provider: "slack",
@@ -103,10 +104,10 @@ test("an @mention holds the streaming dispatch and paints the reply into a threa
         },
     });
     createSlackListener(ctx, () => new Map([["app", connection]])).onEvent(connection, envelope(messageEvent({ text: `<@${SELF}> help` })));
-    await vi.waitFor(() => expect(streamed).toHaveLength(1));
+    await waitFor(() => expect(streamed).toHaveLength(1));
     expect(streamed[0]).toMatchObject({ mentioned: true });
     // The reply threads under the message that asked for it rather than landing in the channel.
-    await vi.waitFor(() => expect(posted).toHaveLength(1));
+    await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toMatchObject({ channel: "C1", thread_ts: "1755102030.001900", text: "hi" });
 });
 
@@ -117,7 +118,7 @@ test("every message in a DM counts as addressed to us", async () => {
         connection,
         envelope(messageEvent({ channel_type: "im", text: "no tag needed" })),
     );
-    await vi.waitFor(() => expect(streamed).toHaveLength(1));
+    await waitFor(() => expect(streamed).toHaveLength(1));
     expect(streamed[0]).toMatchObject({ mentioned: true });
 });
 
@@ -134,7 +135,7 @@ test("a follow-up in a thread the bot already replied in needs no re-tag", async
         connection,
         envelope(messageEvent({ thread_ts: "1.0", text: "and the other one?" })),
     );
-    await vi.waitFor(() => expect(streamed).toHaveLength(1));
+    await waitFor(() => expect(streamed).toHaveLength(1));
     expect(streamed[0]).toMatchObject({ mentioned: true, extra: { threadTs: "1.0" } });
 });
 
@@ -147,7 +148,7 @@ test("our own posts never wake us, and neither does the same message delivered t
     // Slack's message + app_mention double delivery of one human message.
     listener.onEvent(connection, envelope(messageEvent({ id: "x" } as Partial<SlackMessage>)));
     listener.onEvent(connection, envelope({ ...messageEvent(), type: "app_mention" }));
-    await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+    await waitFor(() => expect(dispatched).toHaveLength(1));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(dispatched).toHaveLength(1);
 });
@@ -181,7 +182,7 @@ test("a reaction dispatches with the message it points at as its content", async
             event_ts: "6.0",
         }),
     );
-    await vi.waitFor(() => expect(dispatched).toHaveLength(1));
+    await waitFor(() => expect(dispatched).toHaveLength(1));
     expect(dispatched[0]).toMatchObject({
         provider: "slack",
         type: "reaction_added",
@@ -205,5 +206,5 @@ test("every envelope is acked, including one we choose not to dispatch", async (
     // has to be acked exactly as a dispatched one is.
     listener.onEvent(connection, acking(messageEvent({ subtype: "channel_join" }), "join"));
     listener.onEvent(connection, acking(messageEvent({ user: SELF }), "self"));
-    await vi.waitFor(() => expect(acked).toEqual(["join", "self"]));
+    await waitFor(() => expect(acked).toEqual(["join", "self"]));
 });

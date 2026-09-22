@@ -6,9 +6,9 @@ import { STATE_DIR } from "@intentic/constants";
 import { defaultGit } from "@intentic/scaffold";
 import { type AgentTurn, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { SETTLES } from "@intentic/testing/vitest";
 import { call } from "@orpc/server";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
@@ -80,7 +80,7 @@ test("a pressed Fix starts an ordinary session: a run role, and nothing marking 
     const { routes, started } = await harness();
     const outcome = await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
     expect(outcome.conversationId).toContain("web");
-    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
     const turn = started[0]!;
     expect(turn).toMatchObject({ isolated: true, runRole: "pipeline-fix" });
     expect(turn.unattended).toBeUndefined();
@@ -90,7 +90,7 @@ test("a pressed Fix starts an ordinary session: a run role, and nothing marking 
 test("the prompt points at the host's API for a job this sandbox cannot run, never at a CLI it lacks", async () => {
     const { routes, started } = await harness();
     await call(routes.fix, { repo: "web", runId: RUN_ID }, { context });
-    await vi.waitFor(() => expect(started).toHaveLength(1), SETTLES);
+    await waitFor(() => expect(started).toHaveLength(1), SETTLES);
     const prompt = started[0]!.prompt;
     expect(prompt).toContain("github REST API");
     expect(prompt).toContain("`github` skill");

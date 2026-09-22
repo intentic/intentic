@@ -1,5 +1,5 @@
 import { type AgentProvider, providerLabel } from "@intentic/sandbox-contract";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import {
     AUTO_KEY,
     autoEntry,
@@ -18,8 +18,8 @@ import { endpointProviders, LOCAL_MODELS_GROUP } from "../accounts/providerCatal
 // during the window before catalogs adopt it.
 
 // modelPicker imports conversation.ts for the live catalogs; stub its side-effects so the import is inert.
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: vi.fn() }));
-vi.mock("./useChat-catalog", () => ({ loadProviderModels: vi.fn(async () => {}) }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: mock() }));
+mock.module("./useChat-catalog", () => ({ loadProviderModels: mock(async () => {}) }));
 
 const entry = (provider: AgentProvider, value: string, label: string): PickerEntry => ({ key: `${provider}:${value}`, provider, value, label });
 
@@ -172,7 +172,7 @@ test("opens Kimi on K3 when its live catalog also contains K2.x releases", () =>
 
 test("opens a group at one row per family: every tier visible, no version history", () => {
     expect(pickerBlocks(familyGroups(CLAUDE), `claude-opus-5`, false)).toEqual([
-        { key: `latest`, entries: [CLAUDE[0], CLAUDE[2], CLAUDE[1], CLAUDE[6]] },
+        { key: `latest`, entries: [CLAUDE[0]!, CLAUDE[2]!, CLAUDE[1]!, CLAUDE[6]!] },
     ]);
 });
 
@@ -199,7 +199,7 @@ test("expands into per-family blocks, because the intent is 'Opus, an older one'
 test("gives a single-version provider no older blocks, so a short group never grows a disclosure", () => {
     const codex = [entry(`codex`, `gpt-5.1`, `GPT 5.1`), entry(`codex`, `gpt-5`, `GPT 5`)];
 
-    expect(pickerBlocks(familyGroups(codex), undefined, false)).toEqual([{ key: `latest`, entries: [codex[0]] }]);
+    expect(pickerBlocks(familyGroups(codex), undefined, false)).toEqual([{ key: `latest`, entries: [codex[0]!] }]);
 });
 
 // Access order: every catalog is non-empty whether connected or not (the daemon serves a seed floor), so readiness must

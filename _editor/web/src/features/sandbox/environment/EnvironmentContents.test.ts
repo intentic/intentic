@@ -1,15 +1,16 @@
-// @vitest-environment jsdom
 // Pins EnvironmentContents' shape, not the inventory (contents.integration.test.ts has that): staples as a scannable
 // strip, a closed row costing one line, attribution said once.
+import "@intentic/testing/dom";
 import type { EnvironmentItem } from "@intentic/api-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, jest } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import type { ContentsGroup } from "./useEnvironmentContents";
 import { IconStub } from "@intentic/ui/testing";
 
 // The import chain touches browser globals at import time; stubbing fetch to fail mirrors an offline sandbox, so every
 // mark paints its fallback tier.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.fetch = (() => Promise.resolve({ ok: false })) as unknown as typeof globalThis.fetch;
     // jsdom ships no ResizeObserver; nothing in this suite depends on measured width.
 });
@@ -184,27 +185,27 @@ const mountLoading = (): HTMLElement => {
 };
 
 it(`draws the list's outline while it is checking installed versions`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const el = mountLoading();
-        vi.advanceTimersByTime(250);
+        jest.advanceTimersByTime(250);
         await nextTick();
         expect(el.querySelectorAll(`.skeleton`).length).toBeGreaterThan(0);
         expect(el.querySelector(`[role="status"]`)?.textContent?.trim().length ?? 0).toBeGreaterThan(0);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 
 it(`paints no outline for a probe that answers within the reveal delay`, async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const el = mountLoading();
-        vi.advanceTimersByTime(150);
+        jest.advanceTimersByTime(150);
         await nextTick();
         expect(el.querySelector(`.skeleton`)).toBeNull();
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
 });
 

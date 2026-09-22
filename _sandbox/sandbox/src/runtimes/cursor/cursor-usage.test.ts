@@ -1,5 +1,5 @@
 import { unstubbed } from "@intentic/testing";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock, jest } from "bun:test";
 import type { ObservedLimitStore, ObservedSpend } from "../../usage/observed-limits.js";
 import type { CursorCatalog } from "./cursor-catalog.js";
 import type { CursorStore, StoredCursorAccount } from "./cursor-credentials.js";
@@ -14,8 +14,8 @@ const COMPOSER = `composer-2.5`;
 
 const account = (id: string, over: Partial<StoredCursorAccount> = {}): StoredCursorAccount => ({ id, apiKey: `key-${id}`, connectedAt: 0, ...over });
 
-const deps = (accounts: readonly StoredCursorAccount[], ledger: Record<string, ObservedSpend> = {}, listed = vi.fn()) => {
-    const models = vi.fn(async () => {
+const deps = (accounts: readonly StoredCursorAccount[], ledger: Record<string, ObservedSpend> = {}, listed = mock()) => {
+    const models = mock(async () => {
         listed();
         return { models: [{ id: COMPOSER, label: `Composer 2.5` }], default: COMPOSER };
     });
@@ -39,10 +39,10 @@ test("a named account is honoured, because that choice is the user's", async () 
 
 test("a named account that has expired is nobody, not the next row along", async () => {
     const { deps: services } = deps([account(`live`), account(`dead`, { apiKeyExpiresAtMs: NOW - 1 })]);
-    vi.setSystemTime(NOW);
+    jest.setSystemTime(NOW);
 
     expect(await cursorAccountForTurn(services, `dead`, COMPOSER)).toBeUndefined();
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 // The fix for the helper that kept landing on the spent account: the model decides which credential serves.
@@ -59,7 +59,7 @@ test("a model the spent account was never refused for still runs on it, first-co
 });
 
 test("one connected account is not a choice, and no ledger is read to make it", async () => {
-    const spent = vi.fn();
+    const spent = mock();
     const services = {
         cursorStore: unstubbed<CursorStore>(`cursorStore`, { credentials: async () => [account(`only`)] }),
         cursorModels: unstubbed<CursorCatalog>(`cursorModels`, {}),
@@ -105,7 +105,7 @@ test("a source target answers with the pools it has, and says outright when it h
 
 // Every sweep of every provider reaches this target, and almost every one finds nothing on file.
 test("an account with nothing on file costs no catalog read", async () => {
-    const listed = vi.fn();
+    const listed = mock();
     const { deps: services } = deps([account(`one`)], {}, listed);
     const targets = await cursorHeadroomSource(services).targets();
     await targets[0]!.read();

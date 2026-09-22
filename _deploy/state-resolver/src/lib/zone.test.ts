@@ -1,5 +1,5 @@
 import type { IntentSet } from "@intentic/need-resolver";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 
 import { collectDomains, selectZone } from "./zone.js";
 

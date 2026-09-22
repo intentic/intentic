@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
 // The kit's segmented ring, tested from its consumer: @intentic/ui carries no test harness of its own, and the agent
 // cards here are the only thing that draws one. What is asserted is the dash geometry, because it fails silently —
 // a pattern whose total misses the circumference repeats onto the unlit rim as ghost ticks nobody can read as wrong.
+import "@intentic/testing/dom";
 import { SegmentRing } from "@intentic/ui";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 
 const SIZE = 28;

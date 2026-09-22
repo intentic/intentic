@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { workspaceRepoOf } from "./workspaceRepo";
 
 /* Repository rows derive their title and link from the same source. */

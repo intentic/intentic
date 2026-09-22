@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { includeGlobs } from "./search-globs.js";
 
 test("an empty field scopes nothing", () => {

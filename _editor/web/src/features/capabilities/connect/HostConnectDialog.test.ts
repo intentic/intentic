@@ -1,27 +1,28 @@
-// @vitest-environment jsdom
 // The command here is read and pasted onto a second machine, so a local dev build must not render it by repo path
 // (the checkout isn't on that machine). Pins that flipping the script-source switch actually rewrites the copied
 // line.
+import "@intentic/testing/dom";
 import type { Device } from "@intentic/sandbox-contract";
 import PrimeVue from "primevue/config";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { computed, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // The composable reads only the sandbox's address and a minted pairing token; everything else in the command is
 // built here.
-vi.mock(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
+mock.module(`../../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ daemonUrl: ref(`https://sandbox-abc.intentic.dev`) }) }));
 // The roster a test connects a machine into; the pair route answers a token regardless.
 const roster = ref<unknown[]>([]);
-vi.mock(`../../sandbox/client/sandboxClient`, () => ({
-    sandboxRequest: vi.fn(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: roster.value }) })),
+mock.module(`../../sandbox/client/sandboxClient`, () => ({
+    sandboxRequest: mock(async () => ({ ok: true, json: async () => ({ token: `pair-token`, hosts: roster.value }) })),
 }));
 // Taking the hostname is a rename, which is the capabilities composable's; this spies on the call rather than on the wire.
-const renamed = vi.fn(async (_: { id: string; to: string }) => ({}));
-vi.mock(`./useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
+const renamed = mock(async (_: { id: string; to: string }) => ({}));
+mock.module(`./useCapabilities`, () => ({ useCapabilities: () => ({ rename: { mutateAsync: renamed } }) }));
 // The fleet the dialog reads Windows PCs' distros off; empty unless a test connects one.
 const fleet = ref<Device[]>([]);
-vi.mock(`../../sandbox/devices/useDevices`, () => ({
+mock.module(`../../sandbox/devices/useDevices`, () => ({
     useDevices: () => ({ devices: computed(() => fleet.value), readAt: ref(0), error: ref(undefined), isLoading: ref(false), refetch: () => {} }),
 }));
 
@@ -50,7 +51,7 @@ const mount = (id = `my-desktop`, unnamed = false): { open: () => void } => {
     };
 };
 
-const onRenamed = vi.fn();
+const onRenamed = mock();
 
 const pill = (label: string): HTMLButtonElement =>
     [...document.body.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === label)!;
@@ -61,7 +62,7 @@ it(`rewrites the command between the working-tree script and the released one`, 
     mount().open();
 
     // The token is minted on open, so the command only exists after that round trip.
-    await vi.waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
+    await waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
     expect(document.body.textContent).toContain(`sh _site/site/public/scripts/device.sh`);
 
     pill(`Standard`).click();
@@ -69,7 +70,7 @@ it(`rewrites the command between the working-tree script and the released one`, 
     // Same env, fetched delivery: the form for a machine that's never seen the repo. Waited for, not ticked, since
     // Shiki highlights in a promise and Code.vue holds the previous markup mid-flight, so the new command lands a
     // microtask later than the click.
-    await vi.waitFor(() => expect(document.body.textContent).toContain(`curl -fsSL https://intentic.dev/device |`));
+    await waitFor(() => expect(document.body.textContent).toContain(`curl -fsSL https://intentic.dev/device |`));
     expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`);
     expect(document.body.textContent).not.toContain(`_site/site/public/scripts/device.sh`);
 });
@@ -98,13 +99,13 @@ it(`hands a WSL distro's command to PowerShell when the device is named for one`
     ];
     mount(`rog-wsl-arch`).open();
 
-    await vi.waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
+    await waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
     expect(document.body.textContent).toContain(`wsl -d Arch --exec sh -c "curl -fsSL https://intentic.dev/device |`);
     expect(document.body.textContent).toContain(`in PowerShell`);
 
     // The other way in stays one click away, for a reader already inside the distro.
     pill(`A terminal in the distro`).click();
-    await vi.waitFor(() => expect(document.body.textContent).not.toContain(`wsl -d Arch`));
+    await waitFor(() => expect(document.body.textContent).not.toContain(`wsl -d Arch`));
     expect(document.body.textContent).toContain(`in a terminal`);
     fleet.value = [];
 });
@@ -135,15 +136,15 @@ it(`offers a card-named machine its hostname, and renames to it on a click`, asy
     roster.value = [connected(`linux-2`, facts(`ROG-2024`, `archlinux`))];
     mount(`linux-2`, true).open();
 
-    await vi.waitFor(() => expect(document.body.textContent).toContain(`This machine calls itself`));
+    await waitFor(() => expect(document.body.textContent).toContain(`This machine calls itself`));
     // Slugged the way the Devices board joins a distro to its PC, lowercased since it becomes a tool prefix.
     expect(document.body.textContent).toContain(`rog-2024-wsl-archlinux`);
 
     pill(`Name it rog-2024-wsl-archlinux`).click();
 
-    await vi.waitFor(() => expect(renamed).toHaveBeenCalledWith({ id: `linux-2`, to: `rog-2024-wsl-archlinux` }));
+    await waitFor(() => expect(renamed).toHaveBeenCalledWith({ id: `linux-2`, to: `rog-2024-wsl-archlinux` }));
     expect(onRenamed).toHaveBeenCalledWith(`rog-2024-wsl-archlinux`);
-    await vi.waitFor(() => expect(document.body.textContent).toContain(`Named rog-2024-wsl-archlinux`));
+    await waitFor(() => expect(document.body.textContent).toContain(`Named rog-2024-wsl-archlinux`));
     expect(document.body.textContent).not.toContain(`This machine calls itself`);
     roster.value = [];
 });
@@ -154,7 +155,7 @@ it(`leaves a machine the owner named alone`, async () => {
     roster.value = [connected(`rog`, facts(`rog-2024`))];
     mount(`rog`, false).open();
 
-    await vi.waitFor(() => expect(document.body.textContent).toContain(`is connected`));
+    await waitFor(() => expect(document.body.textContent).toContain(`is connected`));
     expect(document.body.textContent).not.toContain(`This machine calls itself`);
     roster.value = [];
 });

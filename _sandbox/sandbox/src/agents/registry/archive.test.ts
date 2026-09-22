@@ -1,5 +1,5 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
 import type { AgentsStore, PersistedAgent } from "./agents-store.js";
 import { archivable, archivableByAge, archiveAgents, purgeArchived, sweepAgedAgents } from "./archive.js";
@@ -41,8 +41,8 @@ const noPresences = { of: () => undefined, refresh: async () => false, forget: (
 
 // Only `retire` and `remove` are exercised; the rest of the interface is unreachable from these paths.
 const stubWorktrees = (
-    retire = vi.fn(async () => undefined),
-    remove = vi.fn(async () => undefined),
+    retire = mock(async () => undefined),
+    remove = mock(async () => undefined),
 ): { worktrees: AgentWorktrees; retire: typeof retire; remove: typeof remove } => ({
     worktrees: { retire, remove } as unknown as AgentWorktrees,
     retire,
@@ -112,7 +112,7 @@ describe("archiveAgents", () => {
         await agents.finish("c1", 2_000);
         await agents.begin(turn({ conversationId: "c2" }), 1_000);
         await agents.finish("c2", 2_000);
-        const retire = vi.fn(async (id: string) => {
+        const retire = mock(async (id: string) => {
             if (id === "c1") {
                 throw new Error("worktree busy");
             }
@@ -149,7 +149,7 @@ describe("purgeArchived", () => {
         const { worktrees, remove } = stubWorktrees();
         await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
         const repos = agents.entry("filed")?.repos;
-        const purgeConversationState = vi.fn(async () => {});
+        const purgeConversationState = mock(async () => {});
 
         const removed = await purgeArchived({ agents, agentWorktrees: worktrees, logger, purgeConversationState });
 
@@ -182,7 +182,7 @@ describe("purgeArchived", () => {
             await agents.begin(turn({ conversationId: id }), 1_000);
             await agents.finish(id, 2_000);
         }
-        const remove = vi.fn(async (id: string) => {
+        const remove = mock(async (id: string) => {
             if (id === "a") {
                 throw new Error("repo locked");
             }

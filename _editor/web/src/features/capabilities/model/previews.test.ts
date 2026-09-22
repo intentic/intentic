@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { hostPresets, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./previews";
 
 /* The sentences the forms say back. Each is the actual thing being agreed to, so what it claims is pinned. */

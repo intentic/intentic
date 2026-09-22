@@ -14,13 +14,11 @@
     // Enumerating also pins the rule set across oxlint upgrades, so a bump cannot silently change what an agent
     // is being told to do mid-task.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    // `jest` is here for ONE rule oxlint ships only in that namespace — no-restricted-matchers, the single
-    // configurable lever over which assertions are allowed (see the test-assertion block below). Oxlint's
-    // vitest plugin is largely the jest plugin under another name, so enabling both DOUBLE-REPORTS every rule
-    // that exists in each: measured, 288 + 127 valid-expect, 88 + 88 require-to-throw-message, 33 + 33
-    // no-conditional-expect. Every jest twin of a vitest rule this file already decided about is therefore
-    // switched off next to that decision, and the vitest copy stays the one that speaks.
-    "plugins": ["typescript", "unicorn", "oxc", "import", "vue", "promise", "node", "vitest", "jest"],
+    "plugins": ["typescript", "unicorn", "oxc", "import", "vue", "promise", "node"],
+    // Oxlint's own jest/vitest rules recognise a test function only when it is imported from "vitest" or
+    // "@jest/globals", so every one of them is silent on `import { it } from "bun:test"`. Test hygiene for the
+    // suites this repo actually runs lives in the plugin below, whose rules resolve each name to its import.
+    "jsPlugins": [{ "name": "bun-test", "specifier": "./_tools/oxlint/bun-test/index.ts" }],
     "categories": {
         "correctness": "error",
         "suspicious": "error",
@@ -32,7 +30,7 @@
         "import/no-unassigned-import": [
             "error",
             {
-                "allow": ["**/*.css", "**/sandbox/client/sandboxScope", "**/sandbox/client/sandboxScreen", "**/extension-host/hostModules"]
+                "allow": ["**/*.css", "@intentic/testing/dom", "**/sandbox/client/sandboxScope", "**/sandbox/client/sandboxScreen", "**/extension-host/hostModules"]
             }
         ],
         // `_` is this repo's throwaway binding, not a private-member sigil. `_all`/`_count`/`_sum` are Prisma's
@@ -71,13 +69,6 @@
         // Sequential awaits in a loop are the intent throughout the daemon (ordered writes, rate-limited
         // fetches), not an oversight. 953 hits.
         "no-await-in-loop": "off",
-        // Miscounts the arguments of the call being asserted on: `expect(await fn(a, b, c))` reads as three
-        // arguments to expect(). 109 hits, all false. Upstream rule bug, not a codebase problem.
-        "vitest/valid-expect": "off",
-        // Wants a type parameter on every vi.fn()/vi.mock(). 977 hits of pure ceremony.
-        "vitest/require-mock-type-parameters": "off",
-        // Wants a message argument on every .toThrow(). 89 hits; the thrown type is usually the assertion.
-        "vitest/require-to-throw-message": "off",
         // The repo wraps genuine callback APIs (node-pty, watchers, Playwright events) — 189 hits, none of
         // which have an await to prefer.
         "promise/prefer-await-to-callbacks": "off",
@@ -115,10 +106,6 @@
         // resolutions of the same promise, which is a ternary: exactly one arm runs. Every site here is an
         // error path plus a success path, and settling twice is a no-op by spec anyway.
         "promise/no-multiple-resolved": "off", // 25
-        // Breaks table-driven tests, which is most of the suites here: iterate a table, branch on the shape
-        // of each row, assert the invariant that row is supposed to have. Satisfying it means duplicating
-        // the loop per branch or flattening the table into expected-value pairs — strictly worse tests.
-        "vitest/no-conditional-expect": "off", // 33
         // Aimed at `[...acc, x]` accumulation, which really is quadratic. It does not fire on that here: it
         // fires on `automations.map((a) => ({ ...a, enabled: false }))` and `[...someMap.values()]` — an
         // immutable update and an iterator being materialised. Its own help then suggests `Object.assign` or
@@ -146,13 +133,6 @@
         // Dates, undefined and Maps — exactly the things these call sites are trying to drop.
         "unicorn/prefer-structured-clone": "off", // 3
 
-        // "Title must be a string" — fired on `test(name, ...)` and `describe.skipIf(...)(tier.title, ...)`,
-        // i.e. on every parameterised suite in the repo. Requiring a literal outlaws table-driven tests, which
-        // is how most of these suites are written.
-        "vitest/valid-title": "off", // 8
-        // 100% false positives, and both in files that are not tests: it pattern-matches the word "it" followed
-        // by a parenthesis in ordinary English. `// it (transcript-search.ts), a mid-turn message ...` is prose.
-        "vitest/no-commented-out-tests": "off", // 2
         // Aimed at `.then(() => p.then(...))`. What it actually flags here is `await rename(p).catch(() => undefined)`
         // — one promise, one handler, the concise form of "try this and ignore failure". The remedy is a
         // try/catch block around a single call, which is longer and says less.
@@ -164,9 +144,10 @@
         // THE LOAD-BEARING ONE. Without it the cheapest way for an agent to make the linter quiet is a blanket
         // `oxlint-disable`, and every other rule here becomes advisory.
         "unicorn/no-abusive-eslint-disable": "error",
-        "vitest/no-focused-tests": "error",
-        "vitest/no-disabled-tests": "error",
-        "vitest/no-identical-title": "error",
+        // `.skipIf`, `.runIf` and `.todoIf` state the condition they wait on, so they are not disabled tests.
+        "bun-test/no-focused-tests": "error",
+        "bun-test/no-disabled-tests": "error",
+        "bun-test/no-identical-title": "error",
 
         // What an assertion is allowed to be
         // The only part of test QUALITY a linter can actually decide, and it is worth being precise about why
@@ -185,7 +166,7 @@
         // what the value should be. That is a shape, and a shape is something a linter can see.
         //
 /* THE BACKLOG WAS 328 AND IS NOW ZERO, so this is an ordinary rule rather than an authoring-side one. */
-        "jest/no-restricted-matchers": [
+        "bun-test/no-restricted-matchers": [
             "error",
             {
                 "toMatchSnapshot": "A snapshot records what the code DOES; a test is supposed to say what it must do. Assert the fields the behaviour is about — this repo has no snapshot tests and that is deliberate.",
@@ -198,24 +179,6 @@
                 "resolves.not.toThrow": "Only says the promise settled. Assert the value it resolved to, or the effect it had."
             }
         ],
-        // Belt and braces on the same zero: if a snapshot ever does land, it cannot be a 200-line one that
-        // nobody reads and everybody re-records. maxSize is lines.
-        "jest/no-large-snapshots": ["error", { "maxSize": 12 }],
-        // The jest twins, off
-        // Each of these is the same rule as the `vitest/` entry decided elsewhere in this file, in the other
-        // namespace. Leaving them on reports every finding twice and puts two identical diagnostics on one
-        // line, which is how a fix loop starts oscillating. The vitest copy wins in every pair, because that
-        // is the framework this repo actually runs.
-        "jest/valid-expect": "off", // twin of vitest/valid-expect, off above — 288
-        "jest/require-to-throw-message": "off", // twin, off above — 88
-        "jest/no-conditional-expect": "off", // twin, off above — 33
-        "jest/valid-title": "off", // twin, off above — 8
-        "jest/no-commented-out-tests": "off", // twin, off above — 2
-        "jest/expect-expect": "off", // twin of the configured vitest/expect-expect below — 8
-        "jest/no-focused-tests": "off", // twin of the enabled vitest rule above
-        "jest/no-disabled-tests": "off", // twin
-        "jest/no-identical-title": "off", // twin
-        "jest/no-standalone-expect": "off", // twin
 
         // Type honesty (no checker needed)
         "typescript/no-empty-object-type": "error",
@@ -407,13 +370,13 @@
         // carried them is gone. Anything added here in future that main does not yet satisfy belongs in the
         // same shape: off, with its count, and a note saying who enforces it in the meantime.
         // Kept for the half that pays: `import { type X }` → `import type { X }`, which it autofixes. Its
-        // `disallowTypeAnnotations` half is off — that bans `typeof import("node:child_process")`, which is
-        // vitest's own documented idiom for typing `importOriginal<>()` inside a vi.mock factory, and has no
-        // top-level-import equivalent because the whole point is to name a module's type without importing it.
+        // `disallowTypeAnnotations` half is off — that bans `typeof import("./x")`, which is how a suite types
+        // `freshImport<typeof import("./x")>()`, and has no top-level-import equivalent because the whole point is
+        // to name a module's type without importing it.
         "typescript/consistent-type-imports": ["error", { "disallowTypeAnnotations": false }],
         "no-console": ["error", { "allow": ["warn", "error"] }],
         "no-shadow": "error",
-        "vitest/expect-expect": [
+        "bun-test/expect-expect": [
             "error",
             {
                 // The default list is just `expect`, so a suite that asserts through a shared helper reads as
@@ -428,7 +391,7 @@
         "unicorn/prefer-native-coercion-functions": "error",
         "no-unsafe-optional-chaining": "error",
         "prefer-regex-literals": "error",
-        "vitest/no-standalone-expect": "error",
+        "bun-test/no-standalone-expect": "error",
         "typescript/no-explicit-any": "error",
         "unicorn/error-message": "error",
         "no-new-func": "error",
@@ -502,8 +465,8 @@
         {
             "files": ["**/*.test.ts", "**/*.integration.test.ts", "**/*.spec.ts"],
             "rules": {
-                // vi.mock() is hoisted and has to be declared above the imports it intercepts, which puts a
-                // statement between the import list and leaves this rule with nothing useful to say.
+                // A `mock.module` must run before the `await import()` of what it intercepts, so a suite's imports
+                // are split around a statement and this rule has nothing useful to say.
                 "import/first": "off",
                 // A test may hold a deliberately wrong shape to assert the code rejects it.
                 "typescript/no-explicit-any": "off",

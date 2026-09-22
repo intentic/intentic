@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock, jest } from "bun:test";
+import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import { configSchema, type Config } from "../config.js";
 import { createTrialPool } from "./trial-pool.js";
@@ -9,7 +10,7 @@ import { createTrialPool } from "./trial-pool.js";
 // The trial spends intentic's own money, so what's pinned here is what costs something when it breaks: the allowance
 // actually stopping a caller, a refused key failing over silently, and an unserved turn not being billed.
 
-const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
+const logger = { child: () => logger, info: mock(), warn: mock(), error: mock(), debug: mock() } as unknown as Logger;
 
 const baseConfig = configSchema.parse({
     database: { url: `postgres://x`, poolMax: 10 },
@@ -38,14 +39,14 @@ const fakePrisma = ({ used }: Counters = {}) => {
     let messages = used ?? 0;
     let lastModel: string | null = null;
     const trialUsage = {
-        findUnique: vi.fn(async () => (messages === 0 && lastModel === null ? null : { messages, lastModel })),
-        upsert: vi.fn(async () => {
+        findUnique: mock(async () => (messages === 0 && lastModel === null ? null : { messages, lastModel })),
+        upsert: mock(async () => {
             messages += 1;
             return { messages, lastModel };
         }),
         // One `update` mock serves both the refund (decrement) and the served-model write (sets a name); branches on
         // the payload so a test can't pass by triggering the wrong one.
-        update: vi.fn(async ({ data }: { data: { lastModel?: string } }) => {
+        update: mock(async ({ data }: { data: { lastModel?: string } }) => {
             if (typeof data.lastModel === `string`) {
                 lastModel = data.lastModel;
                 return { messages, lastModel };
@@ -53,11 +54,11 @@ const fakePrisma = ({ used }: Counters = {}) => {
             messages -= 1;
             return { messages, lastModel };
         }),
-        updateMany: vi.fn(async () => ({ count: 0 })),
+        updateMany: mock(async () => ({ count: 0 })),
     };
     const prisma = {
         sandbox: {
-            findUnique: vi.fn(async ({ where }: { where: { tokenDigest: string } }) =>
+            findUnique: mock(async ({ where }: { where: { tokenDigest: string } }) =>
                 where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null,
             ),
         },
@@ -100,22 +101,22 @@ describe("the free trial", () => {
 
     it("spends one message per turn and passes the upstream answer straight through", async () => {
         const { prisma, spent } = fakePrisma();
-        const fetchFn = vi.fn(async () => new Response(`{"choices":[]}`, { status: 200, headers: { "content-type": `application/json` } }));
-        vi.stubGlobal(`fetch`, fetchFn);
+        const fetchFn = mock(async () => new Response(`{"choices":[]}`, { status: 200, headers: { "content-type": `application/json` } }));
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
 
         expect(response.status).toBe(200);
         expect(await response.text()).toBe(`{"choices":[]}`);
         expect(spent()).toBe(1);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it("refuses once the day's allowance is gone, and names the way forward", async () => {
         // Fixture starts at the allowance ceiling; this call is the one that should be refused.
         const { prisma } = fakePrisma({ used: 2 });
-        const fetchFn = vi.fn(async () => new Response(`{}`, { status: 200 }));
-        vi.stubGlobal(`fetch`, fetchFn);
+        const fetchFn = mock(async () => new Response(`{}`, { status: 200 }));
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
 
@@ -126,18 +127,18 @@ describe("the free trial", () => {
         expect(body.error.message).toContain(body.trial.resetsAt);
         // A refused turn must not also spend the pool.
         expect(fetchFn).not.toHaveBeenCalled();
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // Filters to just the chat POSTs: the ladder's own capability GET rides the same pool, and call-order would
     // describe that read instead.
-    const chatPosts = (fetchFn: ReturnType<typeof vi.fn>) =>
+    const chatPosts = (fetchFn: ReturnType<typeof mock>) =>
         fetchFn.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === `POST`);
 
     it("moves to the next key when one is rate-limited, rather than surfacing the refusal", async () => {
         const { prisma } = fakePrisma();
         let posts = 0;
-        const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+        const fetchFn = mock(async (_url: string, init?: RequestInit) => {
             if (init?.method !== `POST`) {
                 return new Response(`{}`, { status: 503 });
             }
@@ -146,7 +147,7 @@ describe("the free trial", () => {
                 ? new Response(`{"error":"quota"}`, { status: 429 })
                 : new Response(`{"choices":[1]}`, { status: 200, headers: { "content-type": `application/json` } });
         });
-        vi.stubGlobal(`fetch`, fetchFn);
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
 
@@ -155,13 +156,13 @@ describe("the free trial", () => {
         // Same model, next key: a refused key is failover's job, not the ladder's.
         expect(chatPosts(fetchFn)).toHaveLength(2);
         expect(chatPosts(fetchFn).every(([, init]) => JSON.parse(String((init as RequestInit).body)).model === `gemini-flash-latest`)).toBe(true);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it("gives the message back when no key could serve it on any model", async () => {
         const { prisma, spent } = fakePrisma();
-        const fetchFn = vi.fn(async () => new Response(`{}`, { status: 503 }));
-        vi.stubGlobal(`fetch`, fetchFn);
+        const fetchFn = mock(async () => new Response(`{}`, { status: 503 }));
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
 
@@ -169,13 +170,13 @@ describe("the free trial", () => {
         // Every rung tried on every key before refusing; not billed once per rung, or at all, for an unserved turn.
         expect(chatPosts(fetchFn)).toHaveLength(4);
         expect(spent()).toBe(0);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it("gives the message back when upstream rejects the model or request", async () => {
         const { prisma, spent } = fakePrisma();
-        const fetchFn = vi.fn(async () => new Response(`{"error":{"message":"model not supported"}}`, { status: 404 }));
-        vi.stubGlobal(`fetch`, fetchFn);
+        const fetchFn = mock(async () => new Response(`{"error":{"message":"model not supported"}}`, { status: 404 }));
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
 
@@ -183,14 +184,14 @@ describe("the free trial", () => {
         expect(response.status).toBe(404);
         expect(JSON.parse(await response.text())).toEqual({ error: { message: `model not supported` } });
         expect(spent()).toBe(0);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it("publishes service health from real chat traffic", async () => {
         const { prisma } = fakePrisma();
-        vi.stubGlobal(
+        stubGlobal(
             `fetch`,
-            vi.fn(async () => new Response(`{}`, { status: 503 })),
+            mock(async () => new Response(`{}`, { status: 503 })),
         );
         const app = createApp(baseConfig, prisma, logger).app;
         const headers = { authorization: `Bearer tok`, "content-type": `application/json` };
@@ -200,13 +201,13 @@ describe("the free trial", () => {
 
         expect(failed.status).toBe(502);
         expect(await status.json()).toMatchObject({ health: `unavailable`, retryAt: expect.any(String) });
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it("refunds, and does not repeat Google's billing advice, when the whole pool is rate-limited", async () => {
         const { prisma, spent } = fakePrisma();
-        const fetchFn = vi.fn(async () => new Response(`{"error":{"message":"check your plan and billing details"}}`, { status: 429 }));
-        vi.stubGlobal(`fetch`, fetchFn);
+        const fetchFn = mock(async () => new Response(`{"error":{"message":"check your plan and billing details"}}`, { status: 429 }));
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
 
@@ -216,13 +217,13 @@ describe("the free trial", () => {
         // An allowance that counts down through turns nobody served isn't an allowance.
         expect(chatPosts(fetchFn)).toHaveLength(4);
         expect(spent()).toBe(0);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // Stubs the two listing surfaces the ladder reads (the compat shim's ids-only list, and Google's own capability
     // list); chat POSTs fall through to a plain success.
     const upstream = (generateContent: readonly string[]) =>
-        vi.fn(async (url: string, init?: RequestInit) => {
+        mock(async (url: string, init?: RequestInit) => {
             if (init?.method === `POST`) {
                 return new Response(`{"choices":[]}`, { status: 200, headers: { "content-type": `application/json` } });
             }
@@ -238,7 +239,7 @@ describe("the free trial", () => {
     // impossible.
     it("publishes exactly one model, whatever the upstream lists", async () => {
         const { prisma } = fakePrisma();
-        vi.stubGlobal(
+        stubGlobal(
             `fetch`,
             upstream([`antigravity-preview-05-2026`, `deep-research-pro-preview-12`, `gemma-4-26b-a4b-it`, `gemini-flash-latest`]),
         );
@@ -250,7 +251,7 @@ describe("the free trial", () => {
             object: `list`,
             data: [{ id: `auto`, object: `model`, owned_by: `intentic-trial`, display_name: `Free trial` }],
         });
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // Constancy matters across two independent readers: the sandbox's translator writes its routing table from this
@@ -258,9 +259,9 @@ describe("the free trial", () => {
     // translator refuses.
     it("publishes the same one model when the upstream cannot be read at all", async () => {
         const { prisma } = fakePrisma();
-        vi.stubGlobal(
+        stubGlobal(
             `fetch`,
-            vi.fn(async () => new Response(`{}`, { status: 503 })),
+            mock(async () => new Response(`{}`, { status: 503 })),
         );
 
         const response = await call(configWith({ models: `` }), prisma, `/trial/v1/models`);
@@ -271,13 +272,13 @@ describe("the free trial", () => {
             object: `list`,
             data: [{ id: `auto`, object: `model`, owned_by: `intentic-trial`, display_name: `Free trial` }],
         });
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it("sends a real model upstream, never the id the caller asked for", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = upstream([`gemini-flash-latest`, `gemini-flash-lite-latest`]);
-        vi.stubGlobal(`fetch`, fetchFn);
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await call(baseConfig, prisma, `/trial/v1/chat/completions`, { method: `POST`, body: `{"model":"auto","stream":true}` });
 
@@ -286,7 +287,7 @@ describe("the free trial", () => {
         expect(JSON.parse(String(sent?.body))).toEqual({ model: `gemini-flash-latest`, stream: true });
         // The answer says which model ran; a routed trial the user can't see into is a black box.
         expect(response.headers.get(`x-intentic-trial-model`)).toBe(`gemini-flash-latest`);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // The body the sandbox's translator sends for a screenshot the agent read: Google refuses an image part outside a
@@ -294,7 +295,7 @@ describe("the free trial", () => {
     it("moves an image out of a tool result before forwarding the turn", async () => {
         const { prisma, spent } = fakePrisma();
         const fetchFn = upstream([`gemini-flash-latest`]);
-        vi.stubGlobal(`fetch`, fetchFn);
+        stubGlobal(`fetch`, fetchFn);
         const image = { type: `image_url`, image_url: { url: `data:image/png;base64,AAAA` } };
         const body = JSON.stringify({
             model: `auto`,
@@ -316,14 +317,14 @@ describe("the free trial", () => {
         // The image still reaches the model, and only from the one role that may carry it.
         expect(withImages).toHaveLength(1);
         expect(withImages.every((message) => message.role === `user`)).toBe(true);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // Quotas are per model, so Flash's window closing says nothing about Lite.
     it("falls to the next model when the first is out of quota on every key", async () => {
         const { prisma, spent } = fakePrisma();
         const asked: string[] = [];
-        const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+        const fetchFn = mock(async (_url: string, init?: RequestInit) => {
             if (init?.method !== `POST`) {
                 return new Response(
                     JSON.stringify({
@@ -341,7 +342,7 @@ describe("the free trial", () => {
                 ? new Response(`{"error":"quota"}`, { status: 429 })
                 : new Response(`{"choices":[]}`, { status: 200, headers: { "content-type": `application/json` } });
         });
-        vi.stubGlobal(`fetch`, fetchFn);
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await chat(baseConfig, prisma);
 
@@ -351,7 +352,7 @@ describe("the free trial", () => {
         expect(response.headers.get(`x-intentic-trial-model`)).toBe(`gemini-flash-lite-latest`);
         // Billed once, for the message the user actually got, not once per rung tried.
         expect(spent()).toBe(1);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // Discovery may only remove rungs we named, never add ones we didn't: a retired model stops being used without a
@@ -360,7 +361,7 @@ describe("the free trial", () => {
         const { prisma } = fakePrisma();
         // Flash is missing from the listing; only Lite remains of the ladder.
         const fetchFn = upstream([`gemini-flash-lite-latest`, `deep-research-max-preview-01`]);
-        vi.stubGlobal(`fetch`, fetchFn);
+        stubGlobal(`fetch`, fetchFn);
 
         // One app across both messages: the ladder's cache lives on the route instance, so a fresh app per request
         // would never exercise the veto.
@@ -371,7 +372,7 @@ describe("the free trial", () => {
         // First message answers from the unfiltered ladder and kicks off the capability read in the background; the
         // veto only lands on the next one.
         await send();
-        await vi.waitFor(() => expect(fetchFn.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method !== `POST`)).toBe(true));
+        await waitFor(() => expect(fetchFn.mock.calls.some(([, init]) => (init as RequestInit | undefined)?.method !== `POST`)).toBe(true));
         const before = chatPosts(fetchFn).length;
         const response = await send();
 
@@ -382,7 +383,7 @@ describe("the free trial", () => {
                 .slice(before)
                 .map(([, init]) => JSON.parse(String((init as RequestInit).body)).model),
         ).toEqual([`gemini-flash-lite-latest`]);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // Replaces the curated ladder wholesale; can't be filtered against Google's vocabulary since it's meant for ids
@@ -390,7 +391,7 @@ describe("the free trial", () => {
     it("routes to the operator's models when TRIAL_MODELS names some", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = upstream([`gemini-flash-latest`]);
-        vi.stubGlobal(`fetch`, fetchFn);
+        stubGlobal(`fetch`, fetchFn);
 
         const response = await call(configWith({ models: `my-own-model` }), prisma, `/trial/v1/chat/completions`, {
             method: `POST`,
@@ -400,13 +401,13 @@ describe("the free trial", () => {
         expect(response.status).toBe(200);
         const sent = fetchFn.mock.calls.find(([, init]) => init?.method === `POST`)?.[1];
         expect(JSON.parse(String(sent?.body))).toEqual({ model: `my-own-model` });
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it("reads a pasted `#` note as the blank setting it annotates, not as a model", async () => {
         const { prisma } = fakePrisma();
         const fetchFn = upstream([`gemini-flash-latest`]);
-        vi.stubGlobal(`fetch`, fetchFn);
+        stubGlobal(`fetch`, fetchFn);
 
         const models = `# optional allowlist; empty = whatever upstream serves`;
         const response = await call(configWith({ models }), prisma, `/trial/v1/chat/completions`, { method: `POST`, body: `{"model":"auto"}` });
@@ -415,43 +416,43 @@ describe("the free trial", () => {
         const sent = fetchFn.mock.calls.find(([, init]) => init?.method === `POST`)?.[1];
         // Falls back to the curated ladder; the comment text itself is not something any upstream would answer for.
         expect(JSON.parse(String(sent?.body))).toEqual({ model: `gemini-flash-latest` });
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // Can't ride the chat response: the sandbox's translator sits between us and drops headers, so the status poll it
     // already makes is the channel.
     it("remembers which model served, and reports it on the status read", async () => {
         const { prisma } = fakePrisma();
-        vi.stubGlobal(`fetch`, upstream([`gemini-flash-latest`]));
+        stubGlobal(`fetch`, upstream([`gemini-flash-latest`]));
 
         await chat(baseConfig, prisma);
         const status = await call(baseConfig, prisma, `/trial/status`);
 
         expect(await status.json()).toMatchObject({ servedModel: `gemini-flash-latest` });
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     // One key only, so the result can't depend on where the pool's rotation happened to start.
     it("keeps a key a pasted note was glued to", async () => {
         const { prisma } = fakePrisma();
-        const fetchFn = vi.fn(async (_url: string, init: RequestInit) =>
+        const fetchFn = mock(async (_url: string, init: RequestInit) =>
             (init.headers as Record<string, string>)[`authorization`] === `Bearer k1`
                 ? new Response(`{}`, { status: 200, headers: { "content-type": `application/json` } })
                 : new Response(`{"error":"invalid api key"}`, { status: 401, headers: { "content-type": `application/json` } }),
         );
-        vi.stubGlobal(`fetch`, fetchFn);
+        stubGlobal(`fetch`, fetchFn);
 
         const config = configWith({ keys: `k1   # comma-separated Google AI Studio keys; empty = no trial at all` });
         const response = await chat(config, prisma);
 
         expect(response.status).toBe(200);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 });
 
 describe("the free-trial key pool", () => {
     it("reports healthy when the first selected key answers", async () => {
-        const pool = createTrialPool(baseConfig, vi.fn(async () => new Response(`{}`, { status: 200 })) as unknown as typeof fetch);
+        const pool = createTrialPool(baseConfig, mock(async () => new Response(`{}`, { status: 200 })) as unknown as typeof fetch);
 
         await pool.call(`/chat/completions`, { method: `POST`, observeHealth: true });
 
@@ -459,28 +460,28 @@ describe("the free-trial key pool", () => {
     });
 
     it("times out a stuck key and advances to the next one", async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
-            const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+            const fetchFn = mock((_url: string | URL | Request, init?: RequestInit) => {
                 const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
                 return auth === `Bearer k1` ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
             });
             const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
             const pending = pool.call(`/chat/completions`, { method: `POST`, body: () => `{}`, observeHealth: true });
 
-            await vi.advanceTimersByTimeAsync(20_000);
+            await advanceTimersByTimeAsync(20_000);
 
             expect((await pending)?.response.status).toBe(200);
             expect(fetchFn).toHaveBeenCalledTimes(2);
             expect(pool.status().health).toBe(`degraded`);
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
     it("fails over on a rejected key and quarantines it for later calls", async () => {
         const auths: (string | undefined)[] = [];
-        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
             auths.push(auth);
             return new Response(`{}`, { status: auth === `Bearer k1` ? 401 : 200 });
@@ -498,7 +499,7 @@ describe("the free-trial key pool", () => {
 
     it("stops reporting degraded once the windows it was degraded for have closed", async () => {
         let clock = 1_000;
-        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
             // k1 is refused only while the clock is early; it works again once time has moved past the quarantine.
             return new Response(`{}`, { status: auth === `Bearer k1` && clock < 60_000 ? 401 : 200 });
@@ -518,7 +519,7 @@ describe("the free-trial key pool", () => {
     });
 
     it("does not read a refused capability listing as the chat path being unwell", async () => {
-        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) =>
+        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) =>
             init?.method === `GET` ? new Response(`{}`, { status: 429 }) : new Response(`{"choices":[1]}`, { status: 200 }),
         );
         const pool = createTrialPool(baseConfig, fetchFn as unknown as typeof fetch);
@@ -532,7 +533,7 @@ describe("the free-trial key pool", () => {
 
     it("keeps a key usable for another model after one model's quota refuses it", async () => {
         const attempts: { key: string; model: string }[] = [];
-        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) => {
             const key = ((init?.headers ?? {}) as Record<string, string>)[`authorization`] ?? ``;
             const model = (JSON.parse(String(init?.body)) as { model: string }).model;
             attempts.push({ key, model });
@@ -557,10 +558,10 @@ describe("the free-trial key pool", () => {
     });
 
     it("abandons a silent rung for the fallback instead of timing out on every key", async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             const attempts: string[] = [];
-            const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+            const fetchFn = mock((_url: string | URL | Request, init?: RequestInit) => {
                 const model = (JSON.parse(String(init?.body)) as { model: string }).model;
                 attempts.push(model);
                 // Silence, not a refusal — the case a per-key walk alone can't tell apart from a slow answer.
@@ -573,21 +574,21 @@ describe("the free-trial key pool", () => {
                 body: (model) => JSON.stringify({ model }),
             });
 
-            await vi.advanceTimersByTimeAsync(20_000);
+            await advanceTimersByTimeAsync(20_000);
 
             expect((await pending)?.model).toBe(`lite`);
             // One timeout only, not one per key: silence is the same fact on every credential.
             expect(attempts).toEqual([`flash`, `lite`]);
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
     it("skips the silent rung outright on the messages that follow", async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             const attempts: string[] = [];
-            const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+            const fetchFn = mock((_url: string | URL | Request, init?: RequestInit) => {
                 const model = (JSON.parse(String(init?.body)) as { model: string }).model;
                 attempts.push(model);
                 return model === `flash` ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
@@ -597,7 +598,7 @@ describe("the free-trial key pool", () => {
                 pool.call(`/chat/completions`, { method: `POST`, models: [`flash`, `lite`], body: (model) => JSON.stringify({ model }) });
 
             const first = send();
-            await vi.advanceTimersByTimeAsync(20_000);
+            await advanceTimersByTimeAsync(20_000);
             await first;
             attempts.length = 0;
             const second = await send();
@@ -606,16 +607,16 @@ describe("the free-trial key pool", () => {
             expect(second?.model).toBe(`lite`);
             expect(attempts).toEqual([`lite`]);
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
     it("tries a cooling rung again rather than refusing when no rung is left", async () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         try {
             let silent = true;
             const attempts: string[] = [];
-            const fetchFn = vi.fn((_url: string | URL | Request, init?: RequestInit) => {
+            const fetchFn = mock((_url: string | URL | Request, init?: RequestInit) => {
                 attempts.push((JSON.parse(String(init?.body)) as { model: string }).model);
                 return silent ? new Promise<Response>(() => {}) : Promise.resolve(new Response(`{"choices":[1]}`, { status: 200 }));
             });
@@ -624,7 +625,7 @@ describe("the free-trial key pool", () => {
                 pool.call(`/chat/completions`, { method: `POST`, models: [`flash`, `lite`], body: (model) => JSON.stringify({ model }) });
 
             const first = send();
-            await vi.advanceTimersByTimeAsync(60_000);
+            await advanceTimersByTimeAsync(60_000);
             await first;
             silent = false;
             attempts.length = 0;
@@ -633,14 +634,14 @@ describe("the free-trial key pool", () => {
             expect((await send())?.model).toBe(`flash`);
             expect(attempts).toEqual([`flash`]);
         } finally {
-            vi.useRealTimers();
+            jest.useRealTimers();
         }
     });
 
     it("honours Retry-After when quarantining a rate-limited key", async () => {
         let at = Date.parse(`2026-08-16T00:00:00.000Z`);
         const auths: (string | undefined)[] = [];
-        const fetchFn = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const fetchFn = mock(async (_url: string | URL | Request, init?: RequestInit) => {
             const auth = (init?.headers as Record<string, string> | undefined)?.[`authorization`];
             auths.push(auth);
             return new Response(`{}`, auth === `Bearer k1` ? { status: 429, headers: { "retry-after": `120` } } : { status: 200 });

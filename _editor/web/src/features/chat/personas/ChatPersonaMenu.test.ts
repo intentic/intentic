@@ -1,10 +1,12 @@
-// @vitest-environment jsdom
 // Pins what the picker says before a message goes: which persona speaks, whether it can reach an account, and what "no
 // persona" means on the attended side.
+import "@intentic/testing/dom";
 import type { Persona } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as vueRouterOriginal from "vue-router";
+import { RouterLinkStub } from "../../../testing/routerLinkStub";
 
 // Needs jsdom: the kit's barrel reads matchMedia at import time (its device tracker), which jsdom lacks.
 
@@ -12,9 +14,9 @@ const personas = ref<Persona[]>([]);
 const connected = ref<string[]>([]);
 // The reader's tier: a guest is offered its own personas and nothing wider.
 const isGuest = ref(false);
-vi.mock(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
+mock.module(`../../sandbox/secrets/useRole`, () => ({ useRole: () => ({ isGuest }) }));
 
-vi.mock(`../../sandbox/personas/usePersonas`, () => ({
+mock.module(`../../sandbox/personas/usePersonas`, () => ({
     usePersonas: () => ({
         personas,
         connected,
@@ -25,10 +27,10 @@ vi.mock(`../../sandbox/personas/usePersonas`, () => ({
 }));
 
 // Router stub keeps real hrefs on "manage personas" links; a push spy wouldn't see them at all.
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
-    useRouter: () => ({ push: vi.fn() }) as never,
-    RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
+mock.module(`vue-router`, () => ({
+    ...vueRouterOriginal,
+    useRouter: () => ({ push: mock() }) as never,
+    RouterLink: RouterLinkStub as never,
 }));
 
 const { default: ChatPersonaMenu } = await import("./ChatPersonaMenu.vue");

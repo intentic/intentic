@@ -1,5 +1,5 @@
 import type { Rule } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { adoptedRules, fingerprintOf, isAdopted, type RepoDeclaration, repoChecksPath, rulesOf, summariesOf, withRepoChecks } from "./repo-checks.js";
 
 // What a repository's own declaration MEANS, with no workspace on disk: it becomes ordinary rules, and it only becomes

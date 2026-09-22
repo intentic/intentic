@@ -1,27 +1,29 @@
-// @vitest-environment jsdom
 // Pins that a recommendation carries the evidence read to make it, and that scan-known answers (e.g. an instance
 // url) are pre-filled. The evidence is legible on the entry, not the entry, since the grid stays one-line entrys.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, nextTick, ref } from "vue";
 import type { CapabilityRecommendation } from "@intentic/api-contract";
 import { IconStub } from "@intentic/ui/testing";
+import * as actualVueRouter from "vue-router";
 
 // Import-time globals a mounted view needs: ui's useDevice reads matchMedia, environment.ts reads window.env.
 
 // Which entry the page is on and whether the setup walk runs, both read off the URL; `` is the catalog itself.
 let entry = ``;
 let setup: string | undefined;
-const push = vi.fn();
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+const push = mock();
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
     useRoute: () => ({ params: { entry }, query: setup === undefined ? {} : { setup } }) as never,
-    useRouter: () => ({ push, replace: vi.fn() }) as never,
+    useRouter: () => ({ push, replace: mock() }) as never,
 }));
 
 // The gitlab entry is contributed, not static, with its instance url as the field the scan can answer. The registry
 // cache backs the Extension entry's counts; nothing here has browsed it.
-vi.mock(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
-vi.mock(`../extensions/useExtensions`, () => ({
+mock.module(`../extensions/useRegistry`, () => ({ useRegistry: () => ({ entries: ref([]) }) }));
+mock.module(`../extensions/useExtensions`, () => ({
     useExtensions: () => ({
         contributionOf: () => undefined,
         extensions: ref([]),
@@ -50,37 +52,41 @@ vi.mock(`../extensions/useExtensions`, () => ({
 }));
 
 const recommendations = ref<CapabilityRecommendation[]>([]);
-const dismiss = vi.fn();
-vi.mock(`./connect/useCapabilities`, () => ({
+const dismiss = mock();
+mock.module(`./connect/useCapabilities`, () => ({
     useCapabilities: () => ({
         recommendationFor: (id: string) => recommendations.value.find((recommendation) => recommendation.entry === id),
         capabilities: ref([]),
         error: ref(undefined),
-        add: vi.fn(),
-        remove: { mutateAsync: vi.fn(), isPending: ref(false) },
-        rename: { mutateAsync: vi.fn(), isPending: ref(false) },
-        refetch: vi.fn(),
+        add: mock(),
+        remove: { mutateAsync: mock(), isPending: ref(false) },
+        rename: { mutateAsync: mock(), isPending: ref(false) },
+        refetch: mock(),
         dismissRecommendation: { mutateAsync: dismiss, isPending: ref(false) },
     }),
-    browseMarketplace: vi.fn(),
+    browseMarketplace: mock(),
+    // The connect forms read these at link time though no case here opens one; a mock missing a name anything in
+    // the graph imports is refused.
+    readRemoteRefs: mock(async () => ({ refs: [] })),
+    probeCapability: mock(),
 }));
-vi.mock(`../terminal/useBackgroundProcesses`, () => ({
-    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: vi.fn(), stop: vi.fn() }),
-    viewProcessLogs: vi.fn(),
+mock.module(`../terminal/useBackgroundProcesses`, () => ({
+    useBackgroundProcesses: () => ({ rows: ref([]), busy: ref(undefined), start: mock(), stop: mock() }),
+    viewProcessLogs: mock(),
 }));
-vi.mock(`../composables/sandbox/useHostConnect`, () => ({
-    useHostConnect: () => ({ hostFor: () => undefined, revoke: vi.fn(), refresh: vi.fn(), start: vi.fn(), stop: vi.fn() }),
+mock.module(`../composables/sandbox/useHostConnect`, () => ({
+    useHostConnect: () => ({ hostFor: () => undefined, revoke: mock(), refresh: mock(), start: mock(), stop: mock() }),
 }));
 // VpnConnections dials as well as lists, so `error` must be present or the render throws.
-vi.mock(`../sandbox/devices/useVpn`, () => ({
-    importForticlient: vi.fn(),
-    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: vi.fn(), disconnect: vi.fn() }),
+mock.module(`../sandbox/devices/useVpn`, () => ({
+    importForticlient: mock(),
+    useVpn: () => ({ links: ref([]), error: ref(undefined), connect: mock(), disconnect: mock() }),
 }));
-vi.mock(`../sandbox/devices/useNetdisk`, () => ({
-    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: vi.fn(), unmount: vi.fn() }),
+mock.module(`../sandbox/devices/useNetdisk`, () => ({
+    useNetdisk: () => ({ links: ref([]), error: ref(undefined), mount: mock(), unmount: mock() }),
 }));
-vi.mock(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
-vi.mock(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./connect/BrowserProfileDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
+mock.module(`./connect/HostConnectDialog.vue`, () => ({ default: defineComponent({ render: () => null }) }));
 
 const { default: Capabilities } = await import("./Capabilities.vue");
 
@@ -167,7 +173,7 @@ it(`takes "not needed" as an answer and moves on rather than asking again`, asyn
     await nextTick();
 
     button(el, `Not needed`).click();
-    await vi.waitFor(() => expect(dismiss).toHaveBeenCalledWith(`gitlab`));
+    await waitFor(() => expect(dismiss).toHaveBeenCalledWith(`gitlab`));
     // Moves straight to the next queued entry, not back to the grid.
-    await vi.waitFor(() => expect(push).toHaveBeenCalledWith(expect.objectContaining({ params: { entry: `docker` } })));
+    await waitFor(() => expect(push).toHaveBeenCalledWith(expect.objectContaining({ params: { entry: `docker` } })));
 });

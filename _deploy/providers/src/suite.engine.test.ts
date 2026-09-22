@@ -1,7 +1,7 @@
 import { apply } from "@intentic/engine";
 import { env } from "@intentic/graph";
 import { defineStack } from "@intentic/sdk";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { SshExecutor, SshResult } from "./core/ssh.js";
 import type { ForgejoApi, ForgejoHook, ForgejoRepo } from "./forgejo/forgejo-api.js";

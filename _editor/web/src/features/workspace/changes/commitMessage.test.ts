@@ -1,19 +1,20 @@
-import { afterAll, beforeEach, describe, expect, test, vi } from "vitest";
+import { describe, test, expect, beforeEach, afterAll, mock } from "bun:test";
+import { freshImport, stubGlobal, hoisted } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 
-// vi.hoisted lets these exist before the mocked imports below, which read them at import time.
-const { active, stored } = vi.hoisted(() => {
+// hoisted lets these exist before the mocked imports below, which read them at import time.
+const { active, stored } = hoisted(() => {
     const state = { active: { sandboxId: undefined as string | undefined }, stored: new Map<string, string>() };
     return state;
 });
 
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    // Imported inside the factory since mocks hoist above this file's own imports; renamed to avoid shadowing `ref`.
-    const { ref: vueRef } = await import("vue");
-    return { useSandbox: () => ({ activeSandboxId: vueRef<string | undefined>(active.sandboxId) }) };
-});
+// The factory is synchronous: a mock.module factory runs in place, and awaiting inside one that replaces a module
+// already in this file's graph never returns.
+mock.module("../../sandbox/client/useSandbox", () => ({
+    useSandbox: () => ({ activeSandboxId: ref<string | undefined>(active.sandboxId) }),
+}));
 
-vi.stubGlobal(`localStorage`, {
+stubGlobal(`localStorage`, {
     getItem: (key: string): string | null => stored.get(key) ?? null,
     setItem: (key: string, value: string): void => void stored.set(key, value),
     removeItem: (key: string): void => void stored.delete(key),
@@ -201,10 +202,7 @@ describe(`the ask to name a commit after a session`, () => {
 // A reload is a fresh module instance reading what the last one left; these re-import the module rather than
 // reaching into the live singleton.
 describe(`the commit box after a reload`, () => {
-    const load = async (): Promise<typeof import("./commitMessage")> => {
-        vi.resetModules();
-        return import("./commitMessage");
-    };
+    const load = (): Promise<typeof import("./commitMessage")> => freshImport<typeof import("./commitMessage")>("./commitMessage", import.meta.url);
 
     beforeEach(() => {
         stored.clear();

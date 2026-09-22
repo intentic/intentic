@@ -2,8 +2,8 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, type Automation, SandboxSettingsSchema, type ListenerMessage } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
 import type { Services } from "../composition.js";
@@ -61,9 +61,9 @@ const message = (over: Partial<ListenerMessage> = {}): ListenerMessage => ({
 
 const longLine = (tag: string): string => tag + "x".repeat(30_000);
 
-// Waits with `SETTLES` rather than vitest's 1s default: an integration fire writes to a temp tree before its wake
+// Waits with `SETTLES` rather than waitFor's 1s default: an integration fire writes to a temp tree before its wake
 // lands. Still finite, so a real regression fails on the assertion instead of hanging.
-const eventually = (assertion: () => void | Promise<void>): Promise<void> => vi.waitFor(assertion, SETTLES);
+const eventually = (assertion: () => void | Promise<void>): Promise<void> => waitFor(assertion, SETTLES);
 
 // Fixed origin/title for every push; only the stream varies, since the batching tests are about payloads and reply
 // sinks.
@@ -195,7 +195,9 @@ const captureWithSession = (turns: AgentTurn[], sessionId: string): WakeFn =>
 // A turn reaching the wake hasn't settled yet; the fire settles the thread record (session, lastAt) after. Callers that
 // read or rewrite that record must wait for the settle first, or overwrite what they wrote.
 const settledThread = async (services: Services, key: string): Promise<void> => {
-    await eventually(async () => expect((await services.threadSessions.get(key, CHANNEL_SESSION_TTL_MS, Date.now()))?.sessionId).toEqual(expect.any(String)));
+    await eventually(async () =>
+        expect((await services.threadSessions.get(key, CHANNEL_SESSION_TTL_MS, Date.now()))?.sessionId).toEqual(expect.any(String)),
+    );
 };
 
 test("a follow-up message in the same channel reuses the conversation and resumes its session", async () => {
@@ -277,7 +279,13 @@ test("dispatch honors mentioned: a mention-only listener skips plain messages an
 test("a fatal source failure lands as an error run on the provider's listener automations only", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(listenerAutomation("live"));
-    await services.automations.upsert({ id: "cron", trigger: { kind: "schedule", cron: "* * * * *" }, prompt: "p", models: [{ provider: "claude", model: "claude-sonnet-4-6" }], enabled: true });
+    await services.automations.upsert({
+        id: "cron",
+        trigger: { kind: "schedule", cron: "* * * * *" },
+        prompt: "p",
+        models: [{ provider: "claude", model: "claude-sonnet-4-6" }],
+        enabled: true,
+    });
     await reportListenerFailure(services, "discord", "Discord rejected the bot token");
     expect((await services.automations.get("live"))?.runs[0]).toMatchObject({ outcome: "error" });
     expect((await services.automations.get("live"))?.runs[0]?.detail).toContain("Discord");
@@ -316,7 +324,12 @@ test("two people one channel answers as different agents get two conversations, 
     await dispatchListenerMessage(services, message({ author: mark, content: "deploy it" }), captureWithSession(turns, "sess-mark"), 5);
     await eventually(() => expect(turns).toHaveLength(1));
     await settledThread(services, threadKey("discord", "senders-lanes", "c1"));
-    await dispatchListenerMessage(services, message({ id: "m2", author: martha, content: "where is my order?" }), captureWithSession(turns, "sess-martha"), 5);
+    await dispatchListenerMessage(
+        services,
+        message({ id: "m2", author: martha, content: "where is my order?" }),
+        captureWithSession(turns, "sess-martha"),
+        5,
+    );
     await eventually(() => expect(turns).toHaveLength(2));
     const [first, second] = turns as [AgentTurn, AgentTurn];
     expect(first.actsAs).toBeUndefined();

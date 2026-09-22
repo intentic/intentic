@@ -1,6 +1,6 @@
 import { INGRESS_GRANT_HEADER } from "@intentic/sandbox-contract/ingress-contract";
 import type { IngressSessionServer } from "@intentic/sandbox-contract/ingress-protocol";
-import { describe, expect, test, vi } from "vitest";
+import { describe, test, expect, mock } from "bun:test";
 import { reachPosture, startIngressTunnel, startIngressTunnelWhenConfigured, tunnelUrl, type TunnelSocket } from "./ingress-tunnel.js";
 
 // Reconnect-loop timing against a fake socket; byte-level behavior is covered by the protocol's own test. Pins
@@ -9,8 +9,8 @@ import { reachPosture, startIngressTunnel, startIngressTunnelWhenConfigured, tun
 // Stand-in for `ws`; records listeners so a test can drive the socket's lifecycle by hand.
 class FakeSocket implements TunnelSocket {
     private readonly listeners = new Map<string, ((...args: never[]) => void)[]>();
-    public readonly close = vi.fn<(code?: number, reason?: string) => void>();
-    public readonly terminate = vi.fn<() => void>();
+    public readonly close = mock<(code?: number, reason?: string) => void>();
+    public readonly terminate = mock<() => void>();
 
     public on(event: string, listener: (...args: never[]) => void): this {
         this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
@@ -31,7 +31,7 @@ const harness = (options?: { readonly now?: () => number }) => {
     const waits: number[] = [];
     const headers: Record<string, string>[] = [];
     let release: (() => void) | undefined;
-    const served: IngressSessionServer = { close: vi.fn() };
+    const served: IngressSessionServer = { close: mock() };
 
     const handle = startIngressTunnel({
         url: `https://ingress.sbx.example.test`,
@@ -153,14 +153,14 @@ describe(`startIngressTunnelWhenConfigured`, () => {
         [`no edge`, { ...base, url: `` }, `INGRESS_URL`],
         [`no grant`, { ...base, grant: `` }, `SANDBOX_GRANT`],
     ])(`%s is a loopback-only posture, not a failure`, (_name, options, reason) => {
-        const log = vi.fn();
+        const log = mock();
         expect(startIngressTunnelWhenConfigured({ ...options, log })).toBeUndefined();
         expect(log.mock.calls[0]?.[0]).toContain(`loopback only`);
         expect(log.mock.calls[0]?.[0]).toContain(reason);
     });
 
     test(`a Fly machine is reached directly and dials no tunnel`, () => {
-        const log = vi.fn();
+        const log = mock();
         expect(startIngressTunnelWhenConfigured({ ...base, vm: true, log })).toBeUndefined();
         expect(log.mock.calls[0]?.[0]).toContain(`reachable directly`);
     });

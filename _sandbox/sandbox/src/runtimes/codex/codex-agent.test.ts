@@ -1,6 +1,7 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
@@ -621,10 +622,10 @@ test("a turn the translator never got to the model is re-run, not surfaced", asy
             { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Added the route." } },
         ],
     );
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const events = collect(createTestAgent(runner), request);
-        await vi.advanceTimersByTimeAsync(3_000);
+        await advanceTimersByTimeAsync(3_000);
         expect(await events).toEqual([
             { kind: "session", sessionId: "thr-a" },
             { kind: "provider_retry", attempt: 1, maxAttempts: 3, nextAttemptAt: expect.any(Number) as number },
@@ -634,7 +635,7 @@ test("a turn the translator never got to the model is re-run, not surfaced", asy
             { kind: "done" },
         ]);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
     expect(calls).toHaveLength(2);
 });
@@ -659,13 +660,13 @@ test("a transport failure that outlasts the retries is surfaced in the end", asy
         { type: "thread.started", thread_id: "thr-d" },
         { type: "turn.failed", error: { message: DNS_STALL } },
     ]);
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     try {
         const events = collect(createTestAgent(runner), request);
-        await vi.advanceTimersByTimeAsync(11_000);
+        await advanceTimersByTimeAsync(11_000);
         expect((await events).filter((event) => event.kind === "error")).toEqual([{ kind: "error", message: DNS_STALL }]);
     } finally {
-        vi.useRealTimers();
+        jest.useRealTimers();
     }
     // Three attempts: the two waits are the cap, and the third failure is the turn's answer.
     expect(calls).toHaveLength(3);

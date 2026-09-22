@@ -1,12 +1,12 @@
-// @vitest-environment jsdom
-import { reactive } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { reactive, ref } from "vue";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
+import { stubGlobal } from "@intentic/testing/bun";
 import type { ChatEnvelope, ChatNote } from "./chatChannel";
 import type { StoredTab } from "../tabs/tabSnapshot";
 
 // The sandbox id scopes every note here; useSandbox reaches window.env through useApi, which no test has.
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
     return { useSandbox: () => ({ activeSandboxId, reachable: ref(false) }) };
 });
@@ -27,7 +27,7 @@ class FakeChannel {
     }
 }
 
-vi.stubGlobal(`BroadcastChannel`, FakeChannel);
+stubGlobal(`BroadcastChannel`, FakeChannel);
 
 const { onChatNote, postChatNote, receiveChatNote } = await import("./chatChannel");
 

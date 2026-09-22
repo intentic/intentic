@@ -1,9 +1,9 @@
-// @vitest-environment jsdom
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, spyOn, jest } from "bun:test";
 import { AnchoredOverlay } from "@intentic/ui";
 import { createApp, defineComponent, h, ref } from "vue";
 
-// jsdom: the @intentic/ui barrel reaches window.matchMedia at import (stubbed in vitest.setup.ts). ResizeObserver is
+// jsdom: the @intentic/ui barrel reaches window.matchMedia at import (stubbed in bun.setup.ts). ResizeObserver is
 // stubbed too, though unused here.
 
 // Complements anchorPlacement.test.ts: that file pins the computed geometry, this one pins that it reaches the DOM.
@@ -30,7 +30,7 @@ const anchor = ref<HTMLElement>();
 let app: ReturnType<typeof createApp> | undefined;
 
 const mountPicker = (): void => {
-    vi.spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue(rect(PANEL));
+    spyOn(HTMLElement.prototype, `getBoundingClientRect`).mockReturnValue(rect(PANEL));
     app = createApp(
         defineComponent({
             setup: () => () =>
@@ -70,7 +70,7 @@ afterEach(() => {
     app = undefined;
     open.value = false;
     document.body.replaceChildren();
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 it(`leaves the placement on the box instead of stripping it a frame later`, async () => {

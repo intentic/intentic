@@ -1,5 +1,5 @@
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
 import { createCommandGuard } from "../../guard/command-guard.js";

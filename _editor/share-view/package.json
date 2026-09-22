@@ -19,24 +19,23 @@
     "scripts": {
         "build": "vite build",
         "typecheck": "vue-tsc --noEmit",
-        "test": "vitest run",
-        "test:watch": "vitest"
+        "test": "suites",
+        "test:watch": "suites --watch"
     },
     "devDependencies": {
-        "@intentic/web": "workspace:*",
         "@intentic/constants": "workspace:*",
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
         "@intentic/ui": "workspace:*",
+        "@intentic/web": "workspace:*",
         "@tailwindcss/vite": "catalog:",
+        "@types/bun": "catalog:",
         "@vitejs/plugin-vue": "catalog:",
-        "jsdom": "catalog:",
         "shiki": "catalog:",
         "tailwindcss": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
-        "vitest": "catalog:",
         "vue": "catalog:",
         "vue-tsc": "catalog:"
     }

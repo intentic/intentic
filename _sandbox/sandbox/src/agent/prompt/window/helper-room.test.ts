@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { helperOverflow, helperPromptRoom } from "./context-budget.js";
 
 // What a one-shot helper may spend, and what it is told when it cannot. The sibling of the turn arithmetic in

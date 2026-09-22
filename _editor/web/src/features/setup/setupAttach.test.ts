@@ -1,8 +1,9 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { addressZone, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "./setupAttach";
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 test("a bare hostname is accepted: https is assumed, not demanded of the user", () => {
@@ -62,7 +63,7 @@ test("a domain of the reader's own is left alone, zone suffix and all", () => {
 
 const stubFetch = (routes: Record<string, { status: number; body?: unknown }>) => {
     const calls: { url: string; connect: string | null }[] = [];
-    vi.stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
+    stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
         const route = routes[url];
         calls.push({ url, connect: new Headers(init?.headers).get(`x-intentic-connect`) });
         if (route === undefined) {
@@ -90,7 +91,7 @@ test("an unreachable address (DNS, TLS, or a CORS-blocked daemon) reports unreac
 
 test("every probe request carries a deadline, so a hang can never outlive it", async () => {
     const signals: (AbortSignal | null | undefined)[] = [];
-    vi.stubGlobal(`fetch`, (_url: string, init?: RequestInit) => {
+    stubGlobal(`fetch`, (_url: string, init?: RequestInit) => {
         signals.push(init?.signal);
         return Promise.resolve(new Response(`{}`, { status: 200 }));
     });
@@ -102,7 +103,7 @@ test("every probe request carries a deadline, so a hang can never outlive it", a
 test("a hang is reported as a timeout, not folded into the generic nothing-answered case", async () => {
     // What AbortSignal.timeout rejects with once the deadline fires. The two must stay distinguishable: one
     // means "wrong address", the other means "something is there but silent": different next steps.
-    vi.stubGlobal(`fetch`, () => Promise.reject(new DOMException(`signal timed out`, `TimeoutError`)));
+    stubGlobal(`fetch`, () => Promise.reject(new DOMException(`signal timed out`, `TimeoutError`)));
     expect(await probeDaemon({ daemonUrl: `https://sandbox.example.com`, idToken: `id-tok` })).toEqual({ kind: `timeout` });
 });
 

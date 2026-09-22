@@ -75,7 +75,7 @@ is useless without:
 | stripe | [hosted-plan-stripe.e2e.test.ts](../../_platform/api/src/e2e/hosted-plan-stripe.e2e.test.ts) | `HOSTED_PLAN_E2E_STRIPE_SECRET_KEY` (a **test-mode** key; a live one is refused) + `HOSTED_PLAN_E2E_STRIPE_PRICE_ID` (the hosted plan's test-mode price). No Docker: it is the platform's own Stripe client against Stripe |
 
 A tier that is asked to run and finds a credential missing puts the variable's name in its own suite title,
-which is what vitest prints beside the `↓`: so the nightly's log states which tiers ran without anything
+which is what the runner prints beside its skip marker: so the nightly's log states which tiers ran without anything
 logging it. Widening the nightly is adding a protected CI variable, not editing a job. The credentials a
 tier declares and the `passThroughEnv` list on turbo's `e2e` task are the same statement written twice: a
 variable absent from `turbo.json` never reaches the suite, however CI is configured.

@@ -1,13 +1,16 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 
 // Models the deployed tree, where prepare-image-trees.sh prunes this dependency; the packed fixture below is a file-URL
-// import and stays visible.
-vi.mock("@cursor/sdk", () => {
-    throw new Error("pruned from the published image");
-});
+// import and stays visible. Re-declared per case: a factory that throws is honoured once per registration.
+const prunedFromTheImage = (): void => {
+    mock.module("@cursor/sdk", () => {
+        throw new Error("pruned from the published image");
+    });
+};
+prunedFromTheImage();
 
 const { ensureCursorSdk, forgetCursorSdk } = await import("./cursor-sdk.js");
 
@@ -23,6 +26,7 @@ const writeSdk = (root: string, version: string): void => {
 // A store of its own per case, so one case's activation is invisible to the next; the suite-wide fence
 // (engine-fence.ts) keeps all of it off the real store.
 const emptyStore = (name: string): string => {
+    prunedFromTheImage();
     const root = mkdtempSync(join(tmpdir(), name));
     process.env["INTENTIC_ENGINES_DIR"] = root;
     // No pack prefix either: these cases model the published image, which carries neither.
@@ -41,7 +45,7 @@ test("an explicit connect installs the pack's pinned version into the engine sto
     const { activateVersion } = await import("../../engines/engine-store.js");
 
     // Install is faked, activation is real: proves this asks for the pinned version, loads the store's answer.
-    const install = vi.fn(async (id: "cursor", version: string) => {
+    const install = mock(async (id: "cursor", version: string) => {
         expect(id).toBe("cursor");
         expect(version).toMatch(/^\d+\.\d+\.\d+$/);
         writeSdk(store, version);
@@ -52,11 +56,11 @@ test("an explicit connect installs the pack's pinned version into the engine sto
 
     const sdk = await ensureCursorSdk(install);
 
-    expect(install).toHaveBeenCalledOnce();
+    expect(install).toHaveBeenCalledTimes(1);
     expect(sdk.Agent).toBeTypeOf("function");
     expect(sdk.Cursor).toBeTypeOf("function");
     await ensureCursorSdk(install);
-    expect(install).toHaveBeenCalledOnce();
+    expect(install).toHaveBeenCalledTimes(1);
 });
 
 test("a failed bootstrap can be retried", async () => {
@@ -69,14 +73,14 @@ test("a failed bootstrap can be retried", async () => {
         }),
     ).rejects.toThrow("registry unavailable");
 
-    const install = vi.fn(async (_id: "cursor", version: string) => {
+    const install = mock(async (_id: "cursor", version: string) => {
         writeSdk(store, version);
         await activateVersion("cursor", version);
         forgetCursorSdk();
         return { ok: true as const, version, reused: false };
     });
     expect((await ensureCursorSdk(install)).Cursor).toBeTypeOf("function");
-    expect(install).toHaveBeenCalledOnce();
+    expect(install).toHaveBeenCalledTimes(1);
 });
 
 test("a refused install surfaces the store's reason", async () => {

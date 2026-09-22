@@ -3,13 +3,13 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
-import { SETTLES } from "@intentic/testing/vitest";
 
 import { type AgentEvent, type Capability, isTurnFact, type TranscriptRow } from "@intentic/sandbox-contract";
 
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 
 import { createApp } from "./app.js";
 import { workspacePaths } from "./workspace/workspace.js";
@@ -190,7 +190,7 @@ test("/system/ws-ticket 404s in loopback mode: no identity to bind, and the upgr
 
 test("POST /system/sessions/revoke re-keys sessions, closes live access, drops tickets, and requires the operating tier", async () => {
     let rotations = 0;
-    const close = vi.fn();
+    const close = mock();
     const connections = createAuthConnections();
     connections.register({ email: "owner@x.com", role: "owner" }, close);
     const auth = {
@@ -210,16 +210,16 @@ test("POST /system/sessions/revoke re-keys sessions, closes live access, drops t
     const owner = createApp(ownerServices);
     expect((await postJson(owner, "/system/sessions/revoke")).status).toBe(200);
     expect(rotations).toBe(1);
-    expect(close).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledTimes(1);
     expect(ownerServices.wsTickets.redeem(ticket)).toBeUndefined();
 });
 
 test("account deletion can retire owner access permanently, and a member can remove only self", async () => {
-    const ownerClose = vi.fn();
+    const ownerClose = mock();
     const ownerConnections = createAuthConnections();
     ownerConnections.register({ email: "owner@x.com", role: "owner" }, ownerClose);
-    const disable = vi.fn(async () => {});
-    const rotate = vi.fn(async () => {});
+    const disable = mock(async () => {});
+    const rotate = mock(async () => {});
     const ownerServices = services({
         auth: {
             authorize: async () => proven("owner@x.com", "owner"),
@@ -232,9 +232,9 @@ test("account deletion can retire owner access permanently, and a member can rem
     });
     const ownerTicket = ownerServices.wsTickets.mint({ email: "owner@x.com", role: "owner" });
     expect((await postJson(createApp(ownerServices), "/system/access/disable")).status).toBe(200);
-    expect(disable).toHaveBeenCalledOnce();
-    expect(rotate).toHaveBeenCalledOnce();
-    expect(ownerClose).toHaveBeenCalledOnce();
+    expect(disable).toHaveBeenCalledTimes(1);
+    expect(rotate).toHaveBeenCalledTimes(1);
+    expect(ownerClose).toHaveBeenCalledTimes(1);
     expect(ownerServices.wsTickets.redeem(ownerTicket)).toBeUndefined();
 
     // A prior partial deletion already disabled ordinary authorize(); retirement bypasses only that gate and
@@ -254,7 +254,7 @@ test("account deletion can retire owner access permanently, and a member can rem
     expect(disable).toHaveBeenCalledTimes(2);
 
     const removed: string[] = [];
-    const memberClose = vi.fn();
+    const memberClose = mock();
     const memberConnections = createAuthConnections();
     memberConnections.register({ email: "member@x.com", role: "viewer" }, memberClose);
     const memberServices = services({
@@ -268,7 +268,7 @@ test("account deletion can retire owner access permanently, and a member can rem
     const memberTicket = memberServices.wsTickets.mint({ email: "member@x.com", role: "viewer" });
     expect((await createApp(memberServices).request("/members/self", { method: "DELETE" })).status).toBe(200);
     expect(removed).toEqual(["member@x.com"]);
-    expect(memberClose).toHaveBeenCalledOnce();
+    expect(memberClose).toHaveBeenCalledTimes(1);
     expect(memberServices.wsTickets.redeem(memberTicket)).toBeUndefined();
 
     const ownerCannotSelfRemove = createApp(
@@ -467,7 +467,7 @@ test("POST /automations/:id/fire skips bearer auth, enforces the door's token fr
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ ok: true });
     // The turn runs detached (the fake agent completes instantly) and lands in the run history.
-    await vi.waitFor(async () => expect((await store.get("deploy"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await store.get("deploy"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("deploy"))?.runs[0]?.outcome).toBe("completed");
 });
 
@@ -486,14 +486,14 @@ test("automations.run fires by hand on the real path: a disabled automation too,
 
     // The turn runs detached; the ack doesn't wait on it since the guard alone can take a minute.
     expect(await client.automations.run({ id: "cron" })).toEqual({ ok: true });
-    await vi.waitFor(async () => expect((await store.get("cron"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await store.get("cron"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("cron"))?.runs[0]?.outcome).toBe("completed");
 
     expect(await client.automations.run({ id: "paused" })).toEqual({ ok: true });
-    await vi.waitFor(async () => expect((await store.get("paused"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await store.get("paused"))?.runs).toHaveLength(1), SETTLES);
 
     expect(await client.automations.run({ id: "gated" })).toEqual({ ok: true });
-    await vi.waitFor(async () => expect((await store.get("gated"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await store.get("gated"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("gated"))?.runs[0]?.outcome).toBe("completed");
 });
 
@@ -556,7 +556,7 @@ test("POST /webchat/:id/message skips bearer auth, gates on the origin allowlist
     expect(ok.headers.get("content-type")).toContain("text/event-stream");
     expect(ok.headers.get("access-control-allow-origin")).toBe("https://site.example");
     await ok.text();
-    await vi.waitFor(async () => expect((await store.get("support"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await store.get("support"))?.runs).toHaveLength(1), SETTLES);
     expect((await store.get("support"))?.runs[0]?.outcome).toBe("completed");
 
     // The preflight is answered with the reflected origin too, so the browser lets the cross-site POST through.

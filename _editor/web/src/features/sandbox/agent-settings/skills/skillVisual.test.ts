@@ -3,7 +3,7 @@
 import type { CapabilitySummary, SkillOrigin, SkillSummary } from "@intentic/api-contract";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { type SkillSources, skillVisual } from "./skillVisual";
 
 const skill = (name: string, origin: SkillOrigin, owner?: string): SkillSummary => ({

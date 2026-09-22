@@ -1,5 +1,5 @@
 import type { AccountUsage, UsageWindow } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { spawnableProviders, spawnCatalogText } from "./spawn-catalog.js";
 

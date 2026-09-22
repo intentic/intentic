@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // Pins the one coupling between nginx.conf and entrypoint.sh: the entrypoint renders the template with an
 // envsubst RESTRICTED to a named list (an unrestricted one would blank every $uri), so a `${…}` the list does
@@ -20,7 +20,7 @@ const substituted = new Set(
 
 describe(`the rendered nginx config`, () => {
     it(`names every placeholder nginx.conf carries in the template's envsubst`, () => {
-        const used = [...nginxConf.matchAll(/\$\{(\w+)\}/g)].map((match) => match[1]);
+        const used = [...nginxConf.matchAll(/\$\{(\w+)\}/g)].flatMap((match) => match[1] ?? []);
         expect(used.length, `no \${…} left in nginx.conf — this test is pinning nothing`).toBeGreaterThan(0);
         for (const name of new Set(used)) {
             expect(substituted, `nginx.conf uses \${${name}}, which entrypoint.sh's envsubst does not name`).toContain(name);

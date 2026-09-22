@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { REPLAY_ENV } from "./index.js";
 
 // Parses the Rust source of the ic host-side connect flow (_sandbox/ic) and pins its env keys against the contract's

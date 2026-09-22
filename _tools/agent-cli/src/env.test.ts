@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { toolHome, toolOutDir } from "./env.js";
 
 const CLEARED = ["FILEQ_HOME", "WEBQ_HOME", "XDG_CACHE_HOME"] as const;

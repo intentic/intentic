@@ -1,5 +1,5 @@
 import type { TranscriptRow } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { REDACTED, shareTranscript } from "./share-payload.js";
 
 // Pins what leaves the machine: the safety tests for a pure function whose payload is checked directly, since every

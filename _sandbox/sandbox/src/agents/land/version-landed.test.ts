@@ -1,17 +1,17 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Rule } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { describe, test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { settleLanding, versionRuleOf } from "./version-landed.js";
 
-const describeLanding = vi.fn<() => Promise<void>>();
-vi.mock("./landed-subject.js", () => ({ describeLanding: () => describeLanding() }));
-const commitOnly = vi.fn<(dir: string, paths: readonly string[], subject: string) => Promise<boolean>>(async () => true);
-vi.mock("../../git/changes/changes-index.js", () => ({
+const describeLanding = mock<() => Promise<void>>();
+mock.module("./landed-subject.js", () => ({ describeLanding: () => describeLanding() }));
+const commitOnly = mock<(dir: string, paths: readonly string[], subject: string) => Promise<boolean>>(async () => true);
+mock.module("../../git/changes/changes-index.js", () => ({
     commitOnly: (dir: string, paths: readonly string[], subject: string) => commitOnly(dir, paths, subject),
 }));
-vi.mock("../../git/remote/root-repo.js", () => ({ commitWorktreeRemainder: async () => false }));
+mock.module("../../git/remote/root-repo.js", () => ({ commitWorktreeRemainder: async () => false }));
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rule => ({ label: over.id, enabled: true, ...over });
 
@@ -75,7 +75,7 @@ describe(`settling a landing`, () => {
 
     test(`without the rule the subject is still drafted for the chip, and nothing is committed`, async () => {
         await settleLanding(servicesWith([], `fix: cascading markers`), `c1`);
-        expect(describeLanding).toHaveBeenCalledOnce();
+        expect(describeLanding).toHaveBeenCalledTimes(1);
         expect(commitOnly).not.toHaveBeenCalled();
     });
 });

@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
 // The picks a question card keeps across a reload: found by the same requestId and no other, gone once the
 // card is settled or swept, and limited to what the live card would still accept.
-import { beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, beforeEach } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 import { clearQuestionDraft, type DraftQuestionShape, OTHER_LABEL, readQuestionDraft, writeQuestionDraft } from "./questionDraft";
 
 beforeEach(() => {
@@ -33,10 +34,8 @@ it("sweeps drafts older than a week, and keeps the rest", async () => {
     const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
     localStorage.setItem(stale, JSON.stringify({ selections: { 0: [`A`] }, otherTexts: {}, savedAt: eightDaysAgo }));
     localStorage.setItem(fresh, JSON.stringify({ selections: { 0: [`B`] }, otherTexts: {}, savedAt: Date.now() }));
-    // The sweep runs once, at module load; re-run the module under a fresh registry rather than exporting a
-    // test-only hook.
-    vi.resetModules();
-    await import(`./questionDraft`);
+    // The sweep runs once, at module load; re-evaluate the module rather than exporting a test-only hook.
+    await freshImport<typeof import("./questionDraft")>("./questionDraft", import.meta.url);
 
     expect(readQuestionDraft(`req-new`, [single(`B`)])).toEqual({ selections: { 0: [`B`] }, otherTexts: {} });
     expect(localStorage.getItem(stale)).toBeNull();

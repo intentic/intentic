@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { test, expect, beforeEach, afterEach } from "bun:test";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { createLogger } from "../../logger.js";
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";

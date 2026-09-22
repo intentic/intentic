@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 /* THE ONE THING THIS PACKAGE'S IMAGE CANNOT SURVIVE, asserted rather than remembered. */
 const SRC = new URL(".", import.meta.url).pathname;

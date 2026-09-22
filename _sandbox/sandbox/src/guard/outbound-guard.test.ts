@@ -1,5 +1,5 @@
 import type { SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { outboundGuardHooks } from "./outbound-guard.js";
 
 const DISCORD_SEND = `curl -s -X POST "https://discord.com/api/v10/channels/123/messages" -H "Authorization: Bot $TOKEN" -d '{"content":"hi"}'`;

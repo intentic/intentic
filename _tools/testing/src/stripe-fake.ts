@@ -367,15 +367,17 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
         [...subscriptions.values()].find((candidate) => candidate.customer === customerId && candidate.status !== "canceled");
 
     // The API: every call logged with what it encoded and whether it carried the key, refused without it.
-    const api = (handle: (hit: Hit, params: Record<string, string>) => Promise<void> | void): Route["handle"] => (hit) => {
-        const params = Object.fromEntries(new URLSearchParams(hit.body));
-        const authorized = hit.req.headers.authorization === `Bearer ${options.secretKey}`;
-        calls.push({ method: hit.req.method ?? "GET", path: hit.url.pathname.slice("/v1".length), params, authorized });
-        if (!authorized) {
-            return refuse(hit.res, 401, "Invalid API Key provided: the key sent does not belong to this account");
-        }
-        return handle(hit, params);
-    };
+    const api =
+        (handle: (hit: Hit, params: Record<string, string>) => Promise<void> | void): Route["handle"] =>
+        (hit) => {
+            const params = Object.fromEntries(new URLSearchParams(hit.body));
+            const authorized = hit.req.headers.authorization === `Bearer ${options.secretKey}`;
+            calls.push({ method: hit.req.method ?? "GET", path: hit.url.pathname.slice("/v1".length), params, authorized });
+            if (!authorized) {
+                return refuse(hit.res, 401, "Invalid API Key provided: the key sent does not belong to this account");
+            }
+            return handle(hit, params);
+        };
 
     const subscriptionOf = (hit: Hit): FakeSubscription | undefined => subscriptions.get(decodeURIComponent(hit.match[1] ?? ""));
 
@@ -440,7 +442,9 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
             pattern: /^\/v1\/subscriptions\/([^/]+)$/,
             handle: api((hit) => {
                 const subscription = subscriptionOf(hit);
-                return subscription === undefined ? refuse(hit.res, 404, `No such subscription: '${hit.match[1]}'`) : json(hit.res, wireSubscription(subscription));
+                return subscription === undefined
+                    ? refuse(hit.res, 404, `No such subscription: '${hit.match[1]}'`)
+                    : json(hit.res, wireSubscription(subscription));
             }),
         },
         {
@@ -487,9 +491,10 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
                 html(
                     res,
                     "Fake Stripe checkout",
-                    `<h1>Fake Stripe checkout</h1><p>${escapeHtml(session.price)} × ${session.quantity} for ${escapeHtml(session.client_reference_id)}</p>${ 
-                        form(`/checkout/${session.id}/pay`, "Pay") 
-                        }${form(`/checkout/${session.id}/cancel`, "Back")}`,
+                    `<h1>Fake Stripe checkout</h1><p>${escapeHtml(session.price)} × ${session.quantity} for ${escapeHtml(session.client_reference_id)}</p>${form(
+                        `/checkout/${session.id}/pay`,
+                        "Pay",
+                    )}${form(`/checkout/${session.id}/cancel`, "Back")}`,
                 );
             },
         },
@@ -524,8 +529,15 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
                 const action =
                     subscription === undefined
                         ? `<p>No active subscription.</p>`
-                        : form(`/portal/${customer.id}/${subscription.cancel_at_period_end ? "resume" : "cancel"}${back}`, subscription.cancel_at_period_end ? "Resume plan" : "Cancel plan");
-                html(res, "Fake Stripe portal", `<h1>Fake Stripe portal</h1><p>${escapeHtml(customer.email)}</p>${action}<p><a href="${escapeHtml(returnUrl)}">Return</a></p>`);
+                        : form(
+                              `/portal/${customer.id}/${subscription.cancel_at_period_end ? "resume" : "cancel"}${back}`,
+                              subscription.cancel_at_period_end ? "Resume plan" : "Cancel plan",
+                          );
+                html(
+                    res,
+                    "Fake Stripe portal",
+                    `<h1>Fake Stripe portal</h1><p>${escapeHtml(customer.email)}</p>${action}<p><a href="${escapeHtml(returnUrl)}">Return</a></p>`,
+                );
             },
         },
         {
@@ -547,14 +559,23 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
             method: "GET",
             pattern: /^\/__test\/state$/,
             handle: ({ res }) =>
-                json(res, { customers: [...customers.values()], subscriptions: [...subscriptions.values()], sessions: [...sessions.values()], calls }),
+                json(res, {
+                    customers: [...customers.values()],
+                    subscriptions: [...subscriptions.values()],
+                    sessions: [...sessions.values()],
+                    calls,
+                }),
         },
         {
             method: "POST",
             pattern: /^\/__test\/update\/([^/]+)$/,
             handle: async ({ res, match, body }) => {
                 const asked = JSON.parse(body || "{}") as { patch?: FakeSubscriptionPatch; createdAt?: string };
-                const delivered = await update(match[1] ?? "", asked.patch ?? {}, asked.createdAt === undefined ? {} : { createdAt: new Date(asked.createdAt) });
+                const delivered = await update(
+                    match[1] ?? "",
+                    asked.patch ?? {},
+                    asked.createdAt === undefined ? {} : { createdAt: new Date(asked.createdAt) },
+                );
                 json(res, { delivered: delivered.status });
             },
         },
@@ -597,8 +618,9 @@ export const startFakeStripe = async (options: FakeStripeOptions): Promise<FakeS
         emit,
         close: () =>
             new Promise<void>((resolve, reject) => {
-                server.closeAllConnections();
+                // close() first, then the keep-alive sockets holding it open: the other order stops bun's listener twice.
                 server.close((error) => (error === undefined ? resolve() : reject(error)));
+                server.closeAllConnections();
             }),
     };
 };

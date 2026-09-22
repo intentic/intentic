@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileWatchJournal, type JournalledWatch } from "./watch-journal.js";
 
 const journalDir = (): string => join(mkdtempSync(join(tmpdir(), "watch-journal-")), "watches");

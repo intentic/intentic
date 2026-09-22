@@ -1,6 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // What a fileq run costs before it does anything. `derive.ts` imports all eleven derivers so `read` and `derive`
 // cannot disagree about a file, which means one deriver's top-level `import` is paid by every run of the CLI: an

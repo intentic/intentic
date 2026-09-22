@@ -3,7 +3,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
 import { handleMcpMessage } from "./mcp.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
@@ -16,8 +17,8 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     ...overrides,
 });
 
-// Without a vitest config there is no unstubEnvs, so a stub outlives its test and the home leaks down the file.
-afterEach(() => vi.unstubAllEnvs());
+// Nothing restores a stub on its own, so one outlives its test and the home leaks down the file.
+afterEach(() => unstubAllEnvs());
 
 const call = async (name: string, args: Record<string, unknown>, grant: DeviceScopes): Promise<{ text: string; isError: boolean }> => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, grant)) as {
@@ -145,7 +146,7 @@ test("a write says whether it created or replaced, and a read gets it back", asy
 test("trash moves the file somewhere recoverable instead of deleting it", async () => {
     // The trash and the file's temp home must share a filesystem for files.ts's rename to work; a container job's
     // $HOME (bind mount) and tmpdir() (image layer) are two devices, so this passed on laptops and failed only in CI.
-    vi.stubEnv("HOME", mkdtempSync(join(tmpdir(), "host-home-")));
+    stubEnv("HOME", mkdtempSync(join(tmpdir(), "host-home-")));
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "doomed.txt");
     await writeFile(path, "keep me");

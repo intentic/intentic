@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { CapabilitiesListSchema } from "./capabilities.js";
 import { SandboxSettingsSchema } from "./settings.js";
 import { SmbNetdiskConfigSchema } from "./netdisk.js";

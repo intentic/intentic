@@ -1,8 +1,9 @@
-// @vitest-environment jsdom
 // Pins that any focus write (board card, history row, chord, new agent) scrolls the list's card into view via
 // `nearest`, including the docked sheet's first frame after mount.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetChat, useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
@@ -19,7 +20,7 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // jsdom has no scrollIntoView; installed here as the recorder the assertions read.
-const { reveals } = vi.hoisted(() => {
+const { reveals } = hoisted(() => {
     const recorded: { tab: string | undefined; block: string | undefined }[] = [];
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: boolean | ScrollIntoViewOptions): void {
         recorded.push({

@@ -1,6 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { fakeAcpAgentApp, fakeAcpConnection } from "./__fixtures__/fake-acp-agent.js";

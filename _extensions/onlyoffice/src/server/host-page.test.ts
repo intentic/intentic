@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { editorConfig, hostPage } from "./host-page.js";
 import { verifyJwt } from "./jwt.js";
 import type { Session } from "./sessions.js";

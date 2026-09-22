@@ -1,7 +1,7 @@
 // The subpath, not the barrel: brandMark.ts is a string gate and an encoder, and `@intentic/ui` would drag the whole
 // component graph (and a `window`) into a node-environment suite.
 import { artSrc } from "@intentic/ui/brand-mark";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // What a registry row is allowed to paint. `art` is the one mark tier whose document comes from a stranger, arriving as
 // a whole document rather than a name to look up.

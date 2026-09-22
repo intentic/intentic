@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { estimatedModelMemory, fitsBudget, localModelGpu } from "./local-model-fit.js";
 
 // The arithmetic the connect view's offer and the start's admission check share. Reading the machine is the

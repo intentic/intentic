@@ -1,50 +1,50 @@
-// @vitest-environment jsdom
 // Access tab's rendered text after an invite: which of its two writes (daemon grant, platform record/email) failed, and
 // refusal vs silence, must all read differently on screen.
+import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { formatDate } from "@intentic/ui/format";
 
 // Import chain touches the API client and a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
-const sandboxJson = vi.fn(async (..._args: unknown[]): Promise<unknown> => ({ members: [] }));
-vi.mock(`../client/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
+const sandboxJson = mock(async (..._args: unknown[]): Promise<unknown> => ({ members: [] }));
+mock.module(`../client/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
 
-const create = vi.fn();
-const list = vi.fn(async (): Promise<{ members: unknown[] }> => ({ members: [] }));
-const setRole = vi.fn();
-vi.mock(`../../../lib/useApi`, () => ({
+const create = mock();
+const list = mock(async (): Promise<{ members: unknown[] }> => ({ members: [] }));
+const setRole = mock();
+mock.module(`../../../lib/useApi`, () => ({
     apiClient: { invite: { list: () => list(), create: (...a: unknown[]) => create(...a), setRole: (...a: unknown[]) => setRole(...a) } },
 }));
 
-vi.mock(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
+mock.module(`../../auth/useAuth`, () => ({ useAuth: () => ({ user: ref({ email: `owner@example.com` }) }) }));
 const role = ref<`owner` | `viewer`>(`owner`);
-vi.mock(`../client/useSandbox`, () => ({
+mock.module(`../client/useSandbox`, () => ({
     useSandbox: () => ({
         active: computed(() => ({ name: `radarsu-mig`, role: role.value })),
         activeSandboxId: ref(`s1`),
         daemonUrl: ref(`https://sandbox-abc.example.test`),
     }),
 }));
-vi.mock(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
+mock.module(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => false }));
 // One assistant, homed in the support folder: which areas hand it over is read off where it starts, never picked.
 const personas = ref([{ id: `support`, label: `Support`, capabilities: [], workspace: { startIn: `support` } }]);
-vi.mock(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
+mock.module(`../personas/usePersonas`, () => ({ usePersonas: () => ({ personas, connected: ref([]), isConnected: () => false }) }));
 // Two named parts of the workspace: one the assistant above works in, one nobody works in — the two answers a fence
 // can give.
 const areas = ref([
     { id: `support`, label: `Support guest`, folders: [`support`] },
     { id: `finance`, label: `Finance`, folders: [`finance`] },
 ]);
-vi.mock(`../areas/useAreas`, () => ({
+mock.module(`../areas/useAreas`, () => ({
     useAreas: () => ({ areas, labelOf: (id: string) => areas.value.find((area) => area.id === id)?.label ?? id }),
 }));
-vi.mock(`../../../shell/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
+mock.module(`../../../shell/presence/usePresence`, () => ({ presenceOthers: [], presenceActivity: () => `` }));
 // Session module touches GIS/localStorage at eval; needs only its expiry. Fixed date avoids timezone drift.
 const sessionExpiresAt = ref<number | undefined>(Date.parse(`2026-09-24T12:00:00.000Z`));
-vi.mock(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
+mock.module(`../session/sandboxSession`, () => ({ useSandboxSession: () => ({ sessionExpiresAt }) }));
 
 const { default: SandboxAccess } = await import("./SandboxAccess.vue");
 
@@ -95,7 +95,7 @@ const pick = async (ariaLabel: string, option: string): Promise<void> => {
 };
 
 // The daemon roster's every read, and the grant a guest write answers with.
-const daemonMembers = vi.fn((): unknown[] => []);
+const daemonMembers = mock((): unknown[] => []);
 
 afterEach(() => {
     sandboxJson.mockReset();
@@ -132,7 +132,7 @@ it(`does not ask whether the sandbox is online when the platform is what failed`
 });
 
 it(`hands the owner the link when the email did not carry it`, async () => {
-    const writeText = vi.fn(async () => undefined);
+    const writeText = mock(async () => undefined);
     Object.defineProperty(globalThis.navigator, `clipboard`, { value: { writeText }, configurable: true });
     create.mockResolvedValue({
         members: [{ email: `guest@example.com`, role: `collaborator`, status: `pending`, invitedAt: `2026-08-18T00:00:00.000Z` }],

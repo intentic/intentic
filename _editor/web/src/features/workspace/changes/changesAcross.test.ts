@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 import type { RepoChanges } from "@intentic/api-contract";
 
@@ -7,10 +7,10 @@ import type { RepoChanges } from "@intentic/api-contract";
 
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
-vi.mock("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJsonAt: vi.fn(), sandboxJsonQuietly: vi.fn() }));
-vi.mock("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch: vi.fn() }));
-vi.mock("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: vi.fn() } }));
+mock.module("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJsonAt: mock(), sandboxJsonQuietly: mock(), sandboxJsonVia: mock() }));
+mock.module("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch: mock() }));
+mock.module("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: mock() } }));
 
 const { hasOtherSandboxes, rowsOf, worthShowing } = await import("./changesAcross");
 const { outgoingWork } = await import("../push/outgoingWork");

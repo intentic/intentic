@@ -1,5 +1,5 @@
 import type { WorkspaceSearchResult } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { rankedAnchors, scoreCase } from "./score.js";
 
 const result = (groups: Array<{ path: string; lines: number[] }>, related?: string[], candidates?: string[]): WorkspaceSearchResult => ({

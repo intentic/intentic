@@ -9,7 +9,7 @@
         "start": "bun ./src/main.ts",
         "typecheck": "tsgo --noEmit",
         "docker:release": "bash ../../_tools/scripts/platform/docker-release.sh ingress --prune",
-        "test": "vitest run && bun scripts/runtime-smoke.ts"
+        "test": "suites && bun scripts/runtime-smoke.ts"
     },
     "dependencies": {
         "@intentic/constants": "workspace:*",
@@ -27,7 +27,6 @@
         "@types/bun": "catalog:",
         "@types/ws": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "bun": "catalog:",
-        "vitest": "catalog:"
+        "bun": "catalog:"
     }
 }

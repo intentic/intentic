@@ -1,11 +1,12 @@
 // Attachment thumbnail re-fetch, focused on the case where the first ask fails before the sandbox's address is
 // known. Pins which failures are worth retrying and which are final: the difference between a screenshot that
 // comes back and a permanent `image.png` chip.
-import { beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, mock, jest } from "bun:test";
+import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 
-const blob = vi.fn<(path: string) => Promise<Blob>>();
+const blob = mock<(path: string) => Promise<Blob>>();
 // The resolved daemon address, exactly as useEndpoint hands it out: undefined until sandbox.list lands.
 const daemonBase = ref<string | undefined>(undefined);
 
@@ -15,8 +16,8 @@ class HttpError extends Error {
     }
 }
 
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path), SandboxHttpError: HttpError }));
-vi.mock("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path), SandboxHttpError: HttpError }));
+mock.module("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 const { attachmentAudio, attachmentPreview, forgetMedia, rememberMedia } = await import("./attachmentPreviews");
 
@@ -35,8 +36,8 @@ const settle = async (): Promise<void> => {
 beforeEach(() => {
     blob.mockReset();
     daemonBase.value = undefined;
-    vi.useFakeTimers();
-    globalThis.URL.createObjectURL = vi.fn(() => `blob:thumb`);
+    jest.useFakeTimers();
+    globalThis.URL.createObjectURL = mock(() => `blob:thumb`);
 });
 
 it("re-mints a thumbnail from the workspace bytes on first ask", async () => {
@@ -86,7 +87,7 @@ it("retries a daemon that is still booting until it answers", async () => {
     await settle();
     expect(attachmentPreview(path)).toBeUndefined();
 
-    await vi.advanceTimersByTimeAsync(200);
+    await advanceTimersByTimeAsync(200);
     await settle();
 
     expect(blob).toHaveBeenCalledTimes(2);
@@ -103,7 +104,7 @@ it("stops asking for an attachment the daemon says is gone", async () => {
     // Neither a later render nor a resolved address re-opens a question already answered.
     attachmentPreview(path);
     daemonBase.value = `https://sandbox-1.example`;
-    await vi.advanceTimersByTimeAsync(30_000);
+    await advanceTimersByTimeAsync(30_000);
     await settle();
 
     expect(blob).toHaveBeenCalledTimes(1);
@@ -147,7 +148,7 @@ it("gives up on a chain that never lands, without a chip that polls forever", as
     blob.mockRejectedValue(new Error(`network down`));
 
     attachmentPreview(path);
-    await vi.advanceTimersByTimeAsync(60_000);
+    await advanceTimersByTimeAsync(60_000);
     await settle();
 
     // The five backed-off tries after the first, and then silence.

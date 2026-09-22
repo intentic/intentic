@@ -1,8 +1,9 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { GitRunner } from "./exec.js";
 import { gitClone, gitCommitAll, gitInit, gitStageAll, gitStatus, gitSync } from "./git.js";
 
@@ -23,8 +24,8 @@ test("gitInit creates the worktree dir and the separate git dir's parent, then i
     const separateGitDir = join(historyRoot, "gits", "intent");
     const { git, calls } = recordingGit({});
     await gitInit(dir, separateGitDir, git);
-    await expect(access(dir)).resolves.toBeUndefined();
-    await expect(access(join(historyRoot, "gits"))).resolves.toBeUndefined();
+    expect(existsSync(dir)).toBe(true);
+    expect(existsSync(join(historyRoot, "gits"))).toBe(true);
     expect(calls).toEqual([[dir, "init", "-q", "--initial-branch=main", `--separate-git-dir=${separateGitDir}`]]);
     await rm(historyRoot, { recursive: true });
 });
@@ -35,7 +36,7 @@ test("gitInit with no separate git dir is a plain init", async () => {
     const dir = join(historyRoot, "work", "app");
     const { git, calls } = recordingGit({});
     await gitInit(dir, undefined, git);
-    await expect(access(dir)).resolves.toBeUndefined();
+    expect(existsSync(dir)).toBe(true);
     expect(calls).toEqual([[dir, "init", "-q", "--initial-branch=main"]]);
     await rm(historyRoot, { recursive: true });
 });
@@ -65,7 +66,7 @@ test("gitClone forwards the auth header, branch, and separate git dir flags, and
             "extra",
         ],
     ]);
-    await expect(access(join(historyRoot, "gits"))).resolves.toBeUndefined();
+    expect(existsSync(join(historyRoot, "gits"))).toBe(true);
     await rm(historyRoot, { recursive: true });
 });
 
@@ -86,9 +87,11 @@ test("gitStatus on a clean tree is not dirty", async () => {
 });
 
 // A GitRunner that fails every call with git's own exit code, the half of a rejection gitStageAll reads.
-const failingGit = (code: number, message: string): GitRunner => async () => {
-    throw Object.assign(new Error(message), { code, stdout: "", stderr: message });
-};
+const failingGit =
+    (code: number, message: string): GitRunner =>
+    async () => {
+        throw Object.assign(new Error(message), { code, stdout: "", stderr: message });
+    };
 
 /* `--ignore-errors` demotes a path git cannot stage from "the run dies" to "that path is skipped", and git. */
 test("gitStageAll swallows the skipped-path exit and rethrows a genuine git fault", async () => {

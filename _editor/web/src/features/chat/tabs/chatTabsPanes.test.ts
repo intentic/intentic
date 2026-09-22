@@ -1,8 +1,9 @@
-// @vitest-environment jsdom
 // Pins which click-handler branch resets the split to a plain click, through the real mounted list; `chat
 // panes` in useChat.test.ts already covers the store verb itself.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
 import { resetAgents } from "../../agents/fleet/useAgents";
 import { resetChat, useChat } from "../run/useChat";
@@ -21,7 +22,7 @@ import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Globals a mounted chat needs that jsdom lacks: matchMedia, window.env, ResizeObserver, scrollIntoView.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 });
 
@@ -53,7 +54,7 @@ const mountList = async (): Promise<HTMLElement> => {
 };
 
 // Three chats with content, so none is the untouched draft a focus move would reap.
-const openThree = (): readonly string[] => {
+const openThree = (): readonly [string, string, string] => {
     const chat = useChat();
     const ids: string[] = [];
     for (let at = 0; at < 3; at++) {
@@ -62,7 +63,7 @@ const openThree = (): readonly string[] => {
         ids.push(conversation.conversationId);
     }
     chat.setActive(ids[0]!);
-    return ids;
+    return ids as [string, string, string];
 };
 
 const row = (el: HTMLElement, id: string): HTMLElement => el.querySelector<HTMLElement>(`[data-chat-tab="${id}"]`)!;
@@ -97,7 +98,7 @@ it(`collapses the split to the row clicked without a modifier`, async () => {
     expect(useChat().panes.value).toEqual([ids[2]]);
     expect(useChat().activeId.value).toBe(ids[2]);
     // Panes are given back, not closed: every chat is still a row in this list.
-    expect(useChat().conversations.value.map((c) => c.conversationId)).toEqual(ids);
+    expect(useChat().conversations.value.map((c) => c.conversationId)).toEqual([...ids]);
 });
 
 it(`marks every chat on screen the same, whichever one holds the keyboard`, async () => {

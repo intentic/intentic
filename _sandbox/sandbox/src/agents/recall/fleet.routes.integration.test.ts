@@ -1,6 +1,6 @@
 import { deriveTitle } from "@intentic/sandbox-contract";
 import type { Hono } from "hono";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
 import { clientFor, proven } from "../../harness/route-client.testing.js";

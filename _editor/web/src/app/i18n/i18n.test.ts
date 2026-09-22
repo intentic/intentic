@@ -1,6 +1,8 @@
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Catalog, MessageTree } from "@intentic/ui/i18n";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
+import { BASE_LOCALE, type Catalog, type MessageTree } from "@intentic/ui/i18n";
+import { setFormatLocale } from "@intentic/ui/format";
 
 // The layer's one hard promise: NOTHING ON SCREEN CHANGES LANGUAGE UNTIL THE WORDS FOR IT ARE IN HAND. Every test
 // here is a way that promise could be broken — a swap that leads its fetch, a catalog arriving after the swap, two
@@ -18,13 +20,19 @@ const deferred = <T>(): { promise: Promise<T>; settle: (value: T) => void } => {
     return { promise, settle };
 };
 
-const freshI18n = async (stored?: string): Promise<typeof import("@intentic/ui/i18n")> => {
+// The layer's state lives in the module the package barrel re-exports, so that is what a case evaluates afresh;
+// re-evaluating the barrel alone would hand back the same instance and the same catalogs.
+const I18N = new URL(`./i18n.ts`, import.meta.resolve("@intentic/ui/i18n")).href;
+
+const freshI18n = (stored?: string): Promise<typeof import("@intentic/ui/i18n")> => {
     localStorage.clear();
     if (stored !== undefined) {
         localStorage.setItem(`ui-locale`, stored);
     }
-    vi.resetModules();
-    return import(`@intentic/ui/i18n`);
+    // The date formatter is one instance every layer shares, so a case that counts its readings has to open on the
+    // base locale rather than wherever the last one left it.
+    setFormatLocale(BASE_LOCALE);
+    return freshImport<typeof import("@intentic/ui/i18n")>(I18N, import.meta.url);
 };
 
 /** A catalog whose non-English fetch this test controls. */

@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { ciFixConversationId, fixAttemptId } from "../ids/conversation-ids.js";
 import type { AgentSummary } from "../schemas/agents.js";
 import { planFixAttempt } from "./fix-attempt-plan.js";

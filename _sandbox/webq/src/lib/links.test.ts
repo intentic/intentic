@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { parseHtml } from "./dom.js";
 import { extractLinks, normalizeUrl, sameOrigin } from "./links.js";
 

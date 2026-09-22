@@ -1,7 +1,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { codexModelList } from "./codex-model-list.js";
 
 /* The Codex CLI's own `model/list`, over a real spawned process: what the runtime says about its models is what the picker offers. */

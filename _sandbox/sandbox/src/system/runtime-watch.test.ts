@@ -1,5 +1,6 @@
 import type { RuntimeDomain } from "@intentic/sandbox-contract";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, jest } from "bun:test";
+import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createRuntimeSampler, paneFingerprint, publishRuntimeChange, type RuntimeProbes, subscribeRuntimeChanges } from "./runtime-watch.js";
 
 // The bus is module-level state; every test subscribes and unsubscribes so the last unsubscribe resets pending domains,
@@ -25,7 +26,7 @@ const fakeProbes = (): RuntimeProbes & { set: (key: "terminals" | "ports", value
 };
 
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 test("a publish reaches the stream on the next tick, and a burst arrives as one frame", async () => {
@@ -34,7 +35,7 @@ test("a publish reaches the stream on the next tick, and a burst arrives as one 
     publishRuntimeChange("terminals");
     // Nothing has gone out yet; the coalescing window turns two publishes into one frame.
     expect(frames).toHaveLength(0);
-    await vi.waitFor(() => expect(frames).toHaveLength(1));
+    await waitFor(() => expect(frames).toHaveLength(1));
     expect(frames[0]?.toSorted()).toEqual(["panels", "terminals"]);
     unsubscribe();
 });
@@ -49,34 +50,34 @@ test("nothing is queued while no browser is connected", async () => {
 });
 
 test("a chatty domain is rate-limited: the first change goes out at once, the rest coalesce", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const unsubscribe = listen();
     // Simulates a subagent publishing continuously (tool use, token count).
     publishRuntimeChange("subagents");
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(1);
     expect(frames).toEqual([["subagents"]]);
 
     for (let i = 0; i < 50; i++) {
         publishRuntimeChange("subagents");
     }
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceTimersByTimeAsync(100);
     // Still one frame: fifty mutations inside the window cost the browsers nothing extra.
     expect(frames).toHaveLength(1);
-    await vi.advanceTimersByTimeAsync(2000);
+    await advanceTimersByTimeAsync(2000);
     expect(frames).toEqual([["subagents"], ["subagents"]]);
     unsubscribe();
 });
 
 test("a discrete domain is not held up behind a chatty one's window", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const unsubscribe = listen();
     publishRuntimeChange("subagents");
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(1);
     frames.length = 0;
 
     // subagents is mid-window; a panel starting must not wait, or a click feels as slow as the chattiest domain.
     publishRuntimeChange("subagents", "panels");
-    await vi.advanceTimersByTimeAsync(1);
+    await advanceTimersByTimeAsync(1);
     expect(frames).toEqual([["panels"]]);
     unsubscribe();
 });
@@ -92,7 +93,7 @@ test("the sampler publishes only what changed, and never on its first reading", 
 
     probes.set("terminals", "web-a\t0\t\t1");
     await sampler.sample();
-    await vi.waitFor(() => expect(frames).toEqual([["terminals"]]));
+    await waitFor(() => expect(frames).toEqual([["terminals"]]));
 
     // A second identical reading says nothing: an idle sandbox with a tab open pushes nothing at all.
     await sampler.sample();
@@ -124,7 +125,7 @@ test("a new listening port refreshes the panels above it as well as the ports vi
     // A dev server binding its port IS the panel turning healthy: panel health is read off the sockets.
     probes.set("ports", "1F90");
     await sampler.sample();
-    await vi.waitFor(() => expect(frames).toHaveLength(1));
+    await waitFor(() => expect(frames).toHaveLength(1));
     expect(frames[0]?.toSorted()).toEqual(["panels", "ports"]);
     unsubscribe();
 });

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
 import { noteChildWork } from "./child-verification.js";
 import {
     closeSubagents,
@@ -61,7 +61,7 @@ const update = (frame: AgentEvent | undefined): Extract<AgentEvent, { kind: "sub
 };
 
 beforeEach(() => resetSubagents());
-afterEach(() => vi.useRealTimers());
+afterEach(() => jest.useRealTimers());
 
 describe("the SDK's own subagents", () => {
     it("opens a record from task_started and reports it as born", () => {
@@ -242,13 +242,13 @@ describe("the roster", () => {
     // Retain window asserted from both sides (still listed at 4 min, gone by 6): the boundary is pinned, not
     // incidental.
     it("ages a finished child out of the list after five minutes, and keeps a live one", () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         noteSubagentTask(turn(), started());
         noteSubagentTask(turn(), started({ tool_use_id: "live-1", task_id: "task-b" }));
         noteSubagentTask(turn(), { subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } });
-        vi.advanceTimersByTime(4 * 60_000);
+        jest.advanceTimersByTime(4 * 60_000);
         expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1", "call-1"]);
-        vi.advanceTimersByTime(2 * 60_000);
+        jest.advanceTimersByTime(2 * 60_000);
         expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1"]);
     });
 });

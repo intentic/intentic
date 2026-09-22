@@ -1,5 +1,5 @@
 import { REQUEST_ID_HEADER } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createApp } from "../app.js";
 import { createPerfTracker, type PerfFields } from "../platform/resources/perf.js";
 import { services } from "../harness/route-services.testing.js";

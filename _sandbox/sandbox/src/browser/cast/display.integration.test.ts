@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:net";
-import { afterEach, beforeAll, describe, expect, test } from "vitest";
+import { describe, test, expect, afterEach, beforeAll } from "bun:test";
 import { presenceOf } from "./display.js";
 
 // Which display numbers the allocator may claim. Getting this wrong is silent: claiming a number a live server still

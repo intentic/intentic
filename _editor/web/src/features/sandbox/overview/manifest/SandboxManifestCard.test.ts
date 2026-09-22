@@ -1,20 +1,20 @@
-// @vitest-environment jsdom
 // Pins that a collapsed row shows only a file name and a status tag, no preamble or complaint count.
 // jsdom: mounts the component tree and reads rendered text.
+import "@intentic/testing/dom";
 import { STATE_DIR } from "@intentic/constants";
 import type { ManifestProblemReport, ManifestRepair } from "@intentic/sandbox-contract";
-import { afterEach, expect, it, vi } from "vitest";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 const reports = ref<ManifestProblemReport[]>([]);
-const repair = vi.fn<(request: ManifestRepair) => Promise<void>>(async () => undefined);
-vi.mock(`../../extensions/useManifestProblems`, () => ({
+const repair = mock<(request: ManifestRepair) => Promise<void>>(async () => undefined);
+mock.module(`../../extensions/useManifestProblems`, () => ({
     useManifestProblems: () => ({ reports, hasProblems: computed(() => reports.value.length > 0), repair }),
 }));
 
-const opened = vi.fn();
-vi.mock(`../../../workspace/files/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
+const opened = mock();
+mock.module(`../../../workspace/files/openFileRef`, () => ({ openWorkspaceRef: (path: string) => opened(path) }));
 
 const { default: SandboxManifestCard } = await import("./SandboxManifestCard.vue");
 

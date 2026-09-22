@@ -1,4 +1,4 @@
-import { describe, expect, it, test } from "vitest";
+import { describe, it, test, expect } from "bun:test";
 import { blockAtOffset, type MarkdownBlock, offsetOfLine, splitMarkdownBlocks } from "@intentic/ui/markdown";
 
 // The block splitter behind the file viewer's pretty-editing surface. No DOM here: this is the lexer's view of a

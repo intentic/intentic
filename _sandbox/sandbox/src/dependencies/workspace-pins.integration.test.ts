@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createWorkspacePins } from "./workspace-pins.js";
 
 const workspace = async (files: Record<string, string>): Promise<string> => {

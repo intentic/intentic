@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 // @ts-expect-error -- hand-written .mjs with a .d.mts beside it; see mirror-roots.mjs for why it isn't compiled.
 import { MIRRORED_DIRS, replacedMirrorRoots } from "./mirror-roots.mjs";
 

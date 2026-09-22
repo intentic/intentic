@@ -3,7 +3,7 @@ import type { SerializedValue } from "@intentic/graph";
 import { env, isRef } from "@intentic/graph";
 import type { ResourceType } from "@intentic/resources";
 import { OUTPUTS } from "@intentic/resources";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { graph } from "./__fixtures__/deploy.config.js";
 import { defineStack } from "./index.js";
 

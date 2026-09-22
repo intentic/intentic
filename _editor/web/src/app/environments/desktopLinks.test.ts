@@ -1,5 +1,6 @@
-// @vitest-environment jsdom
-import { afterEach, expect, test, vi } from "vitest";
+import "@intentic/testing/dom";
+import { test, expect, afterEach, spyOn } from "bun:test";
+import { stubGlobal } from "@intentic/testing/bun";
 
 // The desktop app's webview drops a `target="_blank"` press without telling the app anything (WebView2 raises its
 // new-window event for `window.open` and a named target, and for `_blank` raises nothing). These pin the substitution
@@ -36,7 +37,8 @@ const press = (attributes: Record<string, string>, modifiers: MouseEventInit = {
     return event.defaultPrevented;
 };
 
-vi.spyOn(window, `open`).mockImplementation((url) => {
+// Stubbed rather than spied on: the DOM shim carries `open` as an accessor, and a spy cannot stand in for one.
+stubGlobal(`open`, (url: string | URL | undefined) => {
     opened.push(String(url));
     return null;
 });
@@ -101,7 +103,7 @@ test("every other link on the page is left exactly as it was", () => {
 
 test("in a browser nothing is installed at all: `_blank` needs no help there", () => {
     asApp(undefined);
-    const watching = vi.spyOn(document, `addEventListener`);
+    const watching = spyOn(document, `addEventListener`);
     try {
         installDesktopLinks();
         expect(watching).not.toHaveBeenCalled();

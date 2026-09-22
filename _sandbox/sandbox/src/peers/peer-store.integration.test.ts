@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { z } from "zod";
 import { filePeerStore, type PeerStore } from "./peer-store.js";
 
@@ -19,7 +19,7 @@ const peerFiles =
 
 const spec = { files: peerFiles("host"), key: "hosts", prefix: "iht_", extra: {} };
 
-const tempStore = (): { store: PeerStore<Record<string, never>>; root: string } => {
+const tempStore = (): { store: PeerStore<Record<never, never>>; root: string } => {
     const root = mkdtempSync(join(tmpdir(), "peers-"));
     return { store: filePeerStore(root, spec), root };
 };
@@ -138,14 +138,24 @@ test("a replayable door burns every redeemed pairing, so a restart refuses the r
     const restarted = filePeerStore(root, runners);
     restarted.mintPairing("rog-runner");
     expect(await restarted.enroll(token)).toBeUndefined();
-    expect(JSON.parse(await readFile(join(root, "runner-pair-consumed.json"), "utf8"))).toMatchObject({ digests: [expect.stringMatching(/^[0-9a-f]{64}$/)] });
+    expect(JSON.parse(await readFile(join(root, "runner-pair-consumed.json"), "utf8"))).toMatchObject({
+        digests: [expect.stringMatching(/^[0-9a-f]{64}$/)],
+    });
 });
 
 // Extra fields (e.g. a runner's host) are the only way back to the machine that can stop it; the runner itself can't
 // supply them.
 test("a door's extra record travels from the pairing to the enrollment", async () => {
-    const store = filePeerStore(mkdtempSync(join(tmpdir(), "peers-")), { files: peerFiles("runner"), key: "runners", prefix: "irt_", extra: { host: z.string().optional() } });
+    const store = filePeerStore(mkdtempSync(join(tmpdir(), "peers-")), {
+        files: peerFiles("runner"),
+        key: "runners",
+        prefix: "irt_",
+        extra: { host: z.string().optional() },
+    });
     expect(await store.enroll(store.mintPairing("rig", { host: "rog" }).token)).toMatchObject({ id: "rig", host: "rog" });
     await store.enroll(store.mintPairing("hand-made").token);
-    expect((await store.list()).toSorted((left, right) => left.id.localeCompare(right.id))).toEqual([{ id: "hand-made" }, { id: "rig", host: "rog" }]);
+    expect((await store.list()).toSorted((left, right) => left.id.localeCompare(right.id))).toEqual([
+        { id: "hand-made" },
+        { id: "rig", host: "rog" },
+    ]);
 });

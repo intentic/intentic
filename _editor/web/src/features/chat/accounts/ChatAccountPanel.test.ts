@@ -1,11 +1,15 @@
-// @vitest-environment jsdom
 // The line above the composer when this chat has nothing to send with; it never pitches, and it names a
 // vendor only where the owner named one first. It stays silent through both the account and endpoint reads
 // rather than claiming anything, and for a spent trial, which is connected but out of allowance.
+import "@intentic/testing/dom";
 import { type AgentProvider, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as vueRouterOriginal from "vue-router";
+import { RouterLinkStub } from "../../../testing/routerLinkStub";
+import * as providerCatalogOriginal from "./providerCatalog";
+import * as providerAccountsOriginal from "./providerAccounts";
 
 const connected = ref(false);
 const accountsLoaded = ref(true);
@@ -13,22 +17,22 @@ const endpointsLoaded = ref(true);
 const nativeConnectFlow = ref<{ provider: AgentProvider; url: string; code: string } | undefined>(undefined);
 const translatorConnectFlow = ref<undefined>(undefined);
 const provider = ref<AgentProvider>(`claude`);
-const selectModel = vi.fn();
-const startConnect = vi.fn();
-const connectTranslator = vi.fn();
+const selectModel = mock();
+const startConnect = mock();
+const connectTranslator = mock();
 
 // The two reads `accessKnown` needs, mocked at their source so `accessKnown` itself runs unmocked.
-vi.mock(`./providerAccounts`, async (importOriginal) => ({
-    ...(await importOriginal<object>()),
+mock.module(`./providerAccounts`, () => ({
+    ...providerAccountsOriginal,
     accountsLoaded,
 }));
-vi.mock(`./providerCatalog`, async (importOriginal) => ({
-    ...(await importOriginal<object>()),
+mock.module(`./providerCatalog`, () => ({
+    ...providerCatalogOriginal,
     endpointsLoaded,
 }));
 
 // The pane's view the real panel injects from ChatPane; mounted bare here and handed over directly.
-vi.mock(`../run/useChat`, () => ({
+mock.module(`../run/useChat`, () => ({
     useChat: () => ({
         nativeConnectFlow,
         translatorConnectFlow,
@@ -47,7 +51,7 @@ vi.mock(`../run/useChat`, () => ({
         completeTranslator: () => {},
     }),
 }));
-vi.mock(`../panel/useChat-view`, () => ({
+mock.module(`../panel/useChat-view`, () => ({
     usePaneView: () => ({
         connected,
         provider,
@@ -58,10 +62,10 @@ vi.mock(`../panel/useChat-view`, () => ({
         selectAccount: () => {},
     }),
 }));
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
-    useRouter: () => ({ push: vi.fn() }) as never,
-    RouterLink: (await import(`../../../testing/routerLinkStub`)).RouterLinkStub as never,
+mock.module(`vue-router`, () => ({
+    ...vueRouterOriginal,
+    useRouter: () => ({ push: mock() }) as never,
+    RouterLink: RouterLinkStub as never,
 }));
 
 const { modelRequest, settleModelPick } = await import("../models/host/hostModelPicker");

@@ -1,6 +1,6 @@
 import http from "node:http";
 import { Readable } from "node:stream";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { signJwt } from "./jwt.js";
 import { createListener, type Listener } from "./listener.js";
 import { Sessions } from "./sessions.js";

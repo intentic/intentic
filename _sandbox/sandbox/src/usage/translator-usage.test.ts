@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { authFileCooling, codexUsageFromPayload, codexUsageFromRateLimits, geminiUsageFromPayload, kimiUsageFromPayload } from "./translator-usage.js";
 
 // Pins the mapping into AccountUsage: every named pool becomes its own window, utilization is always utilization, never

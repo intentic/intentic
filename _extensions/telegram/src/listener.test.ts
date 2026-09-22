@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import type { TelegramConnection, TelegramMessage } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
 import { addressesUs, attachmentsOf, authorNameOf, contentOf, createTelegramListener } from "./listener.js";
@@ -93,7 +94,7 @@ test("an unaddressed group message dispatches without holding a turn stream", as
     const fake = fakeCtx();
     const listener = createTelegramListener(fake.ctx, () => new Map([["token", fakeConnection(calls)]]));
     listener.onUpdate(fakeConnection(calls), { update_id: 1, message: message() });
-    await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
+    await waitFor(() => expect(fake.dispatched).toHaveLength(1));
     expect(fake.streamed).toHaveLength(0);
     expect(fake.dispatched[0]).toMatchObject({ provider: "telegram", type: "message", channelId: "-100123", content: "deploy is red again" });
     expect(fake.dispatched[0]?.["mentioned"]).toBeUndefined();
@@ -107,7 +108,7 @@ test("a private message is always addressed to us: it shows typing and streams t
     const connection = fakeConnection(calls);
     const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
     listener.onUpdate(connection, { update_id: 1, message: message({ chat: { id: 42, type: "private" }, text: "hello?" }) });
-    await vi.waitFor(() => expect(calls.map((call) => call.method)).toEqual(["sendChatAction", "sendMessage"]));
+    await waitFor(() => expect(calls.map((call) => call.method)).toEqual(["sendChatAction", "sendMessage"]));
     expect(fake.streamed[0]).toMatchObject({ mentioned: true, channelId: "42" });
     expect(calls[1]?.body).toMatchObject({ chat_id: 42, text: "on it" });
     // Private chat has nothing to disambiguate, so no `reply_parameters`.
@@ -121,7 +122,7 @@ test("a group reply points at the message it answers, and stays in its forum top
     const connection = fakeConnection(calls);
     const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
     listener.onUpdate(connection, { update_id: 1, message: message({ text: `@${SELF_NAME} status?`, message_thread_id: 5 }) });
-    await vi.waitFor(() => expect(calls.some((call) => call.method === "sendMessage")).toBe(true));
+    await waitFor(() => expect(calls.some((call) => call.method === "sendMessage")).toBe(true));
     const sent = calls.find((call) => call.method === "sendMessage");
     expect(sent?.body).toMatchObject({ chat_id: -100123, message_thread_id: 5, reply_parameters: { message_id: 11 } });
     listener.stopAll();
@@ -135,7 +136,7 @@ test("the same message reaching two of our bots wakes an agent once", async () =
     const listener = createTelegramListener(fake.ctx, () => new Map([["a", first]]));
     listener.onUpdate(first, { update_id: 1, message: message() });
     listener.onUpdate(second, { update_id: 2, message: message() });
-    await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
+    await waitFor(() => expect(fake.dispatched).toHaveLength(1));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(fake.dispatched).toHaveLength(1);
 });
@@ -157,9 +158,9 @@ test("what the gateway watched go by becomes the history a later mention carries
     const connection = fakeConnection(calls);
     const listener = createTelegramListener(fake.ctx, () => new Map([["token", connection]]));
     listener.onUpdate(connection, { update_id: 1, message: message({ message_id: 1, text: "the deploy went out at four" }) });
-    await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
+    await waitFor(() => expect(fake.dispatched).toHaveLength(1));
     listener.onUpdate(connection, { update_id: 2, message: message({ message_id: 2, text: `@${SELF_NAME} what happened?` }) });
-    await vi.waitFor(() => expect(fake.streamed).toHaveLength(1));
+    await waitFor(() => expect(fake.streamed).toHaveLength(1));
     // History is only what the gateway saw before; a bot can't read the past, and it excludes this message itself.
     expect(fake.streamed[0]?.["history"]).toEqual([
         { author: { id: "42", name: "Ada Lovelace" }, content: "the deploy went out at four", timestamp: "2025-08-13T16:20:30.000Z" },

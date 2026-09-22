@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import type { Capability } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { type CapabilitiesStore, fileCapabilitiesStore } from "./capabilities-store.js";
 
 // Fresh temp path; .intentic doesn't exist yet, so the store must create it on write.

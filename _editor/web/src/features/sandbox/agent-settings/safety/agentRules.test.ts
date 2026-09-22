@@ -1,10 +1,10 @@
-// @vitest-environment jsdom
 // The four built-in switches on the Agent tab write and read ordinary rules in settings; toggling one must not
 // touch the others, and "Test what the change did" writes a setting rather than a rule.
+import "@intentic/testing/dom";
 import type { Rule, SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -12,16 +12,16 @@ import { IconStub } from "@intentic/ui/testing";
 
 // The settings object every row reads and writes; patch is the seam, not the daemon round trip.
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = vi.fn((fields: Partial<SandboxSettings>) => {
+const patch = mock((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-vi.mock(`../../overview/useSandboxSettings`, () => ({
+mock.module(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
 // The firings query is a separate route; it says nothing about what a row writes.
-vi.mock(`../../client/useSandboxQuery`, () => ({
+mock.module(`../../client/useSandboxQuery`, () => ({
     useSandboxQuery: () => ({ query: { data: ref({}), isLoading: ref(false), error: ref(undefined) }, error: ref(undefined) }),
 }));
 

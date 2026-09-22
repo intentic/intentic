@@ -1,6 +1,6 @@
 import { STATE_DIR } from "@intentic/constants";
 import type { AttachFrame, TranscriptTool } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createTranslator, editorPath } from "./translate.js";
 
 const CWD = "/home/me/projects/mirror";

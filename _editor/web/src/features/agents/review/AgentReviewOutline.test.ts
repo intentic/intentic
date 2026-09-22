@@ -1,17 +1,18 @@
-// @vitest-environment jsdom
 // The outline is a promise about a screen that hasn't arrived, so what it draws is the whole of it: the panel's two
 // columns on a desktop, the list alone on a phone (whose diff is a full-screen takeover only a pick can open), and one
 // announcement for the wait rather than one per bar.
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { uiLength } from "../../../shell/window/uiScale";
+import * as actualUi from "@intentic/ui";
 
 // The only stand-in: the form factor, which the kit reads off matchMedia (desktop under jsdom) and this suite needs
 // both ways.
 const mobile = ref(false);
-vi.mock("@intentic/ui", async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
+mock.module("@intentic/ui", () => ({
+    ...actualUi,
     useDevice: () => ({ mobile }),
 }));
 

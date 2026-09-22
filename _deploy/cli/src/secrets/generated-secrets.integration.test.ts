@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { ensureGeneratedSecrets, readGeneratedSecrets } from "./generated-secrets.js";
 import { createLocalSecretStore } from "./secret-store.js";
 

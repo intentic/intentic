@@ -1,6 +1,6 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { Code, Icon } from "@intentic/ui";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 describe("Code scrollBottom", () => {

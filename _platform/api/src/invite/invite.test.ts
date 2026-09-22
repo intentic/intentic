@@ -1,5 +1,6 @@
 import { call, ORPCError } from "@orpc/server";
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { OrpcContext } from "../context.js";
 import { inviteRoutes } from "./invite.routes.js";
 
@@ -7,7 +8,7 @@ const user = { id: `u1`, email: `owner@example.com`, name: `Owner`, image: null 
 const sandboxRow = { id: `s1`, name: `dev`, image: null, ownerId: `u1`, token: `tok`, daemonUrl: null, lastSeenAt: null, tunnelToken: null };
 
 // Minimal prisma fake: each test overrides just the calls its route makes.
-const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof vi.fn>>>) => overrides as unknown as OrpcContext[`prisma`];
+const fakePrisma = (overrides: Record<string, Record<string, ReturnType<typeof mock>>>) => overrides as unknown as OrpcContext[`prisma`];
 
 const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
     ({
@@ -19,7 +20,7 @@ const context = (overrides?: Partial<OrpcContext>): OrpcContext =>
             email: { apiKey: ``, from: `` },
         },
         user,
-        logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        logger: { info: mock(), warn: mock(), error: mock() },
         ...overrides,
     }) as OrpcContext;
 
@@ -43,9 +44,9 @@ const expectOrpcCode = async (promise: Promise<unknown>, code: string) => {
 
 describe(`invite routes`, () => {
     it(`invite.create lowercases the invited email, mints a token, and returns the pending roster`, async () => {
-        const findUnique = vi.fn().mockResolvedValue(null);
-        const upsert = vi.fn().mockResolvedValue({});
-        const findMany = vi.fn().mockResolvedValue([
+        const findUnique = mock().mockResolvedValue(null);
+        const upsert = mock().mockResolvedValue({});
+        const findMany = mock().mockResolvedValue([
             {
                 email: `guest@example.com`,
                 role: `collaborator`,
@@ -55,7 +56,7 @@ describe(`invite routes`, () => {
             },
         ]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) },
+            sandbox: { findFirst: mock().mockResolvedValue(sandboxRow) },
             sandboxMember: { findUnique, upsert, findMany },
         });
 
@@ -92,14 +93,14 @@ describe(`invite routes`, () => {
 
     // A failed send must not throw: it would 500 the request over a roster that already shows the person pending.
     it(`invite.create survives a refused email and hands back the link`, async () => {
-        const findMany = vi.fn().mockResolvedValue([]);
+        const findMany = mock().mockResolvedValue([]);
         const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) },
-            sandboxMember: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}), findMany },
+            sandbox: { findFirst: mock().mockResolvedValue(sandboxRow) },
+            sandboxMember: { findUnique: mock().mockResolvedValue(null), upsert: mock().mockResolvedValue({}), findMany },
         });
-        const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
-        const fetchMock = vi.fn().mockResolvedValue(new Response(`nope`, { status: 422 }));
-        vi.stubGlobal(`fetch`, fetchMock);
+        const logger = { info: mock(), warn: mock(), error: mock() };
+        const fetchMock = mock().mockResolvedValue(new Response(`nope`, { status: 422 }));
+        stubGlobal(`fetch`, fetchMock);
 
         const result = await call(
             inviteRoutes.create,
@@ -107,23 +108,23 @@ describe(`invite routes`, () => {
             { context: context({ prisma, logger, config: mailConfig(`https://app.test`) } as unknown as Partial<OrpcContext>) },
         );
 
-        expect(fetchMock).toHaveBeenCalledOnce();
+        expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(result.delivery).toBe(`refused`);
         expect(result.link).toMatch(/^https:\/\/app\.test\/invite\/.+/);
         // The provider's own error, carried to the owner rather than left in a server-side log.
         expect(result.reason).toContain(`422`);
         // Still an incident on the server; the recipient and the provider's error are what make the log worth reading.
         expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.anything(), to: `guest@example.com` }), expect.any(String));
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it(`invite.create doesn't email a link that only resolves on this machine`, async () => {
         const prisma = fakePrisma({
-            sandbox: { findFirst: vi.fn().mockResolvedValue(sandboxRow) },
-            sandboxMember: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({}), findMany: vi.fn().mockResolvedValue([]) },
+            sandbox: { findFirst: mock().mockResolvedValue(sandboxRow) },
+            sandboxMember: { findUnique: mock().mockResolvedValue(null), upsert: mock().mockResolvedValue({}), findMany: mock().mockResolvedValue([]) },
         });
-        const fetchMock = vi.fn();
-        vi.stubGlobal(`fetch`, fetchMock);
+        const fetchMock = mock();
+        stubGlobal(`fetch`, fetchMock);
 
         const result = await call(
             inviteRoutes.create,
@@ -134,7 +135,7 @@ describe(`invite routes`, () => {
         expect(fetchMock).not.toHaveBeenCalled();
         expect(result.delivery).toBe(`local-link`);
         expect(result.link).toBe(`https://localhost:47145/invite/${result.link.split(`/`).pop() ?? ``}`);
-        vi.unstubAllGlobals();
+        unstubAllGlobals();
     });
 
     it(`invite.accept flips a valid invite for the invited address and is email-locked`, async () => {
@@ -146,20 +147,20 @@ describe(`invite routes`, () => {
             acceptedAt: null,
             inviteExpiresAt: new Date(`2099-01-01T00:00:00Z`),
         };
-        const update = vi.fn().mockResolvedValue({});
-        const prisma = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(memberRow), update } });
+        const update = mock().mockResolvedValue({});
+        const prisma = fakePrisma({ sandboxMember: { findUnique: mock().mockResolvedValue(memberRow), update } });
 
         const result = await call(inviteRoutes.accept, { token: `tok` }, { context: context({ prisma, user: guest }) });
         expect(update).toHaveBeenCalledWith({ where: { id: `m1` }, data: { acceptedAt: expect.any(Date) } });
         expect(result).toEqual({ sandboxId: `s1` });
 
         // A different Google account can't accept: the invite is locked to the invited email.
-        const wrong = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(memberRow), update: vi.fn() } });
+        const wrong = fakePrisma({ sandboxMember: { findUnique: mock().mockResolvedValue(memberRow), update: mock() } });
         await expectOrpcCode(call(inviteRoutes.accept, { token: `tok` }, { context: context({ prisma: wrong }) }), `FORBIDDEN`);
     });
 
     it(`invite.accept 404s an unknown token`, async () => {
-        const prisma = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(null) } });
+        const prisma = fakePrisma({ sandboxMember: { findUnique: mock().mockResolvedValue(null) } });
         await expectOrpcCode(call(inviteRoutes.accept, { token: `nope` }, { context: context({ prisma }) }), `NOT_FOUND`);
     });
 
@@ -171,7 +172,7 @@ describe(`invite routes`, () => {
             inviteExpiresAt: new Date(`2099-01-01T00:00:00Z`),
             sandbox: sandboxRow,
         };
-        const prisma = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(memberRow) } });
+        const prisma = fakePrisma({ sandboxMember: { findUnique: mock().mockResolvedValue(memberRow) } });
         expect(await call(inviteRoutes.preview, { token: `tok` }, { context: context({ prisma }) })).toEqual({
             status: `pending`,
             sandboxName: `dev`,
@@ -181,7 +182,7 @@ describe(`invite routes`, () => {
     });
 
     it(`invite.preview exposes nothing at all for a token it does not know`, async () => {
-        const prisma = fakePrisma({ sandboxMember: { findUnique: vi.fn().mockResolvedValue(null) } });
+        const prisma = fakePrisma({ sandboxMember: { findUnique: mock().mockResolvedValue(null) } });
         expect(await call(inviteRoutes.preview, { token: `nope` }, { context: context({ prisma }) })).toEqual({ status: `invalid` });
     });
 });

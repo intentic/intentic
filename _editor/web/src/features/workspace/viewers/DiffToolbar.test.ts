@@ -1,14 +1,14 @@
-// @vitest-environment jsdom
 // The bar's settings moved behind one control, and the whole cost of that move is what the CLOSED control still
 // says. Comments are hidden by default, so the diff under this bar is silently withholding lines; the old bar said
 // so in a word, and these pin that the glyph says it now — and that the settings themselves are still there, one
 // press away, for every shape of file the bar serves.
-import { afterEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, afterEach, jest } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same reason as the other viewer suites: the import chain reads browser globals (useDevice's matchMedia,
-// environment.ts's window.env), which vitest.setup.ts stubs package-wide. Desktop, so Split|Unified is on offer.
+// environment.ts's window.env), which the package preload stubs package-wide. Desktop, so Split|Unified is on offer.
 const { default: DiffToolbar } = await import("./DiffToolbar.vue");
 const { showComments, toggleShowComments } = (await import("../../../shell/window/useLayout")).useLayout();
 
@@ -32,7 +32,7 @@ afterEach(() => {
     if (showComments.value) {
         toggleShowComments();
     }
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
 });
 
 const control = (el: HTMLElement): HTMLElement => el.querySelector<HTMLElement>(`[aria-expanded]`)!;

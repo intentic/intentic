@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { createRequest } from "../agent/tools/agent-requests.js";
 import { INTERNAL_SERVERS, outsideSourceOf } from "../guard/outside-results.js";
 import { clearTerminalHelp, raiseTerminalHelp, settleTerminalHelpFor, terminalHelpFor } from "./terminal-help.js";

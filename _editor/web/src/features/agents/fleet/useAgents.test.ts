@@ -1,22 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock, spyOn } from "bun:test";
+import { waitFor, mocked } from "@intentic/testing/bun";
 
 // canArchive is pure, but the fleet store it lives beside pulls useChat and the app shell at import time. These
 // mocks cut the edges that reach `window.env` (router, analytics, sandbox client) without touching what's tested.
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-vi.mock("../../sandbox/client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
+mock.module("../../sandbox/client/useSandbox", () => {
     return { useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) };
 });
 // Pins the scoping rule to a fixed id so assertions below can spell out the whole key.
-vi.mock("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
-vi.mock("../../sandbox/client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
+mock.module("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
 // And the fourth: auditRoster reports through sandboxTarget, which reads window.env on import.
-vi.mock("../../../app/clientDiagnostics", () => ({ reportClient: vi.fn() }));
+mock.module("../../../app/clientDiagnostics", () => ({ reportClient: mock() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
-import { nextTick } from "vue";
+import { nextTick, ref } from "vue";
 import { forgetClosedDraft, keepClosedDraft } from "../../chat/drafts/closedDrafts";
 import { previewOf } from "../../chat/panel/useChat-strip";
 import { Conversation } from "../../chat/session/conversation";
@@ -298,7 +298,7 @@ describe("roster frames the board can skip", () => {
         await nextTick();
 
         // The request never settles, so the board holds only the in-place optimistic write.
-        vi.mocked(sandboxJson).mockImplementation(() => new Promise(() => undefined));
+        mocked(sandboxJson).mockImplementation(() => new Promise(() => undefined));
         void useAgents().rename(`a1`, `New name`);
         await nextTick();
         expect(cardsById().get(`a1`)?.title).toBe(`New name`);
@@ -331,12 +331,12 @@ describe("the beat's audit of the roster", () => {
     // What the roster says about one agent right now, the whole of what a stale board gets wrong.
     const parked = (id: string): boolean => useAgents().fleet.value.find((card) => card.id === id)?.attention.question === true;
     const answers = (agents: AgentSummary[], rev: number): void => {
-        vi.mocked(sandboxJson).mockResolvedValue({ agents, rev });
+        mocked(sandboxJson).mockResolvedValue({ agents, rev });
     };
 
     beforeEach(() => {
         resetAgents();
-        vi.mocked(sandboxJson).mockReset();
+        mocked(sandboxJson).mockReset();
     });
 
     it("asks for nothing while the beat agrees with what it holds", async () => {
@@ -357,7 +357,7 @@ describe("the beat's audit of the roster", () => {
         answers([summary(`a1`)], 8);
 
         auditRoster(8);
-        await vi.waitFor(() => expect(parked(`a1`)).toBe(false));
+        await waitFor(() => expect(parked(`a1`)).toBe(false));
 
         expect(sandboxJson).toHaveBeenCalledWith(`/agents`);
     });
@@ -370,7 +370,7 @@ describe("the beat's audit of the roster", () => {
         answers([summary(`a1`)], 4);
 
         auditRoster(3);
-        await vi.waitFor(() => expect(parked(`a1`)).toBe(false));
+        await waitFor(() => expect(parked(`a1`)).toBe(false));
     });
 
     it("keeps one read in flight, however many beats disagree while it runs", async () => {
@@ -381,9 +381,9 @@ describe("the beat's audit of the roster", () => {
         auditRoster(8);
         auditRoster(9);
         auditRoster(9);
-        await vi.waitFor(() => expect(parked(`a1`)).toBe(false));
+        await waitFor(() => expect(parked(`a1`)).toBe(false));
 
-        expect(vi.mocked(sandboxJson).mock.calls.filter(([path]) => path === `/agents`)).toHaveLength(1);
+        expect(mocked(sandboxJson).mock.calls.filter(([path]) => path === `/agents`)).toHaveLength(1);
     });
 });
 
@@ -407,7 +407,7 @@ describe("diff invalidation", () => {
 
     it("invalidates an agent's diff on a status transition: the auto-land flip this browser never performed", () => {
         setAgents([summary(`a1`, `running`)], 1);
-        const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+        const invalidate = spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
         setAgents([summary(`a1`, `landed`)], 2);
 
@@ -417,7 +417,7 @@ describe("diff invalidation", () => {
 
     it("stays quiet across frames that only tick activity: a running turn must not hammer the diff", () => {
         setAgents([summary(`a1`, `running`)], 1);
-        const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+        const invalidate = spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
         setAgents([{ ...summary(`a1`, `running`), updatedAt: 2_000 }], 2);
 
@@ -437,7 +437,7 @@ describe("diff invalidation", () => {
     });
 
     it("treats an unseen id as a transition: a reconnect's first snapshot may carry a land that happened offline", () => {
-        const invalidate = vi.spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
+        const invalidate = spyOn(queryClient, `invalidateQueries`).mockResolvedValue();
 
         setAgents([summary(`a1`, `landed`)], 0);
 
@@ -482,10 +482,10 @@ describe("draft cards", () => {
     beforeEach(() => {
         // These cases drive the real open path, firing the daemon's best-effort side calls (read marker, attach probe);
         // both are stubbed to resolve, since an undefined return isn't something either knows how to survive.
-        vi.mocked(sandboxJson)
+        mocked(sandboxJson)
             .mockReset()
             .mockResolvedValue({} as never);
-        vi.mocked(sandboxRequest)
+        mocked(sandboxRequest)
             .mockReset()
             .mockResolvedValue({ ok: false } as never);
         resetAgents();
@@ -913,7 +913,7 @@ describe("draft cards", () => {
     it("takes the chat tab with the card, leaving nothing behind in either view", async () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
         setAgents([registered(`a1`)], 1);
-        vi.mocked(sandboxJson).mockResolvedValueOnce({ moved: [{ ...registered(`a1`), archivedAt: 2_000 }], failed: [], rev: 2 } as never);
+        mocked(sandboxJson).mockResolvedValueOnce({ moved: [{ ...registered(`a1`), archivedAt: 2_000 }], failed: [], rev: 2 } as never);
 
         await useAgents().archive([`a1`]);
 
@@ -1110,7 +1110,10 @@ describe("the finished fold", () => {
         writing.draft.value = `picking this back up:`;
         useChat().conversations.value = [...useChat().conversations.value, writing];
 
-        setAgents([landed(`receipt-now`, now), { ...landed(`ready-9h`, now - 9 * hour), status: `ready` }, landed(`stale-unsent`, now - 26 * hour)], 1);
+        setAgents(
+            [landed(`receipt-now`, now), { ...landed(`ready-9h`, now - 9 * hour), status: `ready` }, landed(`stale-unsent`, now - 26 * hour)],
+            1,
+        );
 
         // The press sorts on its own time, under the fresh receipt; the unsent card leads though it is the oldest of the three.
         expect(useAgents().lanes.value.finished.map((entry) => entry.id)).toEqual([`stale-unsent`, `receipt-now`, `ready-9h`]);
@@ -1210,7 +1213,7 @@ describe("archive", () => {
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
-    const post = vi.mocked(sandboxJson);
+    const post = mocked(sandboxJson);
     // This suite's own agent tabs; reset also installs a main-tree chat no archive case is about.
     const openTabs = (): string[] =>
         useChat()
@@ -1655,7 +1658,7 @@ describe("the archive list", () => {
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
-    const post = vi.mocked(sandboxJson);
+    const post = mocked(sandboxJson);
     const archivedReads = (): number => post.mock.calls.filter(([path]) => path === `/agents/archived`).length;
 
     beforeEach(() => {
@@ -1674,7 +1677,7 @@ describe("the archive list", () => {
 
         // The retention sweep archived `b`: the next roster frame simply arrives without it.
         setAgents([agent(`a`)], 2);
-        await vi.waitFor(() => expect(archived.value.map((entry) => entry.id)).toEqual([`b`]));
+        await waitFor(() => expect(archived.value.map((entry) => entry.id)).toEqual([`b`]));
 
         expect(archivedReads()).toBe(1);
     });
@@ -1736,7 +1739,7 @@ describe("tabs the daemon retired", () => {
     };
 
     beforeEach(() => {
-        vi.mocked(sandboxJson)
+        mocked(sandboxJson)
             .mockReset()
             .mockResolvedValue({} as never);
         resetAgents();

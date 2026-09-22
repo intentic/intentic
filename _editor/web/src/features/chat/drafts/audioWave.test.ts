@@ -1,6 +1,6 @@
 // The waveform reduction on its own: what the chip draws for a clip is decided here, and a browser AudioContext is
 // not needed to say whether it is right.
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { barsFrom, WAVE_BARS } from "./audioWave";
 
 // A ramp whose loudest sample sits in the last window, so normalization has something to scale against.

@@ -1,10 +1,10 @@
-// @vitest-environment jsdom
 // What a press on an expandable row opens or closes, pinned on the real component since the failure is only visible
 // from a pointer, not a snapshot or a typecheck. `hit="pair"` used to let the whole title/description block swallow
 // clicks, so a plain name did nothing and a link's surrounding text was dead too. This pins the geography: which parts
 // open a row, which belong to a control, and which parts of an open row close it again.
+import "@intentic/testing/dom";
 import { DisclosureRow } from "@intentic/ui";
-import { afterEach, expect, it } from "vitest";
+import { it, expect, afterEach } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 
 // Vue stamps each event with `Date.now()` and drops it on any handler added at or after that stamp. Under jsdom both
@@ -93,7 +93,7 @@ const mount = (hit: `header` | `pair`, slots: Slots): Harness => {
     };
     const toggle = (): HTMLElement => find(`button[aria-expanded]`);
     // By the id the toggle names via `aria-controls`, so the lookup follows what a screen reader would. An attribute
-    // selector rather than `#id` + CSS.escape: jsdom under vitest ships no `CSS` object.
+    // selector rather than `#id` + CSS.escape: jsdom ships no `CSS` object.
     const evidence = (): HTMLElement => find(`[id="${toggle().getAttribute(`aria-controls`) ?? ``}"]`);
     return {
         isOpen: () => open.value,

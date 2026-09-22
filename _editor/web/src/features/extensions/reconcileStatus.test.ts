@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { readPlanSteps, statusLabel, statusVariant } from "./reconcileStatus";
 
 // Build the SSE body the daemon emits for an `intentic deploy plan` stream: one `data: <json>\n\n` frame per line.

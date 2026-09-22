@@ -1,10 +1,11 @@
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { type Config, configSchema } from "../../../config.js";
 import { installFakeFly } from "@intentic/testing/fly-fake";
-import { testIngressConfig } from "../../../testing.js";
+import { fakeHostedAppLock, testIngressConfig } from "../../../testing.js";
 import {
     hostedMigrationsOf,
     HostedMigrationRefused,
@@ -16,14 +17,14 @@ import {
     sweepHostedMigrations,
 } from "./hosted-migrate.js";
 
-vi.mock(`../hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../../testing.js`)).fakeHostedAppLock }));
+mock.module(`../hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
 
 /* WHAT THIS SUITE IS FOR. A migration is the one operation that can lose somebody's work, so the cases below are
  * about ordering rather than about arithmetic: the pre-flight snapshot happens before anything else, the old disk is
  * destroyed only after the new machine has announced on the new one, and every failure leaves the machine as it was.
  * The Fly side is a routed fetch stub, because the assertion is which requests were made and in what order. */
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
+const logger = { info: mock(), warn: mock(), error: mock() } as unknown as Logger;
 const noSleep = async (): Promise<void> => undefined;
 
 const STANDARD = hostedTier(`standard`);
@@ -138,7 +139,10 @@ const built = (fly: ReturnType<typeof stubFly>, seeded: { machineId: string; vol
  * fork carries the source's bytes, that a snapshot must finish before it can be restored from, and that a machine
  * somebody stopped does not answer `started`. */
 const stubFly = (over: { snapshotNeverFinishes?: boolean } = {}) => {
-    const fly = installFakeFly((name, value) => vi.stubGlobal(name, value), (over.snapshotNeverFinishes === true ? { faults: { snapshotNeverFinishes: true } } : {}));
+    const fly = installFakeFly(
+        (name, value) => stubGlobal(name, value),
+        over.snapshotNeverFinishes === true ? { faults: { snapshotNeverFinishes: true } } : {},
+    );
     const seeded = machine();
     fly.apps.add(seeded.appName);
     fly.volumes.set(seeded.volumeId, {
@@ -162,7 +166,7 @@ const stubFly = (over: { snapshotNeverFinishes?: boolean } = {}) => {
 };
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe(`planning a migration`, () => {
@@ -301,9 +305,9 @@ describe(`moving to another machine`, () => {
     it(`takes away everything it built and starts the original again when the new machine never answers`, async () => {
         const fly = stubFly();
         const { prisma, migrations, state } = fakePrisma({ announces: false });
-        await expect(
-            migrateHosted(prisma, config(), logger, machine(), { tier: `standard`, region: `arn` }, `platform`, noSleep),
-        ).rejects.toThrow(/did not announce itself/u);
+        await expect(migrateHosted(prisma, config(), logger, machine(), { tier: `standard`, region: `arn` }, `platform`, noSleep)).rejects.toThrow(
+            /did not announce itself/u,
+        );
 
         // The new volume is this run's alone, so it goes; the original's is never touched.
         /* Exactly one volume was destroyed and it was not the original's. Stated as the calls rather than as the
@@ -386,7 +390,7 @@ describe(`the sweep over runs that stopped`, () => {
 
 describe(`what the owner is told about their backups`, () => {
     it(`answers the newest finished snapshot, and ignores one still being taken`, async () => {
-        vi.stubGlobal(`fetch`, () =>
+        stubGlobal(`fetch`, () =>
             Promise.resolve(
                 new Response(
                     JSON.stringify([

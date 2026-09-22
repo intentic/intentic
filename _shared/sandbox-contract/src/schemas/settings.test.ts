@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { RuleSchema } from "./settings.js";
 
 // A rule that saves cleanly and silently does nothing is the failure this schema exists to refuse: an action, and a

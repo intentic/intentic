@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { type AgentEvent, type AgentTurn, LOOP_DIR, type Workflow, type WorkflowStep, workflowFaults } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import type { TurnFn } from "../loops/loop-runner.js";
@@ -142,7 +142,7 @@ test("a long unstructured response is handed on through a complete shared artifa
     const reportPath = settled?.steps[0]?.reportPath;
     expect(reportPath).toBe(`.intentic/records/artifacts/workflow-runs/${run.runId}/write.md`);
     expect(await readFile(join(root, reportPath ?? ""), "utf8")).toBe(full);
-    expect(downstream).toContain(reportPath);
+    expect(downstream).toContain(reportPath ?? "");
     expect(settled?.steps[0]?.report?.length).toBeLessThan(full.length);
 });
 
@@ -291,7 +291,7 @@ test("the sandbox-wide workflow limit bounds several fan-outs together", async (
     // Slots are sandbox-wide module state shared by every test in this file; releasing in `finally` stops a failed wait
     // from starving every later test of a slot.
     try {
-        await vi.waitFor(() => expect(peak).toBe(4), SETTLES);
+        await waitFor(() => expect(peak).toBe(4), SETTLES);
     } finally {
         release();
     }
@@ -407,7 +407,7 @@ test("restart recovery gives a workflow-owned loop only to the workflow schedule
     );
 
     await resumeWorkflowExecution(services, claiming(root, prompts));
-    await vi.waitFor(async () => expect((await services.workflowRuns.get(opened.runId))?.state).toBe("done"), SETTLES);
+    await waitFor(async () => expect((await services.workflowRuns.get(opened.runId))?.state).toBe("done"), SETTLES);
 
     expect(prompts).toHaveLength(1);
     expect((await services.workflowRuns.get(opened.runId))?.resumed).toBe(1);

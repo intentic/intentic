@@ -1,6 +1,6 @@
 import { usageContract } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { expect, test, vi } from "vitest";
+import { test, expect, spyOn } from "bun:test";
 import type { UsageRoutesDeps } from "./usage.routes.js";
 import { createUsageRoutes } from "./usage.routes.js";
 import { routesClient } from "../harness/route-client.testing.js";
@@ -80,8 +80,7 @@ test("usage.limitReset answers for an account the store has no credential for, r
 });
 
 test("a rate-limited eligibility probe fails over the wire, and the ask after it is held off rather than sent", async () => {
-    const fetcher = vi
-        .spyOn(globalThis, "fetch")
+    const fetcher = spyOn(globalThis, "fetch")
         .mockResolvedValueOnce(new Response("{}", { status: 429 }))
         .mockResolvedValueOnce(new Response(JSON.stringify({ juniper_tide: { eligible: true, available: true, arm: "reset" } })));
     try {

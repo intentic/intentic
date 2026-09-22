@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
+import "@intentic/testing/dom";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick } from "vue";
+import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { type App, computed, createApp, defineComponent as define, h, h as hyper, nextTick, ref as vueRef, shallowRef, watchEffect } from "vue";
 import type { MenuItem } from "primevue/menuitem";
 import type { ChatMessage } from "./transcript";
 import { errands } from "../run/errands";
@@ -10,10 +11,10 @@ import { IconStub } from "@intentic/ui/testing";
 // Pins the cut's menu: which rows a cut offers, which an uncheckpointed cut may still show, and that the destructive rewind
 // needs two presses.
 
-const forkAt = vi.hoisted(() => vi.fn());
-const rewindTo = vi.hoisted(() => vi.fn(async () => true));
-const beginEdit = vi.hoisted(() => vi.fn());
-const state = vi.hoisted(() => ({
+const forkAt = hoisted(() => mock());
+const rewindTo = hoisted(() => mock(async () => true));
+const beginEdit = hoisted(() => mock());
+const state = hoisted(() => ({
     messages: [] as ChatMessage[],
     streaming: false,
     isolated: true,
@@ -21,16 +22,15 @@ const state = vi.hoisted(() => ({
     editing: undefined as ChatMessage | undefined,
     fleet: [] as { id: string; title?: string; forkedFrom?: { conversationId: string; index: number } }[],
 }));
-const opened = vi.hoisted(() => ({ ids: [] as string[] }));
+const opened = hoisted(() => ({ ids: [] as string[] }));
 // What the ContextMenu component was last handed, since PrimeVue itself isn't mounted here.
-const shown = vi.hoisted(() => ({ model: [] as MenuItem[], opened: 0 }));
+const shown = hoisted(() => ({ model: [] as MenuItem[], opened: 0 }));
 
-vi.hoisted(() => {
+hoisted(() => {
     // The fleet read below reaches the environment chain every component test must stand up.
 });
 
-vi.mock("@intentic/ui", async () => {
-    const { ref: vueRef, defineComponent: define, h: hyper, watchEffect } = await import("vue");
+mock.module("@intentic/ui", () => {
     return {
         useDevice: () => ({ mobile: vueRef(false) }),
         // Stub that records the model instead of rendering a popup; jsdom has no layout for PrimeVue's overlay.
@@ -49,10 +49,9 @@ vi.mock("@intentic/ui", async () => {
         }),
     };
 });
-vi.mock("../../workspace/changes/history/useHistory", () => ({ invalidateWorkspace: vi.fn() }));
+mock.module("../../workspace/changes/history/useHistory", () => ({ invalidateWorkspace: mock() }));
 // Built fresh per mount: a computed over the plain `state` object would otherwise cache its first reading.
-vi.mock("../panel/useChat-view", async () => {
-    const { computed, shallowRef } = await import("vue");
+mock.module("../panel/useChat-view", () => {
     return {
         usePaneView: () => ({
             // Whether the chat works in a copy of its own decides how many forks the menu offers.
@@ -65,14 +64,12 @@ vi.mock("../panel/useChat-view", async () => {
         }),
     };
 });
-vi.mock("../run/useChat", async () => {
-    const { computed } = await import("vue");
+mock.module("../run/useChat", () => {
     return { useChat: () => ({ conversations: computed(() => []), setActive: (id: string) => opened.ids.push(id) }) };
 });
-vi.mock("../panel/useChat-reveal", () => ({ openAgentConversation: (agent: { id: string }) => opened.ids.push(agent.id) }));
+mock.module("../panel/useChat-reveal", () => ({ openAgentConversation: (agent: { id: string }) => opened.ids.push(agent.id) }));
 // Forks are read off the fleet, not open tabs, so a closed tab or a colleague's fork still counts.
-vi.mock("../../agents/fleet/useAgents", async () => {
-    const { computed } = await import("vue");
+mock.module("../../agents/fleet/useAgents", () => {
     return { useAgents: () => ({ fleet: computed(() => state.fleet), agentById: (id: string) => state.fleet.find((agent) => agent.id === id) }) };
 });
 
@@ -103,7 +100,7 @@ const anchored = (id: number): ChatMessage => ({ id, role: `user`, text: `prompt
 const uncheckpointed = (id: number): ChatMessage => ({ id, role: `user`, text: `prompt ${id}` });
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     forkAt.mockClear();
     rewindTo.mockClear();
     beginEdit.mockClear();
@@ -121,7 +118,7 @@ afterEach(() => {
     app?.unmount();
     app = undefined;
     document.body.innerHTML = ``;
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 describe(`the fork cut`, () => {
@@ -288,7 +285,7 @@ describe(`the fork cut`, () => {
         await nextTick();
         expect(row(`Click again`)).toEqual(expect.any(Object));
 
-        vi.advanceTimersByTime(4000);
+        jest.advanceTimersByTime(4000);
         await nextTick();
         expect(row(`Click again`)).toBeUndefined();
         expect(row(`Rewind`)?.disabled).toBe(false);

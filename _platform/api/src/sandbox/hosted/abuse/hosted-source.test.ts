@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect, mock } from "bun:test";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../../config.js";
 import { assertHostedSource, emailDomain, HostedSourceCapped, recordHostedProvision } from "./hosted-source.js";
@@ -20,7 +20,7 @@ interface Row {
 
 // Enough of Prisma's findMany to honour the where the module writes: source, window and the NOT on the caller.
 const prismaWith = (rows: Row[]) => {
-    const findMany = vi.fn(async ({ where }: { where: { ip?: string; domain?: string; createdAt: { gte: Date }; NOT: { userId: string } } }) =>
+    const findMany = mock(async ({ where }: { where: { ip?: string; domain?: string; createdAt: { gte: Date }; NOT: { userId: string } } }) =>
         [
             ...new Set(
                 rows
@@ -30,7 +30,7 @@ const prismaWith = (rows: Row[]) => {
             ),
         ].map((userId) => ({ userId })),
     );
-    const create = vi.fn().mockResolvedValue({});
+    const create = mock().mockResolvedValue({});
     return { prisma: { hostedProvision: { findMany, create } } as unknown as PrismaClient, findMany, create };
 };
 

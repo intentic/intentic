@@ -1,15 +1,15 @@
 // The two reads behind a file chip, focused on what they must never do: quote the same bytes twice, spend a second
 // request on a file the first one already finished, or decode something that isn't text and draw it as lines.
-import { beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, mock } from "bun:test";
 import { nextTick, ref } from "vue";
 import type { WorkspaceFileResponse } from "@intentic/api-contract";
 
-const readWindow = vi.fn<(path: string, opts?: { offset?: number; limit?: number }) => Promise<WorkspaceFileResponse>>();
+const readWindow = mock<(path: string, opts?: { offset?: number; limit?: number }) => Promise<WorkspaceFileResponse>>();
 const daemonBase = ref<string | undefined>(`https://sandbox-1.example`);
 
-vi.mock("../../workspace/files/fileWindow", () => ({ readFileWindow: (path: string, opts?: object) => readWindow(path, opts) }));
-vi.mock("../../sandbox/client/sandboxClient", () => ({ SandboxHttpError: class extends Error {} }));
-vi.mock("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
+mock.module("../../workspace/files/fileWindow", () => ({ readFileWindow: (path: string, opts?: object) => readWindow(path, opts) }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ SandboxHttpError: class extends Error {} }));
+mock.module("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 const { attachmentPeek } = await import("./attachmentPeeks");
 

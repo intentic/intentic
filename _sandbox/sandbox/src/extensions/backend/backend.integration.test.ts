@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { createApp } from "../../app.js";
 import type { Services } from "../../composition.js";
 import { services } from "../../harness/route-services.testing.js";

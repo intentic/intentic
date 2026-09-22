@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import type { WhatsAppConnection } from "./client.js";
 import type { GatewayCtx } from "@intentic/connector-runtime";
 import { addressesUs, contentOf, createWhatsAppListener, hasMedia, jidUser, timestampOf, unwrap } from "./listener.js";
@@ -112,7 +113,7 @@ test("an unaddressed group message dispatches without a turn stream, a typing in
     const connection = fakeConnection(calls);
     const listener = createWhatsAppListener(fake.ctx, () => new Map([["whatsapp-1", connection]]));
     listener.onMessage(connection, groupMessage());
-    await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
+    await waitFor(() => expect(fake.dispatched).toHaveLength(1));
     expect(fake.streamed).toHaveLength(0);
     expect(calls).toEqual([]);
     expect(fake.dispatched[0]).toMatchObject({
@@ -132,7 +133,7 @@ test("a DM shows typing for the turn and sends the finished reply, unquoted", as
     const listener = createWhatsAppListener(fake.ctx, () => new Map([["whatsapp-1", connection]]));
     const dm = "4915222222222@s.whatsapp.net";
     listener.onMessage(connection, groupMessage({ key: { id: "DM1", remoteJid: dm, fromMe: false } }, { conversation: "hello?" }));
-    await vi.waitFor(() => expect(calls.some((call) => call.method === "sendText")).toBe(true));
+    await waitFor(() => expect(calls.some((call) => call.method === "sendText")).toBe(true));
     expect(fake.streamed[0]).toMatchObject({ mentioned: true, channelId: dm });
     expect(calls.map((call) => call.method)).toEqual(["presence", "sendText", "presence"]);
     expect(calls[0]?.args).toEqual([dm, "composing"]);
@@ -151,7 +152,7 @@ test("a group mention's reply quotes the message it answers", async () => {
         connection,
         groupMessage({}, { extendedTextMessage: { text: "@bot status?", contextInfo: { mentionedJid: [`${SELF}@s.whatsapp.net`] } } }),
     );
-    await vi.waitFor(() => expect(calls.some((call) => call.method === "sendText")).toBe(true));
+    await waitFor(() => expect(calls.some((call) => call.method === "sendText")).toBe(true));
     expect(calls.find((call) => call.method === "sendText")?.args).toEqual([GROUP, "on it", "MSG1"]);
     listener.stopAll();
 });
@@ -175,7 +176,7 @@ test("a redelivered message wakes an agent once", async () => {
     const listener = createWhatsAppListener(fake.ctx, () => new Map([["whatsapp-1", connection]]));
     listener.onMessage(connection, groupMessage());
     listener.onMessage(connection, groupMessage());
-    await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
+    await waitFor(() => expect(fake.dispatched).toHaveLength(1));
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(fake.dispatched).toHaveLength(1);
 });
@@ -189,7 +190,7 @@ test("media rides as an attachment reference the download command can use", asyn
         connection,
         groupMessage({ key: { id: "VOICE1", remoteJid: GROUP, fromMe: false } }, { audioMessage: { ptt: true, seconds: 7 } }),
     );
-    await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
+    await waitFor(() => expect(fake.dispatched).toHaveLength(1));
     expect(fake.dispatched[0]).toMatchObject({
         content: "[voice note, 7s]",
         extra: { chatType: "group", attachments: [{ name: "voice note, 7s", id: "VOICE1" }] },
@@ -208,7 +209,7 @@ test("what the gateway watched go by becomes the history a later mention carries
             { conversation: "release went out at four" },
         ),
     );
-    await vi.waitFor(() => expect(fake.dispatched).toHaveLength(1));
+    await waitFor(() => expect(fake.dispatched).toHaveLength(1));
     listener.onMessage(
         connection,
         groupMessage(
@@ -216,7 +217,7 @@ test("what the gateway watched go by becomes the history a later mention carries
             { extendedTextMessage: { text: "@bot what happened?", contextInfo: { mentionedJid: [`${SELF}@s.whatsapp.net`] } } },
         ),
     );
-    await vi.waitFor(() => expect(fake.streamed).toHaveLength(1));
+    await waitFor(() => expect(fake.streamed).toHaveLength(1));
     // WhatsApp has no history to fetch: the ring holds what came BEFORE this message, and only that.
     expect(fake.streamed[0]?.["history"]).toEqual([
         { author: { id: "4915222222222", name: "Ada" }, content: "release went out at four", timestamp: "2025-08-13T16:20:30.000Z" },

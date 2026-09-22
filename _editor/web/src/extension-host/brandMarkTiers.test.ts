@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // The ladder as the component actually climbs it: brandMark.test.ts asserts what the artwork gate accepts, this asserts
 // what <BrandMark> then draws, which a passing gate cannot promise on its own.
+import "@intentic/testing/dom";
 import { BrandMark } from "@intentic/ui";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { createApp, h, nextTick } from "vue";
 
 const MARK = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#6C4FE0"/></svg>`;
@@ -22,7 +22,8 @@ interface MarkProps {
 // train. Stubbed to never resolve rather than fail, so "art beats logo" cannot pass merely because the fetch lost a
 // race.
 const mount = async (props: MarkProps): Promise<HTMLElement> => {
-    globalThis.fetch = (() => new Promise(() => {})) as typeof fetch;
+    // A fetch that never answers; cast through `unknown` because the runtime's own `fetch` type carries `preconnect`.
+    globalThis.fetch = (() => new Promise(() => {})) as unknown as typeof fetch;
     const host = document.createElement(`div`);
     document.body.appendChild(host);
     createApp({ render: () => h(BrandMark, { size: 28, ...props }) }).mount(host);

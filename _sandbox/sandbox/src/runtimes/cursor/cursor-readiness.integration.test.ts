@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, jest } from "bun:test";
 import { createLogger } from "../../logger.js";
 import { fileCursorStore } from "./cursor-credentials.js";
 import { cursorReadiness } from "./cursor-readiness.js";
@@ -15,11 +15,11 @@ const newStore = () => fileCursorStore(mkdtempSync(join(tmpdir(), "cursor-ready-
 
 const NOW = 1_800_000_000_000;
 beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(NOW);
+    jest.useFakeTimers();
+    jest.setSystemTime(NOW);
 });
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 test("nothing connected asks for a subscription, with the code that opens the connect gate", async () => {

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { PrismaClient } from "@intentic/prisma";
 import { Hono } from "hono";
 import type { Logger } from "pino";
-import { expect, it, vi } from "vitest";
+import { it, expect, mock } from "bun:test";
 import { type Config, configSchema } from "../config.js";
 import type { CustodyGateway } from "./wallet-custody.js";
 import { walletHttpRoutes } from "./wallet.routes.js";
@@ -11,7 +11,7 @@ import { walletHttpRoutes } from "./wallet.routes.js";
 // compromised sandbox must never obtain: over the ceiling, past the daily cap, on someone else's wallet, on non-USDC,
 // or too long-lived.
 
-const logger = { child: () => logger, info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as unknown as Logger;
+const logger = { child: () => logger, info: mock(), warn: mock(), error: mock(), debug: mock() } as unknown as Logger;
 const NOW = new Date(`2026-08-19T12:00:00Z`);
 const ADDRESS = `0x857b06519E91e3A54538791bDbb0E22373e36b66`;
 const PAY_TO = `0x209693Bc6afc0C5328bA36FaF03C514EF312287C`;
@@ -60,33 +60,33 @@ const fakePrisma = (seed?: { wallets?: StoredWallet[]; payments?: StoredPayment[
     const payments = seed?.payments ?? [];
     let next = 0;
     const walletDelegate = {
-        findUnique: vi.fn(async ({ where }: { where: { userId_network: { userId: string; network: string } } }) => {
+        findUnique: mock(async ({ where }: { where: { userId_network: { userId: string; network: string } } }) => {
             const key = where.userId_network;
             return wallets.find((row) => row.userId === key.userId && row.network === key.network) ?? null;
         }),
         // The schema's own default caps, as Postgres would fill them: a wallet the sandbox brings into being
         // carries the floor until the owner states otherwise over their session.
-        create: vi.fn(async ({ data }: { data: Omit<StoredWallet, `id` | `perPaymentMaxUsd` | `dailyCapUsd`> }) => {
+        create: mock(async ({ data }: { data: Omit<StoredWallet, `id` | `perPaymentMaxUsd` | `dailyCapUsd`> }) => {
             const row = { id: `wallet-${(next += 1)}`, perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00`, ...data };
             wallets.push(row);
             return row;
         }),
-        update: vi.fn(async ({ where, data }: { where: { id: string }; data: Partial<StoredWallet> }) => {
+        update: mock(async ({ where, data }: { where: { id: string }; data: Partial<StoredWallet> }) => {
             const index = wallets.findIndex((row) => row.id === where.id);
             wallets[index] = { ...wallets[index]!, ...data };
             return wallets[index];
         }),
     };
     const paymentDelegate = {
-        findMany: vi.fn(async ({ where }: { where: { walletId: string; day: string } }) =>
+        findMany: mock(async ({ where }: { where: { walletId: string; day: string } }) =>
             payments.filter((row) => row.walletId === where.walletId && row.day === where.day).map((row) => ({ amountUsd: row.amountUsd })),
         ),
-        create: vi.fn(async ({ data }: { data: Omit<StoredPayment, `id`> }) => {
+        create: mock(async ({ data }: { data: Omit<StoredPayment, `id`> }) => {
             const row = { id: `pay-${(next += 1)}`, ...data };
             payments.push(row);
             return { id: row.id };
         }),
-        delete: vi.fn(async ({ where }: { where: { id: string } }) => {
+        delete: mock(async ({ where }: { where: { id: string } }) => {
             const index = payments.findIndex((row) => row.id === where.id);
             if (index >= 0) {
                 payments.splice(index, 1);
@@ -96,13 +96,13 @@ const fakePrisma = (seed?: { wallets?: StoredWallet[]; payments?: StoredPayment[
     };
     const prisma = {
         sandbox: {
-            findUnique: vi.fn(async ({ where }: { where: { tokenDigest: string } }) =>
+            findUnique: mock(async ({ where }: { where: { tokenDigest: string } }) =>
                 where.tokenDigest === digestOf(`tok`) ? { ownerId: `user-1` } : null,
             ),
         },
         wallet: walletDelegate,
         walletPayment: paymentDelegate,
-        $transaction: vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run({ wallet: walletDelegate, walletPayment: paymentDelegate })),
+        $transaction: mock(async (run: (tx: unknown) => Promise<unknown>) => run({ wallet: walletDelegate, walletPayment: paymentDelegate })),
     };
     return { prisma: prisma as unknown as PrismaClient, wallets, payments };
 };

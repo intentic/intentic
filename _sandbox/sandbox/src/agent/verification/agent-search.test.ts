@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { searchCameBackEmpty, searchNoticeHooks, walksTreeWithGrep } from "./agent-search.js";
 
 // These predicates are judged on the miss, not the hit: a notice firing on a filtering grep, or on an empty result that

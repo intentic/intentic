@@ -1,31 +1,43 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, mock, jest } from "bun:test";
+import { freshImport, advanceTimersByTimeAsync, stubGlobal } from "@intentic/testing/bun";
 
 // Pins the module's three promises to its callers (an error handler, an unload hook, a perf recorder): it never
 // throws, never blocks, and never grows unbounded while the thing it's describing is still going wrong.
 
 const target = { base: `https://sandbox.example`, connectToken: undefined };
-const fetched: { body: unknown; keepalive: boolean | undefined }[] = [];
+const fetched: { body: unknown }[] = [];
 
-vi.mock(`../features/sandbox/client/sandboxTarget`, () => ({ currentSandboxTarget: () => currentTarget }));
-vi.mock(`../features/sandbox/client/sandboxAuthFetch`, () => ({
+// A Request does not carry `keepalive` back off the object under this runtime, so what the module asked for is
+// recorded as it is built.
+const inits: RequestInit[] = [];
+class RecordingRequest extends Request {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+        super(input, init);
+        inits.push(init ?? {});
+    }
+}
+stubGlobal(`Request`, RecordingRequest);
+
+mock.module(`../features/sandbox/client/sandboxTarget`, () => ({ currentSandboxTarget: () => currentTarget }));
+mock.module(`../features/sandbox/client/sandboxAuthFetch`, () => ({
     sandboxAuthenticatedFetch: async (request: Request) => {
-        fetched.push({ body: JSON.parse(await request.clone().text()), keepalive: (request as Request & { keepalive?: boolean }).keepalive });
+        fetched.push({ body: JSON.parse(await request.clone().text()) });
         return new Response(`{}`);
     },
 }));
-vi.mock(`./buildEpoch`, () => ({ buildId: () => `test-build` }));
+mock.module(`./buildEpoch`, () => ({ buildId: () => `test-build` }));
 
 let currentTarget: typeof target | undefined = target;
 
-const load = async () => {
-    vi.resetModules();
+const load = (): Promise<typeof import("./clientDiagnostics")> => {
     fetched.length = 0;
+    inits.length = 0;
     currentTarget = target;
-    return import(`./clientDiagnostics`);
+    return freshImport<typeof import("./clientDiagnostics")>("./clientDiagnostics", import.meta.url);
 };
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
 });
 
 test("a report is batched, then posted with the page's route and build", async () => {
@@ -34,7 +46,7 @@ test("a report is batched, then posted with the page's route and build", async (
 
     // Nothing yet: batching is what keeps a burst from being a burst of requests.
     expect(fetched).toHaveLength(0);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTimersByTimeAsync(5_000);
 
     expect(fetched).toHaveLength(1);
     const posted = fetched[0];
@@ -51,11 +63,11 @@ test("the post is keepalive, which is what makes a report survive the reload it 
     const { reportClient, flushClientDiagnostics } = await load();
     reportClient(`self-heal.wipe`, `crashed`);
     flushClientDiagnostics();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
 
     // An ordinary fetch issued before `location.reload()` would be cancelled with the page; keepalive is why the
     // self-heal report survives.
-    expect(fetched[0]?.keepalive).toBe(true);
+    expect(inits.at(-1)?.keepalive).toBe(true);
 });
 
 test("a component looping on the same error sends a few reports and a count, not a flood", async () => {
@@ -63,7 +75,7 @@ test("a component looping on the same error sends a few reports and a count, not
     for (let index = 0; index < 400; index++) {
         reportClient(`vue.render`, `the same error every frame`);
     }
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTimersByTimeAsync(5_000);
 
     const events = (fetched[0]?.body as { events: { event: string; fields?: { repeat?: number } }[] } | undefined)?.events ?? [];
     // Five of the real thing, plus the line that says what was thrown away.
@@ -77,7 +89,7 @@ test("distinct errors are not coalesced into each other", async () => {
     const { reportClient } = await load();
     reportClient(`vue.render`, `first`);
     reportClient(`vue.render`, `second`);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTimersByTimeAsync(5_000);
 
     expect((fetched[0]?.body as { events: unknown[] } | undefined)?.events).toHaveLength(2);
 });
@@ -86,7 +98,7 @@ test("with no sandbox addressed the report is dropped rather than queued forever
     const { reportClient } = await load();
     currentTarget = undefined;
     reportClient(`window.error`, `on the sign-in screen`);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTimersByTimeAsync(5_000);
 
     // The sign-in screens have nowhere to report to. Keeping these would mean a queue that only ever grows.
     expect(fetched).toHaveLength(0);
@@ -99,7 +111,7 @@ test("reporting cannot throw, whatever it is handed", async () => {
 
     // Called from an error handler: a reporter that throws turns one bug into two.
     expect(() => reportClient(`window.error`, `x`, { fields: circular as never })).not.toThrow();
-    await vi.advanceTimersByTimeAsync(5_000);
+    await advanceTimersByTimeAsync(5_000);
     // The report is dropped, not sent half-formed: not-throwing alone wouldn't prove that, since the flush settling
     // either way satisfies it. The queue drains and nothing posts, so the caller's error stays the only one to handle.
     expect(fetched).toHaveLength(0);
@@ -108,7 +120,7 @@ test("reporting cannot throw, whatever it is handed", async () => {
 test("an empty queue posts nothing", async () => {
     const { flushClientDiagnostics } = await load();
     flushClientDiagnostics();
-    await vi.advanceTimersByTimeAsync(0);
+    await advanceTimersByTimeAsync(0);
     expect(fetched).toHaveLength(0);
 });
 

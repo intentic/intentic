@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { checkpointWorktree, type CheckpointDeps, forkWorktreeBase } from "./checkpoint-worktree.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
@@ -10,7 +10,7 @@ const REPOS = [
 // Commit title where there is something to keep; only ever read by a human, so tests assert nothing about it.
 const TITLE = "Agent: before this turn";
 
-const services = { agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` }, logger: { warn: vi.fn() } } as unknown as CheckpointDeps;
+const services = { agentWorktrees: { worktreeDir: (_id: string, repo: string) => `/w/${repo}` }, logger: { warn: mock() } } as unknown as CheckpointDeps;
 
 // Finds the git verb the way git does: `-c key=value` pairs come before the subcommand, so the first token isn't it.
 const subcommandOf = (args: readonly string[]): string => {

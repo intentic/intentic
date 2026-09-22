@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { PrismaClient } from "@intentic/prisma";
 import type { Config } from "../../config.js";
 import { forgetHostedHealthAlert, sweepHostedHealth } from "./hosted-health.js";
@@ -7,7 +8,7 @@ import { forgetProviderCapacity, noteProviderAtCapacity } from "./hosted-capacit
 // Every other sweep here acts on the gap between the platform's rows and Fly, but never reported the gap itself. These
 // tests pin what this watch has to say out loud.
 
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as never;
+const logger = { info: mock(), warn: mock(), error: mock() } as never;
 
 const config = (over: Record<string, unknown> = {}): Config =>
     ({
@@ -38,7 +39,7 @@ const edgeAnswer = (target: string, edge: unknown): Response | undefined =>
     target === EDGE_URL ? new Response(JSON.stringify(edge)) : undefined;
 
 const stubApps = (...names: string[]) => {
-    vi.stubGlobal(`fetch`, (url: URL | string) =>
+    stubGlobal(`fetch`, (url: URL | string) =>
         Promise.resolve(edgeAnswer(String(url), EDGE_OK) ?? new Response(JSON.stringify({ apps: names.map((name) => ({ name })) }))),
     );
 };
@@ -46,7 +47,7 @@ const stubApps = (...names: string[]) => {
 // The org's app list and what each app runs, since ownership is now read off the provider, not a missing row.
 // `edge` is what the edge answers, so a test can hand back an old build without touching the Fly half.
 const stubFly = (apps: string[], machines: Record<string, unknown[]> = {}, edge: unknown = EDGE_OK) => {
-    vi.stubGlobal(`fetch`, (url: URL | string) => {
+    stubGlobal(`fetch`, (url: URL | string) => {
         const target = String(url);
         const edgeResponse = edgeAnswer(target, edge);
         if (edgeResponse !== undefined) {
@@ -78,27 +79,27 @@ type Reach = { reachable: number; unreachable: number };
 const prismaWith = (machines: unknown[], pooled: unknown[], reach: Reach = { reachable: 0, unreachable: 0 }) =>
     ({
         sandbox: {
-            count: vi.fn().mockImplementation((args: { where: { bootReport: { equals: string } } }) =>
+            count: mock().mockImplementation((args: { where: { bootReport: { equals: string } } }) =>
                 Promise.resolve(args.where.bootReport.equals === `reachable` ? reach.reachable : reach.unreachable),
             ),
         },
-        hostedMachine: { findMany: vi.fn().mockResolvedValue(machines), count: vi.fn().mockResolvedValue(machines.length) },
+        hostedMachine: { findMany: mock().mockResolvedValue(machines), count: mock().mockResolvedValue(machines.length) },
         hostedPoolMachine: {
-            findMany: vi.fn().mockResolvedValue(pooled),
-            count: vi.fn().mockImplementation((args?: { where?: Record<string, unknown> }) =>
+            findMany: mock().mockResolvedValue(pooled),
+            count: mock().mockImplementation((args?: { where?: Record<string, unknown> }) =>
                 Promise.resolve(
                     args?.where === undefined ? pooled.length : pooled.filter((row) => (row as { state?: string }).state === `ready`).length,
                 ),
             ),
         },
-        hostedBuild: { count: vi.fn().mockResolvedValue(0) },
+        hostedBuild: { count: mock().mockResolvedValue(0) },
     }) as unknown as PrismaClient;
 
 const taken = (appName: string) => ({ appName, region: `iad`, wokeAt: null, sandboxId: `s1`, sandbox: { owner: { email: `o@test` } } });
 const warm = (appName: string, region = `iad`) => ({ appName, region, state: `ready` });
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
     forgetHostedHealthAlert();
 });
 
@@ -161,7 +162,7 @@ describe(`hosted health`, () => {
     /* Regional refusals name the region and preserve healthy regions. */
     it(`names the refusing region, quotes the provider, and does not call the lane down for one region's refusal`, async () => {
         const sent: string[] = [];
-        vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+        stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
             const target = String(url);
             if (target.startsWith(`https://api.resend.com`)) {
                 sent.push(String(init?.body ?? ``));
@@ -231,7 +232,7 @@ describe(`hosted health`, () => {
 
     // The edge unreachable means nothing is reachable, tunnel lane included; it must not read as a fleet fault.
     it(`says so when the edge cannot be reached at all`, async () => {
-        vi.stubGlobal(`fetch`, (url: URL | string) =>
+        stubGlobal(`fetch`, (url: URL | string) =>
             String(url) === EDGE_URL ? Promise.reject(new Error(`getaddrinfo ENOTFOUND`)) : Promise.resolve(new Response(JSON.stringify({ apps: [] }))),
         );
         const health = await sweepHostedHealth(prismaWith([], []), config({ poolSize: 0, regionEu: `` }), logger);
@@ -272,16 +273,16 @@ describe(`hosted health`, () => {
     // No ingress means no hosted lane at all (hostedEnabled → ingressEnabled), so there is no edge to ask and
     // nothing to alarm about. Pinned because the edge probe must never fire on a platform that has no edge.
     it(`asks no edge when the platform has no ingress configured`, async () => {
-        const fetchSpy = vi.fn();
-        vi.stubGlobal(`fetch`, fetchSpy);
+        const fetchSpy = mock();
+        stubGlobal(`fetch`, fetchSpy);
         const noIngress = { ...config({ poolSize: 1, regionEu: `` }), ingress: { url: ``, signingKey: ``, zone: `` } } as never;
         expect(await sweepHostedHealth(prismaWith([], []), noIngress, logger)).toBeUndefined();
         expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it(`does nothing at all when the lane is off`, async () => {
-        const fetchSpy = vi.fn();
-        vi.stubGlobal(`fetch`, fetchSpy);
+        const fetchSpy = mock();
+        stubGlobal(`fetch`, fetchSpy);
         expect(await sweepHostedHealth(prismaWith([], []), config({ flyApiToken: `` }), logger)).toBeUndefined();
         expect(fetchSpy).not.toHaveBeenCalled();
     });

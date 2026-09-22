@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileSearch, filesVerbHits } from "./files.js";
 
 const PATHS = ["alpha/src/widget.ts", "alpha/src/registry.ts", "beta/app.py", "notes.md"];

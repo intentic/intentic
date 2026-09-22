@@ -6,9 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { upgradeWebSocket, type WebSocketServerLike } from "@hono/node-server";
 import { Hono } from "hono";
-import { afterAll, expect, test } from "vitest";
-import { WebSocket, WebSocketServer } from "ws";
+import { test, expect, afterAll } from "bun:test";
 import { createLoopbackListener, hostOf } from "./loopback-listener.js";
+
+// bun's built-in `ws` upgrades a Bun.serve socket only, and this listener is a node http2 server; the daemon runs on
+// node, so the suite drives the installed package rather than the runtime's stand-in.
+const { WebSocket, WebSocketServer } = (await import(join(import.meta.dirname, "../../../node_modules/ws/index.js"))) as typeof import("ws");
 
 // Pins the loopback listener's h2 negotiation: getting it wrong doesn't error, it silently exhausts the browser's
 // six-connections-per-origin limit and freezes the workspace.

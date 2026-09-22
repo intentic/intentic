@@ -2,7 +2,8 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
+import { waitFor } from "@intentic/testing/bun";
 import { createSpeech, type ExecFn, SpeechModelNotReadyError, SpeechUnprovisionedError, whisperLanguage } from "./transcribe.js";
 
 // Speech engine over its two injected seams (exec, model fetch); the same shape the Discord voice transcriber pins its
@@ -78,7 +79,7 @@ test("a status poll on an absent model starts ONE download and reports ready onc
     // Transcribing mid-download is answered as "wait," not held open for minutes.
     await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
     release(new Blob(["model bytes"]));
-    await expect.poll(async () => (await speech.status()).model).toBe("ready");
+    await waitFor(async () => expect((await speech.status()).model).toBe("ready"));
 });
 
 test("a model still streaming in never reads ready: it takes its place only once whole", async () => {
@@ -95,13 +96,13 @@ test("a model still streaming in never reads ready: it takes its place only once
     // Grown in place, the file would exist from the download's first byte and read as ready, letting the browser record
     // against a half-written model it can only report as "try again".
     push(4096);
-    await expect.poll(() => bytesOnDisk(root, "staged")).toBeGreaterThan(0);
+    await waitFor(() => expect(bytesOnDisk(root, "staged")).toBeGreaterThan(0));
     expect(bytesOnDisk(root, "model")).toBe(0);
     expect(await speech.status()).toEqual({ provisioned: true, model: "downloading" });
     await expect(speech.transcribe(Buffer.from("RIFF"), "en")).rejects.toBeInstanceOf(SpeechModelNotReadyError);
 
     finish();
-    await expect.poll(async () => (await speech.status()).model).toBe("ready");
+    await waitFor(async () => expect((await speech.status()).model).toBe("ready"));
     expect(bytesOnDisk(root, "model")).toBe(4096);
     expect(bytesOnDisk(root, "staged")).toBe(0);
 });
@@ -118,8 +119,8 @@ test("a failed download does not poison later polls: the next status retries it"
         },
     });
     expect((await speech.status()).model).toBe("downloading");
-    await expect.poll(() => fetches).toBe(1);
-    await expect.poll(async () => (await speech.status()).model).toBe("ready");
+    await waitFor(() => expect(fetches).toBe(1));
+    await waitFor(async () => expect((await speech.status()).model).toBe("ready"));
     expect(fetches).toBe(2);
 });
 

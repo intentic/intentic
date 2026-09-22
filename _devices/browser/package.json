@@ -1,7 +1,7 @@
 {
     "name": "@intentic/browser",
     "version": "0.0.0",
-    "description": "Drive a Chromium browser from Node over CDP \u2014 open pages, read them as structured text, click and type by element reference. No dependencies.",
+    "description": "Drive a Chromium browser from Node over CDP — open pages, read them as structured text, click and type by element reference. No dependencies.",
     "license": "MIT",
     "type": "module",
     "repository": {
@@ -44,8 +44,8 @@
         "build": "tsgo",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
-        "test": "vitest run",
-        "test:watch": "vitest"
+        "test": "suites",
+        "test:watch": "suites --watch"
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
@@ -54,8 +54,8 @@
     "devDependencies": {
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
-        "@typescript/native-preview": "catalog:",
-        "vitest": "catalog:"
+        "@typescript/native-preview": "catalog:"
     }
 }

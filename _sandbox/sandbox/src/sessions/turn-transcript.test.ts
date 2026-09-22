@@ -1,7 +1,7 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, RESUME_NOTES, type TranscriptRow, watchWakePrompt, withResumeNote } from "@intentic/sandbox-contract";
 import { foldTurn, TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { restoredSessionMessages } from "./sessions.js";
 import { openingRows } from "./turn-transcript.js";

@@ -1,7 +1,8 @@
-// @vitest-environment jsdom
 // DOM: the desktop app's update event, the visibility-change re-ask, and the `window` marker it injects at load are
 // all meaningless in a bare node context.
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
+import { freshImport, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { nextTick } from "vue";
 
 // Two failure modes: never appearing defeats the point (a stale workspace nobody reloads); appearing wrongly is
@@ -15,19 +16,18 @@ const load = async (options: {
     readonly ok?: boolean;
     readonly desktopUpdate?: string | null;
 }) => {
-    vi.resetModules();
-    vi.stubGlobal(`fetch`, () =>
+    stubGlobal(`fetch`, () =>
         Promise.resolve({
             ok: options.ok ?? true,
             json: () => Promise.resolve(options.deployed),
         }),
     );
-    // Assigned on the real `window`, not stubbed over: replacing the object would also drop vitest.setup.ts's
+    // Assigned on the real `window`, not stubbed over: replacing the object would also drop bun.setup.ts's
     // `window.env`, which every module in the import graph reads at load.
     window.__INTENTIC_DESKTOP__ =
         options.desktopUpdate === undefined ? undefined : { version: `1.0.0`, installId: `id`, update: options.desktopUpdate };
-    vi.doMock(`./buildEpoch`, () => ({ buildId: () => options.running, dropOutdatedMirrors: () => undefined }));
-    return await import(`./appUpdate`);
+    mock.module(`./buildEpoch`, () => ({ buildId: () => options.running, dropOutdatedMirrors: () => undefined }));
+    return await freshImport<typeof import("./appUpdate")>("./appUpdate", import.meta.url);
 };
 
 /** The poll is fired from `useAppUpdate`; give the fetch and its two awaits a turn to settle. */
@@ -39,8 +39,8 @@ const settled = async (): Promise<void> => {
 };
 
 beforeEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
+    unstubAllGlobals();
+    jest.restoreAllMocks();
 });
 
 describe(`isStaleBuild`, () => {

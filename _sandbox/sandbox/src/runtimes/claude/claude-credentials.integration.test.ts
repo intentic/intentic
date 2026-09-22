@@ -3,8 +3,8 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pino } from "pino";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect } from "bun:test";
+import { waitFor, SETTLES } from "@intentic/testing/bun";
 import {
     buildAuthorizeUrl,
     type ClaudeStore,
@@ -310,14 +310,14 @@ test("the last turn's release rotates the token there and then", async () => {
     const store = memoryStore(stored({ accessToken: "held", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
     const stop = startClaudeRefresh(store, 60 * 60_000, async () => ({ accessToken: "rotated" }));
     // The boot tick runs immediately; with nothing holding the account, it rotates right away.
-    await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"), SETTLES);
+    await waitFor(() => expect(store.current()?.accessToken).toBe("rotated"), SETTLES);
     // With a turn now in flight, nothing rotates until the release lands.
     await store.write(stored({ accessToken: "second", refreshToken: "r", expiresAt: Date.now() + 3 * 60 * 60_000 }));
     const release = holdAccount("a");
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(store.current()?.accessToken).toBe("second");
     release();
-    await vi.waitFor(() => expect(store.current()?.accessToken).toBe("rotated"), SETTLES);
+    await waitFor(() => expect(store.current()?.accessToken).toBe("rotated"), SETTLES);
     stop();
 });
 

@@ -1,8 +1,8 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect, afterEach } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { createApp } from "../app.js";
 import { proven, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
 import { services } from "../harness/route-services.testing.js";
@@ -85,7 +85,7 @@ test("starting an export answers with its name at once, and the list carries it 
     const listed = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles"));
     expect(listed.exports.map((entry) => entry.name)).toContain(name);
 
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
         const now = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles"));
         expect(now.exports.find((entry) => entry.name === name)?.status).toBe("ready");
     }, SETTLES);
@@ -105,7 +105,7 @@ const owner = { authorization: "Bearer owner-token" } as const;
 test("download needs a ticket for THAT bundle, and serves it with a real length", async () => {
     const { app } = await appOn({ authed: true });
     const { name } = await jsonOf<{ name: string }>(await app.request("/bundles", { method: "POST", headers: owner }));
-    await vi.waitFor(async () => {
+    await waitFor(async () => {
         const now = await jsonOf<{ exports: ExportRow[] }>(await app.request("/bundles", { headers: owner }));
         expect(now.exports.find((entry) => entry.name === name)?.status).toBe("ready");
     }, SETTLES);

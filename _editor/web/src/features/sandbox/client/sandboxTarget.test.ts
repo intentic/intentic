@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 
 // targetFor must never present one sandbox's credentials to another sandbox's daemon; sandboxAuthFetch's
@@ -8,7 +8,7 @@ const active = ref<{ token?: string } | undefined>({ token: `connect-here` });
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 const daemonUrl = ref<string | undefined>(`https://here.test`);
 const sandboxes = ref<{ id: string; daemonUrl: string | null; token: string }[]>([]);
-vi.mock("./useSandbox", () => ({ useSandbox: () => ({ active, activeSandboxId, daemonUrl, sandboxes }) }));
+mock.module("./useSandbox", () => ({ useSandbox: () => ({ active, activeSandboxId, daemonUrl, sandboxes }) }));
 
 // The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls to daemonUrl.
 const { currentSandboxTarget, targetFor } = await import("./sandboxTarget");

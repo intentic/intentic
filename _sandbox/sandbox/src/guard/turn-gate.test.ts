@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { vendorSubject } from "./command-guard.js";
 import { createTurnGate, type TurnGateInput, turnIsGated } from "./turn-gate.js";
 import { conversationTainted } from "./turn-taint.js";

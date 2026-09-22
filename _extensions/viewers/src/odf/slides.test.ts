@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect } from "bun:test";
+import { stubGlobal } from "@intentic/testing/bun";
 import { textOfBlock } from "./document-model";
 import { openOdf } from "./pkg";
 import { readPresentation } from "./slides";
@@ -7,7 +8,7 @@ import { contentXml, odfBytes, PNG_PIXEL, SLIDES_MIME, stylesXml } from "./testi
 /* A slide is a page of boxes at fixed positions; what matters is that each box keeps its place, its fill and its
    text. */
 
-vi.stubGlobal(`URL`, { ...URL, createObjectURL: (blob: Blob) => `blob:test/${blob.size}`, revokeObjectURL: () => {} });
+stubGlobal(`URL`, { ...URL, createObjectURL: (blob: Blob) => `blob:test/${blob.size}`, revokeObjectURL: () => {} });
 
 const GRAPHICS = `<style:style style:name="gr1" style:family="graphic"><style:graphic-properties draw:fill="solid" draw:fill-color="#204060" draw:stroke="none" draw:textarea-vertical-align="middle"/></style:style>`;
 

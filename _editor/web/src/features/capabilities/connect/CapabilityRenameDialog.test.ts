@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // Renaming is this dialog's only path: the field starts from the current name, the button stays disabled until it
 // actually differs, and typed spaces/punctuation are repaired the same way the add form does, shown before submit.
+import "@intentic/testing/dom";
 import PrimeVue from "primevue/config";
-import { expect, it } from "vitest";
+import { it, expect } from "bun:test";
 import { createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 

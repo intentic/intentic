@@ -1,10 +1,10 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { checkpointSteeredMessage, takeSteerCheckpoints } from "./steer-checkpoints.js";
 
 // Pins that a steered message's position is fixed when the turn accepts it, before its snapshot resolves; a queue that
 // reordered by finish time would file one message's state under another's index.
 
-const logger = { warn: vi.fn() } as never;
+const logger = { warn: mock() } as never;
 
 // A history whose capture takes as long as it is told to, so the test can make two steers finish out of order.
 const history = (order: string[], delays: Record<string, number>) => {

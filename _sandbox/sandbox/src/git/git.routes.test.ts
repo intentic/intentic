@@ -1,5 +1,5 @@
 import type { GitChange } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { capRepoChanges, MAX_REPO_CHANGES } from "./git.routes.js";
 
 const changes = (count: number, prefix: string): GitChange[] =>

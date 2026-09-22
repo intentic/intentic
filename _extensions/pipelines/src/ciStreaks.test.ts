@@ -1,5 +1,5 @@
 import type { PipelineRun } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { arrivesOpen, failureStreaks, openFailures, inFlightOnHead, streakTooltip, supersededBy } from "./ciStreaks";
 import { type JobFailureRun, recurringFailures } from "./failureHistory";
 
@@ -75,8 +75,8 @@ test("the tooltip names the branch while there is only one", () => {
     const streaks = failureStreaks([run(1, "failed", 50), run(2, "failed", 40)]);
     const [only] = streaks;
     const single = streakTooltip(streaks);
-    expect(single).toContain(only?.repo);
-    expect(single).toContain(only?.branch);
+    expect(single).toContain(only!.repo);
+    expect(single).toContain(only!.branch);
     expect(single).toContain(String(only?.commits));
     // One-commit streaks name the commit, not a count of 1.
     const oneCommit = streakTooltip(failureStreaks([run(1, "failed", 50, "main", "abcdef1234")]));

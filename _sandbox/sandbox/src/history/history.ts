@@ -429,7 +429,22 @@ export const createWorkspaceHistory = (
                 byId.set(commit.id, group);
             }
         }
-        indexCache = { groups: [...byId.values()].toSorted((a, b) => b.at - a.at), logs };
+        // Commit timestamps are whole seconds, so two snapshots in one second tie; a scope's own log is the parent
+        // chain, which orders them for real. Newest first.
+        const newestFirst = (a: SnapshotGroup, b: SnapshotGroup): number => {
+            if (a.at !== b.at) {
+                return b.at - a.at;
+            }
+            for (const log of logs.values()) {
+                const left = log.findIndex((commit) => commit.id === a.id);
+                const right = log.findIndex((commit) => commit.id === b.id);
+                if (left !== -1 && right !== -1 && left !== right) {
+                    return left - right;
+                }
+            }
+            return 0;
+        };
+        indexCache = { groups: [...byId.values()].toSorted(newestFirst), logs };
         return indexCache;
     };
 

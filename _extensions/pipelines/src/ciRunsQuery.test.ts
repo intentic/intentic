@@ -1,5 +1,5 @@
 import type { ExtensionContext, HostQuery, IntenticApi, ViewRegistration } from "@intentic/extension-api";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, jest } from "bun:test";
 import { ciRunsQuery, CI_RUNS_STALE_MS } from "./ciRunsQuery";
 import { activate } from "./extension";
 import { bindHost } from "./host";
@@ -38,7 +38,7 @@ afterEach(() => {
     for (const subscription of subscriptions.splice(0)) {
         subscription.dispose();
     }
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 describe(`the Pipelines opening query`, () => {
@@ -55,7 +55,7 @@ describe(`the Pipelines opening query`, () => {
     });
 
     it(`opts the rail view into warming that exact query`, () => {
-        vi.useFakeTimers();
+        jest.useFakeTimers();
         const { api, views, fetched } = fakeHost();
         const context: ExtensionContext = { extensionId: `ext-pipelines`, subscriptions };
 

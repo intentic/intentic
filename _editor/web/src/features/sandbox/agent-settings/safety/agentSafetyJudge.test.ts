@@ -1,20 +1,20 @@
-// @vitest-environment jsdom
 // AgentSafetyJudge controls commandJudge's mode; the model applying it is chosen on the Models tab and only
 // named here.
+import "@intentic/testing/dom";
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter } from "vue-router";
 import { IconStub } from "@intentic/ui/testing";
 
 const settings = ref<SandboxSettings>(SandboxSettingsSchema.parse({}));
-const patch = vi.fn((fields: Partial<SandboxSettings>) => {
+const patch = mock((fields: Partial<SandboxSettings>) => {
     settings.value = { ...settings.value, ...fields };
 });
 
-vi.mock(`../../overview/useSandboxSettings`, () => ({
+mock.module(`../../overview/useSandboxSettings`, () => ({
     useSandboxSettings: () => ({ settings, patch, dropped: ref(undefined), error: ref(undefined), isLoading: ref(false), save: { mutate: patch } }),
 }));
 
@@ -25,8 +25,8 @@ const CATALOGS: Record<string, readonly { value: string; label: string }[]> = {
 };
 const connected = ref<readonly string[]>([`codex`, `claude`]);
 
-vi.mock(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
-vi.mock(`../../../chat/accounts/providerCatalog`, () => ({
+mock.module(`../../../chat/session/access`, () => ({ providerReady: (provider: string) => connected.value.includes(provider) }));
+mock.module(`../../../chat/accounts/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
     modelOptionsFor: (provider: string) => CATALOGS[provider] ?? [],

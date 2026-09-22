@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
 import { checks } from "./invariant.js";

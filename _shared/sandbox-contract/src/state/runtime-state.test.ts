@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { RUNTIME_DOMAIN_BINDINGS, runtimeBoundQueryKeys, staleRuntimeQueryKeys } from "./runtime-state.js";
 
 describe(`staleRuntimeQueryKeys`, () => {

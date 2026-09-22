@@ -1,18 +1,19 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { RESUME_NOTES, withResumeNote } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, readWorkspaceSessionTail, searchWorkspaceSessions } from "./sessions.js";
 import { IN_MEMORY, openSearchIndex } from "./search-index.js";
 import { readSessionLines } from "./transcript-search.js";
 
 // Fakes the SDK store: `listSessions` is newest-first, `getSessionMessages` returns Anthropic-shaped turns.
-const { listSessions, getSessionMessages, getSessionInfo } = vi.hoisted(() => ({
-    listSessions: vi.fn(),
-    getSessionMessages: vi.fn(),
-    getSessionInfo: vi.fn(),
+const { listSessions, getSessionMessages, getSessionInfo } = hoisted(() => ({
+    listSessions: mock(),
+    getSessionMessages: mock(),
+    getSessionInfo: mock(),
 }));
-vi.mock("@anthropic-ai/claude-agent-sdk", () => ({ listSessions, getSessionMessages, getSessionInfo }));
+mock.module("@anthropic-ai/claude-agent-sdk", () => ({ listSessions, getSessionMessages, getSessionInfo }));
 
 // Seeds `n` sessions newest-first as `<tag>0..<tag>{n-1}`, titled "chat N" and bodied "body <id>" so a query can target
 // one precisely. `tag` namespaces each test's session ids.

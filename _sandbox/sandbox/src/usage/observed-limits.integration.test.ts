@@ -1,7 +1,7 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { fileObservedLimitStore, OBSERVED_FOR_MS } from "./observed-limits.js";
 
 // Path's parent directory doesn't exist yet; the store must create it on write.

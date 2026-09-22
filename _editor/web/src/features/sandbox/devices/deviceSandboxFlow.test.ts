@@ -1,20 +1,22 @@
-// @vitest-environment jsdom
 // jsdom for the import chain: the stream reader touches the app's environment and the per-origin stream budget
 // at module eval.
 // A container verb aimed at the sandbox relaying it kills the daemon mid-stream, so the browser sees a dead body
 // rather than a result frame. Pinned here: with `severing` that IS the outcome, and a refusal the device managed
 // to send is still a failure either way.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
 
 const requests: { path: string; init?: RequestInit }[] = [];
 let answer: () => Response;
-vi.mock(`../client/sandboxClient`, () => ({
+mock.module(`../client/sandboxClient`, () => ({
     sandboxRequest: (path: string, init?: RequestInit) => {
         requests.push({ path, init });
         return Promise.resolve(answer());
     },
-    sandboxJson: vi.fn(),
+    sandboxJson: mock(),
     sandboxError: (response: Response) => Promise.resolve(new Error(`HTTP ${response.status}`)),
+    // Named by useDevices but never thrown here; bun links an ESM import against exactly what this returns.
+    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 
 const { manageDeviceSandbox } = await import("./useDevices");

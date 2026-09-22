@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { NEUTRALIZED, neutralizeOutsideText, wrapOutsideContent } from "./outside-text.js";
 
 describe("wrapOutsideContent", () => {

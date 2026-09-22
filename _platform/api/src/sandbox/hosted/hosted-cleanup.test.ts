@@ -1,16 +1,18 @@
 import { FREE_TIER } from "@intentic/constants";
 import { Prisma, type PrismaClient } from "@intentic/prisma";
 import type { Logger } from "pino";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { configSchema } from "../../config.js";
-import { testIngressConfig } from "../../testing.js";
+import { fakeHostedAppLock, testIngressConfig } from "../../testing.js";
 import { connectTokenIdentity } from "../mint-sandbox.js";
 import { assertHostedIdentity, HostedProvisionCancelled, reconcileHostedCleanup, releaseHosted } from "./hosted-cleanup.js";
 import { provisionHosted } from "./hosted.js";
+import * as hostedImageOriginal from "./build/hosted-image.js";
 
-vi.mock(`./hosted-app-lock.js`, async () => ({ withHostedAppLock: (await import(`../../testing.js`)).fakeHostedAppLock }));
-vi.mock(`./build/hosted-image.js`, async (original) => ({
-    ...(await original<typeof import("./build/hosted-image.js")>()),
+mock.module(`./hosted-app-lock.js`, () => ({ withHostedAppLock: fakeHostedAppLock }));
+mock.module(`./build/hosted-image.js`, () => ({
+    ...hostedImageOriginal,
     resolveHostedImage: async () => `registry.test/sandbox@sha256:abc`,
 }));
 
@@ -22,7 +24,7 @@ const config = configSchema.parse({
     ingress: testIngressConfig,
     hosted: { flyApiToken: `fly`, flyOrg: `org` },
 });
-const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
+const logger = { info: mock(), warn: mock(), error: mock() } as unknown as Logger;
 const args = { sandboxId: `s1`, connectToken: `token`, ownerEmail: `owner@example.test`, region: `iad`, tier: FREE_TIER.id };
 const appName = `${config.hosted.appPrefix}-${connectTokenIdentity(args.connectToken).tunnelId}`;
 
@@ -41,43 +43,43 @@ const fixture = () => {
         },
     };
     const db = {
-        $transaction: vi.fn((work: (tx: unknown) => Promise<unknown>) => work(db)),
-        $queryRaw: vi.fn().mockResolvedValue([]),
-        $executeRaw: vi.fn().mockResolvedValue(0),
+        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(db)),
+        $queryRaw: mock().mockResolvedValue([]),
+        $executeRaw: mock().mockResolvedValue(0),
         sandbox: {
-            findUnique: vi.fn(async () => state.sandbox),
-            findUniqueOrThrow: vi.fn(async () => state.sandbox),
-            update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => Object.assign(state.sandbox, data)),
+            findUnique: mock(async () => state.sandbox),
+            findUniqueOrThrow: mock(async () => state.sandbox),
+            update: mock(async ({ data }: { data: Record<string, unknown> }) => Object.assign(state.sandbox, data)),
         },
         hostedMachine: {
-            findUnique: vi.fn(async () => state.sandbox.hosted),
-            count: vi.fn(async () => (state.sandbox.hosted === null ? 0 : 1)),
-            create: vi.fn(async ({ data }: { data: { appName: string; wokeAt: Date | null } }) => {
+            findUnique: mock(async () => state.sandbox.hosted),
+            count: mock(async () => (state.sandbox.hosted === null ? 0 : 1)),
+            create: mock(async ({ data }: { data: { appName: string; wokeAt: Date | null } }) => {
                 state.sandbox.hosted = { id: `h1`, ...data };
             }),
-            delete: vi.fn(async () => {
+            delete: mock(async () => {
                 state.sandbox.hosted = null;
             }),
         },
-        hostedPlan: { findUnique: vi.fn().mockResolvedValue(null) },
+        hostedPlan: { findUnique: mock().mockResolvedValue(null) },
         hostedPoolMachine: {
-            findMany: vi.fn().mockResolvedValue([]),
-            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
-            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-            delete: vi.fn().mockResolvedValue({}),
+            findMany: mock().mockResolvedValue([]),
+            deleteMany: mock().mockResolvedValue({ count: 1 }),
+            updateMany: mock().mockResolvedValue({ count: 1 }),
+            delete: mock().mockResolvedValue({}),
         },
         hostedCleanup: {
-            create: vi.fn(async ({ data }: { data: { appName: string } }) => {
+            create: mock(async ({ data }: { data: { appName: string } }) => {
                 pending.add(data.appName);
             }),
-            upsert: vi.fn(async ({ create }: { create: { appName: string } }) => {
+            upsert: mock(async ({ create }: { create: { appName: string } }) => {
                 pending.add(create.appName);
             }),
-            deleteMany: vi.fn(async ({ where }: { where: { appName: string } }) => {
+            deleteMany: mock(async ({ where }: { where: { appName: string } }) => {
                 pending.delete(where.appName);
             }),
-            findMany: vi.fn(async () => [...pending].map((name) => ({ appName: name }))),
-            findUnique: vi.fn(async ({ where }: { where: { appName: string } }) => (pending.has(where.appName) ? { appName: where.appName } : null)),
+            findMany: mock(async () => [...pending].map((name) => ({ appName: name }))),
+            findUnique: mock(async ({ where }: { where: { appName: string } }) => (pending.has(where.appName) ? { appName: where.appName } : null)),
         },
     };
     return { db, prisma: db as unknown as PrismaClient, state, pending };
@@ -88,7 +90,7 @@ const provider = (pending: Set<string>, pauseAt?: string) => {
     const resume = Promise.withResolvers<void>();
     const state = { exists: false, failDelete: false, deleting: false };
     const calls: string[] = [];
-    vi.stubGlobal(`fetch`, async (url: string, init: RequestInit) => {
+    stubGlobal(`fetch`, async (url: string, init: RequestInit) => {
         const path = new URL(url).pathname;
         const method = init.method;
         calls.push(`${method} ${path}${new URL(url).search}`);
@@ -117,7 +119,7 @@ const provider = (pending: Set<string>, pauseAt?: string) => {
     return { state, calls, entered, resume };
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => unstubAllGlobals());
 
 describe(`hosted cancellation`, () => {
     it.each([`/v1/apps`, `/v1/apps/${appName}/volumes`, `/v1/apps/${appName}/machines`])(
@@ -126,14 +128,14 @@ describe(`hosted cancellation`, () => {
             const { db, prisma, state, pending } = fixture();
             const fly = provider(pending, pauseAt);
             const creating = provisionHosted(prisma, config, logger, args);
-            const cancelled = expect(creating).rejects.toBeInstanceOf(HostedProvisionCancelled);
             await fly.entered.promise;
             await releaseHosted(prisma, config, args.sandboxId);
             await reconcileHostedCleanup(prisma, config, logger);
             expect(fly.calls.filter((call) => call.startsWith(`DELETE`))).toEqual([]);
             expect([...pending]).toEqual([appName]);
             fly.resume.resolve();
-            await cancelled;
+            // bun's `expect(promise).rejects` settles the promise where it is written, so the assertion belongs here.
+            await expect(creating).rejects.toBeInstanceOf(HostedProvisionCancelled);
             expect(db.hostedMachine.create).not.toHaveBeenCalled();
             expect(state.sandbox.hosted).toBeNull();
             expect(state.sandbox.lastSeenAt).toBeNull();
@@ -216,8 +218,8 @@ describe(`hosted cancellation`, () => {
 
     it(`does not destroy an existing app when its create request is refused`, async () => {
         const { prisma, pending } = fixture();
-        const fetch = vi.fn().mockResolvedValue(Response.json({ error: `app name already exists` }, { status: 422 }));
-        vi.stubGlobal(`fetch`, fetch);
+        const fetch = mock().mockResolvedValue(Response.json({ error: `app name already exists` }, { status: 422 }));
+        stubGlobal(`fetch`, fetch);
         await expect(provisionHosted(prisma, config, logger, args)).rejects.toThrow(`app name already exists`);
         expect(fetch).toHaveBeenCalledTimes(1);
         expect(fetch).toHaveBeenCalledWith(`https://api.machines.dev/v1/apps`, expect.objectContaining({ method: `POST` }));
@@ -255,15 +257,16 @@ describe(`hosted cancellation`, () => {
         const fly = provider(pending, `${method} /v1/apps/${warmApp}/machines/m1`);
         fly.state.exists = true;
         const creating = provisionHosted(prisma, config, logger, args);
-        const cancelled = expect(creating).rejects.toBeInstanceOf(HostedProvisionCancelled);
         await fly.entered.promise;
         await releaseHosted(prisma, config, args.sandboxId);
         const localToken = state.sandbox.token;
         fly.resume.resolve();
-        await cancelled;
+        // bun's `expect(promise).rejects` settles the promise where it is written, so the assertion belongs here.
+        await expect(creating).rejects.toBeInstanceOf(HostedProvisionCancelled);
         expect(state.sandbox.token).toBe(localToken);
         expect(db.hostedMachine.create).not.toHaveBeenCalled();
-        expect(db.hostedPoolMachine.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: { appName: warmApp, state: `claimed` } });
+        expect(db.hostedPoolMachine.deleteMany).toHaveBeenCalledTimes(1);
+        expect(db.hostedPoolMachine.deleteMany).toHaveBeenCalledWith({ where: { appName: warmApp, state: `claimed` } });
         expect(fly.calls.some((call) => call.endsWith(`/start`))).toBe(false);
         expect(fly.state.exists).toBe(false);
         expect([...pending]).toEqual([]);

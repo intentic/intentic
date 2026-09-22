@@ -1,5 +1,5 @@
 import type { Area, Persona } from "@intentic/sandbox-contract";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Member } from "../auth/auth.js";
 import { memoryMembersStore, memoryAreasStore, memoryPersonasStore } from "../harness/route-stores.testing.js";
 import { checks } from "./invariant.js";

@@ -1,6 +1,6 @@
 import { apply } from "@intentic/engine";
 import { compile, env, toNodeMap } from "@intentic/graph";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { SshExecutor } from "../core/ssh.js";
 import { createHostProvider } from "./host.js";
 

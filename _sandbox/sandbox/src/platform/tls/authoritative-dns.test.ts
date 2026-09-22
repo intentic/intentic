@@ -1,10 +1,11 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { resolveTxtAuthoritatively } from "./authoritative-dns.js";
 
 // Fake delegation: an apex with nameservers, names beneath it without, and per-nameserver TXT data — enough to exercise
 // which zone gets asked and what counts as published.
 
-const dns = vi.hoisted(() => ({
+const dns = hoisted(() => ({
     // Only the apex carries NS records, as in a real delegation.
     ns: new Map<string, string[]>(),
     addresses: new Map<string, string[]>(),
@@ -13,7 +14,7 @@ const dns = vi.hoisted(() => ({
     nsQueries: [] as string[],
 }));
 
-vi.mock("node:dns/promises", () => {
+mock.module("node:dns/promises", () => {
     const notFound = (): never => {
         throw Object.assign(new Error("ENOTFOUND"), { code: "ENOTFOUND" });
     };

@@ -5,7 +5,8 @@ import { OpenAPILink } from "@orpc/openapi-client/fetch";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import type { AnyRouter } from "@orpc/server";
 import type { Hono } from "hono";
-import { afterEach, vi } from "vitest";
+import { afterEach } from "bun:test";
+import { unstubAllEnvs } from "@intentic/testing/bun";
 import type { MemberRole, ProofMethod } from "@intentic/sandbox-contract";
 import { ForbiddenError, type ProvenCaller } from "../auth/auth.js";
 import type { AppEnv, OrpcContext } from "../app-env.js";
@@ -27,8 +28,8 @@ export const clientFor = (app: Hono<AppEnv>, options?: { readonly bearer?: strin
         }),
     );
 
-// Without a vitest config there is no unstubEnvs, so a stubbed var would outlive the test that set it.
-afterEach(() => vi.unstubAllEnvs());
+// Nothing restores a stubbed var on its own, so one would outlive the test that set it.
+afterEach(() => unstubAllEnvs());
 
 // Auth stub refusing every bearer as an AUTHENTICATION failure (401), for testing a route's gate.
 export const rejectAuth = async (): Promise<never> => {

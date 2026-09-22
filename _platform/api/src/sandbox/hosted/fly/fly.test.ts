@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { flyMachineConfig } from "@intentic/sandbox-run/fly";
 import {
     createApp,
@@ -22,7 +23,7 @@ import {
 // Routes by method + URL substring; records each call for payload assertions.
 const stubFetch = (routes: { match: (method: string, url: string) => boolean; respond: () => Response }[]) => {
     const calls: { method: string; url: string; body?: unknown }[] = [];
-    vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
+    stubGlobal(`fetch`, (url: URL | string, init?: RequestInit): Promise<Response> => {
         const method = init?.method ?? `GET`;
         calls.push({ method, url: String(url), ...(typeof init?.body === `string` ? { body: JSON.parse(init.body) } : {}) });
         const route = routes.find((candidate) => candidate.match(method, String(url)));
@@ -37,7 +38,7 @@ const stubFetch = (routes: { match: (method: string, url: string) => boolean; re
 const json = (payload: unknown, status = 200) => new Response(JSON.stringify(payload), { status });
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe(`fly`, () => {
@@ -110,7 +111,7 @@ describe(`fly`, () => {
     });
 
     it(`fails a hung Fly call as a status-less FlyError, so nothing reads it as "gone"`, async () => {
-        vi.stubGlobal(`fetch`, (_url: URL | string, init?: RequestInit): Promise<Response> => {
+        stubGlobal(`fetch`, (_url: URL | string, init?: RequestInit): Promise<Response> => {
             // What AbortSignal.timeout produces when it fires; undici rejects with this shape.
             const aborted = new Error(`The operation was aborted due to timeout`);
             aborted.name = `TimeoutError`;

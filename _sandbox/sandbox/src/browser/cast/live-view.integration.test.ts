@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { BrowserContext, Page } from "playwright";
-import { afterAll, expect, test } from "vitest";
+import { test, expect, afterAll } from "bun:test";
 import { chromiumWindowArgs, DISPLAY_HEIGHT, DISPLAY_WIDTH, ensureDisplay, releaseDisplay } from "./display.js";
 import { startLiveView, type LiveReady, type LiveView } from "./live-view.js";
 import { readRegion } from "./region.js";
@@ -71,7 +71,13 @@ const expectViewport = async (wire: Wire, page: Page): Promise<number> => {
     if (read === undefined) {
         throw new Error("the page reported no geometry");
     }
-    expect(readies(wire)[0]).toMatchObject({ kind: "video", width: read.region.width, height: read.region.height, scale: read.region.scale, codec: expect.stringMatching(/^avc1\./) });
+    expect(readies(wire)[0]).toMatchObject({
+        kind: "video",
+        width: read.region.width,
+        height: read.region.height,
+        scale: read.region.scale,
+        codec: expect.stringMatching(/^avc1\./),
+    });
     expect(read.region.y).toBeGreaterThan(read.geometry.screenY * read.region.scale);
     return read.region.scale;
 };
@@ -83,7 +89,7 @@ const expectSharpened = async (wire: Wire): Promise<void> => {
     const stillAt = wire.tags.indexOf(FRAME_WEBP);
     expect(stillAt).toBeGreaterThan(-1);
     await settle(() => wire.tags.slice(stillAt).some((tag) => tag === FRAME_H264_KEY_QUIET || tag === FRAME_H264_DELTA_QUIET));
-    expect(wire.tags.slice(stillAt)).toContainEqual(expect.toSatisfy((tag: number) => tag === FRAME_H264_KEY_QUIET || tag === FRAME_H264_DELTA_QUIET));
+    expect(wire.tags.slice(stillAt).some((tag) => tag === FRAME_H264_KEY_QUIET || tag === FRAME_H264_DELTA_QUIET)).toBe(true);
 };
 
 // A resize from the client's box is a fresh stream at that size, and the page's viewport is that size.
@@ -108,38 +114,42 @@ const expectSteered = async (view: LiveView, page: Page): Promise<void> => {
 
 afterAll(() => releaseDisplay(DISPLAY_KEY));
 
-test("the picture is the page's viewport, sharpened once it settles, resized and steered from the client", { timeout: 120_000 }, async () => {
-    const launched = await launch();
-    if (launched === undefined) {
-        return; // no browser on this box
-    }
-    const { context, profile } = launched;
-    const wire: Wire = { json: [], tags: [] };
-    const errors: string[] = [];
-    const sink = {
-        send: (data: string | Uint8Array): void => {
-            if (typeof data === "string") {
-                wire.json.push(JSON.parse(data) as object);
-            } else {
-                wire.tags.push(data[0] ?? -1);
-            }
-        },
-    };
-    try {
-        const page = context.pages()[0] ?? (await context.newPage());
-        await page.goto("data:text/html,<title>one</title><body style='margin:0;background:%23fff'><p>a page that holds still</p></body>");
-        const view = await startLiveView(context, DISPLAY_KEY, sink, (reason) => errors.push(reason));
-        try {
-            const scale = await expectViewport(wire, page);
-            await expectSharpened(wire);
-            await expectResized(view, wire, page, scale);
-            await expectSteered(view, page);
-            expect(errors).toEqual([]);
-        } finally {
-            await view.stop();
+test(
+    "the picture is the page's viewport, sharpened once it settles, resized and steered from the client",
+    async () => {
+        const launched = await launch();
+        if (launched === undefined) {
+            return; // no browser on this box
         }
-    } finally {
-        await context.close().catch(() => undefined);
-        rmSync(profile, { recursive: true, force: true });
-    }
-});
+        const { context, profile } = launched;
+        const wire: Wire = { json: [], tags: [] };
+        const errors: string[] = [];
+        const sink = {
+            send: (data: string | Uint8Array): void => {
+                if (typeof data === "string") {
+                    wire.json.push(JSON.parse(data) as object);
+                } else {
+                    wire.tags.push(data[0] ?? -1);
+                }
+            },
+        };
+        try {
+            const page = context.pages()[0] ?? (await context.newPage());
+            await page.goto("data:text/html,<title>one</title><body style='margin:0;background:%23fff'><p>a page that holds still</p></body>");
+            const view = await startLiveView(context, DISPLAY_KEY, sink, (reason) => errors.push(reason));
+            try {
+                const scale = await expectViewport(wire, page);
+                await expectSharpened(wire);
+                await expectResized(view, wire, page, scale);
+                await expectSteered(view, page);
+                expect(errors).toEqual([]);
+            } finally {
+                await view.stop();
+            }
+        } finally {
+            await context.close().catch(() => undefined);
+            rmSync(profile, { recursive: true, force: true });
+        }
+    },
+    { timeout: 120_000 },
+);

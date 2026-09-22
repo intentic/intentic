@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 // The close gesture every tab strip shares, pinned here since @intentic/ui has no test runner of its own. jsdom
 // has neither autoscroll nor a primary selection, so the platform's middle-press default is asserted as
 // `defaultPrevented` rather than by what it would have started.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
 import { createApp, h, nextTick, ref, withDirectives } from "vue";
 import { vMiddleclick } from "@intentic/ui";
 
@@ -27,7 +27,7 @@ const press = (el: HTMLElement, button: number, type = `auxclick`): MouseEvent =
 };
 
 it(`closes on the middle button and ignores the other two`, () => {
-    const closed = vi.fn();
+    const closed = mock();
     const { tab, app, host } = strip(closed);
 
     press(tab, 1);
@@ -43,7 +43,7 @@ it(`closes on the middle button and ignores the other two`, () => {
 
 // A press on the glyph inside the pill is a press on the pill: the gesture is the tab's, not the leaf's.
 it(`answers a press on anything inside the tab`, () => {
-    const closed = vi.fn();
+    const closed = mock();
     const { label, app, host } = strip(closed);
 
     press(label, 1);
@@ -55,7 +55,7 @@ it(`answers a press on anything inside the tab`, () => {
 
 // Autoscroll (and X11's paste) start on mousedown and would outlive the pill the close removes.
 it(`takes the platform's middle-press default away, and leaves the other buttons theirs`, () => {
-    const { tab, app, host } = strip(vi.fn());
+    const { tab, app, host } = strip(mock());
 
     expect(press(tab, 1, `mousedown`).defaultPrevented).toBe(true);
     expect(press(tab, 0, `mousedown`).defaultPrevented).toBe(false);
@@ -66,8 +66,8 @@ it(`takes the platform's middle-press default away, and leaves the other buttons
 
 // The strip underneath has gestures of its own (selection, its own context menu); a press that closed a tab is spent.
 it(`keeps the press off the strip underneath`, () => {
-    const onStrip = vi.fn();
-    const { tab, host, app } = strip(vi.fn());
+    const onStrip = mock();
+    const { tab, host, app } = strip(mock());
     host.querySelector<HTMLElement>(`.strip`)!.addEventListener(`auxclick`, onStrip);
 
     const event = press(tab, 1);
@@ -81,7 +81,7 @@ it(`keeps the press off the strip underneath`, () => {
 
 // Listeners are the element's own, so a tab that has left the strip must not answer a press aimed at where it was.
 it(`stops listening once the tab is gone`, async () => {
-    const closed = vi.fn();
+    const closed = mock();
     const held = ref(true);
     const { tab, app, host } = strip(closed, held);
 

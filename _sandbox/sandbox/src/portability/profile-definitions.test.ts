@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { parseDefinitionToml } from "./definition.js";
 
 // The platform ships one sandbox.toml per profile and hands it to a new machine as base64 in SANDBOX_DEFINITION_SEED;

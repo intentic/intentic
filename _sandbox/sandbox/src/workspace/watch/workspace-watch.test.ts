@@ -1,6 +1,6 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, jest } from "bun:test";
 import {
     announceUnwatchedWrite,
     createPathBatcher,
@@ -22,77 +22,77 @@ const batchesOf = (): { batches: string[][]; add: (path: string) => void } => {
 };
 
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 test("a burst inside one window is announced as a single batch", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { batches, add } = batchesOf();
     add("a.txt");
     add("b.txt");
     // Nothing yet: the window turns an edit storm into one frame instead of one per file.
-    vi.advanceTimersByTime(DEBOUNCE_MS - 1);
+    jest.advanceTimersByTime(DEBOUNCE_MS - 1);
     expect(batches).toHaveLength(0);
-    vi.advanceTimersByTime(1);
+    jest.advanceTimersByTime(1);
     expect(batches).toEqual([["a.txt", "b.txt"]]);
 });
 
 test("the window opens on the first path and is not reset by later ones", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { batches, add } = batchesOf();
     add("a.txt");
     // A late path joins without pushing the deadline out, bounding latency instead of starving the browser.
-    vi.advanceTimersByTime(DEBOUNCE_MS - 10);
+    jest.advanceTimersByTime(DEBOUNCE_MS - 10);
     add("b.txt");
-    vi.advanceTimersByTime(10);
+    jest.advanceTimersByTime(10);
     expect(batches).toEqual([["a.txt", "b.txt"]]);
 });
 
 test("a file touched twice in a window is announced once", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { batches, add } = batchesOf();
     // A single write often arrives as create-then-update; this is the common case, not an edge one.
     add("a.txt");
     add("a.txt");
-    vi.advanceTimersByTime(DEBOUNCE_MS);
+    jest.advanceTimersByTime(DEBOUNCE_MS);
     expect(batches).toEqual([["a.txt"]]);
 });
 
 test("the next change after a flush opens a fresh window", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { batches, add } = batchesOf();
     add("a.txt");
-    vi.advanceTimersByTime(DEBOUNCE_MS);
+    jest.advanceTimersByTime(DEBOUNCE_MS);
     add("b.txt");
-    vi.advanceTimersByTime(DEBOUNCE_MS);
+    jest.advanceTimersByTime(DEBOUNCE_MS);
     expect(batches).toEqual([["a.txt"], ["b.txt"]]);
 });
 
 test("a quiet window announces nothing at all", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { batches } = batchesOf();
-    vi.advanceTimersByTime(DEBOUNCE_MS * 4);
+    jest.advanceTimersByTime(DEBOUNCE_MS * 4);
     expect(batches).toHaveLength(0);
 });
 
 test("a burst past the path ceiling becomes an empty batch: just refetch the tree", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { batches, add } = batchesOf();
     for (let index = 0; index <= MAX_PATHS; index += 1) {
         add(`file-${index}.txt`);
     }
-    vi.advanceTimersByTime(DEBOUNCE_MS);
+    jest.advanceTimersByTime(DEBOUNCE_MS);
     // A branch switch or codegen run isn't worth a frame naming every file it touched.
     expect(batches).toEqual([[]]);
 });
 
 test("a burst exactly at the ceiling still names its paths", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { batches, add } = batchesOf();
     for (let index = 0; index < MAX_PATHS; index += 1) {
         add(`file-${index}.txt`);
     }
-    vi.advanceTimersByTime(DEBOUNCE_MS);
+    jest.advanceTimersByTime(DEBOUNCE_MS);
     expect(batches[0]).toHaveLength(MAX_PATHS);
 });
 

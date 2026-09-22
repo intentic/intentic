@@ -6,8 +6,8 @@ import { promisify } from "node:util";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { PushRun } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
-import { SETTLES } from "@intentic/testing/vitest";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../../composition.js";
 import type { TerminalRunner } from "../../terminal/terminal-run.js";
 import { CHECKS_SESSION } from "../../terminal/terminal-session.js";
@@ -128,7 +128,7 @@ const fakes = (over: { visible?: boolean; starts?: boolean } = {}): Fakes => {
 };
 
 const settled = async (runs: ReturnType<typeof createPushRuns>, repo: string): Promise<PushRun> => {
-    await vi.waitFor(() => expect(runs.state(repo).status).not.toBe("running"), SETTLES);
+    await waitFor(() => expect(runs.state(repo).status).not.toBe("running"), SETTLES);
     return runs.state(repo);
 };
 
@@ -150,7 +150,7 @@ test("a running push names its terminal once the command is in it, and none with
     const visible = fakes();
     const runs = createPushRuns(visible.services, () => {});
     await runs.start("app", clone, {});
-    await vi.waitFor(() => expect(runs.state("app").session).toBe(CHECKS_SESSION), SETTLES);
+    await waitFor(() => expect(runs.state("app").session).toBe(CHECKS_SESSION), SETTLES);
     await settled(runs, "app");
 
     const { clone: other } = await ahead();
@@ -256,7 +256,7 @@ test("two repos take turns in the one terminal window", async () => {
     await runs.start("one", first.clone, {});
     await runs.start("two", second.clone, {});
     // The second push is queued behind the first and has no session until it actually starts.
-    await vi.waitFor(() => expect(runs.state("one").session).toBe(CHECKS_SESSION), SETTLES);
+    await waitFor(() => expect(runs.state("one").session).toBe(CHECKS_SESSION), SETTLES);
     expect(runs.state("two")).toMatchObject({ status: "running" });
     expect(runs.state("two").session).toBeUndefined();
     const one = await settled(runs, "one");
@@ -272,7 +272,7 @@ test("a cancelled push is cancelled, not failed, and nobody is notified", async 
     const { services, notified } = fakes();
     const runs = createPushRuns(services, () => {});
     await runs.start("app", clone, {});
-    await vi.waitFor(() => expect(runs.state("app").session).toBe(CHECKS_SESSION), SETTLES);
+    await waitFor(() => expect(runs.state("app").session).toBe(CHECKS_SESSION), SETTLES);
     runs.cancel("app");
     const run = await settled(runs, "app");
     expect(run.status).toBe("cancelled");

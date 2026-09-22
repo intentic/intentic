@@ -1,7 +1,7 @@
-// @vitest-environment jsdom
 //
 // Needs jsdom: this file's import chain reaches the app's theme, which touches the document as it loads.
-import { describe, expect, it } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect } from "bun:test";
 import { RESTART_PATIENCE_MS, type RestartWork } from "../../features/sandbox/live/sandboxRestart";
 import { restartCard } from "./notificationSources";
 

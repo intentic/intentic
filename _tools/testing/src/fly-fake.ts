@@ -90,11 +90,11 @@ export interface FakeFly {
 
 /**
  * Installs the fake over `globalThis.fetch`. Requests to anything but Fly are passed through to the real one, so a
- * suite that also speaks to Stripe or an edge keeps working; `vi.unstubAllGlobals()` takes it away again.
+ * suite that also speaks to Stripe or an edge keeps working; `unstubAllGlobals()` takes it away again.
  */
 export const installFakeFly = (
     stub: (name: string, value: unknown) => void,
-    options: { readonly faults?: FakeFlyFaults; readonly passThrough?: typeof fetch } = {},
+    options: { readonly faults?: FakeFlyFaults; readonly passThrough?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> } = {},
 ): FakeFly => {
     const calls: FakeFlyCall[] = [];
     const apps = new Set<string>();
@@ -119,7 +119,15 @@ export const installFakeFly = (
         image_ref: { digest: `sha256:${machine.id}` },
         ...(machine.exit === undefined
             ? {}
-            : { events: [{ type: "exit", timestamp: 1, request: { exit_event: { exit_code: machine.exit.exitCode, oom_killed: machine.exit.oomKilled } } }] }),
+            : {
+                  events: [
+                      {
+                          type: "exit",
+                          timestamp: 1,
+                          request: { exit_event: { exit_code: machine.exit.exitCode, oom_killed: machine.exit.oomKilled } },
+                      },
+                  ],
+              }),
     });
 
     const wireVolume = (volume: FakeFlyVolume) => ({

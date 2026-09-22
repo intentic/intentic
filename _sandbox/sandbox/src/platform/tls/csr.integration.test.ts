@@ -3,7 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, expect, it } from "vitest";
+import { it, expect, afterAll } from "bun:test";
 import { base64Url, buildCsr } from "./csr.js";
 
 // Hand-rolled ASN.1 fails silently by one byte; openssl is the independent oracle here (parses the DER, checks the

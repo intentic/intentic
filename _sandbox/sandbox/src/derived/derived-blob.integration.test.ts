@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { test, expect, beforeEach, afterEach } from "bun:test";
 import { DERIVED_BLOBS_DIR, deriveBytes } from "./derived-blob.js";
 import type { ExecFn } from "./fileq.js";
 

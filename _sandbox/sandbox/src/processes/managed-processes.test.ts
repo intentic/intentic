@@ -1,5 +1,6 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, jest } from "bun:test";
+import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createManagedProcesses, launchEnv, type ProcessRunner, type ProcessSpec } from "./managed-processes.js";
 
 // Records launches and lets a test drive each session's foreground command, mirroring tmux. Absent means destroyed; a
@@ -25,7 +26,7 @@ const fakeRunner = () => {
 const SPEC: ProcessSpec = { command: "pnpm dev", cwd: `${WORKSPACE_ROOT}/app/operator` };
 
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 test("start launches tmux session panel-<key> with the assigned port, exposed via portOf", async () => {
@@ -89,32 +90,32 @@ test("stopAll kills everything", async () => {
 });
 
 test("a session killed externally (vanished from tmux) drops out of running", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     cmd.delete("panel-app");
-    await vi.advanceTimersByTimeAsync(2100);
+    await advanceTimersByTimeAsync(2100);
     expect(panels.running("app")).toBe(false);
 });
 
 test("a dev panel sitting at its shell prompt (Ctrl+C'd server) stays running", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     cmd.set("panel-app", "zsh");
-    await vi.advanceTimersByTimeAsync(60_000);
+    await advanceTimersByTimeAsync(60_000);
     expect(panels.running("app")).toBe(true);
     panels.stopAll();
 });
 
 test("a oneShot job stays running while its command is in the foreground, even past the grace", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
-    await vi.advanceTimersByTimeAsync(60_000);
+    await advanceTimersByTimeAsync(60_000);
     expect(panels.running("job")).toBe(true);
     panels.stopAll();
 });
@@ -135,21 +136,21 @@ test("a oneShot job completes on the first prompt signal once the job was seen, 
     expect(panels.running("job")).toBe(true);
     cmd.set("panel-job", "zsh");
     onPrompt?.();
-    await vi.waitFor(() => expect(panels.running("job")).toBe(false));
+    await waitFor(() => expect(panels.running("job")).toBe(false));
     expect(killed).toEqual([]);
 });
 
 test("a oneShot job completes after two consecutive prompt sightings on the poll tick: the session lingers unkilled", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner, cmd, killed } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
-    await vi.advanceTimersByTimeAsync(2100);
+    await advanceTimersByTimeAsync(2100);
     cmd.set("panel-job", "zsh");
-    await vi.advanceTimersByTimeAsync(2000);
+    await advanceTimersByTimeAsync(2000);
     // One prompt sighting is not completion: it could be the shell between two chained commands.
     expect(panels.running("job")).toBe(true);
-    await vi.advanceTimersByTimeAsync(2000);
+    await advanceTimersByTimeAsync(2000);
     expect(panels.running("job")).toBe(false);
     // The sweep only untracked it: no kill, so the finished job's shell stays attachable.
     expect(killed).toEqual([]);
@@ -160,13 +161,13 @@ test("a oneShot job completes after two consecutive prompt sightings on the poll
  * reads its stamp to age the leftover shell out. */
 // The two poll ticks a completion takes: one that sees the command running, then the pair of prompt sightings.
 const untilComplete = async (cmd: Map<string, string>, session: string): Promise<void> => {
-    await vi.advanceTimersByTimeAsync(2100);
+    await advanceTimersByTimeAsync(2100);
     cmd.set(session, "zsh");
-    await vi.advanceTimersByTimeAsync(4000);
+    await advanceTimersByTimeAsync(4000);
 };
 
 test("a finished oneShot is remembered as a run that ended; a dev server is no run at all", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const startedAt = Date.now();
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner);
@@ -188,7 +189,7 @@ test("a finished oneShot is remembered as a run that ended; a dev server is no r
 });
 
 test("re-running a oneShot key drops the completion of the run before it", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
@@ -213,43 +214,43 @@ test("stopping a oneShot leaves no finished run behind", async () => {
 });
 
 test("a single prompt sighting between chained commands does not complete a oneShot job", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
-    await vi.advanceTimersByTimeAsync(2100);
+    await advanceTimersByTimeAsync(2100);
     cmd.set("panel-job", "zsh");
-    await vi.advanceTimersByTimeAsync(2000);
+    await advanceTimersByTimeAsync(2000);
     cmd.set("panel-job", "node");
-    await vi.advanceTimersByTimeAsync(2000);
+    await advanceTimersByTimeAsync(2000);
     cmd.set("panel-job", "zsh");
-    await vi.advanceTimersByTimeAsync(2000);
+    await advanceTimersByTimeAsync(2000);
     // The streak reset on the next chained command; one fresh sighting is again not completion.
     expect(panels.running("job")).toBe(true);
-    await vi.advanceTimersByTimeAsync(2000);
+    await advanceTimersByTimeAsync(2000);
     expect(panels.running("job")).toBe(false);
 });
 
 test("a oneShot job never observed running (instant failure) completes only after the boot grace", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("job", { ...SPEC, oneShot: true });
     // The command failed before the first sweep: the pane shows only the booted shell at its prompt.
     cmd.set("panel-job", "zsh");
-    await vi.advanceTimersByTimeAsync(8100);
+    await advanceTimersByTimeAsync(8100);
     expect(panels.running("job")).toBe(true);
-    await vi.advanceTimersByTimeAsync(6000);
+    await advanceTimersByTimeAsync(6000);
     expect(panels.running("job")).toBe(false);
 });
 
 test("a start after a crash relaunches into a fresh session", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner, cmd, launches } = fakeRunner();
     const panels = createManagedProcesses(runner);
     await panels.start("app", SPEC);
     cmd.delete("panel-app");
-    await vi.advanceTimersByTimeAsync(2100);
+    await advanceTimersByTimeAsync(2100);
     await panels.start("app", SPEC);
     expect(launches).toHaveLength(2);
     expect(panels.running("app")).toBe(true);
@@ -270,17 +271,17 @@ test("a launch failure propagates to the caller and leaves nothing tracked", asy
 });
 
 test("launchOf narrates a start: launching until the command is seen, starting while it runs, exited once it returns to a prompt", async () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const { runner, cmd } = fakeRunner();
     const panels = createManagedProcesses(runner, { onPromptWatch: () => () => undefined });
     // The fake reports the job command only from the first sweep on; before that nothing's been seen.
     await panels.start("app", SPEC);
     expect(panels.launchOf("app")).toBe("launching");
-    await vi.advanceTimersByTimeAsync(2_000);
+    await advanceTimersByTimeAsync(2_000);
     // SPEC's cwd has no node_modules and no install-completion file, so this reads as installing.
     expect(panels.launchOf("app")).toBe("installing");
     cmd.set("panel-app", "zsh");
-    await vi.advanceTimersByTimeAsync(2_000);
+    await advanceTimersByTimeAsync(2_000);
     expect(panels.launchOf("app")).toBe("exited");
     // Not running at all, and a one-shot job, both answer nothing.
     expect(panels.launchOf("site")).toBeUndefined();

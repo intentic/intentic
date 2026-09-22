@@ -1,14 +1,15 @@
-// @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 
 // The scope's two halves: the predicate every narrowed source applies, and the selection surviving a reload for
 // the sandbox it was made in. jsdom: the selection lives in localStorage.
 
-const load = () => import("./projectScope");
+// The selection is module state read from storage at load, so each case gets its own evaluation of it.
+const load = () => freshImport<typeof import("./projectScope")>("./projectScope", import.meta.url);
 
 beforeEach(() => {
     localStorage.clear();
-    vi.resetModules();
 });
 
 describe(`inside a project`, () => {

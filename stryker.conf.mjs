@@ -3,22 +3,24 @@
 // steering/rule-resolution code, the part expensive to get wrong; a real dependency, since `pnpm dlx` can't resolve its
 // own plugins.
 
+// The unit suites of the two packages under mutation; `suites` is not used since its integration run would spend the
+// machine per mutant.
+const UNIT_RUN = "bun test --conditions=@intentic/src --path-ignore-patterns '**/*.integration.test.*' --path-ignore-patterns '**/*.e2e.test.*'";
+
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {
     packageManager: "pnpm",
-    testRunner: "vitest",
-    // Named explicitly: Stryker's default glob resolves from core's own node_modules, missing siblings under pnpm.
-    plugins: ["@stryker-mutator/vitest-runner"],
-    // No root vitest config exists; pointed at the daemon's, whose `sourceAlias` resolves the contract from source, so
-    // the contract's chores get mutated under it too.
-    vitest: {
-        configFile: "_sandbox/sandbox/vitest.config.ts",
-        // Without this, vitest collects every package's suites from the sandbox copy, dies on the first `.vue` import.
-        dir: "_sandbox/sandbox",
+    // Stryker has no bun runner: the command runner spawns the suites per mutant, so per-test coverage is unavailable
+    // and every mutant costs one full run of the two packages.
+    testRunner: "command",
+    plugins: [],
+    commandRunner: {
+        command: `(cd _sandbox/sandbox && ${UNIT_RUN}) && (cd _shared/sandbox-contract && ${UNIT_RUN} src/chores)`,
     },
+    // In place: a sandbox copy holds only the root node_modules, through which no package resolves under pnpm.
+    inPlace: true,
     reporters: ["json"],
-    // Re-runs only the tests that could catch each mutant; safe since the unit suite shares no state between files.
-    coverageAnalysis: "perTest",
+    coverageAnalysis: "off",
     mutate: [
         "_sandbox/sandbox/src/agent/verification/agent-diagnostics.ts",
         "_sandbox/sandbox/src/agent/verification/agent-removals.ts",
@@ -38,7 +40,7 @@ export default {
     // For Stryker's own exit code and report colour, not the chore: its real floor lives in chores.ts. `break: null`
     // keeps a low score from failing this command, since the probe already runs it with `|| true`.
     thresholds: { high: 80, low: 60, break: null },
-    // Outside the repo tree: a sandbox copy per worker here would drag into the iq index and every file listing.
+    // Outside the repo tree, so a run's files never drag into the iq index or a file listing.
     tempDirName: "/tmp/intentic-stryker",
     incrementalFile: "/tmp/intentic-stryker/incremental.json",
 };

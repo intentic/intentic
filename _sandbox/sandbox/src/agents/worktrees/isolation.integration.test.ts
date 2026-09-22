@@ -9,7 +9,7 @@ import { repoRoot } from "@intentic/constants/node";
 import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
-import { afterEach, expect, test } from "vitest";
+import { test, expect, afterEach } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import {
     ANCHOR_READY,

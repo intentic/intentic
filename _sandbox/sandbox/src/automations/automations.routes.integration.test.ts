@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { type Automation, type Capability, SandboxSettingsSchema, ZoneSchema } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
-import { expect, test, vi } from "vitest";
-import { SETTLES } from "@intentic/testing/vitest";
+import { test, expect } from "bun:test";
+import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { testConfig } from "../testing.js";
@@ -122,7 +122,7 @@ test("run now retires a one-time wake exactly as its own moment would have", asy
     // Retired before the fire is even dispatched, which is what makes a second fire impossible rather than unlikely.
     expect((await services.automations.get("dentist"))?.enabled).toBe(false);
     // The fire itself is detached and outlives the request; the floor is what stopped it, and that reaches the record.
-    await vi.waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
+    await waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
     expect((await services.automations.get("dentist"))?.runs[0]?.outcome).toBe("skipped");
 });
 

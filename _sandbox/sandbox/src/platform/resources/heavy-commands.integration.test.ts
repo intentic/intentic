@@ -1,11 +1,11 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { DEFAULT_HEAVY_COMMANDS, fileHeavyCommandsStore, type HeavyCommands, matchHeavyCommand } from "./heavy-commands.js";
 
 // The file half: what .intentic/config/heavy-commands.json does on disk, separate from heavy-commands.test.ts since
-// these open real temp trees under a longer hang-detector budget (@intentic/testing/vitest).
+// these open real temp trees under the longer integration hang-detector budget.
 
 const dir = async (): Promise<string> => mkdtemp(join(tmpdir(), "heavy-"));
 

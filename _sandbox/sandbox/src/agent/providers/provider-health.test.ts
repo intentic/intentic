@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import {
     OUTAGE_MAX_ATTEMPTS,
     outageRetryDue,

@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS } from "@intentic/sandbox-contract/peer-dial";
-import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test, mock } from "bun:test";
+import * as osOriginal from "node:os";
+import * as residentOriginal from "../resident.js";
 
 // Dropping the links a machine can no longer reach: the one delete on this device driven from a sandbox, so what it is
 // allowed to act on is the whole subject. It deletes ONLY on live evidence — the resident agent's own stamp — because
@@ -13,7 +15,7 @@ import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 let home: string;
 let commands: typeof import("./commands.js");
 let config: typeof import("./config.js");
-const reconciled = vi.fn<(log: (message: string) => void) => Promise<void>>();
+const reconciled = mock<(log: (message: string) => void) => Promise<void>>();
 
 const scopes: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off" };
 
@@ -24,11 +26,8 @@ const gone = (since: number) => ({ state: "connecting", outage: { failures: LONG
 
 beforeAll(async () => {
     home = await mkdtemp(join(tmpdir(), "intentic-machine-forget-"));
-    vi.doMock("node:os", async () => ({ ...(await vi.importActual<typeof import("node:os")>("node:os")), homedir: () => home }));
-    vi.doMock("../resident.js", async () => ({
-        ...(await vi.importActual<typeof import("../resident.js")>("../resident.js")),
-        reconcileResidency: reconciled,
-    }));
+    mock.module("node:os", () => ({ ...osOriginal, homedir: () => home }));
+    mock.module("../resident.js", () => ({ ...residentOriginal, reconcileResidency: reconciled }));
     config = await import("./config.js");
     commands = await import("./commands.js");
 });

@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect } from "bun:test";
+import { stubGlobal } from "@intentic/testing/bun";
 import { readTextDocument } from "./document";
 import { textOfBlock } from "./document-model";
 import { openOdf } from "./pkg";
@@ -6,7 +7,7 @@ import { contentXml, odfBytes, PNG_PIXEL, stylesXml, TEXT_MIME } from "./testing
 
 /* What a reader sees of an .odt: its text, the formatting the file asked for, and its pictures. */
 
-vi.stubGlobal(`URL`, { ...URL, createObjectURL: (blob: Blob) => `blob:test/${blob.size}`, revokeObjectURL: () => {} });
+stubGlobal(`URL`, { ...URL, createObjectURL: (blob: Blob) => `blob:test/${blob.size}`, revokeObjectURL: () => {} });
 
 const AUTOMATIC = [
     `<style:style style:name="T1" style:family="text"><style:text-properties fo:font-weight="bold" fo:color="#cc0000" style:text-underline-style="solid"/></style:style>`,

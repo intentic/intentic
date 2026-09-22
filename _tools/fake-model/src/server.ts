@@ -292,8 +292,9 @@ export const startFakeModel = async (options: FakeModelOptions = {}): Promise<Fa
         bearers,
         close: () =>
             new Promise<void>((resolve, reject) => {
-                server.closeAllConnections();
+                // close() first, then the keep-alive sockets holding it open: the other order stops bun's listener twice.
                 server.close((error) => (error === undefined ? resolve() : reject(error)));
+                server.closeAllConnections();
             }),
     };
 };

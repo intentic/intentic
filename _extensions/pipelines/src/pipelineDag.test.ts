@@ -1,5 +1,5 @@
 import type { PipelineJob } from "@intentic/sandbox-contract";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { jobLineage, pipelineDag, pipelineStages } from "./pipelineDag";
 
 // Pins how a run's job graph draws: node/edge shape from declared dependencies (falling back to time overlap), and that

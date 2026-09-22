@@ -1,9 +1,10 @@
-// @vitest-environment jsdom
 // Pins the way back from a turn that stopped, through the real composer and the DOM: the strip and its button,
 // Enter-to-continue, and their absence where continuing would be wrong.
+import "@intentic/testing/dom";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { type App, createApp, h, nextTick, ref } from "vue";
+import { it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
+import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { providerAccounts, setAccountUsage } from "../accounts/providerAccounts";
 import { CONTINUATIONS } from "../transcript/transcript";
@@ -14,9 +15,13 @@ import { useLayout } from "../../../shell/window/useLayout";
 import { router } from "../../../router";
 import ChatPanel from "./ChatPanel.vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as limitResetOriginal from "../session/limitReset";
+import * as useSandboxOriginal from "../../sandbox/client/useSandbox";
+import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
+import * as useSandboxSettingsOriginal from "../../sandbox/overview/useSandboxSettings";
 
 // Import-time globals a mounted chat surface needs.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.IntersectionObserver ??= class {
         observe(): void {}
         unobserve(): void {}
@@ -35,17 +40,16 @@ const rosterEntry = (policies: Record<string, unknown> = {}): Record<string, unk
     attention: { ...NO_ATTENTION },
     ...policies,
 });
-const { agentEntry, setBreakPolicy, sandboxSettings } = await vi.hoisted(async () => {
+const { agentEntry, setBreakPolicy, sandboxSettings } = await hoisted(async () => {
     const { ref: vueRef } = await import(`vue`);
     return {
         agentEntry: vueRef<Record<string, unknown> | undefined>(undefined),
-        setBreakPolicy: vi.fn(),
+        setBreakPolicy: mock(),
         sandboxSettings: vueRef<Record<string, unknown> | undefined>({}),
     };
 });
 // Fleet roster and workflow ledger the pane queries on mount; irrelevant here beyond the break policy, so answered empty.
-vi.mock(`../../agents/fleet/useAgents`, async () => {
-    const { computed } = await import(`vue`);
+mock.module(`../../agents/fleet/useAgents`, () => {
     return {
         useAgents: () => ({
             fleet: computed(() => []),
@@ -58,27 +62,26 @@ vi.mock(`../../agents/fleet/useAgents`, async () => {
         }),
     };
 });
-vi.mock(`../../sandbox/overview/useSandboxSettings`, async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
-    useSandboxSettings: () => ({ settings: sandboxSettings, patch: vi.fn() }),
+mock.module(`../../sandbox/overview/useSandboxSettings`, () => ({
+    ...useSandboxSettingsOriginal,
+    useSandboxSettings: () => ({ settings: sandboxSettings, patch: mock() }),
 }));
-vi.mock(`../../agents/fleet/useWorkflowRuns`, async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
+mock.module(`../../agents/fleet/useWorkflowRuns`, () => ({
+    ...useWorkflowRunsOriginal,
     useWorkflowRuns: () => ({ runs: ref([]), designs: ref([]), start: () => undefined, stop: () => undefined }),
 }));
 // The composer only renders once the sandbox is reachable; mocked online here, the state this file tests.
-const { sandboxReachable, sandboxConnection, ONLINE_CONNECTION } = await vi.hoisted(async () => {
+const { sandboxReachable, sandboxConnection, ONLINE_CONNECTION } = await hoisted(async () => {
     const { ref: vueRef } = await import(`vue`);
     // Steady state for this file: `reachable` alone can't distinguish briefly retrying from down for a while.
     const online = { phase: `online`, failure: undefined, attempt: 0, retryDelayMs: 0, everOnline: true, unavailableSince: undefined, generation: 0 };
     return { sandboxReachable: vueRef(true), sandboxConnection: vueRef({ ...online }), ONLINE_CONNECTION: online };
 });
-vi.mock(`../../sandbox/client/useSandbox`, async (importOriginal) => {
-    const { computed } = await import(`vue`);
+mock.module(`../../sandbox/client/useSandbox`, () => {
     const activeSandboxId = ref<string | undefined>(`sandbox-1`);
     const sandboxes = ref([{ id: `sandbox-1`, name: `test` }]);
     return {
-        ...(await importOriginal<Record<string, unknown>>()),
+        ...useSandboxOriginal,
         useSandbox: () => ({
             sandboxes,
             activeSandboxId,
@@ -99,14 +102,14 @@ vi.mock(`../../sandbox/client/useSandbox`, async (importOriginal) => {
 
 // Stubbed at the composable, not the transport: whether the offer exists is the provider's judgement, and this file is
 // about what the strip does with it.
-const { resetOffer, claimReset } = await vi.hoisted(async () => {
+const { resetOffer, claimReset } = await hoisted(async () => {
     const { ref: vueRef } = await import(`vue`);
     // A ref, since a claim retiring the offer must repaint the strip.
-    return { resetOffer: vueRef<unknown>(undefined), claimReset: vi.fn() };
+    return { resetOffer: vueRef<unknown>(undefined), claimReset: mock() };
 });
-vi.mock(`../session/limitReset`, async (importOriginal) => ({
-    ...(await importOriginal<Record<string, unknown>>()),
-    askLimitReset: vi.fn().mockResolvedValue(undefined),
+mock.module(`../session/limitReset`, () => ({
+    ...limitResetOriginal,
+    askLimitReset: mock().mockResolvedValue(undefined),
     limitResetFor: () => resetOffer.value,
     claimLimitReset: claimReset,
 }));
@@ -147,9 +150,11 @@ const openWays = async (): Promise<void> => {
 };
 // The one question's answers, as the segmented control draws them: role="tab", one selected at a time.
 const answerPills = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>(`.chat-pane button[role="tab"]`)];
-const answerPill = (label: string): HTMLButtonElement | undefined =>
-    answerPills().find((element) => element.textContent?.trim().startsWith(label));
-const armedAnswer = (): string | undefined => answerPills().find((element) => element.getAttribute(`aria-selected`) === `true`)?.textContent?.trim();
+const answerPill = (label: string): HTMLButtonElement | undefined => answerPills().find((element) => element.textContent?.trim().startsWith(label));
+const armedAnswer = (): string | undefined =>
+    answerPills()
+        .find((element) => element.getAttribute(`aria-selected`) === `true`)
+        ?.textContent?.trim();
 const composerText = (): string => document.querySelector(`.chat-pane`)?.textContent ?? ``;
 const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaElement>(`.chat-pane textarea`)!;
 
@@ -202,7 +207,7 @@ afterEach(() => {
 
 it(`offers the stopped turn a way on, and sends the sentence when it is pressed`, async () => {
     const conversation = stoppedChat();
-    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Turn stopped short · work kept`);
@@ -216,7 +221,7 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
 
 it(`makes Enter on an empty composer continue, and says so under the box`, async () => {
     const conversation = stoppedChat();
-    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Enter to continue`);
@@ -228,7 +233,7 @@ it(`makes Enter on an empty composer continue, and says so under the box`, async
 
 it(`stands down the moment the user types something of their own`, async () => {
     const conversation = stoppedChat();
-    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
     expect(continueButton()).toEqual(expect.any(Object));
 
@@ -302,7 +307,7 @@ it(`offers only the answers this ending can take`, async () => {
 // An unheld allowance means the daemon has no copy of the refused turn, so nothing can be resumed before it resets.
 it(`counts an unheld allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
     const conversation = stoppedChat();
-    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000 };
     await mountPanel();
 
@@ -317,8 +322,8 @@ it(`counts an unheld allowance down instead of going quiet, and keeps the press 
 
 it(`offers a held allowance the press straight away, and re-runs the turn instead of saying anything`, async () => {
     const conversation = stoppedChat();
-    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
-    const rerun = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const rerun = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 8 * 3_600_000, held: { ran: false } };
     await mountPanel();
 
@@ -347,7 +352,7 @@ it(`tells a mid-turn allowance failure apart from one that refused the turn outr
 
 it(`hands the press over once the allowance has reset`, async () => {
     const conversation = stoppedChat();
-    const enqueue = vi.spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() - 1_000 };
     await mountPanel();
 
@@ -465,7 +470,7 @@ const limitChat = (): Conversation => {
 it(`offers the other account by name on a spent allowance, and re-runs the held turn on it`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();
@@ -533,7 +538,7 @@ it(`offers the reset in the row when the provider is granting one, and re-runs t
     claimReset.mockResolvedValue({ result: `reset` });
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     const reset = button(`Reset limit now`);
@@ -567,7 +572,7 @@ it(`says why nothing happened when a claim changes nothing, and does not re-run 
     });
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     button(`Reset limit now`)?.click();
@@ -602,7 +607,7 @@ it(`offers the other account twice when the session is worth carrying, each with
         readyAt: Date.now() + 3_600_000,
         held: { ran: true, contextTokens: 85_000, handoffTokens: 6_000 },
     };
-    const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();
@@ -623,7 +628,7 @@ it(`offers only the fresh session when nothing ran`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: false, handoffTokens: 6_000 } };
-    const resume = vi.spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();

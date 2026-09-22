@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { test, expect, beforeEach, afterEach, jest } from "bun:test";
 import { chatRings, recentKeys, typingHeartbeat } from "./listener-memory.js";
 
 // Pins the memory contract shared by every listener; each listener's own tests cover its wiring.
@@ -33,10 +33,10 @@ test("a chat ring keeps the newest entries per chat, and the quietest chat goes 
 });
 
 beforeEach(() => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
 });
 afterEach(() => {
-    vi.useRealTimers();
+    jest.useRealTimers();
 });
 
 test("the typing heartbeat re-sends on its cadence, stops with a closing word, and never outlives its cap", () => {
@@ -44,7 +44,7 @@ test("the typing heartbeat re-sends on its cadence, stops with a closing word, a
     const sent: string[] = [];
     heartbeat.start("room", () => sent.push("typing"), () => sent.push("paused"));
     expect(sent).toEqual(["typing"]);
-    vi.advanceTimersByTime(2_000);
+    jest.advanceTimersByTime(2_000);
     expect(sent).toEqual(["typing", "typing", "typing"]);
     // Restarting is a continuation: no "paused" fires in between.
     heartbeat.start("room", () => sent.push("typing"), () => sent.push("paused"));
@@ -55,11 +55,11 @@ test("the typing heartbeat re-sends on its cadence, stops with a closing word, a
     // Stopping an already-stopped room is a no-op.
     const before = sent.length;
     heartbeat.stop("room");
-    vi.advanceTimersByTime(5_000);
+    jest.advanceTimersByTime(5_000);
     expect(sent.length).toBe(before);
     // maxMs cap: an indicator with no reply stops itself, closing word included.
     heartbeat.start("late", () => sent.push("late"), () => sent.push("late-paused"));
-    vi.advanceTimersByTime(10_000);
+    jest.advanceTimersByTime(10_000);
     expect(sent.filter((entry) => entry === "late").length).toBeLessThanOrEqual(5);
     expect(sent.at(-1)).toBe("late-paused");
     // stopAll drops every heartbeat without a closing word.
@@ -67,7 +67,7 @@ test("the typing heartbeat re-sends on its cadence, stops with a closing word, a
     heartbeat.start("b", () => sent.push("b"), () => sent.push("b-paused"));
     heartbeat.stopAll();
     const after = sent.length;
-    vi.advanceTimersByTime(5_000);
+    jest.advanceTimersByTime(5_000);
     expect(sent.length).toBe(after);
     expect(sent).not.toContain("a-paused");
 });

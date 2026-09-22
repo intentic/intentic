@@ -1,5 +1,5 @@
 import { type Logger, pino } from "pino";
-import { expect, test, vi } from "vitest";
+import { test, expect, jest } from "bun:test";
 import { createPerfTracker } from "./perf.js";
 
 // Captures lines instead of writing them, so a test can assert which sink got a line. Explicit `Logger` type works
@@ -75,15 +75,15 @@ test("with no perf sink the slow lines fall back to the main log rather than bei
 });
 
 test("the ranked summary stays on the main log, where an incident reader is already looking", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const main = capturing();
     const perf = capturing();
     const tracker = createPerfTracker(main.logger, perf.logger);
 
     tracker.record("git.run", 500, {});
-    vi.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(60_000);
     tracker.stop();
-    vi.useRealTimers();
+    jest.useRealTimers();
 
     const summary = main.lines.find((line) => line["perfSummary"] !== undefined);
     expect(summary).toMatchObject({ level: 30 });
@@ -92,7 +92,7 @@ test("the ranked summary stays on the main log, where an incident reader is alre
 });
 
 test("a wait op is printed beside the work it explains, however far down the ranking it falls", () => {
-    vi.useFakeTimers();
+    jest.useFakeTimers();
     const main = capturing();
     const tracker = createPerfTracker(main.logger, capturing().logger);
 
@@ -106,9 +106,9 @@ test("a wait op is printed beside the work it explains, however far down the ran
     }
     tracker.record("git.lock.wait", 1, {});
     tracker.record("git.run.wait", 1, {});
-    vi.advanceTimersByTime(60_000);
+    jest.advanceTimersByTime(60_000);
     tracker.stop();
-    vi.useRealTimers();
+    jest.useRealTimers();
 
     const rows = main.lines.find((line) => line["perfSummary"] !== undefined)?.["perfSummary"] as { op: string }[];
     const ops = rows.map((row) => row.op);

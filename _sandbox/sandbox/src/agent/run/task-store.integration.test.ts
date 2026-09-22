@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { checklistSeedOf, readTaskStore, taskStoreDir } from "./task-store.js";
 
 const SESSION = "6e296ad0-8660-428e-aa79-b014a3c61004";

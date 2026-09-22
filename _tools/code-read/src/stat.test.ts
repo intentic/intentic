@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { codeLineStat, lineStat } from "./stat.js";
 import { analyze } from "./grammars.js";
 

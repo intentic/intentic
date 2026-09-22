@@ -1,10 +1,11 @@
-// @vitest-environment jsdom
 // The empty board mounted, the first screen most new users see: asserts it asks for a task rather than a sign-in with
 // whatever this sandbox can send, offers the one task needing no code and none needing some, and that starters fill the
 // composer rather than dispatching an agent.
+import "@intentic/testing/dom";
 import { TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { it, expect, beforeEach, afterEach } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
 import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat/accounts/providerAccounts";
 import { endpointProviders, endpointsLoaded, trialStatus } from "../../chat/accounts/providerCatalog";
@@ -17,7 +18,7 @@ import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";
 
 // Same import-time globals as other mounted-component tests; matches:false keeps the device desktop.
-vi.hoisted(() => {
+hoisted(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
 });
 

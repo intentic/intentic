@@ -8,7 +8,7 @@ import {
     TRIAL_ENDPOINT_ID,
     TRIAL_MODEL_ID,
 } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
 import type { SeatRefusal } from "../../runtimes/claude/claude-seats.js";
 import { services, withTranslator } from "../../harness/route-services.testing.js";

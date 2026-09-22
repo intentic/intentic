@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../config.js";
 import { hostedFleet, renderHostedFleet, stampHostedOwners, type HostedFleetRole } from "./hosted-fleet.js";
 
@@ -12,8 +13,8 @@ const config = (): Config =>
 
 const fakePrisma = (machines: unknown[], pooled: unknown[]) =>
     ({
-        hostedMachine: { findMany: vi.fn().mockResolvedValue(machines) },
-        hostedPoolMachine: { findMany: vi.fn().mockResolvedValue(pooled) },
+        hostedMachine: { findMany: mock().mockResolvedValue(machines) },
+        hostedPoolMachine: { findMany: mock().mockResolvedValue(pooled) },
     }) as never;
 
 const taken = (over?: Record<string, unknown>) => ({
@@ -26,10 +27,10 @@ const taken = (over?: Record<string, unknown>) => ({
 });
 
 const stubApps = (names: string[]) =>
-    vi.stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ apps: names.map((name) => ({ name })) }), { status: 200 })));
+    stubGlobal(`fetch`, () => Promise.resolve(new Response(JSON.stringify({ apps: names.map((name) => ({ name })) }), { status: 200 })));
 
 afterEach(() => {
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 /* WHOSE MACHINE IS THIS, asked of the Fly console rather than of the database. */
@@ -37,7 +38,7 @@ describe(`stampHostedOwners`, () => {
     // Records every Fly write so the test can assert what was stamped, and on which machines.
     const stubFleetAndWrites = (names: string[]) => {
         const writes: { url: string; body: unknown }[] = [];
-        vi.stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
+        stubGlobal(`fetch`, (url: URL | string, init?: RequestInit) => {
             const target = String(url);
             if (target.includes(`/metadata/`)) {
                 writes.push({ url: target, body: typeof init?.body === `string` ? JSON.parse(init.body) : undefined });
@@ -76,7 +77,7 @@ describe(`stampHostedOwners`, () => {
 
     // Best effort per machine: one refusal must not cost the rest of the fleet its stamp.
     it(`keeps stamping the rest when Fly refuses one machine`, async () => {
-        vi.stubGlobal(`fetch`, (url: URL | string) => {
+        stubGlobal(`fetch`, (url: URL | string) => {
             const target = String(url);
             if (target.includes(`/machines/m1/metadata/`)) {
                 return Promise.resolve(new Response(`nope`, { status: 500 }));

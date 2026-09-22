@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { type ModelSource, modelPinKey, parsePinned, readyChain } from "./model-pins.js";
 import type { ModelPin } from "../schemas/agent.js";
 

@@ -1,4 +1,5 @@
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
+import { freshImport } from "@intentic/testing/bun";
 
 /* The page's window, as the module reads it: a browser's until a test marks it as the app's (`__INTENTIC_DESKTOP__`). */
 interface FakeWindow {
@@ -12,10 +13,9 @@ interface FakeWindow {
 const fakeWindow = (): FakeWindow => (globalThis as { window: FakeWindow }).window;
 
 /* The sync handoff's whole payload is two sender-chosen values the Rust side trusts only from the app's own window (setup_link.rs). */
-const load = async (): Promise<typeof import("./desktop")> => {
-    vi.resetModules();
+const load = (): Promise<typeof import("./desktop")> => {
     (globalThis as { window?: FakeWindow }).window = {};
-    return import("./desktop");
+    return freshImport<typeof import("./desktop")>("./desktop", import.meta.url);
 };
 
 test("the sync link carries the sandbox url and pairing token, encoded", async () => {
@@ -46,7 +46,15 @@ test("flags ride only when set, and a folder never does", async () => {
 test("a setup report is read back with its figures and without anything unexpected", async () => {
     const { readDesktopSetupReport } = await load();
     expect(
-        readDesktopSetupReport({ name: `work`, state: `running`, percent: 42, position: `Step 4 of 10`, remaining: `about 3 min left`, step: `pulling-image`, extra: 1 }),
+        readDesktopSetupReport({
+            name: `work`,
+            state: `running`,
+            percent: 42,
+            position: `Step 4 of 10`,
+            remaining: `about 3 min left`,
+            step: `pulling-image`,
+            extra: 1,
+        }),
     ).toEqual({ name: `work`, state: `running`, percent: 42, position: `Step 4 of 10`, remaining: `about 3 min left`, step: `pulling-image` });
     // The optional fields are absent when empty, never empty strings the strip would draw as blanks.
     expect(readDesktopSetupReport({ state: `failed`, percent: 100, name: ``, position: null })).toEqual({ state: `failed`, percent: 100 });
@@ -94,9 +102,9 @@ test("a browser window is closed, raised and widened by the page itself", async 
     (globalThis as { location?: unknown }).location = location;
     (globalThis as { document?: unknown }).document = { readyState: `complete` };
     const own = fakeWindow();
-    own.close = vi.fn();
-    own.focus = vi.fn();
-    own.resizeTo = vi.fn();
+    own.close = mock();
+    own.focus = mock();
+    own.resizeTo = mock();
     own.outerHeight = 700;
 
     closeOwnWindow();
@@ -117,9 +125,9 @@ test("a window of the app is closed, raised and widened by the app, one link eac
     (globalThis as { document?: unknown }).document = { readyState: `complete` };
     const own = fakeWindow();
     own.__INTENTIC_DESKTOP__ = { version: `1.0.0`, installId: `id`, update: null, frameless: true };
-    own.close = vi.fn();
-    own.focus = vi.fn();
-    own.resizeTo = vi.fn();
+    own.close = mock();
+    own.focus = mock();
+    own.resizeTo = mock();
 
     closeOwnWindow();
     expect(location.href).toBe(`intentic://window?do=close`);

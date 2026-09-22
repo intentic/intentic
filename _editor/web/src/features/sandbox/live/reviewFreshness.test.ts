@@ -1,23 +1,37 @@
-// @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { ref } from "vue";
+import { it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 
 // Needs jsdom: the stream router's import chain reaches the app's environment read at module eval.
 
-vi.mock("../../../router", () => ({ router: { push: vi.fn() } }));
-vi.mock("../../../app/analytics", () => ({ track: vi.fn() }));
-vi.mock("../client/useSandbox", async () => {
-    const { ref } = await import("vue");
+mock.module("../../../router", () => ({ router: { push: mock() } }));
+mock.module("../../../app/analytics", () => ({ track: mock() }));
+mock.module("../client/useSandbox", () => {
     return {
         useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }),
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
-vi.mock("../client/sandboxClient", () => ({ sandboxJson: vi.fn(), sandboxRequest: vi.fn() }));
+// Every name the app's graph imports from the daemon client, since bun links an ESM import against exactly what
+// this factory returns; only the two below are ever called here.
+mock.module("../client/sandboxClient", () => ({
+    sandboxJson: mock(),
+    sandboxRequest: mock(),
+    sandboxRequestVia: mock(),
+    sandboxJsonAt: mock(),
+    sandboxJsonQuietly: mock(),
+    sandboxJsonVia: mock(),
+    sandboxBlob: mock(),
+    sandboxUpload: mock(),
+    sandboxError: mock(async () => new Error(`unused`)),
+    SandboxHttpError: class SandboxHttpError extends Error {},
+}));
 // The two fields this import chain reads, both only as `.value`: `streaming` here, `conversations` in useChanges' own
 // module-scope watch. Hoisted so a case can flip `streaming` before the frame is routed.
-const streaming = vi.hoisted(() => ({ value: false }));
-const conversations = vi.hoisted(() => ({ value: [] as { streaming: { value: boolean } }[] }));
-vi.mock("../../chat/run/useChat", () => ({ useChat: () => ({ streaming, conversations }) }));
+const streaming = hoisted(() => ({ value: false }));
+const conversations = hoisted(() => ({ value: [] as { streaming: { value: boolean } }[] }));
+mock.module("../../chat/run/useChat", () => ({ useChat: () => ({ streaming, conversations }), resetChat: mock() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { AGENT_DIFF, AGENTS, GIT_CHANGES } from "../../../lib/queryKeys";
@@ -49,16 +63,16 @@ beforeEach(() => {
     filters = [];
     // Fake, because the rescan is throttled at module scope: one test's window would otherwise swallow the next one's
     // leading call.
-    vi.useFakeTimers();
-    vi.spyOn(queryClient, `invalidateQueries`).mockImplementation(async (given) => {
+    jest.useFakeTimers();
+    spyOn(queryClient, `invalidateQueries`).mockImplementation(async (given) => {
         filters.push(((typeof given === `function` ? given() : given) ?? {}) as Match);
     });
 });
 
 afterEach(() => {
     // Drains the trailing run so the throttle's window is closed again, not merely abandoned mid-flight.
-    vi.advanceTimersByTime(5_000);
-    vi.useRealTimers();
+    jest.advanceTimersByTime(5_000);
+    jest.useRealTimers();
     registry.value = [];
     streaming.value = false;
 });
@@ -113,6 +127,6 @@ it(`leaves the review alone while a land is applying`, () => {
     // useChanges refetches on the same transition for a browser sitting on a quiet workspace.
     applySystemEvent({ kind: `refsChanged`, repos: [`root`] }, SANDBOX);
     registry.value = [];
-    vi.advanceTimersByTime(CHANGES_REFRESH_MS);
+    jest.advanceTimersByTime(CHANGES_REFRESH_MS);
     expect(reaches(GIT_CHANGES.of())).toBe(true);
 });

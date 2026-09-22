@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { bytesOf } from "./sync-ssh.js";
 
 /* Reading a frame off the wire is the one thing on this route that can corrupt an SSH stream silently. */

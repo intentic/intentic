@@ -2,7 +2,8 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AccountUsage } from "@intentic/sandbox-contract";
-import { afterEach, expect, test, vi } from "vitest";
+import { test, expect, afterEach, mock } from "bun:test";
+import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { createCliProxyClient } from "./translator.js";
 
 // `accounts` falls back to the auth-dir files on disk when the proxy is unreachable, rather than reporting empty. Uses
@@ -23,7 +24,7 @@ const memoryStore = () => {
 
 // Every client here is pointed at a port nothing is listening on, with fetch rejecting: the situation itself.
 const clientOver = (authDir: string) => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fetch failed")));
+    stubGlobal("fetch", mock().mockRejectedValue(new Error("fetch failed")));
     return createCliProxyClient({
         managementUrl: "http://127.0.0.1:8789/v0/management",
         token: "local",
@@ -43,7 +44,7 @@ const authDirWith = (files: Record<string, string>): string => {
     return dir;
 };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => unstubAllGlobals());
 
 test("lists the subscriptions on disk when the management API cannot be reached", async () => {
     const authDir = authDirWith({
@@ -96,9 +97,9 @@ test("reads a Google credential's project off disk, and benches only the one tha
 test("judges the credential a sign-in just wrote, before the proxy's listing catches up with it", async () => {
     const authDir = authDirWith({ "antigravity-fresh.json": JSON.stringify({ type: "antigravity", email: "fresh@gmail.com" }) });
     const patched: unknown[] = [];
-    vi.stubGlobal(
+    stubGlobal(
         "fetch",
-        vi.fn(async (input: string | URL, init?: RequestInit) => {
+        mock(async (input: string | URL, init?: RequestInit) => {
             const url = String(input);
             if (url.endsWith("/auth-files/status")) {
                 patched.push(JSON.parse(String(init?.body)));

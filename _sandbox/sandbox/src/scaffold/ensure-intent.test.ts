@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { dependencySpec } from "./ensure-intent.js";
 
 // The workspace is the unpublished 0.0.0 sentinel, so both deps must link to a bundled/workspace copy: never

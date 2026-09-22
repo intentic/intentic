@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
 
 // Pins resolveNeeds's job-id-to-display-name matching: needs uses job IDs, the jobs API reports display names, and

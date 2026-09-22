@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import type { Config } from "../../env.config.js";
 import { testConfig } from "../../testing.js";
 import { listenHost, localContractComplaints, profileTraits } from "./profile.js";

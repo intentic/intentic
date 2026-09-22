@@ -1,5 +1,5 @@
 import { flattenQuery, mergeQuery } from "@intentic/extension-api";
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 
 // Tests the rules behind api.route, a pure function in @intentic/extension-api exercised here where the router lives.
 // A view's navigation lives in the query string, since /ext/:ext/:key? has only one free path segment (the activation);

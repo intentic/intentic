@@ -14,8 +14,8 @@
         "build": "tsgo && esbuild src/main.ts --bundle --platform=node --format=esm --target=node24 --outfile=dist/index.mjs --log-level=warning",
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
         "watch": "tsgo --build --watch",
-        "test": "vitest run",
-        "test:watch": "vitest"
+        "test": "suites",
+        "test:watch": "suites --watch"
     },
     "dependencies": {
         "@intentic/base": "workspace:*",
@@ -26,9 +26,9 @@
         "@intentic/sandbox-contract": "workspace:*",
         "@intentic/testing": "workspace:*",
         "@intentic/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
-        "esbuild": "catalog:",
-        "vitest": "catalog:"
+        "esbuild": "catalog:"
     }
 }

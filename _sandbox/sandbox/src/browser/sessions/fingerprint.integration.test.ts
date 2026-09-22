@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { test, expect } from "bun:test";
 import { browserFingerprint } from "./fingerprint.js";
 import { stealthInit } from "./stealth.js";
 
@@ -120,7 +120,7 @@ test("the GPU is one a Linux desktop could actually report", async () => {
 
 // Checks what the page actually receives, not just what's derived.
 // Evaluated as a string because the daemon compiles without DOM lib types.
-test("a page sees the owner's device, not the server underneath it", { timeout: 60_000 }, async () => {
+test("a page sees the owner's device, not the server underneath it", async () => {
     if (!(await chromiumInstalled())) {
         return;
     }
@@ -180,4 +180,4 @@ test("a page sees the owner's device, not the server underneath it", { timeout: 
     } finally {
         await browser.close();
     }
-});
+}, { timeout: 60_000 });

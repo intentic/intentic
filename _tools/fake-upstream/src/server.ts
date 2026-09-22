@@ -162,8 +162,9 @@ export const startFakeUpstream = async (options: FakeUpstreamOptions = {}): Prom
         received,
         close: () =>
             new Promise<void>((resolveClose) => {
-                server.closeAllConnections();
+                // close() first, then the keep-alive sockets holding it open: the other order stops bun's listener twice.
                 server.close(() => resolveClose());
+                server.closeAllConnections();
             }),
     };
 };

@@ -4,7 +4,7 @@ import { createCredentialGrants } from "../../secrets/credential-grants.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type AgentTurn, type Persona, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { expect, test, vi } from "vitest";
+import { test, expect, mock } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
 import { testConfig } from "../../testing.js";
@@ -19,7 +19,7 @@ import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 // sent once per conversation, honoured on every runtime, and built against the run's actual tree, not the shared
 // checkout.
 
-vi.mock("../providers/harness-credentials.js", () => ({
+mock.module("../providers/harness-credentials.js", () => ({
     resolveHarnessCredentials: async () => ({ ok: true, credentials: { oauthToken: "***", account: "acc-1" } }),
 }));
 

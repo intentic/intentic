@@ -1,6 +1,7 @@
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, afterEach, jest } from "bun:test";
+import { stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { Dialed } from "../daemon-base.js";
 import type { Pairing } from "./config.js";
 import { bridgeConnection, createTunnelPool, sshSocketUrl, startSshTunnel, syncSshPort, tunnelReady, tunnelTargets } from "./tunnel.js";
@@ -91,7 +92,7 @@ afterEach(() => {
             (item as Server).close();
         }
     }
-    vi.unstubAllGlobals();
+    unstubAllGlobals();
 });
 
 describe("syncSshPort", () => {
@@ -151,7 +152,7 @@ describe("tunnelTargets", () => {
 
 describe("bridgeConnection", () => {
     it("carries ssh's bytes to the sandbox and the sandbox's bytes back to ssh", async () => {
-        vi.stubGlobal("WebSocket", FakeSocket);
+        stubGlobal("WebSocket", FakeSocket);
         const { ssh, accepted, server } = await socketPair();
         open.push(server, ssh, accepted);
 
@@ -184,7 +185,7 @@ describe("bridgeConnection", () => {
     // The credential authorizes this stream and belongs on the request, not the URL: a query string is the half of a
     // request that gets logged.
     it("presents the enrolled machine's sync token as a header", () => {
-        vi.stubGlobal("WebSocket", FakeSocket);
+        stubGlobal("WebSocket", FakeSocket);
         const socket = connect({ port: 1, host: "127.0.0.1" });
         socket.on("error", () => {});
         open.push(socket);
@@ -198,7 +199,7 @@ describe("bridgeConnection", () => {
     // Mutagen treats a dropped transport as a reconnect, so a failed socket ends the TCP connection rather than
     // leaving ssh hanging, which would look like a wedged sync.
     it("closes ssh's connection when the socket fails", async () => {
-        vi.stubGlobal("WebSocket", FakeSocket);
+        stubGlobal("WebSocket", FakeSocket);
         const { ssh, accepted, server } = await socketPair();
         open.push(server, ssh, accepted);
         const ended = new Promise<void>((resolve) => ssh.once("close", () => resolve()));
@@ -206,14 +207,15 @@ describe("bridgeConnection", () => {
         bridgeConnection(accepted, target, () => {});
         FakeSocket.last?.fail();
 
-        await expect(ended).resolves.toBeUndefined();
+        // Awaited, not `expect(ended).resolves`: that form settles the promise itself and never pumps socket I/O.
+        expect(await ended).toBeUndefined();
     });
 
     // The listener is local, so TCP connect always succeeds; an unreachable sandbox shows only as a WebSocket that
     // never opens or errors, leaving ssh stuck in banner exchange and stalling every pairing behind it.
     it("ends a connection whose socket never opens, instead of holding ssh in the handshake", async () => {
-        vi.useFakeTimers();
-        vi.stubGlobal("WebSocket", FakeSocket);
+        jest.useFakeTimers();
+        stubGlobal("WebSocket", FakeSocket);
         const { ssh, accepted, server } = await socketPair();
         open.push(server, ssh, accepted);
         const ended = new Promise<void>((resolve) => ssh.once("close", () => resolve()));
@@ -221,17 +223,17 @@ describe("bridgeConnection", () => {
 
         // Neither open nor failed: exactly what a sandbox behind a hung tunnel looks like from this end.
         bridgeConnection(accepted, target, (message) => said.push(message));
-        await vi.advanceTimersByTimeAsync(10_000);
-        vi.useRealTimers();
+        await advanceTimersByTimeAsync(10_000);
+        jest.useRealTimers();
 
-        await expect(ended).resolves.toBeUndefined();
+        expect(await ended).toBeUndefined();
         expect(said[0]).toContain("did not open within 10s");
     });
 });
 
 describe("startSshTunnel and the pool", () => {
     it("binds this pairing's derived port, and stops listening when told", async () => {
-        vi.stubGlobal("WebSocket", FakeSocket);
+        stubGlobal("WebSocket", FakeSocket);
         const stop = await startSshTunnel(target, () => {});
         if (stop === undefined) {
             throw new Error("the transport did not bind");
@@ -258,7 +260,7 @@ describe("startSshTunnel and the pool", () => {
 
     // How a concurrent `setup` or `uninstall` takes effect without restarting this process.
     it("starts a transport for a new pairing and drops one that went away", async () => {
-        vi.stubGlobal("WebSocket", FakeSocket);
+        stubGlobal("WebSocket", FakeSocket);
         const pool = createTunnelPool(() => {});
 
         await pool.reconcile([target]);
@@ -273,7 +275,7 @@ describe("startSshTunnel and the pool", () => {
     // A moved base needs a rebind: the listener closes over the address it dials, so without one a promoted-to-loopback
     // pairing would keep opening streams to its old public URL. Proven by where the next connection actually goes.
     it("rebinds a pairing whose resolved base moved, so later streams use the new address", async () => {
-        vi.stubGlobal("WebSocket", FakeSocket);
+        stubGlobal("WebSocket", FakeSocket);
         const pool = createTunnelPool(() => {});
         const port = syncSshPort(target.sandboxId);
 

@@ -1,21 +1,23 @@
-// @vitest-environment jsdom
 // jsdom for the import chain: the stream reader touches the app's environment and the per-origin stream budget
 // at module eval.
 // Both agent ops (update, restart) stop the process carrying the request, so the stream always ends with no
 // terminal frame. Pinned here: a silent end is success, a refusal is thrown, and a completed run is quoted.
-import { expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { it, expect, mock } from "bun:test";
 
 // The client is the whole environment this module needs; sandboxJson is mocked too since the module reaches
 // for it at import time.
 const requests: { path: string; init?: RequestInit }[] = [];
 let answer: () => Response;
-vi.mock(`../client/sandboxClient`, () => ({
+mock.module(`../client/sandboxClient`, () => ({
     sandboxRequest: (path: string, init?: RequestInit) => {
         requests.push({ path, init });
         return Promise.resolve(answer());
     },
-    sandboxJson: vi.fn(),
+    sandboxJson: mock(),
     sandboxError: (response: Response) => Promise.resolve(new Error(`HTTP ${response.status}`)),
+    // Named by useDevices but never thrown here; bun links an ESM import against exactly what this returns.
+    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 
 const { runDeviceAgentFlow } = await import("./useDevices");
@@ -55,7 +57,11 @@ it(`throws the device's own words when it refuses`, async () => {
 });
 
 it(`comes back settled when the device got to say how it went`, async () => {
-    answer = () => streamOf([{ kind: `line`, text: `Restarting this device's agent loop.` }, { kind: `result`, message: `The agent loop was restarted on this device.` }]);
+    answer = () =>
+        streamOf([
+            { kind: `line`, text: `Restarting this device's agent loop.` },
+            { kind: `result`, message: `The agent loop was restarted on this device.` },
+        ]);
     await expect(runDeviceAgentFlow(`my-pc`, `restart`)).resolves.toEqual({
         message: `The agent loop was restarted on this device.`,
         settled: true,

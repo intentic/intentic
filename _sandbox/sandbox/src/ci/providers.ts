@@ -7,7 +7,8 @@ import { localWorkflowCalls, resolveNeeds } from "./workflowGraph.js";
 // Both vendors' pipeline APIs behind one client shape (CiClient), keyed off the account a project mapped to; the vendor
 // branch exists exactly once. `fetch` is injectable for tests; failures throw with the vendor's status and body tail.
 
-export type FetchFn = typeof fetch;
+// The call shape only, not `typeof fetch`: a test's stand-in answers requests, it does not carry fetch's own statics.
+export type FetchFn = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 // Delivery target: the daemon's public receiver plus the signing secret (github signs with it, gitlab echoes it as
 // X-Gitlab-Token).
@@ -214,7 +215,9 @@ const githubClient = (fetchFn: FetchFn): CiClient => {
         project: CiProject,
         runId: number,
     ): Promise<{ id: number; name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[]> => {
-        const listed = await json<{ jobs: { id: number; name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[] }>(
+        const listed = await json<{
+            jobs: { id: number; name: string; conclusion: string | null; steps?: { name: string; conclusion: string | null }[] }[];
+        }>(
             await fetchFn(githubApi(project, `/actions/runs/${runId}/jobs?per_page=100`), { headers: githubHeaders(project.account.token) }),
             "github jobs list",
         );

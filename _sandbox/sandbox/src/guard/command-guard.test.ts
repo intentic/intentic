@@ -7,7 +7,7 @@ import {
     type SafetyVerdict,
     WORKSPACE_ROOT,
 } from "@intentic/sandbox-contract";
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { resolveRequest } from "../agent/tools/agent-requests.js";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";

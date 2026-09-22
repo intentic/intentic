@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { bearerOf, signJwt, verifyJwt } from "./jwt.js";
 
 const secret = `s3cret-${Math.random()}`;

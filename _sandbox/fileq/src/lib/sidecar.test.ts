@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, test, expect } from "bun:test";
 import { isFresh, parseSidecarFront, sidecarBody, sidecarPathFor } from "./sidecar.js";
 
 const SIDECAR = `---

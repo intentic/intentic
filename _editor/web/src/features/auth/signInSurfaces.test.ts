@@ -1,51 +1,56 @@
-// @vitest-environment jsdom
 // Every sign-in surface (login, sandbox gate, desktop hand-off) crossed with both windows (ordinary browser,
 // desktop webview), where Google's button renders and accepts clicks but does nothing. The rule lives in
 // useGoogleIdentity; add a new surface to `SURFACES` below to hold it to the same rule.
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "@intentic/testing/dom";
+import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import * as actualVueRouter from "vue-router";
+import * as actualDesktop from "../../app/environments/desktop";
 
 // Mounting reads matchMedia (ui) and window.env (environment.ts) at module scope; see Setup.test.ts.
 
-vi.mock(import(`vue-router`), async (importOriginal) => ({
-    ...(await importOriginal()),
+mock.module(`vue-router`, () => ({
+    ...actualVueRouter,
     useRoute: () => ({ query: { state: `nonce`, challenge: `chal` }, params: {} }) as never,
-    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) as never,
+    useRouter: () => ({ push: mock(), replace: mock() }) as never,
 }));
 
 // renderButton mimics the real mechanism (false in the desktop window, true elsewhere), since what's under test is
 // each surface's response to that. The mechanism's own half is asserted in useGoogleIdentity.desktop.test.ts.
-const desktopVersion = vi.fn<() => string | undefined>();
+const desktopVersion = mock<() => string | undefined>();
 // Takes the options the real one does: a surface asking for Google's chooser says so here (environments/desktop.ts).
-const signInThroughBrowser = vi.fn<(options?: { pickAccount?: boolean }) => void>();
-vi.mock(`../../app/environments/desktop`, () => ({
+const signInThroughBrowser = mock<(options?: { pickAccount?: boolean }) => void>();
+// Partial, over the real module: a surface reaches for whatever the desktop lane grows next, and a mock listing its
+// exports by hand fails the link the day one is added.
+mock.module(`../../app/environments/desktop`, () => ({
+    ...actualDesktop,
     DESKTOP_SIGN_IN_LINK: `intentic://signin`,
     DESKTOP_DOWNLOADS: {},
     desktopVersion: () => desktopVersion(),
     // Which build this machine could install; irrelevant here, so it always answers none.
     desktopInstaller: () => undefined,
     desktopSetupLink: () => ``,
-    openDesktopLink: vi.fn(),
+    openDesktopLink: mock(),
     signInThroughBrowser: (options?: { pickAccount?: boolean }) => signInThroughBrowser(options),
 }));
 
-const renderButton = vi.fn<() => Promise<boolean>>();
+const renderButton = mock<() => Promise<boolean>>();
 const needsSignIn = ref(true);
-vi.mock(`./useGoogleIdentity`, () => ({
+mock.module(`./useGoogleIdentity`, () => ({
     useGoogleIdentity: () => ({
         needsSignIn,
         renderButton,
-        cancelSignIn: vi.fn(),
-        getIdToken: vi.fn(() => new Promise<never>(() => {})),
-        adoptIdToken: vi.fn(),
+        cancelSignIn: mock(),
+        getIdToken: mock(() => new Promise<never>(() => {})),
+        adoptIdToken: mock(),
     }),
 }));
-vi.mock(`./useAuth`, () => ({
-    useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle: vi.fn(), signInWithGoogleCredential: vi.fn() }),
+mock.module(`./useAuth`, () => ({
+    useAuth: () => ({ user: ref({ email: `owner@example.com` }), signInWithGoogle: mock(), signInWithGoogleCredential: mock() }),
 }));
-vi.mock(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
-vi.mock(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: vi.fn() } } }));
+mock.module(`../sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(undefined), active: ref(undefined) }) }));
+mock.module(`../../lib/useApi`, () => ({ apiClient: { desktop: { handoff: mock() } } }));
 
 const { default: Login } = await import("./Login.vue");
 const { default: DesktopAuth } = await import("./DesktopAuth.vue");
