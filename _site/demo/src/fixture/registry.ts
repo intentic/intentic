@@ -102,6 +102,19 @@ export const demoRegistry = (): Marketplace => ({
             pushedAt: PUSHED,
             checks: { sha: sha(`b41c9e75d208af36e5107cb92da4f8e3`), manifest: `ok`, bundle: `ok` },
         },
+        // Pinned but never audited: installs only after the owner acknowledges that nobody checked the code.
+        {
+            name: `tidewater.standup`,
+            kind: `extension`,
+            trust: `listed`,
+            admitted: false,
+            description: `Yesterday, today, blockers: drafted from the week's merged branches and agent runs, posted where your team reads.`,
+            version: `0.4.2`,
+            icon: `calendar`,
+            install: { url: `https://github.com/tidewater/intentic-standup.git`, ref: sha(`5e1f0a93d7c2b684`) },
+            stars: 7,
+            pushedAt: PUSHED,
+        },
         // Author never pinned a commit: it reads and links out but can't install in one click.
         {
             name: `hollowpeak.timesheets`,

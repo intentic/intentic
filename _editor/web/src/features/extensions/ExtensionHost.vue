@@ -37,7 +37,7 @@ const found = computed(() => {
     <ExtensionView v-if="found" :extension="found.extension" :activation="found.activation" />
     <div v-else-if="disabledOwner" class="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted">
         <p>{{ t(`extensions.extensionHost.switchedOff`, { manifest: extensionIdOf(disabledOwner.manifest) }) }}</p>
-        <RouterLink to="/sandbox/extensions" class="text-link hover:underline">{{ t(`extensions.extensionHost.turnBackOnIn`) }}</RouterLink>
+        <RouterLink to="/sandbox/extensions?view=installed" class="text-link hover:underline">{{ t(`extensions.extensionHost.turnBackOnIn`) }}</RouterLink>
     </div>
     <div v-else-if="!isLoading" class="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted">
         <p>{{ t(`extensions.extensionHost.nothingHereViewsContent`) }}</p>

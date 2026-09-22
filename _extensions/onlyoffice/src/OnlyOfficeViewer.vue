@@ -99,7 +99,7 @@ const setAutoStart = async (value: boolean): Promise<void> => {
         await start();
     }
 };
-const settingsLink = appLink(host().href(`/sandbox/extensions`), () => host().navigate(`/sandbox/extensions`));
+const settingsLink = appLink(host().href(`/sandbox/extensions?view=installed`), () => host().navigate(`/sandbox/extensions?view=installed`));
 
 onBeforeUnmount(() => {
     generation++;

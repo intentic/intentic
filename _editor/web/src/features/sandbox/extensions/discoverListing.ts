@@ -5,7 +5,7 @@ import { t } from "@intentic/ui/i18n";
 
 // What a registry row becomes once this sandbox is checked against it: installable, installed, an update, blocked,
 // or unavailable. Joined on the manifest identity (`publisher.name`), not the capability id, since that can be
-// renamed while the identity can't.
+// renamed while the identity can't. A commit the registry hasn't admitted stays installable, flagged `unaudited`.
 
 export type ListingStateKind = "installable" | "installed" | "update" | "blocked" | "unavailable";
 
@@ -17,6 +17,8 @@ export interface ListingState {
     readonly reason?: string;
     /** The commit that is installed here, when one is and it differs from the listed one. */
     readonly installedRef?: string;
+    /** The listed commit hasn't passed the registry's current security audit; acting on it needs an explicit yes. */
+    readonly unaudited?: true;
 }
 
 export interface DiscoverListing {
@@ -54,20 +56,15 @@ export const listingState = (entry: RegistryEntry, installed: readonly Extension
         // Reads and links fine; not a one-click install, since code runs trusted here and a branch isn't a promise.
         return { kind: `unavailable`, reason: t(`sandbox.discoverListing.listingNamesNoExact`) };
     }
-    if (!entry.admitted) {
-        return {
-            kind: `unavailable`,
-            reason: t(`sandbox.discoverListing.exactCommitNotPassed`),
-        };
-    }
+    const audit = entry.admitted ? {} : { unaudited: true as const };
     if (here === undefined) {
-        return { kind: `installable`, action: `Install` };
+        return { kind: `installable`, action: `Install`, ...audit };
     }
     // Built-in or workspace extensions here read as installed, never updatable: replacing either deletes work.
     if (here.source !== `installed` || here.commit === entry.install.ref) {
         return { kind: `installed` };
     }
-    return { kind: `update`, action: `Update`, installedRef: here.commit };
+    return { kind: `update`, action: `Update`, installedRef: here.commit, ...audit };
 };
 
 // Pre-lowercased and wider than the card shows: matches on description and publisher too, not just name.
@@ -115,5 +112,6 @@ export const listingSections = (listings: readonly DiscoverListing[]): readonly 
         },
     ].filter((section) => section.listings.length > 0);
 
-/** How many installed extensions this registry has a newer reviewed commit for, the hub row's badge. */
-export const updateCount = (listings: readonly DiscoverListing[]): number => listings.filter((listing) => listing.state.kind === `update`).length;
+/** How many installed extensions this registry has a newer audited commit for, the hub row's badge. */
+export const updateCount = (listings: readonly DiscoverListing[]): number =>
+    listings.filter((listing) => listing.state.kind === `update` && listing.state.unaudited === undefined).length;

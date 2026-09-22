@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { githubRepoOf } from "@intentic/registry";
+import { githubRepoOf, isCurrentSecurityReview } from "@intentic/registry";
 import { BrandMark, Button, ui, Modal, Notice, type NoticeModel } from "@intentic/ui";
-import { computed, useId } from "vue";
+import { computed, ref, useId } from "vue";
 import { checksOk, checksProblem, type DiscoverListing, splitListingName } from "./discoverListing";
 import { useT } from "@intentic/ui/i18n";
 
 // One listing, read before it's run: where this product's trust argument gets made explicit rather than implied. Source
 // identity, scanner, agent gate and human review are separate guarantees shown as separate lines, not one badge. The
-// owner's own agent read is offered as primary where no human has reviewed the code, secondary otherwise.
+// owner's own agent read is offered as primary where no human has reviewed the code, secondary otherwise. An unaudited
+// commit installs only after the owner ticks that they know nobody checked it.
 
 const t = useT();
 
@@ -46,6 +47,17 @@ const auditable = computed(() => ref40.value !== undefined && listing.state.kind
 const actionable = computed(() => listing.state.action !== undefined && canInstall);
 // Leads wherever the registry hasn't vouched for the code.
 const auditLeads = computed(() => auditable.value && !verified.value);
+
+// Whether the registry's audit record covers this exact commit under the current policy; an older one is no cover.
+const auditCurrent = computed(() => isCurrentSecurityReview(listing.entry.securityReview, listing.entry.install));
+const unaudited = computed(() => listing.state.unaudited === true);
+const acknowledged = ref(false);
+const actionLabel = computed(() => {
+    if (!unaudited.value) {
+        return listing.state.action;
+    }
+    return listing.state.kind === `update` ? t(`sandbox.discoverDetail.updateAnyway`) : t(`sandbox.discoverDetail.installAnyway`);
+});
 </script>
 
 <template>
@@ -87,10 +99,14 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 <b>{{ t(`sandbox.discoverDetail.blocked`) }}</b> {{ listing.state.reason }} {{ t(`sandbox.discoverDetail.staysListedRatherThan`) }}
             </Notice>
             <Notice v-else-if="listing.state.kind === `unavailable`" tone="info">{{ listing.state.reason }}</Notice>
+            <Notice v-else-if="unaudited" tone="warning">
+                <b>{{ t(`sandbox.discoverDetail.notSecurityAudited`) }}</b> {{ t(`sandbox.discoverDetail.exactCommitNotPassed`) }}
+                {{ t(`sandbox.discoverDetail.canStillInstall`) }}
+            </Notice>
             <Notice v-else-if="listing.state.kind === `installed`" tone="info">
                 {{ t(`sandbox.discoverDetail.alreadyInstalledInSandbox`) }}
             </Notice>
-            <Notice v-else-if="listing.state.kind === `update`" tone="info">
+            <Notice v-if="listing.state.kind === `update`" tone="info">
                 {{ t(`sandbox.discoverDetail.installedAt`) }} <code class="ui-code">{{ listing.state.installedRef?.slice(0, 10) }}</code
                 >. The listing points at <code class="ui-code">{{ shortRef }}</code
                 >. Updating replaces the code wholesale and re-asks for broader declared host API access; code internals still need review.
@@ -100,7 +116,7 @@ const auditLeads = computed(() => auditable.value && !verified.value);
             <div class="flex flex-col gap-2 rounded-lg border border-line bg-canvas px-3 py-2.5">
                 <div :class="ui.sectionLabel()">{{ t(`sandbox.discoverDetail.whatYoudTrusting`) }}</div>
 
-                <template v-if="listing.entry.securityReview">
+                <template v-if="listing.entry.securityReview && auditCurrent">
                     <div class="flex items-start gap-2 text-xs">
                         <Icon name="shield" class="mt-0.5 shrink-0 text-success" />
                         <span class="text-content">
@@ -123,6 +139,13 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                         </span>
                     </div>
                 </template>
+                <div v-else-if="listing.entry.securityReview" class="flex items-start gap-2 text-xs">
+                    <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
+                    <span class="text-content">
+                        <b>{{ t(`sandbox.discoverDetail.securityAuditOutOfDate`) }}</b
+                        >{{ t(`sandbox.discoverDetail.auditRecordDoesntCover`) }}
+                    </span>
+                </div>
                 <div v-else class="flex items-start gap-2 text-xs">
                     <Icon name="exclamation-triangle" class="mt-0.5 shrink-0 text-warning" />
                     <span class="text-content">
@@ -194,6 +217,12 @@ const auditLeads = computed(() => auditable.value && !verified.value);
                 {{ t(`sandbox.discoverDetail.insideRepository`) }}
             </p>
 
+            <!-- The explicit yes an unaudited install waits on, stated as what the reader is accepting. -->
+            <label v-if="unaudited && actionable" class="flex cursor-pointer items-start gap-2 text-xs text-content">
+                <input v-model="acknowledged" type="checkbox" class="mt-0.5 shrink-0 accent-primary-600" />
+                <span>{{ t(`sandbox.discoverDetail.understandNobodyAudited`) }}</span>
+            </label>
+
             <Notice v-if="failure" :of="failure" />
             <p v-if="listing.state.action !== undefined && !canInstall" class="text-2xs text-subtle">
                 {{ t(`sandbox.discoverDetail.onlySandboxOwnerInstall`) }}
@@ -214,9 +243,10 @@ const auditLeads = computed(() => auditable.value && !verified.value);
             </Button>
             <Button
                 v-if="actionable"
-                :label="listing.state.action"
+                :label="actionLabel"
                 size="small"
                 :loading="installing"
+                :disabled="unaudited && !acknowledged"
                 :severity="auditLeads ? `secondary` : undefined"
                 @click="emit(`install`)"
             />

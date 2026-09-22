@@ -4,6 +4,7 @@ import { Button, ui, FilterBar, type NoticeModel, NoticeStack, SegmentedControl,
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { storedValue, storeValue } from "../../../lib/browserStorage";
 import { startAgent } from "../../agents/fleet/agentActions";
 import { useExtensionList } from "../../extensions/useExtensionList";
 import { useExtensions } from "../../extensions/useExtensions";
@@ -16,23 +17,34 @@ import ExtensionsInstalled from "./ExtensionsInstalled.vue";
 import NewExtensionDialog from "./NewExtensionDialog.vue";
 import { useT } from "@intentic/ui/i18n";
 
-// The sandbox hub's Extensions section: installed and published listings as two pills over one shared search box,
-// previously two separate index rows. The mode rides the URL (`?view=browse`) rather than component state, so a
-// reload or pasted link lands on the same view.
+// The sandbox hub's Extensions section: installed and published listings as two pills over one shared search box.
+// The mode rides the URL (`?view=browse|installed`) rather than component state, so a reload or pasted link lands on
+// the same view; a bare URL opens the view last picked here, Browse until one has been.
 
 const t = useT();
 
 const VIEWS = [`installed`, `browse`] as const;
 type View = (typeof VIEWS)[number];
+const isView = (value: unknown): value is View => VIEWS.some((known) => known === value);
+
+// Per browser, not per sandbox: which pill a person reaches for is a habit of theirs, not a fact about the box.
+const VIEW_KEY = `intentic.extensionsView`;
 
 const route = useRoute();
 const router = useRouter();
 
-// `installed` is the param-less URL: the recurring visit is what's installed; browsing is the errand.
-const view = computed<View>(() => (route.query[`view`] === `browse` ? `browse` : `installed`));
+const lastPicked = (): View => {
+    const stored = storedValue(VIEW_KEY);
+    return isView(stored) ? stored : `browse`;
+};
+const view = computed<View>(() => {
+    const asked = route.query[`view`];
+    return isView(asked) ? asked : lastPicked();
+});
 // Switching views drops `ext`: it's Browse's own deep-link state, useless while the installed list is shown.
 const show = (next: View): void => {
-    void router.replace({ query: { ...route.query, view: next === `installed` ? undefined : next, ext: undefined } });
+    storeValue(VIEW_KEY, next);
+    void router.replace({ query: { ...route.query, view: next, ext: undefined } });
 };
 
 const { entries, create, checkUpdates, updatesCheckedAt, updatedSinceLoaded } = useExtensionList();

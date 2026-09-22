@@ -315,8 +315,10 @@ const emptyNote = computed<string | undefined>(() => {
             </a>
         </p>
 
+        <!-- Keyed by listing, so an acknowledgment given for one extension never carries over to the next. -->
         <DiscoverDetail
             v-if="opened"
+            :key="opened.entry.name"
             v-model="detailOpen"
             :listing="opened"
             :can-install="canOperate"

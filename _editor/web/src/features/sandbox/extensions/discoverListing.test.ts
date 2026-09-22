@@ -52,10 +52,21 @@ describe(`what a registry row becomes against this sandbox`, () => {
         expect(listingState(entry({ trust: `blocked` }), []).reason).toEqual(expect.stringMatching(/\S/));
     });
 
-    test(`an official row with no current security admission cannot be installed`, () => {
-        const state = listingState(entry({ admitted: false }), []);
-        expect(state.kind).toBe(`unavailable`);
-        expect(state.reason).toEqual(expect.stringMatching(/\S/));
+    test(`an official row with no current security admission installs, flagged unaudited`, () => {
+        expect(listingState(entry({ admitted: false }), [])).toEqual({ kind: `installable`, action: `Install`, unaudited: true });
+    });
+
+    test(`an audited row carries no unaudited flag`, () => {
+        expect(listingState(entry(), []).unaudited).toBeUndefined();
+    });
+
+    test(`an unaudited newer commit is an update that carries the flag`, () => {
+        const state = listingState(entry({ admitted: false }), [installedAs(`intentic.saldeo`, OTHER_SHA)]);
+        expect(state).toEqual({ kind: `update`, action: `Update`, installedRef: OTHER_SHA, unaudited: true });
+    });
+
+    test(`an unaudited commit already installed here is installed`, () => {
+        expect(listingState(entry({ admitted: false }), [installedAs(`intentic.saldeo`, SHA)])).toEqual({ kind: `installed` });
     });
 
     test(`a pointer with no exact commit reads, but cannot be installed in one click`, () => {
@@ -63,7 +74,7 @@ describe(`what a registry row becomes against this sandbox`, () => {
         const state = listingState(branch, []);
         expect(state.kind).toBe(`unavailable`);
         // Two distinct "unavailable" reasons must read differently to the user.
-        expect(state.reason).not.toBe(listingState(entry({ admitted: false }), []).reason);
+        expect(state.reason).not.toBe(listingState(entry({ install: undefined }), []).reason);
     });
 
     test(`a source this daemon cannot clone is unavailable rather than absent`, () => {
@@ -138,6 +149,11 @@ describe(`how the list is grouped and searched`, () => {
             toListing(entry({ name: `intentic.logs`, install: { url: `https://github.com/intentic/extension-logs.git`, ref: SHA } }), []),
         ];
         expect(updateCount(withUpdate)).toBe(1);
+    });
+
+    test(`an unaudited update is not counted: the badge never nudges toward unaudited code`, () => {
+        const unaudited = [toListing(entry({ name: `intentic.saldeo`, admitted: false }), [installedAs(`intentic.saldeo`, OTHER_SHA)])];
+        expect(updateCount(unaudited)).toBe(0);
     });
 });
 

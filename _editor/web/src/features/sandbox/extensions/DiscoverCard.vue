@@ -82,10 +82,23 @@ const dim = computed(() => listing.state.kind === `blocked` || listing.state.kin
                     :dot="true"
                     :label="t(`sandbox.discoverCard.installed`)"
                 />
-                <StatusBadge v-else-if="listing.state.kind === `update`" size="xs" variant="info" :label="t(`sandbox.discoverCard.update`)" />
+                <StatusBadge
+                    v-else-if="listing.state.kind === `update`"
+                    size="xs"
+                    :variant="listing.state.unaudited ? `warning` : `info`"
+                    :label="listing.state.unaudited ? t(`sandbox.discoverCard.unauditedUpdate`) : t(`sandbox.discoverCard.update`)"
+                    v-tooltip.top="listing.state.unaudited ? t(`sandbox.discoverCard.notPassedAudit`) : undefined"
+                />
                 <StatusBadge v-else-if="listing.state.kind === `blocked`" size="xs" variant="danger" :label="t(`sandbox.discoverCard.blocked`)" />
                 <span v-else-if="listing.state.kind === `unavailable`" class="text-2xs text-subtle" v-tooltip.top="listing.state.reason">
                     {{ t(`sandbox.discoverCard.cantInstall`) }}
+                </span>
+                <span
+                    v-else-if="listing.state.unaudited"
+                    class="inline-flex items-center gap-0.5 text-2xs font-medium text-warning"
+                    v-tooltip.top="t(`sandbox.discoverCard.notPassedAudit`)"
+                >
+                    <Icon name="exclamation-triangle" />{{ t(`sandbox.discoverCard.unaudited`) }}
                 </span>
                 <span v-else class="text-2xs font-medium text-link">{{ t(`sandbox.discoverCard.install`) }}</span>
             </span>
