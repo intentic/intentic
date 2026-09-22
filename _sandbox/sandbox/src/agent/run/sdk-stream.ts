@@ -15,6 +15,7 @@ import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "./opt.js";
 import { type CacheCreationBuckets, ttlFromCacheCreation } from "./turn/prompt-cache.js";
 import { noteSubagentSpawn, noteSubagentTask, type SubagentTaskMessage, type SubagentTurn } from "../subagents/subagents.js";
+import { noteJobNotice, noteJobShell, noteModelRequest } from "../tools/background-jobs.js";
 import { TaskChecklist } from "./task-checklist.js";
 import type { ChecklistSeed } from "./task-store.js";
 import { displayNameOf, editDiffContent, resultText, toolCategoryOf, toolLocations, toolTarget } from "../tools/tool-calls.js";
@@ -74,6 +75,16 @@ const nextWithinGrace = async (next: Promise<IteratorResult<SDKMessage, void>>):
 // monitor_mcp the same
 // remote_agent runs on the provider's side, not in this process
 const UNHELD_TASK_TYPES: ReadonlySet<string> = new Set(["local_bash", "monitor_ws", "monitor_mcp", "remote_agent"]);
+
+// The shell id the model was given for a background job, and that its completion notice is queued.
+const noteBashTask = (message: SubagentTaskMessage): void => {
+    if (message.subtype === "task_started" && message.task_type === "local_bash" && message.tool_use_id !== undefined && message.task_id !== undefined) {
+        noteJobShell(message.tool_use_id, message.task_id);
+    }
+    if (message.subtype === "task_notification" && message.task_id !== undefined) {
+        noteJobNotice(message.task_id);
+    }
+};
 
 // Consecutive refusals before ending the turn for the breaker (provider-health.ts) instead of spinning.
 const MAX_IN_TURN_RETRIES = 8;
@@ -379,11 +390,19 @@ class TurnFold {
             this.textBlocks.delete(parent ?? "");
             yield { kind: "text_end", ...opt("parentToolUseId", parent) };
         } else if (event.type === "message_start" && event.message?.usage !== undefined) {
+            this.noteRequest(parent);
             // Full input sent for this request = the context fill right now (input + both cache buckets).
             const usage = event.message.usage;
             this.contextTokens = (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
             this.contextModel = event.message.model;
             this.notePromptCache(usage, parent);
+        }
+    }
+
+    // Only a main-thread request reads this conversation's queued completion notices.
+    private noteRequest(parent: string | undefined): void {
+        if (parent === undefined && this.args.subagents !== undefined) {
+            noteModelRequest(this.args.subagents.conversationId);
         }
     }
 
@@ -706,6 +725,7 @@ class TurnFold {
                 // The SDK's subagent lifecycle messages, the only account of a backgrounded child between its tool_use
                 // and its result. The registry owns the fold; this only forwards what came back.
                 if (this.args.subagents !== undefined && message.subtype.startsWith("task_")) {
+                    noteBashTask(message as SubagentTaskMessage);
                     const frame = noteSubagentTask(this.args.subagents, message as SubagentTaskMessage);
                     if (frame !== undefined) {
                         yield frame;

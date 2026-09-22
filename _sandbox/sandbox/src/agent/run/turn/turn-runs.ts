@@ -242,22 +242,36 @@ export class TurnRun {
 
 const runs = new Map<string, TurnRun>();
 
+// One settled turn, as every settle listener sees it.
+export interface TurnSettled {
+    readonly conversationId: string;
+    // Who asked for the turn (turn-actor.ts); undefined for one the daemon started itself.
+    readonly actor: string | undefined;
+    // Undefined for a turn that ended well or was stopped.
+    readonly failure: string | undefined;
+    // Its last top-level prose; empty when it said nothing.
+    readonly closing: string;
+}
+
 // Module-level settle notice for machinery watching every run (the resource reaper); guarded like `tell`.
-const settleListeners = new Set<(conversationId: string) => void>();
-export const onTurnSettled = (listener: (conversationId: string) => void): (() => void) => {
+const settleListeners = new Set<(settled: TurnSettled) => void>();
+export const onTurnSettled = (listener: (settled: TurnSettled) => void): (() => void) => {
     settleListeners.add(listener);
     return () => settleListeners.delete(listener);
 };
 
-const notifySettled = (conversationId: string): void => {
+const notifySettled = (settled: TurnSettled): void => {
     for (const listener of settleListeners) {
         try {
-            listener(conversationId);
+            listener(settled);
         } catch {
             // Nothing to do and nowhere to report it.
         }
     }
 };
+
+const closingOf = (rows: readonly TranscriptRow[]): string =>
+    rows.findLast((row) => row.role === "assistant" && row.text.trim() !== "")?.text.trim() ?? "";
 
 const sweep = (): void => {
     const now = Date.now();
@@ -408,7 +422,12 @@ export function startTurnRun(
             // above.
             journalOp((target) => target.clearTurn(input.conversationId));
             tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
-            notifySettled(input.conversationId);
+            notifySettled({
+                conversationId: input.conversationId,
+                actor: (input as { readonly actor?: string }).actor,
+                failure,
+                closing: closingOf(run.rows),
+            });
         }
     })();
     return run;

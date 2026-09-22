@@ -55,9 +55,14 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
     // `index` is the message's position in the transcript, which the rewind route addresses by; absent on a turn with
     // no conversation, where the id still powers a plain restore.
     z.object({ kind: z.literal("checkpoint"), id: z.string(), index: z.number().int().nonnegative().optional() }),
-    // A mid-turn user message, framed when the daemon accepted it, so every client and the stored transcript agree on
-    // when. `text` is the raw words typed, never the composed prompt; `sentAt` is the daemon's clock.
-    z.object({ kind: z.literal("steer"), text: z.string(), sentAt: z.number(), attachments: z.array(z.string()).optional() }),
+    // A mid-turn message on the daemon's clock; `voice` is absent only for the person at the composer.
+    z.object({
+        kind: z.literal("steer"),
+        text: z.string(),
+        sentAt: z.number(),
+        attachments: z.array(z.string()).optional(),
+        voice: z.enum(["sandbox", "agent"]).optional(),
+    }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),
     // Closes the prose block `delta` frames were writing; a turn emits several as it narrates, and without this
     // boundary the client cannot tell them apart.

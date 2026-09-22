@@ -199,10 +199,7 @@ const suggestedMemoryGib = computed(() => {
 // Held too: its clause promises the message waits through the restart, and a restart under a running turn kills it.
 const memoryOffer = computed(
     () =>
-        props.message.noticeAction === `sandboxMemory` &&
-        heldHere.value &&
-        selfResources.reshapable.value &&
-        suggestedMemoryGib.value !== undefined,
+        props.message.noticeAction === `sandboxMemory` && heldHere.value && selfResources.reshapable.value && suggestedMemoryGib.value !== undefined,
 );
 const resizing = ref(false);
 const resizeFailed = ref<string | undefined>();
@@ -293,12 +290,23 @@ const waitClock = computed(() => {
     return wait.counts === `up` ? formatElapsed(wait.at, now.value) : formatElapsed(now.value, wait.at);
 });
 
-// The wake itself: its evidence is one press away rather than in the reading column, since a fired watch is usually
-// read as "good, it happened" and only sometimes as "why did it say that".
+// What the model was told, for a row nobody at the composer typed; one press away.
 const watchEvidence = ref(false);
-// A watch that ended without its condition ever holding is the one outcome calling for a different next step, so it is
-// the one that carries weight in the row rather than reading as the good news beside it.
-const watchGaveUp = computed(() => props.message.watchWake !== undefined && props.message.watchWake.outcome !== `met`);
+const unspokenSent = computed(() => props.message.watchWake?.sent ?? props.message.agentWords?.sent);
+// A watch that never saw its condition, or a child that failed, calls for a different next step.
+const watchGaveUp = computed(
+    () => (props.message.watchWake !== undefined && props.message.watchWake.outcome !== `met`) || props.message.agentWords?.failed === true,
+);
+// The board's own watch glyph, another conversation, or a child reporting back.
+const noticeIcon = computed(() => {
+    if (props.message.watchWake !== undefined) {
+        return `eye`;
+    }
+    if (props.message.agentWords !== undefined) {
+        return props.message.agentWords.kind === `peer` ? `comments` : `users`;
+    }
+    return `info-circle`;
+});
 
 // Edit pencil shows only for a user prompt with a rewindIndex, never mid-turn (agent/rewind.ts), and never while this
 // message's own edit is open.
@@ -625,7 +633,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <!-- A mark set at the row's own 11px has no counter left to read; both glyphs take a step up from the sentence. -->
                 <Icon v-if="pendingWait" name="spinner" spin class="shrink-0 text-xs text-info" />
                 <!-- The board's own watch glyph, so one conversation's watch reads the same in both places. -->
-                <Icon v-else :name="message.watchWake ? `eye` : `info-circle`" class="shrink-0 text-xs" />
+                <Icon v-else :name="noticeIcon" class="shrink-0 text-xs" />
                 <span class="min-w-0">{{ message.text }}</span>
                 <span v-if="waitClock" class="shrink-0 tabular-nums">{{ waitClock }}</span>
             </span>
@@ -635,20 +643,23 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </button>
                 <span class="shrink-0">{{ t(`chat.chatMessageView.chatStaysPutInstead`) }}</span>
             </template>
-            <!-- Nobody typed the wake, so what the model was told is one press away rather than taken on trust. -->
+            <!-- Nobody at the composer typed it, so what the model was told is one press away. -->
             <button
-                v-if="message.watchWake"
+                v-if="unspokenSent !== undefined"
                 type="button"
                 class="shrink-0 font-medium text-link hover:underline"
                 :aria-expanded="watchEvidence"
                 @click="watchEvidence = !watchEvidence"
             >
-                {{ watchEvidence ? t(`chat.chatMessageView.hideCheck`) : t(`chat.chatMessageView.showCheck`) }}
+                <template v-if="message.watchWake">{{
+                    watchEvidence ? t(`chat.chatMessageView.hideCheck`) : t(`chat.chatMessageView.showCheck`)
+                }}</template>
+                <template v-else>{{ watchEvidence ? t(`chat.chatMessageView.hideMessage`) : t(`chat.chatMessageView.showMessage`) }}</template>
             </button>
             <pre
-                v-if="watchEvidence && message.watchWake"
+                v-if="watchEvidence && unspokenSent !== undefined"
                 class="chat-inset max-h-64 w-full overflow-auto px-2.5 py-1.5 text-left text-2xs leading-relaxed whitespace-pre-wrap text-subtle"
-                >{{ message.watchWake.sent }}</pre>
+                >{{ unspokenSent }}</pre>
             <!-- Optional follow-up offer on a notice (see holdOffer): a link, not a button, stated as a trailing clause. -->
             <template v-if="holdOffer">
                 <button type="button" class="shrink-0 font-medium text-link hover:underline" @click="holdFutureLands">

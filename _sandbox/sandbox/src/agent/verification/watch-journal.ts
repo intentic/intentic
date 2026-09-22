@@ -1,13 +1,10 @@
 import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { AgentHarnessSchema, AgentProviderSchema, isConversationId, ModelRoleSchema } from "@intentic/sandbox-contract";
+import { AgentHarnessSchema, AgentProviderSchema, isConversationId, ModelRoleSchema, WatchOutcomeSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { writeJsonFile } from "../../store/json-file.js";
 
-// Persists an armed watch since a daemon death mid-wait is ordinary here, not an edge case; in-memory alone would go
-// silent, no fire, no wake. Never persists a credential: only `envKeys` (names), re-resolved fresh from the live
-// capability store at boot, so withholding, revocations and rotations apply naturally. One file per watch, written once
-// at arm and deleted at end; never rewritten per check, since restore always re-checks first.
+// One file per armed or firing watch, deleted only once its wake landed; env var names only, never a credential.
 
 // The charset ConversationIdSchema and watch ids share; a filename that doesn't match is ignored, never trusted, same
 // rule as the turn journal and approvals queue.
@@ -22,8 +19,19 @@ const JournalledWatchSchema = z.object({
     armedAt: z.number(),
     // The staleness test itself, so no separate max-age is needed: a deadline passed while down wakes as expired.
     deadlineAt: z.number(),
-    // The tree the check runs in; a restore that can't find it drops the watch rather than running elsewhere.
+    // The tree the check runs in; a restore that can't find it wakes the watch as broken, never runs elsewhere.
     cwd: z.string(),
+    // An isolated conversation's world, rebuilt for every check; absent for the workspace root.
+    placement: z.object({ worktree: z.string(), fenced: z.boolean() }).optional(),
+    // The source a fetching check's output is outside content from.
+    outside: z.string().optional(),
+    // Set from firing until its wake has landed.
+    firing: z
+        .object({
+            outcome: WatchOutcomeSchema,
+            check: z.object({ exitCode: z.number().optional(), output: z.string(), broken: z.string().optional() }),
+        })
+        .optional(),
     // The NAMES of the environment the check ran with, never the values. See the header.
     envKeys: z.array(z.string()),
     // The turn identity the wake must reproduce; `sessionId` is absent on purpose, looked up at fire time instead.

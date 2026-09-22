@@ -1,3 +1,6 @@
+import { markConversationTaint } from "../../guard/turn-taint.js";
+import { turnRunOf } from "../run/turn/turn-runs.js";
+
 // Mid-turn steering: a running turn consumes its prompt as streaming input, so `/agent/steer` messages inject between
 // tool calls, not abort-and-resend. The registry also holds each turn's hard-cancel: `/agent/stop` aborts daemon-side,
 // since closing the fetch alone sends no cancel frame. Keyed by conversationId; no per-user scoping (daemon is
@@ -141,14 +144,31 @@ export const activeTurnCount = (): number => activeTurns.size;
 // A stamped workload is live while its conversation still owns the registered turn.
 export const turnActive = (conversationId: string): boolean => activeTurns.has(conversationId);
 
-// Deliver a steering message into the conversation's running turn; false when no steerable turn is live. Marked as
-// steered here rather than at the route, so a turn running on a runner is marked in the daemon its gates read from.
-export function steerTurn(conversationId: string, text: string): boolean {
-    const delivered = activeTurns.get(conversationId)?.steering?.push(text) ?? false;
-    if (delivered) {
-        steeredTurns.add(conversationId);
+// Who is speaking into a live turn; only a person proves somebody is at the composer.
+export type SteerVoice = "person" | "sandbox" | "agent";
+
+export interface Steer {
+    readonly text: string;
+    readonly voice: SteerVoice;
+    // The source of outside content in these words; the live turn is tainted by it as they land.
+    readonly outside?: string;
+}
+
+// False when no steerable turn is live; a person's steer is framed by the route that took it, every other voice here.
+export function steerTurn(conversationId: string, steer: Steer): boolean {
+    const delivered = activeTurns.get(conversationId)?.steering?.push(steer.text) ?? false;
+    if (!delivered) {
+        return false;
     }
-    return delivered;
+    if (steer.outside !== undefined) {
+        markConversationTaint(conversationId, steer.outside);
+    }
+    if (steer.voice === "person") {
+        steeredTurns.add(conversationId);
+    } else {
+        turnRunOf(conversationId)?.push({ kind: "steer", text: steer.text, sentAt: Date.now(), voice: steer.voice });
+    }
+    return true;
 }
 
 // Hard-cancel the conversation's running turn; false when nothing is running.

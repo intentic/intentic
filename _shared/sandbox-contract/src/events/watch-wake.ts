@@ -11,6 +11,7 @@ const OPENINGS: Record<WatchOutcome, string> = {
     timeout: "Watch timed out: the deadline passed and the check never exited 0. Decide whether to re-arm it, investigate the check, or report back.",
     "restart-expired":
         "Watch stopped: its deadline passed while the daemon was restarting, so it went unchecked for part of that window. It has just been re-checked once and the condition still does not hold. Decide whether to re-arm it, investigate the check, or report back.",
+    broken: "Watch stopped: its check can no longer run at all, so it was disarmed rather than left waiting on a condition it could never see. The reason is in the output below. Decide whether to re-arm it with a check that can run, or report back.",
 };
 
 // Labels the prompt writes and the parser reads back. `Watching` and `Elapsed` are load-bearing on both sides; the rest
@@ -50,6 +51,9 @@ const headline = (outcome: WatchOutcome, note: string, elapsed: string): string 
     }
     if (outcome === "timeout") {
         return `${note} — the watch gave up after ${elapsed}.`;
+    }
+    if (outcome === "broken") {
+        return `${note} — the watch stopped after ${elapsed}: its check can no longer run.`;
     }
     return `${note} — the watch stopped when the sandbox restarted, after ${elapsed}.`;
 };

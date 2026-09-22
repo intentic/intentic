@@ -1,13 +1,24 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { matchCommand } from "@intentic/sandbox-contract";
+import { classifyCommand, matchCommand } from "@intentic/sandbox-contract";
 import { briefDuration } from "@intentic/base/format";
+import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { sdk } from "../../runtimes/claude/claude-sdk.js";
 import { turnRunOf } from "../run/turn/turn-runs.js";
 import { z } from "zod";
 import { commandRun } from "../../guard/actions.js";
 import { createCredentialOracle } from "../../guard/credential-files.js";
 import { guard } from "../../guard/guard.js";
-import { armWatcher, cancelWatcher, DEFAULT_INTERVAL_S, DEFAULT_TIMEOUT_S, listWatchers, type WatcherTurnSeed } from "./watchers.js";
+import { markConversationTaint } from "../../guard/turn-taint.js";
+import {
+    armWatcher,
+    cancelWatcher,
+    type CheckResult,
+    DEFAULT_INTERVAL_S,
+    DEFAULT_TIMEOUT_S,
+    listWatchers,
+    type WatcherTurnSeed,
+    type WatchPlacement,
+} from "./watchers.js";
 
 // The agent's door to the condition watch (watchers.ts): an SDK MCP server since the handler must run in the daemon,
 // where the watch outlives the turn, and `alwaysLoad` keeps it in the prompt so it isn't replaced by a sleep-and-poll
@@ -20,6 +31,8 @@ export interface WatchServerDeps {
     // The tree and credentials the check runs with, snapshotted since the turn will be long gone at check time.
     readonly cwd: string;
     readonly env: Readonly<Record<string, string>>;
+    // The isolated world the turn's shell ran in, rebuilt for every check; absent on the workspace root.
+    readonly placement?: WatchPlacement;
     // The turn identity the wake must reproduce, see WatcherTurnSeed.
     readonly turn: WatcherTurnSeed;
 }
@@ -40,6 +53,19 @@ const ruleRefusal = (command: string, cwd: string): string | undefined => {
         }
     }
     return undefined;
+};
+
+// A fetching check's output is outside content, as a fetching Bash result is (outside-results.ts).
+const WATCH_FETCH = "watch-fetch";
+const outsideOf = (command: string): string | undefined =>
+    classifyCommand(command, { locus: "sandbox" }).includes("network.outbound") ? WATCH_FETCH : undefined;
+
+const firstCheckOf = (conversationId: string, check: CheckResult, outside: string | undefined): CheckResult => {
+    if (outside === undefined || check.output === "") {
+        return check;
+    }
+    markConversationTaint(conversationId, outside);
+    return { ...check, output: wrapOutsideContent(check.output, { source: outside }) };
 };
 
 export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstance =>
@@ -91,6 +117,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                     if (refusal !== undefined) {
                         return answer({ outcome: "refused", reason: refusal });
                     }
+                    const outside = outsideOf(args.command);
                     const outcome = await armWatcher({
                         conversationId: deps.conversationId,
                         command: args.command,
@@ -99,16 +126,19 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                         ...(args.timeoutSeconds !== undefined ? { timeoutSeconds: args.timeoutSeconds } : {}),
                         cwd: deps.cwd,
                         env: deps.env,
+                        ...(deps.placement === undefined ? {} : { placement: deps.placement }),
+                        ...(outside === undefined ? {} : { outside }),
                         turn: deps.turn,
                     });
                     if (outcome.kind === "refused") {
                         return answer({ outcome: "refused", reason: outcome.reason });
                     }
-                    if (outcome.kind === "already-met") {
+                    const firstCheck = firstCheckOf(deps.conversationId, outcome.firstCheck, outside);
+                    if (outcome.kind !== "armed") {
                         return answer({
                             outcome: "already-met",
                             note: "The check already exits 0, the condition holds now. Nothing was armed and no wake is coming; act on the output directly.",
-                            firstCheck: outcome.firstCheck,
+                            firstCheck,
                         });
                     }
                     // The wait made visible: without this row the turn ends, the chat looks finished, and the wake
@@ -126,7 +156,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                         watchId: outcome.id,
                         intervalSeconds: outcome.intervalSeconds,
                         timeoutSeconds: outcome.timeoutSeconds,
-                        firstCheck: outcome.firstCheck,
+                        firstCheck,
                         note: "You can end this turn, the watch runs without you and this conversation is woken when it fires or times out.",
                     });
                 },

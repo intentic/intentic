@@ -1,5 +1,5 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { AgentEvent, AgentHarness, AgentProvider, AgentTurn, AskQuestion } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion } from "@intentic/sandbox-contract";
 import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { createRequest, resolveRequest } from "../tools/agent-requests.js";
@@ -492,7 +492,7 @@ export const sendToChild = async (
     composeRuntimeFloor(parent.conversationId, kid.spec.provider, kid.spec.harness ?? "native");
     if (kid.running) {
         // Mid-turn, the only door is the runtime's own steering seam; a runtime without one cannot take words yet.
-        return steerTurn(childId, message)
+        return steerTurn(childId, { text: message, voice: "agent" })
             ? { ok: true, note: "Steered: the message lands between its tool calls." }
             : { ok: false, message: "It is mid-turn on a runtime that takes no mid-turn input: wait for it to finish, then send again." };
     }
@@ -504,9 +504,11 @@ export const sendToChild = async (
     let handedOff = false;
     try {
         const spec = kid.spec;
-        const turn: AgentTurn & { conversationId: string } = {
+        const turn: TurnInput & { conversationId: string } = {
             prompt: message,
             conversationId: childId,
+            // Its parent asked, as for the spawn: the settled turn reports back to that parent (child-report.ts).
+            actor: childActor(parent.conversationId),
             isolated: true,
             unattended: true,
             // Reuses the spec's routing verbatim, so a live child never moves onto a different model between turns.

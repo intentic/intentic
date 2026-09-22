@@ -103,6 +103,7 @@ export { vpnContract } from "./contracts/vpn.contract.js";
 export { workflowsContract } from "./contracts/workflows.contract.js";
 export { workspaceContract } from "./contracts/workspace.contract.js";
 export * from "./events/agent-events.js";
+export * from "./events/agent-words.js";
 export * from "./events/requests.js";
 export * from "./events/resume.js";
 export * from "./events/system-events.js";

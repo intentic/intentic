@@ -13,7 +13,7 @@ const fields = (over: Partial<WatchWakeFields> = {}): WatchWakeFields => ({
     ...over,
 });
 
-const OUTCOMES: WatchOutcome[] = ["met", "timeout", "restart-expired"];
+const OUTCOMES: WatchOutcome[] = ["met", "timeout", "restart-expired", "broken"];
 
 describe("watch wake", () => {
     // The composer and the parser are the same piece of knowledge; this is what holds them together when either is
@@ -52,6 +52,7 @@ describe("watch wake", () => {
         const textOf = (outcome: WatchOutcome): string => watchWakeRow(watchWakePrompt(fields({ outcome })))?.text ?? "";
         expect(textOf("timeout")).toBe("CI run 316 on intentic/intentic — the watch gave up after 43m.");
         expect(textOf("restart-expired")).toBe("CI run 316 on intentic/intentic — the watch stopped when the sandbox restarted, after 43m.");
+        expect(textOf("broken")).toBe("CI run 316 on intentic/intentic — the watch stopped after 43m: its check can no longer run.");
     });
 
     it("ignores a prompt that is not a wake, so any reader can ask without checking first", () => {

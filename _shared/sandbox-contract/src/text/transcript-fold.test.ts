@@ -3,6 +3,7 @@ import { describe, it, expect } from "bun:test";
 import type { AgentEvent } from "../events/agent-events.js";
 import type { TranscriptPatch, TranscriptRow } from "../events/transcript.js";
 import { watchWakePrompt } from "../events/watch-wake.js";
+import { childReportPrompt, peerMessagePrompt } from "../events/agent-words.js";
 import { applyTranscriptPatch, foldTurn, TranscriptFold, userRow } from "./transcript-fold.js";
 
 // Epoch ms stamped on the opening user row's sentAt.
@@ -441,6 +442,37 @@ describe("patches", () => {
         expect(fold.rows.map((row) => row.role)).toEqual(["user", "assistant", "notice"]);
         expect(fold.rows.at(-1)?.text).toBe("the deploy — the watch gave up after 2h.");
         expect(fold.steerRows).toEqual([]);
+    });
+
+    // Another agent's words are drawn as theirs, never as the owner's.
+    it("writes a peer's message and a child's report into a live turn as notices, not as the owner's words", () => {
+        const fold = new TranscriptFold(openingOf("ship it"));
+        fold.apply({
+            kind: "steer",
+            text: peerMessagePrompt({ from: "sharp-shale-htw8", title: "Bun migration", message: "done" }),
+            sentAt: SENT_AT + 1,
+            voice: "agent",
+        });
+        fold.apply({
+            kind: "steer",
+            text: childReportPrompt({ child: "sub-x7", title: "Port the parser", failed: false, report: "ported", verification: undefined }),
+            sentAt: SENT_AT + 2,
+            voice: "sandbox",
+        });
+        expect(fold.rows.slice(1)).toMatchObject([
+            { role: "notice", agentWords: { kind: "peer", from: "sharp-shale-htw8" } },
+            { role: "notice", agentWords: { kind: "child", from: "sub-x7" } },
+        ]);
+        expect(fold.steerRows).toEqual([]);
+    });
+
+    // An anchor from any other voice would shift every later person's anchor onto the wrong message.
+    it("anchors only a person's steer, even when another voice's words draw as a user row", () => {
+        const fold = new TranscriptFold(openingOf("ship it"));
+        fold.apply({ kind: "steer", text: "also cover the parser", sentAt: SENT_AT + 1, voice: "agent" });
+        fold.apply({ kind: "steer", text: "and the docs", sentAt: SENT_AT + 2 });
+        expect(fold.rows.map((row) => row.role)).toEqual(["user", "user", "user"]);
+        expect(fold.steerRows).toEqual([2]);
     });
 
     it("drop an empty bubble the turn opened and abandoned", () => {

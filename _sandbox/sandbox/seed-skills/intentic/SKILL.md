@@ -73,6 +73,7 @@ conversation that starts there (a persona's `startIn`).
 | a post on X, Reddit, Discord, YouTube… prepared rather than sent | `drafts` skill (present when the drafts extension is on) |
 | to act as one of the sandbox's signed-in accounts on a site | `mcp__accounts__roster`, then `ToolSearch` `+mcp__browser__`; the account's own skill holds the site's cheatsheet |
 | to wait on a CI run, a deploy, anything outside this sandbox | `mcp__watch__start` with a cheap check command, then end the turn |
+| to wait on work started here: a background command, a child agent | the `wait` tool with the command's ID from its Bash call, or the child's id; never `sleep`, and never detach a process yourself |
 | to know why something failed, died, hung or felt slow | the diagnostics playbook below |
 | a secret or API key used | write `{{secret:name}}` in the command; an unknown name fails and lists the names that exist; the owner adds one at Sandbox ▸ Secrets. Some are gated: the card goes up for the people named on it and the turn waits |
 | a credential that says it needs approval, or an account that looks unconnected | `secrets gates`; then `secrets request <id> --why "…"` for an account or connector, or just write the secret's reference and let the card go up for that one use |

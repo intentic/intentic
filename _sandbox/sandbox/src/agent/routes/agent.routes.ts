@@ -1774,7 +1774,7 @@ export const createAgentRoutes = (services: Services) => {
                 if (composed.invalid !== undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: composed.invalid });
                 }
-                if (!steerTurn(input.conversationId, composed.text)) {
+                if (!steerTurn(input.conversationId, { text: composed.text, voice: "person" })) {
                     throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
                 }
             }

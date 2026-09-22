@@ -131,9 +131,8 @@ export interface TranscriptTool {
     subagent?: TranscriptSubagent | undefined;
 }
 
-// Three endings that wake a conversation off a condition watch: the first two are promised when it is armed, the third
-// is the daemon's own (a deadline that passed while it was down). Composing and parsing the wake is watch-wake.ts.
-export const WatchOutcomeSchema = z.enum(["met", "timeout", "restart-expired"]);
+// Every ending that wakes a conversation off a condition watch; composing and parsing the wake is watch-wake.ts.
+export const WatchOutcomeSchema = z.enum(["met", "timeout", "restart-expired", "broken"]);
 export type WatchOutcome = z.infer<typeof WatchOutcomeSchema>;
 
 // A condition watch waking the conversation, as the row carries it. The wake arrives as an ordinary turn prompt that
@@ -147,6 +146,16 @@ export const TranscriptWatchWakeSchema = z.object({
     sent: z.string().describe("The whole prompt the model was woken with, disclosed under the row."),
 });
 export type TranscriptWatchWake = z.infer<typeof TranscriptWatchWakeSchema>;
+
+// Another agent's words that reached this conversation as a prompt; the row keeps the prompt and names the sender.
+export const TranscriptAgentWordsSchema = z.object({
+    kind: z.enum(["peer", "child"]).describe("Who sent it: another conversation in the workspace, or a child agent this one started."),
+    from: z.string().describe("The sending conversation's id."),
+    title: z.string().optional().describe("The sender's title, when it had one."),
+    failed: z.boolean().optional().describe("A child's report on a turn that failed rather than finished."),
+    sent: z.string().describe("The whole prompt the model received, disclosed under the row."),
+});
+export type TranscriptAgentWords = z.infer<typeof TranscriptAgentWordsSchema>;
 
 // One note the daemon put before a user's message: the model reads `text`, the chat draws `title` on a row that opens
 // to it. Shared by the live frame and the restored transcript, so it reads the same either way.
@@ -251,6 +260,7 @@ export const TranscriptRowSchema = z.object({
     capabilityOffer: TranscriptCapabilityOfferSchema.optional().describe("The capability setup this row asked for, the decision, and the outcome."),
     paymentOffer: TranscriptPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
     watchWake: TranscriptWatchWakeSchema.optional().describe("The condition watch that woke this conversation, and the prompt it was woken with."),
+    agentWords: TranscriptAgentWordsSchema.optional().describe("Another agent's words that reached this conversation, whose they are, and the prompt they came as."),
     credentialOffer: TranscriptCredentialOfferSchema.optional().describe(
         "The gated credential this row asked to use, who may release it, and who did.",
     ),

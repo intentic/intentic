@@ -85,7 +85,13 @@ Every surface this one process owns, and the reason each one lives here rather t
   re-armed with the time they have left. The journal carries no credential, only the NAMES of the environment
   the arming turn ran with; the values are re-derived from the live capability store
   (src/capabilities/turn-env.ts), which reproduces the persona's withholding, picks up a rotated token, and
-  declines to hand back one that has since been revoked.
+  declines to hand back one that has since been revoked. A fired watch stays journalled, marked firing, until its
+  wake has landed, so a restart mid-delivery delivers it again rather than never. Each check runs in the world
+  its arming turn saw (src/agent/verification/watch-check.ts): an isolated conversation's namespace is rebuilt
+  from the anchor's own script around every check, so `/work` is the conversation's worktree and a fenced
+  conversation's check stays inside its fence. A check that can no longer run at all (its tree retired) wakes the
+  conversation as `broken` instead of polling to its deadline. While a watch is armed its conversation counts
+  as busy (src/agent/run/turn/turn-liveness.ts), so the reaper does not reclaim the very processes it waits on.
 - Keep a background job alive past the turn that started it. `run_in_background: true` promises, in the SDK's
   own words and in this harness's waiting guidance, that a command keeps running across turns and re-invokes
   the agent when it exits. In interactive Claude Code that is true because one CLI spans every turn; here a
@@ -99,16 +105,24 @@ Every surface this one process owns, and the reason each one lives here rather t
   that outlives it. The job is filed under its conversation while it runs
   (src/agent/tools/background-jobs.ts), which is how the reaper knows not to reap its terminal at the ordinary
   ten-minute grace, and when the turn settles every job still running is handed to a condition watch of its own
-  (src/agent/tools/background-adoption.ts) so the exit code and output tail wake the conversation. A row in the
-  chat says so at the moment the job starts, because the whole failure it replaces was invisible.
+  (src/agent/tools/background-adoption.ts) so the exit code and output tail wake the conversation. A job that
+  finished after the model's last request is reported the same way at once: the stream pairs each job with the
+  shell id the model was given and notes when its completion notice is read (src/agent/run/sdk-stream.ts). The
+  `wait` tool parks on a job by that id (src/agent/subagents/work-wait.ts), as the waiting guidance tells agents
+  to. A row in the chat says so at the moment the job starts, because the whole failure it replaces was invisible.
+- Tell a parent what its spawned child did. A child keeps working after its parent's turn ends; a settled child
+  turn a parked `wait` did not take is delivered to the parent like any wake (src/agent/subagents/child-report.ts),
+  drawn in the parent's chat as the child's report rather than as the owner's words.
 - Say something to another conversation in this workspace. What a person does by typing into its chat, an agent
   could not do at all: `agents send` reaches only a conversation's own children, and the SDK's cross-session
   messaging reaches only sessions with a live process, which an idle conversation here does not have. The gap
   was paid in copy-paste: an agent that found a stalled peer had to ask the human to carry the message. So
   `agents message <handle> '<text>'` (POST /fleet/message, src/agents/recall/fleet-message.ts) steers the words
   into the target's live turn, or opens one on the routing its registry entry already holds. What it is NOT is
-  the owner's voice: the prompt names the sender before anything the sender said, and the turn carries
-  `outsideWake`, so the command gate judges it as content from elsewhere. It can start turns, so each sender
+  the owner's voice: the prompt names the sender before anything the sender said, the chat draws it as the peer's
+  (agent-words.ts in the contract), and it taints whatever turn it reaches, steered in or opening one, so the command
+  gate judges it as content from elsewhere. Every steer names its voice (src/agent/checkpoints/agent-steering.ts):
+  only a person's marks a turn attended. It can start turns, so each sender
   has an hourly ceiling on how many it may start — two agents talking to each other is otherwise a way to spend
   an allowance with nobody asking — and the route reaches nothing that lands, archives, renames or discards.
 - Open a brand-new sandbox with something running in it. A fresh workspace used to arrive empty, so the first

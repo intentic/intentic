@@ -53,6 +53,8 @@ interface SubagentRecord {
     agentId: string | undefined;
     // Where the current summary came from, so a weaker source can't overwrite a stronger one (see `ending`).
     summarySource: SummarySource | undefined;
+    // The status a wait last handed back; a wait on "any" does not report the same move twice.
+    reported: SubagentStatus | undefined;
 }
 
 const records = new Map<string, SubagentRecord>();
@@ -226,6 +228,7 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         turn,
         agentId: undefined,
         summarySource: undefined,
+        reported: undefined,
         ...fields,
     };
     records.set(id, record);
@@ -686,7 +689,11 @@ export interface SubagentWaitOutcome {
     readonly matched?: SubagentSession;
 }
 
-const waitMatch = (record: SubagentRecord, until: readonly SubagentWaitUntil[]): SubagentWaitUntil | undefined => {
+const waitMatch = (record: SubagentRecord, until: readonly SubagentWaitUntil[], any: boolean): SubagentWaitUntil | undefined => {
+    // A named child answers with its state however often it is asked.
+    if (any && record.reported === record.status) {
+        return undefined;
+    }
     if (until.includes("blocked") && record.status === "blocked") {
         return "blocked";
     }
@@ -716,8 +723,10 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
         const evaluate = (): void => {
             const found = candidates();
             for (const record of found) {
-                const matched = waitMatch(record, options.until);
+                const matched = waitMatch(record, options.until, options.target === undefined);
                 if (matched !== undefined) {
+                    // Marked in the step that settles, before anything else can ask.
+                    record.reported = record.status;
                     settle({ outcome: matched, matched: wire(record) });
                     return;
                 }
@@ -741,6 +750,12 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
         waiters.add(evaluate);
         evaluate();
     });
+
+/** Whether a wait already handed this child's ending to its parent. */
+export const subagentEndingReported = (id: string): boolean => {
+    const reported = records.get(id)?.reported;
+    return reported !== undefined && !LIVE.has(reported);
+};
 
 /**
  * Settles every still-live child of this turn as it ends, so one the SDK never reported a terminal status for does not

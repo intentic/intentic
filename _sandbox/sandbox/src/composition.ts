@@ -245,8 +245,7 @@ import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js"
 import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { liveRequestRun } from "./agent/run/offer-request.js";
-import { onTurnSettled, turnRunOf } from "./agent/run/turn/turn-runs.js";
-import { turnActive } from "./agent/checkpoints/agent-steering.js";
+import { onTurnSettled } from "./agent/run/turn/turn-runs.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
 import { type Announcer, createAnnouncer } from "./platform/boot/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/listeners/reach-report.js";
@@ -261,6 +260,7 @@ import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
 import { type AgentTool, internalTools } from "./agent/tools/agent-tools.js";
 import { backgroundJobSessions } from "./agent/tools/background-jobs.js";
+import { conversationBusy } from "./agent/run/turn/turn-liveness.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
@@ -906,7 +906,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
     );
     // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
     const reaper = createResourceReaper({
-        ownerLive: (owner) => owner === DAEMON_OWNER || turnActive(owner) || turnRunOf(owner)?.done === false,
+        ownerLive: (owner) => owner === DAEMON_OWNER || conversationBusy(owner),
         ownerKnown: (owner) => agents.entry(owner) !== undefined,
         liveSessionNames: () =>
             new Set([
@@ -920,11 +920,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
                 ...backgroundJobSessions(),
             ]),
         panePids,
-        onOwnerStopped: onTurnSettled,
+        onOwnerStopped: (listener) => onTurnSettled((settled) => listener(settled.conversationId)),
         logger,
     });
     // A settled turn's outside-content taint drops with the turn; the registry must be told when that moment is.
-    onTurnSettled(clearTurnTaint);
+    onTurnSettled((settled) => clearTurnTaint(settled.conversationId));
     // Hoisted like the presences above: its attribution caches report into the resource series.
     const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.

@@ -1,6 +1,7 @@
 import { errorMessage } from "@intentic/base/errors";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
+import { cancelWatchersFor } from "../../agent/verification/watchers.js";
 import type { ResourceReaper } from "../../platform/boot/reaper.js";
 import type { AgentsRegistry } from "./agents-registry.js";
 import type { PersistedAgent } from "./agents-store.js";
@@ -16,7 +17,9 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 // - conflict: still asking for something in Attention
 // - ready: held work nobody has landed yet
 // - error/interrupted: a failure or a daemon death nobody has seen
-export const archivable = (agent: AgentSummary): boolean => agent.archivedAt === undefined && (agent.status === "landed" || agent.status === "idle");
+// - watching: an idle card parked on an armed watch is waiting for its wake, not finished
+export const archivable = (agent: AgentSummary): boolean =>
+    agent.archivedAt === undefined && (agent.status === "landed" || agent.status === "idle") && (agent.watches ?? []).length === 0;
 
 // Aged out per the retention setting; kept separate from `archivable` so the manual Clear button can act immediately
 // while the sweep waits, same guards, different clock.
@@ -101,7 +104,9 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
     if (archived.length > 0) {
         await deps.agents.setArchived(archived, now);
         // After the registry write on purpose, so a half-failed archive can't kill shells of agents still on the board.
+        // A watch goes too: its checks ran in the checkout just retired.
         for (const id of archived) {
+            await cancelWatchersFor(id);
             await deps.reaper?.reapConversation(id, { force: true });
         }
     }

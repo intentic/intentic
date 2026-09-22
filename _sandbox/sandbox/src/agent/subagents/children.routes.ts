@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { z } from "zod";
-import { listSubagentSessions, waitForSubagent, type SubagentWaitUntil } from "./subagents.js";
+import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
+import { waitForWork, workWaitAnswer } from "./work-wait.js";
 import { soleLiveConversation } from "../run/turn/turn-runs.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
@@ -96,8 +97,7 @@ export const createChildrenRoutes = (services: Services) => ({
         // Both shapes: the CLI and the MCP tool print the text, anything reading this as data gets the rows.
         return c.json({ providers, text: spawnCatalogText(providers) });
     },
-    /** POST /children/wait — park until a child of this conversation needs input or finishes. Long-poll: the
-     *  connection is held for up to the asked timeout, settled early by the request's own abort. */
+    /** POST /children/wait — long-poll on this conversation's children and background commands. */
     wait: async (c: Context<AppEnv>): Promise<Response> => {
         const conversationId = conversationOf(c);
         if (conversationId === undefined) {
@@ -108,19 +108,13 @@ export const createChildrenRoutes = (services: Services) => ({
             return c.json({ outcome: "unknown-target", note: "The wait's own arguments did not parse; fix them rather than retrying." }, 400);
         }
         const until: readonly SubagentWaitUntil[] = parsed.data.until ?? ["blocked", "finished"];
-        const result = await waitForSubagent(conversationId, {
+        const result = await waitForWork(conversationId, {
             ...(parsed.data.target !== undefined ? { target: parsed.data.target } : {}),
             until,
             timeoutMs: Math.round((parsed.data.timeoutSeconds ?? WAIT_DEFAULT_S) * 1000),
             signal: c.req.raw.signal,
         });
-        // A blocked child's whole question rides along, options included, so the caller can actually answer it.
-        const question = result.outcome === "blocked" && result.matched !== undefined ? pendingQuestionOf(result.matched.id) : undefined;
-        return c.json({
-            outcome: result.outcome,
-            ...(result.matched !== undefined ? { agent: result.matched } : {}),
-            ...(question !== undefined ? { question } : {}),
-        });
+        return c.json(workWaitAnswer(result, pendingQuestionOf));
     },
     /** POST /children/send — steer a working child, or run a follow-up turn on a settled one. */
     send: async (c: Context<AppEnv>): Promise<Response> => {

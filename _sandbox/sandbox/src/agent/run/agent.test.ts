@@ -4,12 +4,14 @@ import { homedir } from "node:os";
 import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract";
 import { test, expect, afterEach, jest } from "bun:test";
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
 import { resolveRequest } from "../tools/agent-requests.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
+import { backgroundJobOf, openBackgroundJob, settledBackgroundJobs } from "../tools/background-jobs.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
 
 // Fake QueryFn yielding canned SDK messages; runAgent reads only the fields exercised here.
@@ -1519,6 +1521,69 @@ test("after the last result a steered stream settles: the grace window closes th
     expect(events).toEqual([{ kind: "done" }]);
     expect(drained).toEqual(["add a /ping route", "absorbed mid-turn"]);
     expect(steering.push("too late")).toBe(false);
+});
+
+// A job's ending is seen only by a main-thread request (message_start) after its completion notice.
+const bashJobStream = (toolUseId: string, taskId: string, noticeRead: boolean): QueryFn => {
+    const notice = {
+        type: "system",
+        subtype: "task_notification",
+        session_id: "s",
+        task_id: taskId,
+        tool_use_id: toolUseId,
+        status: "completed",
+        summary: "done",
+    };
+    const modelRequest = {
+        type: "stream_event",
+        session_id: "s",
+        event: { type: "message_start", message: { model: "m", usage: { input_tokens: 10 } } },
+    };
+    return fakeQuery(
+        {
+            type: "system",
+            subtype: "task_started",
+            session_id: "s",
+            task_id: taskId,
+            tool_use_id: toolUseId,
+            task_type: "local_bash",
+            description: "build",
+        },
+        ...(noticeRead ? [notice, modelRequest] : [modelRequest, notice]),
+        { type: "result", subtype: "success", total_cost_usd: 0 },
+    );
+};
+
+const finishedJob = (
+    conversationId: string,
+    toolUseId: string,
+): { readonly id: string; readonly finish: () => void; readonly remove: () => void } => {
+    const job = openBackgroundJob({ conversationId, turn: {} }, { command: "pnpm build", session: "agent-x", toolUseId });
+    if (job === undefined) {
+        throw new Error("the job dir could not be minted");
+    }
+    return {
+        id: job.id,
+        finish: () => writeFileSync(join(job.dir, "status"), "0\n"),
+        remove: () => rmSync(job.dir, { recursive: true, force: true }),
+    };
+};
+
+test("a background command's completion notice read by a later request retires the job as seen", async () => {
+    const job = finishedJob("c-bash-read", "tu-bash-read");
+    await collect({ ...request, conversationId: "c-bash-read" }, bashJobStream("tu-bash-read", "bsh-read", true));
+    expect(backgroundJobOf("c-bash-read", "bsh-read")?.id).toBe(job.id);
+    job.finish();
+    expect(settledBackgroundJobs("c-bash-read")).toEqual({ running: [], unseen: [] });
+    job.remove();
+});
+
+test("a background command whose notice arrived after the model's last request is still unseen", async () => {
+    const job = finishedJob("c-bash-late", "tu-bash-late");
+    await collect({ ...request, conversationId: "c-bash-late" }, bashJobStream("tu-bash-late", "bsh-late", false));
+    job.finish();
+    expect(settledBackgroundJobs("c-bash-late").unseen.map((entry) => entry.id)).toEqual([job.id]);
+    job.remove();
 });
 
 // A backgrounded child (task_type local_agent) keeps the stream open past the parent's first result until its wake

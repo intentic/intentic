@@ -12,7 +12,7 @@ import {
 } from "../events/transcript.js";
 import { contextTrimLine } from "../schemas/context-trim.js";
 import { mentionedPathTokens } from "./mentions.js";
-import { watchWakeRow } from "../events/watch-wake.js";
+import { unspokenPromptRow } from "../events/agent-words.js";
 
 // Folds a turn's frames into rows once, live and for the settled record alike, so a reopened chat matches what was on
 // screen. `tag` selects the stream read: undefined is the main turn, a tool-call id is the subagent it spawned; other
@@ -184,6 +184,8 @@ export class TranscriptFold {
     readonly rows: TranscriptRow[] = [];
     // Row index of each user steer, in order; the daemon anchors rewind state to these once the turn settles.
     readonly steerRows: number[] = [];
+    // Whether anything was steered in, whoever spoke: a retract may not take back an opening something followed.
+    private steeredIn = false;
     // Index of the open assistant bubble; always the last row, since every other row kind closes it first.
     private bubble: number | undefined;
     private readonly cards = new Map<string, CardPlace>();
@@ -408,14 +410,12 @@ export class TranscriptFold {
         }
     }
 
-    /**
-     * A message pushed into a turn already running. A condition watch's wake arrives this way too, and it is the
-     * daemon's own words: it becomes a notice, and never an anchor the rewind can return a person to.
-     */
+    /** A message pushed into a running turn; only a person's own message is a rewind anchor. */
     private steered(event: Extract<AgentEvent, { kind: "steer" }>): TranscriptPatch[] {
-        const wake = watchWakeRow(event.text);
-        if (wake !== undefined) {
-            return this.pushRow(wake);
+        this.steeredIn = true;
+        const unspoken = unspokenPromptRow(event.text);
+        if (unspoken !== undefined) {
+            return this.pushRow(unspoken);
         }
         // A steer also closes the bubble, or the next answer would print over it mid-call.
         const patches = this.pushRow({
@@ -424,7 +424,10 @@ export class TranscriptFold {
             sentAt: event.sentAt,
             ...(event.attachments === undefined ? {} : { attachments: [...event.attachments] }),
         });
-        this.steerRows.push(this.rows.length - 1);
+        // Anchors pair by position with the checkpoints only a person's steer reserves.
+        if (event.voice === undefined) {
+            this.steerRows.push(this.rows.length - 1);
+        }
         return patches;
     }
 
@@ -448,7 +451,7 @@ export class TranscriptFold {
         if (code === undefined || !HELD_FOR_RESEND.has(code) || event.unattended === true) {
             return [];
         }
-        if (this.rows.some((row) => row.role === "assistant") || this.steerRows.length > 0) {
+        if (this.rows.some((row) => row.role === "assistant") || this.steeredIn) {
             return [];
         }
         this.unrun = true;

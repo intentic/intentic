@@ -5,6 +5,8 @@ import type { AgentsStore, PersistedAgent } from "./agents-store.js";
 import { archivable, archivableByAge, archiveAgents, purgeArchived, sweepAgedAgents } from "./archive.js";
 import { createLogger } from "../../logger.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
+import { memoryWatchJournal } from "../../agent/verification/watch-journal.js";
+import { armWatcher, listWatchers, startWatcherRuntime } from "../../agent/verification/watchers.js";
 
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const DAY = 24 * 60 * 60 * 1000;
@@ -65,6 +67,8 @@ describe("archivable", () => {
         // Daemon died mid-turn; not `running`, so sweeping it away unread is what this status prevents.
         expect(archivable(card({ status: "interrupted" }))).toBe(false);
         expect(archivable(card({ archivedAt: 1 }))).toBe(false);
+        // Parked on an armed watch: waiting for its wake, not finished.
+        expect(archivable(card({ status: "idle", watches: [{ id: "watch-k3f9", note: "CI", intervalSeconds: 60, deadlineAt: 1 }] }))).toBe(false);
     });
 
     it("ages out on updatedAt, and never when retention is off", () => {
@@ -91,6 +95,31 @@ describe("archiveAgents", () => {
         expect(failed).toEqual([]);
         expect(retire).toHaveBeenCalledWith("c1", agents.entry("c1")?.repos, "Fix the login bug");
         expect(agents.get("c1")?.archivedAt).toBe(9_000);
+    });
+
+    it("disarms the conversation's watches along with its checkout", async () => {
+        const stop = startWatcherRuntime({
+            logger,
+            runCheck: async () => ({ exitCode: 1, output: "" }),
+            steer: () => false,
+            start: async () => true,
+            sessionIdOf: () => undefined,
+            journal: memoryWatchJournal(),
+            envOf: async () => ({}),
+            conversationLive: () => true,
+        });
+        try {
+            const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+            await agents.init();
+            await agents.begin(turn(), 1_000);
+            await agents.finish("c1", 2_000);
+            await armWatcher({ conversationId: "c1", command: "false", note: "CI", cwd: "/", env: {}, turn: {} });
+            expect(listWatchers("c1")).toHaveLength(1);
+            await archiveAgents({ agents, agentWorktrees: stubWorktrees().worktrees, logger }, ["c1"], 9_000);
+            expect(listWatchers("c1")).toEqual([]);
+        } finally {
+            stop();
+        }
     });
 
     it("archives a workspace conversation without calling worktree teardown", async () => {

@@ -177,7 +177,10 @@ export const bashTmuxHooks = (
                         // Filed before the command is rewritten, so the flag and the registry entry cannot disagree
                         // about which dir holds this job's completion. A dir that cannot be made leaves the call
                         // ordinary rather than failing it.
-                        const job = jobs === undefined || tool.run_in_background !== true ? undefined : openBackgroundJob(jobs, { command, session });
+                        const job =
+                            jobs === undefined || tool.run_in_background !== true
+                                ? undefined
+                                : openBackgroundJob(jobs, { command, session, toolUseId: input.tool_use_id });
                         if (job !== undefined) {
                             // Said in the chat at the moment it starts, because the whole failure this replaces was
                             // invisible: a job nobody could see running, in no terminal anyone could find, that a

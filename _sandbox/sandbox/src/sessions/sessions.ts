@@ -8,7 +8,7 @@ import {
     type TranscriptQuestion,
     type TranscriptRow,
     type TranscriptTool,
-    watchWakeRow,
+    unspokenPromptRow,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
@@ -164,14 +164,12 @@ export const readWorkspaceSessionTail = async (dir: string, id: string): Promise
     return restoredSessionMessages(messages.slice(lastTurnStart(messages)), dir);
 };
 
-// One stored user message, as rows. A prompt nobody typed becomes a row of its own — a watch's wake, a re-run's
-// interruption — because drawing either as a bubble credits the user with words the daemon wrote. `dir` is the
-// workspace root that attachment chips resolve against.
+// A prompt nobody typed is its own row, never the user's bubble; `dir` is the root attachment chips resolve against.
 const storedPromptRows = (text: string, dir: string): TranscriptRow[] => {
-    // Read exactly as the daemon's own record reads it (turn-transcript.ts), or one wake has two appearances.
-    const wake = watchWakeRow(text);
-    if (wake !== undefined) {
-        return [wake];
+    // Read as the daemon's own record reads it (turn-transcript.ts).
+    const unspoken = unspokenPromptRow(text);
+    if (unspoken !== undefined) {
+        return [unspoken];
     }
     const unwrapped = unwrapStoredPrompt(text);
     // A re-run's resumed prompt becomes a muted line, not a duplicate; its note rides separately on the card.

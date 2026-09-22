@@ -80,4 +80,4 @@ export const composeSteerText = async (services: Services, input: SteerInput): P
 };
 
 // Delivers into the conversation's live turn; false means no steerable turn, read as "queue for the next turn".
-export const applySteer = (conversationId: string, text: string): boolean => steerTurn(conversationId, text);
+export const applySteer = (conversationId: string, text: string): boolean => steerTurn(conversationId, { text, voice: "person" });

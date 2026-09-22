@@ -1,5 +1,13 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { type AgentEvent, RESUME_NOTES, type TranscriptRow, watchWakePrompt, withResumeNote } from "@intentic/sandbox-contract";
+import {
+    type AgentEvent,
+    childReportPrompt,
+    peerMessagePrompt,
+    RESUME_NOTES,
+    type TranscriptRow,
+    watchWakePrompt,
+    withResumeNote,
+} from "@intentic/sandbox-contract";
 import { foldTurn, TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { describe, it, expect } from "bun:test";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
@@ -164,6 +172,19 @@ describe("a prompt nobody typed", () => {
         for (const rows of byEachReader(WAKE)) {
             expect(rows.map((row) => row.role)).toEqual(["notice"]);
         }
+    });
+
+    const PEER = peerMessagePrompt({ from: "sharp-shale-htw8", title: "Bun migration", message: "the sweep is done" });
+    const REPORT = childReportPrompt({ child: "sub-x7", title: "Port the parser", failed: true, report: "tests fail", verification: undefined });
+
+    it.each([
+        ["a peer's message", PEER, "peer"],
+        ["a child's report", REPORT, "child"],
+    ] as const)("reads %s as the sender's, the same on every path", (_label, prompt, kind) => {
+        const [recorded, steered, restored] = byEachReader(prompt);
+        expect(recorded).toEqual([{ role: "notice", text: expect.any(String), agentWords: expect.objectContaining({ kind, sent: prompt }) }]);
+        expect(steered).toEqual(recorded);
+        expect(restored).toEqual(recorded);
     });
 
     // The other half: a prompt the user DID type must still reach them as their own words on every path, or this

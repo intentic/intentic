@@ -20,6 +20,7 @@ import {
     subagentHooks,
     subagentInParentTree,
     subagentSource,
+    subagentEndingReported,
     waitForSubagent,
     type SubagentTaskMessage,
     type SubagentTurn,
@@ -407,6 +408,29 @@ describe("waitForSubagent", () => {
         const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
         settleSpawnedChild("bash-1", { failed: false, report: "done" });
         expect(await wait).toMatchObject({ outcome: "finished" });
+    });
+
+    it("with no target, moves on to the next child rather than answering again with one already reported", async () => {
+        spawn("fan-1");
+        spawn("fan-2");
+        settleSpawnedChild("fan-1", { failed: false, report: "first" });
+        expect(await waitForSubagent("conv-1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
+            outcome: "finished",
+            matched: { id: "fan-1" },
+        });
+        const next = waitForSubagent("conv-1", { until: ["finished"], timeoutMs: 5_000 });
+        settleSpawnedChild("fan-2", { failed: false, report: "second" });
+        expect(await next).toMatchObject({ outcome: "finished", matched: { id: "fan-2" } });
+        expect(await waitForSubagent("conv-1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "unknown-target" });
+        expect(await waitForSubagent("conv-1", { target: "fan-1", until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "finished" });
+    });
+
+    it("knows a child's ending reached its parent only once a wait handed it over", async () => {
+        spawn("told");
+        settleSpawnedChild("told", { failed: false, report: "done" });
+        expect(subagentEndingReported("told")).toBe(false);
+        await waitForSubagent("conv-1", { target: "told", until: ["finished"], timeoutMs: 5_000 });
+        expect(subagentEndingReported("told")).toBe(true);
     });
 });
 

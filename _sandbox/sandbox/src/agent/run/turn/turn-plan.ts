@@ -18,7 +18,7 @@ import {
     envSuffix,
 } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type IsolationAnchor, fromWorktree, inWorktree, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
+import { type IsolationAnchor, fromWorktree, inWorktree, nsenterPrefix, type TurnPlacement } from "../../../agents/worktrees/isolation.js";
 import { dirtyPathsAcross } from "../../../git/changes/changes.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 import { accountsServer } from "../../../browser/tools/accounts-tools.js";
@@ -78,7 +78,7 @@ import { contextShortfall, declaredWindow } from "../../prompt/window/context-bu
 import { applyTrim, promptTrim, trimState, type TurnTrim, type TurnTrimState, turnTrim } from "../../prompt/window/context-trim.js";
 import { subagentWaitServer } from "../../subagents/subagent-wait.js";
 import { watchServer } from "../../verification/watch-server.js";
-import type { WatcherTurnSeed } from "../../verification/watchers.js";
+import type { WatcherTurnSeed, WatchPlacement } from "../../verification/watchers.js";
 import { seedFields } from "./turn-seed.js";
 import { resolveHarnessCredentials } from "../../providers/harness-credentials.js";
 import { type FieldNotes, fieldNotes } from "../../prompt/field-notes.js";
@@ -212,6 +212,9 @@ export interface TurnContext {
 /* A closure over `services`, the policy text and the owner's model pin rather than any of them directly, because the seam it fills lives in guard/. */
 /* THE TURN IDENTITY A WATCH'S WAKE HAS TO REPRODUCE: where the arming turn ran, on whose account, at what tier, with what reasoning, as which persona. */
 const watchSeed = (input: AgentTurn): WatcherTurnSeed => seedFields(input);
+
+const watchPlacementOf = (isolation: TurnPlacement | undefined): { readonly placement?: WatchPlacement } =>
+    isolation === undefined ? {} : { placement: { worktree: isolation.plan.worktree, fenced: isolation.plan.fence !== undefined } };
 
 const judgeFor =
     (services: Services, policy: string, pins: readonly ModelPin[] | undefined): CommandGuardOptions["judge"] =>
@@ -950,6 +953,8 @@ export const planHarnessTurn = async (
                       // The base's persona-filtered env, for the same reason shellEnv below reads it: a check must not
                       // run with a credential the card withheld.
                       env: context.base.cliEnv ?? {},
+                      // A check's /work must be this conversation's tree, fence and all.
+                      ...watchPlacementOf(context.base.isolation),
                       turn: watchSeed(input),
                   }),
               }

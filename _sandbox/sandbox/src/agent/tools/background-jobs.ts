@@ -1,73 +1,96 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AgentHarnessSchema, AgentProviderSchema, ModelRoleSchema } from "@intentic/sandbox-contract";
+import { z } from "zod";
 import type { TurnSeed } from "../run/turn/turn-seed.js";
 
-// Every Bash call made with `run_in_background: true`, filed under its conversation so the turn's ending can hand the
-// job to a daemon watch (background-adoption.ts) instead of leaving it to be killed.
-//
-// WHY THIS EXISTS. Intentic runs each turn as its own short-lived CLI process, and that process SIGTERMs its background
-// shells as it exits — while the SDK's own Bash description, and this harness's waiting guidance, both promise a
-// background command "keeps running across turns" and re-invokes the agent when it exits. In interactive Claude Code
-// that is true, because one CLI spans every turn. Here it was false by fifteen seconds: bin/tmux-run turned the
-// teardown SIGTERM into `tmux kill-window` and the job died with its pane, silently, leaving no record, no output and
-// no notice. Agents then armed watches on files the dead job was supposed to write and waited hours for a wake that
-// could never come. The pane now outlives the wrapper (bin/tmux-run -b); this registry is what remembers that it did.
-//
-// Two readers besides the adoption: the turn that opened the job (through the Bash hook) and the resource reaper, which
-// would otherwise kill the job's terminal ten minutes after the conversation stopped.
+// Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, filed under its conversation.
 
-// Published by atomic rename by bin/tmux-run once the command has exited; its existence IS completion.
+// Published by atomic rename by bin/tmux-run once the command has exited; its existence is completion.
 const STATUS_FILE = "status";
-// The pane's combined output, tee'd as it runs, so a wake can carry a tail even for a job still going.
+// The pane's combined output, tee'd as it runs.
 const OUTPUT_FILE = "out";
-// What the job IS, beside its output: written at open so a daemon that dies under a running job can find it again.
-// This container recreates itself on every update and environment approval, and a registry held only in memory would
-// hand the reaper a terminal it must not touch (the watch itself survives: it has a journal of its own).
+// The job itself, rewritten whole as it is named and adopted, so a restarted daemon can take it back.
 const JOB_FILE = "job.json";
 
-// Longest a stopped conversation's job may hold a terminal and an armed watch. Past this the job is the leak this was
-// meant not to be, and the record retires whether or not the command ever exited.
+// Longest a job may hold a terminal and an armed watch, in ms, whether or not it ever exits.
 export const JOB_MAX_MS = 6 * 3_600_000;
 
-// Shares the reaper's `intentic-run-` tmp sweep, so a dir no wake ever read is reclaimed on the same 24h clock.
+// Under the reaper's `intentic-run-` tmp sweep.
 const JOB_DIR_PREFIX = "intentic-run-job-";
 
-// Longest a command may be where it is quoted back to a person (a notice row, a wake's headline); past this the line
-// stops being one. A heredoc-shaped job is folded to a single line first.
+// Longest a command may be where it is quoted back to a person, after folding to one line.
 const COMMAND_LINE_CHARS = 120;
 
-/** The job's command as one readable line, for every place that names it to a reader. */
+// Bytes of output tail a reader is handed.
+export const OUTPUT_TAIL_BYTES = 4_000;
+
+/** The job's command as one readable line. */
 export const jobCommandLine = (command: string): string => {
     const line = command.replaceAll(/\s+/gu, " ").trim();
     return line.length <= COMMAND_LINE_CHARS ? line : `${line.slice(0, COMMAND_LINE_CHARS - 1)}…`;
 };
 
-// What a wake needs to continue the turn that started the job: the conversation to wake and the routing to wake it on.
+// The conversation a job's completion wakes, and the routing it wakes it on.
 export interface BackgroundJobSeed {
     readonly conversationId: string;
-    // Snapshotted at open, since the turn is long gone by the time the job ends (same reason WatcherTurnSeed exists).
+    // Snapshotted at open: the turn is gone by the time the job ends.
     readonly turn: TurnSeed;
 }
+
+// A job file is read back by a later daemon, so it is validated, never trusted.
+const TurnSeedSchema = z.object({
+    agent: AgentProviderSchema.optional(),
+    harness: AgentHarnessSchema.optional(),
+    account: z.string().optional(),
+    model: z.string().optional(),
+    effort: z.string().optional(),
+    thinking: z.boolean().optional(),
+    fast: z.boolean().optional(),
+    actsAs: z.string().optional(),
+    isolated: z.boolean().optional(),
+    unattended: z.boolean().optional(),
+    runRole: ModelRoleSchema.optional(),
+});
+
+const JobFileSchema = z.object({
+    id: z.string(),
+    conversationId: z.string(),
+    command: z.string(),
+    session: z.string(),
+    startedAt: z.number(),
+    turn: TurnSeedSchema,
+    // The SDK's background task id, the one the model knows the job by.
+    shellId: z.string().optional(),
+    // Whether its completion was handed to a watch; a restored unadopted job is adopted at boot.
+    adopted: z.boolean().optional(),
+});
 
 export interface BackgroundJob {
     readonly id: string;
     readonly conversationId: string;
-    // The agent's own command line, for the note a wake carries; never the daemon's wrapped one.
+    // The agent's own command line, never the daemon's wrapped one.
     readonly command: string;
-    // Capture dir, minted here so the daemon can read a completion the turn will not be alive to see.
+    // Capture dir holding the status, the output and the job file.
     readonly dir: string;
-    // tmux session holding the pane, the fact the reaper needs and can learn nowhere else.
+    // tmux session holding the pane, which the reaper must spare.
     readonly session: string;
     readonly startedAt: number;
     readonly turn: TurnSeed;
 }
 
-// `adopted` guards against a second settle (a steer, a wake, a retry) arming a second watch for one job.
+// The CLI queues a completion notice when the command exits; only a later model request reads it.
+type Notice = "none" | "queued" | "read";
+
 interface JobRecord {
     readonly job: BackgroundJob;
     adopted: boolean;
+    shellId: string | undefined;
+    toolUseId: string | undefined;
+    notice: Notice;
 }
 
 const jobs = new Map<string, JobRecord>();
@@ -75,98 +98,138 @@ const jobs = new Map<string, JobRecord>();
 export const jobStatusPath = (job: BackgroundJob): string => join(job.dir, STATUS_FILE);
 export const jobOutputPath = (job: BackgroundJob): string => join(job.dir, OUTPUT_FILE);
 
-/** Whether the command has exited: the status file is written last and by rename, so this is never half-true. */
+/** Whether the command has exited; never half-true, since the status file is renamed into place last. */
 export const jobFinished = (job: BackgroundJob): boolean => existsSync(jobStatusPath(job));
 
-/**
- * Mints one background job's capture dir and files it under the conversation. Undefined when the dir cannot be made —
- * the caller then runs the command as an ordinary one, which is the pre-existing behaviour, not a new failure.
- */
-export const openBackgroundJob = (seed: BackgroundJobSeed, spec: { readonly command: string; readonly session: string }): BackgroundJob | undefined => {
+// Sibling temp plus rename, so a reader after a crash finds one whole version or the other.
+const persist = (record: JobRecord): void => {
+    const { dir: _dir, ...job } = record.job;
+    const file = join(record.job.dir, JOB_FILE);
+    try {
+        writeFileSync(
+            `${file}.tmp`,
+            JSON.stringify({ ...job, ...(record.shellId === undefined ? {} : { shellId: record.shellId }), ...(record.adopted ? { adopted: true } : {}) }),
+            { mode: 0o600 },
+        );
+        renameSync(`${file}.tmp`, file);
+    } catch {
+        // Only a restart under the job would miss what this write carried.
+    }
+};
+
+/** Undefined when the dir cannot be made, leaving the command an ordinary one; `toolUseId` pairs it with its shell id later. */
+export const openBackgroundJob = (
+    seed: BackgroundJobSeed,
+    spec: { readonly command: string; readonly session: string; readonly toolUseId?: string },
+): BackgroundJob | undefined => {
     const id = randomUUID();
     const dir = join(tmpdir(), `${JOB_DIR_PREFIX}${id}`);
     try {
-        // Made by the daemon, not the pane: the adoption's watch runs its check in this dir, and a cwd that does not
-        // exist yet reads as a failed check rather than as "still waiting".
+        // Made before the pane, since a watch on a dir that does not exist yet reads as broken.
         mkdirSync(dir, { recursive: true, mode: 0o700 });
     } catch {
         return undefined;
     }
     const job: BackgroundJob = { id, conversationId: seed.conversationId, command: spec.command, dir, session: spec.session, startedAt: Date.now(), turn: seed.turn };
-    try {
-        writeFileSync(join(dir, JOB_FILE), JSON.stringify(job), { mode: 0o600 });
-    } catch {
-        // The job still runs and the turn still gets its result; only a restart under it would forget the terminal.
-    }
-    jobs.set(id, { job, adopted: false });
+    const record: JobRecord = { job, adopted: false, shellId: undefined, toolUseId: spec.toolUseId, notice: "none" };
+    jobs.set(id, record);
+    persist(record);
     return job;
 };
 
-// One `job.json` as a job, or undefined for anything that is not one: a half-written file, a dir from an older build,
-// a shape that has since changed. Nothing here throws — a bad entry is skipped, never a boot that fails.
-const jobFileOf = (dir: string): BackgroundJob | undefined => {
+// Undefined for anything that is not a job file; never throws, so a bad entry cannot fail a boot.
+const recordOf = (dir: string): JobRecord | undefined => {
     try {
-        const parsed: unknown = JSON.parse(readFileSync(join(dir, JOB_FILE), "utf8"));
-        if (typeof parsed !== "object" || parsed === null) {
+        const parsed = JobFileSchema.safeParse(JSON.parse(readFileSync(join(dir, JOB_FILE), "utf8")));
+        if (!parsed.success) {
             return undefined;
         }
-        const entry = parsed as Partial<BackgroundJob>;
-        const { id, conversationId, command, session, startedAt } = entry;
-        if (typeof id !== "string" || typeof conversationId !== "string" || typeof command !== "string" || typeof session !== "string" || typeof startedAt !== "number") {
-            return undefined;
-        }
-        return { id, conversationId, command, dir, session, startedAt, turn: entry.turn ?? {} };
+        const { shellId, adopted, turn, ...rest } = parsed.data;
+        const seed = Object.fromEntries(Object.entries(turn).filter(([, value]) => value !== undefined)) as TurnSeed;
+        return { job: { ...rest, dir, turn: seed }, adopted: adopted === true, shellId, toolUseId: undefined, notice: "none" };
     } catch {
         return undefined;
     }
 };
 
-/**
- * Re-files the jobs a dead daemon left running, once at boot. They come back ALREADY adopted: a watch armed before the
- * restart is restored from its own journal, and arming a second one here would wake the conversation twice for one
- * job. What this restores is the fact the reaper needs — that these terminals hold work — which nothing else records.
- * Answers how many it took back.
- */
-export const restoreBackgroundJobs = (now: number = Date.now()): number => {
-    let restored = 0;
+/** Once at boot: re-files the still-running jobs a dead daemon left, each as adopted as its own file says. */
+export const restoreBackgroundJobs = (now: number = Date.now()): readonly BackgroundJob[] => {
+    const restored: BackgroundJob[] = [];
     for (const entry of readdirSync(tmpdir(), { withFileTypes: true }).filter((candidate) => candidate.isDirectory() && candidate.name.startsWith(JOB_DIR_PREFIX))) {
-        const job = jobFileOf(join(tmpdir(), entry.name));
-        if (job === undefined || jobs.has(job.id) || jobFinished(job) || now - job.startedAt > JOB_MAX_MS) {
+        const record = recordOf(join(tmpdir(), entry.name));
+        if (record === undefined || jobs.has(record.job.id) || jobFinished(record.job) || now - record.job.startedAt > JOB_MAX_MS) {
             continue;
         }
-        jobs.set(job.id, { job, adopted: true });
-        restored += 1;
+        jobs.set(record.job.id, record);
+        restored.push(record.job);
     }
     return restored;
 };
 
-/**
- * The conversation's jobs that were still running when its turn ended, marked adopted as they are handed out. Jobs that
- * finished inside the turn retire here: the turn already had their result from the Bash call itself.
- */
-export const adoptableBackgroundJobs = (conversationId: string): BackgroundJob[] => {
-    const ready: BackgroundJob[] = [];
+// The stream's facts about a job, in arrival order: named, its completion notice queued, that notice read.
+
+/** From the CLI's `task_started` for the Bash call that opened the job. */
+export const noteJobShell = (toolUseId: string, shellId: string): void => {
+    for (const record of jobs.values()) {
+        if (record.toolUseId === toolUseId) {
+            record.shellId = shellId;
+            persist(record);
+            return;
+        }
+    }
+};
+
+/** From the CLI's `task_notification`. */
+export const noteJobNotice = (shellId: string): void => {
+    for (const record of jobs.values()) {
+        if (record.shellId === shellId && record.notice === "none") {
+            record.notice = "queued";
+        }
+    }
+};
+
+/** A main-thread model request reads every completion notice queued before it. */
+export const noteModelRequest = (conversationId: string): void => {
+    for (const record of jobs.values()) {
+        if (record.job.conversationId === conversationId && record.notice === "queued") {
+            record.notice = "read";
+        }
+    }
+};
+
+export interface SettledJobs {
+    // Still running when the turn ended.
+    readonly running: readonly BackgroundJob[];
+    // Finished with a completion notice the model never read.
+    readonly unseen: readonly BackgroundJob[];
+}
+
+/** A settled turn's jobs, each handed out once; a job whose completion the model read retires here. */
+export const settledBackgroundJobs = (conversationId: string): SettledJobs => {
+    const running: BackgroundJob[] = [];
+    const unseen: BackgroundJob[] = [];
     for (const [id, record] of jobs) {
         if (record.job.conversationId !== conversationId) {
             continue;
         }
         if (jobFinished(record.job)) {
             jobs.delete(id);
+            if (record.notice !== "read" && !record.adopted) {
+                unseen.push(record.job);
+            }
             continue;
         }
         if (record.adopted) {
             continue;
         }
         record.adopted = true;
-        ready.push(record.job);
+        persist(record);
+        running.push(record.job);
     }
-    return ready;
+    return { running, unseen };
 };
 
-/**
- * tmux sessions holding a job that is still running, for the reaper's terminal sweep. Prunes as it reads: a record is
- * only interesting while its command has not exited and its ceiling has not passed.
- */
+/** tmux sessions holding a still-running job, for the reaper to spare; prunes finished and expired records. */
 export const backgroundJobSessions = (now: number = Date.now()): ReadonlySet<string> => {
     const live = new Set<string>();
     for (const [id, record] of jobs) {
@@ -177,4 +240,58 @@ export const backgroundJobSessions = (now: number = Date.now()): ReadonlySet<str
         live.add(record.job.session);
     }
     return live;
+};
+
+/** The conversation's jobs still running, for `wait` on "any". */
+export const runningJobsOf = (conversationId: string): readonly BackgroundJob[] =>
+    [...jobs.values()].filter((record) => record.job.conversationId === conversationId && !jobFinished(record.job)).map((record) => record.job);
+
+/** One of the conversation's jobs, by its shell id or its own id. */
+export const backgroundJobOf = (conversationId: string, id: string): BackgroundJob | undefined =>
+    [...jobs.values()].find((record) => record.job.conversationId === conversationId && (record.shellId === id || record.job.id === id))?.job;
+
+/** The id the model was given for the job, else the daemon's own. */
+export const jobHandle = (job: BackgroundJob): string => jobs.get(job.id)?.shellId ?? job.id;
+
+// Empty when the file cannot be read.
+const tailOf = async (path: string, bytes: number): Promise<string> => {
+    try {
+        const handle = await open(path, "r");
+        try {
+            const { size } = await handle.stat();
+            const length = Math.min(size, bytes);
+            const buffer = Buffer.alloc(length);
+            await handle.read(buffer, 0, length, size - length);
+            return buffer.toString("utf8");
+        } finally {
+            await handle.close();
+        }
+    } catch {
+        return "";
+    }
+};
+
+export interface JobReport {
+    readonly id: string;
+    readonly command: string;
+    // Undefined while it runs, or when the status is not a number.
+    readonly exitCode: number | undefined;
+    readonly running: boolean;
+    readonly outputTail: string;
+    readonly outputFile: string;
+}
+
+
+export const jobReport = async (job: BackgroundJob): Promise<JobReport> => {
+    const finished = jobFinished(job);
+    const status = finished ? (await tailOf(jobStatusPath(job), 64)).trim() : "";
+    const code = status === "" ? Number.NaN : Number(status);
+    return {
+        id: jobHandle(job),
+        command: jobCommandLine(job.command),
+        exitCode: Number.isInteger(code) ? code : undefined,
+        running: !finished,
+        outputTail: await tailOf(jobOutputPath(job), OUTPUT_TAIL_BYTES),
+        outputFile: jobOutputPath(job),
+    };
 };

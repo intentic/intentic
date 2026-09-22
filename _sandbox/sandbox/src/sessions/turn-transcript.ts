@@ -1,4 +1,11 @@
-import { type AgentTurn, capabilitiesOf, resumeDisclosure, type TranscriptRow, watchWakeRow, withoutResumeNote } from "@intentic/sandbox-contract";
+import {
+    type AgentTurn,
+    capabilitiesOf,
+    resumeDisclosure,
+    type TranscriptRow,
+    unspokenPromptRow,
+    withoutResumeNote,
+} from "@intentic/sandbox-contract";
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
@@ -10,12 +17,11 @@ import type { TranscriptAgent } from "./agent-transcript.js";
 export const rootRelative = (paths: readonly string[], root: string): string[] =>
     paths.map((path) => (path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path));
 
-// The row a prompt nobody typed becomes: a watch wake, or a re-run's interruption. Both replace the message rather than
-// riding it, since showing either as a user bubble credits the user with words the daemon wrote.
+// A prompt nobody typed replaces the user's bubble rather than riding it.
 const unspokenRow = (prompt: string): TranscriptRow | undefined => {
-    const wake = watchWakeRow(prompt);
-    if (wake !== undefined) {
-        return wake;
+    const unspoken = unspokenPromptRow(prompt);
+    if (unspoken !== undefined) {
+        return unspoken;
     }
     const resume = resumeDisclosure(prompt);
     return resume?.kind === "notice" ? { role: "notice", text: resume.text } : undefined;

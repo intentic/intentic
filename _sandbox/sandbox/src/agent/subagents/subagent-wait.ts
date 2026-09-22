@@ -3,11 +3,10 @@ import { sdk } from "../../runtimes/claude/claude-sdk.js";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { ChildSupervisor } from "./children.js";
-import { waitForSubagent, type SubagentWaitUntil } from "./subagents.js";
+import type { SubagentWaitUntil } from "./subagents.js";
+import { waitForWork, workWaitAnswer } from "./work-wait.js";
 
-// Waits on this turn's own children only, keyed by the spawning tool call's id or spawn's returned id. An SDK MCP tool
-// rather than a CLI: a blocking shell command hits the soft-timeout and becomes the very polling this replaces; a tool
-// call parks server-side and settles with the turn's abort.
+// A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 
 // Long enough for a real run, short enough to return if forgotten; a longer wait means calling again.
 const DEFAULT_TIMEOUT_S = 600;
@@ -23,6 +22,9 @@ export interface SubagentWaitDeps {
 }
 
 const UNTIL = z.enum(["blocked", "finished"]);
+
+const NOTHING_TO_WAIT_FOR =
+    "Nothing to wait for: no child or background command of this conversation is still running under that id, or its ending was already reported.";
 
 // The tool's whole answer as one JSON text block, so the model can branch on `outcome` without parsing prose.
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({
@@ -59,7 +61,8 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               "Composer models) to work on a task of its own. It runs as a separate conversation in its own isolated " +
                               "worktree, visible on the board, and keeps working after your turn ends; its finished work lands the way " +
                               "any agent's does. Returns the child's id immediately: supervise it with the wait tool (target: that id), " +
-                              "which returns when it is blocked on input or finished, with its report. Give it a self-contained prompt " +
+                              "which returns when it is blocked on input or finished, with its report. If your turn ends first, its " +
+                              "report wakes this conversation when it finishes. Give it a self-contained prompt " +
                               "with every path, requirement, and constraint — it sees none of this conversation. You must name the " +
                               "provider AND the model: this spends a real allowance and nothing is chosen for you. Call the providers " +
                               "tool for what is connected and what still has room. A provider nobody has connected fails with the " +
@@ -146,17 +149,19 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                   ]),
             sdk().tool(
                 "wait",
-                "Wait until an agent you started needs you. Blocks until the target is blocked on input (a question or " +
-                    "permission), or finishes, whichever comes first: then returns its status, its last report, and " +
+                "Wait until work you started here needs you: an agent you started, or a command you ran with " +
+                    "run_in_background. Blocks until the target is blocked on input (a question or permission), or " +
+                    "finishes, whichever comes first. For an agent it returns its status, its last report, and " +
                     "`verification` — whether anything actually checked the work that report describes (`verified` / " +
                     "`unproven` / `failing` / `no-code`, with the check that spoke). Read it before you build on what it " +
-                    "says: an agent's own account of its work is a claim, not a result. Target an " +
-                    "Agent-tool child by its spawning tool call id, a spawned agent by the id the " +
-                    'spawn tool returned, or "any" for whichever of this ' +
-                    "conversation's children moves first. Use this instead of sleeping or polling in a " +
-                    "loop. On timeout it returns the current state: call it again to keep waiting.",
+                    "says: an agent's own account of its work is a claim, not a result. For a command it returns the " +
+                    "exit code, the tail of its output and the file holding all of it. Target an Agent-tool child by its " +
+                    "spawning tool call id, a spawned agent by the id the spawn tool returned, a background command by " +
+                    'the ID its Bash call returned, or "any" for whichever of these moves first (each is reported once). ' +
+                    "Use this instead of sleeping or polling in a loop. On timeout it returns the current state: call it " +
+                    "again to keep waiting.",
                 {
-                    target: z.string().min(1).describe('The child\'s tool call id, or "any"'),
+                    target: z.string().min(1).describe('The child\'s tool call id, a background command\'s ID, or "any"'),
                     until: z.array(UNTIL).min(1).optional().describe('Which states end the wait; default ["blocked","finished"]'),
                     timeoutSeconds: z.number().min(5).max(MAX_TIMEOUT_S).optional().describe(`Default ${DEFAULT_TIMEOUT_S}`),
                 },
@@ -166,24 +171,15 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     if (deps.conversationId === undefined) {
                         return answer({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
                     }
-                    const result = await waitForSubagent(deps.conversationId, {
+                    const result = await waitForWork(deps.conversationId, {
                         ...(args.target !== "any" ? { target: args.target } : {}),
                         until,
                         timeoutMs,
                         signal: deps.signal,
                     });
-                    // A blocked child's whole question rides along, so the parent can answer rather than only report.
-                    const question =
-                        result.outcome === "blocked" && result.matched !== undefined ? deps.children?.pendingQuestion(result.matched.id) : undefined;
                     return answer({
-                        outcome: result.outcome,
-                        ...(result.matched !== undefined ? { agent: result.matched } : {}),
-                        ...(question !== undefined ? { question } : {}),
-                        ...(result.outcome === "unknown-target"
-                            ? {
-                                  note: "Nothing to wait for: no child of this conversation is still running, it never started, it has already finished, or it left the roster.",
-                              }
-                            : {}),
+                        ...workWaitAnswer(result, (childId) => deps.children?.pendingQuestion(childId)),
+                        ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
                     });
                 },
             ),

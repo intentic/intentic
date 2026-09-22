@@ -3,7 +3,15 @@ import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, reactive, ref, shallowRef } from "vue";
-import { type AgentWatch, verifyNudgePrompt, watchWakePrompt, watchWakeRow } from "@intentic/sandbox-contract";
+import {
+    type AgentWatch,
+    agentWordsRow,
+    childReportPrompt,
+    peerMessagePrompt,
+    verifyNudgePrompt,
+    watchWakePrompt,
+    watchWakeRow,
+} from "@intentic/sandbox-contract";
 import { errandOf, errands, errandPrompt } from "../run/errands";
 import { changedNothing, type ChatMessage } from "./transcript";
 import { IconStub } from "@intentic/ui/testing";
@@ -908,6 +916,38 @@ describe(`ChatMessageView pinned band`, () => {
         await nextTick();
 
         expect(row.className).not.toContain(`chat-prompt-pinned`);
+    });
+});
+
+describe(`another agent's words`, () => {
+    const PEER = peerMessagePrompt({ from: `sharp-shale-htw8`, title: `Bun migration`, message: `the sweep is done` });
+    const REPORT = childReportPrompt({ child: `sub-x7`, title: `Port the parser`, failed: true, report: `tests fail`, verification: undefined });
+    // Built by the daemon's own reader, rather than transcribed.
+    const rowOf = (prompt: string): ChatMessage => ({ id: 12, ...agentWordsRow(prompt)! });
+
+    it(`draws a peer's message as a notice naming the sender, never as a prompt the user could edit`, () => {
+        const element = mount(rowOf(PEER));
+        expect(element.querySelector(`.chat-prompt`)).toBeNull();
+        expect(element.querySelector(`button[aria-label="Edit this message"]`)).toBeNull();
+        expect(element.textContent).toContain(`Message from another conversation: "Bun migration" (sharp-shale-htw8).`);
+        expect([...element.querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`))).toContain(`comments`);
+    });
+
+    it(`keeps what was sent one press away, verbatim`, async () => {
+        const element = mount(rowOf(PEER));
+        expect(element.querySelector(`pre`)).toBeNull();
+        const toggle = element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!;
+        expect(toggle.textContent?.trim()).toBe(`Show the message`);
+        toggle.click();
+        await nextTick();
+        expect(element.querySelector(`pre`)?.textContent).toBe(PEER);
+    });
+
+    it(`weights a child that failed like a watch that gave up`, () => {
+        const element = mount(rowOf(REPORT));
+        expect(element.textContent).toContain(`Child agent "Port the parser" (sub-x7) failed.`);
+        expect(element.querySelector(`.text-danger`)).not.toBeNull();
+        expect(mount(rowOf(PEER)).querySelector(`.text-danger`)).toBeNull();
     });
 });
 

@@ -9,7 +9,7 @@ import { syncHookOutput } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";
 import type { SecretAccess } from "./agent-secrets.js";
 import { bashTmuxHooks } from "./agent-terminals.js";
-import { adoptableBackgroundJobs, type BackgroundJob } from "./background-jobs.js";
+import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./background-jobs.js";
 
 // Demotes a command via nice/ionice and runs it as one `bash -c` tree, before tmux-run sees it.
 const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 bash -c ${shellQuote(command)}`;
@@ -98,8 +98,10 @@ test("a background command carries a job dir, and is filed for the turn's ending
     const command = await rewritten({ command: "pnpm build", run_in_background: true }, bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs));
     const dir = /tmux-run -b (\S+) -c /.exec(command ?? "")?.[1];
     expect(dir).toStartWith(join(tmpdir(), "intentic-run-job-"));
+    noteJobShell("tu-1", "bsh42");
+    expect(backgroundJobOf("conv-bg", "bsh42")?.dir).toBe(dir as string);
     // The registry holds the same job, so the settle that follows can hand it to a watch.
-    const filed = adoptableBackgroundJobs("conv-bg");
+    const filed = settledBackgroundJobs("conv-bg").running;
     expect(filed.map((job: BackgroundJob) => job.dir)).toEqual([dir as string]);
     expect(filed[0]?.command).toBe("pnpm build");
     rmSync(dir as string, { recursive: true, force: true });
@@ -111,7 +113,7 @@ test("an ordinary command, and a background one with nowhere to deliver a wake, 
     expect(await rewritten({ command: "pnpm build" }, bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs))).not.toContain("-b ");
     // No conversation: a job that outlived the turn would have nobody to report to.
     expect(await rewritten({ command: "pnpm build", run_in_background: true })).not.toContain("-b ");
-    expect(adoptableBackgroundJobs("conv-bg-none")).toEqual([]);
+    expect(settledBackgroundJobs("conv-bg-none")).toEqual({ running: [], unseen: [] });
 });
 
 test("forwards env key NAMES as sorted -e flags before the session: never values", async () => {

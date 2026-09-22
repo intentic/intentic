@@ -1,29 +1,22 @@
-import { execFile } from "node:child_process";
-import { access } from "node:fs/promises";
-import { sleep } from "@intentic/base/async";
+import { randomInt } from "node:crypto";
 import { briefDuration, clamp } from "@intentic/base/format";
-import { type AgentTurn, type WatchOutcome, watchWakePrompt } from "@intentic/sandbox-contract";
+import { wrapOutsideContent } from "@intentic/base/outside-text";
+import { type WatchOutcome, watchWakePrompt } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import type { WakeFn } from "../../automations/scheduler.js";
 import { turnCliEnv } from "../../capabilities/turn-env.js";
 import type { Services } from "../../composition.js";
-import { steerTurn } from "../checkpoints/agent-steering.js";
-import { startConversationTurn } from "../run/turn/turn-resume.js";
 import { seedFields, type TurnSeed } from "../run/turn/turn-seed.js";
+import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
+import { conversationDoors } from "../run/turn/wake-doors.js";
+import { type CheckOptions, type CheckResult, type RunCheck, watchCheck, type WatchPlacement } from "./watch-check.js";
 import type { JournalledWatch, WatchJournal } from "./watch-journal.js";
 import { watchProjection } from "./watch-state.js";
 
-// Daemon-owned condition watch replacing hand-rolled `while ... sleep` polling loops: the agent states a check once,
-// the daemon runs it on an interval, since nothing here can outlive the turn's own subprocess, and wakes the
-// conversation exactly once, fired or timed out, never silently. Live in memory for checking, armed on disk so a
-// container recreate, ordinary here, can restore it; only the check's env var names are persisted, values come fresh
-// from the capability store.
+// A daemon-owned condition watch wakes its conversation when it fires, times out or can no longer run, never silently.
 
-// One check may not run longer than this, a hung curl is a failed check, not a stuck watch.
-const CHECK_TIMEOUT_MS = 60_000;
-// What a check may say: enough tail for a real status or error, small enough to keep the wake acting on it.
-const OUTPUT_TAIL = 3_000;
-const MAX_OUTPUT_BYTES = 1024 * 1024;
+export type { CheckResult, RunCheck, WatchPlacement } from "./watch-check.js";
+
 // Pacing bounds: the floor keeps a watch from being the busy-loop it replaces; the ceiling keeps it noticing.
 const MIN_INTERVAL_S = 10;
 const MAX_INTERVAL_S = 1_800;
@@ -34,9 +27,11 @@ const MAX_TIMEOUT_S = 24 * 3_600;
 export const DEFAULT_TIMEOUT_S = 2 * 3_600;
 // A conversation's watch budget: eight concurrent outside conditions is a workflow, more is a leak.
 export const MAX_PER_CONVERSATION = 8;
-// Delivery retries: a wake fails to land only while live and unsteerable, and turns end, so it converges.
+// Delivery retries, in ms, for as long as a watch may wait: a turn parked on a card can sit that long.
 const DELIVER_RETRY_MS = 15_000;
-const DELIVER_ATTEMPTS = 240;
+const DELIVER_ATTEMPTS = (MAX_TIMEOUT_S * 1000) / DELIVER_RETRY_MS;
+// Short, since the agent types ids back; random, so a restart never reissues an id an old chat row still names.
+const ID_ALPHABET_SPAN = 36 ** 4;
 
 /* The turn identity a wake must reproduce, snapshotted at arm time, and shared with the proof follow-up because the two continue a turn for the same reason. */
 export type WatcherTurnSeed = TurnSeed;
@@ -52,13 +47,11 @@ export interface WatcherSpec {
     // Where and with what the check runs: the turn's effective tree and its capability credentials.
     readonly cwd: string;
     readonly env: Readonly<Record<string, string>>;
+    // An isolated conversation's world, rebuilt for every check; absent for the workspace root.
+    readonly placement?: WatchPlacement;
+    // The source a fetching check's output is outside content from.
+    readonly outside?: string;
     readonly turn: WatcherTurnSeed;
-}
-
-export interface CheckResult {
-    // Undefined when the check did not exit on its own (killed at CHECK_TIMEOUT_MS, or failed to spawn).
-    readonly exitCode: number | undefined;
-    readonly output: string;
 }
 
 interface WatcherRecord {
@@ -83,58 +76,31 @@ export interface WatcherSummary {
     readonly secondsLeft: number;
 }
 
-export type RunCheck = (command: string, options: { readonly cwd: string; readonly env: Readonly<Record<string, string>> }) => Promise<CheckResult>;
-
-// The real check: one bash invocation, stdout and stderr folded together, tail-capped, killed at the timeout. A spawn
-// failure or kill answers undefined exit code, read as still-waiting by the loop and visibly non-zero in the report.
-const bashCheck: RunCheck = (command, options) =>
-    new Promise((resolve) => {
-        execFile(
-            "bash",
-            ["-lc", command],
-            { cwd: options.cwd, env: { ...process.env, ...options.env }, timeout: CHECK_TIMEOUT_MS, maxBuffer: MAX_OUTPUT_BYTES },
-            (error, stdout, stderr) => {
-                const output = `${stdout}${stderr === "" ? "" : `\n${stderr}`}`.trim().slice(-OUTPUT_TAIL);
-                const code =
-                    error === null
-                        ? 0
-                        : typeof (error as { code?: unknown }).code === "number"
-                          ? ((error as { code: number }).code as number)
-                          : undefined;
-                resolve({ exitCode: code, output });
-            },
-        );
-    });
-
-// The runtime seam, configured once at boot and injected rather than imported, since importing agent.routes from under
-// turn-plan would close a cycle. `steer` lands the report in a live turn; `start` opens the wake turn.
-export interface WatcherRuntime {
+// Injected at boot rather than imported, since importing agent.routes from under turn-plan would close a cycle.
+export interface WatcherRuntime extends WakeDoors {
     readonly logger: Logger;
     readonly runCheck: RunCheck;
-    readonly steer: (conversationId: string, text: string) => boolean;
-    readonly start: (turn: AgentTurn & { conversationId: string }) => Promise<boolean>;
-    readonly sessionIdOf: (conversationId: string) => string | undefined;
     // What an armed watch IS, on disk, so a daemon that dies under one can put it back (watch-journal.ts).
     readonly journal: WatchJournal;
     // The environment a check runs with today, asked at restore time, not off disk, so no credential is persisted.
     readonly envOf: () => Promise<Record<string, string>>;
-    // Whether a journalled watch's conversation exists, unarchived; outliving it is a timer nothing answers to.
+    // Whether a journalled watch's conversation still exists, archived or not.
     readonly conversationLive: (conversationId: string) => boolean;
-    // Whether a journalled watch's tree is still on disk; a removed worktree means dropping it, not re-running.
-    readonly treeLive: (cwd: string) => Promise<boolean>;
 }
 
 let runtime: WatcherRuntime | undefined;
 const records = new Map<string, WatcherRecord>();
-let sequence = 0;
+// Ids this daemon armed; restore skips them, since it restores only what the previous daemon left.
+const minted = new Set<string>();
 
-// The next free `watch-N`: the counter resets every boot while restored watches keep their armed ids, so a fresh id
-// must skip what a restore already claimed. Ids stay short since the agent types them back (`watch stop watch-3`).
 const nextId = (): string => {
-    do {
-        sequence += 1;
-    } while (records.has(`watch-${sequence}`));
-    return `watch-${sequence}`;
+    for (;;) {
+        const id = `watch-${randomInt(ID_ALPHABET_SPAN).toString(36).padStart(4, "0")}`;
+        if (!records.has(id) && !minted.has(id)) {
+            minted.add(id);
+            return id;
+        }
+    }
 };
 
 // Idle-stop's probe: a machine mid-watch is not idle, stopping it is how a watch silently never fires.
@@ -185,13 +151,16 @@ const forget = (record: WatcherRecord): void => {
     publish(record.spec.conversationId);
 };
 
-// The watch is over: fired, timed out, or stopped by the agent or the user. The journal drop is awaited by every
-// caller, since a stop and a recreate must not resurrect a dismissed watch; a drop that finds no file is a no-op.
+const dropEntry = async (id: string): Promise<void> => {
+    await runtime?.journal.drop(id).catch((error: unknown) => {
+        runtime?.logger.error({ err: error, watch: id }, "watch: journal entry could not be dropped, a restart may re-arm it");
+    });
+};
+
+// A stop by the agent or the user; awaited, so a recreate cannot resurrect a dismissed watch.
 const discard = async (record: WatcherRecord): Promise<void> => {
     forget(record);
-    await runtime?.journal.drop(record.id).catch((error: unknown) => {
-        runtime?.logger.error({ err: error, watch: record.id }, "watch: journal entry could not be dropped, a restart may re-arm it");
-    });
+    await dropEntry(record.id);
 };
 
 // Tells the fleet card what the conversation is parked on, on every transition, nowhere else; a tick publishes nothing.
@@ -211,6 +180,12 @@ const publish = (conversationId: string): void =>
 
 const elapsed = (record: WatcherRecord): string => briefDuration(Math.round((Date.now() - record.armedAt) / 1000));
 
+// A broken check's reason leads, and a fetching check's words are wrapped as outside content.
+const checkSays = (check: CheckResult, outside: string | undefined): string => {
+    const said = outside === undefined || check.output === "" ? check.output : wrapOutsideContent(check.output, { source: outside });
+    return check.broken === undefined ? said : [`The check cannot run: ${check.broken}.`, said].filter((part) => part !== "").join("\n");
+};
+
 // Composed through the contract, never spelled here: the same wording is what three readers turn back into the notice
 // row a person sees, so a wake worded locally would reach the model fine and reach the reader as their own typing.
 const report = (record: WatcherRecord, outcome: WatchOutcome): string =>
@@ -221,67 +196,88 @@ const report = (record: WatcherRecord, outcome: WatchOutcome): string =>
         elapsed: elapsed(record),
         command: record.spec.command,
         exitCode: record.last.exitCode,
-        output: record.last.output,
+        output: checkSays(record.last, record.spec.outside),
     });
 
-// Lands the report: a live turn takes it as a steer, otherwise a fresh turn resumes the current provider session.
-// `start` answering undefined means a turn is live but unsteerable; wait and retry.
+// A wake continues the arming turn on its own routing, not a new one.
 const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: WatchOutcome): Promise<void> => {
-    const { conversationId } = record.spec;
-    const message = report(record, outcome);
-    for (let attempt = 0; attempt < DELIVER_ATTEMPTS; attempt += 1) {
-        if (live.steer(conversationId, message)) {
-            live.logger.info({ watch: record.id, conversationId, outcome }, "watch: report steered into the live turn");
-            return;
-        }
-        const sessionId = live.sessionIdOf(conversationId);
-        try {
-            const started = await live.start({
-                prompt: message,
-                conversationId,
-                ...(sessionId !== undefined ? { sessionId } : {}),
-                // The arming turn, whole: same provider, model, knobs, persona, job; a wake continues that turn, not a
-                // new one.
-                ...seedFields(record.spec.turn),
-            });
-            if (started) {
-                live.logger.info({ watch: record.id, conversationId, outcome }, "watch: wake turn started");
-                return;
-            }
-        } catch (error) {
-            live.logger.warn({ err: error, watch: record.id, conversationId }, "watch: wake turn failed to start, retrying");
-        }
-        await sleep(DELIVER_RETRY_MS, { unref: true });
+    const prompt = report(record, outcome);
+    const landing = await deliverWake(
+        live,
+        {
+            conversationId: record.spec.conversationId,
+            prompt,
+            voice: "sandbox",
+            ...(record.spec.outside === undefined ? {} : { outside: record.spec.outside }),
+            turn: seedFields(record.spec.turn),
+        },
+        { attempts: DELIVER_ATTEMPTS, retryMs: DELIVER_RETRY_MS, logger: live.logger, context: { watch: record.id, outcome } },
+    );
+    if (landing === "busy") {
+        // The report goes into the log rather than nowhere.
+        live.logger.error({ watch: record.id, conversationId: record.spec.conversationId, report: prompt }, "watch: report could not be delivered");
     }
-    // The bounded loss, said whole: the report goes into the log rather than nowhere.
-    live.logger.error({ watch: record.id, conversationId, report: message }, "watch: report could not be delivered");
 };
 
-// Ends the watch, then says so, strictly in that order: delivery has its own durability, but a crash between a
-// delivered report and an undropped journal entry would re-arm and wake the agent twice.
+const entryOf = (record: WatcherRecord): JournalledWatch => ({
+    id: record.id,
+    conversationId: record.spec.conversationId,
+    command: record.spec.command,
+    note: record.spec.note,
+    intervalMs: record.intervalMs,
+    armedAt: record.armedAt,
+    deadlineAt: record.deadlineAt,
+    cwd: record.spec.cwd,
+    ...(record.spec.placement === undefined ? {} : { placement: record.spec.placement }),
+    ...(record.spec.outside === undefined ? {} : { outside: record.spec.outside }),
+    // Names, never values: the environment's shape restores, its substance is asked of the capability store again.
+    envKeys: Object.keys(record.spec.env),
+    turn: record.spec.turn,
+});
+
+// At least once: the entry stays journalled, marked firing, until its wake has landed.
 const fire = (live: WatcherRuntime, record: WatcherRecord, outcome: WatchOutcome): void => {
-    void discard(record)
+    forget(record);
+    void live.journal
+        .record({ ...entryOf(record), firing: { outcome, check: record.last } })
+        .catch((error: unknown) =>
+            live.logger.warn({ err: error, watch: record.id }, "watch: firing could not be journalled, a restart now would lose it"),
+        )
         .then(() => deliver(live, record, outcome))
+        .then(() => dropEntry(record.id))
         .catch((error: unknown) => live.logger.error({ err: error, watch: record.id }, "watch: delivery crashed"));
 };
 
-// One check, then the verdict: fire on 0, fire on the deadline, else sleep and go again; the next check is scheduled
-// only once this one finishes.
+const checkOptions = (spec: WatcherSpec): CheckOptions => ({
+    cwd: spec.cwd,
+    env: spec.env,
+    ...(spec.placement === undefined ? {} : { placement: spec.placement }),
+});
+
+// Undefined keeps waiting.
+const verdictOf = (check: CheckResult, deadlineAt: number): WatchOutcome | undefined => {
+    if (check.broken !== undefined) {
+        return "broken";
+    }
+    if (check.exitCode === 0) {
+        return "met";
+    }
+    return Date.now() >= deadlineAt ? "timeout" : undefined;
+};
+
+// The next check is scheduled only once this one finishes.
 const tick = async (live: WatcherRuntime, record: WatcherRecord): Promise<void> => {
     record.checks += 1;
-    record.last = await live.runCheck(record.spec.command, { cwd: record.spec.cwd, env: record.spec.env });
+    record.last = await live.runCheck(record.spec.command, checkOptions(record.spec));
     if (record.cancelled) {
         return;
     }
-    if (record.last.exitCode === 0) {
-        fire(live, record, "met");
+    const outcome = verdictOf(record.last, record.deadlineAt);
+    if (outcome === undefined) {
+        schedule(live, record);
         return;
     }
-    if (Date.now() >= record.deadlineAt) {
-        fire(live, record, "timeout");
-        return;
-    }
-    schedule(live, record);
+    fire(live, record, outcome);
 };
 
 const schedule = (live: WatcherRuntime, record: WatcherRecord): void => {
@@ -302,6 +298,8 @@ const schedule = (live: WatcherRuntime, record: WatcherRecord): void => {
 export type ArmOutcome =
     // The condition already held when asked, nothing armed, no wake coming.
     | { readonly kind: "already-met"; readonly firstCheck: CheckResult }
+    // The condition already held and the wake is being delivered anyway.
+    | { readonly kind: "reported"; readonly id: string; readonly firstCheck: CheckResult }
     | {
           readonly kind: "armed";
           readonly id: string;
@@ -311,9 +309,14 @@ export type ArmOutcome =
       }
     | { readonly kind: "refused"; readonly reason: string };
 
+export interface ArmOptions {
+    // Wake even when the first check already passes, for news the conversation has not seen yet.
+    readonly reportIfMet?: boolean;
+}
+
 // Arms a watch; the first check runs now, inside this call, so a broken command fails to the agent's face instead of
 // reading as still-waiting for hours. Exit 0 on the first check arms nothing.
-export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
+export const armWatcher = async (spec: WatcherSpec, options: ArmOptions = {}): Promise<ArmOutcome> => {
     const live = runtime;
     if (live === undefined) {
         return { kind: "refused", reason: "Watching is not available in this runtime." };
@@ -321,8 +324,11 @@ export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
     if (listWatchers(spec.conversationId).length >= MAX_PER_CONVERSATION) {
         return { kind: "refused", reason: `This conversation already has ${MAX_PER_CONVERSATION} armed watches, stop one first.` };
     }
-    const firstCheck = await live.runCheck(spec.command, { cwd: spec.cwd, env: spec.env });
-    if (firstCheck.exitCode === 0) {
+    const firstCheck = await live.runCheck(spec.command, checkOptions(spec));
+    if (firstCheck.broken !== undefined) {
+        return { kind: "refused", reason: `The check cannot run: ${firstCheck.broken}.` };
+    }
+    if (firstCheck.exitCode === 0 && options.reportIfMet !== true) {
         return { kind: "already-met", firstCheck };
     }
     const intervalSeconds = clamp(Math.round(spec.intervalSeconds ?? DEFAULT_INTERVAL_S), MIN_INTERVAL_S, MAX_INTERVAL_S);
@@ -339,21 +345,13 @@ export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
         timer: undefined,
         cancelled: false,
     };
+    if (firstCheck.exitCode === 0) {
+        fire(live, record, "met");
+        return { kind: "reported", id: record.id, firstCheck };
+    }
     records.set(record.id, record);
     // Written before the first timer, so a crash leaves an armed watch restorable, never an orphan timer.
-    await live.journal.record({
-        id: record.id,
-        conversationId: spec.conversationId,
-        command: spec.command,
-        note: spec.note,
-        intervalMs: record.intervalMs,
-        armedAt: record.armedAt,
-        deadlineAt: record.deadlineAt,
-        cwd: spec.cwd,
-        // Names, never values: the environment's shape restores, its substance is asked of the capability store again.
-        envKeys: Object.keys(spec.env),
-        turn: spec.turn,
-    });
+    await live.journal.record(entryOf(record));
     schedule(live, record);
     // The card learns in the same breath the map does: this is the moment the conversation stops looking finished.
     publish(spec.conversationId);
@@ -361,9 +359,7 @@ export const armWatcher = async (spec: WatcherSpec): Promise<ArmOutcome> => {
     return { kind: "armed", id: record.id, intervalSeconds, timeoutSeconds, firstCheck };
 };
 
-// Puts back what the daemon died under, once at boot: the journal holds exactly what was armed when the predecessor
-// stopped, since every decided ending drops its entry. Every entry is re-checked first, since the condition can resolve
-// mid-restart.
+// Once at boot; every armed entry is re-checked first, since the condition can resolve mid-restart.
 export const restoreWatchers = async (): Promise<void> => {
     const live = runtime;
     if (live === undefined) {
@@ -385,56 +381,60 @@ export const restoreWatchers = async (): Promise<void> => {
     }
 };
 
-// The journalled seed as the wake wants it: zod's `| undefined` differs from an absent field under
-// exactOptionalPropertyTypes, and spreading `account: undefined` would name an account rather than leave it unset. Same
-// absent-means-absent rebuild delivery uses.
-const seedOf = (turn: JournalledWatch["turn"]): WatcherTurnSeed => seedFields(turn);
+// Absent stays absent: spreading `account: undefined` would name an account rather than leave it unset.
+const specOf = (entry: JournalledWatch, env: Record<string, string>): WatcherSpec => ({
+    conversationId: entry.conversationId,
+    command: entry.command,
+    note: entry.note,
+    cwd: entry.cwd,
+    // Fresh store values narrowed to the arming keys, so withholding and rotation apply.
+    env: Object.fromEntries(entry.envKeys.filter((key) => env[key] !== undefined).map((key) => [key, env[key] as string])),
+    ...(entry.placement === undefined ? {} : { placement: entry.placement }),
+    ...(entry.outside === undefined ? {} : { outside: entry.outside }),
+    turn: seedFields(entry.turn),
+});
+
+const checkOf = (check: NonNullable<JournalledWatch["firing"]>["check"]): CheckResult => ({
+    exitCode: check.exitCode,
+    output: check.output,
+    ...(check.broken === undefined ? {} : { broken: check.broken }),
+});
 
 const restoreOne = async (live: WatcherRuntime, entry: JournalledWatch, env: Record<string, string>): Promise<void> => {
+    if (minted.has(entry.id) || records.has(entry.id)) {
+        return;
+    }
     const context = { watch: entry.id, conversationId: entry.conversationId, note: entry.note };
-    // Two ways a watch is stale, not interrupted: nobody left to wake, or nowhere to run the check.
     if (!live.conversationLive(entry.conversationId)) {
         live.logger.info(context, "watch: not restored, its conversation is gone");
         await live.journal.drop(entry.id);
         return;
     }
-    if (!(await live.treeLive(entry.cwd))) {
-        live.logger.info({ ...context, cwd: entry.cwd }, "watch: not restored, the tree it checked in is gone");
-        await live.journal.drop(entry.id);
-        return;
-    }
-    // Rebuilt, not restored: fresh store values, narrowed to the arming keys, reproduce withholding for free.
-    const armedEnv = Object.fromEntries(entry.envKeys.filter((key) => env[key] !== undefined).map((key) => [key, env[key] as string]));
-    const check = await live.runCheck(entry.command, { cwd: entry.cwd, env: armedEnv });
+    const spec = specOf(entry, env);
+    const firing = entry.firing;
     const record: WatcherRecord = {
         id: entry.id,
-        spec: {
-            conversationId: entry.conversationId,
-            command: entry.command,
-            note: entry.note,
-            cwd: entry.cwd,
-            env: armedEnv,
-            turn: seedOf(entry.turn),
-        },
+        spec,
         intervalMs: entry.intervalMs,
         // The original arm time, so the wake reports real wait time, not time since the daemon came back.
         armedAt: entry.armedAt,
         deadlineAt: entry.deadlineAt,
         checks: 1,
-        last: check,
+        last: firing === undefined ? await live.runCheck(entry.command, checkOptions(spec)) : checkOf(firing.check),
         timer: undefined,
         cancelled: false,
     };
-    // Held so `fire`'s discard has something to take off the card, and so the id is taken before nextId runs.
-    records.set(record.id, record);
-    if (check.exitCode === 0) {
-        live.logger.info(context, "watch: condition was met while the daemon was down, waking now");
-        fire(live, record, "met");
+    if (firing !== undefined) {
+        live.logger.info(context, "watch: it fired before the restart and its wake had not landed, delivering it now");
+        fire(live, record, firing.outcome);
         return;
     }
-    if (Date.now() >= entry.deadlineAt) {
-        live.logger.info(context, "watch: deadline passed while the daemon was down, waking with the restart ending");
-        fire(live, record, "restart-expired");
+    records.set(record.id, record);
+    const outcome = verdictOf(record.last, entry.deadlineAt);
+    if (outcome !== undefined) {
+        live.logger.info({ ...context, outcome }, "watch: it ended while the daemon was down, waking now");
+        // A deadline that passed unchecked is the restart's ending, not a timeout.
+        fire(live, record, outcome === "timeout" ? "restart-expired" : outcome);
         return;
     }
     schedule(live, record);
@@ -453,28 +453,19 @@ export const startWatcherRuntime = (live: WatcherRuntime): (() => void) => {
         for (const record of records.values()) {
             forget(record);
         }
+        minted.clear();
         runtime = undefined;
     };
 };
 
-// Boot wiring: the real check under bash, the real steering registry, and the same detached-turn door every
-// daemon-started turn uses, which journals the wake so a daemon death between start and first frame re-runs it.
 export const startWatchers = (services: Services, wake: WakeFn): (() => void) =>
     startWatcherRuntime({
         logger: services.logger,
-        runCheck: bashCheck,
-        steer: steerTurn,
-        start: async (turn) => (await startConversationTurn(services, wake, turn)) !== undefined,
-        sessionIdOf: (conversationId) => services.agents.sessionIdOf(conversationId),
+        runCheck: watchCheck(services.turnIsolation),
+        ...conversationDoors(services, wake),
         journal: services.watchJournal,
         // The same function that builds a turn's shell env, so a restored check can't drift from an arming turn's.
         envOf: () => turnCliEnv(services),
-        // Archived counts as live: archiving takes a card off the board without disarming anything.
+        // Archive disarms its own watches, so an archived conversation's entry is one still being delivered.
         conversationLive: (conversationId) => services.agents.entry(conversationId) !== undefined,
-        // The real disk, and the only place here that touches it: a landed worktree is gone by the next boot.
-        treeLive: (cwd) =>
-            access(cwd).then(
-                () => true,
-                () => false,
-            ),
     });

@@ -3,7 +3,7 @@ import { describe, it, expect, mock, jest } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import type { JournalEntry } from "./turn-journal.js";
 import { commandsOf, resetCommands } from "../../providers/agent-commands.js";
-import { type AttachEntry, type AttachHead, startTurnRun, type TurnFn, turnRunOf } from "./turn-runs.js";
+import { type AttachEntry, type AttachHead, onTurnSettled, startTurnRun, type TurnFn, type TurnSettled, turnRunOf } from "./turn-runs.js";
 
 // A hand-cranked turn: push events (or a failure) and the pump consumes them as they land, mirroring SteeringQueue's
 // push/pull shape.
@@ -448,5 +448,27 @@ describe(`turn runs`, () => {
         expect(commandsOf(`kimi`)).toEqual([{ name: `deploy`, description: `Ship it` }]);
         // Keyed by provider; an absent `agent` means claude.
         expect(commandsOf(`claude`)).toEqual([]);
+    });
+});
+
+describe(`the settle notice`, () => {
+    it(`carries the turn's actor, its failure and its last words`, async () => {
+        const heard: TurnSettled[] = [];
+        const stop = onTurnSettled((settled) => heard.push(settled));
+        const { turnFn, push, close } = crankedTurn();
+        startTurnRun(turnFn, { ...turn(`c-settle`), actor: `agent:parent-1` } as AgentTurn & { conversationId: string }, { opening });
+        push({ kind: `delta`, text: `first thought` });
+        push({ kind: `text_end` });
+        push({ kind: `delta`, text: `Ported all 12 tests.` });
+        push({ kind: `error`, message: `usage limit reached` });
+        close();
+        await waitFor(() => expect(heard).toHaveLength(1));
+        stop();
+        expect(heard[0]).toEqual({
+            conversationId: `c-settle`,
+            actor: `agent:parent-1`,
+            failure: `usage limit reached`,
+            closing: `Ported all 12 tests.`,
+        });
     });
 });

@@ -3,7 +3,8 @@ import type { AgentEvent, AskQuestion } from "@intentic/sandbox-contract";
 import { createRequest } from "../../agent/tools/agent-requests.js";
 import type { AgentRequest } from "../../agent/run/agent.js";
 import { formatAnswers } from "../../agent/tools/question-answers.js";
-import { waitForSubagent, type SubagentWaitUntil } from "../../agent/subagents/subagents.js";
+import type { SubagentWaitUntil } from "../../agent/subagents/subagents.js";
+import { waitForWork, workWaitAnswer } from "../../agent/subagents/work-wait.js";
 import { type CommandGuard, consultWith, JS_SUBJECT } from "../../guard/command-guard.js";
 import { outsideSourceOf, sealResult } from "../../guard/outside-results.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
@@ -83,7 +84,8 @@ const spawnTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTo
         "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor) to work on a " +
         "task of its own. It runs as a separate conversation in its own isolated worktree and keeps working " +
         "after your turn ends; its finished work lands the way any agent's does. Returns the child's id " +
-        "immediately: supervise it with the wait tool (target: that id). Give it a self-contained prompt with " +
+        "immediately: supervise it with the wait tool (target: that id); if your turn ends first, its report wakes " +
+        "this conversation when it finishes. Give it a self-contained prompt with " +
         "every path, requirement, and constraint — it sees none of this conversation. You must name the provider " +
         "AND the model: this spends a real allowance and nothing is chosen for you. Call the providers tool for " +
         "what is connected and what still has room.",
@@ -209,7 +211,7 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
     description:
         "Wait until an agent you started needs you. Blocks until the target is blocked on input or finishes, " +
         'whichever comes first, then returns its status and last report. Target a spawned child by its id, or "any" ' +
-        "for whichever of this conversation's children moves first. On timeout it returns the current state: call " +
+        "for whichever of this conversation's children moves first (each is reported once). On timeout it returns the current state: call " +
         "it again to keep waiting.",
     inputSchema: {
         type: "object",
@@ -229,19 +231,13 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
             (entry): entry is SubagentWaitUntil => entry === "blocked" || entry === "finished",
         );
         const seconds = typeof args["timeoutSeconds"] === "number" ? Math.min(Math.max(args["timeoutSeconds"], 5), WAIT_MAX_S) : WAIT_DEFAULT_S;
-        const result = await waitForSubagent(request.conversationId, {
+        const result = await waitForWork(request.conversationId, {
             ...(target !== "any" ? { target } : {}),
             until: until.length > 0 ? until : ["blocked", "finished"],
             timeoutMs: Math.round(seconds * 1000),
             signal: request.signal,
         });
-        // Blocked child's whole question rides along, options included: lets a parent answer, not just report.
-        const question = result.outcome === "blocked" && result.matched !== undefined ? request.children?.pendingQuestion(result.matched.id) : undefined;
-        return JSON.stringify({
-            outcome: result.outcome,
-            ...(result.matched !== undefined ? { agent: result.matched } : {}),
-            ...(question !== undefined ? { question } : {}),
-        });
+        return JSON.stringify(workWaitAnswer(result, (childId) => request.children?.pendingQuestion(childId)));
     },
 });
 

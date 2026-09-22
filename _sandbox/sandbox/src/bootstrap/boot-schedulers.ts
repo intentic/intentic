@@ -1,6 +1,8 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { streamAgent } from "../agent/routes/agent.routes.js";
 import { adoptBackgroundJobs } from "../agent/tools/background-adoption.js";
+import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
+import { conversationDoors, conversationRouting } from "../agent/run/turn/wake-doors.js";
 import { onTurnSettled } from "../agent/run/turn/turn-runs.js";
 import { startVerifyNudges } from "../agent/verification/verify-nudge.js";
 import { startWatchers } from "../agent/verification/watchers.js";
@@ -25,8 +27,24 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // own, so the conversation is woken when it exits. Beside the watchers because it arms one, and after them because
     // it needs their runtime bound.
     shutdown.push(
-        onTurnSettled((conversationId) => {
-            void adoptBackgroundJobs(conversationId, logger);
+        onTurnSettled((settled) => {
+            void adoptBackgroundJobs(settled.conversationId, logger);
+        }),
+    );
+
+    // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it.
+    const childReports: ChildReportDeps = {
+        doors: conversationDoors(services, streamAgent),
+        logger,
+        entryOf: (conversationId) => services.agents.entry(conversationId),
+        routingOf: (conversationId) => {
+            const entry = services.agents.entry(conversationId);
+            return entry === undefined ? undefined : conversationRouting(entry);
+        },
+    };
+    shutdown.push(
+        onTurnSettled((settled) => {
+            void reportChildTurn(childReports, settled);
         }),
     );
 
