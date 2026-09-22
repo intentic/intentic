@@ -44,7 +44,7 @@ export const filePeerStore = <Shape extends z.ZodRawShape>(
 ): PeerStore<z.infer<z.ZodObject<Shape>>> => {
     type Extra = z.infer<z.ZodObject<Shape>>;
     const files = spec.files(historyRoot);
-    const pending = pairings<Pairing<Extra>>(files.consumed);
+    const pending = pairings<Pairing<Extra>>(files.consumed, spec.pairTtlMs);
     const records = enrollments({ path: files.enrollments, key: spec.key, prefix: spec.prefix, extra: spec.extra });
     const replayable = spec.replayable === true;
 

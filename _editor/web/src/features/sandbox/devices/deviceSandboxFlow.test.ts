@@ -19,13 +19,13 @@ mock.module(`../client/sandboxClient`, () => ({
     SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 
-const { manageDeviceSandbox } = await import("./useDevices");
+const { DeviceFlowLostError, manageDeviceSandbox } = await import("./useDevices");
 
 // Matches the daemon's wire shape: one `data: <JSON>` SSE frame per line. `dies` plays a container deleted out
 // from under the connection carrying its own removal — Chromium's own words for a body that stops arriving.
 // One frame per pull rather than a filled queue: a stream that errors with chunks still queued drops them, and the
 // ordering under test is precisely "the lines arrived, then the socket went".
-const streamOf = (frames: Record<string, unknown>[], dies = false): Response => {
+const streamOf = (frames: Record<string, unknown>[], dies = false, death: Error = new TypeError(`network error`)): Response => {
     const encoder = new TextEncoder();
     let at = 0;
     const body = new ReadableStream<Uint8Array>({
@@ -36,7 +36,7 @@ const streamOf = (frames: Record<string, unknown>[], dies = false): Response => 
                 return;
             }
             if (dies) {
-                controller.error(new TypeError(`network error`));
+                controller.error(death);
                 return;
             }
             controller.close();
@@ -89,12 +89,35 @@ it(`still throws the device's own refusal on a severing op`, async () => {
     );
 });
 
-// Every other row on the Devices page: a dropped stream there says nothing about what the machine did.
+// Every other row on the Devices page: a dropped stream there says nothing about what the machine did, whether the
+// socket broke (the browser's words ride along) or merely closed early (nothing to quote).
 it(`still reports a lost connection for an op that was not aimed at this sandbox`, async () => {
     answer = () => streamOf([{ kind: `line`, text: `Removing intentic-sandbox-other…` }], true);
-    await expect(manageDeviceSandbox(`rog`, `other`, `remove`)).rejects.toThrow(TypeError);
+    const broke = await manageDeviceSandbox(`rog`, `other`, `remove`).catch((error: unknown) => error);
+    expect(broke).toBeInstanceOf(DeviceFlowLostError);
+    expect((broke as InstanceType<typeof DeviceFlowLostError>).transport).toBe(`network error`);
+    expect((broke as Error).message).toBe(
+        `Lost contact with that device while this was running: it may still have finished. Refresh to see where it got to. The browser said: "network error".`,
+    );
     answer = () => streamOf([{ kind: `line`, text: `Removing intentic-sandbox-other…` }]);
-    await expect(manageDeviceSandbox(`rog`, `other`, `remove`)).rejects.toThrow(/Lost contact with that device/);
+    const ended = await manageDeviceSandbox(`rog`, `other`, `remove`).catch((error: unknown) => error);
+    expect(ended).toBeInstanceOf(DeviceFlowLostError);
+    expect((ended as InstanceType<typeof DeviceFlowLostError>).transport).toBeUndefined();
+});
+
+// A body the browser itself aborts mid-flow (Chromium's words below) is the watching ending, not the machine answering.
+it(`reads a body the browser aborted mid-flow as lost contact, not as the device's answer`, async () => {
+    answer = () =>
+        streamOf(
+            [{ kind: `line`, text: `intentic: building intentic-sandbox-env-runner-omen:a470f481d4d8 from the parent's approved overlay…` }],
+            true,
+            new DOMException(`BodyStreamBuffer was aborted`, `AbortError`),
+        );
+    const seen: string[] = [];
+    const lost = await manageDeviceSandbox(`omen`, `omen`, `runner-up`, { onLine: (line) => seen.push(line) }).catch((error: unknown) => error);
+    expect(lost).toBeInstanceOf(DeviceFlowLostError);
+    expect((lost as InstanceType<typeof DeviceFlowLostError>).transport).toBe(`BodyStreamBuffer was aborted`);
+    expect(seen).toEqual([`intentic: building intentic-sandbox-env-runner-omen:a470f481d4d8 from the parent's approved overlay…`]);
 });
 
 it(`quotes the device's own sentence whenever it got to send one`, async () => {

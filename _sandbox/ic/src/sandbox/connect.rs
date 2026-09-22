@@ -416,13 +416,12 @@ fn connect(
     // Two attempts: the loopback shortcut (127.0.0.1:<derived port>:8787, a browser on this machine skipping
     // the tunnel) is the one part whose failure doesn't mean a broken sandbox — docker refuses the WHOLE
     // launch when the port is held, so the retry drops just the shortcut.
-    if !docker::run_argv(&argv, &log) {
+    if docker::run_argv(&argv, &log).is_err() {
         docker::quiet(&["rm", "-f", &container]);
         let retry = contract::run_command(&request, &env_pairs, true, &[], &[], &log)?;
-        if !docker::run_argv(&retry, &log) {
-            let tail = log.tail(5);
+        if let Err(refusal) = docker::run_argv(&retry, &log) {
             bail!(
-                "starting the sandbox failed — the full docker error is saved to {}.\n{tail}",
+                "starting the sandbox failed — the full docker error is saved to {}.\n{refusal}",
                 log.path.display()
             );
         }

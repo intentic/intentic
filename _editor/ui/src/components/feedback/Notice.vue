@@ -38,7 +38,8 @@ const boxClass = computed(() => twMerge(NOTICE_BOX[shown.value], attrs[`class`] 
             <span v-if="of !== undefined" class="block">{{ of.title }}</span>
             <!-- The cause, a shade back: evidence a reader may skip; sized down, not faded, since fading failed contrast. -->
             <!-- `break-words`: the raw cause is often a URL/sha/token wider than the box; else the line pushes the layout. -->
-            <span v-if="of?.detail !== undefined && of.detail !== ``" class="mt-0.5 block break-words text-2xs">{{ of.detail }}</span>
+            <!-- `whitespace-pre-line`: a machine's refusal quotes its output line by line, which run together reads as one sentence. -->
+            <span v-if="of?.detail !== undefined && of.detail !== ``" class="mt-0.5 block whitespace-pre-line break-words text-2xs">{{ of.detail }}</span>
             <slot />
         </span>
         <button v-if="of?.action !== undefined" type="button" :class="ui.linkButton(`shrink-0 font-medium`)" @click="of.action.run()">

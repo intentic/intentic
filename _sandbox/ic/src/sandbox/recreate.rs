@@ -55,8 +55,8 @@ const PORT_RELEASE_TRIES: u32 = 3;
 const PORT_RELEASE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
 
 /* Did a launch fail because its published port is still taken? */
-fn port_still_held(log_tail: &str) -> bool {
-    log_tail.contains("port is already allocated")
+fn port_still_held(refusal: &str) -> bool {
+    refusal.contains("port is already allocated")
 }
 
 impl Mode {
@@ -580,11 +580,11 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     /* THE PORT THIS CUTOVER JUST FREED IS NOT FREE YET, and that is a race rather than a refusal. */
     let mut launched = docker::run_argv(&argv, &log);
     for _ in 0..PORT_RELEASE_TRIES {
-        // The window is the last attempt's output alone — its command line, the created container's id, and
-        // docker's refusal — so a conflict on an earlier attempt cannot keep this true once a later one has
-        // failed for some other reason.
-        if launched || !port_still_held(&log.tail(6)) {
-            break;
+        // The last attempt's refusal alone, so a conflict on an earlier attempt cannot keep this true once a later
+        // one has failed for some other reason.
+        match &launched {
+            Err(refusal) if port_still_held(refusal) => {}
+            _ => break,
         }
         // The refused attempt leaves a created-but-stopped container holding the name, exactly as below.
         docker::quiet(&["rm", "-f", &container]);
@@ -598,7 +598,7 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
     // again at run time, and it can answer differently (an nvidia runtime registered against a mismatched
     // driver satisfies `docker info` and then fails the container). A sandbox that comes back saying it has
     // no GPU beats no sandbox. The failed attempt leaves a created-but-stopped container holding the name.
-    if !launched {
+    if launched.is_err() {
         docker::quiet(&["rm", "-f", &container]);
         let all_optional: Vec<String> = probes.iter().map(|probe| probe.token.clone()).collect();
         let retry_argv =
@@ -609,11 +609,10 @@ fn recreate(mode: Mode, slug: Option<String>, reach: Reach, auto: bool) -> Resul
                     return Err(err);
                 }
             };
-        if !docker::run_argv(&retry_argv, &log) {
+        if let Err(refusal) = docker::run_argv(&retry_argv, &log) {
             restore_parked(&container, &parked, &slug, &saved);
-            let tail = log.tail(5);
             bail!(
-                "starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?).\n{tail}\n       Your previous sandbox was restored. The old container's logs and this error are saved to {}.",
+                "starting the recreated sandbox failed (a runtime flag the host rejects, e.g. --privileged or /dev/net/tun?).\n{refusal}\n       Your previous sandbox was restored. The old container's logs and this error are saved to {}.",
                 log.path.display()
             );
         }

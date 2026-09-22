@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Button, ConfirmDialog, DeviceRunLog, type NoticeModel, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
+import { Button, ConfirmDialog, DeviceRunLog, RowGroup, RowNote, StatusBadge, ui } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import DeviceOpFailure from "./DeviceOpFailure.vue";
-import { runnerFallback } from "./deviceFallback";
+import { type RunnerFailure, type RunnerOp, runnerFailure } from "./runnerFailure";
 import { createRunner, removeRunner, syncRunnerSettings, updateRunner, useRunners } from "./useRunners";
 import { type DeviceRow, type MachineRow, managerOf } from "../deviceRows";
 import { environmentTitle } from "../machineEnvironments";
@@ -45,13 +45,13 @@ const builtOn = (host: string | undefined): string | undefined => {
 // Building or updating a container on somebody's laptop, so the Devices row carries it while the reader is
 // elsewhere in the hub.
 const hubWork = useHubWork();
-const WORKING: Record<"create" | "remove" | "update", string> = { create: `Adding runner`, remove: `Removing runner`, update: `Updating runner` };
+const WORKING: Record<RunnerOp, string> = { create: `Adding runner`, remove: `Removing runner`, update: `Updating runner` };
 
 // One flow at a time on one machine, same rule the sandbox rows above follow.
 const busy = ref<string | undefined>();
 const lines = ref<string[]>([]);
 // The notice, and the line that does the same thing on the machine itself when this route to it is shut.
-const failure = ref<{ notice: NoticeModel; command?: string } | undefined>();
+const failure = ref<RunnerFailure | undefined>();
 const done = ref<string | undefined>();
 
 const facts = (runner: { online: boolean; facts?: { cpus: number; memoryMb: number; load: number } }): string => {
@@ -100,7 +100,7 @@ const sync = async (id: string): Promise<void> => {
 const confirmingRemove = ref<string | undefined>();
 const removeHeader = computed(() => `Remove runner "${confirmingRemove.value ?? ``}"?`);
 
-const run = async (op: "create" | "remove" | "update", name: string): Promise<void> => {
+const run = async (op: RunnerOp, name: string): Promise<void> => {
     if (door.value?.device.hostId === undefined || busy.value !== undefined) {
         return;
     }
@@ -119,7 +119,7 @@ const removeConfirmed = async (): Promise<void> => {
     }
 };
 
-const execute = async (op: "create" | "remove" | "update", name: string): Promise<void> => {
+const execute = async (op: RunnerOp, name: string): Promise<void> => {
     const host = door.value?.device.hostId;
     if (host === undefined || busy.value !== undefined) {
         return;
@@ -134,7 +134,7 @@ const execute = async (op: "create" | "remove" | "update", name: string): Promis
         const flow = { create: createRunner, remove: removeRunner, update: updateRunner }[op];
         done.value = await flow(host, name, onLine);
     } catch (error) {
-        failure.value = { notice: noticeFrom(error, `That didn't work on this device.`), command: runnerFallback(op, name) };
+        failure.value = runnerFailure(op, name, machine.label, error, lines.value);
     } finally {
         busy.value = undefined;
         endMark();
@@ -244,12 +244,12 @@ const add = async (): Promise<void> => {
             t(`sandbox.deviceRunners.sandboxKeepsNoRunner`, { label: machine.label })
         }}</RowNote>
 
-        <!-- The machine's own output while `ic` works, and whatever it said at the end. -->
+        <!-- The machine's own output while `ic` works, kept after a failure as the record of how far it got. -->
         <RowNote v-if="busy !== undefined || failure || done" variant="block" class="flex flex-col gap-1">
             <DeviceRunLog
-                v-if="busy !== undefined"
+                v-if="busy !== undefined || (failure !== undefined && lines.length > 0)"
                 :lines="lines"
-                :running="true"
+                :running="busy !== undefined"
                 :empty="t(`sandbox.deviceRunners.startingOnDevice`)"
                 :note="t(`sandbox.deviceRunners.runningOnDeviceKeeps`)"
             />

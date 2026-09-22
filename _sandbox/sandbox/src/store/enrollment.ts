@@ -34,8 +34,8 @@ export interface Pairings<T> {
 }
 
 // `burns` is the /history file replayable pairings are recorded in. Omitting it declares nothing at this door can be
-// replayed, so `arm` refuses: an unauditable token must not be accepted.
-export const pairings = <T>(burns?: string): Pairings<T> => {
+// replayed, so `arm` refuses: an unauditable token must not be accepted. `ttlMs` is how long an unredeemed one lives.
+export const pairings = <T>(burns?: string, ttlMs = PAIR_TTL_MS): Pairings<T> => {
     const burned =
         burns === undefined
             ? undefined
@@ -73,20 +73,20 @@ export const pairings = <T>(burns?: string): Pairings<T> => {
     return {
         mint: (payload, options) => {
             const token = randomBytes(32).toString("base64url");
-            live.set(token, { payload, expiresAt: Date.now() + PAIR_TTL_MS, replayable: options?.replayable === true });
+            live.set(token, { payload, expiresAt: Date.now() + ttlMs, replayable: options?.replayable === true });
             // Nothing else times these out, so the sweep rides the one call that's neither hot nor latency-bound.
             for (const [key, pairing] of live) {
                 if (pairing.expiresAt < Date.now()) {
                     live.delete(key);
                 }
             }
-            return { token, expiresIn: Math.floor(PAIR_TTL_MS / 1000) };
+            return { token, expiresIn: Math.floor(ttlMs / 1000) };
         },
         arm: async (token, payload) => {
             if (token === "" || burned === undefined || (await isBurned(token))) {
                 return false;
             }
-            live.set(token, { payload, expiresAt: Date.now() + PAIR_TTL_MS, replayable: true });
+            live.set(token, { payload, expiresAt: Date.now() + ttlMs, replayable: true });
             return true;
         },
         peek,

@@ -9,7 +9,7 @@ mock.module("./useSandbox", () => ({
     useSandbox: () => ({ active: { value: { token: `connect` } }, activeSandboxId: { value: `s1` }, daemonUrl: { value: `https://daemon.test` } }),
 }));
 
-const { sandboxError, sandboxJson } = await import("./sandboxClient");
+const { sandboxError, sandboxJson, sandboxRequest } = await import("./sandboxClient");
 const { SandboxTimeoutError } = await import("./sandboxAuthFetch");
 const { resetDaemonRoutes, setDaemonRoutes } = await import("../overview/useDaemonRoutes");
 const { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } = await import("@intentic/sandbox-contract");
@@ -57,6 +57,35 @@ it("exempts a call that streams a body up: its headers cannot arrive until the u
     );
     const outcome = await Promise.race([settled, new Promise((resolve) => setTimeout(() => resolve(`still uploading`), 50))]);
     expect(outcome).toBe(`still uploading`);
+    timeout.mockRestore();
+});
+
+// A daemon that answers its headers at once and its body well after the shortened deadline; like real fetch, an abort
+// of the request's signal errors a body still being read.
+const streamingDaemon = (): ReturnType<typeof spyOn> => {
+    stubGlobal(
+        `fetch`,
+        mock((request: Request) => {
+            const body = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    request.signal.addEventListener(`abort`, () => controller.error(new DOMException(`BodyStreamBuffer was aborted`, `AbortError`)));
+                    setTimeout(() => {
+                        controller.enqueue(new TextEncoder().encode(`finished`));
+                        controller.close();
+                    }, 40);
+                },
+            });
+            return Promise.resolve(new Response(body));
+        }),
+    );
+    const real = AbortSignal.timeout.bind(AbortSignal);
+    return spyOn(AbortSignal, `timeout`).mockImplementation(() => real(5));
+};
+
+it("lets a stream run past the deadline once its headers are in: a device flow takes minutes", async () => {
+    const timeout = streamingDaemon();
+    const response = await sandboxRequest(`/system/devices/omen/sandboxes/omen`, { method: `POST` });
+    expect(await response.text()).toBe(`finished`);
     timeout.mockRestore();
 });
 

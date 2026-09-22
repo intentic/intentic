@@ -25,6 +25,8 @@ export interface PeerStoreSpec<Shape extends z.ZodRawShape> {
     readonly extra: Shape;
     // Whether pairings end up immortal and must burn on redemption; a runner's always do, a host's vary.
     readonly replayable?: boolean;
+    // How long an unredeemed pairing lives; absent means the ten minutes it takes to walk over and paste one.
+    readonly pairTtlMs?: number;
 }
 
 export interface PeerHubSpec {

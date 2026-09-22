@@ -37,6 +37,17 @@ export const uploadsBody = (body: BodyInit | null | undefined): boolean =>
 const bounded = (request: Request, deadline: AbortSignal | undefined): AbortSignal =>
     deadline === undefined ? request.signal : AbortSignal.any([request.signal, deadline]);
 
+// fetch keeps its signal on the body too, so the deadline reaches it only through this switch, released once headers arrive.
+const headersDeadline = (expiry: AbortSignal | undefined): { readonly signal: AbortSignal | undefined; readonly release: () => void } => {
+    if (expiry === undefined) {
+        return { signal: undefined, release: () => undefined };
+    }
+    const due = new AbortController();
+    const trip = (): void => due.abort(expiry.reason);
+    expiry.addEventListener(`abort`, trip, { once: true });
+    return { signal: due.signal, release: () => expiry.removeEventListener(`abort`, trip) };
+};
+
 const belongsTo = (request: Request, target: SandboxTarget): boolean =>
     request.url === target.base || request.url.startsWith(`${target.base.replace(/\/$/, ``)}/`);
 
@@ -87,7 +98,8 @@ export const sandboxAuthenticatedFetch = async (
     const background = options?.background === true;
     const bearer = await bearerFor(target, background);
     const expiry = options?.deadline === false ? undefined : AbortSignal.timeout(DEADLINE_MS);
-    const signal = bounded(request, expiry);
+    const deadline = headersDeadline(expiry);
+    const signal = bounded(request, deadline.signal);
     // Cloned before the first fetch consumes the body, so the retry has its own independent copy.
     const retrySource = request.clone();
     const send = async (outgoing: Request, token: string): Promise<Response> => {
@@ -102,17 +114,22 @@ export const sandboxAuthenticatedFetch = async (
             throw expiry?.aborted === true && request.signal.aborted !== true ? timedOut() : error;
         }
     };
-    const response = await send(request, bearer.token);
-    if (!bearerRefused(response.status)) {
-        return response;
-    }
+    // One deadline for the call, retry included; released on the way out, once the answer's headers are in.
+    try {
+        const response = await send(request, bearer.token);
+        if (!bearerRefused(response.status)) {
+            return response;
+        }
 
-    // Blames the bearer this request actually sent, not whatever is on file by the time the response lands.
-    rejectSessionToken(target, bearer);
-    const replacement = await getSessionToken(target, { background });
-    if (replacement === undefined) {
-        return response;
+        // Blames the bearer this request actually sent, not whatever is on file by the time the response lands.
+        rejectSessionToken(target, bearer);
+        const replacement = await getSessionToken(target, { background });
+        if (replacement === undefined) {
+            return response;
+        }
+        await response.body?.cancel().catch(() => undefined);
+        return await send(retrySource, replacement.token);
+    } finally {
+        deadline.release();
     }
-    await response.body?.cancel().catch(() => undefined);
-    return send(retrySource, replacement.token);
 };

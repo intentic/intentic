@@ -2,9 +2,10 @@ import { mkdtempSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { test, expect } from "bun:test";
+import { test, expect, setSystemTime } from "bun:test";
 import { z } from "zod";
 import { filePeerStore, type PeerStore } from "./peer-store.js";
+import { RUNNER_PAIR_TTL_MS, RUNNER_PEER } from "../runners/runner-peer.js";
 
 // The two files a door keeps on /history, spelled the way the doors spell them.
 const peerFiles =
@@ -158,4 +159,26 @@ test("a door's extra record travels from the pairing to the enrollment", async (
         { id: "hand-made" },
         { id: "rig", host: "rog" },
     ]);
+});
+
+// A runner redeems its pairing at its container's first boot, after the image pull and overlay build that follow the
+// mint; at a door with the ordinary lifetime, a slow first install boots holding a pairing already dead.
+test("a runner's pairing outlives the install between its mint and the container's first boot, then still expires", async () => {
+    const minted = Date.now();
+    const runners = filePeerStore(mkdtempSync(join(tmpdir(), "peers-")), RUNNER_PEER.store);
+    const hosts = tempStore().store;
+    try {
+        const installed = runners.mintPairing("omen", { host: "omen" });
+        const abandoned = runners.mintPairing("rog", { host: "rog" });
+        const pasted = hosts.mintPairing("laptop");
+        expect(installed.expiresIn * 1000).toBe(RUNNER_PAIR_TTL_MS);
+        // A half-hour pull and build.
+        setSystemTime(new Date(minted + 30 * 60 * 1000));
+        expect(await runners.enroll(installed.token)).toMatchObject({ id: "omen", host: "omen" });
+        expect(await hosts.enroll(pasted.token)).toBeUndefined();
+        setSystemTime(new Date(minted + RUNNER_PAIR_TTL_MS + 1_000));
+        expect(await runners.enroll(abandoned.token)).toBeUndefined();
+    } finally {
+        setSystemTime();
+    }
 });

@@ -77,17 +77,6 @@ impl Log {
             let _ = file.write_all(bytes);
         }
     }
-
-    /// The log's last few lines, for surfacing next to "the full error is saved to <path>" — the terminal
-    /// user should not have to open a file to see WHAT failed, only for the detail.
-    pub fn tail(&self, lines: usize) -> String {
-        let Ok(content) = std::fs::read_to_string(&self.path) else {
-            return String::new();
-        };
-        let all: Vec<&str> = content.lines().collect();
-        let start = all.len().saturating_sub(lines);
-        all[start..].join("\n")
-    }
 }
 
 /// Keep the newest 10 `<prefix>-*.log` (by name — the timestamp format sorts), delete the rest. Best-effort,

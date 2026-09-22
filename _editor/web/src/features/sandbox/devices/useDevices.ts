@@ -12,6 +12,7 @@ import {
     hostRunningSandbox,
     SyncStatusSchema,
 } from "@intentic/sandbox-contract";
+import { errorMessage } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref } from "vue";
 import { sandboxError, SandboxHttpError, sandboxJson, sandboxRequest } from "../client/sandboxClient";
 import { readIntenticLines } from "../../../lib/intenticStream";
@@ -113,6 +114,17 @@ const flowSaid = async (
     return { outcome, refusal: undefined };
 };
 
+/**
+ * A flow's stream that broke, or ended, before the device's last word: the machine carries on with nobody listening,
+ * so this is never its refusal. `transport` is what the browser said when the stream broke; absent when it just ended.
+ */
+export class DeviceFlowLostError extends Error {
+    constructor(readonly transport: string | undefined) {
+        const browser = transport === undefined ? `` : ` The browser said: "${transport}".`;
+        super(`Lost contact with that device while this was running: it may still have finished. Refresh to see where it got to.${browser}`);
+    }
+}
+
 // A stream ending without a terminal frame means the connection dropped, not that the operation stopped;
 // the next fleet read reflects the real outcome. `severed` is that drop's answer for an op that causes it.
 const outcomeOf = async (
@@ -122,7 +134,9 @@ const outcomeOf = async (
 ): Promise<string> => {
     const said = await flowSaid(body, onLine).catch((error: unknown) => {
         if (severed === undefined) {
-            throw error;
+            // Read by shape: the browser's own abort is a DOMException, which not every DOM makes an Error.
+            const browser = errorMessage(error, ``);
+            throw new DeviceFlowLostError(browser === `` ? undefined : browser);
         }
         return { outcome: severed, refusal: undefined };
     });
@@ -135,7 +149,7 @@ const outcomeOf = async (
     if (severed !== undefined) {
         return severed;
     }
-    throw new Error(`Lost contact with that device while this was running: it may still have finished. Refresh to see where it got to.`);
+    throw new DeviceFlowLostError(undefined);
 };
 
 export async function manageDeviceSandbox(hostId: string, slug: string, op: DeviceSandboxOp, payload: DeviceSandboxPayload = {}): Promise<string> {

@@ -202,11 +202,10 @@ pub fn up(args: Up) -> Result<()> {
     // Nothing else creates it on this machine: a runner's slug never goes through the connect flow.
     sandbox::ensure_network(&slug)?;
     log.section(&format!("docker run {run_image}"));
-    if !docker::run_argv(&argv, &log) {
+    if let Err(refusal) = docker::run_argv(&argv, &log) {
         docker::quiet(&["rm", "-f", &container]);
-        let tail = log.tail(5);
         bail!(
-            "starting the runner failed — the full docker error is saved to {}.\n{tail}",
+            "starting the runner failed — the full docker output is saved to {}.\n{refusal}",
             log.path.display()
         );
     }

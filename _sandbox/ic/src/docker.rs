@@ -387,9 +387,12 @@ fn sift(from: impl Read, log: &Log, keep: fn(&str) -> bool, show: fn(&str), said
 ///
 /// The contract's json form is docker's ARGUMENTS (`["run", "-d", …]`) — only its sh form carries the
 /// `docker` word, because that one is text for a shell. Spawning argv[0] as the program would exec `run`.
-pub fn run_argv(argv: &[String], log: &Log) -> bool {
+///
+/// Err is docker's own refusal, the words a failure message quotes: never the command line, which carries
+/// every env pair the launch was given (a runner's pairing token among them) to whoever reads the error.
+pub fn run_argv(argv: &[String], log: &Log) -> std::result::Result<(), String> {
     if argv.is_empty() {
-        return false;
+        return Err("the run contract printed no docker command.".to_string());
     }
     // Logged HERE, not by the caller: every caller runs a second, differently-shaped attempt when the first
     // is refused, and a postmortem that shows only the first command describes a launch that never happened.
@@ -399,13 +402,29 @@ pub fn run_argv(argv: &[String], log: &Log) -> bool {
         // Silence here reads as "docker refused the flags" in every caller's error message, so the one
         // failure that isn't docker's answer at all has to say so.
         Err(err) => {
-            log.line(&format!("could not run docker: {err}"));
-            return false;
+            let said = format!("could not run docker: {err}");
+            log.line(&said);
+            return Err(said);
         }
     };
     log.write(&out.stdout);
     log.write(&out.stderr);
-    out.status.success()
+    if out.status.success() {
+        return Ok(());
+    }
+    Err(refusal_of(&out.stderr)
+        .unwrap_or_else(|| format!("docker exited with {} and said nothing.", out.status)))
+}
+
+/// Docker's stderr, trimmed, without the usage pointer it appends to every refusal; None when that is all it said.
+fn refusal_of(stderr: &[u8]) -> Option<String> {
+    let said = String::from_utf8_lossy(stderr);
+    let lines: Vec<&str> = said
+        .lines()
+        .map(str::trim_end)
+        .filter(|line| !line.is_empty() && !line.starts_with("Run 'docker "))
+        .collect();
+    (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
 pub fn image_exists(image: &str) -> bool {
@@ -679,9 +698,28 @@ fn pull_once(image: &str, log: &Log) -> Result<Streamed> {
 #[cfg(test)]
 mod tests {
     use super::{
-        docker_last_words, pull_refusal, pull_refusal_message, wrong_container_platform,
-        PullRefusal,
+        docker_last_words, pull_refusal, pull_refusal_message, refusal_of,
+        wrong_container_platform, PullRefusal,
     };
+
+    // Verbatim from a runner launch on Windows whose network was missing.
+    #[test]
+    fn a_refused_launch_is_quoted_as_docker_said_it_without_the_usage_pointer() {
+        let stderr = b"docker: Error response from daemon: failed to set up container networking: network intentic-workspace-runner-omen not found\n\nRun 'docker run --help' for more information\n";
+        assert_eq!(
+            refusal_of(stderr).as_deref(),
+            Some("docker: Error response from daemon: failed to set up container networking: network intentic-workspace-runner-omen not found")
+        );
+    }
+
+    #[test]
+    fn a_launch_refused_in_silence_has_no_words_to_quote() {
+        assert_eq!(
+            refusal_of(b"\nRun 'docker run --help' for more information\n"),
+            None
+        );
+        assert_eq!(refusal_of(b""), None);
+    }
 
     /* WHO HAS TO ACT, read out of docker's words — the one question a failed pull must not guess at. */
 

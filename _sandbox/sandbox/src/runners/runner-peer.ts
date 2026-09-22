@@ -21,13 +21,17 @@ export type RunnerAnnounced = Pick<RunnerHello, "version" | "image" | "channel" 
 export type RunnerHub = PeerHub<RunnerClient, RunnerAnnounced, RunnerFacts, never>;
 export type RunnerStore = PeerStore<{ readonly host?: string | undefined }>;
 
+// A runner redeems its pairing only when its container first boots, after `ic` has pulled a multi-gigabyte image and
+// built the overlay on it; the relayed flow's own ceiling (hosts/device-reports.ts) bounds that wait.
+export const RUNNER_PAIR_TTL_MS = 60 * 60 * 1000;
+
 export const RUNNER_PEER: PeerDoor<RunnerHello, RunnerAnnounced, { host: z.ZodOptional<z.ZodString> }> = {
     slug: "runners",
     noun: "runner",
     listKey: "runners",
     store: {
         files: (historyRoot) => ({ enrollments: join(historyRoot, "runner-enrollments.json"), consumed: join(historyRoot, "runner-pair-consumed.json") }),
-        key: "runners", prefix: "irt_", extra: { host: z.string().optional() }, replayable: true
+        key: "runners", prefix: "irt_", extra: { host: z.string().optional() }, replayable: true, pairTtlMs: RUNNER_PAIR_TTL_MS
     },
     hub: {
         domain: "runners",
