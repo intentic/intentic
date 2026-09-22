@@ -83,7 +83,7 @@ export const compareFamilies: CompareFamily[] = [
         label: "AI editors",
         verdict: "keep yours",
         body: "An AI editor keeps you at the keyboard. With intentic the agent writes and you review, and desktop sync mirrors the sandbox so your editor opens its latest work. Editors offer cloud agents now too; the difference is whose infrastructure runs them.",
-        examples: ["Cursor", "Windsurf", "VS Code + Copilot", "Zed", "JetBrains AI"],
+        examples: ["Cursor", "Devin Desktop", "GitHub Copilot", "Zed", "JetBrains AI"],
     },
     {
         id: "assistants",
@@ -1040,6 +1040,266 @@ export const comparePages: ComparePage[] = [
             datePublished: PUBLISHED,
         },
     },
+    {
+        slug: "devin",
+        name: "Devin",
+        url: "https://devin.ai/",
+        navLabel: "vs Devin",
+        menuBlurb: "A cloud AI engineer versus a self-hosted agent fleet",
+        family: "cloud",
+        heading: "Devin runs on Cognition's machines. intentic runs on yours.",
+        sub: "Devin is the most prominent cloud coding agent. intentic gives the same browser experience on hardware you own, with your code and credentials staying on your machine.",
+        theirPitch:
+            '"Devin, the AI software engineer." A cloud agent with its own VM, IDE, browser and terminal, built to let engineering teams assign tasks to Devin and review pull requests.',
+        verdict: [
+            "A polished product with deep integrations: Slack, Linear, Jira, GitHub, Sentry and PagerDuty. It runs on Cognition's cloud VMs with environment snapshots, macOS and Windows VM support, and a self-hosted option via Devin Outposts.",
+            "intentic keeps the same supervision from a browser, with the sandbox on your machine. The platform never holds your code or credentials; the full MIT source is in one public repo.",
+        ],
+        overlap: {
+            title: "Where you agree",
+            body: "both supervise agents from a browser, run tasks in parallel, review a plan before work begins and a diff before anything lands, and start work from events and schedules.",
+        },
+        differences: [
+            {
+                title: "Whose machine holds your source",
+                body: "Devin clones your repo into a cloud VM that Cognition manages. intentic runs the sandbox on your own hardware; the platform stores identity and a URL, never code.",
+            },
+            {
+                title: "Free and MIT, versus a metered plan",
+                body: "Devin's Teams plan is $80/month base plus $40 per developer seat, and cloud sessions consume a metered quota. intentic is MIT and free, on your own model subscription, with no proxy, markup or seat charge.",
+            },
+        ],
+        table: [
+            { label: "Where the agent runs", intentic: "a Docker sandbox on your hardware", them: "Cognition's cloud VMs, or Outposts on your infrastructure" },
+            { label: "Who can read your source", intentic: "you; the platform has no path to it", them: "Cognition, for the duration of the session" },
+            { label: "How it gets your code", intentic: "it is already on your machine", them: "cloned from GitHub, GitLab, Bitbucket or Azure DevOps into the VM" },
+            { label: "Where credentials sit", intentic: "inside a sandbox you own, injected per turn", them: "in Devin's environment, scoped to the session" },
+            {
+                label: "Integrations",
+                intentic: "capabilities: GitHub, Postgres, Sentry, SSH, MCP servers",
+                them: "Slack, Linear, Jira, Sentry, PagerDuty, Datadog, MCP servers",
+                theirs: true,
+            },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "automations: Slack, GitHub, Linear, Jira, PagerDuty, schedule, webhook",
+            },
+            { label: "Model billing", intentic: "your own subscription, never metered by us", them: "bundled in Devin's plan with daily/weekly quota" },
+            {
+                label: "Setup",
+                intentic: "Docker, a Google account, one pasted command",
+                them: "connect a repo and go; nothing to host",
+                theirs: true,
+            },
+            {
+                label: "Elastic capacity",
+                intentic: "bounded by the machines you provide",
+                them: "up to 10 concurrent sessions, unlimited on Teams/Enterprise",
+                theirs: true,
+            },
+            { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "proprietary" },
+            { label: "Price", intentic: "free, on your own model subscription", them: "free tier; Pro $20/mo, Teams $80/mo base + $40/seat" },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "session review, Devin Review on PRs, visual QA",
+            },
+        ],
+        pickThem:
+            "You would rather not provide a machine, your team wants deep Slack and Jira integration out of the box, procurement needs a vendor with established enterprise contracts, and you want parallel cloud agents without owning the hardware.",
+        sources: [
+            { label: "Docs", url: "https://docs.devin.ai/get-started/devin-intro" },
+            { label: "Pricing", url: "https://devin.ai/pricing" },
+            { label: "Automations", url: "https://docs.devin.ai/product-guides/automations" },
+        ],
+        meta: {
+            title: "intentic vs Devin · whose machine runs your code",
+            description:
+                "Devin runs agents on Cognition's cloud VMs. intentic keeps the same browser workflow on your own hardware, free and MIT, with code and credentials that never leave.",
+            datePublished: "2026-09-22",
+        },
+    },
+    {
+        slug: "github-copilot",
+        name: "GitHub Copilot",
+        url: "https://github.com/features/copilot",
+        navLabel: "vs GitHub Copilot",
+        menuBlurb: "The editor everyone has versus a self-hosted sandbox fleet",
+        family: "editors",
+        heading: "GitHub Copilot is everywhere. intentic gives its agents a machine.",
+        sub: "GitHub Copilot pairs with you in the editor and sends its cloud agent to work on GitHub Actions. intentic gives any harness a sandbox it runs inside, with your code staying on your hardware.",
+        theirPitch:
+            '"Your AI accelerator for every workflow, from the editor to the enterprise." Code completions in every editor, agent mode for local autonomous work, and a cloud coding agent that runs on GitHub Actions.',
+        verdict: [
+            "The widest editor reach of any AI tool: VS Code, JetBrains, Xcode, Neovim, Eclipse, Visual Studio, GitHub Mobile. Its cloud coding agent runs autonomously on GitHub Actions with a 59-minute session limit, assigning Copilot as an issue assignee.",
+            "intentic adds a different layer: a container you approve, credentials kept inside, and a fleet of worktree-isolated agents you supervise from a browser. It runs Copilot's models alongside Claude Code, Codex, Grok and others.",
+        ],
+        overlap: {
+            title: "Where you agree",
+            body: "both offer autonomous coding agents that work without you watching, both review code through diffs and pull requests, and both integrate with GitHub repos.",
+        },
+        differences: [
+            {
+                title: "Whose machine the cloud agent runs on",
+                body: "Copilot's coding agent runs in an ephemeral GitHub Actions environment, limited to 59 minutes per session. An intentic sandbox runs on your hardware with no session time limit, on a machine you own and control.",
+            },
+            {
+                title: "An editor, or the machine under the agent",
+                body: "GitHub Copilot is an editor companion: completions, chat and agent mode inside the IDE. intentic is the sandbox and fleet around the agent: an image you approve, capabilities that carry your systems, and automations that start the work.",
+            },
+            {
+                title: "Pricing models",
+                body: "Copilot charges per seat from $10 to $39/user on individual plans and $19 to $39/user on business plans, with usage metered in AI credits. intentic is MIT and free, on your own model subscription.",
+            },
+        ],
+        table: [
+            { label: "What it is", intentic: "the machine and fleet an agent works in", them: "an AI-powered editor companion with a cloud coding agent" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox on your hardware", them: "your editor (agent mode) or GitHub Actions (cloud agent)" },
+            {
+                label: "Editor support",
+                intentic: "a shared editor plus desktop sync to the one you have",
+                them: "VS Code, JetBrains, Xcode, Neovim, Eclipse, Visual Studio, Zed",
+                theirs: true,
+            },
+            {
+                label: "Code completions",
+                intentic: "not an editor; the agent writes whole changes",
+                them: "inline completions and next-edit suggestions, unlimited on paid plans",
+                theirs: true,
+            },
+            {
+                label: "Cloud agent session",
+                intentic: "no time limit; runs until the job is done",
+                them: "59-minute maximum on GitHub Actions",
+            },
+            {
+                label: "What you can change about the environment",
+                intentic: "the image, the capabilities, the context loaded each turn",
+                them: "custom instructions and MCP servers; the runtime is GitHub's",
+            },
+            { label: "Where credentials live", intentic: "inside a sandbox you own, injected per turn", them: "in the ephemeral GitHub Actions environment" },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "assign an issue to Copilot, trigger from Slack, Linear, Jira, API or automation",
+            },
+            { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "proprietary" },
+            { label: "Price", intentic: "free, on your own model subscription", them: "free tier; Pro $10/user, Business $19/user, Enterprise $39/user" },
+            {
+                label: "Isolation",
+                intentic: "one sandbox container for the fleet; one git worktree per agent",
+                them: "one branch and one PR per cloud agent task",
+            },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "Copilot opens a PR; AI-assisted code review on the diff",
+            },
+        ],
+        pickThem:
+            "You want AI in your editor under your hands, the cloud agent's GitHub integration is enough for your unattended work, and your team is already paying for GitHub Enterprise.",
+        sources: [
+            { label: "Features", url: "https://github.com/features/copilot" },
+            { label: "Plans", url: "https://github.com/features/copilot/plans" },
+            { label: "Cloud agent docs", url: "https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-coding-agent" },
+        ],
+        meta: {
+            title: "intentic vs GitHub Copilot · editor companion, or agent sandbox",
+            description:
+                "GitHub Copilot pairs with you in every editor and runs a cloud coding agent on GitHub Actions. intentic gives agents a self-hosted sandbox fleet, free and MIT.",
+            datePublished: "2026-09-22",
+        },
+    },
+    {
+        slug: "codex",
+        name: "Codex",
+        url: "https://openai.com/codex",
+        navLabel: "vs Codex",
+        menuBlurb: "OpenAI's agent in the cloud versus a self-hosted sandbox fleet",
+        family: "harnesses",
+        heading: "Codex is one of intentic's built-in harnesses. Its cloud runs on OpenAI's machines; intentic's on yours.",
+        sub: "Codex is both a CLI agent and a cloud coding platform inside ChatGPT. intentic runs its CLI as one of six harnesses, so this compares the cloud platform with the sandbox around it.",
+        theirPitch:
+            '"The same powerful coding agent — now in ChatGPT." A command centre for agentic coding with cloud environments, worktrees, scheduled tasks and an always-on background mode.',
+        verdict: [
+            "A strong agent embedded in ChatGPT, with cloud environments, parallel worktrees, skills you teach it, scheduled runs and a CLI that works offline. The IDE extension and desktop app round out a polished surface.",
+            "Codex is also one of intentic's built-in harnesses: run it beside Claude Code, Grok, Kimi Code and Google, inside a container you approve, with your own capabilities and automations.",
+        ],
+        overlap: {
+            title: "Where you agree",
+            body: "both isolate parallel agents in git worktrees, both run on schedules and events, and both use the model subscription you already pay for. intentic runs Codex, so the agent can be the same one.",
+        },
+        differences: [
+            {
+                title: "Whose machine the cloud runs on",
+                body: "Codex cloud environments run on OpenAI's infrastructure, and your repo is cloned into them. An intentic sandbox is a container on a machine you choose; the platform stores identity and a URL, never your code.",
+            },
+            {
+                title: "One harness, or the workshop around it",
+                body: "Codex is the harness. intentic is the machine and fleet around one: six side by side, an image you approve, capabilities that carry your systems, a board that sorts your agents, and automations that wake them.",
+            },
+        ],
+        table: [
+            { label: "What it is", intentic: "the machine and fleet an agent works in", them: "a coding agent inside ChatGPT with cloud environments" },
+            { label: "Where the agent runs", intentic: "a Docker sandbox on your hardware", them: "OpenAI's cloud, or locally via the CLI and IDE extension" },
+            {
+                label: "Harnesses / models",
+                intentic: "Claude Code, Codex, Grok, Kimi Code, Google, plus any ACP agent",
+                them: "OpenAI models including GPT-6, on your ChatGPT plan",
+            },
+            {
+                label: "Surfaces",
+                intentic: "any browser over a private tunnel, phone included",
+                them: "ChatGPT web and desktop, IDE extension, CLI",
+                theirs: true,
+            },
+            {
+                label: "What you can change about the environment",
+                intentic: "the image, the capabilities, the context loaded each turn",
+                them: "skills, AGENTS.md, plugins; the cloud environment is OpenAI's",
+            },
+            { label: "Where credentials live", intentic: "inside a sandbox you own, injected per turn", them: "with OpenAI for the session's duration" },
+            {
+                label: "Starts on an event",
+                intentic: "automations: cron, webhook, chat, email, CI/CD, workspace events",
+                them: "scheduled tasks, GitHub Action, hooks, workspace agents",
+            },
+            { label: "Licence", intentic: "MIT for the sandbox, platform and CLI", them: "proprietary; CLI is open source" },
+            { label: "Price", intentic: "free, on your own model subscription", them: "bundled with ChatGPT plans; Pro from $100/mo for full Codex" },
+            {
+                label: "Parallel agents",
+                intentic: "a fleet of worktree-isolated agents across your sandbox",
+                them: "parallel agents in cloud worktrees and environments",
+            },
+            {
+                label: "Runs without you at the keyboard",
+                intentic: "automations on cron, webhook, push, alert, email, chat",
+                them: "scheduled tasks, always-on background mode",
+            },
+            {
+                label: "Review workflow",
+                intentic: "the diff in the Changes panel, approved before it lands",
+                them: "code review inside ChatGPT, PRs from cloud sessions",
+            },
+        ],
+        together: {
+            title: "Run Codex inside intentic",
+            body: "Pick Codex as an agent's harness in intentic and it runs inside a sandbox you own, with your capabilities and automations around it. The next agent can use Claude Code or Grok without switching tools.",
+        },
+        pickThem:
+            "You want one subscription that covers the model, the cloud environment and the desktop app, you prefer OpenAI's models, and you would rather not run your own container.",
+        sources: [
+            { label: "Codex", url: "https://openai.com/codex" },
+            { label: "CLI source", url: "https://github.com/openai/codex" },
+        ],
+        meta: {
+            title: "intentic vs Codex · a harness intentic runs",
+            description:
+                "OpenAI Codex is one of intentic's built-in harnesses. Its cloud runs on OpenAI's machines; intentic runs every harness in a sandbox on yours. Free and MIT.",
+            datePublished: "2026-09-22",
+        },
+    },
 ];
 
 export const comparePage = (slug: string): ComparePage | undefined => comparePages.find((page) => page.slug === slug);
@@ -1073,9 +1333,9 @@ export const compareIndex = {
         cta: "Report an inaccuracy",
     },
     meta: {
-        title: "How intentic compares · Cursor, Claude Code, Devin",
+        title: "How intentic compares · Cursor, Claude Code, Devin, GitHub Copilot",
         description:
-            "Where intentic sits among agent CLIs, AI editors, assistants, local orchestrators and cloud platforms: Cursor, Claude Code, Conductor, Superset, Synara, Devin.",
+            "Where intentic sits among agent CLIs, AI editors, assistants, local orchestrators and cloud platforms: Cursor, Claude Code, Devin, GitHub Copilot, Codex, Conductor, Superset.",
         datePublished: PUBLISHED,
     },
 };

@@ -110,6 +110,12 @@ export default defineConfig({
                 if (p === "/") {
                     item.priority = 1.0;
                     item.changefreq = "weekly";
+                } else if (p.startsWith("/compare/") || p.startsWith("/features/") || p.startsWith("/guides/") || p === "/pricing/" || p === "/docs/quickstart/") {
+                    item.priority = 0.8;
+                } else if (p.startsWith("/docs/") || p === "/blog/" || p.startsWith("/blog/") || p === "/where-it-runs/" || p === "/download/") {
+                    item.priority = 0.7;
+                } else if (p.startsWith("/api/")) {
+                    item.priority = 0.4;
                 }
                 const lastmod = lastModForUrl(item.url);
                 if (lastmod) {
