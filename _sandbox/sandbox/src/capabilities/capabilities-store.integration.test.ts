@@ -65,6 +65,27 @@ test("ONE unreadable entry never takes the rest of the manifest down with it", a
     expect(invalid).toEqual(["office"]);
 });
 
+// The manifest is read on every capability lookup; a report per read buried the log under one unchanged fact.
+test("an unreadable entry is reported when it appears, and again only once it has been fixed and broken anew", async () => {
+    const invalid: string[] = [];
+    const path = join(mkdtempSync(join(tmpdir(), "caps-")), `${STATE_DIR}`, "config", "capabilities.json");
+    const store = fileCapabilitiesStore(path, (id) => invalid.push(id));
+    await mkdir(dirname(path), { recursive: true });
+    const stale = { id: "office", kind: "vpn", config: { config: "[Interface]\n", enabled: "on" } };
+    await writeFile(path, JSON.stringify([stale]));
+
+    await store.list();
+    await store.get("office");
+    await store.list();
+    expect(invalid).toEqual(["office"]);
+
+    await writeFile(path, JSON.stringify([{ id: "linear", kind: "mcp", config: { url: "https://a/mcp" } }]));
+    await store.list();
+    await writeFile(path, JSON.stringify([stale]));
+    await store.list();
+    expect(invalid).toEqual(["office", "office"]);
+});
+
 test("an unreadable entry survives writes instead of being quietly deleted", async () => {
     // Stale entry is real user data (VPN credentials); an unrelated write must not be what destroys it.
     const { store, path } = tempStore();

@@ -5,6 +5,7 @@ import {
     isTrialProvider,
     type Model,
     NATIVE_PROVIDERS,
+    type RunnableProviders,
     RunnableProvidersSchema,
     type TrialStatusResponse,
 } from "@intentic/sandbox-contract";
@@ -184,7 +185,9 @@ watch(
 // The providers this sandbox adds to the fixed native list: ACP agents (the row is the provider itself) and model
 // endpoints (their own catalog, loaded right after). Read from /providers, not /capabilities: which providers a chat
 // may run on is every member's read, while what this box connects to is the operator's alone.
-export const loadRunnableProviders = async (): Promise<void> => {
+// The readiness half: which providers can run. Answers the endpoints whose catalogs the endpoint half loads, or
+// undefined when a daemon that may yet answer leaves both halves unknown.
+const readRunnableProviders = async (): Promise<RunnableProviders["endpoints"] | undefined> => {
     let answer: unknown;
     try {
         answer = await sandboxJson(`/providers`);
@@ -193,27 +196,39 @@ export const loadRunnableProviders = async (): Promise<void> => {
         // daemon that doesn't serve it) answer the same way every time, so they leave the half known and empty rather
         // than holding a spinner over every gated surface for as long as the tab is open. A 5xx or an unreachable
         // daemon leaves it unknown, and the next reachable seam asks again.
-        if (error instanceof SandboxHttpError && (error.status === 403 || error.status === 404)) {
-            await loadTrialStatus();
-            endpointsLoaded.value = true;
-        }
-        return;
+        return error instanceof SandboxHttpError && (error.status === 403 || error.status === 404) ? [] : undefined;
     }
     // Parsed, not cast: a body this build can't read is an answer too, and one more retry won't make it readable, so
     // the lists keep what they had and the gate still stops waiting.
     const listing = RunnableProvidersSchema.safeParse(answer);
-    if (listing.success) {
-        nativeReady.value = listing.data.native;
-        acpProviders.value = listing.data.agents;
-        // Ids arrive already prefixed `endpoint/`, and `kind` rides along: it's the only way to tell a local model from
-        // a remote server once both are `endpoint/<id>`.
-        endpointProviders.value = listing.data.endpoints;
-        // Endpoint catalogs load on the same seam as native ones, not via loadAllProviderModels (fixed list).
-        await Promise.all(listing.data.endpoints.map((endpoint) => loadProviderModels(endpoint.id)));
+    if (!listing.success) {
+        return [];
     }
-    // Read last: catalogs must land first, or a chat moved onto the trial keeps an empty model id forever.
+    nativeReady.value = listing.data.native;
+    acpProviders.value = listing.data.agents;
+    // Ids arrive already prefixed `endpoint/`, and `kind` rides along: it's the only way to tell a local model from a
+    // remote server once both are `endpoint/<id>`.
+    endpointProviders.value = listing.data.endpoints;
+    return listing.data.endpoints;
+};
+
+// The endpoint half: each endpoint's catalog, on the same seam as native ones (not loadAllProviderModels, a fixed
+// list), then the trial allowance. Read last: catalogs must land first, or a chat moved onto the trial keeps an empty
+// model id forever.
+const loadEndpointHalf = async (endpoints: RunnableProviders["endpoints"]): Promise<void> => {
+    await Promise.all(endpoints.map((endpoint) => loadProviderModels(endpoint.id)));
     await loadTrialStatus();
     endpointsLoaded.value = true;
+};
+
+// Two halves with different waiters: `ready` once the readiness half has landed, which is all the account gate needs;
+// `settled` once the endpoint half has too, which only `endpointsLoaded` waits on.
+export const loadRunnableProviders = (): { readonly ready: Promise<void>; readonly settled: Promise<void> } => {
+    const endpoints = readRunnableProviders();
+    return {
+        ready: endpoints.then(() => undefined),
+        settled: endpoints.then((found) => (found === undefined ? undefined : loadEndpointHalf(found))),
+    };
 };
 
 // Singleton per window (hotReload.ts): a hot-reload re-run would mint a second set of in-flight catalog reads.

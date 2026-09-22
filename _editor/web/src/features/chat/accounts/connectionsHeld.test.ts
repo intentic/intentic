@@ -37,8 +37,38 @@ const daemon = (held: unknown, posted: Posted[] = []): Posted[] => {
 };
 
 const { heldAccounts, refreshConnections } = await import("./useChat-accounts");
+const { accountsLoaded } = await import("./providerAccounts");
 
 const HELD = [{ provider: `claude`, account: `a`, resumesAt: 1_800_000_000 }];
+
+// The arrival read holds for the daemon's sweep by design, and the trial read waits on the platform; neither is an
+// account list, so the capacity rail's skeleton and every "checking" chip must not wait on them.
+it(`opens the account gate on the lists while the plan-limits hold and the trial read are still out`, async () => {
+    const { promise: slow, resolve: release } = Promise.withResolvers<unknown>();
+    sandboxJsonMock.mockImplementation((path: string) => {
+        if (path === `/usage/plan-limits/refresh` || path === `/endpoints/trial/status`) {
+            return slow;
+        }
+        return Promise.resolve(path === `/translator/accounts` ? { codex: [], grok: [], kimi: [], gemini: [] } : { accounts: [] });
+    });
+    accountsLoaded.value = false;
+    let settled = false;
+    const connections = refreshConnections().then(() => {
+        settled = true;
+    });
+
+    try {
+        // One macrotask: every read that answered has had its microtasks run, and the held two have not answered.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(accountsLoaded.value).toBe(true);
+        expect(settled).toBe(false);
+    } finally {
+        // Released either way: a read left in flight would be joined by the next test's refreshConnections.
+        release({ ok: true, held: [] });
+        await connections;
+    }
+    expect(settled).toBe(true);
+});
 
 it(`learns what is held on arrival, not only from a press`, async () => {
     const posted = daemon(HELD);

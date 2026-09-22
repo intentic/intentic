@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import type { Logger } from "pino";
+import { gitDirOf } from "../../git/git-dir.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { PerfTracker } from "../../platform/resources/perf.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
@@ -140,25 +141,9 @@ export const createAgentWorktrees = (
     const worktreeDir = (id: string, repo: string): string => (repo === "root" ? conversationDir(id) : join(conversationDir(id), repo));
     const mainDir = (repo: string): string => (repo === "root" ? workspace.root : join(workspace.root, repo));
 
-    // Where a checkout's git admin area stands, or undefined when nothing stands behind it any more: a worktree's `.git`
-    // file points into `<main>/.git/worktrees/<name>`, which a deleted, re-cloned or renamed repo takes with it.
-    const gitDirOf = async (worktree: string): Promise<string | undefined> => {
-        const pointer = join(worktree, ".git");
-        // A real .git directory is its own repository, never a worktree pointer; needs no resolving.
-        const stats = await lstat(pointer).catch(() => undefined);
-        if (stats === undefined) {
-            return undefined;
-        }
-        if (stats.isDirectory()) {
-            return pointer;
-        }
-        const named = (await readFile(pointer, "utf8").catch(() => ``)).match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
-        const gitDir = named === undefined || named === `` ? undefined : resolve(worktree, named);
-        return gitDir !== undefined && (await pathExists(gitDir)) ? gitDir : undefined;
-    };
-
     // Is there still a repository behind this checkout: every git command against one without it fails permanently
-    // (`fatal: not a git repository`); asked before retire tries to preserve anything.
+    // (`fatal: not a git repository`); asked before retire tries to preserve anything. A worktree's admin dir lives in
+    // `<main>/.git/worktrees/<name>`, which a deleted, re-cloned or renamed repo takes with it.
     const repoBehind = async (worktree: string): Promise<boolean> => (await gitDirOf(worktree)) !== undefined;
 
     // Which branch an admin area's HEAD names, undefined for a detached HEAD, which is not a branch. Split from the
@@ -172,10 +157,7 @@ export const createAgentWorktrees = (
     // detached HEAD, which is not a branch.
     const checkedOutBranch = async (worktree: string): Promise<string | undefined> => {
         const gitDir = await gitDirOf(worktree);
-        if (gitDir === undefined) {
-            return undefined;
-        }
-        return (await readFile(join(gitDir, "HEAD"), "utf8").catch(() => ``)).match(/^ref:\s*refs\/heads\/(\S+)$/m)?.[1];
+        return gitDir === undefined ? undefined : headBranchIn(gitDir);
     };
 
     // Per-repo op chains: worktree add/remove and land touch the repo's admin area and, for land, the main index.

@@ -1,4 +1,4 @@
-import type { CapabilityKind } from "@intentic/sandbox-contract";
+import { type CapabilityKind, hostEntryOf } from "@intentic/sandbox-contract";
 import type { CapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { InvariantCheck } from "../invariants/invariants.js";
 import type { PeerHub } from "./peer-hub.js";
@@ -44,8 +44,16 @@ const registryCheck = (name: string, store: Roster, hub: Sockets, stakes: string
 });
 
 // The same rule for the doors whose grant is a capability card: nothing is enrolled that no card holds. Boot too, since
-// the manifest is a workspace file a checkout or a land can rewrite while the daemon is not looking.
-const grantCheck = (name: string, store: Roster, cards: Pick<CapabilitiesStore, "list">, kind: CapabilityKind, stakes: string): InvariantCheck => ({
+// the manifest is a workspace file a checkout or a land can rewrite while the daemon is not looking. `cardOf` names the
+// card an enrollment is a connection of, the door's own rule (PeerDoor.cardOf).
+const grantCheck = (
+    name: string,
+    store: Roster,
+    cards: Pick<CapabilitiesStore, "list">,
+    kind: CapabilityKind,
+    cardOf: (id: string) => string,
+    stakes: string,
+): InvariantCheck => ({
     name,
     on: ["boot", "sweep"],
     run: async ({ fail }) => {
@@ -54,7 +62,7 @@ const grantCheck = (name: string, store: Roster, cards: Pick<CapabilitiesStore, 
             return;
         }
         const granted = new Set((await cards.list()).flatMap((capability) => (capability.kind === kind ? [capability.id] : [])));
-        const orphans = enrolled.flatMap((peer) => (granted.has(peer.id) ? [] : [peer.id]));
+        const orphans = enrolled.flatMap((peer) => (granted.has(cardOf(peer.id)) ? [] : [peer.id]));
         if (orphans.length > 0) {
             fail(`${orphans.length} enrollment(s) are held by no capability card (${orphans.join(", ")}): ${stakes}`);
         }
@@ -70,6 +78,8 @@ export const checks = (deps: PeerRegistryDeps): readonly InvariantCheck[] => [
         deps.hosts,
         deps.capabilities,
         "device",
+        // A machine card holds every OS install on it, each enrolled as `<card>::<environment>`.
+        hostEntryOf,
         "a key into this sandbox that no screen lists and no button can withdraw",
     ),
     grantCheck(
@@ -77,6 +87,7 @@ export const checks = (deps: PeerRegistryDeps): readonly InvariantCheck[] => [
         deps.webexts,
         deps.capabilities,
         "webext",
+        (id) => id,
         "a browser extension still paired to a sandbox whose card for it is gone",
     ),
 ];

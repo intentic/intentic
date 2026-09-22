@@ -180,20 +180,23 @@ const readConnections = async (force: boolean): Promise<void> => {
         await readPlanLimits(true);
     }
     const natives = NATIVE_PROVIDERS.filter((target) => !subscriptionOnly(target));
+    // Started with the lists and awaited after the gate: unforced it holds for the daemon's sweep, and its own answer
+    // lands on `heldAccounts` whenever it arrives.
+    const limits = force ? undefined : readPlanLimits(false);
+    const runnable = loadRunnableProviders();
     const [reads] = await Promise.all([
         Promise.allSettled(natives.map((target) => refreshAccounts(target))),
         refreshTranslatorAccounts(),
         refreshProviderRefusals(),
         // The daemon's own readiness rides with the account lists rather than only with the catalogs: the two answer
         // one question, and a disconnect that moved one and not the other would leave a gone account reading ready.
-        loadRunnableProviders(),
-        // Alongside the lists rather than before them: unforced it must not delay the panel, and its own answer lands
-        // on `heldAccounts` whenever it arrives.
-        force ? undefined : readPlanLimits(false),
+        runnable.ready,
     ]);
     if (reads.some((read) => read.status === `fulfilled`)) {
         accountsLoaded.value = true;
     }
+    // Endpoint catalogs and the trial allowance are `endpointsLoaded`'s to wait on, not this gate's.
+    await Promise.all([runnable.settled, limits]);
 };
 
 // The unforced read in flight, joined by concurrent mounters; a forced read is never joined.

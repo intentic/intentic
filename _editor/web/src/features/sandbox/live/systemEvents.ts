@@ -1,4 +1,4 @@
-import { fileBoundQueryKeys, runtimeBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
+import { fileBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { contributedFileBindings } from "../../../extension-host/fileBindings";
 import { emitFilesChanged } from "../../../extension-host/fileEvents";
 import { emitRefsChanged } from "../../../extension-host/refEvents";
@@ -56,7 +56,9 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     // Between events a cached read is taken as true (staleTime, queryPersistence), which makes a (re)connect the one
     // moment that has to distrust every one of them: frames that landed while this browser was away are gone, and a
     // cache hydrated from disk can be hours old. What is on screen refetches now; the rest is marked for its next
-    // mount. Ahead of the reset below, so a replaced workspace still gets the stronger treatment.
+    // mount. This covers every pushed-only (file- and runtime-bound) key too; naming one again would cancel its read
+    // in flight and start another, which the daemon answers twice. Ahead of the reset below, so a replaced workspace
+    // still gets the stronger treatment.
     void queryClient.invalidateQueries({ refetchType: `active` });
     // Workspace replaced (recreated under the same id) or daemon rebuilt into a differently-shaped one; either makes the
     // cached workspace state stale.
@@ -74,18 +76,9 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
             resetWorkspaceScopedState();
         }
     }
-    // File-bound views are pushed-only, so refetch each key once on (re)connect to catch frames missed while
-    // disconnected.
-    for (const key of fileBoundQueryKeys(contributedFileBindings())) {
-        void queryClient.invalidateQueries({ queryKey: [key] });
-    }
     // Catches views an invalidation can't reach (nothing mounted); an empty batch is this channel's "something changed,
     // unspecified" (fileEvents.ts).
     emitFilesChanged([]);
-    // Runtime-bound views are also pushed-only with no poll to fall back on, so refetch them on reconnect too.
-    for (const key of runtimeBoundQueryKeys()) {
-        void queryClient.invalidateQueries({ queryKey: key });
-    }
 };
 
 // Paths the daemon saw change on disk, or the unnamed batch that stands for "something moved and I cannot say what".

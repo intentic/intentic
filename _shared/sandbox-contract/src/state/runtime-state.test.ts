@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { RUNTIME_DOMAIN_BINDINGS, runtimeBoundQueryKeys, staleRuntimeQueryKeys } from "./runtime-state.js";
+import { RUNTIME_DOMAIN_BINDINGS, staleRuntimeQueryKeys } from "./runtime-state.js";
 
 describe(`staleRuntimeQueryKeys`, () => {
     it(`maps a pushed domain to the queries it makes stale`, () => {
@@ -30,13 +30,7 @@ describe(`staleRuntimeQueryKeys`, () => {
     });
 });
 
-describe(`runtimeBoundQueryKeys`, () => {
-    it(`covers every declared domain, since a reconnect is the only recovery for a frame nobody received`, () => {
-        // Joined into strings for comparison: two equal arrays are still different object identities.
-        const joined = (keys: readonly (readonly string[])[]): string[] => [...new Set(keys.map((key) => key.join(`/`)))].toSorted();
-        expect(joined(runtimeBoundQueryKeys())).toEqual(joined(RUNTIME_DOMAIN_BINDINGS.flatMap((binding) => binding.invalidates)));
-    });
-
+describe(`RUNTIME_DOMAIN_BINDINGS`, () => {
     it(`leaves no domain declaring no keys: a domain nothing renders has no reason to be pushed`, () => {
         expect(RUNTIME_DOMAIN_BINDINGS.filter((binding) => binding.invalidates.length === 0)).toEqual([]);
     });

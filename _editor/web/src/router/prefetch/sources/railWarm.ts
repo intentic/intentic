@@ -3,7 +3,8 @@ import { capabilitiesKey, fetchCapabilities } from "../../../features/capabiliti
 import { fetchPanels, panelsKey } from "../../../features/extensions/usePanels";
 import { fetchSubagents, subagentsKey } from "../../../features/chat/subagents/subagentsQuery";
 import { fetchModules, modulesKey } from "../../../features/workspace/health/useModules";
-import { fetchWorkspaceTree, workspaceTreeKey } from "../../../features/workspace/explorer/useWorkspaceTree";
+import { fetchWorkspaceTree } from "../../../features/workspace/explorer/useWorkspaceTree";
+import { workspaceTreeKey } from "../../../features/workspace/explorer/workspaceTreeKey";
 import type { WarmTask } from "../warmPlan";
 import { warmQuery } from "../warmQuery";
 

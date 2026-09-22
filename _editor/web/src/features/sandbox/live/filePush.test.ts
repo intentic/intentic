@@ -31,6 +31,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { registerFileBindings } from "../../../extension-host/fileBindings";
 import { onFilesChanged } from "../../../extension-host/fileEvents";
 import { queryClient } from "../../../lib/queryPersistence";
+import { viewsOnScreen } from "../../../testing/viewsOnScreen";
 import { applySystemEvent } from "./systemEvents";
 
 // A file push evicts the query keys a `contributes.files` declaration names, and also announces the frame to
@@ -40,12 +41,13 @@ const SANDBOX = `sbx-1`;
 const APPROVALS = `${STATE_DIR}/config/approvals/`;
 
 let invalidated: unknown[][];
+let invalidateSpy: ReturnType<typeof spyOn>;
 let disposables: { dispose: () => void }[];
 
 beforeEach(() => {
     invalidated = [];
     disposables = [];
-    spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
+    invalidateSpy = spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
         const resolved = typeof filters === `function` ? filters() : filters;
         invalidated.push([...(resolved?.queryKey ?? [])]);
     });
@@ -83,14 +85,20 @@ it(`treats a batch too large to list as "assume everything file-backed moved"`, 
     expect(listener).toHaveBeenCalledWith([APPROVALS]);
 });
 
-it(`wakes the file-backed background state on a new connection, not just the mounted views`, () => {
+// Through the real cache, since the count is the point: a view read twice on one reconnect costs the daemon twice.
+it(`wakes the file-backed background state on a new connection, not just the mounted views`, async () => {
+    invalidateSpy.mockRestore();
     // A write that landed while the stream was down was pushed once, to nobody, and no later frame repeats it.
     const listener = woken([APPROVALS]);
-
-    applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);
-
-    expect(invalidated).toContainEqual([`approvals`]);
-    expect(listener).toHaveBeenCalledWith([APPROVALS]);
+    const views = viewsOnScreen(queryClient, [[`approvals`, SANDBOX]]);
+    try {
+        applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(views.reads([`approvals`, SANDBOX])).toBe(1);
+        expect(listener).toHaveBeenCalledWith([APPROVALS]);
+    } finally {
+        views.unmount();
+    }
 });
 
 it(`leaves an extension that claimed a different path alone`, () => {

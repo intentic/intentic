@@ -28,6 +28,7 @@ mock.module("../client/sandboxClient", () => ({
 }));
 
 import { queryClient } from "../../../lib/queryPersistence";
+import { viewsOnScreen } from "../../../testing/viewsOnScreen";
 import { applySystemEvent } from "./systemEvents";
 
 // These views hold no timer of their own, so this frame is their entire live feed; right views refresh, wrong ones are
@@ -37,9 +38,10 @@ const SANDBOX = `sbx-1`;
 
 // Which query keys were asked to refresh, spied rather than driven through a real cache.
 let invalidated: unknown[][];
+let invalidateSpy: ReturnType<typeof spyOn>;
 beforeEach(() => {
     invalidated = [];
-    spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
+    invalidateSpy = spyOn(queryClient, `invalidateQueries`).mockImplementation(async (filters) => {
         const resolved = typeof filters === `function` ? filters() : filters;
         invalidated.push([...(resolved?.queryKey ?? [])]);
     });
@@ -67,10 +69,18 @@ it(`leaves the file-backed views alone: a running thing moving is not a file cha
     expect(invalidated).toEqual([[`browsers`], [`subagents`]]);
 });
 
-it(`re-asks every runtime-bound view on a new connection`, () => {
+// Driven through the real cache: what matters is how many reads reach the daemon, and a second invalidation of a key
+// already refetching cancels that read and starts another, which the daemon answers both of.
+it(`re-asks every runtime-bound view on a new connection, once each`, async () => {
+    invalidateSpy.mockRestore();
     // Replaces the polls: a frame missed while the stream was down is never resent, so hello re-asks all.
-    applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);
-    for (const key of [`terminals`, `panels`, `apps`, `ports`, `browsers`, `subagents`]) {
-        expect(invalidated).toContainEqual([key]);
+    const keys = [`terminals`, `panels`, `apps`, `ports`, `browsers`, `subagents`, `capabilities`].map((key) => [key, SANDBOX]);
+    const views = viewsOnScreen(queryClient, keys);
+    try {
+        applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(keys.map((key) => [key[0], views.reads(key)])).toEqual(keys.map((key) => [key[0], 1]));
+    } finally {
+        views.unmount();
     }
 });

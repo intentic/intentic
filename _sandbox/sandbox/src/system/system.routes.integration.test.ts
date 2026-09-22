@@ -19,6 +19,8 @@ import { fakeFiles, fakeProcesses } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { HOST_PEER } from "../hosts/host-peer.js";
 import { filePeerStore } from "../peers/peer-store.js";
+import { MAX_BACKLOG_FRAMES } from "./frame-backlog.js";
+import { connectedCount } from "./presence.js";
 import { publishRuntimeChange } from "./runtime-watch.js";
 
 // System routes, driven over the daemon's HTTP surface as the browser does. Fakes and the client are shared
@@ -224,6 +226,35 @@ test("presence: an /events connection joins the roster and a /system/presence re
         },
     ]);
     controller.abort();
+});
+
+// A tab frozen in the background keeps its connection open and reads nothing: every snapshot it missed was held for it
+// for as long as it slept, and its roster entry kept the sandbox awake and everyone's notifications quiet.
+test("events: a connection that stopped reading is cut, and leaves the roster", async () => {
+    const app = createApp(services({ auth: { authorize: async () => proven("a@x.com", "maintainer"), authorizeOwner: rejectForbidden } }));
+    const client = clientFor(app);
+    const controller = new AbortController();
+    const frames = (await client.system.events({ clientId: "frozen-1" }, { signal: controller.signal }))[Symbol.asyncIterator]();
+    // Read up to its own roster entry, which is what proves the connection has joined; then it reads nothing more.
+    for (;;) {
+        const { value, done } = await frames.next();
+        if (done === true) {
+            throw new Error("stream ended before a presence frame");
+        }
+        if (value.kind === "presence" && value.users.some((user) => user.clientId === "frozen-1")) {
+            break;
+        }
+    }
+    const joined = connectedCount();
+    try {
+        // Each report fans a presence frame out to every connection, this one included.
+        for (let report = 0; report <= MAX_BACKLOG_FRAMES + 64 && connectedCount() === joined; report += 1) {
+            await client.system.presence({ clientId: "frozen-1", idle: report % 2 === 0 });
+        }
+        expect(connectedCount()).toBe(joined - 1);
+    } finally {
+        controller.abort();
+    }
 });
 
 test("events: the first frame is the workspace-identity hello, stable across connections", async () => {

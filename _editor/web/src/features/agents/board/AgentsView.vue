@@ -84,7 +84,6 @@ const {
 // Whole store, not a destructure: the first-screen connect offer acts on the focused chat, and the card is that
 // conversation's view as one object.
 const chat = useChat();
-const { active, connected, accountsLoaded } = chat;
 // A refusal lands on the board's notice strip, since a press with no visible effect reads as broken.
 const synthesize = async (): Promise<void> => {
     const result = await synthesizeSessions();

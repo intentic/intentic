@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { GitRunner } from "@intentic/scaffold";
+import { commonDirOf, gitDirOf } from "../git-dir.js";
 
 // Where a repo's code lives: its remote urls and the host/project each names. Read by two independent callers (CI's
 // account mapping, the capability scan) neither of which owns the other, so it lives here.
@@ -23,17 +24,21 @@ export const parseRemote = (url: string): { host: string; project: string } | un
 };
 
 // Every remote (`origin` first, not whichever sorts first alphabetically), via one `git remote -v` spawn; cached on
-// `.git/config`'s mtime (any write invalidates), skipped for a dir with no local config to stat.
+// the mtime of the config that holds remotes (any write invalidates), skipped for a dir with no config to stat.
 interface CachedRemotes {
     readonly mtimeMs: number;
     readonly urls: readonly string[];
 }
 const remoteCache = new Map<string, CachedRemotes>();
 
-// The mtime remotes are cached against, or undefined with no local config to watch; never throws, an unreadable repo
-// just means "do not cache".
+// The mtime remotes are cached against: the common dir's `config`, which a linked worktree shares with its main
+// checkout. Undefined with no config to watch; never throws, an unreadable repo just means "do not cache".
 const configMtime = async (dir: string): Promise<number | undefined> => {
-    const stats = await stat(join(dir, ".git", "config")).catch(() => undefined);
+    const gitDir = await gitDirOf(dir);
+    if (gitDir === undefined) {
+        return undefined;
+    }
+    const stats = await stat(join(await commonDirOf(gitDir), "config")).catch(() => undefined);
     return stats?.isFile() === true ? stats.mtimeMs : undefined;
 };
 

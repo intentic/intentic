@@ -86,7 +86,7 @@ test(`takes the providers this box adds from the daemon's own answer`, async () 
         endpoints: [{ id: `endpoint/trial`, label: `Free trial`, kind: `endpoint` }],
     });
 
-    await loadRunnableProviders();
+    await loadRunnableProviders().settled;
 
     expect(acpProviders.value).toEqual([{ id: `goose`, label: `Goose` }]);
     expect(endpointProviders.value).toEqual([{ id: `endpoint/trial`, label: `Free trial`, kind: `endpoint` }]);
@@ -102,7 +102,7 @@ test(`a refused or unserved read is an answer, so the account gate stops waiting
         endpointsLoaded.value = false;
         refuses(status);
 
-        await loadRunnableProviders();
+        await loadRunnableProviders().settled;
 
         expect(endpointProviders.value, `${status}`).toEqual([]);
         expect(endpointsLoaded.value, `${status}`).toBe(true);
@@ -111,11 +111,11 @@ test(`a refused or unserved read is an answer, so the account gate stops waiting
 
 test(`a daemon that may yet answer leaves the half unknown for the next reachable load`, async () => {
     refuses(503);
-    await loadRunnableProviders();
+    await loadRunnableProviders().settled;
     expect(endpointsLoaded.value).toBe(false);
 
     sandboxJsonMock.mockRejectedValue(new Error(`Failed to fetch`));
-    await loadRunnableProviders();
+    await loadRunnableProviders().settled;
     expect(endpointsLoaded.value).toBe(false);
 });
 
@@ -124,7 +124,7 @@ test(`a daemon that may yet answer leaves the half unknown for the next reachabl
 test(`an unreadable answer leaves the lists alone and still resolves the gate`, async () => {
     answers({ capabilities: [{ id: `goose`, kind: `agent`, config: {} }] });
 
-    await loadRunnableProviders();
+    await loadRunnableProviders().settled;
 
     expect(acpProviders.value).toEqual([]);
     expect(endpointsLoaded.value).toBe(true);

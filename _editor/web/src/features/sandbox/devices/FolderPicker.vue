@@ -2,7 +2,7 @@
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic/api-contract";
 import { ui, ResponsiveOverlay, SkeletonRows, vAction } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
-import { WORKSPACE_TREE } from "../../../lib/queryKeys";
+import { sharedWorkspaceTreeKey } from "../../workspace/explorer/workspaceTreeKey";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxQuery } from "../client/useSandboxQuery";
@@ -33,10 +33,10 @@ const {
 
 const picked = defineModel<string[]>({ required: true });
 
-// Shared workspace tree, keyed like the explorer's read so opening this picker after the tree has drawn costs
-// nothing. Not scoped via scopeQuery: folders are workspace-relative regardless of which checkout is active.
+// Shared workspace tree, under the explorer's own entry so opening this picker after the tree has drawn costs nothing.
+// Not scoped via scopeQuery: folders are workspace-relative regardless of which checkout is active.
 const { query } = useSandboxQuery<WorkspaceTreeResponse>({
-    queryKey: WORKSPACE_TREE.of(`shared`),
+    queryKey: sharedWorkspaceTreeKey(),
     queryFn: () => sandboxJson<WorkspaceTreeResponse>(`/workspace/tree`),
 });
 

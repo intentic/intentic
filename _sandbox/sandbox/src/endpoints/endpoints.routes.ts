@@ -8,6 +8,10 @@ import { endpointConfigOf } from "./local-model.js";
 
 export type EndpointsRoutesDeps = Pick<Services, "capabilities" | "endpointModels" | "trial" | "workspace">;
 
+// How long a read waits on the platform before answering with the last known figures; a healthy platform answers well
+// inside it, and a slow one must not hold the chat's account gate that awaits this read.
+const TRIAL_READ_WAIT_MS = 3_000;
+
 // The picker catalog for one endpoint-minting capability; unlike the four fixed provider routes it resolves its subject
 // first, so an id naming no capability is NOT_FOUND rather than an empty list.
 export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
@@ -21,10 +25,11 @@ export const createEndpointsRoutes = (services: EndpointsRoutesDeps) => {
             }
             return services.endpointModels.models(capability.id, config);
         }),
-        // Re-probed on every read rather than cached, so the number reflects the message just sent; probe failure falls
-        // back to the last known figures. No trial returns `available: false` with zeroes, not a 404.
+        // Re-probed on every read rather than cached, so the number reflects the message just sent; a probe that fails
+        // or outlasts the wait falls back to the last known figures. No trial returns `available: false` with zeroes,
+        // not a 404.
         trial: i.trial.handler(async () => {
-            await services.trial.refresh();
+            await services.trial.refresh({ withinMs: TRIAL_READ_WAIT_MS });
             const status = services.trial.status();
             if (!services.trial.available() || status === undefined) {
                 return { available: false, allowance: 0, used: 0, remaining: 0, health: "unknown" as const };

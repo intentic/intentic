@@ -116,11 +116,48 @@ test("disposal removes an owner's checks", async () => {
 
 test("the violation list is bounded: it is a live signal, not a ledger", async () => {
     const registry = createInvariantRegistry(silent());
-    registry.register("platform", [check("claim", ({ fail }) => fail("still broken"))]);
+    let pass = 0;
+    registry.register("platform", [check("claim", ({ fail }) => fail(`broken a new way on pass ${pass}`))]);
 
-    for (let pass = 0; pass < 250; pass += 1) {
+    for (; pass < 250; pass += 1) {
         await registry.run("sweep");
     }
 
     expect(registry.violations()).toHaveLength(200);
+});
+
+// A sweep runs every five minutes; a violation nobody has fixed yet is the same fact each time, and logging it each time
+// filled the log and pushed every other violation out of the bounded list.
+test("a violation standing unchanged is recorded once, and again once it has cleared and come back", async () => {
+    const lines: { msg: string }[] = [];
+    const registry = createInvariantRegistry(pino({ level: "info" }, { write: (line: string) => lines.push(JSON.parse(line) as { msg: string }) }));
+    let state: "broken" | "worse" | "fine" = "broken";
+    registry.register("peers", [
+        check("cards", ({ fail }) => {
+            if (state !== "fine") {
+                fail(state === "broken" ? "2 enrollments held by no card" : "3 enrollments held by no card");
+            }
+        }),
+    ]);
+
+    for (const next of ["broken", "broken", "worse", "fine", "fine", "broken"] as const) {
+        state = next;
+        const broken = await registry.run("sweep");
+        // Every pass still answers with what is broken right now.
+        expect(broken.map((violation) => violation.message)).toEqual(
+            next === "fine" ? [] : [next === "broken" ? "2 enrollments held by no card" : "3 enrollments held by no card"],
+        );
+    }
+
+    expect(registry.violations().map((violation) => violation.message)).toEqual([
+        "2 enrollments held by no card",
+        "3 enrollments held by no card",
+        "2 enrollments held by no card",
+    ]);
+    expect(lines.map((line) => line.msg)).toEqual([
+        "invariant broken: 2 enrollments held by no card",
+        "invariant broken: 3 enrollments held by no card",
+        "invariant holds again",
+        "invariant broken: 2 enrollments held by no card",
+    ]);
 });

@@ -63,7 +63,3 @@ const dedupe = (keys: readonly QueryKeyPath[]): readonly QueryKeyPath[] => [...n
 // browser share one table. An unknown domain is dropped rather than throwing, for forward compatibility.
 export const staleRuntimeQueryKeys = (domains: readonly string[]): readonly QueryKeyPath[] =>
     dedupe(RUNTIME_DOMAIN_BINDINGS.filter((binding) => domains.includes(binding.domain)).flatMap((binding) => binding.invalidates));
-
-// Every key any runtime domain feeds; what a fresh /events connection re-asks wholesale, since a missed push here is
-// gone for good. Bounds the cost to one read per key, letting these views stay unpolled.
-export const runtimeBoundQueryKeys = (): readonly QueryKeyPath[] => dedupe(RUNTIME_DOMAIN_BINDINGS.flatMap((binding) => binding.invalidates));

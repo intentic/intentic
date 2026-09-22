@@ -1,7 +1,8 @@
-import { lstat, readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { pathExists } from "../../path-exists.js";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { gitDirOf } from "../git-dir.js";
 
 // The operation a worktree is halted in, and the way out. Only external actors (a terminal rebase, a user's shell, a
 // failed land) can leave one, since every verb this daemon runs itself self-aborts on failure. Reads the same
@@ -27,24 +28,8 @@ const queuedSequence = async (gitDir: string): Promise<GitOperation | undefined>
     }
 };
 
-// The per-worktree git dir (not the common dir), since every marker is per-worktree. Read straight off `.git` rather
-// than `rev-parse --git-dir`, avoiding a spawn per repo per scan; unmemoized, so nothing goes stale.
-const gitDirOf = async (dir: string): Promise<string | undefined> => {
-    const entry = join(dir, ".git");
-    try {
-        const stats = await lstat(entry);
-        if (stats.isDirectory()) {
-            return entry;
-        }
-        const target = /^gitdir:\s*(.+?)\s*$/.exec(await readFile(entry, "utf8"))?.[1];
-        // A relative pointer is resolved against the dir holding it, the rule gitfiles are defined by.
-        return target === undefined ? undefined : resolve(dir, target);
-    } catch {
-        return undefined; // Not a repo (or a torn pointer): the same "nothing to report" as before.
-    }
-};
-
-// No git runner: every answer here comes straight from the filesystem.
+// No git runner: every answer here comes straight from the filesystem. Reads the per-worktree admin dir, not the common
+// dir, since every marker is per-worktree.
 export const operationInProgress = async (dir: string): Promise<GitOperation | undefined> => {
     const gitDir = await gitDirOf(dir);
     if (gitDir === undefined) {

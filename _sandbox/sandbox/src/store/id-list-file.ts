@@ -19,17 +19,22 @@ const rawId = (entry: unknown): string | undefined => {
     return typeof id === "string" ? id : undefined;
 };
 
+// `onInvalid` hears an unreadable entry when it appears, not on every read: an unchanged file is read many times a
+// minute, and the manifest-problems registry (`report`) is what keeps the standing record.
 export const idListFile = <T extends { readonly id: string }>(
     path: string,
     schema: z.ZodType<T>,
     onInvalid?: (id: string, reason: string) => void,
 ): IdListStore<T> => {
+    // `${id}\0${reason}` of every entry the previous read could not parse.
+    let reported = new Set<string>();
     const file = jsonFile<unknown[]>(path, {
         // Only checks that the value is an array; anything else is treated as empty.
         parse: (raw, report) => {
             if (!Array.isArray(raw)) {
                 return undefined;
             }
+            const unreadable = new Set<string>();
             for (const entry of raw) {
                 const parsed = schema.safeParse(entry);
                 if (parsed.success) {
@@ -37,9 +42,14 @@ export const idListFile = <T extends { readonly id: string }>(
                 }
                 const id = rawId(entry) ?? "<unnamed>";
                 const reason = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
-                onInvalid?.(id, reason);
+                const signature = `${id}\u0000${reason}`;
+                unreadable.add(signature);
+                if (!reported.has(signature)) {
+                    onInvalid?.(id, reason);
+                }
                 report({ kind: "invalidEntry", detail: `${id}, ${reason}` });
             }
+            reported = unreadable;
             return raw;
         },
         fallback: () => [],

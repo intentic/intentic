@@ -52,7 +52,7 @@ export interface InvariantRegistry {
     readonly register: (owner: string, checks: readonly InvariantCheck[]) => () => void;
     // Run every check armed for this moment. Never rejects. Returns what broke this pass.
     readonly run: (moment: InvariantMoment) => Promise<readonly InvariantViolation[]>;
-    // What has broken recently, newest last, bounded. Read by the diagnostics route and by tests.
+    // Each violation as it appeared or changed, newest last, bounded; one standing unchanged is in here once.
     readonly violations: () => readonly InvariantViolation[];
     readonly owners: () => readonly string[];
 }
@@ -83,10 +83,19 @@ const deadline = async (work: Promise<void> | void, ms: number): Promise<void> =
 export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
     const registered = new Map<string, readonly InvariantCheck[]>();
     const seen: InvariantViolation[] = [];
+    // What each failing check last reported, keyed `${owner}\0${check}`: a violation standing unchanged across passes
+    // is recorded once, or one stuck check fills the log and evicts every other violation from `seen`.
+    const standing = new Map<string, string>();
     // Serializes runs: concurrent passes over shared state could double-report or catch a subsystem mid-write.
     let queue: Promise<readonly InvariantViolation[]> = Promise.resolve([]);
 
     const record = (violation: InvariantViolation): void => {
+        const key = `${violation.owner}\u0000${violation.check}`;
+        const signature = `${violation.broken}\u0000${violation.message}`;
+        if (standing.get(key) === signature) {
+            return;
+        }
+        standing.set(key, signature);
         seen.push(violation);
         if (seen.length > MAX_VIOLATIONS) {
             seen.splice(0, seen.length - MAX_VIOLATIONS);
@@ -95,6 +104,12 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
             { owner: violation.owner, check: violation.check, moment: violation.moment, broken: violation.broken },
             violation.broken ? `invariant check failed to run: ${violation.message}` : `invariant broken: ${violation.message}`,
         );
+    };
+
+    const recovered = (owner: string, check: string, moment: InvariantMoment): void => {
+        if (standing.delete(`${owner}\u0000${check}`)) {
+            logger.info({ owner, check, moment }, "invariant holds again");
+        }
     };
 
     const runOne = async (owner: string, check: InvariantCheck, moment: InvariantMoment): Promise<InvariantViolation | undefined> => {
@@ -123,11 +138,15 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
         );
         // Concurrent within a pass: independent reads of independent state cost one check's latency, not the sum.
         const results = await Promise.all(armed.map(({ owner, check }) => runOne(owner, check, moment)));
-        const broken = results.filter((result) => result !== undefined);
-        for (const violation of broken) {
-            record(violation);
+        for (const [index, result] of results.entries()) {
+            if (result === undefined) {
+                const { owner, check } = armed[index]!;
+                recovered(owner, check.name, moment);
+                continue;
+            }
+            record(result);
         }
-        return broken;
+        return results.filter((result) => result !== undefined);
     };
 
     return {
@@ -145,6 +164,11 @@ export const createInvariantRegistry = (logger: Logger): InvariantRegistry => {
             registered.set(owner, checks);
             return () => {
                 registered.delete(owner);
+                for (const key of standing.keys()) {
+                    if (key.startsWith(`${owner}\u0000`)) {
+                        standing.delete(key);
+                    }
+                }
             };
         },
         run: (moment) => {

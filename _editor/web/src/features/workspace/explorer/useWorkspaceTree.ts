@@ -20,7 +20,7 @@ import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";
-import { UNPERSISTED } from "../../../lib/queryPersistence";
+import { workspaceTreeKey } from "./workspaceTreeKey";
 
 // Shared busy/error state for file actions (rename, delete, save, move); drag-drop uploads use useUploadQueue.
 // Concurrent, not mutexed: these are independent writes to different paths, and one runner shared by the tree, the
@@ -158,13 +158,6 @@ const readFile = async (path: string): Promise<string | undefined> => {
 
 // Raw bytes for binary preview (images / PDF), where the text route's utf8 decode would corrupt the file.
 const readBlob = (path: string): Promise<Blob> => sandboxBlob(`/workspace/raw?${scopeQuery(new URLSearchParams({ path })).toString()}`);
-
-// Scope is part of the query key, not just the request: different scopes are different trees, cached independently.
-// Exported for the prefetch loader, which must read the scope live.
-// UNPERSISTED: the mirror structured-clones the whole cache on a timer, and a workspace's tree is not the small,
-// shape-stable thing that rule was written for — a wide one runs to tens of thousands of entries, and cloning it every
-// couple of seconds stalls the main thread for longer than the paint it was meant to save.
-export const workspaceTreeKey = (): unknown[] => WORKSPACE_TREE.of(workspaceAgent.value ?? `shared`, UNPERSISTED);
 
 export const fetchWorkspaceTree = (): Promise<WorkspaceTreeResponse> =>
     sandboxJson<WorkspaceTreeResponse>(`/workspace/tree?${scopeQuery(new URLSearchParams()).toString()}`);

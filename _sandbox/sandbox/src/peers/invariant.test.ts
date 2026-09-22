@@ -80,6 +80,14 @@ test("an enrollment no card holds is named, since nothing on either screen would
     await expect(run("enrolled-browsers-have-cards", ["old-chrome"], [], [])).rejects.toThrow(/no capability card \(old-chrome\)/);
 });
 
+// One card is one computer; its WSL distros enroll as `<card>::wsl:<distro>` and are withdrawn with the card.
+test("a machine's other OS installs are held by the machine's card, and named when the machine has none", async () => {
+    await expect(run("enrolled-devices-have-cards", ["rig", "rig::wsl:archlinux"], [], [card("rig", "device")])).resolves.toBeUndefined();
+    await expect(run("enrolled-devices-have-cards", ["rig", "gone::wsl:Ubuntu-22.04"], [], [card("rig", "device")])).rejects.toThrow(
+        /1 enrollment\(s\) are held by no capability card \(gone::wsl:Ubuntu-22\.04\)/,
+    );
+});
+
 test("a card of another kind is not a grant: same name, different door", async () => {
     await expect(run("enrolled-devices-have-cards", ["laptop"], [], [card("laptop", "webext")])).rejects.toThrow(/\(laptop\)/);
 });

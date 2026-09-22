@@ -39,6 +39,7 @@ import { manifestProblems } from "../store/manifest-problems.js";
 import { repairManifest } from "../store/manifest-repair.js";
 import { workspaceIdentity } from "./workspace-identity.js";
 import { framedEvent } from "../auth/fleet-scope.js";
+import { frameBacklog } from "./frame-backlog.js";
 import { callerFence } from "../areas/area-scope.js";
 
 const execFileAsync = promisify(execFile);
@@ -73,9 +74,22 @@ async function* systemEvents(
         build: buildId(),
         boot: services.boot.progress(),
     };
-    // Frames waiting to go out, stamped with production time; queue depth distinguishes a burst from a stalled
-    // consumer.
-    const queue: { readonly event: SystemEvent; readonly at: bigint }[] = [];
+    // Every subscription this connection holds, released together and last-first: at the end of the stream, or at the
+    // cut, since a consumer that stopped reading leaves this generator suspended at `yield` and its `finally` may never
+    // run.
+    const releases: (() => void)[] = [];
+    const release = (): void => {
+        for (const undo of releases.splice(0).toReversed()) {
+            undo();
+        }
+    };
+    // Frames waiting to go out, stamped with production time; depth distinguishes a burst from a stalled consumer.
+    const backlog = frameBacklog<SystemEvent>((unsent) => {
+        services.logger.info({ clientId, unsent }, "events: cut a connection that stopped reading; it reconnects on waking");
+        // A microtask later: the cut lands inside a subscription's own notify loop, which must not lose members mid-walk.
+        queueMicrotask(release);
+        controller.abort();
+    });
     // A narrowed caller's stream is cut frame by frame (auth/fleet-scope.ts): a guest's own conversations and no
     // paths, a fenced member's own folders. Resolved once here rather than per frame, which a file read cannot be;
     // editing an area revokes the connection, so this can never outlive the grant it was read from.
@@ -83,7 +97,7 @@ async function* systemEvents(
     const enqueue = (event: SystemEvent): void => {
         const framed = framedEvent(identity, fence, event);
         if (framed !== undefined) {
-            queue.push({ event: framed, at: process.hrtime.bigint() });
+            backlog.push(framed);
         }
     };
     // Resolves the current idle wait immediately on a change or abort, instead of stalling for the next heartbeat.
@@ -94,75 +108,85 @@ async function* systemEvents(
         resolve?.();
     };
     // Registers before subscribing, so the broadcast reaches existing members before the snapshot paints back.
-    const unregisterPresence = identity !== undefined && clientId !== undefined ? registerPresence(clientId, identity) : undefined;
-    const unsubscribePresence = subscribePresence((users) => {
-        enqueue({ kind: "presence", users });
-        onWake();
-    });
-    // Fleet roster: snapshot-not-diff, an immediate frame on subscribe then a re-frame on every registry change.
-    const unsubscribeAgents = services.agents.subscribe((agents, rev) => {
-        enqueue({ kind: "agents", agents, rev });
-        onWake();
-    });
-    // Boot transitions re-frame the hello snapshot, so a mid-boot reconnect is consistent from its first frame.
-    const unsubscribeBoot = services.boot.subscribe((progress) => {
-        enqueue({ kind: "boot", ...progress });
-        onWake();
-    });
-    const unsubscribe = subscribeWorkspaceChanges((paths) => {
-        enqueue({ kind: "workspaceChanged", paths });
-        onWake();
-    });
-    // The unnamed batch for a write the watcher could not see: a check's build rewrites tracked files under `dist/`,
-    // which is pruned, so without this a review read mid-build stands as the answer until something remounts the panel.
-    const unsubscribeAnnounced = subscribeUnwatchedWrites(() => {
-        enqueue({ kind: "workspaceChanged", paths: [] });
-        onWake();
-    });
-    // Shadows land under the state directory the watcher ignores on purpose, so no workspaceChanged batch can ever
-    // carry them; without this frame a reader watching a file waits for text that already arrived.
-    const unsubscribeDerived = subscribeDerived((paths) => {
-        enqueue({ kind: "derivedChanged", paths, queue: services.derived.status() });
-        onWake();
-    });
-    // Repo-set snapshots: a clone, scaffold, or delete under /work re-frames the discovered list.
-    const unsubscribeRepos = subscribeRepoChanges((repos) => {
-        enqueue({ kind: "reposChanged", repos });
-        onWake();
-    });
-    // Which repos' refs moved (commit, checkout, branch/tag, rebase); without it, commit-graphs refresh on click.
-    const unsubscribeRefs = subscribeRefChanges((repos) => {
-        enqueue({ kind: "refsChanged", repos });
-        onWake();
-    });
-    // Running things with no file on disk (sessions, ports, browsers, subagents); this also starts the sampler.
-    const unsubscribeRuntime = subscribeRuntimeChanges((domains) => {
-        enqueue({ kind: "runtimeChanged", domains });
-        onWake();
-    });
-    // Account plan limits or a provider refusal changed, so every open window's usage ring agrees without polling.
-    const unsubscribeHeadroom = services.headroom.onChange((provider, account, usage) => {
-        enqueue({ kind: "accountUsage", provider, account, ...(usage === undefined ? {} : { usage }) });
-        onWake();
-    });
-    const unsubscribeRefusals = services.providerRefusals.onChange((provider, refusal) => {
-        enqueue({ kind: "providerRefusal", provider, ...(refusal === undefined ? {} : { refusal }) });
-        onWake();
-    });
+    if (identity !== undefined && clientId !== undefined) {
+        releases.push(registerPresence(clientId, identity));
+    }
+    releases.push(
+        subscribePresence((users) => {
+            enqueue({ kind: "presence", users });
+            onWake();
+        }),
+        // Fleet roster: snapshot-not-diff, an immediate frame on subscribe then a re-frame on every registry change.
+        services.agents.subscribe((agents, rev) => {
+            enqueue({ kind: "agents", agents, rev });
+            onWake();
+        }),
+        // Boot transitions re-frame the hello snapshot, so a mid-boot reconnect is consistent from its first frame.
+        services.boot.subscribe((progress) => {
+            enqueue({ kind: "boot", ...progress });
+            onWake();
+        }),
+        subscribeWorkspaceChanges((paths) => {
+            enqueue({ kind: "workspaceChanged", paths });
+            onWake();
+        }),
+        // The unnamed batch for a write the watcher could not see: a check's build rewrites tracked files under `dist/`,
+        // which is pruned, so without this a review read mid-build stands as the answer until something remounts the
+        // panel.
+        subscribeUnwatchedWrites(() => {
+            enqueue({ kind: "workspaceChanged", paths: [] });
+            onWake();
+        }),
+        // Shadows land under the state directory the watcher ignores on purpose, so no workspaceChanged batch can ever
+        // carry them; without this frame a reader watching a file waits for text that already arrived.
+        subscribeDerived((paths) => {
+            enqueue({ kind: "derivedChanged", paths, queue: services.derived.status() });
+            onWake();
+        }),
+        // Repo-set snapshots: a clone, scaffold, or delete under /work re-frames the discovered list.
+        subscribeRepoChanges((repos) => {
+            enqueue({ kind: "reposChanged", repos });
+            onWake();
+        }),
+        // Which repos' refs moved (commit, checkout, branch/tag, rebase); without it, commit-graphs refresh on click.
+        subscribeRefChanges((repos) => {
+            enqueue({ kind: "refsChanged", repos });
+            onWake();
+        }),
+        // Running things with no file on disk (sessions, ports, browsers, subagents); this also starts the sampler.
+        subscribeRuntimeChanges((domains) => {
+            enqueue({ kind: "runtimeChanged", domains });
+            onWake();
+        }),
+        // Account plan limits or a provider refusal changed, so every open window's usage ring agrees without polling.
+        services.headroom.onChange((provider, account, usage) => {
+            enqueue({ kind: "accountUsage", provider, account, ...(usage === undefined ? {} : { usage }) });
+            onWake();
+        }),
+        services.providerRefusals.onChange((provider, refusal) => {
+            enqueue({ kind: "providerRefusal", provider, ...(refusal === undefined ? {} : { refusal }) });
+            onWake();
+        }),
+    );
     // Registered after every step that could throw, right before the loop, so a dead entry can't leak.
-    const unregisterAccess = identity === undefined ? undefined : services.auth?.connections.register(identity, () => controller.abort());
+    if (identity !== undefined) {
+        const unregisterAccess = services.auth?.connections.register(identity, () => controller.abort());
+        if (unregisterAccess !== undefined) {
+            releases.push(unregisterAccess);
+        }
+    }
     abort.addEventListener("abort", onWake);
     try {
         while (!abort.aborted) {
-            const framed = queue.shift();
+            const framed = backlog.shift();
             if (framed !== undefined) {
                 // Measures how long the frame sat queued, not the serialization or write after; depth is what was
                 // behind it.
                 services.perf.record("events.frame", Number(process.hrtime.bigint() - framed.at) / 1e6, {
-                    frame: framed.event.kind,
-                    depth: queue.length,
+                    frame: framed.frame.kind,
+                    depth: backlog.depth(),
                 });
-                yield framed.event;
+                yield framed.frame;
                 continue;
             }
             // Idle: wait for a change (wake) or the heartbeat interval; a timeout means nothing changed, beat.
@@ -184,19 +208,7 @@ async function* systemEvents(
         }
     } finally {
         abort.removeEventListener("abort", onWake);
-        unsubscribe();
-        unsubscribeAnnounced();
-        unsubscribeDerived();
-        unsubscribeRepos();
-        unsubscribeRefs();
-        unsubscribeRuntime();
-        unsubscribeHeadroom();
-        unsubscribeRefusals();
-        unsubscribeAgents();
-        unsubscribeBoot();
-        unsubscribePresence();
-        unregisterPresence?.();
-        unregisterAccess?.();
+        release();
         signal?.removeEventListener("abort", abortFromCaller);
     }
 }

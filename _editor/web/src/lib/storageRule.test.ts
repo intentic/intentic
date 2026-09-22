@@ -6,6 +6,8 @@ import { mirrors, UNPERSISTED } from "./queryPersistence";
 import { agentTranscriptKey } from "../features/chat/transcript/agentTranscript";
 import { agentFileDiffKey } from "../features/agents/review/useAgentChanges";
 import { changesKey, fileDiffKey } from "../features/workspace/changes/useChanges";
+import { sharedWorkspaceTreeKey, workspaceTreeKey } from "../features/workspace/explorer/workspaceTreeKey";
+import { capabilitiesKey } from "../features/capabilities/connect/useCapabilities";
 
 // The cache mirrors to disk whole, one clone per write, so an unmarked heavy entry taxes every other write and reads as
 // random stuttering. A background loader now fills it unpredictably, worth testing rather than only commenting.
@@ -33,9 +35,16 @@ describe(`what may go to disk`, () => {
         expect(mirrors(keys.transcript)).toBe(false);
     });
 
+    // Two readers hold the shared tree (the explorer, the folder picker); one unmarked entry is the whole tree on disk.
+    it(`keeps the workspace tree out, whichever reader holds it: a wide one runs to tens of thousands of entries`, () => {
+        expect(workspaceTreeKey()).toContain(UNPERSISTED);
+        expect(mirrors(workspaceTreeKey())).toBe(false);
+        expect(sharedWorkspaceTreeKey()).toEqual(workspaceTreeKey());
+    });
+
     it(`still mirrors the small, shape-stable lists a reload has to paint from`, () => {
         expect(mirrors(keys.changes)).toBe(true);
-        expect(mirrors([`workspace`, `tree`, `shared`, `sandbox-1`])).toBe(true);
+        expect(mirrors(capabilitiesKey)).toBe(true);
     });
 
     it(`never mirrors a sandbox row, which carries the tunnel's connect token`, () => {
