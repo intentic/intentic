@@ -5,7 +5,7 @@ import type { EnvironmentReach, HostDeviceReach, MachineReach } from "../../host
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
-import { INTENTIC_PROMPT } from "./intentic-prompt.js";
+import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 
 // Three modes: `intentic` and `claude` share the same appends over a different base; `custom` replaces the prompt
@@ -413,6 +413,8 @@ export const turnPromptPlacement = (input: TurnPromptInput): TurnPromptPlacement
 
 export interface SdkSystemPromptInput {
     readonly mode: SystemPromptMode;
+    // The turn's model, which decides the variant of Claude Code's preset the intentic base is cut from.
+    readonly model?: string;
     // The owner's text, under "custom". It is then the whole prompt and every field below is moot.
     readonly custom: string | undefined;
     // What the turn composed for a built-in base (turnPromptPlacement's systemAppend).
@@ -442,6 +444,7 @@ export interface SdkSystemPromptInput {
 // The turn fields the composed prompt reads. Declared here rather than taken from AgentRequest so both readers — the
 // adapter that sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
 export interface PromptRequest {
+    readonly model?: string;
     readonly systemPromptMode?: SystemPromptMode;
     readonly systemPrompt?: string;
     readonly systemAppend?: string;
@@ -466,6 +469,7 @@ export const terminalMounted = (request: Pick<PromptRequest, "unattended">, tmux
 // make the prompt shown disagree with the prompt sent.
 export const promptInputOf = (request: PromptRequest, terminal: boolean): SdkSystemPromptInput => ({
     mode: request.systemPromptMode ?? "intentic",
+    ...(request.model === undefined ? {} : { model: request.model }),
     custom: request.systemPrompt,
     append: request.systemAppend,
     unattended: request.unattended === true,
@@ -480,7 +484,7 @@ export const promptInputOf = (request: PromptRequest, terminal: boolean): SdkSys
 
 // This harness's own guidance, most-stable-first, with whatever the turn composed appended after. Shared by both
 // built-in bases, so they differ only in the base itself.
-export const harnessGuidance = (input: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
+export const harnessGuidance = (input: Omit<SdkSystemPromptInput, "mode" | "model" | "custom">): string[] => [
     // A window with no room for it drops the whole block at once rather than a paragraph at a time: these are the
     // habits a capable model is being asked to keep, and half of them is not half a product, it is a longer prompt
     // that still does not fit. What the turn composed for itself (the persona, the owner's rules) rides the append
@@ -499,7 +503,7 @@ const untrimmedGuidance = ({
     terminal,
     hostDevices,
     ownBrowsers,
-}: Omit<SdkSystemPromptInput, "mode" | "custom">): string[] => [
+}: Omit<SdkSystemPromptInput, "mode" | "model" | "custom">): string[] => [
     // First and unconditional: under the Claude preset, this is the only place the product gets named.
     SELF_GUIDANCE,
     ...(unattended ? [] : [INTERACTIVE_GUIDANCE]),
@@ -525,8 +529,11 @@ const untrimmedGuidance = ({
 
 // A string replaces Claude Code's preset outright (the SDK's documented behaviour): how both `intentic` and `custom`
 // are carried, though only intentic's is followed by harness guidance. The object form keeps the preset and hands
-// guidance to the CLI's own `append` instead.
-export const sdkSystemPrompt = ({ mode, custom, ...extras }: SdkSystemPromptInput): NonNullable<Options["systemPrompt"]> => {
+// guidance to the CLI's own `append` instead. `cwd` only says where the intentic base's probe is spawned.
+export const sdkSystemPrompt = async (
+    { mode, model, custom, ...extras }: SdkSystemPromptInput,
+    cwd: string,
+): Promise<NonNullable<Options["systemPrompt"]>> => {
     // A trimmed base takes the same exit as the owner's own prompt: `custom` carries the paragraph turnPromptPlacement
     // composed in place of the loop's instructions, persona and owner's rules already on it, and this product adds
     // nothing to either.
@@ -535,7 +542,7 @@ export const sdkSystemPrompt = ({ mode, custom, ...extras }: SdkSystemPromptInpu
         return custom ?? "";
     }
     if (mode === "intentic") {
-        return [INTENTIC_PROMPT, ...harnessGuidance(extras)].join("\n\n");
+        return [(await intenticSystemPrompt(cwd, model)).text, ...harnessGuidance(extras)].join("\n\n");
     }
     return { type: "preset", preset: "claude_code", append: harnessGuidance(extras).join("\n\n") };
 };

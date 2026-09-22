@@ -1,14 +1,16 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { sdk } from "../../runtimes/claude/claude-sdk.js";
+import { type ClaudeSdk, claudeCliPath, sdk } from "../../runtimes/claude/claude-sdk.js";
+import { opt } from "../run/opt.js";
 import type { BuiltinPromptText } from "@intentic/sandbox-contract";
 
 // Claude Code's system prompt, captured from a real CLI request rather than transcribed here, since neither the SDK nor
 // the CLI exposes the preset text directly. A loopback endpoint intercepts one throwaway turn's first request and
 // answers with a canned stream; nothing reaches Anthropic and no credential is used.
 
-// One capture per daemon process: the prompt only changes when the CLI does, which restarts the daemon.
-let cached: BuiltinPromptText | undefined;
+// One capture per loaded SDK copy and model, shared by concurrent readers: Claude Code renders a different preset per
+// model, and neither changes until the CLI does. Keyed "" for no model, the CLI's own default.
+let cached: { readonly copy: ClaudeSdk; readonly byModel: Map<string, Promise<BuiltinPromptText>> } | undefined;
 
 // A billing/telemetry line, not prompt text; dropped since the owner isn't replacing it.
 const BILLING_PREFIX = "x-anthropic-billing-header:";
@@ -58,10 +60,7 @@ const promptTextOf = (system: unknown): string | undefined => {
 // Bounds the capture so a CLI that never sends a request does not hang the settings page.
 const CAPTURE_TIMEOUT_MS = 60_000;
 
-export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText> => {
-    if (cached !== undefined) {
-        return cached;
-    }
+const capture = async (copy: ClaudeSdk, cwd: string, model: string | undefined): Promise<BuiltinPromptText> => {
     let text: string | undefined;
     let version = "";
     const server = createServer((request, response) => {
@@ -84,10 +83,13 @@ export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText
     const { port } = server.address() as AddressInfo;
     const abort = new AbortController();
     const timeout = setTimeout(() => abort.abort(), CAPTURE_TIMEOUT_MS);
-    const session = sdk().query({
+    const session = copy.query({
         prompt: "hi",
         options: {
             cwd,
+            // The binary this copy's turns spawn, so the text captured is the text those turns get.
+            ...opt("pathToClaudeCodeExecutable", claudeCliPath()),
+            ...opt("model", model),
             abortController: abort,
             // Bare Claude Code only: no memory files, skills, or tools leaking into Claude's default.
             settingSources: [],
@@ -117,6 +119,27 @@ export const presetSystemPrompt = async (cwd: string): Promise<BuiltinPromptText
     if (text === undefined) {
         throw new Error("Could not read Claude Code's system prompt: the CLI produced no request to capture it from.");
     }
-    cached = { text, version };
-    return cached;
+    return { text, version };
+};
+
+export const presetSystemPrompt = (cwd: string, model?: string): Promise<BuiltinPromptText> => {
+    const copy = sdk();
+    if (cached?.copy !== copy) {
+        cached = { copy, byModel: new Map() };
+    }
+    const { byModel } = cached;
+    const key = model ?? "";
+    const known = byModel.get(key);
+    if (known !== undefined) {
+        return known;
+    }
+    const prompt = capture(copy, cwd, model);
+    byModel.set(key, prompt);
+    // A failed capture is not kept, so the next reader probes again.
+    prompt.catch(() => {
+        if (byModel.get(key) === prompt) {
+            byModel.delete(key);
+        }
+    });
+    return prompt;
 };

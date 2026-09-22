@@ -1,8 +1,29 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
-import { INTENTIC_PROMPT } from "./intentic-prompt.js";
+import { test, expect, mock } from "bun:test";
+import { intenticPromptOf } from "./intentic-prompt.js";
 import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";
+
+// Stands in for the installed CLI's preset, so no suite here spawns one: a line and a section the intentic base cuts,
+// around what it keeps.
+const PRESET = [
+    "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+    "\nYou are an interactive agent that helps users with software engineering tasks.",
+    "IMPORTANT: Assist with authorized security testing.",
+    "# Environment\n - The most recent Claude models are the Claude 5 family.",
+    "# Context management\nWhen the conversation grows long, the context is summarized.",
+].join("\n\n");
+const INTENTIC = intenticPromptOf(PRESET);
+const asked: (string | undefined)[] = [];
+mock.module("./preset-prompt.js", () => ({
+    presetSystemPrompt: async (_cwd: string, model?: string) => {
+        asked.push(model);
+        return { text: PRESET, version: "2.1.0" };
+    },
+}));
+
+// Only the intentic base's probe reads the directory.
+const systemPromptOf = (input: Parameters<typeof sdkSystemPrompt>[0]): ReturnType<typeof sdkSystemPrompt> => sdkSystemPrompt(input, WORKSPACE_ROOT);
 
 // Built-in bases differ only in base text and append in a stable order (prompt caching); `custom` means the whole
 // prompt, and the instruction axis's three answers are three distinct placements.
@@ -127,18 +148,22 @@ test("a custom prompt drops the harness's guidance and keeps the owner's own rul
     expect(emptied.systemPrompt).toBe(MEMORY);
 });
 
-test("intentic ships its own prompt as the base, with the harness guidance after it", () => {
-    const prompt = sdkSystemPrompt({
+test("intentic cuts its base from the preset of the turn's own model, with the harness guidance after it", async () => {
+    const prompt = await systemPromptOf({
         ...BASE,
         mode: "intentic",
+        model: "claude-opus-5",
         custom: undefined,
         append: "extra",
         browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
     });
-    // A string, not an object: Intentic's prompt is not the CLI's preset, so the SDK is told to drop it.
+    // A string, not an object: Intentic's prompt is not the CLI's preset as rendered, so the SDK is told to drop it.
     expect(typeof prompt).toBe("string");
     const text = prompt as string;
-    expect(text.startsWith(INTENTIC_PROMPT)).toBe(true);
+    expect(text.startsWith(INTENTIC)).toBe(true);
+    expect(text).not.toContain("# Environment");
+    // Claude Code renders a different preset per model, so the one cut is the one this turn's model would have had.
+    expect(asked.at(-1)).toBe("claude-opus-5");
     // This guidance rides the default setting; without it the shipped question cards, checklist and browser tools go
     // dark for anyone who never touched it.
     expect(text).toContain("AskUserQuestion");
@@ -152,20 +177,20 @@ test("intentic ships its own prompt as the base, with the harness guidance after
 
 // browserOutputDir is turn-plan's browser-presence signal; when it is absent, the prompt must not advertise tools the
 // turn cannot load.
-test("no browser servers this turn: the prompt advertises no browser", () => {
-    const prompt = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: undefined });
+test("no browser servers this turn: the prompt advertises no browser", async () => {
+    const prompt = await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: undefined });
     expect(prompt as string).not.toContain("mcp__web__browser");
 });
 
-test("a turn holding accounts is told about the routed browser, and one without is not", () => {
+test("a turn holding accounts is told about the routed browser, and one without is not", async () => {
     const browserOutputDir = `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`;
-    const withAccounts = sdkSystemPrompt({
+    const withAccounts = (await systemPromptOf({
         ...BASE,
         mode: "intentic",
         custom: undefined,
         browserOutputDir,
         browserAccounts: true,
-    }) as string;
+    })) as string;
     expect(withAccounts).toContain("mcp__browser__");
     expect(withAccounts).toContain("`account` argument");
     // Accounts tools are deferred too, so the same sentence has to say how they load and what the roster tool is
@@ -175,14 +200,14 @@ test("a turn holding accounts is told about the routed browser, and one without 
     // Anonymous and signed-in are different tool prefixes, not one tool with a flag.
     expect(withAccounts).toContain("mcp__web__browser_navigate");
 
-    const anonymousOnly = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, browserOutputDir }) as string;
+    const anonymousOnly = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, browserOutputDir })) as string;
     expect(anonymousOnly).toContain("mcp__web__browser_navigate");
     expect(anonymousOnly).not.toContain("mcp__browser__");
     expect(anonymousOnly).not.toContain("mcp__accounts__");
 });
 
-test("claude keeps the CLI's preset and hands the same guidance to its append", () => {
-    const preset = sdkSystemPrompt({
+test("claude keeps the CLI's preset and hands the same guidance to its append", async () => {
+    const preset = await systemPromptOf({
         ...BASE,
         mode: "claude",
         custom: undefined,
@@ -201,21 +226,28 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
     expect(append.endsWith("extra")).toBe(true);
 });
 
-test("custom reaches the SDK as the bare text, with no guidance at all", () => {
-    const prompt = sdkSystemPrompt({ ...BASE, mode: "custom", custom: CUSTOM, append: "extra" });
+test("custom reaches the SDK as the bare text, with no guidance at all", async () => {
+    const prompt = await systemPromptOf({ ...BASE, mode: "custom", custom: CUSTOM, append: "extra" });
     expect(prompt).toBe(CUSTOM);
 });
 
-test("an unattended turn loses the interactive guidance but keeps the checklist", () => {
-    const text = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, unattended: true }) as string;
+test("an unattended turn loses the interactive guidance but keeps the checklist", async () => {
+    const text = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, unattended: true })) as string;
     expect(text).not.toContain("AskUserQuestion");
     expect(text).toContain("TaskCreate");
 });
 
-test("both built-in bases carry the waiting and context-reuse steers", () => {
-    for (const mode of ["intentic", "claude"] as const) {
-        const composed = sdkSystemPrompt({ ...BASE, mode, custom: undefined, append: undefined });
-        const text = typeof composed === "string" ? composed : (composed as { append: string }).append;
+// Both built-in bases as text: the intentic string whole, and the append that rides the preset.
+const builtinTexts = async (): Promise<string[]> =>
+    Promise.all(
+        (["intentic", "claude"] as const).map(async (mode) => {
+            const composed = await systemPromptOf({ ...BASE, mode, custom: undefined, append: undefined });
+            return typeof composed === "string" ? composed : (composed as { append: string }).append;
+        }),
+    );
+
+test("both built-in bases carry the waiting and context-reuse steers", async () => {
+    for (const text of await builtinTexts()) {
         // The replacement seams are named explicitly; an unnamed capability is one the model falls back past to the
         // shell primitive it already knows.
         expect(text).toContain("run_in_background");
@@ -225,8 +257,8 @@ test("both built-in bases carry the waiting and context-reuse steers", () => {
     }
 });
 
-test("an unattended turn keeps them: a wake nobody watches is where polling costs most", () => {
-    const text = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, unattended: true }) as string;
+test("an unattended turn keeps them: a wake nobody watches is where polling costs most", async () => {
+    const text = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, unattended: true })) as string;
     expect(text).toContain("run_in_background");
     expect(text).toMatch(/already read/i);
 });
@@ -238,28 +270,26 @@ test("a runtime outside the Claude Code loop is not told to use seams it has not
 });
 
 // Which binary is installed is not a loop-specific mechanism, so unlike the seams above it travels to every runtime.
-test("the search-binary steer travels to every runtime, like the other image facts", () => {
+test("the search-binary steer travels to every runtime, like the other image facts", async () => {
     const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
     expect(codex.systemAppend).toContain("`rg` (ripgrep)");
-    const claude = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: undefined }) as string;
+    const claude = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: undefined })) as string;
     expect(claude).toContain("`rg` (ripgrep)");
 });
 
 // iqSearch defaults off and is measured under a holdout arm; naming it here unconditionally would jump that gate and
 // spoil the holdout.
-test("the always-on prompt never advertises iq: its plugin is gated and under measurement", () => {
-    const intentic = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, append: undefined }) as string;
-    const claude = sdkSystemPrompt({ ...BASE, mode: "claude", custom: undefined, append: undefined }) as { append: string };
+test("the always-on prompt never advertises iq: its plugin is gated and under measurement", async () => {
+    const intentic = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, append: undefined })) as string;
+    const claude = (await systemPromptOf({ ...BASE, mode: "claude", custom: undefined, append: undefined })) as { append: string };
     for (const text of [intentic, claude.append]) {
         expect(text).not.toMatch(/\biq\b/);
     }
 });
 
 // Names the situation (orienting) rather than restating the batching rule.
-test("both built-in bases name orientation as the place to batch", () => {
-    for (const mode of ["intentic", "claude"] as const) {
-        const composed = sdkSystemPrompt({ ...BASE, mode, custom: undefined, append: undefined });
-        const text = typeof composed === "string" ? composed : (composed as { append: string }).append;
+test("both built-in bases name orientation as the place to batch", async () => {
+    for (const text of await builtinTexts()) {
         expect(text).toContain("ORIENTING");
         expect(text).toContain("ONE response");
     }
@@ -267,10 +297,8 @@ test("both built-in bases name orientation as the place to batch", () => {
 
 // The only place "Intentic" is explained at all; the reference itself is a pointer to the on-demand `intentic` skill,
 // kept out of the always-on cost.
-test("both built-in bases say what the agent runs inside and where the product's reference is", () => {
-    for (const mode of ["intentic", "claude"] as const) {
-        const composed = sdkSystemPrompt({ ...BASE, mode, custom: undefined, append: undefined });
-        const text = typeof composed === "string" ? composed : (composed as { append: string }).append;
+test("both built-in bases say what the agent runs inside and where the product's reference is", async () => {
+    for (const text of await builtinTexts()) {
         expect(text).toContain("You run inside Intentic");
         expect(text).toContain("`intentic` skill");
         // The one fact the model cannot infer on its own: this workspace's own AGENTS.md is read as the owner's
@@ -288,34 +316,34 @@ test("a runtime outside the Claude Code loop is not pointed at a skill it cannot
 
 // Diagnostics tools are named only on the turns that mounted them; turn-plan withholds the server from a persona with
 // no files power.
-test("the diagnostics tools are named on the turns that mounted them, and nowhere else", () => {
-    const mounted = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, diagnostics: true }) as string;
+test("the diagnostics tools are named on the turns that mounted them, and nowhere else", async () => {
+    const mounted = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, diagnostics: true })) as string;
     expect(mounted).toContain("mcp__diagnostics__errors");
     expect(mounted).toContain("mcp__diagnostics__turns");
     expect(mounted).toContain("mcp__diagnostics__slow");
     expect(mounted).toContain("mcp__diagnostics__resources");
     expect(mounted).toMatch(/before re-instrumenting/i);
 
-    const withheld = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined }) as string;
+    const withheld = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined })) as string;
     expect(withheld).not.toContain("mcp__diagnostics__");
     // An unattended wake keeps diagnostics: an automation's own failure is exactly what those records answer.
-    const unattended = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, unattended: true, diagnostics: true }) as string;
+    const unattended = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, unattended: true, diagnostics: true })) as string;
     expect(unattended).toContain("mcp__diagnostics__errors");
     const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
     expect(codex.systemAppend).not.toContain("mcp__diagnostics__");
 });
 
 // The terminal hand-off is deferred, and named only on turns agent.ts mounted it for: attended, with the tmux wrapper.
-test("the terminal hand-off is named on the turns that mounted it, and nowhere else", () => {
-    const mounted = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, terminal: true }) as string;
+test("the terminal hand-off is named on the turns that mounted it, and nowhere else", async () => {
+    const mounted = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, terminal: true })) as string;
     expect(mounted).toContain("mcp__terminal__request_help");
     expect(mounted).toContain("ToolSearch (`+terminal`)");
     // Said for the moment it arrives in (mid-run), not as a tool summary.
     expect(mounted).toContain("still running");
 
-    const withheld = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined }) as string;
+    const withheld = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined })) as string;
     expect(withheld).not.toContain("mcp__terminal__");
-    const preset = sdkSystemPrompt({ ...BASE, mode: "claude", custom: undefined, terminal: true }) as { append: string };
+    const preset = (await systemPromptOf({ ...BASE, mode: "claude", custom: undefined, terminal: true })) as { append: string };
     expect(preset.append).toContain("mcp__terminal__request_help");
     const codex = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
     expect(codex.systemAppend ?? "").not.toContain("mcp__terminal__");
@@ -323,13 +351,13 @@ test("the terminal hand-off is named on the turns that mounted it, and nowhere e
 
 // The device sentence exists because a turn with a connected machine still wrote commands out for the owner to paste
 // on it. It rides only where those servers were mounted, and names the sandbox's own host when that is already known.
-test("a connected device is named, with the machine running this sandbox called out when known", () => {
-    const known = sdkSystemPrompt({
+test("a connected device is named, with the machine running this sandbox called out when known", async () => {
+    const known = (await systemPromptOf({
         ...BASE,
         mode: "intentic",
         custom: undefined,
         hostDevices: { ids: ["ada-laptop"], self: "ada-laptop", slug: "work-abc" },
-    }) as string;
+    })) as string;
     expect(known).toContain("`ada-laptop`");
     expect(known).toContain("The one running this sandbox is `ada-laptop`.");
     expect(known).toContain("ToolSearch (`+mcp__ada-laptop__`)");
@@ -338,36 +366,36 @@ test("a connected device is named, with the machine running this sandbox called 
     expect(known).toContain("never routed around");
 
     // Unread is not "no such machine": the turn is told how to ask, with its own slug to match a row by.
-    const unread = sdkSystemPrompt({
+    const unread = (await systemPromptOf({
         ...BASE,
         mode: "intentic",
         custom: undefined,
         hostDevices: { ids: ["ada-laptop", "studio-pc"], slug: "work-abc" },
-    }) as string;
+    })) as string;
     expect(unread).toContain("`list_sandboxes` answers");
     expect(unread).toContain("its slug there is `work-abc`");
     expect(unread).toContain("`studio-pc`");
 
     // No device, or a card with none granted: no sentence at all rather than one about tools that aren't there.
-    const none = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined }) as string;
+    const none = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined })) as string;
     expect(none).not.toContain("list_sandboxes");
-    const empty = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: [] } }) as string;
+    const empty = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: [] } })) as string;
     expect(empty).not.toContain("list_sandboxes");
-    const preset = sdkSystemPrompt({ ...BASE, mode: "claude", custom: undefined, hostDevices: { ids: ["ada-laptop"] } }) as { append: string };
+    const preset = (await systemPromptOf({ ...BASE, mode: "claude", custom: undefined, hostDevices: { ids: ["ada-laptop"] } })) as { append: string };
     expect(preset.append).toContain("`ada-laptop`");
 });
 
 // The failure this paragraph exists for: with their own browser connected, a turn still opened a fresh automation
 // profile on their laptop for a page that needed their login. It names the browser as they know it, and says which of
 // the two to reach for.
-test("the owner's own browser is named, as the browser they see, and preferred over one on a machine", () => {
-    const prompt = sdkSystemPrompt({
+test("the owner's own browser is named, as the browser they see, and preferred over one on a machine", async () => {
+    const prompt = (await systemPromptOf({
         ...BASE,
         mode: "intentic",
         custom: undefined,
         hostDevices: { ids: ["rog"] },
         ownBrowsers: { browsers: [{ id: "chrome", what: "Brave 141 on Windows" }] },
-    }) as string;
+    })) as string;
     expect(prompt).toContain("`chrome` (Brave 141 on Windows)");
     expect(prompt).toContain("ToolSearch (`+mcp__chrome__`)");
     expect(prompt).toContain("BEFORE a browser on a connected machine");
@@ -377,21 +405,21 @@ test("the owner's own browser is named, as the browser they see, and preferred o
     expect(prompt.indexOf("The owner's own computers are connected")).toBeLessThan(prompt.indexOf("The owner's OWN browser is connected"));
 
     // A browser that has never said what it is is still named; only the parenthesis goes.
-    const unread = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [{ id: "chrome" }] } }) as string;
+    const unread = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [{ id: "chrome" }] } })) as string;
     expect(unread).toContain("this turn: `chrome`, behind deferred tools");
 
     // No browser connected, or a card with none granted: no sentence at all rather than one about absent tools.
-    const none = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined }) as string;
+    const none = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined })) as string;
     expect(none).not.toContain("The owner's OWN browser");
-    const empty = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [] } }) as string;
+    const empty = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [] } })) as string;
     expect(empty).not.toContain("The owner's OWN browser");
 });
 
 // ONE CARD, SEVERAL OS INSTALLS. A turn told only the machine's id would look for a second device that does not
 // exist, or run a Linux path through PowerShell. The sentence names the sides, how `in` picks one, and the two names
 // every folder has.
-test("says a connected machine has several environments, and how a command picks one", () => {
-    const prompt = sdkSystemPrompt({
+test("says a connected machine has several environments, and how a command picks one", async () => {
+    const prompt = (await systemPromptOf({
         ...BASE,
         mode: "intentic",
         custom: undefined,
@@ -409,7 +437,7 @@ test("says a connected machine has several environments, and how a command picks
                 },
             ],
         },
-    }) as string;
+    })) as string;
     expect(prompt).toContain("`rog` is ONE computer with 2 environments on it");
     expect(prompt).toContain("`native` is the metal (PowerShell 7, home C:\\Users\\radar), where the screen, the GUI and the clipboard live");
     expect(prompt).toContain('`wsl:archlinux` is the WSL distro "archlinux" on it (/usr/bin/zsh, home /home/radarsu)');
@@ -419,7 +447,7 @@ test("says a connected machine has several environments, and how a command picks
         "C:\\Users\\radar is /mnt/c/Users/radar from a distro; /home/radarsu is \\\\wsl.localhost\\archlinux\\home\\radarsu from Windows",
     );
     // A machine with one OS install gets no such sentence: every command lands in the only place it could.
-    const lone = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: ["ada-laptop"] } }) as string;
+    const lone = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, hostDevices: { ids: ["ada-laptop"] } })) as string;
     expect(lone).not.toContain("ONE computer");
 });
 
@@ -496,16 +524,16 @@ test("a lean window drops the workspace conventions from the append and keeps ev
     expect(placement.systemAppend).toContain(MEMORY);
 });
 
-test("a lean window leaves the Claude Code loop its own base", () => {
-    const prompt = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: undefined, trim: LEAN });
+test("a lean window leaves the Claude Code loop its own base", async () => {
+    const prompt = await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, trim: LEAN });
 
-    expect(prompt).toContain(INTENTIC_PROMPT);
+    expect(prompt).toContain(INTENTIC);
     // Every guidance paragraph goes at once, rather than a few of them: half the habits is not half a product, it is
     // a longer prompt that still does not fit.
     expect(prompt).not.toContain("ripgrep");
 });
 
-test("the smallest window swaps the base, carrying the persona and the owner's rules onto it", () => {
+test("the smallest window swaps the base, carrying the persona and the owner's rules onto it", async () => {
     const placement = turnPromptPlacement({
         capabilities: CLAUDE,
         mode: "intentic",
@@ -520,11 +548,11 @@ test("the smallest window swaps the base, carrying the persona and the owner's r
     expect(placement.systemPrompt).toContain("context window is small");
     expect(placement.systemPrompt).toContain(PERSONA);
     expect(placement.systemPrompt).toContain(MEMORY);
-    expect(placement.systemPrompt).not.toContain(INTENTIC_PROMPT);
+    expect(placement.systemPrompt).not.toContain(INTENTIC);
     expect(placement.systemAppend).toBeUndefined();
 
     // And the adapter sends exactly that, rather than composing the base back underneath it.
-    const sent = sdkSystemPrompt({ ...BASE, mode: "intentic", custom: placement.systemPrompt, trim: MINIMAL });
+    const sent = await systemPromptOf({ ...BASE, mode: "intentic", custom: placement.systemPrompt, trim: MINIMAL });
     expect(sent).toBe(placement.systemPrompt!);
 });
 

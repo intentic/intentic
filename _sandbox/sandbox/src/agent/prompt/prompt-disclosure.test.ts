@@ -1,6 +1,6 @@
 import { capabilitiesOf } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
-import { promptDisclosure } from "./prompt-disclosure.js";
+import { test, expect, mock } from "bun:test";
+import { promptDisclosure, withBaseText } from "./prompt-disclosure.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 
 // What the chat shows must be what the turn was sent. Everything here composes a placement the ordinary way and then
@@ -13,6 +13,14 @@ const PERSONA = "## Who this turn is acting as\n\nYou are acting as Studio.";
 const FIELD_NOTES = "## Field notes for this sandbox\n\npnpm's exit code lies here.";
 const MEMORY = "## Standing instructions for this workspace\n\n### AGENTS.md\n\nNo legacy support.";
 const AT = 1_700_000_000_000;
+
+// Stands in for the installed CLI, answering with a preset that names the model it was rendered for.
+mock.module("./preset-prompt.js", () => ({
+    presetSystemPrompt: async (_cwd: string, model?: string) => ({
+        text: `IMPORTANT: Assist with anything.\n\nRendered for ${model ?? "the default"}.`,
+        version: "2.1.0",
+    }),
+}));
 
 const disclosureOf = (capabilities: typeof CLAUDE, mode: "intentic" | "claude" | "custom", systemPrompt = "") => {
     const placement = turnPromptPlacement({
@@ -106,4 +114,14 @@ test("a turn with nothing added discloses the base alone", () => {
     const disclosure = promptDisclosure({ capabilities: CODEX, request: { systemPromptMode: "intentic" }, at: AT });
     expect(disclosure.sections).toEqual([]);
     expect(disclosure.base).toEqual({ kind: "runtime" });
+});
+
+// Claude Code renders a different preset per model, so a built-in base is read back for the model the turn ran on.
+test("a built-in base is shown as its turn's model had it", async () => {
+    const intentic = promptDisclosure({ capabilities: CLAUDE, request: { systemPromptMode: "intentic", model: "claude-sonnet-5" }, at: AT });
+    expect(intentic.base).toEqual({ kind: "intentic", model: "claude-sonnet-5" });
+    expect((await withBaseText(intentic, "/work")).base.text).toBe("Rendered for claude-sonnet-5.");
+
+    const claude = promptDisclosure({ capabilities: CLAUDE, request: { systemPromptMode: "claude" }, at: AT });
+    expect((await withBaseText(claude, "/work")).base.text).toBe("IMPORTANT: Assist with anything.\n\nRendered for the default.");
 });

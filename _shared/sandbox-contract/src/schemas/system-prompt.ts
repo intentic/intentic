@@ -20,6 +20,7 @@ export type PromptBaseKind = z.infer<typeof PromptBaseKindSchema>;
 export const PromptBaseSchema = z.object({
     kind: PromptBaseKindSchema.describe("Which prompt the additions ride on."),
     text: z.string().optional().describe("The base's own words, when they can be read here. Absent for a runtime that keeps its prompt to itself."),
+    model: z.string().optional().describe("The model the turn ran on, for a built-in base: Claude Code renders a different preset for each."),
 });
 export type PromptBase = z.infer<typeof PromptBaseSchema>;
 

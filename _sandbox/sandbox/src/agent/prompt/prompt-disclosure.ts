@@ -9,7 +9,7 @@ import type {
 import { PERSONA_NOTE_HEADER, PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { FIELD_NOTES_NOTE_HEADER, FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
-import { INTENTIC_PROMPT } from "./intentic-prompt.js";
+import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { presetSystemPrompt } from "./preset-prompt.js";
 import { GUIDANCE_TITLE, harnessGuidance, type PromptRequest, promptInputOf, terminalMounted } from "./system-prompt.js";
 import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
@@ -31,7 +31,7 @@ const marksIn = (append: string): { readonly at: number; readonly title: string;
     }).toSorted((left, right) => left.at - right.at);
 
 // Only `claude-code` takes a base from here; every other runtime keeps its own.
-const baseOf = (capabilities: AgentCapabilities, mode: SystemPromptMode, own: string, replaced: boolean): PromptBase => {
+const baseOf = (capabilities: AgentCapabilities, request: PromptRequest, mode: SystemPromptMode, own: string, replaced: boolean): PromptBase => {
     if (replaced) {
         // `trimmed`, not `custom`, for text the owner never wrote.
         return { kind: mode === "custom" ? "custom" : "trimmed", text: own };
@@ -39,8 +39,8 @@ const baseOf = (capabilities: AgentCapabilities, mode: SystemPromptMode, own: st
     if (capabilities.runtime !== "claude-code") {
         return { kind: "runtime" };
     }
-    // Text is filled in on read (withBaseText); Claude's is a probe of the installed CLI.
-    return { kind: mode === "claude" ? "claude" : "intentic" };
+    // Text is filled in on read (withBaseText), from a probe of the installed CLI for the model the turn ran on.
+    return { kind: mode === "claude" ? "claude" : "intentic", ...(request.model === undefined ? {} : { model: request.model }) };
 };
 
 export interface DisclosureInput {
@@ -73,7 +73,7 @@ export const promptDisclosure = (input: DisclosureInput): SystemPromptDisclosure
     const marks = marksIn(append);
     // Ahead of the first titled piece: the guidance, or the replacing prompt where there is one.
     const leading = append.slice(0, marks[0]?.at).trim();
-    const base = baseOf(capabilities, mode, leading, replaced);
+    const base = baseOf(capabilities, request, mode, leading, replaced);
     const guidance = guidanceOf(input, leading, replaced);
     const sections: PromptSection[] = [
         ...(guidance === "" ? [] : [{ source: "guidance" as const, title: GUIDANCE_TITLE, text: guidance }]),
@@ -84,12 +84,11 @@ export const promptDisclosure = (input: DisclosureInput): SystemPromptDisclosure
 
 // Fetched only when a reader opens one; nothing for a runtime that keeps its prompt to itself.
 export const withBaseText = async (disclosure: SystemPromptDisclosure, cwd: string): Promise<SystemPromptDisclosure> => {
-    if (disclosure.base.kind === "intentic") {
-        return { ...disclosure, base: { ...disclosure.base, text: INTENTIC_PROMPT } };
+    const { kind, model } = disclosure.base;
+    if (kind !== "intentic" && kind !== "claude") {
+        return disclosure;
     }
-    if (disclosure.base.kind === "claude") {
-        const preset = await presetSystemPrompt(cwd).catch(() => undefined);
-        return preset === undefined ? disclosure : { ...disclosure, base: { ...disclosure.base, text: preset.text } };
-    }
-    return disclosure;
+    const read = kind === "intentic" ? intenticSystemPrompt : presetSystemPrompt;
+    const base = await read(cwd, model).catch(() => undefined);
+    return base === undefined ? disclosure : { ...disclosure, base: { ...disclosure.base, text: base.text } };
 };

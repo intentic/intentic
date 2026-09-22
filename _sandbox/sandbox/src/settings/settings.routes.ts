@@ -1,6 +1,6 @@
 import { settingsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { INTENTIC_PROMPT } from "../agent/prompt/intentic-prompt.js";
+import { intenticSystemPrompt } from "../agent/prompt/intentic-prompt.js";
 import { presetSystemPrompt } from "../agent/prompt/preset-prompt.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -49,10 +49,10 @@ export const createSettingsRoutes = (services: Services) => {
             ]);
             return { input: inputSavings, ...experiments };
         }),
-        // Intentic's prompt is shipped text: instant, no version of its own. Claude's is read from the installed CLI;
-        // the workspace root only says where to spawn that probe, nothing is read from it.
+        // Both are read from the installed CLI for its default model, Intentic's cut from Claude's; the workspace root only
+        // says where to spawn that probe, nothing is read from it.
         builtinPrompt: i.builtinPrompt.handler(({ input }) =>
-            input.base === "intentic" ? { text: INTENTIC_PROMPT, version: "" } : presetSystemPrompt(services.workspace.root),
+            input.base === "intentic" ? intenticSystemPrompt(services.workspace.root) : presetSystemPrompt(services.workspace.root),
         ),
         // When each rule last fired, so the settings list can show a rule that's gone quiet as quiet rather than merely
         // present.

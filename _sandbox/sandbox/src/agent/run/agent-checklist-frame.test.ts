@@ -1,9 +1,12 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { test, expect } from "bun:test";
+import { test, expect, mock } from "bun:test";
 import { runAgent } from "./agent.js";
 import type { QueryFn } from "./sdk-stream.js";
+
+// Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
+mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "You are an interactive agent.", version: "2.1.0" }) }));
 
 // Task verbs fold into one live checklist instead of tool cards; a subagent's verbs (marked by parent_tool_use_id) are
 // excluded from the parent's list. Stream-level: the fold is only reached through the message loop.

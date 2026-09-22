@@ -440,9 +440,6 @@ const baseOptions = (
         permissionMode,
         ...opt("allowedTools", request.allowedTools?.slice()),
         abortController,
-        // Claude Code's coding preset plus this harness's guidance, or the owner's own prompt alone; SDK sends an empty
-        // prompt if omitted.
-        systemPrompt: sdkSystemPrompt(promptInputOf(request, terminalMounted(request, tmuxEnabled))),
         // Loads the workspace's .claude/ config: skills, subagents, settings, hooks, .mcp.json; else none. Not the
         // owner's standing rules — those are composed for every runtime alike (workspace-memory.ts), so a CLAUDE.md
         // this still picks up is a repo's own file, not this product's memory.
@@ -897,6 +894,8 @@ export async function* runAgent(
     // it, the gate decides on it.
     const posture: TurnPosture = { mode: permissionMode };
     const tmuxEnabled = tmuxRunEnabled();
+    // Read after the SDK copy is pinned, since the intentic base is cut from that copy's own preset.
+    const systemPrompt = await sdkSystemPrompt(promptInputOf(request, terminalMounted(request, tmuxEnabled)), request.cwd);
     // Shared handle for every agent this turn starts; no conversation means nothing to file children under.
     const subagents: SubagentTurn | undefined =
         request.conversationId === undefined
@@ -913,6 +912,9 @@ export async function* runAgent(
     let stderr = "";
     const options: Options = {
         ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push),
+        // Either built-in base plus this harness's guidance, or the owner's own prompt alone; SDK sends an empty prompt if
+        // omitted.
+        systemPrompt,
         // Legalizes bypassPermissions without activating it; a plan approval can switch into bypass mid-turn.
         allowDangerouslySkipPermissions: true,
         stderr: (data) => {

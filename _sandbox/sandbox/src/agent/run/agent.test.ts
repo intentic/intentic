@@ -2,7 +2,7 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Options, PermissionResult, PermissionUpdate, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { homedir } from "node:os";
 import { type AgentEvent, type AgentReply, type PermissionMode, PermissionModeSchema } from "@intentic/sandbox-contract";
-import { test, expect, afterEach, jest } from "bun:test";
+import { test, expect, afterEach, jest, mock } from "bun:test";
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +13,9 @@ import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
 import { backgroundJobOf, openBackgroundJob, settledBackgroundJobs } from "../tools/background-jobs.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
+
+// Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
+mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "You are an interactive agent.", version: "2.1.0" }) }));
 
 // Fake QueryFn yielding canned SDK messages; runAgent reads only the fields exercised here.
 const fakeQuery = (...messages: unknown[]): QueryFn =>
@@ -345,7 +348,7 @@ test("a request with no mode runs Intentic's prompt, and each mode reaches the S
     // An absent mode is the product default: a request built by hand must get the same agent the app ships.
     await collect(request, capture);
     const intentic = captured.at(-1)?.systemPrompt as string;
-    expect(intentic).toMatch(/Intentic agent/i);
+    expect(intentic.startsWith("You are an interactive agent.")).toBe(true);
     expect(intentic).toContain("AskUserQuestion");
     expect(intentic).toContain("TaskCreate");
     expect(intentic).toContain("mcp__web__browser_take_screenshot");

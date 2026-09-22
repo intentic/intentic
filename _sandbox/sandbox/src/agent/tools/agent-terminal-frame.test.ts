@@ -7,6 +7,9 @@ import { runAgent } from "../run/agent.js";
 import type { QueryFn } from "../run/sdk-stream.js";
 import * as fsOriginal from "node:fs";
 
+// Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
+mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "You are an interactive agent.", version: "2.1.0" }) }));
+
 // Force the tmux gate ON. In CI the wrapper is absent so tmuxRunEnabled() is false and no `terminal` frame is
 // emitted (agent.test.ts covers that gated-off path); here we stub existsSync true FOR THE WRAPPER'S PATH ONLY
 // (keeping the rest of node:fs, and honest answers for every other path) plus the opt-in env so the on-path

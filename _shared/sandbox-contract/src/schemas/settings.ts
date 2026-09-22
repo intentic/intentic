@@ -237,7 +237,8 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Have the agent edit files by line number rather than by quoting the text it wants replaced. Cheaper on large files, and less forgiving of a stale read.",
         ),
-    // intentic: this product's own prompt (intentic-prompt.ts), tuned for this harness. Default.
+    // intentic: Claude Code's preset, read the same way, with what this harness does not want cut out (intentic-prompt.ts).
+    // Default.
     // claude: Claude Code's preset, read live from the installed CLI, not a stored copy — tracks whatever prompt ships
     // with it.
     // custom: `systemPrompt` below, and nothing else.
@@ -468,7 +469,7 @@ export const TimezoneStateSchema = z.object({
 });
 export type TimezoneState = z.infer<typeof TimezoneStateSchema>;
 // Read live from the installed CLI (preset-prompt.ts), not a stored transcription. `version` is the CLI build it came
-// from, so a fork from an older build reads as a snapshot; empty for Intentic's own prompt.
+// from, so a fork from an older build reads as a snapshot.
 export const BuiltinPromptTextSchema = z.object({ text: z.string(), version: z.string() });
 export type BuiltinPromptText = z.infer<typeof BuiltinPromptTextSchema>;
 // What each token-reduction mechanism actually saved. Input-side: both sides of the comparison come off the same
