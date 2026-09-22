@@ -8,7 +8,9 @@
     // `@intentic/house-css` is a stylesheet reached by a relative `@import` from a consumer's own CSS, which is
     // this repo's convention for cross-package CSS and is invisible to a module graph. The dependency is
     // declared so the edge is stated in the manifest, not so anything imports the package by name.
-    "ignoreDependencies": ["tslib", "@intentic/house-css"],
+    // `@stryker-mutator/command-runner` is core's built-in runner (stryker.conf.mjs `testRunner: "command"`), not a package;
+    // core itself is run by the test-strength chore (sandbox-contract/src/chores/probes.ts) through `pnpm exec`, which no script names.
+    "ignoreDependencies": ["tslib", "@intentic/house-css", "@stryker-mutator/command-runner", "@stryker-mutator/core"],
     "ignoreBinaries": ["docker", "docker compose", "ssh", "mutagen", "cloudflared", "rg", "tmux", "psql", "bun"],
     "workspaces": {
         ".": {
@@ -20,6 +22,7 @@
                 "src/main.ts",
                 "index.html",
                 "vite.config.ts",
+                "bun.setup.ts",
                 "src/**/*.test.ts",
                 "scripts/*.mjs",
                 "src/app/environments/environment.local.ts",
@@ -32,7 +35,11 @@
             "ignore": ["vendor/**"]
         },
         "_editor/desktop-app": {
-            "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh"]
+            "entry": ["src/main.ts", "index.html", "vite.config.ts", "scripts/*.sh", "src/**/*.test.ts"]
+        },
+        // A page, not a library: the suite and the preload that resolves the app's components for it.
+        "_editor/share-view": {
+            "entry": ["src/**/*.test.ts", "bun.setup.ts"]
         },
         "_platform/api": {
             "entry": ["src/**/*.test.ts"]
@@ -42,11 +49,13 @@
                 "src/main.ts",
                 "src/extensions/backend/backend-host-main.ts",
                 "src/**/*.test.ts",
+                "src/fences/*.ts",
                 "bin/*.mjs",
                 "bin/*.test.mjs",
                 "scripts/*.{sh,mjs}"
             ],
-            "ignoreDependencies": ["@intentic/webq"]
+            // vitest is what the test-strength check runs inside a fixture workspace (agent-test-strength.integration.test.ts).
+            "ignoreDependencies": ["@intentic/webq", "vitest"]
         },
         "_search/iq": {
             "entry": ["src/cli.ts", "plugin/**", "src/**/*.test.ts"]
@@ -140,7 +149,13 @@
             "entry": ["src/index.ts", "src/**/*.test.ts"]
         },
         "_tools/testing": {
-            "entry": ["src/index.ts", "src/**/*.test.ts"]
+            "entry": ["src/index.ts", "src/**/*.test.ts"],
+            // jsdom is reached through require (src/jsdom.ts), and `suites` is this package's own bin.
+            "ignoreDependencies": ["jsdom"],
+            "ignoreBinaries": ["suites"]
+        },
+        "_tools/*": {
+            "entry": ["src/{index,cli,main}.ts", "src/**/*.test.ts"]
         },
         "_tools/examples": {
             "entry": ["*.config.ts"]

@@ -1,10 +1,10 @@
 import { Readable } from "node:stream";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
 import { extract, type Headers } from "tar-stream";
 import { ArrivalFormatError } from "../arrival-error.js";
 import { drain, extractAll } from "../tar-extract.js";
 import { skipReason } from "./scan-policy.js";
+import { nodeStream } from "../web-stream.js";
 
 // Reads a gzipped tar of a foreign home directory into a bounded in-memory file map adapters can be pure over. Held in
 // memory, not on disk: the archive is a credential store, and a temp file would be a second place those bytes live.
@@ -76,7 +76,7 @@ export const readForeignArchive = async (body: ReadableStream<Uint8Array>, limit
         files.set(relPath, content);
     };
 
-    const source = Readable.fromWeb(body as NodeReadableStream<Uint8Array>).pipe(createGunzip());
+    const source = Readable.fromWeb(nodeStream(body)).pipe(createGunzip());
     await extractAll(
         source,
         ex,

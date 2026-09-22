@@ -2,6 +2,7 @@ import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
 import { DAEMON_OWNER, workloadStamp } from "../../platform/boot/leftovers.js";
+import { webStream } from "../../web-stream.js";
 
 /* Spawning an ACP agent subprocess: the capability's command split on whitespace (no shell quoting, the config documents this). */
 
@@ -52,7 +53,7 @@ export const spawnAcpProcess = (command: string, env: Record<string, string>, cw
     });
     const stream = ndJsonStream(
         Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
-        Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>,
+        webStream<Uint8Array>(Readable.toWeb(child.stdout)),
     );
     return { child, stream, stderrTail: () => stderr };
 };

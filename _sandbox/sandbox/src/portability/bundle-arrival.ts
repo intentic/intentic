@@ -4,7 +4,6 @@ import { chmod, mkdir, readdir, rm, symlink, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
 import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type BundleManifest, type NeedsAction } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
@@ -18,6 +17,7 @@ import { drain, extractAll } from "../tar-extract.js";
 import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { carries, historyMayContain, historyPortability, workspaceMayContain, workspacePortability } from "./classify.js";
 import { sizeLabel } from "@intentic/base/format";
+import { nodeStream } from "../web-stream.js";
 
 // Bundle arrival: this sandbox's own export format, taken in as a preview-first plan instead of the old write-on-pick
 // restore. Spooled to /history, never memory, since a bundle can be tens of gigabytes; one pass writes the spool and
@@ -175,7 +175,7 @@ export const spoolBundle = async (body: ReadableStream<Uint8Array>, historyRoot:
     await mkdir(arrivalsDir(historyRoot), { recursive: true });
     const spool = join(arrivalsDir(historyRoot), `${randomUUID()}.tar.gz`);
 
-    const source = Readable.fromWeb(body as NodeReadableStream<Uint8Array>);
+    const source = Readable.fromWeb(nodeStream(body));
     const gunzip = createGunzip();
     // Mode 0600 like every credential-bearing file this daemon writes; a bundle with secrets is exactly that.
     const toDisk = createWriteStream(spool, { mode: 0o600 });

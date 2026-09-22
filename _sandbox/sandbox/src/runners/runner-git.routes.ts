@@ -9,6 +9,7 @@ import type { Services } from "../composition.js";
 import { bearerFrom } from "../auth/auth.js";
 import { repoGitDir } from "../history/history.js";
 import { type Presented, refusePresented } from "../peers/peer-store.js";
+import { nodeStream } from "../web-stream.js";
 
 // Smart-HTTP git door: one repo's real git dir served for a runner's stock git fetch/push. No protocol lives here, each
 // route spawns git's own --stateless-rpc half and moves bytes. Auth is the runner's bearer token; push safety is git's
@@ -134,7 +135,7 @@ export const createRunnerGitRpcRoute =
                 services.logger.warn({ runner: caller.id, service, code, stderr: stderr.slice(0, 2000) }, "runner git door: rpc exited non-zero");
             }
         });
-        const request = Readable.fromWeb(raw as Parameters<typeof Readable.fromWeb>[0]);
+        const request = Readable.fromWeb(nodeStream(raw));
         const inbound = c.req.header("content-encoding") === "gzip" ? request.pipe(createGunzip()) : request;
         inbound.pipe(child.stdin);
         inbound.on("error", () => child.kill());

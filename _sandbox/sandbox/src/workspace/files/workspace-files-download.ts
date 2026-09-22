@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
 import { extname } from "node:path";
 import { Readable } from "node:stream";
+import { webStream } from "../../web-stream.js";
 
 // Hard cap on a raw read; the browser holds the whole response as a Blob.
 export const MAX_RAW_BYTES = 25 * 1024 * 1024;
@@ -76,5 +77,5 @@ export const parseByteRange = (header: string | undefined, size: number): ByteRa
 // A file's bytes as a web ReadableStream from start to end inclusive, streamed off disk rather than buffered.
 // Lets a multi-GB recording cost one chunk of memory at a time instead of the whole file.
 export const openWorkspaceFileRange = (absPath: string, start: number, end: number): ReadableStream<Uint8Array> => {
-    return Readable.toWeb(createReadStream(absPath, { start, end })) as ReadableStream<Uint8Array>;
+    return webStream<Uint8Array>(Readable.toWeb(createReadStream(absPath, { start, end })));
 };

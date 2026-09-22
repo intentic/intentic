@@ -9,6 +9,7 @@ import { pipeline } from "node:stream/promises";
 import { cleanTranscription, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
 import { downloadFile } from "@huggingface/hub";
 import { statePath } from "../workspace/layout/state-paths.js";
+import { nodeStream } from "../web-stream.js";
 
 // whisper.cpp over WAV utterances the browser already segments (16kHz mono s16le; this side never decodes audio).
 // Mirrors the Discord voice transcriber's whisper conventions (_extensions/discord/src/audio.ts) in separate code,
@@ -116,7 +117,7 @@ export const createSpeech = ({ workspaceRoot, log, exec = defaultExec, fetchMode
             const staged = `${modelPath}.${randomUUID()}.part`;
             try {
                 // hub's web ReadableStream and the DOM lib's disagree on generics, same object at runtime.
-                await pipeline(Readable.fromWeb(blob.stream() as import("node:stream/web").ReadableStream), createWriteStream(staged));
+                await pipeline(Readable.fromWeb(nodeStream(blob.stream())), createWriteStream(staged));
                 await rename(staged, modelPath);
             } catch (error) {
                 await rm(staged, { force: true });

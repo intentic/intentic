@@ -302,12 +302,12 @@ describe(`VERSIONED_STATE_PATHS`, () => {
     // versioned asks if a human should review it; carry asks if it moves. Frequently-rewritten ledgers are carry only.
     it(`leaves the ledgers and the bulk out even though they travel`, () => {
         for (const path of [
-            `.intentic/records/workflow-runs.json`,
+            `${STATE_DIR}/records/workflow-runs.json`,
             // Split from the tracked automations manifest so a run doesn't dirty it.
-            `.intentic/records/automation-runs.json`,
-            `.intentic/records/loops.json`,
-            `.intentic/records/thread-sessions.json`,
-            `.intentic/records/extension-usage.json`,
+            `${STATE_DIR}/records/automation-runs.json`,
+            `${STATE_DIR}/records/loops.json`,
+            `${STATE_DIR}/records/thread-sessions.json`,
+            `${STATE_DIR}/records/extension-usage.json`,
             `.intentic/records/webchat-installs.json`,
             `.intentic/records/sessions/claude/`,
             `.intentic/records/artifacts/`,

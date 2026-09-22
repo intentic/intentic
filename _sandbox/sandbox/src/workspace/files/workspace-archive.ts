@@ -1,12 +1,12 @@
 import { mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable } from "node:stream";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { extract, type Headers } from "tar-stream";
 import { drain, extractAll } from "../../tar-extract.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, writeStreamCounted } from "./workspace-files-upload.js";
 import { setWorkspaceMtime } from "./workspace-files.js";
+import { nodeStream } from "../../web-stream.js";
 
 // A tar entry whose path escapes /work aborts the whole extraction with 400.
 export class PathEscapeError extends Error {
@@ -72,7 +72,7 @@ export const extractTarToWorkspace = async (root: string, body: ReadableStream<U
         }
     };
 
-    const source = Readable.fromWeb(body as NodeReadableStream<Uint8Array>);
+    const source = Readable.fromWeb(nodeStream(body));
     // Decoder errors surface unchanged; a workspace upload promises no particular archive format.
     await extractAll(source, ex, handleEntry);
 };

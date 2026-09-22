@@ -1,5 +1,4 @@
-/// <reference path="./jsdom.d.ts" />
-import { JSDOM } from "jsdom";
+import { JSDOM } from "./jsdom.js";
 
 // A DOM for the suite that imports this first, or the package that preloads it first: a jsdom window's members become globals with the same override rule
 // the jsdom environment applied, so a suite ported from it sees the same `document`, `Event` and `navigator`.

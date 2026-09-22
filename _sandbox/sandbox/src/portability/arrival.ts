@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { createGunzip } from "node:zlib";
 import type {
     ArrivalApply,
@@ -29,6 +28,7 @@ import { BUNDLE_MANIFEST_ENTRY } from "./bundle.js";
 import { applyBundle, bundleActions, bundleItems, dropSpool, type HeldBundle, spoolBundle } from "./bundle-arrival.js";
 import { parseDefinitionToml } from "./definition.js";
 import { MAX_UPLOAD_BYTES } from "../workspace/files/workspace-files-upload.js";
+import { nodeStream, webStream } from "../web-stream.js";
 
 // Arrival pipeline: one plan → apply → report for everything that can arrive (sandbox.toml, a bundle, a Hermes/OpenClaw
 // home), replacing four near-identical surfaces. Only one artifact is held at a time, dropped asynchronously since a
@@ -61,7 +61,7 @@ const displayedName = (manifest: BundleManifest): string | undefined => manifest
 // Takes the first bytes off the stream without consuming it, and returns something that replays them. Driven by
 // `next()` alone — never `return()` — so `for await` breaking wouldn't destroy the rest of the upload.
 const peek = async (body: ReadableStream<Uint8Array>, bytes: number): Promise<{ head: Buffer; replay: ReadableStream<Uint8Array> }> => {
-    const iterator = Readable.fromWeb(body as NodeReadableStream<Uint8Array>)[Symbol.asyncIterator]();
+    const iterator = Readable.fromWeb(nodeStream(body))[Symbol.asyncIterator]();
     const chunks: Buffer[] = [];
     let taken = 0;
     while (taken < bytes) {
@@ -85,7 +85,7 @@ const peek = async (body: ReadableStream<Uint8Array>, bytes: number): Promise<{ 
             }
         })(),
     );
-    return { head: Buffer.concat(chunks), replay: Readable.toWeb(replay) as ReadableStream<Uint8Array> };
+    return { head: Buffer.concat(chunks), replay: webStream<Uint8Array>(Readable.toWeb(replay)) };
 };
 
 // First tar entry's name from a gzip prefix; a truncated prefix that never reaches one resolves undefined rather than
@@ -126,7 +126,7 @@ const sniff = async (head: Buffer): Promise<"definition" | "bundle" | "assistant
 const readAll = async (body: ReadableStream<Uint8Array>, limit: number): Promise<string> => {
     const chunks: Buffer[] = [];
     let taken = 0;
-    for await (const chunk of Readable.fromWeb(body as NodeReadableStream<Uint8Array>)) {
+    for await (const chunk of Readable.fromWeb(nodeStream(body))) {
         taken += (chunk as Buffer).length;
         if (taken > limit) {
             throw new ArrivalFormatError("that file is far too large to be a sandbox definition");

@@ -11,6 +11,7 @@ import type { SandboxPresentation } from "../platform/platform-client.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, IGNORE_SCOPE_EXCLUSIONS, workspaceMayContain, workspacePortability } from "./classify.js";
 import { deriveDefinition } from "./definition.js";
+import { webStream } from "../web-stream.js";
 
 // Packs a gzipped tar of the sandbox's two volumes, driven by the state manifests so adding a store is what adds it to
 // the bundle.
@@ -218,5 +219,5 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
         }
     })();
 
-    return Readable.toWeb(gzip) as ReadableStream<Uint8Array>;
+    return webStream<Uint8Array>(Readable.toWeb(gzip));
 };

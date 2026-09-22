@@ -137,8 +137,8 @@ for (const { name, dir, pkg } of packages) {
     if (!preloads.some((preload) => resolve(dir, preload) === join(root, PRELOAD))) {
         budgetless.push(`${name}: ${BUNFIG} does not preload ${PRELOAD}, so its suites carry no budget of their own.`);
     }
-    for (const preload of preloads.filter((preload) => !existsSync(resolve(dir, preload)))) {
-        budgetless.push(`${name}: ${BUNFIG} preloads ${preload}, which does not exist, so no suite in the package can start.`);
+    for (const missing of preloads.filter((preload) => !existsSync(resolve(dir, preload)))) {
+        budgetless.push(`${name}: ${BUNFIG} preloads ${missing}, which does not exist, so no suite in the package can start.`);
     }
 }
 

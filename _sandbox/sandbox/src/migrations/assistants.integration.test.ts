@@ -8,6 +8,7 @@ import { MigrationFormatError, readForeignArchive, rebaseArchive } from "./archi
 import { applyMigration, type MigrationDeps } from "./apply.js";
 import { planHermes } from "./hermes.js";
 import { detectOpenclaw, planOpenclaw } from "./openclaw.js";
+import { webStream } from "../web-stream.js";
 
 /* The whole crossing, minus the HTTP framing: a packed `~/.hermes` through the archive reader, the adapter and the apply loop. */
 
@@ -17,7 +18,7 @@ const packHome = (entries: Record<string, string>): ReadableStream<Uint8Array> =
         packer.entry({ name, type: "file" }, content);
     }
     packer.finalize();
-    return Readable.toWeb(packer.pipe(createGzip())) as ReadableStream<Uint8Array>;
+    return webStream<Uint8Array>(Readable.toWeb(packer.pipe(createGzip())));
 };
 
 // Packed the way the docs will tell people to: `tar czf … -C ~ .hermes`, so every entry carries the prefix.
@@ -89,7 +90,7 @@ test("a packed home is read bounded (sessions and databases never held), rebased
 });
 
 test("a non-archive upload is a format error, not a crash", async () => {
-    const body = Readable.toWeb(Readable.from([Buffer.from("just some text")])) as ReadableStream<Uint8Array>;
+    const body = webStream<Uint8Array>(Readable.toWeb(Readable.from([Buffer.from("just some text")])));
     await expect(readForeignArchive(body, 1024)).rejects.toThrow(MigrationFormatError);
 });
 

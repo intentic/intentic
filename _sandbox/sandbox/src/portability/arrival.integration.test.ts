@@ -12,6 +12,7 @@ import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createArrivals } from "./arrival.js";
 import { packBundle } from "./bundle.js";
+import { webStream } from "../web-stream.js";
 
 // One picker for every format (definition, bundle, foreign home), tested with real artifacts from the real
 // packers/exporters, not hand-written headers — sniffing that only works on fixtures is the risk.
@@ -70,7 +71,7 @@ const hermesHome = (): ReadableStream<Uint8Array> => {
     packer.entry({ name: ".hermes/config.yaml", type: "file" }, "mcp_servers:\n  linear:\n    url: https://mcp.linear.app/sse\n");
     packer.entry({ name: ".hermes/SOUL.md", type: "file" }, "Be warm.");
     packer.finalize();
-    return Readable.toWeb(packer.pipe(createGzip())) as ReadableStream<Uint8Array>;
+    return webStream<Uint8Array>(Readable.toWeb(packer.pipe(createGzip())));
 };
 
 const DEFINITION = ["schemaVersion = 1", 'name = "somewhere-else"', "", "[settings]", "workspaceMap = true", ""].join("\n");

@@ -1,9 +1,9 @@
 import { join } from "node:path";
 import { plugin } from "bun";
 import { repoRoot } from "@intentic/constants/node";
-// The app's own preload first: its catalog, env, browser gaps and source aliases. The page compiles the app's chat
-// components directly (vite.config.ts), so a test resolves them the same way the build does.
-import "../web/bun.setup.ts";
+
+// Preloaded after the app's own setup (bunfig.toml lists ../web/bun.setup.ts before this): the page compiles the app's
+// chat components directly (vite.config.ts), so a test resolves them the same way the build does.
 
 const fromRoot = (path: string): string => join(repoRoot(import.meta.url), path);
 

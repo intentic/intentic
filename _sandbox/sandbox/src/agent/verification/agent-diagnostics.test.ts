@@ -201,7 +201,7 @@ test("an anchored turn is checked in its own names, by a compiler entered into i
             "OLDPWD",
             "/usr/bin/env",
             "-C",
-            "/work",
+            WORKSPACE_ROOT,
             "tsgo",
             "--noEmit",
         ],

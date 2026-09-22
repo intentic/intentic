@@ -3,7 +3,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { nodeStream } from "../../web-stream.js";
 
 // Only bounds a single upload/archive against filling disk; higher than MAX_RAW_BYTES since nothing buffers.
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024 * 1024;
@@ -19,7 +19,7 @@ export class UploadTooLargeError extends Error {
 // Never buffers in full; the archive route reuses this via writeStreamCounted for its own counting and cleanup.
 export const writeWorkspaceFileStream = async (absPath: string, body: ReadableStream<Uint8Array>, limit: number, offset = 0): Promise<void> => {
     await mkdir(dirname(absPath), { recursive: true });
-    await writeStreamCounted(Readable.fromWeb(body as NodeReadableStream<Uint8Array>), absPath, () => limit - offset, offset);
+    await writeStreamCounted(Readable.fromWeb(nodeStream(body)), absPath, () => limit - offset, offset);
 };
 
 // Pipes a Node readable to absPath, throwing UploadTooLargeError and removing the partial file once written bytes pass
