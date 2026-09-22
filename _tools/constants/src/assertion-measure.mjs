@@ -88,6 +88,17 @@ const templateChars = (source, from) => {
     return { chars: chars + Math.min(i, source.length) - run, end: i };
 };
 
+// A `/` opens a regex only where an expression may begin: after a bracket, operator or separator, never after a token
+// that can end one (`)`, `]`, an identifier, a digit, a closing quote), where it is division.
+const BEFORE_REGEX = /[(,=:[{!&|?;+\-*%^~<>]/;
+const opensRegex = (source, at) => {
+    let i = at - 1;
+    while (i >= 0 && /\s/.test(source[i])) {
+        i -= 1;
+    }
+    return i < 0 || BEFORE_REGEX.test(source[i]);
+};
+
 const assertedChars = (source, from) => {
     let depth = 0;
     let chars = 0;
@@ -126,7 +137,7 @@ const assertedChars = (source, from) => {
             const template = templateChars(source, i);
             chars += template.chars;
             i = template.end;
-        } else if (ch === "/" && /[(,\s=]/.test(source[i - 1] ?? "(")) {
+        } else if (ch === "/" && opensRegex(source, i)) {
             // A regex literal in argument position; its source counts as asserted text like a string's.
             let j = i + 1;
             for (; j < source.length && source[j] !== "/" && source[j] !== "\n"; j += 1) {
@@ -134,8 +145,11 @@ const assertedChars = (source, from) => {
                     j += 1;
                 }
             }
-            chars += j - i - 1;
-            i = j;
+            // Unterminated on its line, so not a regex: leave `i` be rather than skipping the brackets it spanned.
+            if (source[j] === "/") {
+                chars += j - i - 1;
+                i = j;
+            }
         }
     }
     return chars;

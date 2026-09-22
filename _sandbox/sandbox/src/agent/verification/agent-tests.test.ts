@@ -82,6 +82,22 @@ test("y", () => { expect(u).toBe("bob"); });`;
         expect(measure(commented)).toEqual({ exact: 2, loose: 0, chars: 6, tests: 2 });
     });
 
+    test(`a division inside a matcher is arithmetic, not a regex that swallows the rest of the file`, () => {
+        // The `/ 1000` used to read as an open regex, skipping the line's closing brackets, so the count ran on into
+        // the next test: reformatting the same assertions onto more lines then looked like a narrowing.
+        const oneLine = `test("x", () => { expect(s).toEqual({ at: Math.floor(Date.parse(\`2026-09-17T13:17:20Z\`) / 1000) }); });
+test("y", () => { expect(u).toBe("bob"); });`;
+        const wrapped = `test("x", () => {
+    expect(s).toEqual({
+        at: Math.floor(Date.parse(\`2026-09-17T13:17:20Z\`) / 1000),
+    });
+});
+test("y", () => { expect(u).toBe("bob"); });`;
+        expect(measure(oneLine)).toEqual({ exact: 2, loose: 0, chars: `2026-09-17T13:17:20Z`.length + 3, tests: 2 });
+        expect(measure(wrapped)).toEqual(measure(oneLine));
+        expect(weakened(measure(oneLine), measure(wrapped))).toBeUndefined();
+    });
+
     test(`stronger, or unchanged, is never a finding`, () => {
         const weak = measure(CORPUS[1] ?? "");
         const strong = measure(CORPUS[0] ?? "");
