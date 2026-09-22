@@ -935,6 +935,22 @@
             "chatNoLongerHere": "einem Chat, den es nicht mehr gibt",
             "forked": "Abgezweigt von"
         },
+        "chatJobRow": {
+            "ended": "Beendet nach {elapsed}",
+            "failed": "Fehlgeschlagen (Exit {code}) nach {elapsed}",
+            "finished": "Fertig nach {elapsed}",
+            "hideCommand": "Befehl ausblenden",
+            "running": "Läuft im Hintergrund · {elapsed}",
+            "showCommand": "Befehl anzeigen",
+            "untracked": "Hintergrundjob · gestartet {clock}",
+            "watchInTerminal": "Im Terminal zusehen"
+        },
+        "chatJobsReadout": {
+            "explain": "Sie laufen weiter, wenn der Turn endet. Jeder weckt diesen Chat, sobald er beendet ist.",
+            "running": "{count} Job läuft | {count} Jobs laufen",
+            "title": "Läuft im Hintergrund",
+            "watchInTerminal": "Im Terminal zusehen"
+        },
         "chatMentionPopover": {
             "changeSetting": "Eine Einstellung ändern",
             "keepTypingToSearch": "Weitertippen, um Dateien zu suchen…",

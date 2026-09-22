@@ -444,6 +444,22 @@ export const AgentSummarySchema = z.object({
         .describe(
             "Outside conditions this conversation is parked on, each of which will wake it. Absent means none, which is nearly every conversation: an armed watch is why a finished-looking agent starts working by itself, and why a hosted machine will not go idle.",
         ),
+    // In memory only: a daemon restart leaves transcript rows naming jobs this list no longer carries.
+    jobs: z
+        .array(
+            z.object({
+                id: z.string().describe("The daemon's handle for this job, the one its transcript row names."),
+                label: z.string().describe("What the job is, in the agent's own words when it gave any, else its command on one line."),
+                session: z.string().describe("The terminal session its pane runs in, which is what opening it focuses."),
+                startedAt: z.number().describe("When it started, in milliseconds."),
+                endedAt: z.number().optional().describe("When the command exited, in milliseconds. Absent while it runs."),
+                exitCode: z.number().int().optional().describe("The code it exited with. Absent while it runs, or when its exit left none."),
+            }),
+        )
+        .optional()
+        .describe(
+            "Commands this conversation left running in the background, and how the most recent ones ended. Absent means none since the daemon started. A job is running exactly while it has no end.",
+        ),
     // Epoch ms it was archived; nothing is lost (branch, transcript, counters stay), and unarchiving re-attaches a
     // fresh worktree from the branch.
     archivedAt: z
@@ -456,6 +472,8 @@ export const AgentSummarySchema = z.object({
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
 // One armed watch as a card carries it; derived from AgentSummarySchema.watches so the two shapes can't drift apart.
 export type AgentWatch = NonNullable<AgentSummary["watches"]>[number];
+// One background job as a card carries it.
+export type AgentJob = NonNullable<AgentSummary["jobs"]>[number];
 // AgentsListSchema is declared later, after AutomationApprovalSchema, since the fleet list carries held wakes and zod
 // needs that type declared first.
 export const AgentIdSchema = z.object({ id: z.string().min(1).describe("Which conversation.") });

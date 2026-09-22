@@ -32,6 +32,7 @@ import ChatCard from "./cards/ChatCard.vue";
 import ChatCommandBlock from "../tools/ChatCommandBlock.vue";
 import ChatDecisionButton from "./cards/ChatDecisionButton.vue";
 import ChatDocumentBody from "./cards/ChatDocumentBody.vue";
+import ChatJobRow from "./ChatJobRow.vue";
 import { capabilityStatus, credentialLane, helpStatus, offerStatus, permissionStatus, planStatus } from "./cards/cardStatus";
 import ChatAsideLane from "./asides/ChatAsideLane.vue";
 import ChatNotes from "./asides/ChatNotes.vue";
@@ -634,6 +635,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 <Icon name="pencil" class="text-2xs" />
             </button>
         </div>
+        <!-- A background job's start: its own row, since what matters about it (running, done, failed) is still changing. -->
+        <ChatJobRow v-else-if="message.role === 'notice' && message.backgroundJob" :job="message.backgroundJob" />
         <div
             v-else-if="message.role === 'notice' && message.text !== ''"
             class="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 self-center py-0.5 text-2xs"

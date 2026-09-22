@@ -157,6 +157,15 @@ export const TranscriptAgentWordsSchema = z.object({
 });
 export type TranscriptAgentWords = z.infer<typeof TranscriptAgentWordsSchema>;
 
+// A command the agent left running past its own call; how it is doing now is live state on the card (AgentSummary.jobs).
+export const TranscriptBackgroundJobSchema = z.object({
+    id: z.string().describe("The daemon's handle for the job, which its live state on the conversation's card is keyed by."),
+    label: z.string().describe("What the job is, in the agent's own words when it gave any, else its command on one line."),
+    command: z.string().describe("The command as the agent wrote it, folded to one line."),
+    startedAt: z.number().describe("When it started, in milliseconds."),
+});
+export type TranscriptBackgroundJob = z.infer<typeof TranscriptBackgroundJobSchema>;
+
 // One note the daemon put before a user's message: the model reads `text`, the chat draws `title` on a row that opens
 // to it. Shared by the live frame and the restored transcript, so it reads the same either way.
 export const TurnNoteSchema = z.object({
@@ -269,6 +278,7 @@ export const TranscriptRowSchema = z.object({
     paymentOffer: TranscriptPaymentOfferSchema.optional().describe("The payment this row asked for, the decision, and the receipt."),
     watchWake: TranscriptWatchWakeSchema.optional().describe("The condition watch that woke this conversation, and the prompt it was woken with."),
     agentWords: TranscriptAgentWordsSchema.optional().describe("Another agent's words that reached this conversation, whose they are, and the prompt they came as."),
+    backgroundJob: TranscriptBackgroundJobSchema.optional().describe("The background job this row marks the start of."),
     credentialOffer: TranscriptCredentialOfferSchema.optional().describe(
         "The gated credential this row asked to use, who may release it, and who did.",
     ),

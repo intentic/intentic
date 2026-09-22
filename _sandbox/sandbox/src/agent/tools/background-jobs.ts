@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AgentHarnessSchema, AgentProviderSchema, ModelRoleSchema } from "@intentic/sandbox-contract";
+import { type AgentJob, AgentHarnessSchema, AgentProviderSchema, ModelRoleSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { TurnSeed } from "../run/turn/turn-seed.js";
+import { jobProjection } from "./job-state.js";
 
 // Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, filed under its conversation.
 
@@ -28,10 +29,24 @@ const COMMAND_LINE_CHARS = 120;
 // Bytes of output tail a reader is handed.
 export const OUTPUT_TAIL_BYTES = 4_000;
 
-/** The job's command as one readable line. */
-export const jobCommandLine = (command: string): string => {
-    const line = command.replaceAll(/\s+/gu, " ").trim();
+// Longest wait, in ms, between a command exiting and its card saying so.
+const END_POLL_MS = 3_000;
+
+// Ended jobs a conversation's card keeps, newest last.
+const ENDINGS_KEPT = 8;
+
+const oneLine = (text: string): string => {
+    const line = text.replaceAll(/\s+/gu, " ").trim();
     return line.length <= COMMAND_LINE_CHARS ? line : `${line.slice(0, COMMAND_LINE_CHARS - 1)}…`;
+};
+
+/** The job's command as one readable line. */
+export const jobCommandLine = (command: string): string => oneLine(command);
+
+/** What a person is shown the job as: the agent's own description of the call, else its command. */
+export const jobLabel = (description: string | undefined, command: string): string => {
+    const said = oneLine(description ?? "");
+    return said === "" ? jobCommandLine(command) : said;
 };
 
 // The conversation a job's completion wakes, and the routing it wakes it on.
@@ -60,6 +75,7 @@ const JobFileSchema = z.object({
     id: z.string(),
     conversationId: z.string(),
     command: z.string(),
+    label: z.string(),
     session: z.string(),
     startedAt: z.number(),
     turn: TurnSeedSchema,
@@ -74,6 +90,7 @@ export interface BackgroundJob {
     readonly conversationId: string;
     // The agent's own command line, never the daemon's wrapped one.
     readonly command: string;
+    readonly label: string;
     // Capture dir holding the status, the output and the job file.
     readonly dir: string;
     // tmux session holding the pane, which the reaper must spare.
@@ -95,11 +112,80 @@ interface JobRecord {
 
 const jobs = new Map<string, JobRecord>();
 
+// How each conversation's recent jobs ended, apart from `jobs`, which forgets a job the moment nothing depends on it.
+const endings = new Map<string, AgentJob[]>();
+
 export const jobStatusPath = (job: BackgroundJob): string => join(job.dir, STATUS_FILE);
 export const jobOutputPath = (job: BackgroundJob): string => join(job.dir, OUTPUT_FILE);
 
 /** Whether the command has exited; never half-true, since the status file is renamed into place last. */
 export const jobFinished = (job: BackgroundJob): boolean => existsSync(jobStatusPath(job));
+
+const cardOf = (job: BackgroundJob): AgentJob => ({ id: job.id, label: job.label, session: job.session, startedAt: job.startedAt });
+
+// The status file's own mtime is the exit, however late it is noticed; its body is the exit code.
+const endOf = (job: BackgroundJob): AgentJob => {
+    try {
+        const code = Number(readFileSync(jobStatusPath(job), "utf8").trim());
+        // Clamped to the start: a filesystem clock coarser than Date.now() can date a quick exit before it began.
+        const endedAt = Math.max(job.startedAt, Math.round(statSync(jobStatusPath(job)).mtimeMs));
+        return { ...cardOf(job), endedAt, ...(Number.isInteger(code) ? { exitCode: code } : {}) };
+    } catch {
+        return { ...cardOf(job), endedAt: Date.now() };
+    }
+};
+
+const ended = (job: BackgroundJob): boolean => endings.get(job.conversationId)?.some((entry) => entry.id === job.id) === true;
+
+// Once per job; answers whether this call was the one that wrote it down.
+const noteEnded = (job: BackgroundJob): boolean => {
+    if (ended(job)) {
+        return false;
+    }
+    endings.set(job.conversationId, [...(endings.get(job.conversationId) ?? []), endOf(job)].slice(-ENDINGS_KEPT));
+    return true;
+};
+
+const publish = (conversationId: string): void => {
+    const running = [...jobs.values()].filter((record) => record.job.conversationId === conversationId && !ended(record.job)).map((record) => cardOf(record.job));
+    jobProjection.set(conversationId, [...running, ...(endings.get(conversationId) ?? [])]);
+};
+
+let endPoll: NodeJS.Timeout | undefined;
+
+/** Writes down every job that exited since the last look, and publishes the conversations it moved. */
+export const sweepJobEnds = (): void => {
+    const moved = new Set<string>();
+    for (const record of jobs.values()) {
+        if (!ended(record.job) && jobFinished(record.job) && noteEnded(record.job)) {
+            moved.add(record.job.conversationId);
+        }
+    }
+    for (const conversationId of moved) {
+        publish(conversationId);
+    }
+    if (endPoll !== undefined && ![...jobs.values()].some((record) => !ended(record.job))) {
+        clearInterval(endPoll);
+        endPoll = undefined;
+    }
+};
+
+// One timer for every running job, stopped once none is left; unref'd, since a job never holds the daemon up.
+const followEnds = (): void => {
+    if (endPoll === undefined) {
+        endPoll = setInterval(sweepJobEnds, END_POLL_MS);
+        endPoll.unref();
+    }
+};
+
+// Every path out of `jobs` comes through here, so a job that exited is written down before it is forgotten.
+const forgetJob = (id: string, record: JobRecord): void => {
+    jobs.delete(id);
+    if (jobFinished(record.job)) {
+        noteEnded(record.job);
+    }
+    publish(record.job.conversationId);
+};
 
 // Sibling temp plus rename, so a reader after a crash finds one whole version or the other.
 const persist = (record: JobRecord): void => {
@@ -120,7 +206,7 @@ const persist = (record: JobRecord): void => {
 /** Undefined when the dir cannot be made, leaving the command an ordinary one; `toolUseId` pairs it with its shell id later. */
 export const openBackgroundJob = (
     seed: BackgroundJobSeed,
-    spec: { readonly command: string; readonly session: string; readonly toolUseId?: string },
+    spec: { readonly command: string; readonly session: string; readonly description?: string; readonly toolUseId?: string },
 ): BackgroundJob | undefined => {
     const id = randomUUID();
     const dir = join(tmpdir(), `${JOB_DIR_PREFIX}${id}`);
@@ -130,10 +216,21 @@ export const openBackgroundJob = (
     } catch {
         return undefined;
     }
-    const job: BackgroundJob = { id, conversationId: seed.conversationId, command: spec.command, dir, session: spec.session, startedAt: Date.now(), turn: seed.turn };
+    const job: BackgroundJob = {
+        id,
+        conversationId: seed.conversationId,
+        command: spec.command,
+        label: jobLabel(spec.description, spec.command),
+        dir,
+        session: spec.session,
+        startedAt: Date.now(),
+        turn: seed.turn,
+    };
     const record: JobRecord = { job, adopted: false, shellId: undefined, toolUseId: spec.toolUseId, notice: "none" };
     jobs.set(id, record);
     persist(record);
+    publish(job.conversationId);
+    followEnds();
     return job;
 };
 
@@ -162,6 +259,12 @@ export const restoreBackgroundJobs = (now: number = Date.now()): readonly Backgr
         }
         jobs.set(record.job.id, record);
         restored.push(record.job);
+    }
+    for (const conversationId of new Set(restored.map((job) => job.conversationId))) {
+        publish(conversationId);
+    }
+    if (restored.length > 0) {
+        followEnds();
     }
     return restored;
 };
@@ -213,7 +316,7 @@ export const settledBackgroundJobs = (conversationId: string): SettledJobs => {
             continue;
         }
         if (jobFinished(record.job)) {
-            jobs.delete(id);
+            forgetJob(id, record);
             if (record.notice !== "read" && !record.adopted) {
                 unseen.push(record.job);
             }
@@ -234,7 +337,7 @@ export const backgroundJobSessions = (now: number = Date.now()): ReadonlySet<str
     const live = new Set<string>();
     for (const [id, record] of jobs) {
         if (jobFinished(record.job) || now - record.job.startedAt > JOB_MAX_MS) {
-            jobs.delete(id);
+            forgetJob(id, record);
             continue;
         }
         live.add(record.job.session);

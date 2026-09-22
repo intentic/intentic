@@ -935,6 +935,22 @@
             "chatNoLongerHere": "un chat que ya no está aquí",
             "forked": "Bifurcado de"
         },
+        "chatJobRow": {
+            "ended": "Se detuvo tras {elapsed}",
+            "failed": "Falló (salida {code}) tras {elapsed}",
+            "finished": "Terminó en {elapsed}",
+            "hideCommand": "Ocultar comando",
+            "running": "En segundo plano · {elapsed}",
+            "showCommand": "Mostrar comando",
+            "untracked": "Tarea en segundo plano · iniciada a las {clock}",
+            "watchInTerminal": "Mirar en el terminal"
+        },
+        "chatJobsReadout": {
+            "explain": "Siguen en marcha cuando termina el turno. Cada una despierta este chat al terminar.",
+            "running": "{count} tarea en curso | {count} tareas en curso",
+            "title": "En segundo plano",
+            "watchInTerminal": "Mirar en el terminal"
+        },
         "chatMentionPopover": {
             "changeSetting": "Cambiar un ajuste",
             "keepTypingToSearch": "Sigue escribiendo para buscar archivos…",

@@ -1,7 +1,7 @@
 import type { AgentHarness, AgentProvider, TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { MAKER_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./maker";
-import { REVIEW_AGENT_ID } from "./fleet";
+import { REVIEW_AGENT_ID, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
 import { MAYA_CHAT_ID, OWEN_CHAT_ID, PRIYA_CHAT_ID } from "./openChats";
 
 // Transcript route body: messages plus the session id, provider, harness and account they're bound to. A reopened tab
@@ -50,6 +50,12 @@ const USERS_ROUTE_AFTER = `export const deleteUser = async (id: string) => {
     return { ok: true };
 };
 `;
+
+// The row a background job's start leaves, from the same job the roster reports live (fleet.ts).
+const jobRow = (id: string): TranscriptRow => {
+    const job = SOFT_DELETES_JOBS(Date.now()).find((entry) => entry.id === id)!;
+    return { role: `notice`, text: `Background job: ${job.label}`, backgroundJob: { id, label: job.label, command: job.command, startedAt: job.startedAt } };
+};
 
 const SOFT_DELETES: AgentTranscript = {
     sessionId: `ses_01j9soft`,
@@ -118,6 +124,7 @@ const SOFT_DELETES: AgentTranscript = {
                 },
             ],
         },
+        jobRow(SOFT_TYPECHECK_JOB),
         {
             role: `assistant`,
             text: `The purge job is the one place a hard delete still belongs, it runs on rows retired more than 30 days ago, so I left it alone and covered it with a test instead.`,
@@ -137,6 +144,7 @@ const SOFT_DELETES: AgentTranscript = {
                 },
             ],
         },
+        jobRow(SOFT_E2E_JOB),
         {
             role: `assistant`,
             text: `Done, **4 files, +210 / −55**, held on \`agent/soft-deletes\`.\n\nOne thing to decide when you read it: the API still returns retired users to admin tokens (that's what the \`includeRetired\` flag does). If you'd rather they were invisible everywhere, say so and I'll drop the flag.`,

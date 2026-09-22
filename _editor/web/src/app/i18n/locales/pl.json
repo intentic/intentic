@@ -935,6 +935,22 @@
             "chatNoLongerHere": "czatu, którego już tu nie ma",
             "forked": "Rozgałęzione z"
         },
+        "chatJobRow": {
+            "ended": "Zakończone po {elapsed}",
+            "failed": "Błąd (kod {code}) po {elapsed}",
+            "finished": "Gotowe po {elapsed}",
+            "hideCommand": "Ukryj polecenie",
+            "running": "W tle · {elapsed}",
+            "showCommand": "Pokaż polecenie",
+            "untracked": "Zadanie w tle · uruchomione {clock}",
+            "watchInTerminal": "Obserwuj w terminalu"
+        },
+        "chatJobsReadout": {
+            "explain": "Działają dalej po zakończeniu tury. Każde budzi ten czat, gdy się skończy.",
+            "running": "{count} zadanie w toku | {count} zadania w toku | {count} zadań w toku",
+            "title": "W tle",
+            "watchInTerminal": "Obserwuj w terminalu"
+        },
         "chatMentionPopover": {
             "changeSetting": "Zmień ustawienie",
             "keepTypingToSearch": "Pisz dalej, żeby szukać plików…",

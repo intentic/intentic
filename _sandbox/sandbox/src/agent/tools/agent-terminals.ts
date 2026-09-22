@@ -11,7 +11,7 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { type HeavyCommands, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { type BackgroundJobSeed, jobCommandLine, openBackgroundJob } from "./background-jobs.js";
+import { type BackgroundJob, type BackgroundJobSeed, jobCommandLine, openBackgroundJob } from "./background-jobs.js";
 import { turnRunOf } from "../run/turn/turn-runs.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
@@ -101,6 +101,27 @@ export const queueWhole =
         return prefix === "" ? command : `${prefix}bash -c ${shellQuote(command)}`;
     };
 
+// The start row is written inside the live turn, since the settle that adopts the job runs after the record closes.
+const startJob = (
+    seed: BackgroundJobSeed,
+    call: { readonly command: string; readonly session: string; readonly description: unknown; readonly toolUseId: string },
+): BackgroundJob | undefined => {
+    const job = openBackgroundJob(seed, {
+        command: call.command,
+        session: call.session,
+        ...(typeof call.description === "string" ? { description: call.description } : {}),
+        toolUseId: call.toolUseId,
+    });
+    if (job !== undefined) {
+        turnRunOf(job.conversationId)?.note({
+            role: "notice",
+            text: `Background job: ${job.label}`,
+            backgroundJob: { id: job.id, label: job.label, command: jobCommandLine(call.command), startedAt: job.startedAt },
+        });
+    }
+    return job;
+};
+
 export const bashTmuxHooks = (
     envKeys: readonly string[] = [],
     // An isolated turn's Bash must land in the same tree as its Edit/Write:
@@ -180,17 +201,7 @@ export const bashTmuxHooks = (
                         const job =
                             jobs === undefined || tool.run_in_background !== true
                                 ? undefined
-                                : openBackgroundJob(jobs, { command, session, toolUseId: input.tool_use_id });
-                        if (job !== undefined) {
-                            // Said in the chat at the moment it starts, because the whole failure this replaces was
-                            // invisible: a job nobody could see running, in no terminal anyone could find, that a
-                            // conversation went on believing in for hours. The row is written inside the live turn —
-                            // the settle that adopts the job happens after the record is closed.
-                            turnRunOf(job.conversationId)?.note({
-                                role: "notice",
-                                text: `Background job started: \`${jobCommandLine(command)}\` — it outlives this turn, and its exit wakes this conversation.`,
-                            });
-                        }
+                                : startJob(jobs, { command, session, description: tool.description, toolUseId: input.tool_use_id });
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",

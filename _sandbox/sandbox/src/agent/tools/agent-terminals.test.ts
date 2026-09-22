@@ -95,7 +95,10 @@ test("stamps the pane command with the conversation owner, and refuses one outsi
 // reads the completion nobody is left to see.
 test("a background command carries a job dir, and is filed for the turn's ending to adopt", async () => {
     const jobs = { conversationId: "conv-bg", turn: {} };
-    const command = await rewritten({ command: "pnpm build", run_in_background: true }, bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs));
+    const command = await rewritten(
+        { command: "pnpm build", description: "Build the app", run_in_background: true },
+        bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs),
+    );
     const dir = /tmux-run -b (\S+) -c /.exec(command ?? "")?.[1];
     expect(dir).toStartWith(join(tmpdir(), "intentic-run-job-"));
     noteJobShell("tu-1", "bsh42");
@@ -104,6 +107,8 @@ test("a background command carries a job dir, and is filed for the turn's ending
     const filed = settledBackgroundJobs("conv-bg").running;
     expect(filed.map((job: BackgroundJob) => job.dir)).toEqual([dir as string]);
     expect(filed[0]?.command).toBe("pnpm build");
+    // What the chat shows the job as: the agent's own words for the call, not its command.
+    expect(filed[0]?.label).toBe("Build the app");
     rmSync(dir as string, { recursive: true, force: true });
 });
 

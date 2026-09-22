@@ -935,6 +935,22 @@
             "chatNoLongerHere": "a chat that is no longer here",
             "forked": "Forked from"
         },
+        "chatJobRow": {
+            "ended": "Ended after {elapsed}",
+            "failed": "Failed (exit {code}) after {elapsed}",
+            "finished": "Finished in {elapsed}",
+            "hideCommand": "Hide command",
+            "running": "Running in the background · {elapsed}",
+            "showCommand": "Show command",
+            "untracked": "Background job · started {clock}",
+            "watchInTerminal": "Watch in terminal"
+        },
+        "chatJobsReadout": {
+            "explain": "These keep going after the turn ends. Each one wakes this chat when it exits.",
+            "running": "{count} job running | {count} jobs running",
+            "title": "Running in the background",
+            "watchInTerminal": "Watch in terminal"
+        },
         "chatMentionPopover": {
             "changeSetting": "Change a setting",
             "keepTypingToSearch": "Keep typing to search files…",

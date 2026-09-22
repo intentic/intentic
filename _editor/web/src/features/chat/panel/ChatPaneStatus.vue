@@ -10,6 +10,7 @@ import { useSandboxAvailability } from "../../sandbox/overview/useSandboxAvailab
 import { useRole } from "../../sandbox/secrets/useRole";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import ChatToolCallsToggle from "../tools/ChatToolCallsToggle.vue";
+import ChatJobsReadout from "./ChatJobsReadout.vue";
 import UsageRing from "../../../components/UsageRing.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -83,6 +84,8 @@ const usageChip = computed(() => {
         </span>
         <span v-else-if="!mobile" class="@max-md:hidden">{{ hint }}</span>
         <div class="ml-auto flex items-center gap-3">
+            <!-- What this chat left running past its turns; first, since it is the one readout here that ends on its own. -->
+            <ChatJobsReadout />
             <!-- Whether this transcript shows its tool calls (ChatToolCallsToggle, also drawn in the Subagents pane); joins the other readouts under the composer. -->
             <ChatToolCallsToggle />
             <span v-if="contextRing" class="inline-flex items-center gap-1" v-tooltip.top="contextRing.tooltip">

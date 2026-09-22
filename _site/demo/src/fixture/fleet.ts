@@ -15,6 +15,29 @@ export const CONFLICT_AGENT_ID = `cnv_auth_middleware`;
 
 const minutes = (count: number): number => count * 60_000;
 
+// Two commands the soft-deletes agent left running past their calls: one finished, one still going.
+export const SOFT_TYPECHECK_JOB = `job_soft_typecheck`;
+export const SOFT_E2E_JOB = `job_soft_e2e`;
+export const SOFT_DELETES_JOBS = (now: number) =>
+    [
+        {
+            id: SOFT_TYPECHECK_JOB,
+            label: `Typecheck the web client against the new row`,
+            command: `pnpm -C web exec vue-tsc --noEmit -p tsconfig.app.json`,
+            session: `agent-ses01j9s`,
+            startedAt: now - minutes(24),
+            endedAt: now - minutes(24) + 52_000,
+            exitCode: 0,
+        },
+        {
+            id: SOFT_E2E_JOB,
+            label: `Run the web e2e suite`,
+            command: `pnpm -C web e2e --project=chromium --reporter=line`,
+            session: `agent-ses01j9s`,
+            startedAt: now - minutes(19),
+        },
+    ] as const;
+
 const NO_ATTENTION = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false } as const;
 
 // The two people on this demo sandbox, the same pair the presence roster draws (daemon.ts): the reader is Ada, so a
@@ -224,6 +247,7 @@ export const fleetRoster = (now: number): AgentSummary[] => [
         diff: { files: 4, insertions: 68, deletions: 14 },
         // Somebody else's mark, waiting: work held on a branch is exactly what a teammate says 👀 about.
         reactions: [{ emoji: `👀`, by: [{ ...GRACE, at: now - minutes(16) }] }],
+        jobs: SOFT_DELETES_JOBS(now).map(({ command: _command, ...job }) => job),
     },
     {
         id: `cnv_release_notes`,

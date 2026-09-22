@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:tes
 import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, reactive, ref, shallowRef } from "vue";
 import {
+    type AgentJob,
     type AgentWatch,
     agentWordsRow,
     childReportPrompt,
@@ -18,7 +19,7 @@ import { IconStub } from "@intentic/ui/testing";
 import { formatElapsed } from "../../agents/fleet/agentStatus";
 
 const clock = hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
-const roster = hoisted(() => ({ running: 0, watches: undefined as AgentWatch[] | undefined }));
+const roster = hoisted(() => ({ running: 0, watches: undefined as AgentWatch[] | undefined, jobs: undefined as AgentJob[] | undefined }));
 // Async like the action it stands in for: the row awaits it and swallows a failed disarm, so a sync stub rejects.
 const stopWatching = hoisted(() => mock(async () => undefined));
 // Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it. The rows and
@@ -181,7 +182,7 @@ mock.module("../panel/useChat-view", () => {
 // it is parked on, which a watch's own notice row reads to say whether it is still waiting.
 mock.module("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
-        agentById: () => ({ subagents: { running: roster.running, total: roster.running }, watches: roster.watches }),
+        agentById: () => ({ subagents: { running: roster.running, total: roster.running }, watches: roster.watches, jobs: roster.jobs }),
         setAutoLand: mock(),
         setResumeAfterOutage: mock(),
         stopWatching,
@@ -233,6 +234,7 @@ beforeEach(() => {
     clock.turnStartedAt = Date.now() - 35_000;
     roster.running = 0;
     roster.watches = undefined;
+    roster.jobs = undefined;
     stopWatching.mockClear();
     markdown.parts = [];
     pane.streaming = true;
@@ -954,6 +956,74 @@ describe(`another agent's words`, () => {
         expect(element.textContent).toContain(`Child agent "Port the parser" (sub-x7) failed.`);
         expect(element.querySelector(`.text-danger`)).not.toBeNull();
         expect(mount(rowOf(PEER)).querySelector(`.text-danger`)).toBeNull();
+    });
+});
+
+// A job's row is written once, at its start; how it is doing after that is read live off the card.
+describe(`background jobs`, () => {
+    const jobRow = (): ChatMessage => ({
+        id: 7,
+        role: `notice`,
+        text: `Background job: Run the web e2e suite`,
+        backgroundJob: { id: `job-1`, label: `Run the web e2e suite`, command: `pnpm -C web e2e --project=chromium`, startedAt: Date.now() - 65_000 },
+    });
+
+    const live = (over: Partial<AgentJob> = {}): AgentJob => ({
+        id: `job-1`,
+        label: `Run the web e2e suite`,
+        session: `agent-1`,
+        startedAt: Date.now() - 65_000,
+        ...over,
+    });
+
+    const icons = (element: HTMLElement): (string | null)[] => [...element.querySelectorAll(`i`)].map((icon) => icon.getAttribute(`data-icon`));
+
+    it(`names the job by the agent's words, not its command, and says it is running and for how long`, () => {
+        roster.jobs = [live()];
+        const element = mount(jobRow());
+        expect(element.textContent).toContain(`Run the web e2e suite`);
+        expect(element.textContent).toContain(`Running in the background · 1m 5s`);
+        expect(element.textContent).not.toContain(`pnpm`);
+        expect(icons(element)).toContain(`spinner`);
+        expect(icons(element)).not.toContain(`info-circle`);
+    });
+
+    it(`keeps counting while the job runs`, async () => {
+        roster.jobs = [live()];
+        const element = mount(jobRow());
+        jest.advanceTimersByTime(60_000);
+        await nextTick();
+        expect(element.textContent).toContain(`2m 5s`);
+    });
+
+    it(`says how a job ended once the card reports it, weighting a failure`, () => {
+        roster.jobs = [live({ endedAt: Date.now() - 13_000, exitCode: 0 })];
+        const finished = mount(jobRow());
+        expect(finished.textContent).toContain(`Finished in 52s`);
+        expect(icons(finished)).toContain(`check`);
+
+        app?.unmount();
+        app = undefined;
+        roster.jobs = [live({ endedAt: Date.now() - 24_000, exitCode: 2 })];
+        const failed = mount(jobRow());
+        expect(failed.textContent).toContain(`Failed (exit 2) after 41s`);
+        expect(failed.querySelector(`.text-danger`)).not.toBeNull();
+    });
+
+    // A daemon restart forgets a job's live state; the row then claims nothing about how it went.
+    it(`claims no outcome for a job the card no longer knows`, () => {
+        const element = mount(jobRow());
+        expect(element.textContent).toContain(`Background job · started`);
+        expect(element.textContent).not.toContain(`Running`);
+        expect(icons(element)).not.toContain(`spinner`);
+    });
+
+    it(`keeps the command one press away`, async () => {
+        roster.jobs = [live()];
+        const element = mount(jobRow());
+        element.querySelector<HTMLButtonElement>(`button[aria-expanded="false"]`)!.click();
+        await nextTick();
+        expect(element.textContent).toContain(`pnpm -C web e2e --project=chromium`);
     });
 });
 

@@ -14,6 +14,7 @@ import {
     backgroundJobSessions,
     jobCommandLine,
     jobHandle,
+    jobLabel,
     JOB_MAX_MS,
     jobReport,
     jobStatusPath,
@@ -23,7 +24,9 @@ import {
     openBackgroundJob,
     restoreBackgroundJobs,
     settledBackgroundJobs,
+    sweepJobEnds,
 } from "./background-jobs.js";
+import { jobProjection } from "./job-state.js";
 
 // The fix for a job that used to die fifteen seconds after its turn: it is registered here while it runs, handed to a
 // watch when the turn ends, and keeps its terminal off the reaper's list until it exits. Every conversation id in this
@@ -40,11 +43,12 @@ afterEach(() => {
     }
 });
 
-const opened = (conversationId: string, command = "pnpm build", toolUseId?: string): BackgroundJob => {
+const opened = (conversationId: string, command = "pnpm build", toolUseId?: string, description?: string): BackgroundJob => {
     const job = openBackgroundJob(seedOf(conversationId), {
         command,
         session: `agent-${conversationId}`,
         ...(toolUseId === undefined ? {} : { toolUseId }),
+        ...(description === undefined ? {} : { description }),
     });
     if (job === undefined) {
         throw new Error("the job dir could not be minted");
@@ -65,6 +69,7 @@ const planted = (conversationId: string, file: Record<string, unknown> = {}): Ba
         id,
         conversationId,
         command: "pnpm build",
+        label: "pnpm build",
         dir,
         session: `agent-${conversationId}`,
         startedAt: Date.now(),
@@ -201,6 +206,37 @@ describe("background job registry", () => {
         expect(restoreBackgroundJobs().map((job) => job.id)).not.toContain(malformed.id);
     });
 
+    it("names a job by the agent's description of the call, else by its command", () => {
+        expect(jobLabel("  Typecheck the\n machine package ", "tsgo --noEmit")).toBe("Typecheck the machine package");
+        expect(jobLabel(undefined, "pnpm   build")).toBe("pnpm build");
+        expect(jobLabel("   ", "pnpm build")).toBe("pnpm build");
+    });
+
+    it("tells the card a job is running, then how it ended, and keeps the ending after the registry lets the job go", () => {
+        const job = opened("conv-card", "pnpm build", undefined, "Build the app");
+        expect(jobProjection.of("conv-card")).toEqual([{ id: job.id, label: "Build the app", session: job.session, startedAt: job.startedAt }]);
+        finish(job, "2");
+        sweepJobEnds();
+        const [ending] = jobProjection.of("conv-card") ?? [];
+        expect(ending).toMatchObject({ id: job.id, label: "Build the app", exitCode: 2 });
+        expect(ending?.endedAt).toBeGreaterThanOrEqual(job.startedAt);
+        settledBackgroundJobs("conv-card");
+        expect(jobProjection.of("conv-card")).toEqual([ending!]);
+    });
+
+    it("writes down an ending the sweep never saw when the registry lets the job go", () => {
+        const job = opened("conv-card-late");
+        finish(job, "0");
+        settledBackgroundJobs("conv-card-late");
+        expect(jobProjection.of("conv-card-late")).toMatchObject([{ id: job.id, exitCode: 0 }]);
+    });
+
+    it("drops a job that outran its ceiling from the card without inventing an ending", () => {
+        const job = opened("conv-card-forever");
+        backgroundJobSessions(job.startedAt + JOB_MAX_MS + 1);
+        expect(jobProjection.of("conv-card-forever")).toEqual([]);
+    });
+
     it("folds a command to one readable line", () => {
         expect(jobCommandLine("  pnpm\n  build  ")).toBe("pnpm build");
         expect(jobCommandLine("x".repeat(200))).toHaveLength(120);
@@ -246,13 +282,13 @@ describe("background job adoption", () => {
         started.length = 0;
     });
 
-    it("arms a watch whose check reads the job's own status file, and whose note names the command", async () => {
+    it("arms a watch whose check reads the job's own status file, and whose note names the job", async () => {
         stop = startWatcherRuntime(runtime());
         const job = opened("conv-adopt", "pnpm turbo run test");
         expect(await adoptBackgroundJobs("conv-adopt", logger)).toBe(1);
         expect(checks).toEqual([completionCheck(job)]);
         expect(completionCheck(job)).toContain(jobStatusPath(job));
-        expect(jobNote(job, false)).toBe("background job left running when the turn ended: `pnpm turbo run test`");
+        expect(jobNote(job)).toBe(`Background job "pnpm turbo run test"`);
         expect(started).toEqual([]);
     });
 
@@ -264,7 +300,7 @@ describe("background job adoption", () => {
         await delivered(() => started.length);
         expect(started).toHaveLength(1);
         expect(started[0]?.prompt).toMatch(/^Watch fired/);
-        expect(started[0]?.prompt).toContain(jobNote(job, true));
+        expect(started[0]?.prompt).toContain(jobNote(job));
     });
 
     it("reports nothing for a conversation whose jobs all ended where the model read them", async () => {

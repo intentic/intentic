@@ -22,6 +22,7 @@ import { parentOfActor } from "../../agent/run/turn/turn-actor.js";
 import { subagentCountsOf } from "../../agent/subagents/subagents.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import { watchProjection } from "../../agent/verification/watch-state.js";
+import { jobProjection } from "../../agent/tools/job-state.js";
 import { loopProjection } from "../../loops/loop-state.js";
 import { workflowProjection } from "../../workflows/workflow-state.js";
 import { recordConversationPrompt, recordPrompt } from "../../sessions/transcript-search.js";
@@ -620,6 +621,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
         // Empty means every watch has ended; turned into an absent field below, indistinguishable from never having
         // watched.
         const watches = watchProjection.of(entry.id);
+        const jobs = jobProjection.of(entry.id);
         // Branch-backed agents only: a workspace conversation reaches main by typing in it, never by landing.
         const landedPresence = entry.branch === undefined ? undefined : presences.of(entry.id);
         const landedMessage = landedMessageOf(entry);
@@ -697,6 +699,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             // An empty list would still have to be read before dismissal; turned absent instead when nothing is
             // watching.
             ...(watches !== undefined && watches.length > 0 ? { watches: [...watches] } : {}),
+            ...(jobs !== undefined && jobs.length > 0 ? { jobs: [...jobs] } : {}),
         };
     };
 
@@ -719,6 +722,8 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
     // Every watch transition happens between turns (armed as one ends, resolved hours later); without this, a card
     // would keep showing a condition met hours ago until an unrelated broadcast came along.
     watchProjection.onChange(broadcast);
+    // A job starts inside a turn but ends whenever its command does, as often as not between turns.
+    jobProjection.onChange(broadcast);
 
     // Two independent, best-effort readings (standing, landed presence) run together rather than chained, and must
     // never throw: this runs inside `finish`'s `finally`. `allSettled`, so a failing half costs only its own reading.
@@ -1466,6 +1471,7 @@ export const createAgentsRegistry = (store: AgentsStore, standings: LandStanding
             presences.forget(ids);
             loopProjection.forget(ids);
             workflowProjection.forget(ids);
+            jobProjection.forget(ids);
             // Forgets the projection only; disarming the watch timers themselves is the caller's job
             // (agent/watchers.ts), to avoid a dependency cycle back into this module.
             await persist();
