@@ -9,6 +9,8 @@ import { discoverGeminiModels, type GeminiModel, SEED_GEMINI_MODELS } from "./ge
 export interface GeminiCatalog {
     // Google-channel models plus the default id, never empty.
     readonly models: () => Promise<{ models: GeminiModel[]; default: string }>;
+    // What the translator serves; undefined when it has never listed a Google model, whatever `models` falls back to.
+    readonly live: () => Promise<readonly GeminiModel[] | undefined>;
 }
 
 const MODELS_TTL_MS = 60_000;
@@ -47,5 +49,5 @@ export const createGeminiCatalog = (config: Config, persistPath: string, fetchIm
         fromLive: toCatalog,
         fromStored: toCatalog,
     });
-    return { models: catalog.models };
+    return { models: catalog.models, live: catalog.live };
 };

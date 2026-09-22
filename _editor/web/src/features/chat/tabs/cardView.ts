@@ -18,6 +18,7 @@ import { modelLabelFor } from "../accounts/providerCatalog";
 import { statusIcon, statusLabel } from "../models/catalog";
 import type { Conversation } from "../session/conversation";
 import { isArchived, originOf, tabLabel } from "./tabs";
+import { t } from "@intentic/ui/i18n";
 
 // Everything a rail row is handed that isn't a primitive, derived in one place per card. Kept apart from the list
 // that draws it because a row compares its props by identity: the rule that decides when a card's facts are the SAME
@@ -72,12 +73,12 @@ const liveOf = (entry: OpenChat): CardView[`live`] => {
     if (agent !== undefined && turnInFlight(agent)) {
         return {
             icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
-            text: activityLine(agent) ?? `Working…`,
+            text: activityLine(agent) ?? t(`chat.cardView.working`),
             since: agent.startedAt,
         };
     }
     if (conversation.streaming.value) {
-        return { icon: activityIcon(undefined), text: `Working…`, since: conversation.turnStartedAt.value };
+        return { icon: activityIcon(undefined), text: t(`chat.cardView.working`), since: conversation.turnStartedAt.value };
     }
     return undefined;
 };

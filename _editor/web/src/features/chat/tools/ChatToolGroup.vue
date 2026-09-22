@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { TranscriptTool } from "@intentic/sandbox-contract";
-import { usePaneView } from "../panel/useChat-view";
-import { openWorkspaceRef } from "../../workspace/files/openFileRef";
+import { useChatSurface } from "./chatToolSurface";
 import ChatToolCard from "./ChatToolCard.vue";
 import { type ToolGroup, groupDiffSummary } from "./toolGrouping";
 import { present } from "./toolPresentation";
@@ -17,10 +16,8 @@ const props = defineProps<{
     live: boolean;
 }>();
 
-// Whose copy of the workspace the header's target chip names: the pane's conversation, exactly as the cards
-// underneath it answer (see ChatToolCard).
-const { conversation } = usePaneView();
-const linkScope = computed(() => ({ agent: conversation.value.isolated.value ? conversation.value.conversationId : undefined }));
+// Opens the target chip through the surface the cards underneath it use (ChatToolCard), which also scopes the path.
+const openFile = useChatSurface().openFile;
 
 const expanded = ref(false);
 const toggle = (): void => {
@@ -57,15 +54,15 @@ const location = computed(() => props.group.tools[0]?.locations?.[0]);
                 <span class="font-medium" :class="failed ? 'text-danger' : 'text-muted'">{{ group.name }}</span>
             </button>
             <button
-                v-if="location"
+                v-if="location && openFile"
                 type="button"
                 class="min-w-0 truncate font-mono transition-colors hover:text-content hover:underline"
                 v-tooltip.top="t(`chat.chatToolGroup.openInWorkspace`)"
-                @click="openWorkspaceRef(location.path, location.line, linkScope)"
+                @click="openFile(location.path, location.line)"
             >
                 {{ group.target ?? location.path }}
             </button>
-            <span v-else-if="group.target" class="min-w-0 truncate font-mono">{{ group.target }}</span>
+            <span v-else-if="location || group.target" class="min-w-0 truncate font-mono">{{ group.target ?? location?.path }}</span>
             <span class="ml-auto flex shrink-0 items-center gap-2">
                 <span v-if="summary" class="tabular-nums" :class="failed ? 'text-danger' : 'text-subtle'">{{ summary }}</span>
                 <span class="ui-status-pill bg-overlay text-subtle">×{{ group.tools.length }}</span>

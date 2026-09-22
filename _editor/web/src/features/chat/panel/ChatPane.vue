@@ -582,7 +582,7 @@ const composerPlaceholder = computed(() => {
 });
 const sendHint = computed(() => {
     if (!reachable.value) {
-        return `The sandbox is busy: keep typing; Send is available when it is ready.`;
+        return t(`chat.chatPane.sandboxBusyKeepTyping`);
     }
     // What the press actually does with nothing connected: opens the model list (see submit), keeping the draft.
     if (!connected.value) {
@@ -838,22 +838,22 @@ const composerHint = computed(() => {
     }
     // While generating, the shortcut worth the slot is the way out — the only place Escape's meaning is learned.
     if (streaming.value && !awaitingDecision.value) {
-        return `Esc to stop`;
+        return t(`chat.chatPane.escToStop`);
     }
     // A draft that runs as a command sends nothing to the model, so say so before Enter, not after.
     if (commandRun.value !== undefined) {
-        return `Enter runs /${commandRun.value.name}`;
+        return t(`chat.chatPane.enterRunsCommand`, { name: commandRun.value.name });
     }
     // The stopped turn's shortcut, in the slot the user is already reading while deciding what to type — the only
     // place anyone learns the key exists. Ranked ahead of the recall hint since it's rarer and more useful.
     if (continueOffer.value) {
-        return `Enter to continue`;
+        return t(`chat.chatPane.enterToContinue`);
     }
     if (recallable.value) {
-        return `↑ for previous message`;
+        return t(`chat.chatPane.upForPreviousMessage`);
     }
     // An empty box has no line to break; the key worth teaching there is the picker's.
-    return draft.value === `` ? `@ for files and settings` : `Shift+Enter for new line`;
+    return draft.value === `` ? t(`chat.chatPane.atForFilesAndSettings`) : t(`chat.chatPane.shiftEnterNewLine`);
 });
 
 // Mentions and commands: an @-token at the caret opens the picker over files and the four turn settings; a leading

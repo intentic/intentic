@@ -17,6 +17,7 @@ import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../revie
 import type { FleetAgent } from "./useAgents-fleet";
 import { useAgents } from "./useAgents";
 import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../../../lib/queryKeys";
+import { t } from "@intentic/ui/i18n";
 
 // The fleet's mutations, addressed by agent id: the shared source for the review panel's bindings and the board's
 // drag-to-act drops. Land and discard are refused daemon-side while the agent's turn is running, since the worktree is
@@ -106,7 +107,7 @@ export const landAgent = (
 // What a land that moved nothing says, wherever it was pressed. Landed-with-nothing-to-show is the one outcome neither
 // the board nor the review can see for itself — both list what the BRANCH holds — so saying nothing left a press that
 // did nothing looking exactly like one that worked.
-export const NOTHING_LANDED = `Nothing to land: this conversation's branch holds no work your workspace doesn't already have.`;
+export const nothingLanded = (): string => t(`agents.agentActions.nothingLanded`);
 
 // A collaborator's stand-in for a land they can't perform (the daemon floors `land` at maintainer): stamps the ask so
 // every maintainer's board wears it.

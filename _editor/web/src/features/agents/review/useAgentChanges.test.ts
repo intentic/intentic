@@ -38,7 +38,7 @@ mock.module("../fleet/agentActions", () => ({
     discardAgent: mock(),
     invalidateAgentAction: mock(async () => undefined),
     landAgent: mock(),
-    NOTHING_LANDED: stub.nothingLanded,
+    nothingLanded: () => stub.nothingLanded,
 }));
 mock.module("../fleet/useAgents", () => ({ useAgents: () => ({ archive: mock(), setAutoLand: mock() }) }));
 

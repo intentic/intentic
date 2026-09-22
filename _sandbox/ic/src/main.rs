@@ -266,6 +266,8 @@ enum DeviceCommand {
 }
 
 fn main() {
+    #[cfg(windows)]
+    docker::adopt_program_folder();
     let cli = Cli::parse();
     let result = match cli.command {
         Command::Sandbox(command) => match command {

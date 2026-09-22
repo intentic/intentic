@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import { errorMessage } from "@intentic/ui/async";
-import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, NOTHING_LANDED, stopAgent } from "../fleet/agentActions";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded, stopAgent } from "../fleet/agentActions";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { otherFleet } from "../fleet/fleetScope";
 import { unregistered } from "../fleet/agentStatus";
@@ -101,7 +101,7 @@ const runLand = async (id: string, chosen: PendingAction, at?: string): Promise<
     if (!result.changed) {
         // Merged with nothing to show for it. The card carries no trace of that either way, so an unsaid one leaves the
         // press looking like it worked; a receipt, not the danger strip, since nothing was refused.
-        say(NOTHING_LANDED);
+        say(nothingLanded());
     }
 };
 

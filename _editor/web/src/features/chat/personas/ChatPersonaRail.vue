@@ -98,11 +98,11 @@ const liveOf = (entry: PersonaChat | undefined): { icon: IconName; text: string;
     if (agent !== undefined && turnInFlight(agent)) {
         return {
             icon: (agent.subagents?.running ?? 0) > 0 ? `users` : activityIcon(agent.activity?.tool),
-            text: activityLine(agent) ?? `Working…`,
+            text: activityLine(agent) ?? t(`chat.chatPersonaRail.working`),
             since: agent.startedAt,
         };
     }
-    return conversation.streaming.value ? { icon: activityIcon(undefined), text: `Working…`, since: conversation.turnStartedAt.value } : undefined;
+    return conversation.streaming.value ? { icon: activityIcon(undefined), text: t(`chat.chatPersonaRail.working`), since: conversation.turnStartedAt.value } : undefined;
 };
 
 interface PersonaRow {

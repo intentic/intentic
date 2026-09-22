@@ -15,7 +15,8 @@ const OFFERED: readonly GeminiModel[] = [
     { id: "gemini-3.1-pro-low", label: "Gemini 3.1 Pro (Low)", inputModalities: ["text", "image"] },
 ];
 
-const geminiServices = (models: readonly GeminiModel[] = OFFERED): Services =>
+// `live` undefined is a translator that has never listed a Google model, while `models` still falls back to the seed.
+const geminiServices = (models: readonly GeminiModel[] = OFFERED, served: { live: readonly GeminiModel[] | undefined } = { live: models }): Services =>
     servicesWith({
         config: { ...testConfig, translator: { url: "http://127.0.0.1:8788", token: "local" } },
         cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
@@ -23,6 +24,7 @@ const geminiServices = (models: readonly GeminiModel[] = OFFERED): Services =>
         }),
         geminiModels: unstubbed<Services["geminiModels"]>("geminiModels", {
             models: async () => ({ models: [...models], default: models[0]?.id ?? "" }),
+            live: async () => served.live,
         }),
         async *geminiAgent() {},
     });
@@ -53,5 +55,17 @@ test("refuses a pin the channel has stopped offering instead of running on the c
         message:
             "Google is no longer offering claude-opus-4-6-thinking, and this chat is pinned to it. " +
             "Pick another model for this chat, or send again if it comes back.",
+    });
+});
+
+test("refuses a turn the translator has no Google model to serve, instead of sending it to fail as unknown", async () => {
+    // A connected account the translator cannot use (not loaded, or switched off): the picker still shows the seed.
+    const plan = await planGeminiTurn(geminiServices(OFFERED, { live: undefined }), turn({ model: "claude-opus-4-6-thinking" }), context);
+
+    expect(plan).toEqual({
+        ok: false,
+        message:
+            "Google is connected, but the model translator isn't serving any Google model to this sandbox, so nothing can run on it. " +
+            "Send again in a minute; if it keeps happening, reconnect Google in Sandbox ▸ Agent.",
     });
 });

@@ -338,6 +338,7 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                 models: [{ id: "gemini-pro-agent", label: "Gemini Pro Agent", inputModalities: ["text"] }],
                 default: "gemini-pro-agent",
             }),
+            live: async () => [{ id: "gemini-pro-agent", label: "Gemini Pro Agent", inputModalities: ["text"] }],
         },
         kimiModels: { models: async () => ({ models: [{ id: "kimi-k3", label: "Kimi K3" }], default: "kimi-k3" }) },
         // Minted stores, sign-ins and catalogs: nothing connected, since no guard depends on them, unlike Claude's.

@@ -1,5 +1,6 @@
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, sandboxRouteName } from "@intentic/sandbox-contract";
 import { computed, ref } from "vue";
+import { z } from "zod";
 import { contractUncompiled } from "./contractFreshness";
 
 // What the active daemon can do, from its /events hello frame. A newer browser than daemon is normal, not an
@@ -130,6 +131,14 @@ export const staleDaemonReason = (method: string, path: string): string | undefi
         return undefined;
     }
     return `This sandbox's daemon doesn't provide '${name}'. ${daemonOlderRemedy()}`;
+};
+
+// A schema refusing the daemon's answer is version drift no status code carries, and its issue list is developer JSON.
+export const readFailure = (error: unknown): string => {
+    if (error instanceof z.core.$ZodError) {
+        return `This sandbox answered in a shape this app doesn't expect. ${eitherSideOlderRemedy()}`;
+    }
+    return error instanceof Error ? error.message : String(error);
 };
 
 // Why a request that reached its route still failed: the daemon has it, shaped differently, so it answers rather

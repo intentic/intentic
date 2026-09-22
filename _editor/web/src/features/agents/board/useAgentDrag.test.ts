@@ -38,7 +38,7 @@ mock.module("../fleet/agentActions", () => ({
     discardAgent: mock(async () => undefined),
     invalidateAgentAction: mock(async () => undefined),
     stopAgent: mock(async () => undefined),
-    NOTHING_LANDED: stub.nothingLanded,
+    nothingLanded: () => stub.nothingLanded,
 }));
 
 const { askAgentToResolve } = await import("../fleet/agentActions");

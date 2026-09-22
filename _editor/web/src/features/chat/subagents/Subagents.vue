@@ -163,7 +163,7 @@ const liveOf = (session: SubagentSession): { icon: IconName; text: string; since
     if (session.status === `blocked`) {
         return { icon: `question-circle`, text: session.summary ?? `Needs input`, since: session.startedAt };
     }
-    return { icon: activityIcon(session.lastTool), text: session.lastTool ?? `Working…`, since: session.startedAt };
+    return { icon: activityIcon(session.lastTool), text: session.lastTool ?? t(`chat.subagents.working`), since: session.startedAt };
 };
 
 // Whether the facts line has anything to show, so a `v-if` doesn't draw an empty strip. Now only the

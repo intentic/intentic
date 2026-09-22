@@ -1664,6 +1664,38 @@ test("children settled with no wake turn: the grace window closes the input so t
     expect(steering.push("too late")).toBe(false);
 });
 
+// The CLI refuses a wake turn's first tool call ("The user doesn't want to take this action right now") once input closes.
+test("a wake turn slower than the grace window keeps its input open", async () => {
+    resetSubagents();
+    const steering = new SteeringQueue();
+    const sdkLike: QueryFn = async function* (args) {
+        const input = (args.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]();
+        await input.next();
+        let inputEnded = false;
+        void input.next().then((step) => {
+            inputEnded = step.done === true;
+        });
+        yield {
+            type: "system",
+            subtype: "background_tasks_changed",
+            session_id: "s",
+            tasks: [{ task_id: "task-1", task_type: "local_agent", description: "audit chapter 4" }],
+        } as unknown as SDKMessage;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+        yield { type: "system", subtype: "background_tasks_changed", session_id: "s", tasks: [] } as unknown as SDKMessage;
+        yield { type: "system", subtype: "init", session_id: "s" } as unknown as SDKMessage;
+        await new Promise((resolve) => setTimeout(resolve, 3_000));
+        yield {
+            type: "stream_event",
+            session_id: "s",
+            event: { type: "content_block_delta", delta: { type: "text_delta", text: inputEnded ? "input closed" : "input open" } },
+        } as SDKMessage;
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    const events = await withoutTheGraceWait(() => collect({ ...request, conversationId: "c-slow-wake", steering }, sdkLike));
+    expect(events).toContainEqual({ kind: "delta", text: "input open" });
+});
+
 // A backgrounded shell runs in the daemon's own tmux session and outlives the turn on its own; only in-process children
 // (agents) hold the stream open.
 test("a backgrounded shell does not hold the turn open", async () => {
@@ -2027,6 +2059,21 @@ const askTool = (options: Options): ((args: unknown) => Promise<unknown>) => {
 };
 
 const QUESTIONS = [{ question: "How much of the fix?", header: "Scope", multiSelect: false, options: [{ label: "All", description: "…" }] }];
+
+// The server validates a call against the registered schema before the handler runs; the model leaves multiSelect out.
+test("a question without multiSelect validates as a single choice", async () => {
+    withoutTmux();
+    const question = { question: "Which store?", header: "Store", options: [{ label: "Postgres", description: "p" }, { label: "SQLite", description: "s" }] };
+    let parsed: unknown;
+    const query: QueryFn = async function* (args) {
+        const server = args.options.mcpServers?.["ui"] as { instance: unknown } | undefined;
+        const registry = server?.instance as { _registeredTools: Record<string, { inputSchema: { safeParse: (value: unknown) => unknown } }> };
+        parsed = registry["_registeredTools"]["ask"]?.inputSchema.safeParse({ questions: [question] });
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+    await collect(request, query);
+    expect(parsed).toEqual({ success: true, data: { questions: [{ ...question, multiSelect: false }] } });
+});
 
 // Writes `path` (as the model spells it), settles the write with `outcome`, then asks a question.
 const askAfterWriting = async (path: string, markdown: string, outcome: { is_error?: boolean } = {}): Promise<AgentEvent[]> => {

@@ -14,7 +14,7 @@ import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
 import { AGENT_DIFF } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, NOTHING_LANDED } from "../fleet/agentActions";
+import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded } from "../fleet/agentActions";
 import { landedAway } from "../fleet/agentStatus";
 import { blockersOf } from "./conflictResolution";
 import { useAgents } from "../fleet/useAgents";
@@ -213,7 +213,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
             // askResolve gives a press that found nothing left, rather than this panel's red error line. Said out loud
             // because the rows below are read off the branch and don't move, so silence here reads as "it worked".
             if (result.landed && !result.changed) {
-                useNotifications().say(NOTHING_LANDED);
+                useNotifications().say(nothingLanded());
             }
         }, `Land failed.`);
 

@@ -3,6 +3,9 @@
         "accountChip": {
             "runsOn": "Runs on {whole}"
         },
+        "agentActions": {
+            "nothingLanded": "Nothing to land: this conversation's branch holds no work your workspace doesn't already have."
+        },
         "agentCard": {
             "agentTitle": "Agent title",
             "agentsStarted": "Agents it started",
@@ -782,6 +785,9 @@
             "skipped": "Skipped",
             "stopped": "Stopped"
         },
+        "cardView": {
+            "working": "Working…"
+        },
         "catalog": {
             "askBeforeEachEdit": "Ask before each edit and command.",
             "auto": "Auto",
@@ -959,6 +965,7 @@
             "agent": "As agent",
             "agentMode": "Agent mode",
             "askAnythingChatFree": "Ask anything, this chat is free and needs nothing connected.",
+            "atForFilesAndSettings": "{'@'} for files and settings",
             "attachEditorContext": "Attach editor context",
             "attachFiles": "Attach files",
             "attachFilesDevice": "Attach files from this device",
@@ -967,6 +974,9 @@
             "chatAvailableAfterSandbox": "Chat is available after this sandbox finishes setup.",
             "closePane": "Close pane",
             "editingMessage": "Editing this message:",
+            "enterRunsCommand": "Enter runs /{name}",
+            "enterToContinue": "Enter to continue",
+            "escToStop": "Esc to stop",
             "finishCancelEditFirst": "Finish or cancel the edit first: this box is holding a message to replace",
             "googleAccountNoAccess": "This Google account has no access to this sandbox, so chat is unavailable.",
             "keepBothInstead": "Keep both instead",
@@ -983,11 +993,14 @@
             "removeQueuedMessage": "Remove queued message",
             "replacedSend": "it is replaced when you send.",
             "runMessageThrough": "Run this message through",
+            "sandboxBusyKeepTyping": "The sandbox is busy: keep typing; Send is available when it is ready.",
             "sendLoopsMessageUntil": "Send loops this message until it's met: ends on",
             "sendStarts": "Send starts \"",
+            "shiftEnterNewLine": "Shift+Enter for new line",
             "startConversation": "Start a conversation with {providerName}.",
             "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Talk hands-free",
+            "upForPreviousMessage": "↑ for previous message",
             "whereRuns": "Where this runs",
             "writingAgent": "Writing as the agent",
             "writingAgentSendPlaces": "Writing as the agent: Send places the words into the transcript, no reply. Press to write as yourself again"
@@ -1029,7 +1042,8 @@
             "newChat": "New chat as",
             "open": "Open {conversation}",
             "setUpPersona": "Set up a persona",
-            "showSChats": "Show {label}'s chats"
+            "showSChats": "Show {label}'s chats",
+            "working": "Working…"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "This conversation already runs {placedAt}. Start a new agent to work somewhere else.",
@@ -1407,7 +1421,8 @@
             "showFullReport": "Show the full report",
             "showLess": "Show less",
             "watchingLiveWhatAgent": "Watching live: what this agent writes lands here as it works.",
-            "work": "Work"
+            "work": "Work",
+            "working": "Working…"
         },
         "turnBreak": {
             "anotherAccount": "another account",
@@ -3617,7 +3632,9 @@
             "domain": "Domain",
             "domainAlreadyAnswersOn": "a domain it already answers on",
             "download": "Download for {label}",
+            "failedOnYourMachine": "Setup failed on your machine. Here is what it found:",
             "fix": "Fix: {remedy}",
+            "fixAbovePressAgain": "Fix the above, then press \"{button}\" again.",
             "fixAboveRunSame": "Fix the above, then run the same command again. It stays valid.",
             "followInIntenticWindow": "Follow it in the Intentic window. This page opens your workspace the moment it answers.",
             "getDomainIntenticInstead": "← Get a domain from intentic instead",
@@ -3810,13 +3827,17 @@
             "nothingToUpload": "Nothing to upload",
             "partIntenticDidNot": "Part of Intentic did not load",
             "reloadToPickUp": "Reload to pick it up.",
+            "sandboxBusy": "The sandbox is busy",
+            "sandboxBusyDetail": "Your workspace stays open while it catches up automatically.",
             "scanningDroppedFolder": "Scanning dropped folder…",
+            "sessionNeedsAttention": "This browser's sandbox session needs attention",
             "signInAgain": "Sign in again",
             "signedIntoGoogle": "Signed into Google as {presented}",
             "somethingFetchesGoesNever": "Something it fetches as it goes never arrived, so a file may show without its colours or a viewer may stay blank. Reload to get it.",
             "switchAccount": "Switch account",
             "uploadedFailed": "Uploaded {done} of {count} · {failed} failed",
-            "uploading": "Uploading {done} of {count}"
+            "uploading": "Uploading {done} of {count}",
+            "workspaceStillHere": "Your workspace is still here."
         },
         "notifications": {
             "undo": "Undo"
@@ -4882,6 +4903,17 @@
             "searchCtrlP": "Search with Ctrl+P",
             "technicalHidden": "{count} technical file hidden | {count} technical files hidden",
             "viewingFile": "viewing this file"
+        },
+        "useWorkspaceTree": {
+            "couldntOpen": "Couldn't open {path}."
+        },
+        "draftingReceipts": {
+            "anAgent": "an agent",
+            "commitMessageReady": "Commit message ready for {title}",
+            "couldntWriteCommitMessage": "Couldn't write a commit message for {title}. Name the commit yourself.",
+            "couldntWriteCommitMessageBecause": "Couldn't write a commit message for {title}, {reason}. Name the commit yourself.",
+            "modelsRefused": "{models} refused",
+            "writingCommitMessage": "Writing a commit message for {title}…"
         }
     }
 }

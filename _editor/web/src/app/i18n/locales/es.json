@@ -3,6 +3,9 @@
         "accountChip": {
             "runsOn": "Se ejecuta en {whole}"
         },
+        "agentActions": {
+            "nothingLanded": "Nada que integrar: la rama de esta conversación no tiene trabajo que tu espacio de trabajo no tenga ya."
+        },
         "agentCard": {
             "agentTitle": "Título del agente",
             "agentsStarted": "Agentes que ha iniciado",
@@ -782,6 +785,9 @@
             "skipped": "Omitido",
             "stopped": "Detenido"
         },
+        "cardView": {
+            "working": "Trabajando…"
+        },
         "catalog": {
             "askBeforeEachEdit": "Preguntar antes de cada edición y cada comando.",
             "auto": "Automático",
@@ -959,6 +965,7 @@
             "agent": "Como agente",
             "agentMode": "Modo agente",
             "askAnythingChatFree": "Pregunta lo que quieras, este chat es gratis y no necesita nada conectado.",
+            "atForFilesAndSettings": "{'@'} para archivos y ajustes",
             "attachEditorContext": "Adjuntar el contexto del editor",
             "attachFiles": "Adjuntar archivos",
             "attachFilesDevice": "Adjuntar archivos de este dispositivo",
@@ -967,6 +974,9 @@
             "chatAvailableAfterSandbox": "El chat estará disponible cuando este sandbox termine de configurarse.",
             "closePane": "Cerrar el panel",
             "editingMessage": "Editando este mensaje:",
+            "enterRunsCommand": "Enter ejecuta /{name}",
+            "enterToContinue": "Enter para continuar",
+            "escToStop": "Esc para detener",
             "finishCancelEditFirst": "Termina o cancela antes la edición: esta caja retiene un mensaje que reemplazar",
             "googleAccountNoAccess": "Esta cuenta de Google no tiene acceso a este sandbox, así que el chat no está disponible.",
             "keepBothInstead": "Conservar ambos",
@@ -983,11 +993,14 @@
             "removeQueuedMessage": "Quitar el mensaje en cola",
             "replacedSend": "se reemplaza al enviar.",
             "runMessageThrough": "Pasar este mensaje por",
+            "sandboxBusyKeepTyping": "El sandbox está ocupado: sigue escribiendo; podrás enviar cuando esté listo.",
             "sendLoopsMessageUntil": "Enviar repite este mensaje hasta que se cumpla: termina en",
             "sendStarts": "Enviar inicia «",
+            "shiftEnterNewLine": "Shift+Enter para una nueva línea",
             "startConversation": "Empieza una conversación con {providerName}.",
             "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Habla con las manos libres",
+            "upForPreviousMessage": "↑ para el mensaje anterior",
             "whereRuns": "Dónde se ejecuta",
             "writingAgent": "Escribiendo como el agente",
             "writingAgentSendPlaces": "Escribiendo como el agente: Enviar coloca las palabras en la transcripción, sin respuesta. Pulsa para volver a escribir como tú"
@@ -1029,7 +1042,8 @@
             "newChat": "Chat nuevo como",
             "open": "Abrir {conversation}",
             "setUpPersona": "Crear una persona",
-            "showSChats": "Mostrar los chats de {label}"
+            "showSChats": "Mostrar los chats de {label}",
+            "working": "Trabajando…"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Esta conversación ya se ejecuta {placedAt}. Inicia un agente nuevo para trabajar en otro sitio.",
@@ -1407,7 +1421,8 @@
             "showFullReport": "Mostrar el informe completo",
             "showLess": "Mostrar menos",
             "watchingLiveWhatAgent": "Mirando en vivo: lo que escribe este agente aparece aquí mientras trabaja.",
-            "work": "Trabajo"
+            "work": "Trabajo",
+            "working": "Trabajando…"
         },
         "turnBreak": {
             "anotherAccount": "another account",
@@ -3617,7 +3632,9 @@
             "domain": "Dominio",
             "domainAlreadyAnswersOn": "un dominio en el que ya responde",
             "download": "Descargar para {label}",
+            "failedOnYourMachine": "La preparación falló en tu equipo. Esto es lo que encontró:",
             "fix": "Solución: {remedy}",
+            "fixAbovePressAgain": "Arregla lo de arriba y vuelve a pulsar «{button}».",
             "fixAboveRunSame": "Arregla lo de arriba y vuelve a ejecutar el mismo comando. Sigue siendo válido.",
             "followInIntenticWindow": "Síguelo en la ventana de Intentic. Esta página abre tu espacio de trabajo en cuanto responda.",
             "getDomainIntenticInstead": "← Conseguir un dominio de intentic en su lugar",
@@ -3810,13 +3827,17 @@
             "nothingToUpload": "Nada que subir",
             "partIntenticDidNot": "Una parte de Intentic no se cargó",
             "reloadToPickUp": "Recarga para recogerlo.",
+            "sandboxBusy": "El sandbox está ocupado",
+            "sandboxBusyDetail": "Tu espacio de trabajo sigue abierto mientras se pone al día solo.",
             "scanningDroppedFolder": "Explorando la carpeta soltada…",
+            "sessionNeedsAttention": "La sesión del sandbox en este navegador necesita atención",
             "signInAgain": "Vuelve a iniciar sesión",
             "signedIntoGoogle": "Sesión de Google iniciada como {presented}",
             "somethingFetchesGoesNever": "Algo que va cargando sobre la marcha nunca llegó, así que un archivo puede aparecer sin sus colores o un visor quedarse en blanco. Recarga para conseguirlo.",
             "switchAccount": "Cambiar de cuenta",
             "uploadedFailed": "Subidos {done} de {count} · {failed} fallidos",
-            "uploading": "Subiendo {done} de {count}"
+            "uploading": "Subiendo {done} de {count}",
+            "workspaceStillHere": "Tu espacio de trabajo sigue aquí."
         },
         "notifications": {
             "undo": "Deshacer"
@@ -4461,6 +4482,14 @@
             "directorysUiCouldntLoaded": "No se pudo cargar la interfaz de este directorio.",
             "workspace": "espacio de trabajo"
         },
+        "draftingReceipts": {
+            "anAgent": "un agente",
+            "commitMessageReady": "Mensaje de commit listo para {title}",
+            "couldntWriteCommitMessage": "No se pudo escribir el mensaje de commit de {title}. Ponle nombre al commit tú mismo.",
+            "couldntWriteCommitMessageBecause": "No se pudo escribir el mensaje de commit de {title}, {reason}. Ponle nombre al commit tú mismo.",
+            "modelsRefused": "rechazado por {models}",
+            "writingCommitMessage": "Escribiendo el mensaje de commit de {title}…"
+        },
         "editorPane": {
             "closeSplit": "Cerrar la división",
             "closeSplitTabsMove": "Cerrar la división · estas pestañas vuelven a un solo panel"
@@ -4743,6 +4772,9 @@
             "matchCase": "Distinguir mayúsculas",
             "matchWholeWord": "Palabra completa",
             "useRegularExpression": "Usar expresión regular"
+        },
+        "useWorkspaceTree": {
+            "couldntOpen": "No se pudo abrir {path}."
         },
         "workspaceDesktop": {
             "clearEsc": "Vaciar (Esc)",

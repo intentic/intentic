@@ -3,6 +3,9 @@
         "accountChip": {
             "runsOn": "Działa na {whole}"
         },
+        "agentActions": {
+            "nothingLanded": "Nie ma czego scalać: gałąź tej rozmowy nie zawiera pracy, której Twoja przestrzeń robocza jeszcze nie ma."
+        },
         "agentCard": {
             "agentTitle": "Tytuł agenta",
             "agentsStarted": "Agenty, które uruchomił",
@@ -782,6 +785,9 @@
             "skipped": "Pominięto",
             "stopped": "Zatrzymano"
         },
+        "cardView": {
+            "working": "Pracuje…"
+        },
         "catalog": {
             "askBeforeEachEdit": "Pytaj przed każdą zmianą i każdym poleceniem.",
             "auto": "Automatycznie",
@@ -959,6 +965,7 @@
             "agent": "Jako agent",
             "agentMode": "Tryb agenta",
             "askAnythingChatFree": "Pytaj o cokolwiek — ten czat jest darmowy i nie wymaga niczego podłączonego.",
+            "atForFilesAndSettings": "{'@'} – pliki i ustawienia",
             "attachEditorContext": "Dołącz kontekst edytora",
             "attachFiles": "Dołącz pliki",
             "attachFilesDevice": "Dołącz pliki z tego urządzenia",
@@ -967,6 +974,9 @@
             "chatAvailableAfterSandbox": "Czat będzie dostępny, gdy ten sandbox skończy konfigurację.",
             "closePane": "Zamknij panel",
             "editingMessage": "Edytujesz tę wiadomość:",
+            "enterRunsCommand": "Enter uruchamia /{name}",
+            "enterToContinue": "Enter, aby kontynuować",
+            "escToStop": "Esc, aby zatrzymać",
             "finishCancelEditFirst": "Najpierw zakończ albo anuluj edycję: to pole trzyma wiadomość do zastąpienia",
             "googleAccountNoAccess": "To konto Google nie ma dostępu do tego sandboxa, więc czat jest niedostępny.",
             "keepBothInstead": "Zostaw oba",
@@ -983,11 +993,14 @@
             "removeQueuedMessage": "Usuń wiadomość z kolejki",
             "replacedSend": "zostanie zastąpiona przy wysyłce.",
             "runMessageThrough": "Przepuść tę wiadomość przez",
+            "sandboxBusyKeepTyping": "Sandbox jest zajęty: pisz dalej; wysłać będzie można, gdy będzie gotowy.",
             "sendLoopsMessageUntil": "Wyślij powtarza tę wiadomość, aż warunek będzie spełniony: kończy się na",
             "sendStarts": "Wyślij uruchamia „",
+            "shiftEnterNewLine": "Shift+Enter – nowa linia",
             "startConversation": "Zacznij rozmowę z {providerName}.",
             "startConversationAny": "Start a conversation.",
             "talkHandsFree": "Mów bez rąk",
+            "upForPreviousMessage": "↑ – poprzednia wiadomość",
             "whereRuns": "Gdzie to działa",
             "writingAgent": "Piszesz jako agent",
             "writingAgentSendPlaces": "Piszesz jako agent: Wyślij wkłada słowa do zapisu rozmowy, bez odpowiedzi. Naciśnij, żeby znowu pisać jako Ty"
@@ -1029,7 +1042,8 @@
             "newChat": "Nowy czat jako",
             "open": "Otwórz {conversation}",
             "setUpPersona": "Utwórz personę",
-            "showSChats": "Pokaż czaty: {label}"
+            "showSChats": "Pokaż czaty: {label}",
+            "working": "Pracuje…"
         },
         "chatPlacementMenu": {
             "conversationAlreadyRunsStart": "Ta rozmowa już działa {placedAt}. Uruchom nowego agenta, żeby pracować gdzie indziej.",
@@ -1407,7 +1421,8 @@
             "showFullReport": "Pokaż pełny raport",
             "showLess": "Pokaż mniej",
             "watchingLiveWhatAgent": "Podgląd na żywo: to, co pisze ten agent, ląduje tutaj w trakcie pracy.",
-            "work": "Praca"
+            "work": "Praca",
+            "working": "Pracuje…"
         },
         "turnBreak": {
             "anotherAccount": "another account",
@@ -3617,7 +3632,9 @@
             "domain": "Domena",
             "domainAlreadyAnswersOn": "domenę, pod którą już odpowiada",
             "download": "Pobierz dla {label}",
+            "failedOnYourMachine": "Konfiguracja nie powiodła się na Twoim komputerze. Oto, co wykryła:",
             "fix": "Naprawa: {remedy}",
+            "fixAbovePressAgain": "Napraw powyższe, a potem naciśnij „{button}” jeszcze raz.",
             "fixAboveRunSame": "Napraw powyższe, a potem uruchom to samo polecenie jeszcze raz. Pozostaje ważne.",
             "followInIntenticWindow": "Śledź to w oknie Intentic. Ta strona otworzy Twoją przestrzeń roboczą, gdy tylko odpowie.",
             "getDomainIntenticInstead": "← Zamiast tego weź domenę od intentic",
@@ -3810,13 +3827,17 @@
             "nothingToUpload": "Nie ma czego wysłać",
             "partIntenticDidNot": "Część Intentic się nie wczytała",
             "reloadToPickUp": "Przeładuj, żeby ją pobrać.",
+            "sandboxBusy": "Sandbox jest zajęty",
+            "sandboxBusyDetail": "Twoja przestrzeń robocza zostaje otwarta, a sandbox sam nadrobi zaległości.",
             "scanningDroppedFolder": "Skanowanie upuszczonego folderu…",
+            "sessionNeedsAttention": "Sesja sandboxa w tej przeglądarce wymaga uwagi",
             "signInAgain": "Zaloguj się ponownie",
             "signedIntoGoogle": "Zalogowano do Google jako {presented}",
             "somethingFetchesGoesNever": "Coś, co doczytuje się po drodze, nigdy nie dotarło, więc plik może pokazać się bez kolorów, a podgląd zostać pusty. Przeładuj, żeby to pobrać.",
             "switchAccount": "Przełącz konto",
             "uploadedFailed": "Wysłano {done} z {count} · {failed} nieudanych",
-            "uploading": "Wysyłanie {done} z {count}"
+            "uploading": "Wysyłanie {done} z {count}",
+            "workspaceStillHere": "Twoja przestrzeń robocza wciąż tu jest."
         },
         "notifications": {
             "undo": "Cofnij"
@@ -4461,6 +4482,14 @@
             "directorysUiCouldntLoaded": "Nie udało się wczytać interfejsu tego katalogu.",
             "workspace": "przestrzeń robocza"
         },
+        "draftingReceipts": {
+            "anAgent": "agenta",
+            "commitMessageReady": "Wiadomość commita dla {title} jest gotowa",
+            "couldntWriteCommitMessage": "Nie udało się napisać wiadomości commita dla {title}. Nazwij commit sam.",
+            "couldntWriteCommitMessageBecause": "Nie udało się napisać wiadomości commita dla {title}, {reason}. Nazwij commit sam.",
+            "modelsRefused": "odmowa: {models}",
+            "writingCommitMessage": "Pisanie wiadomości commita dla {title}…"
+        },
         "editorPane": {
             "closeSplit": "Zamknij podział",
             "closeSplitTabsMove": "Zamknij podział · te karty wracają do jednego panelu"
@@ -4743,6 +4772,9 @@
             "matchCase": "Uwzględniaj wielkość liter",
             "matchWholeWord": "Całe słowo",
             "useRegularExpression": "Użyj wyrażenia regularnego"
+        },
+        "useWorkspaceTree": {
+            "couldntOpen": "Nie udało się otworzyć {path}."
         },
         "workspaceDesktop": {
             "clearEsc": "Wyczyść (Esc)",

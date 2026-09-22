@@ -1,6 +1,7 @@
 import { useQuery, type QueryFunction, type UseQueryOptions } from "@tanstack/vue-query";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
+import { readFailure } from "../overview/useDaemonRoutes";
 import { useSandbox } from "./useSandbox";
 import { trackPerf } from "../../../app/perf";
 
@@ -36,5 +37,5 @@ export function useSandboxQuery<T>(options: UseQueryOptions<T>, aimedAt?: MaybeR
         // plain handler doesn't have.
         queryClient,
     );
-    return { query, error: computed(() => query.error.value?.message) };
+    return { query, error: computed(() => (query.error.value === null ? undefined : readFailure(query.error.value))) };
 }

@@ -48,6 +48,14 @@ export const planGeminiTurn = async (services: Services, input: AgentTurn, conte
         // Reads the wording off the provider's spec row, matching what the connect prompt and picker already say.
         return { ok: false, message: `Connect your ${PROVIDER_ACCESS.gemini.requirement} in Sandbox ▸ Agent to run Gemini here.` };
     }
+    // A translator with no usable Google sign-in lists no Google model and answers every one "unknown provider".
+    if ((await services.geminiModels.live()) === undefined) {
+        return {
+            ok: false,
+            message:
+                "Google is connected, but the model translator isn't serving any Google model to this sandbox, so nothing can run on it. Send again in a minute; if it keeps happening, reconnect Google in Sandbox ▸ Agent.",
+        };
+    }
     const catalog = await services.geminiModels.models();
     // Absent and empty both mean the catalog default: the wire allows `model: ""`, and nothing was pinned.
     const pinned = input.model === undefined || input.model === "" ? undefined : input.model;

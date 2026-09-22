@@ -21,6 +21,7 @@ import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";
 import { workspaceTreeKey } from "../health/workspaceTreeKey";
+import { t } from "@intentic/ui/i18n";
 
 // Shared busy/error state for file actions (rename, delete, save, move); drag-drop uploads use useUploadQueue.
 // Concurrent, not mutexed: these are independent writes to different paths, and one runner shared by the tree, the
@@ -358,7 +359,7 @@ export function useWorkspaceTree() {
             if (workspaceAgent.value !== asked) {
                 return;
             }
-            const notice = noticeFrom(loadError, `Couldn't open ${path}.`);
+            const notice = noticeFrom(loadError, t(`workspace.useWorkspaceTree.couldntOpen`, { path }));
             loadNotice = { path, notice };
             actionError.value = notice;
         } finally {

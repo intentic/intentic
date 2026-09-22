@@ -236,8 +236,8 @@ export const startNotificationSources = (): void => {
             tone: `info`,
             icon: `spinner`,
             spin: true,
-            title: needsSignin ? `This browser's sandbox session needs attention` : `The sandbox is busy`,
-            detail: needsSignin ? `Your workspace is still here.` : `Your workspace stays open while it catches up automatically.`,
+            title: needsSignin ? t(`shell.notificationSources.sessionNeedsAttention`) : t(`shell.notificationSources.sandboxBusy`),
+            detail: needsSignin ? t(`shell.notificationSources.workspaceStillHere`) : t(`shell.notificationSources.sandboxBusyDetail`),
             // No button for a stall the app is already healing; only an expired session needs the user to act.
             actions: needsSignin
                 ? [{ label: t(`shell.notificationSources.signInAgain`), severity: `secondary` as const, run: signInAgain }]

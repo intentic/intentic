@@ -217,36 +217,15 @@ fn download(url: &str, into: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
-/// Docker's own program folder onto THIS process's PATH, so the `docker` we are about to call is found without
-/// a new shell. A fresh install is not on the PATH any existing process inherited, and `ic sandbox connect`
-/// runs inside this one.
+/// Docker's own program folder onto THIS process's PATH; a later `ic` process adopts it itself (main.rs).
 #[cfg(windows)]
 pub fn put_docker_on_path(facts: &Facts) -> Fixed {
-    let mut roots: Vec<std::path::PathBuf> = Vec::new();
-    if !facts.docker_desktop_path.is_empty() {
-        if let Some(dir) = std::path::Path::new(&facts.docker_desktop_path).parent() {
-            roots.push(dir.join("resources").join("bin"));
-        }
-    }
-    if let Ok(program_files) = std::env::var("ProgramFiles") {
-        roots.push(
-            std::path::Path::new(&program_files)
-                .join("Docker")
-                .join("Docker")
-                .join("resources")
-                .join("bin"),
-        );
-    }
-    let found = roots
-        .into_iter()
-        .find(|dir| dir.join("docker.exe").exists());
-    let Some(dir) = found else {
+    let Some(dir) = crate::docker::program_folder(&facts.docker_desktop_path) else {
         return Err(Trouble::Failed(
             "Docker Desktop is installed, but its docker program is not where it usually lives. Sign out of Windows and back in, then try again.".to_string(),
         ));
     };
-    let existing = std::env::var("PATH").unwrap_or_default();
-    std::env::set_var("PATH", format!("{existing};{}", dir.display()));
+    crate::docker::append_to_path(&dir);
     if crate::docker::cli_present() {
         Ok(Done::Now)
     } else {

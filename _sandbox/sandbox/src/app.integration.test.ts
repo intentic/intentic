@@ -771,6 +771,7 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and refuse
                             models: models.map((id) => ({ id, label: id, inputModalities: ["text" as const] })),
                             default: models[0]!,
                         }),
+                        live: async () => models.map((id) => ({ id, label: id, inputModalities: ["text" as const] })),
                     },
                     async *geminiAgent(request) {
                         seen = request;

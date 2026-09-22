@@ -12,6 +12,50 @@ fn docker(args: &[&str]) -> Command {
     cmd
 }
 
+/// Docker Desktop's CLI folder beside `desktop_exe` (empty for unknown) or under the default install root.
+#[cfg(windows)]
+pub fn program_folder(desktop_exe: &str) -> Option<std::path::PathBuf> {
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    if let Some(dir) = std::path::Path::new(desktop_exe)
+        .parent()
+        .filter(|_| !desktop_exe.is_empty())
+    {
+        roots.push(dir.join("resources").join("bin"));
+    }
+    if let Ok(program_files) = std::env::var("ProgramFiles") {
+        roots.push(
+            std::path::Path::new(&program_files)
+                .join("Docker")
+                .join("Docker")
+                .join("resources")
+                .join("bin"),
+        );
+    }
+    roots
+        .into_iter()
+        .find(|dir| dir.join("docker.exe").exists())
+}
+
+/// Appends `dir` to this process's PATH, which every later `docker` spawn resolves against.
+#[cfg(windows)]
+pub fn append_to_path(dir: &std::path::Path) {
+    let existing = std::env::var("PATH").unwrap_or_default();
+    std::env::set_var("PATH", format!("{existing};{}", dir.display()));
+}
+
+/// A PATH inherited before Docker Desktop was installed lacks its CLI, and each `ic` run is a process of its own.
+#[cfg(windows)]
+pub fn adopt_program_folder() {
+    let on_path = std::env::var_os("PATH").is_some_and(|path| {
+        std::env::split_paths(&path).any(|dir| dir.join("docker.exe").exists())
+    });
+    if !on_path {
+        if let Some(dir) = program_folder("") {
+            append_to_path(&dir);
+        }
+    }
+}
+
 pub fn cli_present() -> bool {
     // `docker --version` is client-only: no daemon round-trip, fails only when the binary is absent.
     docker(&["--version"])

@@ -629,7 +629,8 @@ const askServer = (
                             z.object({
                                 question: z.string(),
                                 header: z.string(),
-                                multiSelect: z.boolean(),
+                                // Defaulted as in the built-in AskUserQuestion, whose call site the model was trained on.
+                                multiSelect: z.boolean().default(false),
                                 options: z
                                     .array(z.object({ label: z.string(), description: z.string(), preview: z.string().optional() }))
                                     .min(2)

@@ -85,10 +85,12 @@ const heldTaskCount = (message: SDKMessage): number | undefined =>
         ? message.tasks.filter((task) => !UNHELD_TASK_TYPES.has(task.task_type)).length
         : undefined;
 
-// A main-thread model frame; only the idle gaps between turns race the grace window. A child's own frames (parented)
+// A main-thread turn frame; only the idle gaps between turns race the grace window. A child's own frames (parented)
 // keep arriving throughout a hold and must not read as a turn underway.
+// `init` opens a wake turn before its model answers; an input closed in that wait refuses the turn's first tool call.
 const isMainTurnFrame = (message: SDKMessage): boolean =>
-    (message.type === "assistant" || message.type === "stream_event" || message.type === "user") && message.parent_tool_use_id === null;
+    (message.type === "system" && message.subtype === "init") ||
+    ((message.type === "assistant" || message.type === "stream_event" || message.type === "user") && message.parent_tool_use_id === null);
 
 // Whether the CLI produced anything at all, model output, a child's, or a local slash command's; separates a turn that
 // legitimately called nothing from one that swallowed its prompt.

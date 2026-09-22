@@ -43,7 +43,8 @@ const flushPersist = throttleTrailing(() => {
     }
     // Timed since this write scales with everything cached; `queries` shows if the mirror has grown too big.
     const client = latestClient;
-    void trackPerf(`query.persist`, { queries: client.clientState.queries.length }, () => set(IDB_KEY, client));
+    // A refused write (a full or disabled IndexedDB) costs only the next reload's instant paint.
+    void trackPerf(`query.persist`, { queries: client.clientState.queries.length }, () => set(IDB_KEY, client)).catch(() => undefined);
 }, PERSIST_WINDOW_MS);
 
 // Called after auth resolves and before any route mounts, so hydration never races a fetch. `buster` combines the user

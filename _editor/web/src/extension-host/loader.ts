@@ -8,6 +8,7 @@ import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-c
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { sandboxError, sandboxJson, sandboxRequest } from "../features/sandbox/client/sandboxClient";
+import { readFailure } from "../features/sandbox/overview/useDaemonRoutes";
 import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
 
@@ -162,7 +163,7 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
     try {
         summaries = ExtensionsListSchema.parse(await sandboxJson(`/extensions`)).extensions;
     } catch (error) {
-        listFailure = errorMessage(error, String(error));
+        listFailure = readFailure(error);
     }
     // Bail if the sandbox switched mid-fetch; activating this list would restore tiles the switch just cleared.
     if (startedIn !== scope) {
@@ -176,7 +177,7 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
             host,
             listFailure === undefined
                 ? `this sandbox image doesn't list it: the image and the app are on different versions, so it can't be switched off here`
-                : `the extension list couldn't be loaded (${listFailure}), activated from this app build alone`,
+                : `the extension list couldn't be loaded, so this build activated it on its own: ${listFailure}`,
             startedIn,
         ),
     ]);

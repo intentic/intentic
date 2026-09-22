@@ -559,6 +559,8 @@ const hostedWait = computed(() =>
 
 // Long fuse for compose, phone, and own-computer-via-app; drops to the short fuse once the command is unfolded.
 const installing = computed(() => appFirst.value && !commandVisible.value);
+// A failed run is retried with the app's "Set it up now" button wherever no command is on screen to run again.
+const retriedByButton = computed(() => !commandVisible.value && (desktop.value || installing.value));
 // Installer was fetched (not proof of install, just intent); changes both when the nudge fires and what it says.
 const downloaded = ref(false);
 const onDownload = (): void => {
@@ -2223,17 +2225,20 @@ const warmSandboxCredential = async (): Promise<void> => {
                             />
 
                             <!-- The machine said exactly what broke: render it verbatim, problem and fix per check, and the one instruction that is always true. -->
-                            <Notice
-                                v-if="reportFailures !== null"
-                                :of="{ tone: `danger`, title: `Setup failed on your machine. Here is what it found:` }"
-                            >
+                            <Notice v-if="reportFailures !== null" :of="{ tone: `danger`, title: t(`setup.setup.failedOnYourMachine`) }">
                                 <ul class="mt-1.5 flex flex-col gap-1.5">
                                     <li v-for="failure in reportFailures" :key="failure.check" class="min-w-0 text-2xs">
                                         <span class="font-medium">{{ failure.check }}:</span> {{ failure.problem }}
                                         <span v-if="failure.remedy !== ``">{{ t(`setup.setup.fix`, { remedy: failure.remedy }) }}</span>
                                     </li>
                                 </ul>
-                                <p class="mt-1.5 text-2xs">{{ t(`setup.setup.fixAboveRunSame`) }}</p>
+                                <p class="mt-1.5 text-2xs">
+                                    {{
+                                        retriedByButton
+                                            ? t(`setup.setup.fixAbovePressAgain`, { button: t(`setup.setup.setUpNow`) })
+                                            : t(`setup.setup.fixAboveRunSame`)
+                                    }}
+                                </p>
                             </Notice>
 
                             <!-- Wide screens move this explanation into the reference column. -->
