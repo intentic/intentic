@@ -69,17 +69,20 @@ export const sandboxesFrom = (rows: readonly DockerRow[]): DeviceSandbox[] => {
         });
 };
 
+// Room for every container's inspect object and a log tail at MAX_LOG_LINES, well past exec's 1 MB default.
+const DOCKER_MAX_BUFFER = 8 * 1024 * 1024;
+
 // `windowsHide` here and on every other spawn in this agent: the connection agent runs detached with no console
 // of its own, and a console child of a console-less process gets a brand-new console, window and all.
-const docker = async (args: readonly string[]): Promise<string> => {
-    const { stdout } = await exec("docker", [...args], { timeout: DOCKER_TIMEOUT_MS, windowsHide: true }).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {
-            throw new Error("This device has no docker command, so no Intentic sandboxes can run here.");
-        }
-        throw error;
-    });
-    return stdout;
-};
+const docker = async (args: readonly string[]): Promise<{ readonly stdout: string; readonly stderr: string }> =>
+    await exec("docker", [...args], { timeout: DOCKER_TIMEOUT_MS, maxBuffer: DOCKER_MAX_BUFFER, windowsHide: true }).catch(
+        (error: NodeJS.ErrnoException) => {
+            if (error.code === "ENOENT") {
+                throw new Error("This device has no docker command, so no Intentic sandboxes can run here.");
+            }
+            throw error;
+        },
+    );
 
 // The three fields `rowsFrom` reads, asked for by name. NEVER `{{json .}}`: the whole-object template carries `Size`,
 // so docker computes every container's disk usage by walking its writable layer — measured at 0.5-1.5s against 60ms
@@ -96,7 +99,7 @@ export const FLEET_ARGS: readonly string[] = [
 ];
 
 // Exported for the auto-prepare tick (../auto-prepare.ts): one producer of "what runs on me", whoever is asking.
-export const fleet = async (): Promise<DeviceSandbox[]> => sandboxesFrom(rowsFrom(await docker(FLEET_ARGS)));
+export const fleet = async (): Promise<DeviceSandbox[]> => sandboxesFrom(rowsFrom((await docker(FLEET_ARGS)).stdout));
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -153,11 +156,7 @@ export const fleetDetailed = async (): Promise<DeviceSandbox[]> => {
     if (boxes.length === 0) {
         return boxes;
     }
-    const inspected = await exec("docker", ["inspect", "--format", "{{json .}}", ...boxes.map((box) => box.container)], {
-        timeout: DOCKER_TIMEOUT_MS,
-        maxBuffer: 8 * 1024 * 1024,
-        windowsHide: true,
-    })
+    const inspected = await docker(["inspect", "--format", "{{json .}}", ...boxes.map((box) => box.container)])
         .then(({ stdout }) => stdout)
         .catch((error: { stdout?: string }) => error.stdout ?? "");
     const byContainer = new Map<string, SandboxResources>();
@@ -452,6 +451,16 @@ export const runIc = async (args: readonly string[], onLine: (line: string) => v
     throw new Error("no ic candidate was tried");
 };
 
+// One `ic` run on one slug, marked in flight for its whole length so the background tick never pulls under it.
+export const icFlow = async (slug: string, args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
+    icInFlight.add(slug);
+    try {
+        return await runIc(args, onLine);
+    } finally {
+        icInFlight.delete(slug);
+    }
+};
+
 export const swapSandbox = async (
     swap: SandboxSwap,
     slug: string,
@@ -464,14 +473,7 @@ export const swapSandbox = async (
     // round trip.
     const args = icSwapArgs(swap, slug, hash);
     await find(slug);
-    icInFlight.add(slug);
-    let run: { code: number; output: string };
-    try {
-        run = await runIc(args, onLine);
-    } finally {
-        icInFlight.delete(slug);
-    }
-    const { code, output } = run;
+    const { code, output } = await icFlow(slug, args, onLine);
     if (code !== 0) {
         throw new Error(`That ${swap} failed on this device.\n\n${output}`);
     }
@@ -497,13 +499,7 @@ export const reshapeSandbox = async (
     // Built before the fleet is read, for icSwapArgs' reason: an empty ask was already wrong when it arrived.
     const args = icReshapeArgs(slug, ask);
     await find(slug);
-    icInFlight.add(slug);
-    let run: { code: number; output: string };
-    try {
-        run = await runIc(args, onLine);
-    } finally {
-        icInFlight.delete(slug);
-    }
+    const run = await icFlow(slug, args, onLine);
     if (run.code !== 0) {
         throw new Error(`That reshape failed on this device.\n\n${run.output}`);
     }
@@ -520,13 +516,7 @@ export const reconnectSandbox = async (
     const args = icConnectArgs(setupCode);
     // find(slug) first: redeeming the claim for a slug not on this machine would burn it for nothing.
     await find(slug);
-    icInFlight.add(slug);
-    let run: { code: number; output: string };
-    try {
-        run = await runIc(args, onLine);
-    } finally {
-        icInFlight.delete(slug);
-    }
+    const run = await icFlow(slug, args, onLine);
     if (run.code !== 0) {
         throw new Error(`That reconnect failed on this device.\n\n${run.output}`);
     }
@@ -544,13 +534,7 @@ export const createSandbox = async (slug: string, setupCode: string | undefined,
     if ((await fleet()).some((box) => box.slug === slug)) {
         throw new Error(`This device already runs a sandbox called "${slug}". Nothing was created and the setup code was not spent.`);
     }
-    icInFlight.add(slug);
-    let run: { code: number; output: string };
-    try {
-        run = await runIc(args, onLine);
-    } finally {
-        icInFlight.delete(slug);
-    }
+    const run = await icFlow(slug, args, onLine);
     if (run.code !== 0) {
         throw new Error(`That sandbox could not be created on this device.\n\n${run.output}`);
     }
@@ -563,13 +547,7 @@ export const createSandbox = async (slug: string, setupCode: string | undefined,
 export const removeSandbox = async (slug: string, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
     assertScope(scopes, "sandboxes");
     await find(slug);
-    icInFlight.add(slug);
-    let run: { code: number; output: string };
-    try {
-        run = await runIc(icRemoveArgs(slug), onLine);
-    } finally {
-        icInFlight.delete(slug);
-    }
+    const run = await icFlow(slug, icRemoveArgs(slug), onLine);
     if (run.code !== 0) {
         throw new Error(`That removal failed on this device.\n\n${run.output}`);
     }
@@ -591,11 +569,7 @@ const readLogs = async (slug: string, lines: number, scopes: DeviceScopes): Prom
         assertScope(scopes, "sandboxes");
     }
     await find(slug);
-    const { stdout, stderr } = await exec("docker", ["logs", "--tail", String(lines), `${PREFIX}${slug}`], {
-        timeout: DOCKER_TIMEOUT_MS,
-        maxBuffer: 8 * 1024 * 1024,
-        windowsHide: true,
-    });
+    const { stdout, stderr } = await docker(["logs", "--tail", String(lines), `${PREFIX}${slug}`]);
     return [stdout, stderr].filter((part) => part !== "").join("\n");
 };
 

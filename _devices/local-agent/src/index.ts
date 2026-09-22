@@ -2,21 +2,37 @@
 // OS, re-invoking a compiled binary, and a detached agent found again by pidfile. Used by @intentic/machine and
 // @intentic/acp-bridge.
 
-export { agentHome, writeSecretFile, type AgentHome, type Log } from "./home.js";
+export { agentHome, writeFileAtomic, writeSecretFile, type AgentHome, type Log } from "./home.js";
 export { cliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub, type CliLauncher } from "./launcher.js";
 export {
+    autostart,
     clearWindowsRunValue,
     linuxDesktopEntry,
     macLaunchAgentXml,
-    registerAutostart,
+    ROTATE_LOG_SH,
     setWindowsRunValue,
-    unregisterAutostart,
+    supervisedPath,
     windowsRunAddArgs,
     windowsRunDeleteArgs,
+    type Autostart,
+    type AutostartKind,
     type AutostartSpec,
     type LaunchAgentSpec,
 } from "./autostart.js";
-export { isProcessAlive, livePid, livePidRecord, type PidRecord, pidFileBody, spawnDetached } from "./detached.js";
+export {
+    claimPidFile,
+    holdPidFile,
+    isProcessAlive,
+    livePid,
+    livePidRecord,
+    LOG_ROTATE_BYTES,
+    type PidClaim,
+    type PidRecord,
+    pidFileBody,
+    releasePidFile,
+    spawnDetached,
+    stopProcess,
+} from "./detached.js";
 export { agentException } from "./text.js";
 export {
     asLabel,

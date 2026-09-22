@@ -62,7 +62,7 @@ test(`every verb a row can press has a line behind it`, () => {
 
 test(`the agent's own two ops are the verbs its CLI takes`, () => {
     expect(agentFallback(`upgrade`)).toBe(`intentic-machine upgrade`);
-    // Bare `run`: reconcileResidency stops the loop it finds before starting its own.
+    // Bare `run` restarts: it stops the agent it finds and starts it again through its supervisor.
     expect(agentFallback(`restart`)).toBe(`intentic-machine run`);
 });
 

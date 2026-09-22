@@ -1,15 +1,17 @@
 import { describe, it, expect, mock } from "bun:test";
-import { addToWindowsPathValue, SELF_UPDATE_GUARD_ENV, selfUpdateBeforeSetup, type SelfUpdateIo } from "./install.js";
+import { UPGRADE_ENV } from "./environments/upgrade.js";
+import { addToWindowsPathValue, selfUpdateBeforeSetup, type SelfUpdateIo } from "./install.js";
 import type { UpgradeOutcome } from "./upgrade.js";
 
 const io = (
     overrides: Partial<SelfUpdateIo> & { outcome?: UpgradeOutcome } = {},
-): { io: SelfUpdateIo; upgraded: () => boolean; reexeced: () => readonly string[] | undefined } => {
+): { io: SelfUpdateIo; upgraded: () => boolean; reexeced: () => readonly string[] | undefined; reexecedAs: () => string | undefined } => {
     let ran = false;
     let reexecArgs: readonly string[] | undefined;
+    let reexecVersion: string | undefined;
     const built: SelfUpdateIo = {
         installed: overrides.installed ?? "1.2.3",
-        installedAgent: overrides.installedAgent ?? (async () => await Promise.resolve(true)),
+        installedAgent: overrides.installedAgent ?? (() => true),
         upgrade:
             overrides.upgrade ??
             (async () => {
@@ -18,19 +20,21 @@ const io = (
             }),
         reexec:
             overrides.reexec ??
-            ((args): never => {
+            ((args, version): never => {
                 reexecArgs = args;
+                reexecVersion = version;
                 // The real one replaces the process; the test one has to stop the caller the same way.
                 throw new Error("reexec");
             }),
     };
-    return { io: built, upgraded: () => ran, reexeced: () => reexecArgs };
+    return { io: built, upgraded: () => ran, reexeced: () => reexecArgs, reexecedAs: () => reexecVersion };
 };
 
 describe("selfUpdateBeforeSetup", () => {
-    it("skips under the re-exec guard, so an updated agent can never agent", async () => {
+    // The same variable marks setup's own re-exec and one leg of a machine-wide upgrade: either is already an update.
+    it("skips under the re-exec guard, so an updated agent never updates again", async () => {
         const t = io();
-        await selfUpdateBeforeSetup(t.io, { [SELF_UPDATE_GUARD_ENV]: "1" }, ["device", "setup"], () => undefined);
+        await selfUpdateBeforeSetup(t.io, { [UPGRADE_ENV]: "1.3.0" }, ["device", "setup"], () => undefined);
         expect(t.upgraded()).toBe(false);
     });
 
@@ -41,7 +45,7 @@ describe("selfUpdateBeforeSetup", () => {
     });
 
     it("leaves a dev run (node dist/cli.js, AGENT_BIN) entirely alone", async () => {
-        const t = io({ installedAgent: async () => await Promise.resolve(false) });
+        const t = io({ installedAgent: () => false });
         await selfUpdateBeforeSetup(t.io, {}, ["device", "setup"], () => undefined);
         expect(t.upgraded()).toBe(false);
     });
@@ -51,6 +55,8 @@ describe("selfUpdateBeforeSetup", () => {
         const args = ["device", "setup", "--url", "https://s.example", "--pair", "p"];
         await expect(selfUpdateBeforeSetup(t.io, {}, args, () => undefined)).rejects.toThrow("reexec");
         expect(t.reexeced()).toEqual(args);
+        // Carried to the re-exec, which is how that run knows to bring the rest of the PC to the same release.
+        expect(t.reexecedAs()).toBe("1.3.0");
     });
 
     it("notes a failed update and continues — the pairing token expires, the enrollment must not", async () => {

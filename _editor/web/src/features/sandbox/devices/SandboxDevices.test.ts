@@ -255,7 +255,7 @@ it(`says what a device is when it has no report to show`, () => {
                 roots: [`C:\\Users\\ada`],
             },
             agentVersion: `0.5.1`,
-            gap: `no-agent`,
+            gap: `unreported`,
         },
     ]);
     const text = el.textContent ?? ``;
@@ -266,8 +266,8 @@ it(`says what a device is when it has no report to show`, () => {
     expect(text).not.toContain(`PowerShell 7`);
     // The build number the title strips off joins them there, rather than being lost with the line it rode.
     expect(hovers(el)).toContain(`Windows 11 Pro (build 10.0.26100) · PowerShell 7 · C:\\Users\\ada`);
-    // The OS doesn't answer the gap: this machine still has no agent.
-    expect(text).toContain(`no agent`);
+    // The OS doesn't answer the gap: this machine's agent still describes nothing.
+    expect(text).toContain(`never described this machine`);
 });
 
 // A machine is usually addressed by its own name, so the masthead would otherwise print `radarsu-rog` as the
@@ -361,7 +361,7 @@ it(`puts the machines worth reading first`, () => {
     const el = mount([
         { key: `a`, label: `a-offline`, hostId: `a`, online: false, platform: `linux`, gap: `offline` },
         { key: `b`, label: `b-quiet`, sync: paired(), platform: `linux`, report: report(Date.now() - 60 * 60_000) },
-        { key: `c`, label: `c-attention`, hostId: `c`, online: true, platform: `linux`, gap: `no-agent` },
+        { key: `c`, label: `c-attention`, hostId: `c`, online: true, platform: `linux`, gap: `unreported` },
         { key: `d`, label: `d-live`, sync: paired(), platform: `linux`, report: report(Date.now()) },
     ]);
     const text = el.textContent ?? ``;
@@ -902,7 +902,7 @@ it(`offers the verbs on a connected device whose agent needs nothing, and says n
     expect(labels(el)).toContain(`Update agent`);
     expect(labels(el)).toContain(`Restart agent`);
     expect(text).not.toContain(`Newest agent this sandbox knows of.`);
-    expect(hovers(el)).toContain(`Fetches the newest agent onto this device`);
+    expect(hovers(el)).toContain(`Brings this whole computer to the newest agent`);
 });
 
 // The agent is the row's own meta now — a build and a state badge beside the environment it runs on — rather
@@ -1667,8 +1667,9 @@ it(`opens the PC as one page: an environment row per side, the sandbox once, and
     expect(text).not.toContain(`connected as rog::wsl:Arch`);
     expect(text).toContain(`Ubuntu`);
     expect(labels(el)).toContain(`Connect`);
-    // Two agents, two Update buttons: each side runs its own process.
-    expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(2);
+    // One Update for the computer, one Restart per side: an update moves every side, a restart is one process.
+    expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(1);
+    expect(labels(el).filter((label) => label === `Restart agent`)).toHaveLength(2);
     // One Runners section and one Danger zone for the PC, not one of each per door.
     expect((text.match(/Runners/g) ?? []).length).toBe(1);
     expect((text.match(/Danger zone/g) ?? []).length).toBe(1);
@@ -1688,49 +1689,50 @@ it(`sends a container verb through the Windows door and a folder verb through th
     expect(mirrorCalls).toEqual([{ hostId: `rog::wsl:Arch`, command: `sync-pause`, sandboxId: `work` }]);
 });
 
-// THE ERRAND THIS GROUP EXISTS FOR. Windows and the distro on it hold separate agent binaries, so a computer whose
-// Windows side was updated and whose distro was not is the ordinary outcome of a per-row press. One press updates every
-// side, in turn — each flow ends by taking its own socket down, so they cannot overlap.
-it(`updates every environment of one computer from a single press, native side first`, async () => {
+// One Update for the computer, through its Windows side, which brings its distros level first and itself last.
+it(`updates the whole computer from one press, through its Windows side`, async () => {
     bothDoors();
     const el = mount([distroSide(), windowsSide()]);
     await nextTick();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update agents`)?.click();
-    await waitFor(() => expect(agentCalls).toHaveLength(2));
-    expect(agentCalls).toEqual([
-        { hostId: `rog`, op: `upgrade` },
-        { hostId: `rog::wsl:Arch`, op: `upgrade` },
-    ]);
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update agent`)?.click();
+    await waitFor(() => expect(agentCalls).toHaveLength(1));
+    expect(agentCalls).toEqual([{ hostId: `rog`, op: `upgrade` }]);
     await nextTick();
-    // Each side's own log, under its own row: a machine-wide press is several updates, and what each answered is
-    // the thing the reader came for.
-    expect((el.textContent ?? ``).match(/Downloading the current agent…/g)).toHaveLength(2);
+    // One log, under the door it went through: that side narrates every other side's leg too.
+    expect((el.textContent ?? ``).match(/Downloading the current agent…/g)).toHaveLength(1);
 });
 
-// ONE PRESS, TWO ANSWERS. The page keeps one slot for what a control answered, and a machine-wide update fills it once
-// per side: without an answer per row, the side asked first goes quiet and the reader is told about half of what they
-// pressed.
-it(`states each side's own refusal when a machine-wide update is turned down twice`, async () => {
+// A distro hands a machine-wide update to its Windows side itself, so a sleeping Windows door is no reason to refuse.
+it(`sends the computer's update through the distro when its Windows side cannot hear it`, async () => {
     bothDoors();
-    agentAnswer = (hostId) => Promise.reject(new Error(`"Run commands" is off for ${hostId}.`));
-    const el = mount([distroSide(), windowsSide()]);
+    const sleepingWindows = { ...windowsSide(), online: false, gap: `offline` as const };
+    const el = mount([distroSide(), sleepingWindows]);
     await nextTick();
-    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update agents`)?.click();
-    await waitFor(() => expect(agentCalls).toHaveLength(2));
-    await waitFor(() => expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog::wsl:Arch.`));
-    expect(el.textContent ?? ``).toContain(`"Run commands" is off for rog.`);
+    [...el.querySelectorAll(`button`)].find((button) => button.textContent?.trim() === `Update agent`)?.click();
+    await waitFor(() => expect(agentCalls).toHaveLength(1));
+    expect(agentCalls).toEqual([{ hostId: `rog::wsl:Arch`, op: `upgrade` }]);
 });
 
-// A side that cannot be asked has no button of its own, and a computer with one reachable side has nothing wider to
-// say than that row's own Update.
-it(`offers no machine-wide update when only one side can be asked`, async () => {
+// The sides of one PC on different builds is one errand for the machine, said once over its environments.
+it(`says so once when the sides of one computer run different agents`, async () => {
+    bothDoors();
+    const lagging = distroSide();
+    const el = mount([{ ...lagging, report: { ...lagging.report!, agent: { running: true, installed: `1.182.0` } } }, windowsSide()]);
+    await nextTick();
+    const text = el.textContent ?? ``;
+    expect(text).toContain(`Its sides run different agents:`);
+    expect(text.match(/Its sides run different agents/g)).toHaveLength(1);
+    expect(text).toContain(`1.182.0`);
+});
+
+// A side that cannot be asked has no Restart of its own; the computer's one Update still goes through the side that can.
+it(`keeps the computer's one update while only one side can be asked`, async () => {
     bothDoors();
     const sleepingDistro = { ...distroSide(), online: false, gap: `offline` as const };
     const el = mount([sleepingDistro, windowsSide()]);
     await nextTick();
-    // The group itself is on screen, so the absence below is a control that was not offered rather than a page that
-    // did not draw.
+    // The group itself is on screen, so the counts below are controls offered rather than a page that did not draw.
     expect(el.textContent ?? ``).toContain(`Environments`);
     expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(1);
-    expect(labels(el)).not.toContain(`Update agents`);
+    expect(labels(el).filter((label) => label === `Restart agent`)).toHaveLength(1);
 });

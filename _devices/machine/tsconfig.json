@@ -7,7 +7,7 @@
         "skipLibCheck": true
     },
     "include": ["./src/**/*"],
-    "exclude": ["./src/**/*.test.ts", "./src/computer/testing.ts"],
+    "exclude": ["./src/**/*.test.ts", "./src/device/testing.ts"],
     "references": [
         { "path": "../../_tools/base" },
         { "path": "../../_devices/browser" },

@@ -250,7 +250,6 @@ test(`sends a distro's row to its computer's own form`, () => {
 test(`stays quiet about permissions on a device that cannot be reached`, () => {
     expect(manageBlock(device({ hostId: `my-pc`, online: false, gap: `offline` }), undefined)).toBeUndefined();
     expect(manageBlock(device({ hostId: `my-pc`, online: true, gap: `scope-off` }), undefined)).toBeUndefined();
-    expect(manageBlock(device({ hostId: `my-pc`, online: true, gap: `no-agent` }), undefined)).toBeUndefined();
 });
 
 // "Run commands" alone is enough to read the container list, so a machine can list its sandboxes, describe nothing

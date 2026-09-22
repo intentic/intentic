@@ -4,15 +4,15 @@ The plumbing every intentic CLI that lives on a **user's own computer** needs, a
 
 ```
 ~/.intentic/<name>/          agentHome(name)      — state dir + config.json
-        config.json          writeSecretFile()    — 0700 dir, 0600 file
+        config.json          writeSecretFile()    — 0700 dir, 0600 file, written whole (writeFileAtomic)
         <agent>.log          spawnDetached()      — the agent's output has nowhere else to go
-        <agent>.pid          livePid()            — find the agent again, pid + the boot it belongs to
+        <agent>.pid          claimPidFile()       — one agent per home: pid, its boot, its build, its supervisor
 
-Task Scheduler\<name>        registerAutostart()  — Windows, per-user logon task, supervised, no elevation
-HKCU\…\Run                   registerAutostart()  — Windows fallback, one shot at logon, nothing watches it
-~/Library/LaunchAgents/      registerAutostart()  — macOS, opt-in per agent, KeepAlive on a non-zero exit
-~/.config/systemd/user/      registerAutostart()  — Linux, Restart=on-failure
-~/.config/autostart/         registerAutostart()  — Linux desktop session, where there is no user manager
+Task Scheduler\<name>        autostart().register — Windows, per-user logon task, supervised, no elevation
+HKCU\…\Run                   autostart().register — Windows fallback, one shot at logon, nothing watches it
+~/Library/LaunchAgents/      autostart().register — macOS, opt-in per agent, KeepAlive on a non-zero exit
+~/.config/systemd/user/      autostart().register — Linux, Restart=on-failure
+~/.config/autostart/         autostart().register — Linux desktop session, where there is no user manager
 
 stdout                       createUi(process)    — the one renderer every agent speaks through
 ```
@@ -48,9 +48,11 @@ This package is those lessons as code, so the fourth agent inherits them by impo
 ## The five pieces
 
 **`home.ts`**: `agentHome(name)` gives `{ dir, configPath }` under `~/.intentic/<name>`; `writeSecretFile`
-writes through a 0700 directory to a 0600 file. Both modes are re-applied on every write, because `mkdir` does
-not tighten a directory that already exists: an agent installed before this floor existed would otherwise keep
-its old permissions forever.
+writes through a 0700 directory to a 0600 file. The directory's mode is re-applied on every write, because `mkdir`
+does not tighten a directory that already exists: an agent installed before this floor existed would otherwise keep
+its old permissions forever. Every write goes through `writeFileAtomic`, which puts the bytes beside the file and
+renames them over it: a reader sees the old file or the new one, never a torn one, which a config reader would take
+for an empty list and write back.
 
 **`launcher.ts`**: `cliLauncher(cliName)` answers how to re-invoke this CLI. The subtlety is the compiled
 binary: `bun build --compile` reports an `argv[1]` inside its own virtual filesystem and re-injects it on every
@@ -58,11 +60,15 @@ launch, so passing it again shifts the command to `argv[2]` where the parser nev
 finds the other half of a Windows install, [`intentic-launch.exe`](../win-launcher), sitting next to the agent's
 own executable.
 
-**`autostart.ts`**: `registerAutostart(spec, launcher, log)` against an `AutostartSpec` the agent declares.
-Every mechanism here supervises what it starts, so every one gets the **foreground** command; on Windows it goes
-through the stub, `intentic-launch.exe --log <log> --wait -- <agent> <foreground args>`. `launchAgent` is
-optional: an agent that has not been exercised on macOS says so and gets a note, rather than a file macOS never
-reads.
+**`autostart.ts`**: `autostart(spec, launcher, log)` against an `AutostartSpec` the agent declares, answering three
+verbs. `register` writes the entry and never starts anything (with `repair`, it only puts back an entry that is
+missing, which is what a running agent calls on itself). `start` starts the agent through its entry — `schtasks /run`,
+`systemctl --user start`, `launchctl bootstrap` or `kickstart` — and answers false where the entry cannot, so the
+caller spawns it instead. `unregister` clears every mechanism's entry, since which one is in force depends on what the
+last registration found. Every mechanism here supervises what it starts, so every one gets the **foreground**
+command; on Windows it goes through the stub, `intentic-launch.exe --log <log> --wait -- <agent> <foreground args>`.
+`launchAgent` is optional: an agent that has not been exercised on macOS says so and gets a note, rather than a file
+macOS never reads.
 
 Supervised is the word that matters, and it is what each mechanism is chosen for. systemd has
 `Restart=on-failure`; launchd gets `KeepAlive: {SuccessfulExit: false}`, which is the same bargain and safe to
@@ -85,11 +91,14 @@ stub is — and it is why the logon task is registered only when the stub is the
 `detachedArgs` in the Run key remains the fallback (a developer running `node dist/cli.js`), unsupervised, and
 registration says out loud that a window will flash.
 
-`registerAutostart` also takes `{ startNow: false }`, for the one caller that is the running agent re-asserting
-its own entry: every mechanism is idempotent, but the two that also *start* would hand that agent a rival, and
-on macOS the restart goes through booting the job out — which is to say, killing the caller.
+Starting through the entry, rather than spawning beside it, is what keeps an agent supervised after a restart: a
+process started outside the logon task is one the task does not know it is running, so the task starts a rival at
+the next watchdog tick and restarts nothing when this one dies. Registration and starting are separate verbs for the
+same reason: a running agent re-asserting its own entry must not be handed a rival, and on macOS a restart goes through
+booting the job out — which is to say, killing the caller.
 
-**`detached.ts`**: `spawnDetached`, `livePid`, `pidFileBody`, `isProcessAlive`. On POSIX the agent is spawned
+**`detached.ts`**: `spawnDetached`, the pidfile (`claimPidFile`, `holdPidFile`, `releasePidFile`, `livePidRecord`),
+`stopProcess`, `isProcessAlive`, and the log roll every supervisor runs before it opens the log (`ROTATE_LOG_SH`). On POSIX the agent is spawned
 `detached` for its own session; on Windows because without it the agent is torn down the moment its parent
 exits — measured on the compiled binary, and the reason "connected in the background (pid N)" was a lie there
 for every release that passed `windowsHide` instead. The two cannot be combined to get both properties
@@ -111,9 +120,9 @@ user their machine is now doing something.
 
 A pidfile lives beside the config, so it **outlives the boot that wrote it**, while the number in it means
 nothing outside that boot's process table: pids restart low and are handed out in roughly the same order every
-time, so a agent's own pid from yesterday is somebody else's transient process this morning. So `pidFileBody`
-writes the pid *and* a stamp naming the boot, and `livePid` ignores any record from a different one without
-probing it. On Linux the stamp is `/proc/sys/kernel/random/boot_id`, exact and unmoved by the clock; elsewhere
+time, so an agent's own pid from yesterday is somebody else's transient process this morning. So the pidfile is a
+JSON record of the pid, a stamp naming the boot, and what only the agent knows about itself (the build it runs and
+who restarts it), and `livePidRecord` ignores any record from a different boot without probing it. On Linux the stamp is `/proc/sys/kernel/random/boot_id`, exact and unmoved by the clock; elsewhere
 it is the boot's epoch by subtraction from the uptime, which libuv takes from `GetTickCount64` on Windows and
 `kern.boottime` on macOS — both keep counting across sleep, so a laptop that suspends goes on answering the same
 boot. That derived form is compared with a two-minute tolerance, because it is anchored to `Date.now()` and a
@@ -125,6 +134,12 @@ pidfile, and on the next boot the watcher probed the pid it used to hold, found 
 wearing it, and refused to start. Refusing is deliberate and so exits 0 — a supervisor must not restart a
 watcher into refusing again every `RestartSec` — which is precisely why `Restart=on-failure` never fired and
 desktop file sync stayed off until somebody went looking.
+
+Claiming is a write, not a check. Reading the file and then writing it let two agents started at the same moment both
+find it empty and both run; `claimPidFile` writes the record, waits a moment and reads it back, so only the last
+writer keeps it and the other is told who holds it. The holder re-asserts it every tick with `holdPidFile` as a lease,
+and `releasePidFile` removes the file only while it still names the caller, so a stopping agent never deletes the
+claim of the one that replaced it.
 
 **`ui.ts`**: `createUi(process)` is the whole of what an agent writes to a person, and the TypeScript twin of
 `ic`'s `_sandbox/ic/src/ui.rs`. One question decides everything: is stdout a terminal. A **pipe** gets the

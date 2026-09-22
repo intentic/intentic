@@ -2278,7 +2278,11 @@
             "waitingFirstLineDevice": "Warten auf die erste Zeile von diesem Gerät…"
         },
         "deviceAgent": {
-            "fetchesNewestAgentOnto": "Holt den neuesten Agenten auf dieses Gerät, installiert ihn und startet seine Schleife neu — den einen Prozess, über den diese Sandbox das Gerät erreicht. Unbedenklich bei einem Agenten, der schon aktuell ist; seine Ordner, Kopplungen und gespiegelten Ports bleiben so oder so unangetastet.",
+            "fetchesNewestAgentOnto": "Bringt diesen ganzen Computer auf den neuesten Agenten — Windows und jede WSL-Distro mit einem Agenten, alle auf einer Version — und startet dabei den Agenten jeder Seite neu. Unbedenklich bei einem Agenten, der schon aktuell ist; Ordner, Kopplungen und gespiegelte Ports bleiben unangetastet.",
+            "oneVersionPerMachine": "Windows und jede WSL-Distro führen ihre eigene Kopie des Agenten aus, und alle gehören auf eine Version. „Agent aktualisieren“ bringt jede Seite auf die neueste davon; eine zurückgebliebene Seite ist eine, deren letztes Update fehlgeschlagen ist.",
+            "publishedForMachine": "Agent {latest} ist veröffentlicht.",
+            "publishedMachineHas": "Agent {latest} ist veröffentlicht; dieser Computer hat {held}.",
+            "sidesRunDifferentAgents": "Seine Seiten laufen mit verschiedenen Agenten: {sides}.",
             "socketDroppedMomentAgo": "Sein Socket ist gerade abgerissen, was genau das ist, was ein Agenten-Neustart tut. Eine frische Schleife wählt sich von selbst wieder ein, und bis dahin lässt sich auf der Maschine nichts ausführen.",
             "updateAgent": "Agent aktualisieren",
             "updateAgentFetchesInstalls": "„Agent aktualisieren“ holt ihn, installiert ihn und startet die Schleife auf diesem Gerät neu.",
@@ -2328,7 +2332,6 @@
             "deviceAloneLosesAccess": "Nur dieses eine Gerät verliert den Zugriff — jedes andere gekoppelte Gerät synchronisiert weiter. Seine Dateisynchronisierung hört auf, und seine gespiegelten Ports fallen innerhalb einer Minute von seinem localhost.",
             "dontMirrorPort": "Nicht spiegeln",
             "environments": "Environments",
-            "fetchesNewestAgentOnto": "Holt den neuesten Agenten der Reihe nach auf jede Umgebung dieses Computers — Windows und jede Distro führen ihre eigene Installation aus, und das ist es, was sie auf dieselbe Version bringt. Unbedenklich auf einer Seite, die schon aktuell ist.",
             "fixAgent": "Mit Agent reparieren",
             "leavePortOffLocalhost": "Diesen Port vom localhost dieses Geräts weglassen. Jeder andere Port, den diese Sandbox bedient, wird weiter gespiegelt.",
             "letGoHint": "Dieses Gerät gibt diese Sandbox frei. Ihre Dateien werden nicht mehr synchronisiert und ihre Ports verschwinden von localhost; der bereits auf dem Gerät liegende Ordner bleibt genau so, wie er ist.",
@@ -2367,8 +2370,7 @@
             "takeSandboxsPortsOff": "Die Ports dieser Sandbox vom localhost dieses Geräts nehmen. Dateien werden weiter synchronisiert.",
             "thisSandbox": "diese Sandbox",
             "unpair": "Entkoppeln",
-            "unpairHeader": "{sandbox} entkoppeln?",
-            "updateAgents": "Update agents"
+            "unpairHeader": "{sandbox} entkoppeln?"
         },
         "deviceRows": {
             "fileSyncing": "Dateisynchronisierung",

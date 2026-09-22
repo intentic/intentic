@@ -6,10 +6,10 @@ import { runPidPath } from "../config.js";
 import { installedBuild } from "../installed.js";
 import { wslEnvironment } from "../wsl.js";
 import { mirrorHeartbeatPath, type Pairing, readState, type SyncState } from "./config.js";
-import { backupSessionName, readSessionState, sessionName } from "./mutagen.js";
+import { backupSessionName, ensureMutagen, readSessionState, sessionName } from "./mutagen.js";
 
 // Everything this agent knows about the device, in one shape fed to `status`, `status --json`, the mirror
-// watcher's post, and the host capability, so they can't drift. No docker scan: enumerating a machine's containers
+// watcher's post, and the device connection's `report` call, so they can't drift. No docker scan: enumerating a machine's containers
 // is the disclosure this design avoids, so containers are no part of a report — they are asked for by name, through
 // the host door's `list_sandboxes`, and land beside the report on the reader's row.
 
@@ -22,11 +22,11 @@ const lastTick = async (): Promise<number | undefined> => {
     return Number.isFinite(stamped) && stamped > 0 ? stamped : undefined;
 };
 
-// Two facts, not one: the agent's own build (from its pidfile note) and the build installed on disk, since a
+// Two facts, not one: the agent's own build (from its pidfile stamp) and the build installed on disk, since a
 // swapped binary leaves a live agent running the old code. `installed` is passed in because it costs a syscall/spawn.
 const agentState = async (installed: string | undefined): Promise<DeviceAgent> => {
     const [resident, lastTickAt] = await Promise.all([livePidRecord(runPidPath), lastTick()]);
-    return { running: resident !== undefined, pid: resident?.pid, build: resident?.note, installed, lastTickAt };
+    return { running: resident !== undefined, pid: resident?.pid, build: resident?.build, installed, lastTickAt };
 };
 
 const pairingReport = (mutagen: string | undefined, pairing: Pairing): DevicePairing => {
@@ -111,3 +111,9 @@ export const scopedReport = (report: DeviceReport, sandboxId: string): DeviceRep
     pairings: report.pairings.filter((pairing) => pairing.sandboxId === sandboxId),
     ports: report.ports.filter((port) => port.sandboxId === sandboxId),
 });
+
+// Mutagen only where a pairing needs it: resolving it downloads it when absent, which a machine syncing nothing never should.
+export const pairedMutagen = async (): Promise<string | undefined> => ((await readState()).pairings.length > 0 ? await ensureMutagen() : undefined);
+
+// The report the device connection's `report` call answers with.
+export const machineReport = async (): Promise<DeviceReport> => await deviceReport(await pairedMutagen());

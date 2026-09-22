@@ -6,7 +6,6 @@ import {
     type HostSummary,
     type DeviceFlowLine,
     type DeviceReport,
-    DeviceReportSchema,
     type DeviceSandbox,
     type DeviceSandboxFlow,
     DeviceSandboxSchema,
@@ -22,12 +21,12 @@ import { approvedPath } from "../environment/environment.js";
 import type { SyncEnrollmentRow } from "../platform/sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
 import { publishRuntimeChange } from "../system/runtime-watch.js";
-import { hostConnections, hostSummaries } from "./host-peer.js";
+import { type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no
-// capability needed) and a `host` capability's pull (adds containers and agent-less machines, never a mounted docker
-// socket). The pull runs the same `intentic-machine status --json` the desktop app spawns, so the two answers cannot
-// drift.
+// capability needed) and a `host` capability's pull (adds containers, never a mounted docker socket). The pull asks the
+// agent on its own connection (`report`), which answers with the same `deviceReport` its `status --json` prints for the
+// desktop app, so the two answers cannot drift.
 
 // How old a served reading may be before re-asking; readers never wait on this, refresh runs behind it.
 const PULL_TTL_MS = 30_000;
@@ -37,8 +36,7 @@ const PULL_TTL_MS = 30_000;
 // a healthy machine look dead the moment its page opens.
 const PULL_SETTLE_MS = 2_000;
 
-// Deadline on one reading; the machine's own budget sits below it, so an overrun surfaces as its own answer.
-const COMMAND_TIMEOUT_MS = 5_000;
+// Deadline on one reading, both halves together; a miss reads as offline.
 const PULL_TIMEOUT_MS = 8_000;
 
 // Ceiling on a management flow; the machine bounds its own work, a cutoff here only ends the watching.
@@ -48,7 +46,7 @@ const FLOW_TIMEOUT_MS = 60 * 60 * 1000;
 const AGENT_FLOW_TIMEOUT_MS = 15 * 60 * 1000;
 
 // One reading, in two halves that arrive independently because they ride two different switches: the machine's
-// description of itself (`status --json`, behind "Run commands") and the containers it holds (`list_sandboxes`, behind
+// description of itself (`report`, behind "Run commands") and the containers it holds (`list_sandboxes`, behind
 // "Manage sandboxes on this device"). No report still means a named gap; `sandboxes` is absent only when nobody could
 // look, so an empty list stays the answer "none there".
 export type PullResult = ({ readonly report: DeviceReport } | { readonly gap: DeviceGap }) & {
@@ -72,34 +70,12 @@ const pulled = new Map<string, PullEntry>();
 // fresh answer.
 export const forgetPull = (id: string): void => void pulled.delete(id);
 
-// run_command answers in prose (exit line plus fenced streams); the report is the last line that parses as a JSON
-// object, since only that line can be one.
-const safeJson = (line: string): unknown => {
+const safeJson = (text: string): unknown => {
     try {
-        return JSON.parse(line);
+        return JSON.parse(text);
     } catch {
         return undefined;
     }
-};
-
-export const reportFrom = (text: string): DeviceReport | undefined => {
-    for (const line of text.split(/\r?\n/).toReversed()) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
-            continue;
-        }
-        // Brace-shaped is not JSON-shaped; a non-parsing candidate is skipped, not thrown on.
-        const parsed = safeJson(trimmed);
-        if (parsed === undefined) {
-            continue;
-        }
-        // The report is the `sync` half of the agent's status envelope; the rest is already known to the daemon.
-        const report = DeviceReportSchema.safeParse((parsed as { sync?: unknown }).sync);
-        if (report.success) {
-            return report.data;
-        }
-    }
-    return undefined;
 };
 
 // Text of an MCP tool result, plus whether the machine refused it; a refusal is a value on this path, not a throw.
@@ -142,29 +118,36 @@ export const sandboxesFromTool = (text: string, refused: boolean): DeviceSandbox
     return rows.success ? rows.data : [];
 };
 
-// Every failure reads as a named gap, not an absence. Status and fleet go out together under one deadline; the status
-// call alone decides no-agent/scope-off, and the fleet answer survives either verdict — a card granting sandbox
-// management and nothing else lists its containers while refusing to describe the machine, and that list is what every
-// "do it out there" button is gated on.
+// FORBIDDEN is the "Run commands" switch, any other refusal an agent without the call; a transport failure throws.
+const describeMachine = async (client: HostClient, signal: AbortSignal): Promise<{ readonly report: DeviceReport } | { readonly gap: DeviceGap }> => {
+    try {
+        return { report: await client.report(undefined, { signal }) };
+    } catch (error) {
+        if (!(error instanceof ORPCError)) {
+            throw error;
+        }
+        return { gap: error.code === "FORBIDDEN" ? "scope-off" : "unreported" };
+    }
+};
+
+// Every failure reads as a named gap, not an absence. Report and fleet go out together under one deadline; the report
+// alone decides the gap, and the fleet answer survives either verdict — a card granting sandbox management and nothing
+// else lists its containers while refusing to describe the machine, and that list is what every "do it out there"
+// button is gated on.
 const pull = async (services: Services, id: string): Promise<PullResult> => {
+    const client = services.hostHub.client(id);
+    if (client === undefined) {
+        return { gap: "offline" };
+    }
     // One deadline over both calls: the reading is what has a budget, not either half of it.
     const signal = AbortSignal.timeout(PULL_TIMEOUT_MS);
-    const [status, fleet] = await Promise.all([
-        callTool(services, id, "run_command", { command: "intentic-machine status --json", timeoutMs: COMMAND_TIMEOUT_MS }, signal),
+    const [described, fleet] = await Promise.all([
+        describeMachine(client, signal),
         callTool(services, id, "list_sandboxes", {}, signal).catch(() => ({ text: "", refused: true })),
     ]);
     // Absent, not empty, when the machine wouldn't answer: "none there" is a reading, and this isn't one.
-    const containers = fleet.refused ? {} : { sandboxes: sandboxesFromTool(fleet.text, false) };
-    if (status.refused) {
-        // A scope refusal is a named value; any other refusal here still reads as "this machine would not answer".
-        return { gap: "scope-off", ...containers };
-    }
-    const report = reportFrom(status.text);
-    if (report === undefined) {
-        return { gap: "no-agent", ...containers };
-    }
     // Report's agent block is left as stated; version rides the row (agentVersion) instead, not merged here.
-    return { report, ...containers };
+    return { ...described, ...(fleet.refused ? {} : { sandboxes: sandboxesFromTool(fleet.text, false) }) };
 };
 
 const gapOf = (result: PullResult): DeviceGap | undefined => ("gap" in result ? result.gap : undefined);

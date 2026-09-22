@@ -3,6 +3,7 @@ import { hostEntryOf } from "@intentic/sandbox-contract";
 import {
     Button,
     ConfirmDialog,
+    DeviceAgentNotes,
     DeviceDetail,
     DeviceRunLog,
     type DeviceSandboxGroup,
@@ -25,7 +26,7 @@ import DeviceEnvironment from "./DeviceEnvironment.vue";
 import DeviceOpFailure from "./runners/DeviceOpFailure.vue";
 import DeviceRunners from "./runners/DeviceRunners.vue";
 import { boardRoute, cardRoute } from "./deviceLinks";
-import { deviceAgentPanel } from "./deviceAgent";
+import { deviceAgentPanel, machineAgent } from "./deviceAgent";
 import { blockAttention, deviceAttention } from "./health/deviceAttention";
 import {
     commandable,
@@ -115,12 +116,18 @@ const listBlock = computed(() =>
 const concernsOf = (row: DeviceRow) => deviceAttention(row, { block: many.value ? undefined : block.value, readAt, canPair: isOwner.value });
 
 // The agent as its own object rather than a version printed under the name: what it serves, what it wants,
-// and the two verbs that change either. Undefined only on a machine with no version and no command door.
-const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest, readAt);
+// and the verbs that change either. Undefined only on a machine with no version and no command door.
+const agentOf = (row: DeviceRow) => deviceAgentPanel(row, latest, readAt, { update: !many.value });
 
-// The environments an agent op can actually be sent to — the same rule the row buttons are drawn from, so the
-// machine-wide control offers exactly what those buttons would.
-const updatable = computed(() => environments.value.filter((environment) => (agentOf(environment)?.actions.length ?? 0) > 0));
+// The machine's one Update, and what only the whole machine can say: its sides disagreeing, or a newer release.
+const shared = computed(() => machineAgent(machine, latest));
+
+const updateMachine = (): void => {
+    const door = shared.value.door;
+    if (door !== undefined) {
+        void ops.runAgent(door, `upgrade`);
+    }
+};
 
 // One verdict for the whole PC, so the masthead of a many-sided machine carries a state instead of listing the
 // environment names that are the section directly beneath it.
@@ -259,20 +266,22 @@ const confirmRemoval = (): void => {
             concerns, since Windows and a distro on it are separate installs that happen to share the hardware.
         -->
         <RowGroup v-if="many" :label="t(`sandbox.devicePage.environments`)">
-            <!-- One press for the computer, because one card is one computer: each side holds its own agent binary and
-                 is updated in turn, its own log under its own row. Offered only where there is more than one side to
-                 bring level; a single reachable environment has its row's own button and needs no wider word. -->
-            <template v-if="updatable.length > 1" #actions>
+            <!-- One press for the computer, which brings every side to one version itself; its log lands under the door's row. -->
+            <template v-if="shared.door" #actions>
                 <Button
                     size="small"
                     severity="secondary"
-                    :label="t(`sandbox.devicePage.updateAgents`)"
-                    :loading="ops.agentEveryOp.value === `upgrade`"
+                    :label="shared.action.label"
+                    :loading="ops.agentOp(shared.door) === `upgrade`"
                     :disabled="ops.working.value"
-                    v-tooltip.top="t(`sandbox.devicePage.fetchesNewestAgentOnto`)"
-                    @click="void ops.runAgentEvery(updatable, `upgrade`)"
+                    v-tooltip.top="shared.action.hint"
+                    @click="updateMachine"
                 />
             </template>
+
+            <RowNote v-if="shared.notes.length > 0" variant="block">
+                <DeviceAgentNotes :notes="shared.notes" />
+            </RowNote>
 
             <DeviceEnvironment
                 v-for="environment in environments"

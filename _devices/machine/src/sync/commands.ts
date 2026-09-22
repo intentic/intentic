@@ -8,8 +8,9 @@ import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agen
 import { sandboxIdFromUrl } from "@intentic/sandbox-contract";
 import { buildCommand, buildRouteMap, type CommandContext } from "@stricli/core";
 import { resolveDaemonBase } from "../daemon-base.js";
-import { prepareSetup } from "../install.js";
-import { machineLauncher, readResidentPid, reconcileResidency, startResidentIfStopped } from "../resident.js";
+import { completeSetup, prepareSetup } from "../install.js";
+import { ensureResident, readResidentPid } from "../resident.js";
+import { machineLauncher } from "../supervision.js";
 import {
     type Pairing,
     readState,
@@ -242,12 +243,10 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // The ssh fragment is regenerated from the whole pairing list, so every paired sandbox keeps its alias.
     await writeManagedSshConfig(pairingSshConfig(pairings));
 
-    // The transport comes up before anything dials it: the sandbox's sshd is reached through a listener the
-    // resident agent holds (tunnel.ts), so the agent is (re)started here, before the probe and before Mutagen, and
-    // the restart also retires a agent still running the binary this run just replaced. Not fatal on timeout:
-    // Mutagen retries a session forever and the agent keeps trying to bind.
+    // The transport is a listener the resident agent holds (tunnel.ts), bound on its next pass; not fatal on timeout.
     ui.step("sync-starting", "starting the sync engine…");
-    await reconcileResidency(out);
+    await ensureResident(out);
+    await completeSetup(out);
     const port = syncSshPort(sandboxId);
     if (!(await tunnelReady(port, TUNNEL_READY_MS))) {
         out(`note: the sync transport for ${sandboxId} isn't listening on 127.0.0.1:${port} yet, syncing starts as soon as it is.`);
@@ -589,14 +588,14 @@ export const syncUninstall = async (out: Log, sandbox?: string): Promise<void> =
         // sandbox, which is the connection an unpair asked for from a sandbox travels over. Mutagen's daemon is left
         // alone too.
         await writeManagedSshConfig(pairingSshConfig(remaining));
-        await startResidentIfStopped(out);
+        await ensureResident(out);
         out(`Still syncing ${plural(remaining.length, "sandbox")}: ${remaining.map((pairing) => pairing.sandboxId).join(", ")}`);
         return;
     }
 
-    // Nothing left to sync: sync's residue goes (forwards, transport, ssh include); reconcileResidency retires the
-    // resident agent with the login entry only when this machine holds nothing at all.
-    await reconcileResidency(out);
+    // Nothing left to sync: sync's residue goes (forwards, transport, ssh include); the agent retires only when this
+    // environment holds nothing at all.
+    await ensureResident(out);
     await teardownAllForwards(mutagen, out);
     await removeManagedSshConfig();
     // Our downloaded Mutagen copy exists only for this agent, so retire its daemon completely. A system-installed

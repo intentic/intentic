@@ -1,6 +1,6 @@
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename } from "node:fs/promises";
 import { join } from "node:path";
-import { writeSecretFile } from "@intentic/local-agent";
+import { writeFileAtomic, writeSecretFile } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { LONG_OUTAGE_ATTEMPTS, type PeerLinkState, type PeerOutage } from "@intentic/sandbox-contract/peer-dial";
 import { baseDir } from "../config.js";
@@ -32,11 +32,10 @@ interface LinkStateStamp {
 // Best-effort, like the sync half's heartbeat: a stamp that fails to write costs one `status` its live answer,
 // and must never be able to take a connection down with it.
 export const stampLinkStates = async (links: Readonly<Record<string, LinkReading>>): Promise<void> => {
-    await writeFile(linkStatePath, JSON.stringify({ at: Date.now(), links } satisfies LinkStateStamp)).catch(() => undefined);
+    await writeFileAtomic(linkStatePath, JSON.stringify({ at: Date.now(), links } satisfies LinkStateStamp)).catch(() => undefined);
 };
 
-// A torn read is a writer mid-stamp, not a fault: unlike the config beside it, this file is rewritten every few
-// seconds and the next reader gets a whole one.
+// Anything but a whole stamp is no answer; the next stamp is seconds away.
 const parseStamp = (raw: string | undefined): LinkStateStamp | undefined => {
     try {
         const parsed = raw === undefined ? undefined : (JSON.parse(raw) as Partial<LinkStateStamp>);
@@ -76,8 +75,6 @@ export interface HostLink {
 // first.
 export interface DeviceConfigFile {
     readonly links: readonly HostLink[];
-    // Whether sandbox updates download in the background (auto-prepare.ts); absent means on.
-    readonly prepareUpdates?: boolean;
 }
 
 // The config as written. A missing file is an EMPTY link list, not an error: "nothing has ever been connected here" is
@@ -98,13 +95,14 @@ export const writeDeviceConfig = async (config: DeviceConfigFile): Promise<void>
     await writeSecretFile(configPath, baseDir, JSON.stringify(config, undefined, 2));
 
 // Read-modify-write for every writer below, so none of them rebuild the file from `links` alone and drop another field.
-// Every mutation writes the whole file back, so what this reads decides what survives: content this build cannot PARSE
-// is set aside and started over, and anything else (a lock, a permission, a disk) propagates untouched. Collapsing the
-// two is what let one unreadable moment replace a machine's links with the absence of them — `rememberScopes` runs on
-// every connect and writes whatever it read.
-const updateDeviceConfig = async (mutate: (config: DeviceConfigFile) => DeviceConfigFile): Promise<DeviceConfigFile> => {
+// A file this build cannot parse propagates: every mutation writes back what it read, and reading nothing wipes links.
+// Only a person re-adding a link (`recover`) may set such a file aside as `.corrupt` and start the list again.
+const updateDeviceConfig = async (
+    mutate: (config: DeviceConfigFile) => DeviceConfigFile,
+    { recover = false }: { readonly recover?: boolean } = {},
+): Promise<DeviceConfigFile> => {
     const config = await readDeviceConfig().catch(async (error: unknown) => {
-        if (!(error instanceof SyntaxError)) {
+        if (!recover || !(error instanceof SyntaxError)) {
             throw error;
         }
         await rename(configPath, `${configPath}.corrupt`).catch(() => undefined);
@@ -122,10 +120,13 @@ export const readLinks = async (): Promise<readonly HostLink[]> => (await readDe
 // Adds a sandbox, keeping the others; replaces rather than duplicates an existing one (a token rotation or
 // re-enrollment). Keyed on the url, the link's one sandbox-chosen identity field.
 export const upsertLink = async (link: HostLink): Promise<readonly HostLink[]> => {
-    const updated = await updateDeviceConfig((config) => ({
-        ...config,
-        links: [...config.links.filter((existing) => existing.sandboxUrl !== link.sandboxUrl), link],
-    }));
+    const updated = await updateDeviceConfig(
+        (config) => ({
+            ...config,
+            links: [...config.links.filter((existing) => existing.sandboxUrl !== link.sandboxUrl), link],
+        }),
+        { recover: true },
+    );
     return updated.links;
 };
 
@@ -146,12 +147,4 @@ export const rememberScopes = async (sandboxUrl: string, scopes: DeviceScopes): 
         const link = config.links[at];
         return link === undefined ? config : { ...config, links: config.links.with(at, { ...link, scopes }) };
     }).catch(() => undefined);
-};
-
-// The background-download switch; absent or unreadable reads as on. A preference, not a credential: the cost of
-// guessing it is one download, so this is the one reader here that may.
-export const readPrepareUpdates = async (): Promise<boolean> => (await readDeviceConfig().catch(() => undefined))?.prepareUpdates !== false;
-
-export const writePrepareUpdates = async (on: boolean): Promise<void> => {
-    await updateDeviceConfig((config) => ({ ...config, prepareUpdates: on }));
 };

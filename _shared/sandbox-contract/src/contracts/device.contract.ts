@@ -1,7 +1,7 @@
 import { oc } from "@orpc/contract";
 import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
-import { DeviceAgentFlowSchema, DeviceFlowLineSchema, DeviceSandboxFlowSchema } from "../schemas/devices.js";
+import { DeviceAgentFlowSchema, DeviceFlowLineSchema, DeviceReportSchema, DeviceSandboxFlowSchema } from "../schemas/devices.js";
 import { DeviceScopesSchema } from "../schemas/capabilities.js";
 import { DeviceFactsSchema } from "../schemas/hosts.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -12,6 +12,8 @@ import { OkSchema } from "../schemas/shared.js";
 export const deviceContract = {
     // Device facts, refreshed on connect and on demand; the agent's skill pack is written against this shape.
     describe: oc.output(DeviceFactsSchema),
+    // The machine's folders, ports and agent health, answered by the agent itself; refused (FORBIDDEN) with "Run commands" off.
+    report: oc.output(DeviceReportSchema),
     // Pushed on connect and on edit; the machine enforces the grant, nothing on the sandbox side checks a scope.
     setScopes: oc.input(DeviceScopesSchema).output(OkSchema),
     // Daemon-driven liveness; doubles as keepalive against an idle tunnel and the gone-vs-quiet probe.

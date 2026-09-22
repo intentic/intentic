@@ -1,5 +1,5 @@
 import { installScriptUrl } from "@intentic/constants";
-import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf, WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { callTool } from "./device-reports.js";
 
@@ -11,9 +11,6 @@ import { callTool } from "./device-reports.js";
 // Done from here rather than by the agent: the pairing is a credential only the daemon may mint, and the crossing is
 // already a `run_command` argument the machine turns into argv (`wsl.exe --exec sh -lc`). Nothing new is asked of the
 // agent beyond the release that took `in`.
-
-// Docker Desktop's own distros, which `wsl -l -q` lists like any other and which hold nobody's checkout.
-const SYSTEM_DISTROS: ReadonlySet<string> = new Set(["docker-desktop", "docker-desktop-data"]);
 
 // Long enough for a download and a first connect on somebody's laptop, short of the hub's own call ceiling.
 const INSTALL_TIMEOUT_MS = 4 * 60_000;
@@ -30,7 +27,7 @@ export const forgetBootstrap = (connection?: string): void => void (connection =
 // connected side's own facts: Windows lists its distros, and a distro implies the Windows side it runs on.
 export const bootstrapTargets = (environment: string, facts: DeviceFacts): string[] => {
     if (environment === HOST_NATIVE_ENVIRONMENT) {
-        return (facts.wslDistros ?? []).filter((distro) => !SYSTEM_DISTROS.has(distro)).map((distro) => `wsl:${distro}`);
+        return (facts.wslDistros ?? []).filter((distro) => !WSL_SYSTEM_DISTROS.has(distro)).map((distro) => `wsl:${distro}`);
     }
     // A distro can only be reached from Windows and can only reach Windows, so its sibling set is that one side.
     return environment.startsWith("wsl:") ? [HOST_NATIVE_ENVIRONMENT] : [];

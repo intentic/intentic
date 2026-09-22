@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import { WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract";
 
 // Whether this agent is running inside a WSL distro rather than on the machine itself, and which distro. WSL hands a
 // distro the Windows computer's name, so `hostname` alone makes Windows and every distro on it look like one machine
@@ -17,6 +18,15 @@ const WSL_KERNEL = /microsoft/i;
 
 const exec = promisify(execFile);
 
+// `wslpath -w /` answers `\\wsl.localhost\archlinux\` (`\\wsl$\archlinux\` on older builds): the second component is
+// the registration name. Anything else — interop off, no wslpath, a drive path — names nothing.
+const registeredFrom = (wslRoot: string | undefined): string =>
+    /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)/.exec((wslRoot ?? "").trim())?.[1] ?? "";
+
+// The registration name alone, from the two sources that carry it; what `wsl.exe -d` needs, so never a pretty one.
+export const registeredNameFrom = (distroEnv: string | undefined, wslRoot: string | undefined): string | undefined =>
+    [registeredFrom(wslRoot), (distroEnv ?? "").trim()].find((name) => name !== "");
+
 // Pure over what was read, so the rules are testable without a filesystem. Three sources, best first: the
 // registration name WSL itself reports through `wslpath`, then `WSL_DISTRO_NAME`, which is the same string but only
 // where the launcher's environment survived, then what the distro calls itself — a last resort that is NOT the
@@ -27,17 +37,12 @@ export const wslFrom = (
     osRelease: string | undefined,
     wslRoot?: string | undefined,
 ): { readonly distro: string } | undefined => {
-    const named = [registeredFrom(wslRoot), (distroEnv ?? "").trim()].find((name) => name !== "") ?? "";
+    const named = registeredNameFrom(distroEnv, wslRoot) ?? "";
     if (named === "" && !WSL_KERNEL.test(procVersion ?? "")) {
         return undefined;
     }
     return { distro: named === "" ? nameFrom(osRelease) : named };
 };
-
-// `wslpath -w /` answers `\\wsl.localhost\archlinux\` (`\\wsl$\archlinux\` on older builds): the second component is
-// the registration name. Anything else — interop off, no wslpath, a drive path — names nothing.
-const registeredFrom = (wslRoot: string | undefined): string =>
-    /^\\\\wsl(?:\.localhost|\$)\\([^\\]+)/.exec((wslRoot ?? "").trim())?.[1] ?? "";
 
 // `NAME="Arch Linux"` out of /etc/os-release, quotes stripped. Empty for anything that doesn't have the line.
 const nameFrom = (osRelease: string | undefined): string => {
@@ -59,4 +64,32 @@ export const wslEnvironment = async (): Promise<{ readonly distro: string } | un
     const [procVersion, osRelease] = await Promise.all([readable("/proc/version"), readable("/etc/os-release")]);
     const root = WSL_KERNEL.test(procVersion ?? "") ? await wslRoot() : undefined;
     return wslFrom(procVersion, process.env["WSL_DISTRO_NAME"], osRelease, root);
+};
+
+// This distro's registration name, or undefined outside WSL or where WSL will not say it: a guess would be refused by wsl.exe.
+export const registeredDistro = async (): Promise<string | undefined> => {
+    if (!WSL_KERNEL.test((await readable("/proc/version")) ?? "")) {
+        return undefined;
+    }
+    return registeredNameFrom(process.env["WSL_DISTRO_NAME"], await wslRoot());
+};
+
+// The distros `wsl -l -q` lists, one per line. Older wsl.exe builds print UTF-16 whatever the console is set to, which
+// arrives through a UTF-8 decode as every other byte NUL; stripping them is what turns that back into names.
+export const distrosFrom = (stdout: string): string[] =>
+    stdout
+        .replaceAll("\0", "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line !== "");
+
+// The user's own distros as this side of the PC sees them (Windows, or a distro through interop); undefined when WSL
+// cannot be asked, so a failed listing is never read as "there are none".
+export const listDistros = async ({ running = false }: { readonly running?: boolean } = {}): Promise<string[] | undefined> => {
+    const answer = await exec("wsl.exe", ["-l", "-q", ...(running ? ["--running"] : [])], {
+        timeout: 5_000,
+        windowsHide: true,
+        env: { ...process.env, WSL_UTF8: "1" },
+    }).catch(() => undefined);
+    return answer === undefined ? undefined : distrosFrom(answer.stdout).filter((distro) => !WSL_SYSTEM_DISTROS.has(distro));
 };

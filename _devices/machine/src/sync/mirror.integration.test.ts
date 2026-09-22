@@ -23,12 +23,12 @@ const {
     retireMirroredPort,
     retirePairingMirror,
     shouldAutoPauseFileSync,
-    signalExitCode,
     strandedForwards,
     SyncAuthError,
 } = await import("./mirror.js");
 const { readState, upsertPairing } = await import("./config.js");
-const { readResidentPid, runForeground, stopResident } = await import("../resident.js");
+const { readResidentPid, runForeground, signalExitCode } = await import("../resident.js");
+const { stopResident } = await import("../supervision.js");
 const { forwardSessionName, mutagenForwardArgs } = await import("./mutagen.js");
 // setup() creates ~/.intentic/machine on write; the pidfile test writes there directly, so make it first.
 await mkdir(dirname(runPidPath), { recursive: true });
@@ -249,7 +249,7 @@ describe("reconcileForwards (minimal-touch)", () => {
 
 describe("readResidentPid", () => {
     it("returns our own pid as alive and rejects a non-numeric pidfile", async () => {
-        await writeFile(runPidPath, await pidFileBody());
+        await writeFile(runPidPath, await pidFileBody({ pid: process.pid }));
         await expect(readResidentPid()).resolves.toBe(process.pid);
         await writeFile(runPidPath, "not-a-pid");
         await expect(readResidentPid()).resolves.toBeUndefined();
@@ -272,7 +272,7 @@ describe("runForeground single-holder guard", () => {
         if (pid === undefined) {
             throw new Error("the stand-in agent didn't start");
         }
-        const held = await pidFileBody(pid);
+        const held = await pidFileBody({ pid });
         try {
             await writeFile(runPidPath, held);
             const said: string[] = [];
@@ -299,7 +299,7 @@ describe("runForeground single-holder guard", () => {
             throw new Error("the stand-in agent didn't start");
         }
         try {
-            await writeFile(runPidPath, `${pid} id:0f9a1c3e-0000-4000-8000-000000000000`);
+            await writeFile(runPidPath, JSON.stringify({ pid, boot: "id:0f9a1c3e-0000-4000-8000-000000000000" }));
 
             expect(await readResidentPid()).toBeUndefined();
         } finally {
@@ -320,6 +320,8 @@ describe("signalExitCode", () => {
     it("uses 128 + the signal number", () => {
         expect(signalExitCode("SIGTERM")).toBe(128 + 15);
         expect(signalExitCode("SIGINT")).toBe(128 + 2);
+        // The Windows side supervising a distro reads SIGHUP (its wsl.exe session ending) as a stop, not a crash.
+        expect(signalExitCode("SIGHUP")).toBe(128 + 1);
     });
 });
 
@@ -340,7 +342,7 @@ describe("stopResident", () => {
         // Waits for the handler to be installed: signalling a still-booting process kills it outright, silently turning
         // this into a test that passes either way.
         await new Promise((ready) => resident.stdout?.once("data", ready));
-        await writeFile(runPidPath, await pidFileBody(pid));
+        await writeFile(runPidPath, await pidFileBody({ pid }));
 
         await expect(stopResident()).resolves.toBe(pid);
 

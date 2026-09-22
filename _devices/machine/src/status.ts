@@ -5,10 +5,12 @@ import { buildCommand, type CommandContext } from "@stricli/core";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
 import { auditPath, readLinks, readLinkStates } from "./device/config.js";
 import { runLogPath } from "./config.js";
-import { readState } from "./sync/config.js";
+import { childrenOf, readMachineConfig } from "./environments/machine.js";
 import { readResidentPid } from "./resident.js";
-import { ensureMutagen, existingSyncSessions, runMutagen, syncSessionNames } from "./sync/mutagen.js";
-import { deviceReport } from "./sync/report.js";
+import { readResident } from "./supervision.js";
+import { registeredDistro } from "./wsl.js";
+import { existingSyncSessions, runMutagen, syncSessionNames } from "./sync/mutagen.js";
+import { deviceReport, pairedMutagen } from "./sync/report.js";
 import { MACHINE_VERSION } from "./version.js";
 
 // What this machine's agent is doing, both halves in one answer: "is my machine connected" and "is my folder
@@ -216,6 +218,16 @@ export const buildSkewLine = (report: DeviceReport): string | undefined => {
     return `${which} — the agent keeps the build it started with. Restart it with \`intentic-machine run --stop\` then \`intentic-machine run\`.`;
 };
 
+// Where this environment sits in its PC, said beside the agent it describes: who restarts it, and what it keeps running.
+export const machineLine = (distro: string | undefined, supervisor: string | undefined, children: readonly string[]): string | undefined => {
+    if (distro !== undefined) {
+        return supervisor === "windows"
+            ? `Machine: the WSL distro ${distro}, kept running and upgraded together with this PC's Windows side.`
+            : `Machine: the WSL distro ${distro}, running on its own: no agent on this PC's Windows side keeps it up.`;
+    }
+    return children.length === 0 ? undefined : `Machine: this PC's Windows side, keeping ${children.join(", ")} running and upgraded to the same release.`;
+};
+
 /* ONE LINK'S LINE, and the word in it that was not earned. */
 export const linkLine = (link: StatusLink): string => {
     switch (link.state) {
@@ -327,11 +339,7 @@ export const status = buildCommand<StatusFlags>({
     },
     async func(this: CommandContext, flags: StatusFlags) {
         const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        // Mutagen is resolved only when a pairing needs it: ensureMutagen DOWNLOADS it when absent, and a read-only
-        // status on a machine that syncs nothing was fetching a 40 MB binary and starting a daemon to report zero
-        // sessions. deviceReport(undefined) answers for everything except the session reads.
-        const paired = (await readState()).pairings.length > 0;
-        const mutagen = paired ? await ensureMutagen() : undefined;
+        const mutagen = await pairedMutagen();
         const report = await deviceStatus(mutagen);
         if (flags.json) {
             out(JSON.stringify(report));
@@ -351,6 +359,11 @@ export const status = buildCommand<StatusFlags>({
         // The agent's liveness is the whole of sync's liveness, not just mirroring's: it holds the SSH transport every
         // session rides (sync/tunnel.ts). Said once, here, where the version it is running is also stated.
         out(agentLine(report.sync.agent, Date.now()));
+        const [distro, held, machine] = await Promise.all([registeredDistro(), readResident(), readMachineConfig().catch(() => ({}))]);
+        const where = machineLine(distro, held?.supervisor, childrenOf(machine));
+        if (where !== undefined) {
+            out(where);
+        }
         const skew = buildSkewLine(report.sync);
         if (skew !== undefined) {
             out(skew);

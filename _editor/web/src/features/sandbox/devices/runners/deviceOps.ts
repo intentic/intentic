@@ -116,7 +116,7 @@ const SYNC_WORKING: Record<SyncCommand, string> = {
 };
 
 const AGENT_WORKING: Record<DeviceAgentOp, string> = {
-    upgrade: `Updating a device's agent`,
+    upgrade: `Updating a machine's agents`,
     restart: `Restarting a device's agent`,
     "forget-unreachable": `Dropping a device's dead links`,
 };
@@ -232,21 +232,14 @@ export interface DeviceOps {
     readonly confirmingUnpair: Ref<{ environment: DeviceRow; group: DeviceSandboxGroup } | undefined>;
     readonly confirmUnpair: () => void;
 
-    // One environment's agent and its two ops.
+    // One agent op, sent through this environment's door. An update moves every side of the machine from there.
     readonly runAgent: (environment: DeviceRow, op: DeviceAgentOp) => Promise<void>;
-    // The same op on every environment named, one after another: each side is its own install with its own binary, so
-    // "update this computer" is several updates rather than one that fans out. A refusal on one is filed under that
-    // row and the rest still run.
-    readonly runAgentEvery: (environments: readonly DeviceRow[], op: DeviceAgentOp) => Promise<void>;
-    /** Which op is running across the machine, for the control that started it; per-row spinners stay their own. */
-    readonly agentEveryOp: ComputedRef<DeviceAgentOp | undefined>;
     /** Which of this environment's ops is in flight; a row has one thing to say. */
     readonly agentOp: (environment: DeviceRow) => DeviceAgentOp | undefined;
     readonly agentBusy: (environment: DeviceRow) => boolean;
     readonly agentLines: (environment: DeviceRow) => readonly string[];
     readonly agentWaiting: (environment: DeviceRow) => string | undefined;
-    // Each side's own answer, kept per environment rather than in the page's one slot: a press that asks two machines
-    // gets two answers, and either can be a refusal.
+    // Per environment, not the page's one slot, so a Restart on one side and an Update through another keep theirs.
     readonly agentFailure: (environment: DeviceRow) => OpFailure | undefined;
     readonly agentOutcome: (environment: DeviceRow) => string | undefined;
 
@@ -283,20 +276,10 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     const syncBusy = ref<{ key: string; command: SyncCommand; port: number | undefined } | undefined>();
     // The agent op in flight and whose agent it is, so the log lands under that environment's row.
     const agentOp = ref<{ key: string; op: DeviceAgentOp } | undefined>();
-    // The op running across the whole machine, for the control that started it; the per-row spinner is `agentOp`.
-    const agentEvery = ref<DeviceAgentOp | undefined>();
     const revoking = ref(false);
     const removing = ref(false);
-    // `agentEvery` is read too, not just the flow in flight: between two environments of one machine nothing is on the
-    // wire for an instant, and the page's buttons must not come back to life inside it.
     const working = computed(
-        () =>
-            busy.value !== undefined ||
-            syncBusy.value !== undefined ||
-            agentOp.value !== undefined ||
-            agentEvery.value !== undefined ||
-            revoking.value ||
-            removing.value,
+        () => busy.value !== undefined || syncBusy.value !== undefined || agentOp.value !== undefined || revoking.value || removing.value,
     );
 
     const failure = ref<OpFailure | undefined>();
@@ -630,31 +613,35 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
     };
 
     // Whether an environment's agent is between "we asked" and "its version moved"; survives the call ending,
-    // since the call ending is not the answer. Keyed by agent, and a record rather than one slot: a machine-wide
-    // update leaves every side it has already asked waiting while it works through the rest.
+    // since the call ending is not the answer. Keyed by agent, and a record rather than one slot: an update sent
+    // through one door moves every side of the machine, and each side waits for its own version.
     const waiting = ref<Record<string, string>>({});
     const agentLog = ref<Record<string, string[]>>({});
-    // An agent's answer is its environment's, not the page's: one press can ask several sides, and the shared slots
-    // beside them hold one answer each, so two machines refusing would leave the first row silent.
+    // Keyed by the door's environment: a Restart on one side must not wipe what an Update through another said.
     const agentFailed = ref<Record<string, OpFailure>>({});
     const agentSaid = ref<Record<string, string>>({});
 
-    const withoutKey = <T>(held: Record<string, T>, key: string): Record<string, T> =>
-        Object.fromEntries(Object.entries(held).filter(([held_key]) => held_key !== key));
+    const without = <T>(held: Record<string, T>, keys: readonly string[]): Record<string, T> =>
+        Object.fromEntries(Object.entries(held).filter(([heldKey]) => !keys.includes(heldKey)));
 
-    // One environment's agent flow, with nothing cleared but this environment's own last answer: whatever the previous
-    // side of this machine said is still on screen under its row, and this one's lands under its.
-    const agentFlow = async (environment: DeviceRow, op: DeviceAgentOp): Promise<void> => {
+    // An update moves every side of the machine from whichever door it went through; the other ops, that door's alone.
+    const movedBy = (environment: DeviceRow, op: DeviceAgentOp): readonly string[] =>
+        (op === `upgrade` ? machine().environments.filter((side) => side.device.hostId !== undefined) : [environment]).map(agentKey);
+
+    // Clears only this row's own last answer: the page's shared slots belong to its other controls.
+    const runAgent = async (environment: DeviceRow, op: DeviceAgentOp): Promise<void> => {
         const hostId = environment.device.hostId;
-        if (hostId === undefined) {
+        if (hostId === undefined || working.value) {
             return;
         }
         const key = agentKey(environment);
+        const moved = movedBy(environment, op);
+        const endMark = hubWork.begin(`${AGENT_WORKING[op]} on ${machine().label}`);
         agentOp.value = { key, op };
         agentLog.value = { ...agentLog.value, [key]: [] };
-        agentFailed.value = withoutKey(agentFailed.value, key);
-        agentSaid.value = withoutKey(agentSaid.value, key);
-        waiting.value = { ...waiting.value, [key]: AGENT_ASKED[op] };
+        agentFailed.value = without(agentFailed.value, [key]);
+        agentSaid.value = without(agentSaid.value, [key]);
+        waiting.value = { ...waiting.value, ...Object.fromEntries(moved.map((side) => [side, AGENT_ASKED[op]])) };
         try {
             const { message } = await runDeviceAgentFlow(hostId, op, {
                 onLine: (line) => (agentLog.value = { ...agentLog.value, [key]: [...(agentLog.value[key] ?? []), line] }),
@@ -664,54 +651,21 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
             // is the one being replaced and nothing comes back but a version, later.
             if (message !== undefined) {
                 agentSaid.value = { ...agentSaid.value, [key]: message };
-                waiting.value = withoutKey(waiting.value, key);
+                waiting.value = without(waiting.value, moved);
             }
         } catch (error) {
             // A refusal, not a lost connection: the client only throws for a frame the device actually sent.
-            // The waiting note is dropped, since nothing is on its way back.
+            // The waiting notes are dropped, since nothing is on its way back.
             agentFailed.value = {
                 ...agentFailed.value,
                 [key]: { key, notice: noticeFrom(error, `That device wouldn't update its agent.`), command: agentFallback(op) },
             };
-            waiting.value = withoutKey(waiting.value, key);
+            waiting.value = without(waiting.value, moved);
         } finally {
             agentOp.value = undefined;
+            endMark();
             // The version is the answer, so ask for it; the tab's own poll picks it up as the loop comes back.
             refetch();
-        }
-    };
-
-    // The page's shared slots are left alone here: an agent's answer lands under its own row now, so clearing them
-    // would only wipe what some other control on this page said.
-    const runAgent = async (environment: DeviceRow, op: DeviceAgentOp): Promise<void> => {
-        if (environment.device.hostId === undefined || working.value) {
-            return;
-        }
-        const endMark = hubWork.begin(AGENT_WORKING[op]);
-        try {
-            await agentFlow(environment, op);
-        } finally {
-            endMark();
-        }
-    };
-
-    // ONE AFTER ANOTHER, NOT AT ONCE. Each flow ends by taking down the socket carrying it, and the refetch behind it
-    // is what the next row's own state is read from; two in flight would race that read. A side that refuses is left
-    // saying so under its row while the rest carry on — they are separate installs, and one of them being current or
-    // locked down is no reason to leave the others behind.
-    const runAgentEvery = async (environments: readonly DeviceRow[], op: DeviceAgentOp): Promise<void> => {
-        if (working.value) {
-            return;
-        }
-        agentEvery.value = op;
-        const endMark = hubWork.begin(`${AGENT_WORKING[op]} on ${machine().label}`);
-        try {
-            for (const environment of environments) {
-                await agentFlow(environment, op);
-            }
-        } finally {
-            agentEvery.value = undefined;
-            endMark();
         }
     };
 
@@ -797,8 +751,6 @@ export function useDeviceOps(machine: () => MachineRow, refetch: () => void): De
         confirmingUnpair,
         confirmUnpair,
         runAgent,
-        runAgentEvery,
-        agentEveryOp: computed(() => agentEvery.value),
         agentOp: (environment) => (agentOp.value?.key === agentKey(environment) ? agentOp.value.op : undefined),
         agentBusy: (environment) => agentOp.value?.key === agentKey(environment),
         agentLines: (environment) => agentLog.value[agentKey(environment)] ?? [],

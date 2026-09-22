@@ -116,7 +116,8 @@ const below = computed(() => stoppedSync.value !== undefined || concerns.length 
             <StatusBadge :variant="deviceTone(device, readAt)" size="xs" :dot="true" :label="deviceState(device, readAt)" class="shrink-0" />
         </template>
 
-        <!-- The agent's verbs, per environment: each runs its own process on its own side of the machine. -->
+        <!-- The agent's verbs through this environment's door: Restart for its own process, and Update only where this
+             row is the whole machine, since an update moves every side and a many-sided page draws it once. -->
         <template v-if="(panel?.actions.length ?? 0) > 0" #control>
             <Button
                 v-for="action in panel?.actions"

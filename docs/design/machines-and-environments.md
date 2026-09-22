@@ -56,9 +56,9 @@ one of them says `wsl:<distro>` are one PC by construction. Two rows with one ho
 machines that happen to be named alike (a laptop and the desktop that replaced it), and folding them would put one
 machine's buttons on the other's row — the fault the fold existed to avoid.
 
-The fact has to arrive at connect time. It used to ride only the sync report, which is `intentic-machine status
---json` behind "Run commands"; a card with that switch off could never say which environment it was, and the daemon's
-fold read that silence as agreement. `DeviceFacts` carries `hostname` and `wsl` now, and an agent old enough to send
+The fact has to arrive at connect time. It used to ride only the machine's report, which is behind "Run commands"; a
+card with that switch off could never say which environment it was, and the daemon's fold read that silence as
+agreement. `DeviceFacts` carries `hostname` and `wsl` now, and an agent old enough to send
 neither says nothing rather than something false.
 
 ## 2b. One install, and where sync lands
@@ -88,17 +88,41 @@ dev reload, `sh` lines that `cd` into the checkout — through the environment t
 reached directly where its own card is connected and by crossing from the Windows side where it is not. The first
 open door is as often the Windows one, which answers a `sh` line with a parse error.
 
-Each environment's row carries its own agent's two verbs, because each side is a separate install of the binary: a
-distro can sit several releases behind the Windows install hosting it and nothing else on the machine says so. Above
-them the group carries one **Update all agents**, which runs the upgrade on every reachable side in turn — one press,
-since the owner connected a computer; in turn rather than at once, since each flow ends by taking down the socket
-carrying it and the read behind it is what the next side's state comes from. A side that refuses is left saying so
-under its own row and the rest still run.
+Each environment's row carries its own agent's **Restart**, because each side runs its own process. **Update** is the
+machine's, drawn once over its environments: an update moves every side to one release (§3b), so a button per side
+would promise something no side can do alone. It goes through the Windows door when that side can hear it and through
+a distro otherwise, and its log lands under the row it went through. A machine whose sides report different builds
+says so once, over the rows, with each side's build.
 
 The Windows side's distro listing is what makes the second
 environment discoverable from the first: a distro not yet connected is a Connect link into the Linux card's add form,
 named `<pc>-wsl-<distro>` so the two ids read as one PC everywhere, and that name is what flips the Linux connect
 dialog to its PowerShell form.
+
+## 3b. One version, one supervisor tree
+
+Two agents on one computer are still one computer, and the things that follow from that are rules in the agent, not
+habits of whoever updates it ([_devices/machine](../../_devices/machine), "One machine").
+
+**One version.** `upgrade`, run on any side, moves the whole PC to one exact release: the newest of the published one
+and every side's installed one, never backwards. A distro hands the job to its Windows side, which upgrades its
+distros first and itself last. Each side still downloads the tagged asset, probes it, swaps it, restarts and checks
+what came up, with a rollback behind a failed start and a lock so two upgrades never share a download. The Windows
+side also compares its sides every hour and asks the release channel every few hours, so a PC nobody touches is level
+and current within the day; `updates --agent off` stops the second and never the first. A side can still end behind
+when its own leg fails, and it then says so on the machine's page and is tried again with backoff.
+
+**One supervisor tree.** The Windows side is started by its logon task and keeps each distro that has an agent
+running through a held `wsl.exe` session: that session boots the distro at sign-in, keeps WSL from shutting the VM
+down after its last client leaves, and restarts the distro's agent when it dies. A distro agent that finds a Windows
+agent hands itself over and removes its own systemd entry, so every agent has exactly one starter. A distro whose
+Windows side has no agent is its own root.
+
+**Why the Windows side is the root.** It is the one environment the owner signs in to, the one whose supervisor runs
+at sign-in, and the one that can start a distro; a distro cannot start Windows, and WSL shuts an idle distro down.
+
+**What stays per environment.** Links, grants and pairings: a sandbox may be allowed to run commands in a distro and
+not on Windows. So `uninstall` removes one side, and the Windows side keeps running while it still keeps a distro.
 
 ## 4. Why crossing is a parameter of `run_command`
 
@@ -117,6 +141,8 @@ Saying so in the code is what keeps the next reader from "fixing" it into a refu
 
 - **One agent that serves both sides.** See §1: it cannot hold a distro's folder, and it would collapse two grants into
   one.
+- **Upgrading one side at a time.** Each side upgrading itself from its own look at `latest` was how a PC ended with
+  its sides on different releases. §3b makes the machine the unit an upgrade acts on.
 - **A `machine` field in the wire payload.** A derived fact restated on the wire is a fact that can drift; the fold is
   cheap and both readers hold the contract that defines it.
 - **Merging the two host capabilities into one card.** The card is the grant, and the grants differ per side. The

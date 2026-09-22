@@ -4,7 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
-import { isProcessAlive, livePid, livePidRecord, LOG_ROTATE_BYTES, pidFileBody, rotateIfLarge, spawnDetached, spawnThroughStub } from "./detached.js";
+import {
+    claimPidFile,
+    holdPidFile,
+    isProcessAlive,
+    livePid,
+    livePidRecord,
+    LOG_ROTATE_BYTES,
+    pidFileBody,
+    releasePidFile,
+    rotateIfLarge,
+    spawnDetached,
+    spawnThroughStub,
+} from "./detached.js";
 
 // Tests that a returned pid means something is actually running under it, not which spawn flags were used (the
 // runtime's job).
@@ -12,6 +24,22 @@ const logFile = (): string => join(mkdtempSync(join(tmpdir(), "detached-")), "ag
 
 // A child that outlives the settle window without holding the test open longer than needed.
 const stayAlive = ["-e", "setTimeout(() => {}, 10_000)"];
+
+// A live process, standing in for whoever holds a recycled pid after reboot.
+const alive = (): { pid: number; stop: () => void } => {
+    const child = spawn(process.execPath, stayAlive, { detached: true, stdio: "ignore" });
+    if (child.pid === undefined) {
+        throw new Error("the stand-in process didn't start");
+    }
+    return { pid: child.pid, stop: () => void child.kill("SIGKILL") };
+};
+
+// Kill is not awaited; poll briefly until the process table catches up.
+const gone = async (pid: number): Promise<void> => {
+    for (let waited = 0; waited < 2_000 && isProcessAlive(pid); waited += 50) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+};
 
 describe("spawnDetached", () => {
     it("answers the pid of an agent that is still running, and writes its output to the log", async () => {
@@ -118,20 +146,11 @@ describe.skipIf(process.platform === "win32")("spawnThroughStub", () => {
 describe("livePid", () => {
     const pidFile = (): string => join(mkdtempSync(join(tmpdir(), "pidfile-")), "agent.pid");
 
-    // A live process, standing in for whoever holds a recycled pid after reboot.
-    const alive = (): { pid: number; stop: () => void } => {
-        const child = spawn(process.execPath, stayAlive, { detached: true, stdio: "ignore" });
-        if (child.pid === undefined) {
-            throw new Error("the stand-in process didn't start");
-        }
-        return { pid: child.pid, stop: () => void child.kill("SIGKILL") };
-    };
-
     it("answers the pid of an agent this boot wrote down and is still running", async () => {
         const path = pidFile();
         const { pid, stop } = alive();
         try {
-            writeFileSync(path, await pidFileBody(pid));
+            writeFileSync(path, await pidFileBody({ pid }));
 
             expect(await livePid(path)).toBe(pid);
         } finally {
@@ -143,7 +162,7 @@ describe("livePid", () => {
         const path = pidFile();
         const { pid, stop } = alive();
         try {
-            writeFileSync(path, `${pid} id:0f9a1c3e-0000-4000-8000-000000000000`);
+            writeFileSync(path, JSON.stringify({ pid, boot: "id:0f9a1c3e-0000-4000-8000-000000000000" }));
 
             expect(await livePid(path)).toBeUndefined();
         } finally {
@@ -154,12 +173,9 @@ describe("livePid", () => {
     it("ignores a pid this boot wrote down that has since exited", async () => {
         const path = pidFile();
         const { pid, stop } = alive();
-        writeFileSync(path, await pidFileBody(pid));
+        writeFileSync(path, await pidFileBody({ pid }));
         stop();
-        // Kill is not awaited; poll briefly until the process table catches up.
-        for (let waited = 0; waited < 2_000 && isProcessAlive(pid); waited += 50) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-        }
+        await gone(pid);
 
         expect(await livePid(path)).toBeUndefined();
     });
@@ -170,34 +186,131 @@ describe("livePid", () => {
         expect(await livePid(path)).toBeUndefined();
         writeFileSync(path, "");
         expect(await livePid(path)).toBeUndefined();
-        writeFileSync(path, "not-a-pid id:abc");
+        writeFileSync(path, `{"pid":`);
         expect(await livePid(path)).toBeUndefined();
     });
 
-    // The note says which build wrote the file: swapping the binary doesn't change what a running process already
-    // reports of itself.
-    it("carries back the note the writer stamped beside the pid", async () => {
+    // Only the running process knows which build it is and who restarts it; replacing the binary changes neither.
+    it("carries back the build and the supervisor the writer stamped", async () => {
         const path = pidFile();
         const { pid, stop } = alive();
         try {
-            writeFileSync(path, await pidFileBody(pid, "1.233.0"));
+            writeFileSync(path, await pidFileBody({ pid, build: "1.233.0", supervisor: "windows" }));
 
-            expect(await livePidRecord(path)).toEqual({ pid, note: "1.233.0" });
+            expect(await livePidRecord(path)).toEqual({ pid, build: "1.233.0", supervisor: "windows" });
         } finally {
             stop();
         }
     });
 
-    // A record without a note isn't broken: it's what an agent too old to stamp its build looks like to a reader.
-    it("answers a record with no note at all", async () => {
+    it("answers a record that stamped nothing but its pid", async () => {
         const path = pidFile();
         const { pid, stop } = alive();
         try {
-            writeFileSync(path, await pidFileBody(pid));
+            writeFileSync(path, await pidFileBody({ pid }));
 
             expect(await livePidRecord(path)).toEqual({ pid });
         } finally {
             stop();
         }
+    });
+});
+
+// Two starters racing for one pidfile must never both keep it: two agents tear down each other's sessions.
+describe("claimPidFile", () => {
+    const home = (): { dir: string; path: string } => {
+        const dir = mkdtempSync(join(tmpdir(), "claim-"));
+        return { dir, path: join(dir, "agent.pid") };
+    };
+
+    it("claims a file nobody holds", async () => {
+        const { dir, path } = home();
+
+        expect(await claimPidFile(path, dir, { pid: process.pid, build: "1.0.0" })).toEqual({ claimed: true });
+        expect(await livePidRecord(path)).toEqual({ pid: process.pid, build: "1.0.0" });
+    });
+
+    it("leaves a live holder alone and names it", async () => {
+        const { dir, path } = home();
+        const { pid, stop } = alive();
+        try {
+            writeFileSync(path, await pidFileBody({ pid }));
+
+            expect(await claimPidFile(path, dir, { pid: process.pid })).toEqual({ claimed: false, holder: { pid } });
+        } finally {
+            stop();
+        }
+    });
+
+    it("takes over the record of a holder that has exited", async () => {
+        const { dir, path } = home();
+        const { pid, stop } = alive();
+        writeFileSync(path, await pidFileBody({ pid }));
+        stop();
+        await gone(pid);
+
+        expect(await claimPidFile(path, dir, { pid: process.pid })).toEqual({ claimed: true });
+    });
+
+    // The race itself: whoever wrote last owns the file, and the other learns it from its own re-read.
+    it("hands a concurrent pair exactly one winner", async () => {
+        const { dir, path } = home();
+        const rival = alive();
+        try {
+            const [ours, theirs] = await Promise.all([
+                claimPidFile(path, dir, { pid: process.pid }),
+                claimPidFile(path, dir, { pid: rival.pid }),
+            ]);
+
+            expect([ours.claimed, theirs.claimed].filter(Boolean)).toHaveLength(1);
+        } finally {
+            rival.stop();
+        }
+    });
+});
+
+describe("holdPidFile", () => {
+    const home = (): { dir: string; path: string } => {
+        const dir = mkdtempSync(join(tmpdir(), "hold-"));
+        return { dir, path: join(dir, "agent.pid") };
+    };
+
+    // A stopper's cleanup or a tidied directory is not a reason to give up the claim.
+    it("writes a vanished claim back and keeps it", async () => {
+        const { dir, path } = home();
+
+        expect(await holdPidFile(path, dir, { pid: process.pid, build: "1.0.0" })).toBe(true);
+        expect(await livePidRecord(path)).toEqual({ pid: process.pid, build: "1.0.0" });
+    });
+
+    it("reports the claim lost when another live process holds it", async () => {
+        const { dir, path } = home();
+        const { pid, stop } = alive();
+        try {
+            writeFileSync(path, await pidFileBody({ pid }));
+
+            expect(await holdPidFile(path, dir, { pid: process.pid })).toBe(false);
+        } finally {
+            stop();
+        }
+    });
+});
+
+describe("releasePidFile", () => {
+    it("removes the file while it names the stopped pid", async () => {
+        const path = join(mkdtempSync(join(tmpdir(), "release-")), "agent.pid");
+        writeFileSync(path, await pidFileBody({ pid: 4242 }));
+
+        expect(await releasePidFile(path, 4242)).toBe(true);
+        expect(existsSync(path)).toBe(false);
+    });
+
+    // A supervisor may already have started the replacement: its claim is not the stopper's to delete.
+    it("leaves the claim of whoever replaced it", async () => {
+        const path = join(mkdtempSync(join(tmpdir(), "release-")), "agent.pid");
+        writeFileSync(path, await pidFileBody({ pid: 4343 }));
+
+        expect(await releasePidFile(path, 4242)).toBe(false);
+        expect(existsSync(path)).toBe(true);
     });
 });

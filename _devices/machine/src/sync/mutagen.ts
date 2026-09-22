@@ -1,8 +1,7 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
-import { once } from "node:events";
-import { createWriteStream, existsSync, type WriteStream } from "node:fs";
-import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { chmod, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
@@ -16,7 +15,9 @@ import {
     stubCommand,
     windowsLaunchStub,
 } from "@intentic/local-agent";
-import { binDir, mutagenDaemonLogPath, type Pairing } from "./config.js";
+import { binDir } from "../config.js";
+import { archToken, download, exe, osToken, setAside } from "../release.js";
+import { mutagenDaemonLogPath, type Pairing } from "./config.js";
 import { runProcess } from "./exec.js";
 import { clearConflictResidue, type ResidueOutcome, sweepDerivedResidue } from "./residue.js";
 import { BACKUP_IGNORES, IGNORES, mutagenSshPath, sanitizeId, sshAlias, sshTransportAnswers } from "./ssh.js";
@@ -573,28 +574,6 @@ export const retireOrphanSessions = (mutagen: string, pairings: readonly Pairing
     }
 };
 
-export const osToken = (): "linux" | "darwin" | "windows" => {
-    if (process.platform === "linux" || process.platform === "darwin") {
-        return process.platform;
-    }
-    if (process.platform === "win32") {
-        return "windows";
-    }
-    throw new Error(`auto-download isn't supported on ${process.platform}: install mutagen and cloudflared manually, then re-run.`);
-};
-
-export const exe = process.platform === "win32" ? ".exe" : "";
-
-export const archToken = (): "amd64" | "arm64" => {
-    if (process.arch === "x64") {
-        return "amd64";
-    }
-    if (process.arch === "arm64") {
-        return "arm64";
-    }
-    throw new Error(`unsupported CPU arch ${process.arch}: install mutagen and cloudflared manually, then re-run.`);
-};
-
 // The installed version, or undefined if missing/broken. Matters most on Windows, where a resident daemon's
 // binary can be neither unlinked nor overwritten, so checking first avoids re-extracting over it.
 const installedVersion = (binary: string, versionArgs: string[]): string | undefined => {
@@ -605,99 +584,10 @@ const installedVersion = (binary: string, versionArgs: string[]): string | undef
     return /\d+\.\d+\.\d+/.exec(result.stdout)?.[0];
 };
 
-// What a download may do beyond arriving, both off by default: resume needs a destination name that means one
-// set of bytes (true for the agent's staged file, not Mutagen's tarball), and progress needs somewhere to show it.
-interface DownloadOptions {
-    /** Continue whatever is already at `dest` instead of starting again. */
-    readonly resume?: boolean;
-    /** Bytes so far and the total when the other end states one, called per chunk. */
-    readonly onProgress?: (received: number, total: number) => void;
-}
-
-// Streams to disk with backpressure rather than buffering the whole body in memory. A failure mid-flight leaves
-// the part file in place for the next attempt to resume from; `resume` is the caller's decision.
-// What is already at a path; zero for anything unaskable (free name, directory, permission), the safe "nothing
-// to continue" answer.
-const fileSize = async (path: string): Promise<number> => {
-    try {
-        return (await stat(path)).size;
-    } catch {
-        return 0;
-    }
-};
-
-// Where the next byte comes from, given what's already on disk:
-// 416 - range past the end; caller decides what that means.
-// 206 - range honoured; body continues the file.
-// 200 - range ignored; body is the whole file, so the part file must be truncated.
-const openDownload = async (
-    url: string,
-    have: number,
-): Promise<{ readonly body: ReadableStream<Uint8Array>; readonly total: number; readonly appending: boolean } | undefined> => {
-    const response = await fetch(url, have > 0 ? { headers: { range: `bytes=${have}-` } } : {});
-    if (response.status === 416 && have > 0) {
-        return undefined;
-    }
-    if (!response.ok || response.body === null) {
-        throw new Error(`download failed (${response.status}): ${url}`);
-    }
-    const appending = response.status === 206;
-    // A 206 without a length reports total as zero, never `have`, or a half-finished download would look complete.
-    const length = Number(response.headers.get("content-length") ?? 0);
-    return { body: response.body, total: length > 0 ? (appending ? have + length : length) : 0, appending };
-};
-
-// The transfer itself: one read at a time, written with backpressure rather than queued in memory. Split out so
-// the decisions above stay readable, and because its failure must leave the part file where it is.
-const drainInto = async (
-    file: WriteStream,
-    body: ReadableStream<Uint8Array>,
-    from: number,
-    total: number,
-    onProgress: DownloadOptions["onProgress"],
-): Promise<void> => {
-    const reader = body.getReader();
-    let received = from;
-    try {
-        for (;;) {
-            // oxlint-disable-next-line eslint/no-await-in-loop -- one read at a time IS the transfer
-            const chunk = await reader.read();
-            if (chunk.done) {
-                break;
-            }
-            received += chunk.value.byteLength;
-            onProgress?.(received, total);
-            if (!file.write(chunk.value)) {
-                // oxlint-disable-next-line eslint/no-await-in-loop -- backpressure: waiting here is the point
-                await once(file, "drain");
-            }
-        }
-        file.end();
-        await once(file, "close");
-    } catch (error) {
-        file.destroy();
-        throw error;
-    }
-};
-
-export const download = async (url: string, dest: string, options: DownloadOptions = {}): Promise<void> => {
-    await mkdir(dirname(dest), { recursive: true });
-    const have = options.resume === true ? await fileSize(dest) : 0;
-    const stream = await openDownload(url, have);
-    if (stream === undefined) {
-        return;
-    }
-    const file = createWriteStream(dest, stream.appending ? { flags: "a" } : {});
-    await drainInto(file, stream.body, stream.appending ? have : 0, stream.total, options.onProgress);
-};
-
-// Replaces `binary` with what `write` produces. Windows refuses to unlink or overwrite a running executable but
-// allows renaming one, so the live process keeps running from the renamed file while the replacement takes its place.
+// Mutagen is replaced by extraction into place, so the running copy is set aside first and dropped once the new one lands.
 const replaceBinary = async (binary: string, write: () => Promise<void> | void): Promise<void> => {
     const displaced = `${binary}.old`;
-    // Best-effort: a leftover that cannot go yet is still being run, and the write below is what has to succeed.
-    await rm(displaced, { force: true }).catch(() => {});
-    await rename(binary, displaced).catch(() => {});
+    await setAside(binary, displaced);
     await write();
     await chmod(binary, 0o755);
     await rm(displaced, { force: true }).catch(() => {});
@@ -743,6 +633,7 @@ export const ensureMutagen = async (): Promise<string> => {
         tarball,
     );
     await replaceBinary(dest, () => extractTarball(tarball));
+    await rm(tarball, { force: true }).catch(() => undefined);
     return dest;
 };
 

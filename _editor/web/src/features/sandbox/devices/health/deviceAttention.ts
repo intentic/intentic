@@ -66,31 +66,27 @@ const GAP_TEXT: Record<NonNullable<Device[`gap`]>, string> = {
     // Its containers are listed regardless (they answer to "Manage sandboxes on this device"), so this names what is
     // actually missing rather than claiming the machine is unreadable.
     "scope-off": `Turn on "Run commands" in its capability card to see its folders, ports and agent.`,
-    "no-agent": `Reachable, but no agent is installed.`,
-    unreported: `Enrolled, but it has never reported. Re-run its install.`,
+    unreported: `Its agent has never described this machine. Update it.`,
 };
 
 // The clause each sentence above was cut down from, on hover: what nobody has to read to act.
 const GAP_HINT: Record<NonNullable<Device[`gap`]>, string> = {
     offline: `Asleep, off the network, or its agent isn't running. Reconnect mints a fresh pairing command, for a machine whose agent is gone rather than merely stopped.`,
     "scope-off": `Without it the machine won't describe itself: no folders, no mirrored ports, and no word on whether its agent is alive. Its containers are listed regardless — those answer to a different switch.`,
-    "no-agent": `Nothing here knows its folders or ports until one is installed. Its capability card hands out the command.`,
-    unreported: `An agent from before machine reports never will report. Re-running the install replaces it with one that does.`,
+    unreported: `An agent from before machine reports never will. Update agent replaces it over the connection; a machine that only syncs gets the new one by re-running its install.`,
 };
 
 // An asleep laptop is a state, not a fault; the other three are something the reader can close.
 const GAP_TONE: Record<NonNullable<Device[`gap`]>, NoticeTone> = {
     offline: `info`,
     "scope-off": `warning`,
-    "no-agent": `warning`,
     unreported: `warning`,
 };
 
-// What the gap IS, at a glance: a sleeping machine, a switch that is off, a missing install, a silence.
+// What the gap IS, at a glance: a sleeping machine, a switch that is off, a silence.
 const GAP_ICON: Record<NonNullable<Device[`gap`]>, IconName> = {
     offline: `moon`,
     "scope-off": `lock`,
-    "no-agent": `desktop`,
     unreported: `question-circle`,
 };
 

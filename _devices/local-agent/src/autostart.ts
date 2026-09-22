@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -7,9 +8,9 @@ import { LOG_ROTATE_BYTES } from "./detached.js";
 import { type CliLauncher, quotedCommandLine, stubCommand, WINDOWS_LAUNCH_STUB, windowsLaunchStub } from "./launcher.js";
 import type { Log } from "./home.js";
 
-// Registers login autostart, best-effort: a failed registration only costs resume-after-reboot since the current
-// session already runs. Windows uses the per-user Run key via a launcher stub, macOS an optional LaunchAgent, Linux a
-// systemd user unit falling back to an XDG entry; none need elevation or a password.
+// Login autostart per OS, every mechanism supervising what it starts and none needing elevation or a password: a
+// per-user logon task through the launcher stub on Windows (the Run key as fallback), a systemd user unit on Linux
+// (an XDG entry where there is no user manager), a LaunchAgent on macOS.
 
 export interface LaunchAgentSpec {
     // Reverse-DNS id: what launchctl bootout/bootstrap address it by.
@@ -26,7 +27,7 @@ export interface AutostartSpec {
     // What the desktop session shows for the entry.
     readonly desktopName: string;
     readonly desktopComment: string;
-    // Absent: no macOS autostart for this agent (see registerAutostart).
+    // Absent: no macOS autostart for this agent, which then says so rather than writing a file nothing reads.
     readonly launchAgent?: LaunchAgentSpec;
     // foreground: args for mechanisms that supervise the agent. detached: Windows fallback, spawns and exits.
     readonly detachedArgs: readonly string[];
@@ -225,6 +226,15 @@ export const clearWindowsRunValue = (name: string): void => {
     spawnSync(regExe(), windowsRunValueDeleteArgs(name), { stdio: "ignore", windowsHide: true });
 };
 
+export const windowsTaskQueryArgs = (spec: AutostartSpec): string[] => ["/query", "/tn", spec.windowsRunValue];
+export const windowsTaskRunArgs = (spec: AutostartSpec): string[] => ["/run", "/tn", spec.windowsRunValue];
+
+const quietly = (command: string, args: readonly string[]): boolean =>
+    spawnSync(command, args, { stdio: "ignore", windowsHide: true }).status === 0;
+
+const windowsTaskExists = (spec: AutostartSpec): boolean => quietly(schtasksExe(), windowsTaskQueryArgs(spec));
+const windowsRunValueExists = (spec: AutostartSpec): boolean => quietly(regExe(), ["query", WINDOWS_RUN_KEY, "/v", spec.windowsRunValue]);
+
 // States meaning a user manager exists (degraded/starting count too); some Linux setups have none.
 const SYSTEMD_LIVE_STATES = new Set(["running", "degraded", "starting", "maintenance", "stopping", "initializing"]);
 
@@ -240,6 +250,12 @@ const systemdUserAvailable = (): boolean => {
 // A systemd unit argument: double quotes with C escapes, the quoting systemd's own command-line parser reads.
 const systemdQuoted = (value: string): string => `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 
+// The PATH every supervised Linux start gives the agent, which a user manager or a bare `sh -c` would not.
+export const supervisedPath = (home: string = homedir()): string => `${join(home, ".local", "bin")}:/usr/local/bin:/usr/bin:/bin`;
+
+// The one log roll every Linux supervisor runs before it opens the log: `$1` the log, `$2` the size that triggers it.
+export const ROTATE_LOG_SH = `[ -f "$1" ] && [ "$(wc -c < "$1")" -ge "$2" ] && mv -f "$1" "$1.1"`;
+
 // Restart=on-failure keeps a deliberate stop stopped, but needs the agent to exit non-zero on a signal;
 // RestartForceExitStatus forces a restart anyway for SIGHUP/INT/TERM/PIPE, which systemd otherwise treats as clean.
 export const systemdUserUnit = (spec: AutostartSpec, launcher: CliLauncher): string => {
@@ -249,7 +265,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=-/bin/sh -c '[ -f "$1" ] && [ "$(wc -c < "$1")" -ge "$2" ] && mv -f "$1" "$1.1"' rotate ${systemdQuoted(spec.logPath)} ${LOG_ROTATE_BYTES}
+ExecStartPre=-/bin/sh -c '${ROTATE_LOG_SH}' rotate ${systemdQuoted(spec.logPath)} ${LOG_ROTATE_BYTES}
 ExecStart=${quotedCommandLine([...launcher, ...spec.foregroundArgs])}
 StandardOutput=append:${spec.logPath}
 StandardError=append:${spec.logPath}
@@ -257,30 +273,11 @@ Restart=on-failure
 RestartSec=5
 RestartForceExitStatus=SIGHUP SIGINT SIGTERM SIGPIPE
 StartLimitIntervalSec=0
-Environment=PATH=${join(homedir(), ".local", "bin")}:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=${supervisedPath()}
 
 [Install]
 WantedBy=default.target
 `;
-};
-
-// `enable --now` both resumes at boot and starts the unit now, so the caller can skip its own spawn. Lingering keeps
-// the user manager (and unit) alive without a session, or a headless box would never autostart.
-const registerSystemdUser = async (spec: AutostartSpec, launcher: CliLauncher, log: Log, startNow: boolean): Promise<boolean> => {
-    const unit = systemdUnitPath(spec);
-    await mkdir(dirname(unit), { recursive: true });
-    await writeFile(unit, systemdUserUnit(spec, launcher), { mode: 0o644 });
-    spawnSync("loginctl", ["enable-linger"], { stdio: "ignore" });
-    // daemon-reload so a rewritten unit is picked up, not the version systemd already parsed.
-    spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
-    register("systemctl", ["--user", "enable", ...(startNow ? ["--now"] : []), systemdUnitName(spec)]);
-    // Named by its own log file, not the journal; see systemdUserUnit.
-    log(
-        startNow
-            ? `registered ${systemdUnitName(spec)} to run now and at boot. Follow it with: tail -f ${spec.logPath}`
-            : `${systemdUnitName(spec)} is registered to run at boot.`,
-    );
-    return startNow;
 };
 
 // Exec args are quoted per the desktop-entry grammar.
@@ -315,126 +312,162 @@ ${[...launcher, ...spec.foregroundArgs].map((arg) => `        <string>${arg}</st
 </plist>
 `;
 
-const registerMac = async (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: CliLauncher, startNow: boolean): Promise<boolean> => {
-    const plist = macPlistPath(agent);
-    await mkdir(dirname(plist), { recursive: true });
-    await writeFile(plist, macLaunchAgentXml(spec, agent, launcher), { mode: 0o644 });
-    // launchd reads this directory at login either way, so the file alone is the whole of "resume at boot". Booting
-    // the job out is how the OTHER half is done, and it would kill the very agent asking to be re-registered.
-    if (!startNow) {
-        return false;
-    }
-    const uid = process.getuid?.() ?? 0;
-    // Bootout any prior instance, then bootstrap (modern launchctl); falls back to legacy `load -w` on older macOS.
-    spawnSync("launchctl", ["bootout", `gui/${uid}/${agent.label}`], { stdio: "ignore" });
-    if (spawnSync("launchctl", ["bootstrap", `gui/${uid}`, plist], { stdio: "ignore" }).status === 0) {
-        return true;
-    }
-    register("launchctl", ["load", "-w", plist]);
-    return true;
-};
+// Who restarts the agent once registered: the word the running process stamps beside its pid, so readers know.
+export type AutostartKind = "task" | "run-key" | "systemd" | "launchd" | "xdg" | "none";
 
-// Exactly one of a systemd user unit or an XDG entry is written, never both, or a desktop machine starts the agent
-// twice.
-const registerLinux = async (spec: AutostartSpec, launcher: CliLauncher, log: Log, startNow: boolean): Promise<boolean> => {
-    if (systemdUserAvailable()) {
-        await rm(linuxDesktopPath(spec), { force: true });
-        return await registerSystemdUser(spec, launcher, log, startNow);
-    }
-    const file = linuxDesktopPath(spec);
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, linuxDesktopEntry(spec, launcher), { mode: 0o644 });
-    if (process.env["XDG_CURRENT_DESKTOP"] === undefined) {
-        log(
-            `note: this machine has neither a systemd user manager nor a desktop session, so nothing will start ${spec.id} at boot. It runs until this machine restarts.`,
-        );
-    }
-    return false;
-};
+export interface Autostart {
+    // Writes the login entry, or with `repair` only puts back one that is missing; never starts anything.
+    readonly register: (options?: { readonly repair?: boolean }) => Promise<AutostartKind>;
+    // Starts the agent through its entry; false where the entry cannot start one and the caller has to spawn it.
+    readonly start: () => Promise<boolean>;
+    // Clears every mechanism's entry, since which one is in force depends on what the last register found.
+    readonly unregister: () => Promise<void>;
+}
 
-// Registers the agent to start at login. Returns true only when the OS mechanism also launched it for the current
-// session (macOS bootstrap, systemd enable --now), so the caller can skip its own spawn.
-//
-// `startNow: false` registers and nothing else, for the one caller that is the running agent itself re-asserting its
-// own entry: every mechanism here is idempotent, but the two that also START would hand that agent a rival, and on
-// macOS the restart goes through booting the job out — which is to say, killing the caller.
-export const registerAutostart = async (
-    spec: AutostartSpec,
-    launcher: CliLauncher,
-    log: Log,
-    { startNow = true }: { readonly startNow?: boolean } = {},
-): Promise<boolean> => {
-    try {
-        if (process.platform === "darwin") {
-            // No LaunchAgent spec: says so instead of silently writing an XDG entry macOS never reads.
-            if (spec.launchAgent === undefined) {
-                log(`note: ${spec.id} has no macOS login autostart yet; it runs until this machine restarts.`);
-                return false;
-            }
-            return await registerMac(spec, spec.launchAgent, launcher, startNow);
-        }
-        if (process.platform === "win32") {
-            // Registering the flashing shape and saying so beats refusing to register or registering silently: the stub
-            // just isn't installed beside a dev checkout.
-            const stub = windowsLaunchStub(launcher);
-            if (stub !== undefined) {
-                // The supervised shape needs the stub: a task whose action is the console agent itself would put a
-                // window on the desktop at every logon AND every watchdog tick, which is worse than the Run key it
-                // replaces. Falling back on refusal keeps a machine that cannot register a task starting at all.
-                try {
-                    await registerWindowsTask(spec, launcher, stub, log);
-                    return false;
-                } catch (error) {
-                    log(
-                        `note: couldn't register a logon task for ${spec.id} (${reason(error)}); falling back to a login entry that starts it once and is not supervised.`,
-                    );
-                }
-            } else {
+// The stub is what makes a logon task silent, so without one the task is not offered: a console window at every
+// logon and every watchdog tick is worse than the Run key. A machine that cannot register a task still starts at login.
+const windowsAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): Autostart => ({
+    register: async ({ repair = false } = {}) => {
+        const stub = windowsLaunchStub(launcher);
+        if (stub === undefined) {
+            log(
+                `note: ${WINDOWS_LAUNCH_STUB} isn't installed beside this agent, so ${spec.id} will start at login through a console window that flashes on the desktop. Re-run the install command from the capability card to get it.`,
+            );
+        } else if (repair && windowsTaskExists(spec)) {
+            return "task";
+        } else {
+            try {
+                await registerWindowsTask(spec, launcher, stub, log);
+                return "task";
+            } catch (error) {
                 log(
-                    `note: ${WINDOWS_LAUNCH_STUB} isn't installed beside this agent, so ${spec.id} will start at login through a console window that flashes on the desktop. Re-run the install command from the capability card to get it.`,
+                    `note: couldn't register a logon task for ${spec.id} (${reason(error)}); falling back to a login entry that starts it once and is not supervised.`,
                 );
             }
-            register(regExe(), windowsRunAddArgs(spec, launcher, stub));
-            return false;
         }
-        if (process.platform === "linux") {
-            return await registerLinux(spec, launcher, log, startNow);
+        if (repair && windowsRunValueExists(spec)) {
+            return "run-key";
         }
-        log(`note: ${spec.id} has no login autostart on ${process.platform}; it runs until this machine restarts.`);
-    } catch (error) {
-        log(spec.failureNote(reason(error)));
-    }
-    return false;
-};
+        register(regExe(), windowsRunAddArgs(spec, launcher, stub));
+        return "run-key";
+    },
+    // IgnoreNew makes a second /run while one runs a no-op, so the caller may repeat it while it waits.
+    start: async () => await Promise.resolve(windowsTaskExists(spec) && quietly(schtasksExe(), windowsTaskRunArgs(spec))),
+    unregister: async () => {
+        spawnSync(schtasksExe(), windowsTaskDeleteArgs(spec), { stdio: "ignore", windowsHide: true });
+        clearWindowsRunValue(spec.windowsRunValue);
+        return await Promise.resolve();
+    },
+});
 
-// Removes the login-autostart entry (and stops the launchd-run instance on macOS). Idempotent and best-effort.
-export const unregisterAutostart = async (spec: AutostartSpec, log: Log): Promise<void> => {
-    try {
-        if (process.platform === "darwin") {
-            if (spec.launchAgent === undefined) {
-                return;
+// Exactly one of a systemd user unit or an XDG entry is written, never both, or a desktop machine starts it twice.
+// Lingering keeps the user manager (and the unit) alive without a session, or a headless box never autostarts.
+const linuxAutostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): Autostart => ({
+    register: async ({ repair = false } = {}) => {
+        if (systemdUserAvailable()) {
+            const unit = systemdUnitPath(spec);
+            if (repair && existsSync(unit)) {
+                return "systemd";
             }
-            const plist = macPlistPath(spec.launchAgent);
-            const uid = process.getuid?.() ?? 0;
-            spawnSync("launchctl", ["bootout", `gui/${uid}/${spec.launchAgent.label}`], { stdio: "ignore" });
-            spawnSync("launchctl", ["unload", plist], { stdio: "ignore" });
-            await rm(plist, { force: true });
-            return;
+            await rm(linuxDesktopPath(spec), { force: true });
+            await mkdir(dirname(unit), { recursive: true });
+            await writeFile(unit, systemdUserUnit(spec, launcher), { mode: 0o644 });
+            spawnSync("loginctl", ["enable-linger"], { stdio: "ignore" });
+            // daemon-reload so a rewritten unit is picked up, not the version systemd already parsed.
+            spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
+            register("systemctl", ["--user", "enable", systemdUnitName(spec)]);
+            log(`${systemdUnitName(spec)} is registered to run at boot. Follow it with: tail -f ${spec.logPath}`);
+            return "systemd";
         }
-        if (process.platform === "win32") {
-            // Both mechanisms, unconditionally: which one is in force depends on what the install found, and leaving
-            // the other behind is how an uninstalled agent comes back at the next logon.
-            spawnSync(schtasksExe(), windowsTaskDeleteArgs(spec), { stdio: "ignore", windowsHide: true });
-            clearWindowsRunValue(spec.windowsRunValue);
-            return;
+        const file = linuxDesktopPath(spec);
+        if (!(repair && existsSync(file))) {
+            await mkdir(dirname(file), { recursive: true });
+            await writeFile(file, linuxDesktopEntry(spec, launcher), { mode: 0o644 });
         }
-        // Both Linux mechanisms are cleared unconditionally: leaving the unregistered one behind would resurrect the
-        // agent at the next boot. `disable --now` also stops it.
+        if (process.env["XDG_CURRENT_DESKTOP"] === undefined) {
+            log(
+                `note: this machine has neither a systemd user manager nor a desktop session, so nothing will start ${spec.id} at boot. It runs until this machine restarts.`,
+            );
+        }
+        return "xdg";
+    },
+    start: async () =>
+        await Promise.resolve(systemdUserAvailable() && existsSync(systemdUnitPath(spec)) && quietly("systemctl", ["--user", "start", systemdUnitName(spec)])),
+    // Both mechanisms, unconditionally: the one left behind would resurrect the agent at the next boot. `--now` stops it.
+    unregister: async () => {
         spawnSync("systemctl", ["--user", "disable", "--now", systemdUnitName(spec)], { stdio: "ignore" });
         await rm(systemdUnitPath(spec), { force: true });
         spawnSync("systemctl", ["--user", "daemon-reload"], { stdio: "ignore" });
         await rm(linuxDesktopPath(spec), { force: true });
-    } catch (error) {
-        log(`note: couldn't remove the login-autostart entry for ${spec.id} (${reason(error)}).`);
+    },
+});
+
+// launchd reads the LaunchAgents directory at login, so the file alone is the whole of "resume at boot".
+const macAutostart = (spec: AutostartSpec, agent: LaunchAgentSpec, launcher: CliLauncher): Autostart => {
+    const plist = macPlistPath(agent);
+    const domain = `gui/${process.getuid?.() ?? 0}`;
+    return {
+        register: async ({ repair = false } = {}) => {
+            if (!(repair && existsSync(plist))) {
+                await mkdir(dirname(plist), { recursive: true });
+                await writeFile(plist, macLaunchAgentXml(spec, agent, launcher), { mode: 0o644 });
+            }
+            return "launchd";
+        },
+        // A job already loaded refuses a second bootstrap; kickstart is what starts a loaded job that is not running.
+        start: async () =>
+            await Promise.resolve(quietly("launchctl", ["bootstrap", domain, plist]) || quietly("launchctl", ["kickstart", `${domain}/${agent.label}`])),
+        unregister: async () => {
+            spawnSync("launchctl", ["bootout", `${domain}/${agent.label}`], { stdio: "ignore" });
+            spawnSync("launchctl", ["unload", plist], { stdio: "ignore" });
+            await rm(plist, { force: true });
+        },
+    };
+};
+
+// Where there is nothing to register with, or no LaunchAgent spec on macOS, it says so instead of writing a file
+// nothing reads.
+const noAutostart = (spec: AutostartSpec, log: Log): Autostart => ({
+    register: async () => {
+        log(`note: ${spec.id} has no login autostart on ${process.platform}; it runs until this machine restarts.`);
+        return await Promise.resolve("none");
+    },
+    start: async () => await Promise.resolve(false),
+    unregister: async () => await Promise.resolve(),
+});
+
+const mechanismFor = (spec: AutostartSpec, launcher: CliLauncher, log: Log): Autostart => {
+    if (process.platform === "win32") {
+        return windowsAutostart(spec, launcher, log);
     }
+    if (process.platform === "linux") {
+        return linuxAutostart(spec, launcher, log);
+    }
+    if (process.platform === "darwin" && spec.launchAgent !== undefined) {
+        return macAutostart(spec, spec.launchAgent, launcher);
+    }
+    return noAutostart(spec, log);
+};
+
+// Best-effort throughout: a failed registration costs resume-after-reboot, never the session already running.
+export const autostart = (spec: AutostartSpec, launcher: CliLauncher, log: Log): Autostart => {
+    const mechanism = mechanismFor(spec, launcher, log);
+    return {
+        register: async (options) => {
+            try {
+                return await mechanism.register(options);
+            } catch (error) {
+                log(spec.failureNote(reason(error)));
+                return "none";
+            }
+        },
+        start: async () => await mechanism.start().catch(() => false),
+        unregister: async () => {
+            try {
+                await mechanism.unregister();
+            } catch (error) {
+                log(`note: couldn't remove the login-autostart entry for ${spec.id} (${reason(error)}).`);
+            }
+        },
+    };
 };

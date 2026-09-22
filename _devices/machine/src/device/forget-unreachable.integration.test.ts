@@ -11,11 +11,11 @@ import * as residentOriginal from "../resident.js";
 // allowed to act on is the whole subject. It deletes ONLY on live evidence — the resident agent's own stamp — because
 // the alternative reading of "this config lists a sandbox I cannot reach" is "my agent isn't running", and that one
 // costs the user every link they have. homedir is stubbed the way config.integration.test.ts stubs it; residency is
-// stubbed because reconciling it spawns a real agent.
+// stubbed because ensuring it spawns a real agent.
 let home: string;
 let commands: typeof import("./commands.js");
 let config: typeof import("./config.js");
-const reconciled = mock<(log: (message: string) => void) => Promise<void>>();
+const ensured = mock<(log: (message: string) => void) => Promise<void>>();
 
 const scopes: DeviceScopes = { shell: "off", write: "off", screen: "off", control: "off", sandboxes: "off", destructive: "off" };
 
@@ -27,7 +27,7 @@ const gone = (since: number) => ({ state: "connecting", outage: { failures: LONG
 beforeAll(async () => {
     home = await mkdtemp(join(tmpdir(), "intentic-machine-forget-"));
     mock.module("node:os", () => ({ ...osOriginal, homedir: () => home }));
-    mock.module("../resident.js", () => ({ ...residentOriginal, reconcileResidency: reconciled }));
+    mock.module("../resident.js", () => ({ ...residentOriginal, ensureResident: ensured }));
     config = await import("./config.js");
     commands = await import("./commands.js");
 });
@@ -37,7 +37,7 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-    reconciled.mockClear();
+    ensured.mockClear();
     await config.removeLinks();
     await rm(config.linkStatePath, { force: true });
 });
@@ -51,7 +51,7 @@ test("a machine whose agent is not stamping drops nothing at all", async () => {
     await commands.dropUnreachableLinks((message) => said.push(message));
 
     expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://one.example"]);
-    expect(reconciled).not.toHaveBeenCalled();
+    expect(ensured).not.toHaveBeenCalled();
     expect(said.join(" ")).toContain("isn't running");
 });
 
@@ -63,11 +63,11 @@ test("every link answering is an answer, not a reason to delete one", async () =
     await commands.dropUnreachableLinks((message) => said.push(message));
 
     expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://one.example"]);
-    expect(reconciled).not.toHaveBeenCalled();
+    expect(ensured).not.toHaveBeenCalled();
     expect(said.join(" ")).toContain("Nothing dropped.");
 });
 
-test("only the links that stopped answering go, and the agent is restarted against what is left", async () => {
+test("only the links that stopped answering go, and the running agent is left to close them without a restart", async () => {
     await config.upsertLink(link("https://open.example"));
     await config.upsertLink(link("https://gone.example"));
     await config.upsertLink(link("https://blipping.example"));
@@ -82,21 +82,8 @@ test("only the links that stopped answering go, and the agent is restarted again
     await commands.dropUnreachableLinks((message) => said.push(message));
 
     expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://open.example", "https://blipping.example"]);
-    // Or the dial loops for the links just deleted keep running inside the agent that is already up.
-    expect(reconciled).toHaveBeenCalledTimes(1);
+    // The agent re-reads its links every pass; what is asked here is only that one is running (or retired if none are left).
+    expect(ensured).toHaveBeenCalledTimes(1);
     expect(said.join(" ")).toContain("https://gone.example");
     expect(said.join(" ")).toContain("Still connected to 2 sandboxes.");
-});
-
-// The background-download switch shares the file with the links, so the drop is held to the same rule every other
-// writer here is: rebuild from what you read, not from what you know.
-test("the drop leaves the rest of the config alone", async () => {
-    await config.upsertLink(link("https://gone.example"));
-    await config.writePrepareUpdates(false);
-    await config.stampLinkStates({ "https://gone.example": gone(1_700_000_000_000) });
-
-    await commands.dropUnreachableLinks(() => undefined);
-
-    expect(await config.readLinks()).toEqual([]);
-    expect(await config.readPrepareUpdates()).toBe(false);
 });

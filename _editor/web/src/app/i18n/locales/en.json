@@ -2270,7 +2270,11 @@
             "sandboxDoesntRecordCheckout": "This sandbox doesn't record which checkout its image came from, so it can't start the rebuild for you. Run it there, and recreating it once with"
         },
         "deviceAgent": {
-            "fetchesNewestAgentOnto": "Fetches the newest agent onto this device, installs it, and restarts the one process this sandbox reaches the device through. Safe on an agent that is already current; its folders, pairings and mirrored ports are untouched either way.",
+            "fetchesNewestAgentOnto": "Brings this whole computer to the newest agent — Windows and every WSL distro with an agent, all on one version — and restarts each side's agent on the way. Safe on an agent that is already current; folders, pairings and mirrored ports are untouched.",
+            "oneVersionPerMachine": "Windows and each WSL distro run their own copy of the agent, and they belong on one version. Update agent brings every side to the newest of them; a side left behind is one whose last update failed.",
+            "publishedForMachine": "Agent {latest} has been published.",
+            "publishedMachineHas": "Agent {latest} has been published; this machine has {held}.",
+            "sidesRunDifferentAgents": "Its sides run different agents: {sides}.",
             "socketDroppedMomentAgo": "Its socket dropped a moment ago, which is what restarting an agent does. A fresh process dials back in by itself, and nothing can be run on the machine until it has.",
             "updateAgent": "Update agent",
             "updateAgentFetchesInstalls": "Update agent fetches it, installs it, and restarts the process on that device.",
@@ -2320,7 +2324,6 @@
             "deviceAloneLosesAccess": "This device alone loses access — every other paired device keeps syncing. Its file sync stops and its mirrored ports drop off its localhost within a minute.",
             "dontMirrorPort": "Don't mirror it",
             "environments": "Environments",
-            "fetchesNewestAgentOnto": "Fetches the newest agent onto every environment of this computer in turn — Windows and each distro run their own install, and this is what brings them to the same version. Safe on a side that is already current.",
             "fixAgent": "Fix with agent",
             "leavePortOffLocalhost": "Leave this port off this device's localhost. Every other port this sandbox serves keeps being mirrored.",
             "letGoHint": "Stop this device holding this sandbox. Its files stop syncing and its ports come off localhost; the folder already on the device is left exactly as it is.",
@@ -2359,8 +2362,7 @@
             "takeSandboxsPortsOff": "Take this sandbox's ports off this device's localhost. Files keep syncing.",
             "thisSandbox": "this sandbox",
             "unpair": "Unpair",
-            "unpairHeader": "Unpair {sandbox}?",
-            "updateAgents": "Update agents"
+            "unpairHeader": "Unpair {sandbox}?"
         },
         "deviceRows": {
             "fileSyncing": "File syncing",

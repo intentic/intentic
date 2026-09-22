@@ -2,7 +2,7 @@ import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
 import type { Log } from "@intentic/local-agent";
 import type { DeviceSandbox } from "@intentic/sandbox-contract";
-import { readPrepareUpdates } from "./config.js";
+import { readMachineConfig } from "../environments/machine.js";
 import { fleet, icInFlight, runIc } from "./tools/sandboxes.js";
 
 // Keeps the next sandbox update downloaded by running `ic sandbox prepare <slug> --auto` on a timer, letting `ic`
@@ -103,8 +103,8 @@ export const runTick = async (
     }
 };
 
-// First look minutes after start, then every few hours with jitter; the switch is re-read every tick so a toggle wins
-// even without a restart.
+// First look minutes after start (jittered, so a PC's sides never pull at once), then every few hours; the switch
+// (`intentic-machine updates --sandboxes`) is re-read every tick.
 export const startAutoPrepare = (log: Log): { stop: () => void } => {
     let timer: NodeJS.Timeout | undefined;
     let stopped = false;
@@ -114,7 +114,7 @@ export const startAutoPrepare = (log: Log): { stop: () => void } => {
     };
     const tick = async (): Promise<void> => {
         try {
-            if (await readPrepareUpdates()) {
+            if ((await readMachineConfig().catch(() => ({ sandboxUpdates: true }))).sandboxUpdates !== false) {
                 await runTick(state, await fleet(), async (slug) => await runIc(autoPrepareArgs(slug), () => undefined), log);
             }
         } catch (error) {
@@ -125,7 +125,7 @@ export const startAutoPrepare = (log: Log): { stop: () => void } => {
             schedule(TICK_MS + Math.floor(Math.random() * JITTER_MS));
         }
     };
-    schedule(FIRST_TICK_MS);
+    schedule(FIRST_TICK_MS + Math.floor(Math.random() * JITTER_MS));
     return {
         stop: (): void => {
             stopped = true;

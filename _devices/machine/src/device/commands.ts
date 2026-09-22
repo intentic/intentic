@@ -4,24 +4,20 @@ import { plural } from "@intentic/base/format";
 import { createUi, type Log, type PlanStep, type Ui } from "@intentic/local-agent";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { resolveDaemonBase } from "../daemon-base.js";
-import { prepareSetup } from "../install.js";
-import { reconcileResidency } from "../resident.js";
+import { completeSetup, prepareSetup } from "../install.js";
+import { ensureResident } from "../resident.js";
 import {
     auditPath,
     configPath,
     type HostLink,
     readLinks,
     readLinkStates,
-    readPrepareUpdates,
     removeLinks,
     unreachableIn,
     upsertLink,
-    writePrepareUpdates,
 } from "./config.js";
 
-// device: setup (redeem a pairing, connect and stay connected), uninstall (disconnect, keep the audit log), and updates
-// (the background-download switch). The connection agent is the shared resident agent (../resident.ts); there's no OAuth,
-// only the short-lived pairing token minted in the sandbox's UI.
+// device: setup (redeem a pairing and stay connected) and uninstall (disconnect, keep the audit log); no OAuth, only the pairing token.
 
 // Retries through a tunnel that may still be warming, but never through a 401: an expired pairing is definitive, and
 // retrying only delays the reconnect the user needs.
@@ -107,12 +103,14 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
     // Added to the link list, not written over it, or connecting a second sandbox silently disconnects the first.
     const links = await upsertLink(link);
     ui.step("device-starting", "starting the agent on this device…");
-    // Restarts against the config as it now is, so an older running binary doesn't keep serving a stale link list.
-    await reconcileResidency(out);
+    // The running agent dials the new link on its next pass; one that is not running is started.
+    await ensureResident(out);
+    await completeSetup(out);
+    const opened = await linkOpens(flags.url);
     // Naming the count shows an already-connected device that it's still connected.
     const others = links.length - 1;
     ui.finished(
-        "This device is connected.",
+        opened ? "This device is connected." : "This device is linked. Its connection comes up as soon as the sandbox answers.",
         id,
         others === 0
             ? "Its permissions are set in the sandbox, on the same card you got this command from."
@@ -122,6 +120,24 @@ const runSetup = async (ui: Ui, out: Log, flags: SetupFlags): Promise<void> => {
             ["disconnect", "intentic-machine device uninstall"],
         ],
     );
+};
+
+// Long enough for the running agent's next pass and a first dial through a tunnel that is warming up.
+const LINK_OPEN_TIMEOUT_MS = 20_000;
+const LINK_OPEN_POLL_MS = 500;
+
+// Setup says "connected" only once the agent's own stamp shows this link's socket open.
+const linkOpens = async (url: string): Promise<boolean> => {
+    const deadline = Date.now() + LINK_OPEN_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded poll of one stamp, serial by definition
+        if ((await readLinkStates())?.[url]?.state === "open") {
+            return true;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- ditto
+        await sleep(LINK_OPEN_POLL_MS);
+    }
+    return false;
 };
 
 interface UninstallFlags {
@@ -156,7 +172,7 @@ export const deviceUninstall = async (out: Log, sandbox?: string): Promise<void>
         // Credential goes; the audit log stays, since it's the user's own record of what happened on their machine.
         await rm(configPath, { force: true });
     }
-    await reconcileResidency(out);
+    await ensureResident(out);
     if (left.length > 0) {
         out(
             `Disconnected from ${dropped.map((link) => link.sandboxUrl).join(", ")}. Still connected to ${left.length} sandbox${left.length === 1 ? "" : "es"}.`,
@@ -170,45 +186,6 @@ export const deviceUninstall = async (out: Log, sandbox?: string): Promise<void>
     );
     out(`Your record of what this agent did stays at ${auditPath}.`);
 };
-
-// Flags, not a positional: a bare word flipping machine-wide behavior shouldn't be an accident; with neither flag, it
-// just reports the current state.
-interface UpdatesFlags {
-    readonly on: boolean;
-    readonly off: boolean;
-}
-
-const updates = buildCommand<UpdatesFlags>({
-    docs: { brief: "Keep each sandbox's next update downloaded in the background, so applying it is a short restart (on by default)" },
-    parameters: {
-        flags: {
-            on: { kind: "boolean", brief: "Download updates in the background (the default)" },
-            off: { kind: "boolean", brief: "Stop downloading updates in the background" },
-        },
-    },
-    async func(this: CommandContext, flags: UpdatesFlags) {
-        const out = (message: string): void => void this.process.stdout.write(`${message}\n`);
-        if (flags.on && flags.off) {
-            throw new Error("--on and --off contradict each other: pass one.");
-        }
-        if (!flags.on && !flags.off) {
-            out(
-                (await readPrepareUpdates())
-                    ? "On: this machine downloads each sandbox's next update in the background, so applying one is a restart of about half a minute. Turn it off with --off."
-                    : "Off: updates are downloaded only when you take one, which makes updating a wait of minutes. Turn background downloads back on with --on.",
-            );
-            return;
-        }
-        await writePrepareUpdates(flags.on);
-        // Restarts the agent now, not at its next tick: 'off' on a metered connection must take effect immediately.
-        await reconcileResidency(out);
-        out(
-            flags.on
-                ? "Background update downloads are on for this machine's sandboxes."
-                : "Background update downloads are off. The update card in your sandbox still downloads and applies on demand.",
-        );
-    },
-});
 
 // Drops the links this machine has been dialling into silence for long enough that "the sandbox is restarting" has
 // stopped being a reading of it — a recreated or deleted sandbox, whose address nothing will ever answer again.
@@ -240,9 +217,8 @@ export const dropUnreachableLinks = async (out: Log): Promise<void> => {
         await removeLinks(url);
     }
     const left = await readLinks();
-    // Restarted against the config as it now is, or the dial loops for the links just dropped keep running in the agent
-    // that is already up — which is the whole point of dropping them.
-    await reconcileResidency(out);
+    // The running agent closes the dropped links on its next pass, and retires if they were all it served.
+    await ensureResident(out);
     out(`Dropped ${plural(gone.length, "unreachable link")}: ${gone.map(({ url }) => url).join(", ")}.`);
     out(
         left.length === 0
@@ -251,4 +227,4 @@ export const dropUnreachableLinks = async (out: Log): Promise<void> => {
     );
 };
 
-export const deviceCommands = { setup, uninstall, updates, "forget-unreachable": forgetUnreachable };
+export const deviceCommands = { setup, uninstall, "forget-unreachable": forgetUnreachable };

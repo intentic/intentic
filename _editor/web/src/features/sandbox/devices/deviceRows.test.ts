@@ -497,11 +497,11 @@ test(`says nothing at all about a healthy, fully-permitted machine`, () => {
 
 test(`leads with whether the machine answers, then how old the reading is`, () => {
     // Granted, like every case here that isn't about permissions: an ungranted switch is a third concern of its own.
-    const concerns = concernsOf({ gap: `no-agent` }, { capturedAt: NOW - 61_000 }, undefined, GRANTED);
+    const concerns = concernsOf({ gap: `unreported` }, { capturedAt: NOW - 61_000 }, undefined, GRANTED);
     expect(concerns.map((concern) => concern.key)).toEqual([`gap`, `stale`]);
-    expect(concerns[0]?.text).toBe(`Reachable, but no agent is installed.`);
+    expect(concerns[0]?.text).toBe(`Its agent has never described this machine. Update it.`);
     // The errand is on the page; why it matters is one hover away, so the strip stays one line per want.
-    expect(concerns[0]?.hint).toContain(`Nothing here knows its folders or ports`);
+    expect(concerns[0]?.hint).toContain(`re-running its install`);
     expect(concerns[1]?.text).toContain(`Last heard from`);
     expect(concerns[1]?.hint).toContain(`what the machine looked like then`);
 });
@@ -571,14 +571,13 @@ test(`offers no pairing to a machine this sandbox reaches only through desktop s
 // Every other gap is a machine that does answer: its own sentence names the switch or the install that closes
 // it, and a second button offering a pairing beside that would point at the wrong errand.
 test(`keeps both ways back for the one gap that is silence`, () => {
-    const remedies = ([`offline`, `scope-off`, `no-agent`, `unreported`] as const).map((gap) => {
+    const remedies = ([`offline`, `scope-off`, `unreported`] as const).map((gap) => {
         const concern = concernsOf({ gap, report: undefined }).find((entry) => entry.key === `gap`);
         return [gap, concern?.command, concern?.fix?.kind];
     });
     expect(remedies).toEqual([
         [`offline`, `intentic-machine run`, `connect`],
         [`scope-off`, undefined, undefined],
-        [`no-agent`, undefined, undefined],
         [`unreported`, undefined, undefined],
     ]);
 });

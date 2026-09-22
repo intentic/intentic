@@ -1,5 +1,5 @@
 import type { deviceContract, DeviceScopes } from "@intentic/sandbox-contract";
-import { createORPCClient } from "@orpc/client";
+import { createORPCClient, ORPCError } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { RPCLink } from "@orpc/client/websocket";
 import { RPCHandler } from "@orpc/server/websocket";
@@ -81,6 +81,14 @@ test("the daemon can ask a machine what it is", async () => {
     expect(facts.shell).toBeTypeOf("string");
     expect(facts.home).toBeTypeOf("string");
     expect(facts.roots.length).toBeGreaterThan(0);
+});
+
+// FORBIDDEN is the one refusal the sandbox reads as the "Run commands" switch rather than an agent without the call.
+test("a machine with commands switched off refuses to describe itself, as FORBIDDEN", async () => {
+    const { client } = connectedPair(scopes({ shell: "off" }));
+    const refusal: unknown = await client.report().catch((error: unknown) => error);
+    expect(refusal).toBeInstanceOf(ORPCError);
+    expect((refusal as ORPCError<string, unknown>).code).toBe("FORBIDDEN");
 });
 
 test("a pushed grant takes effect on the machine", async () => {

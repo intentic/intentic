@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand, wslPathOf } from "@intentic/sandbox-contract";
+import { COMMAND_CLASS_LABELS, type CommandClass, type DeviceScopes, matchCommand } from "@intentic/sandbox-contract";
 import { assertPath, assertScope, rootsOf, ScopeError } from "../policy.js";
+import { crossInterpreter, type Interpreter, POWERSHELL_FLAGS, targetOf } from "../../environments/crossing.js";
 import { wslEnvironment } from "../../wsl.js";
 
 // Running a command on somebody's device. The shell isn't negotiable per call: Windows gets PowerShell,
@@ -20,8 +21,6 @@ export const MAX_TIMEOUT_MS = 10 * 60 * 1000;
 // ended, the megabyte of progress bars between them isn't worth a model's context.
 const MAX_OUTPUT = 100_000;
 
-// -NoProfile keeps profile customisations out of the output; -NonInteractive makes a prompt an error instead of a hang.
-const POWERSHELL_FLAGS = ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"];
 
 export const shellFor = (
     platform: NodeJS.Platform,
@@ -42,87 +41,6 @@ export const shellFor = (
     const shell = process.env["SHELL"] ?? "/bin/sh";
     return { command: shell, args: (script) => ["-lc", script], label: shell };
 };
-
-// Where a command runs: this environment, a WSL distro of this Windows PC, or the Windows side of this distro.
-export type CommandTarget = { readonly kind: "native" } | { readonly kind: "wsl"; readonly distro: string | undefined } | { readonly kind: "windows" };
-
-// `in` as the tool takes it: absent for here, "wsl" for the default distro, "wsl:<name>" for one by name, "windows".
-export const targetOf = (raw: string | undefined): CommandTarget => {
-    if (raw === undefined || raw === "") {
-        return { kind: "native" };
-    }
-    if (raw === "windows") {
-        return { kind: "windows" };
-    }
-    if (raw === "wsl") {
-        return { kind: "wsl", distro: undefined };
-    }
-    if (raw.startsWith("wsl:") && raw.length > "wsl:".length) {
-        return { kind: "wsl", distro: raw.slice("wsl:".length) };
-    }
-    throw new Error(`Unknown \`in\` "${raw}": use "wsl", "wsl:<distro>" or "windows".`);
-};
-
-export interface Interpreter {
-    readonly command: string;
-    readonly args: readonly string[];
-    readonly cwd: string | undefined;
-    readonly env: NodeJS.ProcessEnv;
-}
-
-// The Windows PowerShell a distro reaches through interop, PowerShell 7 preferred as on Windows itself.
-const WINDOWS_POWERSHELL = [
-    "/mnt/c/Program Files/PowerShell/7/pwsh.exe",
-    "/mnt/c/Program Files/PowerShell/7-preview/pwsh.exe",
-    "/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe",
-];
-
-// A command in one of this PC's distros. `--exec` hands sh its argv verbatim, so the script crosses as one argument
-// and never meets PowerShell's quoting; `--cd ~` starts in the distro's home rather than this process's folder
-// mapped under /mnt. A distro wsl.exe doesn't know is its own error, exit code and all.
-const wslInterpreter = (distro: string | undefined, script: string, cwd: string | undefined, platform: NodeJS.Platform): Interpreter => {
-    if (platform !== "win32") {
-        throw new Error(`Only a Windows PC can run a command in WSL; this device runs ${platform}.`);
-    }
-    return {
-        command: "wsl.exe",
-        args: [...(distro === undefined ? [] : ["-d", distro]), "--cd", cwd ?? "~", "--exec", "sh", "-lc", script],
-        cwd: undefined,
-        env: { ...process.env, WSL_UTF8: "1" },
-    };
-};
-
-// A command on the Windows side of this distro. Interop maps a /mnt working directory back to its drive; with none
-// given the script starts in the Windows profile, since this process's own folder has no Windows name.
-const windowsInterpreter = (script: string, cwd: string | undefined, inWsl: boolean, exists: (path: string) => boolean): Interpreter => {
-    if (!inWsl) {
-        throw new Error("Only a WSL distro can run a command on Windows; this device is not one.");
-    }
-    const command = WINDOWS_POWERSHELL.find(exists);
-    if (command === undefined) {
-        throw new Error("No PowerShell is reachable from this distro: Windows interop is off, or C: is not mounted at /mnt/c.");
-    }
-    const start = cwd === undefined ? undefined : cwd.startsWith("/mnt/") ? cwd : wslPathOf(cwd);
-    if (cwd !== undefined && start === undefined) {
-        throw new Error(`A Windows working directory is a drive path (C:\\Users\\you) or its /mnt form, not "${cwd}".`);
-    }
-    return {
-        command,
-        args: [...POWERSHELL_FLAGS, start === undefined ? `Set-Location -LiteralPath $env:USERPROFILE\n${script}` : script],
-        cwd: start,
-        env: process.env,
-    };
-};
-
-// The argv for a command that crosses environments. A cross-over `cwd` names a folder in the other environment,
-// which this door's roots (paths in this one) cannot bound; a command's reach was never bounded by its cwd, only
-// its start.
-export const crossInterpreter = (
-    target: Exclude<CommandTarget, { kind: "native" }>,
-    script: string,
-    cwd: string | undefined,
-    { platform, inWsl, exists }: { platform: NodeJS.Platform; inWsl: boolean; exists: (path: string) => boolean },
-): Interpreter => (target.kind === "wsl" ? wslInterpreter(target.distro, script, cwd, platform) : windowsInterpreter(script, cwd, inWsl, exists));
 
 // Read once per process: whether this agent runs inside a distro decides which way `in` can cross.
 let insideWsl: Promise<boolean> | undefined;

@@ -2278,7 +2278,11 @@
             "waitingFirstLineDevice": "En attente de la première ligne de cet appareil…"
         },
         "deviceAgent": {
-            "fetchesNewestAgentOnto": "Récupère le tout dernier agent sur cet appareil, l'installe, et redémarre sa boucle — le seul processus par lequel ce sandbox atteint l'appareil. Sans risque sur un agent déjà à jour ; ses dossiers, appairages et ports reflétés restent intacts dans tous les cas.",
+            "fetchesNewestAgentOnto": "Amène tout cet ordinateur au tout dernier agent — Windows et chaque distro WSL dotée d'un agent, tous sur une même version — et redémarre l'agent de chaque côté au passage. Sans risque sur un agent déjà à jour ; dossiers, appairages et ports reflétés restent intacts.",
+            "oneVersionPerMachine": "Windows et chaque distro WSL exécutent leur propre copie de l'agent, et tous doivent être sur une même version. « Mettre à jour l'agent » amène chaque côté à la plus récente d'entre elles ; un côté resté en arrière est un côté dont la dernière mise à jour a échoué.",
+            "publishedForMachine": "L'agent {latest} a été publié.",
+            "publishedMachineHas": "L'agent {latest} a été publié ; cet ordinateur a {held}.",
+            "sidesRunDifferentAgents": "Ses côtés exécutent des agents différents : {sides}.",
             "socketDroppedMomentAgo": "Son socket est tombé il y a un instant, ce qui est exactement ce que fait le redémarrage d'un agent. Une nouvelle boucle rappelle d'elle-même, et rien ne peut tourner sur la machine tant que ce n'est pas fait.",
             "updateAgent": "Mettre à jour l'agent",
             "updateAgentFetchesInstalls": "« Mettre à jour l'agent » le récupère, l'installe, et redémarre la boucle sur cet appareil.",
@@ -2328,7 +2332,6 @@
             "deviceAloneLosesAccess": "Cet appareil seul perd l'accès — tous les autres appareils appairés continuent de se synchroniser. Sa synchronisation de fichiers s'arrête et ses ports reflétés disparaissent de son localhost en une minute.",
             "dontMirrorPort": "Ne pas le refléter",
             "environments": "Environments",
-            "fetchesNewestAgentOnto": "Récupère le tout dernier agent sur chaque environnement de cet ordinateur à tour de rôle — Windows et chaque distro lancent leur propre installation, et c'est ce qui les met à la même version. Sans risque sur un côté déjà à jour.",
             "fixAgent": "Réparer avec un agent",
             "leavePortOffLocalhost": "Laisser ce port hors du localhost de cet appareil. Tous les autres ports servis par ce sandbox continuent d'être reflétés.",
             "letGoHint": "Cet appareil cesse de tenir ce sandbox. Ses fichiers cessent de se synchroniser et ses ports quittent localhost ; le dossier déjà présent sur l'appareil reste exactement tel quel.",
@@ -2367,8 +2370,7 @@
             "takeSandboxsPortsOff": "Retirer les ports de ce sandbox du localhost de cet appareil. Les fichiers continuent de se synchroniser.",
             "thisSandbox": "ce sandbox",
             "unpair": "Désappairer",
-            "unpairHeader": "Désappairer {sandbox} ?",
-            "updateAgents": "Update agents"
+            "unpairHeader": "Désappairer {sandbox} ?"
         },
         "deviceRows": {
             "fileSyncing": "Synchronisation de fichiers",

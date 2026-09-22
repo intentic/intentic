@@ -103,6 +103,7 @@ test("a config file that cannot be parsed is a fault, not an empty machine", asy
     await expect(config.readLinks()).rejects.toThrow(SyntaxError);
     // Best-effort by contract, so it stays quiet — but quietly writing `{links: []}` here is the whole bug.
     await config.rememberScopes("https://one.example", scopes("on"));
+    expect(await readFile(config.configPath, "utf8")).toBe('{"links": [ this is not json');
 
     await writeFile(config.configPath, held);
     expect((await config.readLinks()).map((entry) => entry.sandboxUrl)).toEqual(["https://one.example"]);
@@ -161,19 +162,4 @@ test("a stamp caught half-written reads as no answer, since the next one is seco
     await writeFile(config.linkStatePath, '{"at":1700000000000,"links":{"https://one.exa');
 
     expect(await config.readLinkStates()).toBeUndefined();
-});
-
-test("the background-download switch defaults to on, and survives every link writer", async () => {
-    // Same regression as the file header: a writer rebuilding from what it knows drops what it doesn't. The switch
-    // shares the file with links, so each writer proves it passes the setting through.
-    expect(await config.readPrepareUpdates()).toBe(true);
-    await config.writePrepareUpdates(false);
-    await config.upsertLink(link("https://four.example", "laptop"));
-    expect(await config.readPrepareUpdates()).toBe(false);
-    await config.rememberScopes("https://four.example", scopes("on"));
-    expect(await config.readPrepareUpdates()).toBe(false);
-    await config.removeLinks("https://four.example");
-    expect(await config.readPrepareUpdates()).toBe(false);
-    await config.writePrepareUpdates(true);
-    expect(await config.readPrepareUpdates()).toBe(true);
 });

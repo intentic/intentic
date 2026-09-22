@@ -195,9 +195,9 @@ the copyable command, as an unreachable machine does.
 
 It answers off the row's own container list (`Device.sandboxes`), not off the machine's report, because the two ride
 different switches: the containers come from `list_sandboxes` behind "Manage sandboxes on this device", the report from
-`intentic-machine status --json` behind "Run commands". A card that grants the first and not the second — which is
+the agent's own `report` call behind "Run commands". A card that grants the first and not the second — which is
 exactly what setup writes for a new sandbox — can run every swap this predicate leads to while refusing to describe
-itself, so a refused status call leaves the row a named `scope-off` gap and its containers both
+itself, so a refused report leaves the row a named `scope-off` gap and its containers both
 ([device-reports.ts](../../_sandbox/sandbox/src/hosts/device-reports.ts)). Folding the list into the report is what had a
 freshly added sandbox print a terminal command for the one rebuild it always needs.
 

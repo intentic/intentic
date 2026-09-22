@@ -1,7 +1,7 @@
 import type { Device } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { deviceAgentPanel } from "./deviceAgent";
-import { deviceRow } from "./deviceRows";
+import { deviceAgentPanel, machineAgent } from "./deviceAgent";
+import { deviceRow, machineRow } from "./deviceRows";
 
 // The agent panel's rules, checked without mounting the page: what it says about one device's agent, and
 // when each of its two verbs is offered.
@@ -193,7 +193,7 @@ test(`hands the silence back to the concerns strip once the drop is older than t
 // Every gap already has a sentence of its own in the concerns strip (deviceAttention.ts), each naming its own
 // errand. This panel used to restate all four in a few words each, directly beneath them.
 test(`leaves every gap to the concerns strip rather than restating it under the buttons it removed`, () => {
-    for (const gap of [`scope-off`, `no-agent`, `offline`] as const) {
+    for (const gap of [`scope-off`, `offline`] as const) {
         expect(verbs({ gap })).toEqual([]);
         expect(panelOf({ gap })?.blocked).toBeUndefined();
         expect(said({ gap })).toBe(``);
@@ -215,4 +215,74 @@ test(`keeps the verbs for a connected device that has never reported`, () => {
     expect(panel?.state).toEqual({ word: `not reported`, variant: `neutral` });
     expect(panel?.actions.map((action) => action.op)).toEqual([`upgrade`, `restart`]);
     expect(panel?.blocked).toBeUndefined();
+});
+
+// ── one machine, one update ────────────────────────────────────────────────
+
+// Two sides of one PC: the Windows side and the distro on it, each its own door and its own agent.
+const windowsSide = (overrides: Partial<Device> = {}, installed = `1.2.0`): Device =>
+    device({
+        key: `rog`,
+        hostId: `rog`,
+        platform: `windows`,
+        report: report({ os: `win32`, agent: { running: true, lastTickAt: NOW, build: installed, installed } }),
+        ...overrides,
+    });
+const distroSide = (overrides: Partial<Device> = {}, installed = `1.2.0`): Device =>
+    device({
+        key: `rog:wsl`,
+        label: `rog::wsl:Arch`,
+        hostId: `rog::wsl:Arch`,
+        platform: `linux`,
+        facts: { ...facts(undefined), os: `Arch Linux`, wsl: { distro: `Arch` } },
+        report: report({ wsl: { distro: `Arch` }, agent: { running: true, lastTickAt: NOW, build: installed, installed } }),
+        ...overrides,
+    });
+
+const pc = (sides: readonly Device[], latest?: string) =>
+    machineRow(
+        sides.map((side) => deviceRow(side, latest)),
+        { key: `rog`, label: `rog` },
+    );
+
+// An update moves every side, so a side of a many-sided machine offers Restart alone and leaves the release to the machine.
+test(`gives a side of a many-sided machine Restart alone, and no word on the published release`, () => {
+    const side = deviceAgentPanel(deviceRow(distroSide({}, `1.1.0`), `1.2.0`), `1.2.0`, NOW, { update: false });
+    expect(side?.actions.map((action) => action.op)).toEqual([`restart`]);
+    expect(side?.notes).toEqual([]);
+});
+
+// The Windows side updates its distros first and itself last, so its door is where the machine's one press goes.
+test(`sends the machine's update through its Windows side`, () => {
+    expect(machineAgent(pc([distroSide(), windowsSide()]), undefined).door?.device.hostId).toBe(`rog`);
+    expect(machineAgent(pc([distroSide(), windowsSide()]), undefined).action.op).toBe(`upgrade`);
+});
+
+// A distro hands the job to its Windows side itself, so a Windows door that cannot hear is no reason to offer nothing.
+test(`sends it through a distro when the Windows side cannot hear it, and nowhere when no side can`, () => {
+    const asleep = windowsSide({ online: false, gap: `offline` });
+    expect(machineAgent(pc([distroSide(), asleep]), undefined).door?.device.hostId).toBe(`rog::wsl:Arch`);
+    expect(machineAgent(pc([distroSide({ online: false, gap: `offline` }), asleep]), undefined).door).toBeUndefined();
+});
+
+test(`says nothing about a machine whose sides agree and are current`, () => {
+    expect(machineAgent(pc([distroSide(), windowsSide()], `1.2.0`), `1.2.0`).notes).toEqual([]);
+});
+
+// Sides on different builds is the state this design exists to end; it is named once, with each side's build.
+test(`names each side's build when the sides of one machine disagree`, () => {
+    const notes = machineAgent(pc([distroSide({}, `1.1.0`), windowsSide()]), undefined).notes;
+    expect(notes.map((note) => note.text)).toEqual([`Its sides run different agents: Arch Linux on WSL 1.1.0, Windows 1.2.0.`]);
+    expect(notes[0]?.tone).toBe(`warning`);
+});
+
+// The machine's holding is named only when it is one version; a split has just listed every side's.
+test(`names the published release once for the machine, with what it holds when that is one version`, () => {
+    expect(machineAgent(pc([distroSide({}, `1.1.0`), windowsSide({}, `1.1.0`)], `1.2.0`), `1.2.0`).notes.map((note) => note.text)).toEqual([
+        `Agent 1.2.0 has been published; this machine has 1.1.0.`,
+    ]);
+    expect(machineAgent(pc([distroSide({}, `1.1.0`), windowsSide()], `1.2.0`), `1.2.0`).notes.map((note) => note.text)).toEqual([
+        `Its sides run different agents: Arch Linux on WSL 1.1.0, Windows 1.2.0.`,
+        `Agent 1.2.0 has been published.`,
+    ]);
 });

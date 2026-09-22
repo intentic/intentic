@@ -1,8 +1,8 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
-import { hostEntryOf, hostEnvironmentOf, type DeviceFacts, DeviceFactsSchema, WslEnvironmentSchema } from "./hosts.js";
+import { hostEntryOf, hostEnvironmentOf, type DeviceFacts, DeviceFactsSchema, WSL_SYSTEM_DISTROS, WslEnvironmentSchema } from "./hosts.js";
 import { DEV_VERSION } from "../state/versions.js";
-// Desktop-sync report shape shared by the agent, daemon and browser, produced only by `intentic-machine status --json`.
+// Desktop-sync report shape shared by the agent, daemon and browser, produced only by the agent's own `deviceReport`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
 // own pairing.
 
@@ -407,9 +407,7 @@ export const DeviceGapSchema = z.enum([
     // Connected, but "Run commands" is off on its capability card, so it won't describe itself: no folders, no
     // ports, no agent health. Says nothing about its containers, which ride their own switch (`Device.sandboxes`).
     "scope-off",
-    // Reachable and asked, but has no `intentic-machine` installed, so nothing knows its folders or ports.
-    "no-agent",
-    // Sync-enrolled but has not posted a report yet; unlike `no-agent`, the agent is there and syncing.
+    // The agent is there but gave no report: never posted since enrolling, or refused `report` other than by its switch.
     "unreported",
 ]);
 export type DeviceGap = z.infer<typeof DeviceGapSchema>;
@@ -577,10 +575,6 @@ export const hostRunningSandbox = (devices: readonly Device[], slug: string | un
 // the line naming it would work under.
 const windowsPath = (path: string): boolean => /^([A-Za-z]:[\\/]|\\\\)/.test(path);
 
-// Docker Desktop's own distros. `wsl -l -q` lists them like any other and neither ever holds a checkout, so counting
-// them would make every Docker Desktop PC look ambiguous.
-const SYSTEM_DISTROS: ReadonlySet<string> = new Set(["docker-desktop", "docker-desktop-data"]);
-
 // How a line written for a host path reaches the environment that holds it, through one door. `none` carries the
 // distros that were candidates, since "this PC has two and nothing says which" is a different answer for the reader
 // than "there is no way in".
@@ -602,7 +596,7 @@ export const pathReach = (platform: string | undefined, facts: DeviceFacts | und
     if (platform === undefined || (platform === "windows") === windowsPath(path)) {
         return { kind: "direct" };
     }
-    const distros = platform === "windows" ? (facts?.wslDistros ?? []).filter((distro) => !SYSTEM_DISTROS.has(distro)) : [];
+    const distros = platform === "windows" ? (facts?.wslDistros ?? []).filter((distro) => !WSL_SYSTEM_DISTROS.has(distro)) : [];
     const only = distros.length === 1 ? distros[0] : undefined;
     return only === undefined ? { kind: "none", distros } : { kind: "wsl", distro: only };
 };

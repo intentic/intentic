@@ -4,7 +4,7 @@ import { HOST_HEARTBEAT_MS, hostConnectUrl, type DeviceScopes } from "@intentic/
 import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@intentic/sandbox-contract/peer-dial";
 import { RPCHandler } from "@orpc/server/websocket";
 import { type DaemonBase, resolveDaemonBase } from "../daemon-base.js";
-import { type HostLink, rememberScopes } from "./config.js";
+import { type HostLink, rememberScopes, removeLinks } from "./config.js";
 import { createHostRouter } from "./router.js";
 
 // This device's one instance of sandbox-contract's peer-dial (the socket, handler-before-hello, backoff, the
@@ -20,7 +20,10 @@ export interface Dial {
 
 const realDial: Dial = { resolveBase: resolveDaemonBase, socket: (url) => new WebSocket(url) };
 
-export const connect = (config: HostLink, version: string, log: Log, dial: Dial = realDial): PeerLink => {
+// What a revoked link is dropped with; the resident's next pass then closes nothing more, since the loop already ended.
+const forgetLink = async (sandboxUrl: string): Promise<void> => void (await removeLinks(sandboxUrl));
+
+export const connect = (config: HostLink, version: string, log: Log, dial: Dial = realDial, forget = forgetLink): PeerLink => {
     // Every line this link writes names the sandbox it is about. One agent holds a link per sandbox and the dial
     // agent's own complaints carry no address, so a machine with five links wrote "disconnected (1002); 7172 failed
     // attempts" for two days without ever saying whose — and nothing in the log could tell the dead ones apart.
@@ -61,9 +64,10 @@ export const connect = (config: HostLink, version: string, log: Log, dial: Dial 
 /* The deadline that makes a dead link NOTICEABLE, and on this door it is the one that matters most. */
         silenceMs: peerLinkSilenceMs(HOST_HEARTBEAT_MS),
         log: linkLog,
-        revoked: () =>
-            linkLog(
-                "the sandbox refused this device's enrollment: it was revoked there. Run `intentic-machine device uninstall` to clean up, or connect again from the sandbox.",
-            ),
+        // 1008 is the sandbox having read its enrollments and not found this one, so the link is dropped rather than redialled.
+        revoked: () => {
+            linkLog("the sandbox refused this device's enrollment: it was revoked there, so this link is dropped. Connect again from the sandbox to restore it.");
+            void forget(config.sandboxUrl).catch((error: unknown) => linkLog(`could not drop the revoked link (${String(error)})`));
+        },
     });
 };

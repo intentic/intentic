@@ -15,14 +15,13 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     ...overrides,
 });
 
-/* RESTART IS BARE `run`, and the drop is the one op that is a task rather than a agent. */
-test("every op maps to the CLI verb that actually performs it, and says whether that verb is meant to finish", () => {
+/* RESTART IS BARE `run`, and every op is a task: a run that finds nothing to do exits at once, and that is no crash. */
+test("every op maps to the CLI verb that actually performs it", () => {
     expect(AGENT_VERB).toEqual({
-        upgrade: { argv: ["upgrade"], finishes: false },
-        restart: { argv: ["run"], finishes: false },
-        // Detached like the other two — its own reconcile kills the agent serving this socket — but it EXITS, and on the
-        // path where nothing is unreachable it exits at once, which the settle check would otherwise call a crash.
-        "forget-unreachable": { argv: ["device", "forget-unreachable"], finishes: true },
+        // The whole machine, whichever side was asked: the command itself reaches the rest of the PC.
+        upgrade: ["upgrade"],
+        restart: ["run"],
+        "forget-unreachable": ["device", "forget-unreachable"],
     });
 });
 

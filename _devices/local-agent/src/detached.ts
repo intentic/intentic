@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { openSync } from "node:fs";
-import { readFile, rename, stat } from "node:fs/promises";
+import { readFile, rename, rm, stat } from "node:fs/promises";
 import { uptime } from "node:os";
 import { basename } from "node:path";
 import { setTimeout } from "node:timers/promises";
+import { writeSecretFile } from "./home.js";
 import { type CliLauncher, stubCommand, windowsLaunchStub } from "./launcher.js";
 
 // Resident background agent, one per machine, found again across processes via a pidfile. A stale pid (crash, power
@@ -40,37 +41,100 @@ const sameBoot = (written: string, current: string): boolean => {
     return Math.abs(Number(written.slice(3)) - Number(current.slice(3))) <= SAME_BOOT_MS;
 };
 
-// Writes pid, boot token, and an optional build note as one line; one producer keeps `livePidRecord`'s shape single.
-// The note is the only way another process (upgrade, status) can tell a fresh agent from an old one.
-export const pidFileBody = async (pid: number = process.pid, note?: string): Promise<string> =>
-    `${pid} ${await bootToken()}${note === undefined ? "" : ` ${note}`}`;
-
-// The agent behind a pidfile: its pid and whatever it stamped. Undefined covers every case with nothing to reach (no
-// file, half-written, stale boot, exited pid), since callers treat them alike.
+// The agent behind a pidfile, as it stamped itself: the build it runs and who restarts it are known only to it.
 export interface PidRecord {
     readonly pid: number;
-    /** What the writer stamped beside the pid, if anything; the machine agent stamps the build it runs. */
-    readonly note?: string;
+    readonly build?: string;
+    readonly supervisor?: string;
 }
 
-export const livePidRecord = async (pidPath: string): Promise<PidRecord | undefined> => {
-    const [written = "", stamp = "", note] = (await readFile(pidPath, "utf8").catch(() => "")).trim().split(/\s+/);
-    const pid = Number(written);
-    if (!Number.isInteger(pid) || pid <= 0) {
+interface PidFile extends PidRecord {
+    readonly boot: string;
+}
+
+// One producer, so `livePidRecord` reads exactly one shape.
+export const pidFileBody = async (record: PidRecord): Promise<string> => JSON.stringify({ ...record, boot: await bootToken() });
+
+const text = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
+
+const parsePidFile = (raw: string): PidFile | undefined => {
+    try {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        const { pid, boot } = parsed;
+        if (typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0 || typeof boot !== "string") {
+            return undefined;
+        }
+        const build = text(parsed["build"]);
+        const supervisor = text(parsed["supervisor"]);
+        return { pid, boot, ...(build === undefined ? {} : { build }), ...(supervisor === undefined ? {} : { supervisor }) };
+    } catch {
         return undefined;
     }
-    if (!sameBoot(stamp, await bootToken())) {
-        return undefined;
-    }
-    if (!isProcessAlive(pid)) {
-        return undefined;
-    }
-    return { pid, ...(note === undefined || note === "" ? {} : { note }) };
 };
 
-// The pid alone, for callers that only ask whether an agent exists (e.g. VPN and exit-node pidfiles, which stamp no
-// note).
+// Undefined covers every record with nothing to reach (no file, torn, another boot, an exited pid): callers treat them alike.
+export const livePidRecord = async (pidPath: string): Promise<PidRecord | undefined> => {
+    const file = parsePidFile(await readFile(pidPath, "utf8").catch(() => ""));
+    if (file === undefined || !sameBoot(file.boot, await bootToken()) || !isProcessAlive(file.pid)) {
+        return undefined;
+    }
+    const { boot: _boot, ...record } = file;
+    return record;
+};
+
 export const livePid = async (pidPath: string): Promise<number | undefined> => (await livePidRecord(pidPath))?.pid;
+
+// Long enough for a concurrent claimer's write to land, so the re-read after it names the last writer.
+const CLAIM_SETTLE_MS = 150;
+
+export type PidClaim = { readonly claimed: true } | { readonly claimed: false; readonly holder: PidRecord };
+
+// Last writer wins and every claimer re-reads after the settle, so two starters racing for one file never both keep it.
+export const claimPidFile = async (pidPath: string, dir: string, record: PidRecord): Promise<PidClaim> => {
+    const holder = await livePidRecord(pidPath);
+    if (holder !== undefined && holder.pid !== record.pid) {
+        return { claimed: false, holder };
+    }
+    await writeSecretFile(pidPath, dir, await pidFileBody(record));
+    await setTimeout(CLAIM_SETTLE_MS);
+    const settled = await livePidRecord(pidPath);
+    return settled === undefined || settled.pid === record.pid ? { claimed: true } : { claimed: false, holder: settled };
+};
+
+// The holder's lease check: a missing or dead record is written back, and another live pid means this process lost it.
+export const holdPidFile = async (pidPath: string, dir: string, record: PidRecord): Promise<boolean> => {
+    const now = await livePidRecord(pidPath);
+    if (now === undefined) {
+        await writeSecretFile(pidPath, dir, await pidFileBody(record));
+        return true;
+    }
+    return now.pid === record.pid;
+};
+
+// Removes the pidfile only while it still names `pid`, so a stopper never deletes the claim of whoever replaced it.
+export const releasePidFile = async (pidPath: string, pid: number): Promise<boolean> => {
+    const file = parsePidFile(await readFile(pidPath, "utf8").catch(() => ""));
+    if (file !== undefined && file.pid !== pid) {
+        return false;
+    }
+    await rm(pidPath, { force: true });
+    return true;
+};
+
+const STOP_POLL_MS = 50;
+
+// Signalled AND gone, not merely signalled: a caller about to replace what the process holds must wait it out.
+export const stopProcess = async (pid: number, timeoutMs: number): Promise<void> => {
+    try {
+        process.kill(pid, "SIGTERM");
+    } catch {
+        return;
+    }
+    for (let waited = 0; waited < timeoutMs && isProcessAlive(pid); waited += STOP_POLL_MS) {
+        // oxlint-disable-next-line eslint/no-await-in-loop -- a bounded wait for one pid, by definition serial
+        await setTimeout(STOP_POLL_MS);
+    }
+};
 
 // `detached` on every platform: POSIX gives the agent its own session; on Windows, without it the agent dies with its
 // parent. DETACHED_PROCESS and CREATE_NO_WINDOW cannot be combined, so every child spawned from inside the agent passes

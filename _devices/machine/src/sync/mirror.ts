@@ -1,10 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { writeFile } from "node:fs/promises";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import { plural } from "@intentic/base/format";
-import type { Log } from "@intentic/local-agent";
+import { type Log, writeFileAtomic } from "@intentic/local-agent";
 import { type PortSkipReason, type PortSummary, PortsListSchema } from "@intentic/sandbox-contract";
 import {
     mirrorHeartbeatPath,
@@ -283,11 +282,7 @@ export const skippedPortsOf = (
 };
 
 // Stamps the end of a pass; a failed write must not stop mirroring, so it silently under-claims.
-const beat = async (): Promise<void> => await writeFile(mirrorHeartbeatPath, String(Date.now())).catch(() => {});
-
-// Restart=on-failure never restarts a clean exit; a signal means something else stopped the process, so this
-// returns non-zero, or a supervisor won't restart it.
-export const signalExitCode = (signal: NodeJS.Signals): number => (signal === "SIGINT" ? 130 : 143);
+const beat = async (): Promise<void> => await writeFileAtomic(mirrorHeartbeatPath, String(Date.now())).catch(() => {});
 
 // Persists one pairing's ports, leaving every other pairing's alone: avoids clobbering a concurrent `setup`'s
 // write with this tick's stale read.

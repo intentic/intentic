@@ -4,22 +4,19 @@ import { isProcessAlive, spawnDetached } from "@intentic/local-agent";
 import type { DeviceAgentOp, DeviceScopes } from "@intentic/sandbox-contract";
 import { agentLogPath } from "../../config.js";
 import { installedBuild } from "../../installed.js";
-import { machineLauncher } from "../../resident.js";
+import { machineLauncher } from "../../supervision.js";
 import { assertScope } from "../policy.js";
 
 // Updates or restarts this device's own agent, asked for from the browser. Both operations stop the process
 // serving this socket, so the work is detached (spawnDetached) and tailed back rather than spawned inline,
 // which would die with an EPIPE mid-swap. Gated by "Run commands", not a sandbox switch: this touches no container.
 
-// `intentic-machine <verb…>`; the op is a closed enum in the contract and this is the whole mapping. Argv, not one
-// word, since a verb under a route map is two. `restart` is bare `run`, not `run --stop`: reconcileResidency already
-// stops the agent it finds before starting its own.
-// `finishes` says which of them is a TASK: the drop does its work and exits, and on the path where there is nothing to
-// drop it exits in milliseconds, which spawnDetached would otherwise report as a agent that crashed on startup.
-export const AGENT_VERB: Record<DeviceAgentOp, { readonly argv: readonly string[]; readonly finishes: boolean }> = {
-    upgrade: { argv: ["upgrade"], finishes: false },
-    restart: { argv: ["run"], finishes: false },
-    "forget-unreachable": { argv: ["device", "forget-unreachable"], finishes: true },
+// `intentic-machine <verb…>`; the op is a closed enum in the contract and this is the whole mapping. Every one is a TASK:
+// it does its work and exits, often within spawnDetached's settle window, which must not read that as a crash.
+export const AGENT_VERB: Record<DeviceAgentOp, readonly string[]> = {
+    upgrade: ["upgrade"],
+    restart: ["run"],
+    "forget-unreachable": ["device", "forget-unreachable"],
 };
 
 // How long to keep reading the log after the detached run stops looking alive. `upgrade` replaces the binary
@@ -40,24 +37,22 @@ const readFrom = async (path: string, from: number): Promise<{ text: string; at:
 // Start it, then narrate it. The answer is about what was STARTED, not what it achieved, since this process is
 // usually not alive to see the end; the reader confirms by the version moving. `onLine` is the same callback
 // the sandbox flows take (see ../router.ts).
-// Every op here restarts the resident agent — the drop reconciles it, so the links it removed stop being dialled — which
-// is why all three warn about the same dropped connection.
 const started = (op: DeviceAgentOp, installed: string | undefined): string => {
     if (op === "upgrade") {
-        return `Updating the agent on this device${installed === undefined ? "" : ` (currently ${installed})`}. Its background agent restarts, so this connection drops while that happens.`;
+        return `Updating the agent on this whole machine, every WSL distro included${installed === undefined ? "" : ` (this side runs ${installed})`}. Each side's agent restarts, so this connection drops while that happens.`;
     }
     if (op === "restart") {
         return `Restarting this device's agent. This connection drops while that happens.`;
     }
-    return `Dropping this device's links to sandboxes that have stopped answering. Its agent restarts against what is left, so this connection drops while that happens.`;
+    return `Dropping this device's links to sandboxes that have stopped answering. The agent closes them on its next pass; this connection stays up.`;
 };
 
 // What the reader is left with once the run is out of this process's hands. Never a claim about the outcome: the work is
 // detached, and this connection usually dies before it ends.
 const settled: Record<DeviceAgentOp, string> = {
-    upgrade: `The update ran on this device. Whether the new agent is the one serving shows in its version, which this view re-reads on its own.`,
+    upgrade: `The update ran on this machine. Whether each side's new agent is the one serving shows in its version, which this view re-reads on its own.`,
     restart: `The agent was restarted on this device.`,
-    "forget-unreachable": `The drop ran on this device. What it removed is in the lines above; this device's link count catches up when its agent dials back in.`,
+    "forget-unreachable": `The drop ran on this device. What it removed is in the lines above; this device's link count catches up within a few seconds.`,
 };
 
 export const runAgentOp = async (op: DeviceAgentOp, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
@@ -66,8 +61,8 @@ export const runAgentOp = async (op: DeviceAgentOp, scopes: DeviceScopes, onLine
     // Fresh watermark per run, taken before the spawn: the log is append-only and long-lived, so a reader must see
     // only this run's lines.
     const start = (await readFrom(agentLogPath, 0)).at;
-    const { argv, finishes } = AGENT_VERB[op];
-    const pid = await spawnDetached(agentLogPath, machineLauncher(), argv, { finishes });
+    const argv = AGENT_VERB[op];
+    const pid = await spawnDetached(agentLogPath, machineLauncher(), argv, { finishes: true });
     onLine(`Started ${argv.join(" ")} (pid ${pid}), detached from this connection so it finishes either way. Log: ${agentLogPath}`);
 
     let at = start;

@@ -200,7 +200,14 @@ test(`a refused enrollment ends the agent instead of redialling`, async () => {
     jest.useFakeTimers();
     const { dial, sockets, asked } = dialing([{ base: LOCAL, local: true }]);
     const said: string[] = [];
-    const connection = connect(link, `1.0.0`, (line) => void said.push(line), dial);
+    const forgotten: string[] = [];
+    const connection = connect(
+        link,
+        `1.0.0`,
+        (line) => void said.push(line),
+        dial,
+        async (url) => void forgotten.push(url),
+    );
 
     await waitFor(() => expect(sockets).toHaveLength(1));
     sockets[0]?.opens();
@@ -211,4 +218,6 @@ test(`a refused enrollment ends the agent instead of redialling`, async () => {
     expect(sockets).toHaveLength(1);
     expect(asked).toHaveLength(1);
     expect(said.join(`\n`)).toContain(`revoked`);
+    // The sync half drops a revoked pairing; the device half drops a revoked link the same way, or it is redialled at every start.
+    expect(forgotten).toEqual([PUBLIC]);
 });

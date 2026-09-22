@@ -11,7 +11,6 @@ import { baseDir } from "../config.js";
 const configPath = join(baseDir, "sync.json");
 export const sshKeyPath = join(baseDir, "id_ed25519");
 export const knownHostsPath = join(baseDir, "known_hosts");
-export const binDir = join(baseDir, "bin");
 
 // The one thing that does NOT live under baseDir: the ssh-config fragment Mutagen's ssh reads. It sits in
 // ~/.ssh so the user's own config can pull it in by a relative name, the only include spelling every OpenSSH

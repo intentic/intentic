@@ -38,6 +38,9 @@ export const DeviceFactsSchema = z.object({
 });
 export type DeviceFacts = z.infer<typeof DeviceFactsSchema>;
 
+// Docker Desktop's own distros: `wsl -l -q` lists them like any other, and none ever runs an agent or holds a checkout.
+export const WSL_SYSTEM_DISTROS: ReadonlySet<string> = new Set(["docker-desktop", "docker-desktop-data"]);
+
 // One folder, two names. Windows sees a distro's files under a UNC share and a distro sees the Windows drives under
 // /mnt, so a path handed across the boundary is translated here rather than by hand at every call site.
 export const wslPathOf = (windowsPath: string): string | undefined => {

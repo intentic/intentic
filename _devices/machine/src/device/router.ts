@@ -1,8 +1,9 @@
 import { narrate } from "@intentic/base/async";
 import { type DeviceScopes, type DeviceFlowLine, type DeviceSandboxFlow, type DeviceSandboxOp, deviceContract } from "@intentic/sandbox-contract";
-import { implement } from "@orpc/server";
+import { implement, ORPCError } from "@orpc/server";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
+import { machineReport } from "../sync/report.js";
 import { runAgentOp } from "./tools/agent.js";
 import {
     createSandbox,
@@ -109,6 +110,13 @@ export const createHostRouter = (runtime: HostRuntime) => {
     const os = implement(deviceContract);
     return os.router({
         describe: os.describe.handler(async () => await hostFacts(runtime.scopes())),
+        // Behind "Run commands" like `status`; FORBIDDEN is the one refusal the sandbox reads as that switch.
+        report: os.report.handler(async () => {
+            if (runtime.scopes().shell !== "on") {
+                throw new ORPCError("FORBIDDEN", { message: `"Run commands" is switched off for this device, so it does not describe its folders and ports.` });
+            }
+            return await machineReport();
+        }),
         setScopes: os.setScopes.handler(({ input }) => {
             runtime.setScopes(input);
             runtime.log(`permissions updated: commands ${input.shell}, writes ${input.write}, screen ${input.screen}`);

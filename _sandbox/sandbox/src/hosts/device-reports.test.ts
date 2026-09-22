@@ -13,7 +13,7 @@ import { test, expect, afterEach, mock, jest } from "bun:test";
 import { waitFor, hoisted } from "@intentic/testing/bun";
 import type { Services } from "../composition.js";
 import { enrolledFleet, type SyncEnrollmentRow } from "../platform/sync.js";
-import { devices, manageDeviceSandbox, mergeDevices, type PullResult, reportFrom, runDeviceAgentFlow, sandboxesFromTool } from "./device-reports.js";
+import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceAgentFlow, sandboxesFromTool } from "./device-reports.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact this file states in one line.
@@ -49,38 +49,6 @@ const host = (id: string, overrides: Partial<HostSummary> = {}): HostSummary => 
 // One desktop-sync enrollment fixture: a machine name and which sync mode it holds.
 const enrolled = (machine: string, mode: "sync" | "mirror" = "sync"): SyncEnrollmentRow => ({ machine, mode });
 
-// Status envelope the agent prints; the report rides in its `sync` field.
-const statusEnvelope = (machine: DeviceReport): string =>
-    JSON.stringify({ version: "1.0.0", summary: "syncing", device: { links: [] }, sync: machine });
-
-test("finds the report inside run_command's prose answer", () => {
-    const answer = `Exit code 0 (success).\n--- stdout ---\n${statusEnvelope(report("laptop"))}`;
-    expect(reportFrom(answer)?.hostname).toBe("laptop");
-});
-
-test("survives a banner before it and a warning after it", () => {
-    const answer = [
-        "Exit code 0 (success).",
-        "--- stdout ---",
-        "Welcome to your shell!",
-        statusEnvelope(report("laptop")),
-        "--- stderr ---",
-        "warning: something unrelated",
-    ].join("\n");
-    expect(reportFrom(answer)?.hostname).toBe("laptop");
-});
-
-test("finds nothing when the command printed no report", () => {
-    expect(reportFrom("Exit code 127 (failed).\n--- stderr ---\nintentic-machine: command not found")).toBeUndefined();
-    expect(reportFrom(`--- stdout ---\n{"hostname":"laptop"}`)).toBeUndefined();
-    expect(reportFrom(`--- stdout ---\n{ not json at all }`)).toBeUndefined();
-});
-
-test("keeps looking past a line that only looked like JSON", () => {
-    const answer = `--- stdout ---\n${statusEnvelope(report("laptop"))}\n{ tail garbage }`;
-    expect(reportFrom(answer)?.hostname).toBe("laptop");
-});
-
 test("reads the fleet the machine's own tool answered", () => {
     const fleet = [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }];
     expect(sandboxesFromTool(JSON.stringify(fleet, undefined, 2), false)).toEqual(fleet);
@@ -115,7 +83,7 @@ test("says what a connected device is even when it reported nothing", () => {
     const merged = mergeDevices(
         [],
         [],
-        [{ host: host("my-pc", { platform: "windows", facts, version: "0.5.1", lastSeen: 1_700_000_000_000 }), result: { gap: "no-agent" } }],
+        [{ host: host("my-pc", { platform: "windows", facts, version: "0.5.1", lastSeen: 1_700_000_000_000 }), result: { gap: "unreported" } }],
     );
     expect(merged[0]).toEqual({
         key: "my-pc",
@@ -126,7 +94,7 @@ test("says what a connected device is even when it reported nothing", () => {
         facts,
         agentVersion: "0.5.1",
         lastSeen: 1_700_000_000_000,
-        gap: "no-agent",
+        gap: "unreported",
     });
 });
 
@@ -266,7 +234,7 @@ test("keeps two machines apart when nothing says they are the same box", () => {
     expect(merged.map((row) => row.sync?.mode)).toEqual(["sync", undefined]);
 });
 
-// Gap reasons (offline, scope-off, no-agent) must reach the UI distinct, not flattened.
+// Gap reasons (offline, scope-off, unreported) must reach the UI distinct, not flattened.
 test("carries the reason a reachable device produced nothing", () => {
     const merged = mergeDevices(
         [],
@@ -274,10 +242,10 @@ test("carries the reason a reachable device produced nothing", () => {
         [
             { host: host("asleep", { online: false }), result: { gap: "offline" } },
             { host: host("locked-down"), result: { gap: "scope-off" } },
-            { host: host("bare"), result: { gap: "no-agent" } },
+            { host: host("silent"), result: { gap: "unreported" } },
         ],
     );
-    expect(merged.map((row) => row.gap)).toEqual(["offline", "scope-off", "no-agent"]);
+    expect(merged.map((row) => row.gap)).toEqual(["offline", "scope-off", "unreported"]);
     expect(merged.every((row) => row.sync === undefined)).toBe(true);
 });
 
@@ -286,6 +254,7 @@ test("carries the reason a reachable device produced nothing", () => {
 // A nonexistent path: sync contributes nothing, and no test here needs a real temp directory for history.
 const NO_HISTORY = "/nonexistent/machine-reports-history";
 
+// `tool` is the MCP tool's name, or "report" for the typed call on the device connection.
 interface FakeCall {
     readonly id: string;
     readonly tool: string;
@@ -294,8 +263,13 @@ interface FakeCall {
 
 const answer = (text: string, isError = false): unknown => ({ result: { content: [{ text }], isError } });
 
-const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { services: Services; calls: FakeCall[] } => {
+// Both doors of one machine, every call recorded: `report` on its connection, `list_sandboxes` on its MCP door.
+const fakeServices = (id: string, respond: (call: FakeCall) => Promise<unknown>): { services: Services; calls: FakeCall[] } => {
     const calls: FakeCall[] = [];
+    const ask = async (call: FakeCall): Promise<unknown> => {
+        calls.push(call);
+        return await respond(call);
+    };
     const services = {
         config: { historyRoot: NO_HISTORY },
         // The real reader over a history root that holds nothing, which is the empty fleet these cases assume.
@@ -308,12 +282,12 @@ const fakeServices = (id: string, mcp: (call: FakeCall) => Promise<unknown>): { 
             state: () => ({ online: true, version: "0.1.0" }),
             // One connection per card here, named after it: these machines have a single OS install.
             known: () => ["ada-laptop", "guest"],
-            mcp: async (asked: string, payload: unknown, options?: { signal?: AbortSignal }) => {
-                const tool = (payload as { params?: { name?: string } }).params?.name ?? "";
-                const call = { id: asked, tool, signal: options?.signal };
-                calls.push(call);
-                return await mcp(call);
-            },
+            client: (asked: string) => ({
+                report: async (_input: undefined, options?: { signal?: AbortSignal }) =>
+                    await ask({ id: asked, tool: "report", signal: options?.signal }),
+            }),
+            mcp: async (asked: string, payload: unknown, options?: { signal?: AbortSignal }) =>
+                await ask({ id: asked, tool: (payload as { params?: { name?: string } }).params?.name ?? "", signal: options?.signal }),
         },
     } as unknown as Services;
     return { services, calls };
@@ -327,9 +301,7 @@ afterEach(() => {
 test("waits for the first reading of a machine, then serves it while refreshing behind the answer", async () => {
     jest.useFakeTimers();
     let hostname = "first";
-    const { services, calls } = fakeServices("cached-pc", async (call) =>
-        call.tool === "run_command" ? answer(statusEnvelope(report(hostname))) : answer("[]"),
-    );
+    const { services, calls } = fakeServices("cached-pc", async (call) => (call.tool === "report" ? report(hostname) : answer("[]")));
 
     expect((await devices(services))[0]?.report?.hostname).toBe("first");
     expect(calls).toHaveLength(2);
@@ -350,7 +322,7 @@ test("waits for the answer rather than serving a reading old enough to read as q
     jest.useFakeTimers();
     let hostname = "before";
     const { services } = fakeServices("quiet-pc", async (call) =>
-        call.tool === "run_command" ? answer(statusEnvelope(report(hostname, { capturedAt: Date.now() }))) : answer("[]"),
+        call.tool === "report" ? report(hostname, { capturedAt: Date.now() }) : answer("[]"),
     );
 
     expect((await devices(services))[0]?.report?.hostname).toBe("before");
@@ -365,7 +337,7 @@ test("waits for the answer rather than serving a reading old enough to read as q
 test("announces only a landing that changes what the view says", async () => {
     jest.useFakeTimers();
     const { services, calls } = fakeServices("push-pc", async (call) =>
-        call.tool === "run_command" ? answer(statusEnvelope(report("push", { capturedAt: Date.now() }))) : answer("[]"),
+        call.tool === "report" ? report("push", { capturedAt: Date.now() }) : answer("[]"),
     );
 
     // The machine's first reading: nothing was known about it before, so watchers are told.
@@ -390,7 +362,7 @@ test("coalesces concurrent readers into a single round trip", async () => {
     const held = new Promise<void>((resolve) => (release = resolve));
     const { services, calls } = fakeServices("busy-pc", async (call) => {
         await held;
-        return call.tool === "run_command" ? answer(statusEnvelope(report("busy"))) : answer("[]");
+        return call.tool === "report" ? report("busy") : answer("[]");
     });
 
     const readers = [devices(services), devices(services), devices(services)];
@@ -398,19 +370,27 @@ test("coalesces concurrent readers into a single round trip", async () => {
     const answers = await Promise.all(readers);
 
     expect(answers.every((rows) => rows[0]?.report?.hostname === "busy")).toBe(true);
-    expect(calls.filter((call) => call.tool === "run_command")).toHaveLength(1);
+    expect(calls.filter((call) => call.tool === "report")).toHaveLength(1);
 });
 
-// Uses a no-report status so the fleet call must still fire concurrently, not only when status succeeds.
-test("asks for the status and the fleet in one go, and bounds the pair with one deadline", async () => {
-    const { services, calls } = fakeServices("bare-pc", async (call) =>
-        call.tool === "run_command" ? answer("intentic-machine: command not found", false) : answer("[]"),
+// An agent without the call answers through its RPC layer; the fleet call must still fire beside it, not after it.
+test("asks for the report and the fleet in one go, and bounds the pair with one deadline", async () => {
+    const { services, calls } = fakeServices("old-pc", async (call) =>
+        call.tool === "report" ? Promise.reject(new ORPCError("NOT_FOUND", { message: "no such procedure" })) : answer("[]"),
     );
 
-    expect((await devices(services))[0]?.gap).toBe("no-agent");
-    expect(calls.map((call) => call.tool).toSorted()).toEqual(["list_sandboxes", "run_command"]);
+    expect((await devices(services))[0]?.gap).toBe("unreported");
+    expect(calls.map((call) => call.tool).toSorted()).toEqual(["list_sandboxes", "report"]);
     expect(calls[0]?.signal).toBeInstanceOf(AbortSignal);
     expect(calls[0]?.signal).toBe(calls[1]?.signal);
+});
+
+// Between the liveness read and the call the socket can go; a machine with no connection is not asked at all.
+test("a machine whose connection is gone by the time it is asked reads as offline", async () => {
+    const { services, calls } = fakeServices("gone-pc", async () => answer("[]"));
+    (services.hostHub as { client: (id: string) => undefined }).client = () => undefined;
+    expect((await devices(services))[0]).toMatchObject({ hostId: "gone-pc", gap: "offline" });
+    expect(calls).toEqual([]);
 });
 
 // THE GAP THIS CLOSES. A PC's Windows side and the distro on it hold separate agent binaries behind separate sockets,
@@ -449,14 +429,13 @@ test("gives every environment of one machine its own door, read through its own 
                 facts: key === distro ? archFacts : windowsFacts,
             }),
             known: () => ["pc-rog", distro],
-            mcp: async (id: string, payload: unknown) => {
-                asked.push(id);
-                const tool = (payload as { params?: { name?: string } }).params?.name ?? "";
-                if (tool !== "run_command") {
-                    return answer("[]");
-                }
-                return answer(statusEnvelope(report("pc-rog", id === distro ? { wsl: { distro: "Arch" } } : {})));
-            },
+            client: (id: string) => ({
+                report: async () => {
+                    asked.push(id);
+                    return report("pc-rog", id === distro ? { wsl: { distro: "Arch" } } : {});
+                },
+            }),
+            mcp: async () => answer("[]"),
         },
     } as unknown as Services;
 
@@ -475,12 +454,14 @@ test("a machine that refuses to answer at all reads as offline", async () => {
 });
 
 // The card setup writes for a new sandbox: "Manage sandboxes on this device" on, "Run commands" off. Its containers
-// are what every swap button is gated on (hostRunningSandbox), and dropping them over the refused status call is what
+// are what every swap button is gated on (hostRunningSandbox), and dropping them over the refused report is what
 // made a fresh sandbox print a terminal command for its own first rebuild.
-test("keeps the containers of a machine whose status call is refused", async () => {
+test("keeps the containers of a machine whose report is refused", async () => {
     const fleet = [{ slug: "work", container: "intentic-sandbox-work", running: true, image: "img" }];
     const { services } = fakeServices("locked-pc", async (call) =>
-        call.tool === "run_command" ? answer(`This device has no tool called "run_command".`, true) : answer(JSON.stringify(fleet)),
+        call.tool === "report"
+            ? Promise.reject(new ORPCError("FORBIDDEN", { message: `"Run commands" is switched off.` }))
+            : answer(JSON.stringify(fleet)),
     );
 
     const row = (await devices(services))[0];
@@ -493,7 +474,7 @@ test("keeps the containers of a machine whose status call is refused", async () 
 // machine, which would read as a docker with nothing in it.
 test("carries no container list at all when the machine refuses to list them", async () => {
     const { services } = fakeServices("shy-pc", async (call) =>
-        call.tool === "run_command" ? answer(statusEnvelope(report("shy"))) : answer(`This device has no tool called "list_sandboxes".`, true),
+        call.tool === "report" ? report("shy") : answer(`This device has no tool called "list_sandboxes".`, true),
     );
     expect((await devices(services))[0]?.sandboxes).toBeUndefined();
 });

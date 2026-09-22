@@ -1,102 +1,65 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, realpath, rename, rm, symlink } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, rename, rm, symlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { pollUntil } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
-import { type Log, WINDOWS_LAUNCH_STUB } from "@intentic/local-agent";
+import { type Log, spawnDetached } from "@intentic/local-agent";
 import { DEV_VERSION } from "@intentic/sandbox-contract";
-import { agentPath } from "./installed.js";
-import { readResidentBuild, readResidentPid, reconcileResidency, stopResident } from "./resident.js";
-import { binDir } from "./sync/config.js";
-import { archToken, download } from "./sync/mutagen.js";
-import { assetUrl, realUpgradeExec, runUpgrade, type UpgradeExec, type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
+import { agentLogPath, binDir } from "./config.js";
+import { adoptRunningDistros } from "./environments/commands.js";
+import { machineTarget, siblingVersions, UPGRADE_ENV, upgradeHere } from "./environments/upgrade.js";
+import { runningAsInstalledAgent } from "./installed.js";
+import { agentPath, download, launcherAssetUrl, launcherPath, publishedVersion, setAside } from "./release.js";
+import { machineLauncher } from "./supervision.js";
+import { type UpgradeOutcome, upgradeMessage } from "./upgrade.js";
 import { MACHINE_VERSION } from "./version.js";
 
-// Everything an installer used to decide, decided here instead, once. device.{sh,ps1} and sync.{sh,ps1} are now
-// bootstrap shims: they put a first agent on a machine that has none and exec `setup`; every other decision
-// (version comparison, download, PATH, the Windows launcher) runs from this module on every setup. Self-update
-// runs first in `prepareSetup` so the repairs below always run from the newest agent.
-
-// Set on the re-exec after a self-update, so the updated agent doesn't ask GitHub the question that was just
-// answered, and can never re-exec in a agent. Doubles as the escape hatch for a run that must not update.
-export const SELF_UPDATE_GUARD_ENV = "INTENTIC_MACHINE_NO_SELF_UPDATE";
-
-// How long to give a just-started agent to claim its pidfile before calling an upgrade a failure. Bounded by
-// process startup, since the pidfile is its first act.
-const RESIDENT_START_TIMEOUT_MS = 10_000;
-const RESIDENT_START_POLL_MS = 200;
-
-// Restart the agent and answer which build came up, the only answer that proves an upgrade landed. Waits for
-// the pidfile rather than the build since the agent writes both together (resident.ts); undefined covers both
-// "nothing started" and "started too slowly to say so".
-const restartResident = async (): Promise<string | undefined> => {
-    await reconcileResidency(() => undefined);
-    await pollUntil(async () => (await readResidentPid()) !== undefined, { intervalMs: RESIDENT_START_POLL_MS, timeoutMs: RESIDENT_START_TIMEOUT_MS });
-    return await readResidentBuild();
-};
-
-// The one wiring of the upgrade machinery to this machine's resident agent, shared by `upgrade` and the
-// self-update below so the two cannot drift apart.
-export const machineUpgradeExec = (out: Log): UpgradeExec => realUpgradeExec(stopResident, restartResident, readResidentBuild, out);
-
-// Whether this process IS the installed agent, as opposed to a dev run or a binary somebody is trying from
-// Downloads. Only the installed agent self-updates or edits the machine.
-const runningAsInstalledAgent = async (): Promise<boolean> => {
-    const from = await realpath(process.execPath).catch(() => undefined);
-    const at = await realpath(agentPath).catch(() => undefined);
-    return from !== undefined && from === at;
-};
+// Everything an installer used to decide, decided once, here: the shims put a first agent down and exec `setup`.
 
 // The effects of the self-update, behind one seam, so the decision is testable without a network, a disk, or a
 // process to replace.
 export interface SelfUpdateIo {
     readonly installed: string;
-    readonly installedAgent: () => Promise<boolean>;
+    readonly installedAgent: () => boolean;
     readonly upgrade: () => Promise<UpgradeOutcome>;
-    readonly reexec: (args: readonly string[]) => never;
+    readonly reexec: (args: readonly string[], version: string) => never;
 }
 
-// Setup moves the machine onto the current agent before it enrolls anything. Cheap when current; on an actual
-// update the new binary is swapped by the same machinery `upgrade` runs, and the new agent re-runs this very
-// command, so setup always runs on the newest agent. A failed update is a note, never a refusal: the pairing
-// token expires in minutes, and enrolling on a slightly older agent beats not enrolling.
+// Setup runs on the machine's newest agent: this environment first, the rest of the PC right after (completeSetup).
+// A failed update is a note, never a refusal: the pairing token expires in minutes.
 export const selfUpdateBeforeSetup = async (
     io: SelfUpdateIo,
     env: Record<string, string | undefined>,
     args: readonly string[],
     out: Log,
 ): Promise<void> => {
-    if (env[SELF_UPDATE_GUARD_ENV] !== undefined) {
-        return;
-    }
-    if (io.installed === DEV_VERSION) {
-        // A build made from source, deliberately, by whoever is running this: never replaced under them.
-        return;
-    }
-    if (!(await io.installedAgent())) {
+    if (env[UPGRADE_ENV] !== undefined || io.installed === DEV_VERSION || !io.installedAgent()) {
         return;
     }
     const outcome = await io.upgrade();
     if (outcome.kind === "upgraded") {
         out(upgradeMessage(outcome));
-        io.reexec(args);
+        io.reexec(args, outcome.to);
     }
     if (outcome.kind === "failed") {
         out(`note: couldn't update the agent first (${outcome.reason}) — continuing with ${io.installed}.`);
     }
 };
 
+// The newest release the channel or any side of this PC has: setup never leaves this side behind the rest of it.
+const machineUpgradeHere = async (out: Log): Promise<UpgradeOutcome> => {
+    const [published, siblings] = await Promise.all([publishedVersion(), siblingVersions()]);
+    const target = machineTarget(published, [MACHINE_VERSION, ...siblings]);
+    return target === undefined ? { kind: "failed", reason: "couldn't reach the release channel" } : await upgradeHere(target, false, out);
+};
+
 export const realSelfUpdateIo = (out: Log): SelfUpdateIo => ({
     installed: MACHINE_VERSION,
     installedAgent: runningAsInstalledAgent,
-    upgrade: async () => await runUpgrade(machineUpgradeExec(out), assetUrl, MACHINE_VERSION, false, out),
-    reexec: (args) => {
-        const child = spawnSync(agentPath, [...args], {
-            stdio: "inherit",
-            env: { ...process.env, [SELF_UPDATE_GUARD_ENV]: "1" },
-            windowsHide: true,
-        });
+    upgrade: async () => await machineUpgradeHere(out),
+    reexec: (args, version) => {
+        const child = spawnSync(agentPath, [...args], { stdio: "inherit", env: { ...process.env, [UPGRADE_ENV]: version }, windowsHide: true });
         process.exit(child.status ?? 1);
     },
 });
@@ -178,22 +141,17 @@ const windowsPathRepair = (out: Log): void => {
     }
 };
 
-// The windowless launcher, kept fresh beside the agent: the difference between a quiet reconnect at every boot
-// and a console window flashing on the desktop. The agent only registers the stub at logon if it finds it
-// beside itself (@intentic/local-agent's autostart). Download-then-swap, since the stub may be running right now.
-export const ensureWindowsLauncher = async (out: Log): Promise<void> => {
-    if (process.platform !== "win32") {
+// The windowless launcher, pinned to this agent's release; an upgrade replaces it together with the agent afterwards.
+const ensureWindowsLauncher = async (out: Log): Promise<void> => {
+    if (process.platform !== "win32" || MACHINE_VERSION === DEV_VERSION || existsSync(launcherPath)) {
         return;
     }
-    const stub = join(binDir, WINDOWS_LAUNCH_STUB);
-    const staged = `${stub}.tmp`;
+    const staged = `${launcherPath}.tmp`;
     try {
         await rm(staged, { force: true });
-        await download(`https://github.com/intentic/intentic/releases/latest/download/intentic-launch-windows-${archToken()}.exe`, staged);
-        await rm(`${stub}.old`, { force: true }).catch(() => undefined);
-        await rename(stub, `${stub}.old`).catch(() => undefined);
-        await rename(staged, stub);
-        await rm(`${stub}.old`, { force: true }).catch(() => undefined);
+        await download(launcherAssetUrl(MACHINE_VERSION), staged);
+        await setAside(launcherPath, `${launcherPath}.old`);
+        await rename(staged, launcherPath);
     } catch (error) {
         await rm(staged, { force: true }).catch(() => undefined);
         out(
@@ -202,11 +160,11 @@ export const ensureWindowsLauncher = async (out: Log): Promise<void> => {
     }
 };
 
-// What every `setup` runs before it enrolls anything: move onto the current agent, then repair what the machine
-// owes the user around the binary. The repairs run only when this process IS the installed agent.
+// What every `setup` runs before it enrolls anything: move onto the machine's newest agent, then repair what the
+// machine owes the user around the binary. The repairs run only when this process IS the installed agent.
 export const prepareSetup = async (out: Log, args: readonly string[]): Promise<void> => {
     await selfUpdateBeforeSetup(realSelfUpdateIo(out), process.env, args, out);
-    if (!(await runningAsInstalledAgent())) {
+    if (!runningAsInstalledAgent()) {
         return;
     }
     if (process.platform === "win32") {
@@ -215,4 +173,17 @@ export const prepareSetup = async (out: Log, args: readonly string[]): Promise<v
         return;
     }
     await posixPathRepair(out);
+};
+
+// What every `setup` runs once it has enrolled: the Windows side takes over distros already running an agent, and a
+// setup that moved this side onto a newer release brings the rest of the PC level with it, in the background.
+export const completeSetup = async (out: Log): Promise<void> => {
+    await adoptRunningDistros(out);
+    if (process.env[UPGRADE_ENV] === undefined) {
+        return;
+    }
+    delete process.env[UPGRADE_ENV];
+    await spawnDetached(agentLogPath, machineLauncher(), ["upgrade", "--level"], { finishes: true }).catch((error: unknown) =>
+        out(`note: couldn't bring the rest of this PC to this release (${errorMessage(error)}); it catches up within the hour.`),
+    );
 };

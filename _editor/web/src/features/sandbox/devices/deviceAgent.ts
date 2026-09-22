@@ -10,7 +10,8 @@ import {
     restartAgent,
 } from "@intentic/ui/device-agent";
 import { agentBehind, deviceReconnecting } from "./deviceFacts";
-import type { DeviceRow } from "./deviceRows";
+import type { DeviceRow, MachineRow } from "./deviceRows";
+import { environmentTitle } from "./machineEnvironments";
 import { t } from "@intentic/ui/i18n";
 
 // What this sandbox's device registry knows about one machine's agent, folded into the kit's AgentPanel —
@@ -29,7 +30,7 @@ export type DeviceAgentPanel = AgentPanel<DeviceAgentOp>;
 
 // Worded for a current agent as much as a stale one, since it is offered on both: "the newest there is",
 // never "the newest we know of", because the device resolves that for itself when it downloads. This hint is
-// where the panel keeps what it no longer says out loud — what an update touches, and what it leaves alone.
+// where the panel keeps what it no longer says out loud — that it moves every side of the PC, and what it leaves alone.
 const upgrade = (): AgentAction<DeviceAgentOp> => ({
     op: `upgrade`,
     label: t(`sandbox.deviceAgent.updateAgent`),
@@ -42,6 +43,9 @@ const upgrade = (): AgentAction<DeviceAgentOp> => ({
 // wrong; the drop only means something when a machine is holding links that stopped answering, so it is raised as
 // that concern's own fix (health/deviceAttention.ts) and would be a question nobody asked anywhere else.
 const ACTIONS: readonly AgentAction<DeviceAgentOp>[] = [upgrade(), restartAgent()];
+
+// Restart alone on a side of a many-sided machine: an update moves every side, so it is the machine's button (machineAgent).
+const RESTART_ONLY: readonly AgentAction<DeviceAgentOp>[] = [restartAgent()];
 
 // Every verb here travels over the device's own outbound socket, so a machine not holding one gets the
 // sentence without the controls. Wider than the container verbs' `commandable`, by one case: a device
@@ -117,22 +121,98 @@ const notesOf = (row: DeviceRow, latest: string | undefined): AgentNote[] => {
     );
 };
 
+// None on a side that cannot hear them; Restart alone where the machine owns the update.
+const actionsOf = (device: Device, update: boolean): readonly AgentAction<DeviceAgentOp>[] => {
+    if (!reachable(device)) {
+        return [];
+    }
+    return update ? ACTIONS : RESTART_ONLY;
+};
+
 // Nothing to say and nothing to do: a machine with no version from either door and no command door is one
 // this group would draw an empty heading for.
-export const deviceAgentPanel = (row: DeviceRow, latest: string | undefined, readAt: number): DeviceAgentPanel | undefined => {
+export const deviceAgentPanel = (
+    row: DeviceRow,
+    latest: string | undefined,
+    readAt: number,
+    // False on each side of a many-sided machine, whose update and published release are the machine's (machineAgent).
+    { update = true }: { readonly update?: boolean } = {},
+): DeviceAgentPanel | undefined => {
     const { device } = row;
     const version = row.chip?.version;
     if (version === undefined && device.hostId === undefined) {
         return undefined;
     }
-    const offered = reachable(device);
     const pid = row.agent?.pid;
     return {
         version,
         state: stateOf(row, readAt),
         facts: pid === undefined ? [] : [`pid ${pid}`],
-        notes: notesOf(row, latest),
-        actions: offered ? ACTIONS : [],
+        notes: notesOf(row, update ? latest : undefined),
+        actions: actionsOf(device, update),
         blocked: blockedWhy(device, readAt),
+    };
+};
+
+// A many-sided machine's one Update, and what only the machine as a whole can say about its agents.
+export interface MachineAgent {
+    // The Windows side when it can hear, since it updates its distros first and itself last; else any side that can.
+    readonly door: DeviceRow | undefined;
+    readonly action: AgentAction<DeviceAgentOp>;
+    readonly notes: readonly AgentNote[];
+}
+
+interface HeldVersion {
+    readonly row: DeviceRow;
+    readonly version: string;
+}
+
+// The build each side has on disk, which is what an update replaces; a side that never named one is left out.
+const heldVersions = (environments: readonly DeviceRow[]): HeldVersion[] =>
+    environments.flatMap((row) => {
+        const version = row.device.report?.agent.installed ?? row.chip?.version;
+        return version === undefined ? [] : [{ row, version }];
+    });
+
+// Sides on different builds are one errand for the machine, not one per side: the same Update closes it.
+const splitNote = (held: readonly HeldVersion[]): AgentNote | undefined =>
+    new Set(held.map((entry) => entry.version)).size < 2
+        ? undefined
+        : {
+              text: t(`sandbox.deviceAgent.sidesRunDifferentAgents`, {
+                  sides: held.map(({ row, version }) => `${environmentTitle(row)} ${version}`).join(`, `),
+              }),
+              tone: `warning`,
+              hint: t(`sandbox.deviceAgent.oneVersionPerMachine`),
+          };
+
+// Names what the machine holds only when that is one version; a split already listed each side's above it.
+const machinePublishedNote = (
+    environments: readonly DeviceRow[],
+    held: readonly HeldVersion[],
+    latest: string | undefined,
+): AgentNote | undefined => {
+    if (latest === undefined || !environments.some((row) => agentBehind(row.device, latest))) {
+        return undefined;
+    }
+    const versions = [...new Set(held.map((entry) => entry.version))];
+    const [only] = versions;
+    return {
+        text:
+            versions.length === 1 && only !== undefined
+                ? t(`sandbox.deviceAgent.publishedMachineHas`, { latest, held: only })
+                : t(`sandbox.deviceAgent.publishedForMachine`, { latest }),
+        tone: `info`,
+        hint: t(`sandbox.deviceAgent.updateAgentFetchesInstalls`),
+    };
+};
+
+export const machineAgent = (machine: MachineRow, latest: string | undefined): MachineAgent => {
+    const hearing = machine.environments.filter((row) => reachable(row.device));
+    const held = heldVersions(machine.environments);
+    return {
+        door: hearing.find((row) => row.device.platform === `windows`) ?? hearing[0],
+        action: upgrade(),
+        notes: [splitNote(held), machinePublishedNote(machine.environments, held, latest)].filter((note) => note !== undefined),
     };
 };

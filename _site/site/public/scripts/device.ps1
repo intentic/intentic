@@ -225,7 +225,8 @@ if ([string]::IsNullOrEmpty($url) -or [string]::IsNullOrEmpty($pair)) {
     exit 1
 }
 
-$arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'amd64' }
+# The only Windows agent a release publishes is x64, which Windows on ARM runs under emulation.
+$arch = 'amd64'
 $bin = $env:AGENT_BIN
 if (-not $bin) {
     $dest = Join-Path $HOME '.intentic\machine\bin\intentic-machine.exe'
