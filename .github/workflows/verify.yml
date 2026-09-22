@@ -31,6 +31,10 @@ env:
   TURBO_TEAM: ${{ vars.TURBO_TEAM }}
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   INDEXNOW_ENABLED: "0"
+  # SIX RUNNER PROCESSES SHARE ONE BOX (docs/ops/ci-runner.md), and no cgroup says so: these containers are started
+  # without `--memory`, so each job reads the whole machine's RAM and no ceiling at all. test-workers.mjs divides by
+  # this to size the `bun test` fan-out; without it every job sized itself as though the box were its own.
+  CI_HOST_JOBS: "6"
 
 jobs:
   verify:
@@ -104,7 +108,12 @@ jobs:
       # the declarations this reads are what prepass emits, so without them the failures here would be missing
       # modules rather than anything about the tree. A failed typecheck still fails the JOB; it just no longer
       # decides how much of the tree gets measured.
-      - run: pnpm turbo run build test $FILTERS --continue=dependencies-successful
+      #
+      # TEST_WORKERS IS COMPUTED HERE FOR THE SAME REASON THE ROOT `test` SCRIPT COMPUTES IT: turbo is invoked
+      # directly, so the root script that would have set it is not in the chain. Unset, `suites` falls back to the
+      # sizing for a run that is ALONE on the machine — and six of these jobs are not, which is how a green pipeline
+      # became six runners losing contact with the server mid-test.
+      - run: TEST_WORKERS=$(node _tools/scripts/verify/test-workers.mjs) pnpm turbo run build test $FILTERS --continue=dependencies-successful
         if: ${{ !cancelled() && steps.prepass.outcome == 'success' }}
         env:
           FILTERS: ${{ inputs.filters }}

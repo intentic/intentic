@@ -54,6 +54,9 @@ env:
   PNPM_STORE: /ci-cache/pnpm-store
   TURBO_CACHE_DIR: /ci-cache/turbo
   INDEXNOW_ENABLED: "0"
+  # The same six-runners-one-box fact ci.yml states: `suites` divides the machine's memory by this before sizing its
+  # bun fan-out, and a container reports no cgroup ceiling to discover it from.
+  CI_HOST_JOBS: "6"
 
 jobs:
   # `pnpm e2e` fans out to three tiers, and each declares what it needs (`@intentic/testing/e2e`) instead of

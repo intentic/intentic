@@ -50,7 +50,7 @@
     },
     "scripts": {
         "typecheck": "tsgo --noEmit -p tsconfig.test.json",
-        "test": "suites"
+        "test": "node ./bin/suites.mjs"
     },
     "devDependencies": {
         "@intentic/tsconfig": "workspace:*",
