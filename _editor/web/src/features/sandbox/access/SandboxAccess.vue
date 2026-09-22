@@ -123,7 +123,7 @@ const { namesOf } = usePersonaReach();
 // An area is named on the row the way it is on its own page; an id with no area behind it reads as itself, since
 // the person still holds it.
 // Held for a guest with no fence, the one tier the daemon refuses this read to; every other tier may list the names.
-const { areas, labelOf: areaLabel } = useAreas(() => sandbox.active.value?.role !== `guest`);
+const { areas: sandboxAreas, labelOf: areaLabel } = useAreas(() => sandbox.active.value?.role !== `guest`);
 // What a guest row reaches, since for that tier the fence IS the answer: the badges say which folders, this says who.
 // Only on a guest — every other tier does work of its own, and which assistants it may wear is a secondary fact.
 const guestLine = (member: InviteRecord): string | undefined => {
@@ -558,7 +558,7 @@ const revoke = async (target: string): Promise<void> => {
                             <!-- Fence pickers only when the sandbox has named areas; unnarrowed is the default, and
                                  the empty case is explained from a member row's Areas control. -->
                             <AreaPicker
-                                v-if="inviteRole !== 'maintainer' && areas.length > 0"
+                                v-if="inviteRole !== 'maintainer' && sandboxAreas.length > 0"
                                 :picked="inviteAreas"
                                 :role="inviteRole"
                                 :disabled="busy"
