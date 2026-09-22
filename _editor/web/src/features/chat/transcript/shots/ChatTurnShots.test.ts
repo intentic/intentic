@@ -2,14 +2,36 @@
 // shot to open at, and a picture that is gone saying so rather than drawing a broken image.
 import "@intentic/testing/dom";
 import { describe, it, expect, afterEach, beforeEach, mock } from "bun:test";
-import { type App, createApp, h } from "vue";
+import { type App, createApp, h, nextTick } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { IconStub } from "@intentic/ui/testing";
 import { type ChatShot, shotKey } from "./shots";
 
 // What the tile cache answers per path: a URL, `{ url: undefined }` for nothing there, unset for still on its way.
 const tiles = new Map<string, { url: string | undefined }>();
-mock.module("./shotPictures", () => ({ tileOf: (_agent: string | undefined, path: string) => tiles.get(path), pictureAt: () => undefined }));
+// Every path a strip asked a tile or a view of, in order.
+const tileAsks: string[] = [];
+const viewAsks: string[] = [];
+mock.module("./shotPictures", () => ({
+    stripOf: (_agent: string | undefined, path: string) => {
+        tileAsks.push(path);
+        return tiles.get(path);
+    },
+    viewOf: (_agent: string | undefined, path: string) => {
+        viewAsks.push(path);
+        return undefined;
+    },
+}));
+
+// The viewport is the observer's to judge, which jsdom has none of: each case says when its strip comes near.
+const nearing: (() => void)[] = [];
+mock.module("../../../workspace/home/nearViewport", () => ({ whenNear: (_el: Element, near: () => void) => nearing.push(near), stopWaiting: () => {} }));
+const comeNear = async (): Promise<void> => {
+    for (const near of nearing.splice(0)) {
+        near();
+    }
+    await nextTick();
+};
 
 const { default: ChatTurnShots } = await import("./ChatTurnShots.vue");
 
@@ -36,6 +58,9 @@ const buttons = (element: HTMLElement): HTMLButtonElement[] => [...element.query
 beforeEach(() => {
     view.mockClear();
     tiles.clear();
+    tileAsks.length = 0;
+    viewAsks.length = 0;
+    nearing.length = 0;
 });
 
 afterEach(() => {
@@ -45,12 +70,13 @@ afterEach(() => {
 });
 
 describe(`ChatTurnShots`, () => {
-    it(`draws a tile per shot, named for its file, with no count while four or fewer`, () => {
+    it(`draws a tile per shot, named for its file, with no count while four or fewer`, async () => {
         const shots = shotsOf(`before`, `after`);
         for (const shot of shots) {
             tiles.set(shot.path, { url: `blob:${shot.path}` });
         }
         const element = mount(shots);
+        await comeNear();
         expect(buttons(element).map((button) => button.getAttribute(`aria-label`))).toEqual([`Open before`, `Open after`]);
         expect([...element.querySelectorAll(`img`)].map((image) => image.getAttribute(`src`))).toEqual([`blob:${SHOTS}/before.png`, `blob:${SHOTS}/after.png`]);
         expect(element.textContent).not.toContain(`+`);
@@ -72,13 +98,32 @@ describe(`ChatTurnShots`, () => {
         expect(view.mock.calls).toEqual([[shots[1]!]]);
     });
 
-    it(`a picture with nothing on disk says so, and one still coming draws neither`, () => {
+    it(`a picture with nothing on disk says so, and one still coming draws neither`, async () => {
         const shots = shotsOf(`expired`, `coming`);
         tiles.set(shots[0]!.path, { url: undefined });
-        const [gone, coming] = buttons(mount(shots));
+        const element = mount(shots);
+        await comeNear();
+        const [gone, coming] = buttons(element);
         expect(gone?.textContent?.trim()).toBe(`No longer available`);
         expect(gone?.querySelector(`img`)).toBeNull();
         expect(coming?.textContent?.trim()).toBe(``);
         expect(coming?.querySelector(`img`)).toBeNull();
+    });
+
+    // A chat opens on its newest turn; a strip far above it waits, so the pictures on screen are the ones fetched first.
+    it(`asks for no tile until the strip comes near the viewport`, async () => {
+        const shots = shotsOf(`one`, `two`);
+        mount(shots);
+        expect(tileAsks).toEqual([]);
+        await comeNear();
+        expect(tileAsks).toEqual([shots[0]!.path, shots[1]!.path]);
+    });
+
+    it(`starts a tile's view coming when the pointer rests on it, the counted tile's being the turn's first`, async () => {
+        const shots = shotsOf(`a`, `b`, `c`, `d`, `e`);
+        const [counted, second] = buttons(mount(shots));
+        second?.dispatchEvent(new Event(`pointerenter`));
+        counted?.dispatchEvent(new Event(`pointerenter`));
+        expect(viewAsks).toEqual([shots[2]!.path, shots[0]!.path]);
     });
 });

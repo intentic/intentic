@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, useTemplateRef } from "vue";
 import { useT } from "@intentic/ui/i18n";
+import { stopWaiting, whenNear } from "../../../workspace/home/nearViewport";
 import { type ChatShot, shotName } from "./shots";
-import { tileOf } from "./shotPictures";
+import { stripOf, viewOf } from "./shotPictures";
 
 // The pictures a finished turn's tools showed the agent, standing at the turn's end where its answer is read: the last
 // few as tiles, the rest behind a count on the first. A press opens the conversation's viewer at that picture.
@@ -23,11 +24,30 @@ const SHOWN = 4;
 // How many shots the first tile stands for besides its own; zero draws no count.
 const earlier = computed(() => Math.max(0, props.shots.length - SHOWN));
 
+// A strip far up the transcript asks for nothing until it is scrolled near, so the turn the chat opens on loads first.
+const root = useTemplateRef<HTMLElement>(`root`);
+const near = ref(false);
+onMounted(() => {
+    if (root.value !== null) {
+        whenNear(root.value, () => (near.value = true));
+    }
+});
+onBeforeUnmount(() => {
+    if (root.value !== null) {
+        stopWaiting(root.value);
+    }
+});
+
+// A pointer resting on a tile is about to open it: its view starts coming now, not on the press.
+const prefetch = (shot: ChatShot): void => {
+    viewOf(props.agent, shot.path);
+};
+
 const tiles = computed(() =>
     props.shots.slice(-SHOWN).map((shot, index) => ({
         shot,
         name: shotName(shot.path),
-        picture: tileOf(props.agent, shot.path),
+        picture: near.value ? stripOf(props.agent, shot.path) : undefined,
         // The counted tile opens the turn's first shot, so the viewer walks forward through everything it stands for.
         opens: index === 0 && earlier.value > 0 ? props.shots[0]! : shot,
         counted: index === 0 && earlier.value > 0,
@@ -37,7 +57,7 @@ const tiles = computed(() =>
 
 <template>
     <!-- Inset like the answer's own prose, so the pictures read as part of it rather than as the column's next block. -->
-    <section class="grid grid-cols-4 gap-2 px-3.5" :aria-label="t(`chat.chatTurnShots.region`)">
+    <section ref="root" class="grid grid-cols-4 gap-2 px-3.5" :aria-label="t(`chat.chatTurnShots.region`)">
         <button
             v-for="tile in tiles"
             :key="tile.shot.key"
@@ -45,6 +65,8 @@ const tiles = computed(() =>
             class="chat-inset relative aspect-[16/10] min-w-0 cursor-pointer overflow-hidden rounded-md border border-line transition-colors hover:border-line-strong"
             :aria-label="tile.counted ? t(`chat.chatTurnShots.openAll`, { count: shots.length }) : t(`chat.chatTurnShots.open`, { name: tile.name })"
             v-tooltip.top="tile.name"
+            @pointerenter="prefetch(tile.opens)"
+            @focus="prefetch(tile.opens)"
             @click="emit(`view`, tile.opens)"
         >
             <!-- Cropped from the top: a full-page capture is tall, and its top is the part that says which page it is. -->

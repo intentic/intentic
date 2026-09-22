@@ -8,7 +8,7 @@ import { sha256Text } from "./workspace-files.js";
 import { MAX_RAW_BYTES, contentTypeForPath, openWorkspaceFileRange, parseByteRange } from "./workspace-files-download.js";
 import { isControlPlanePath, resolveWithin } from "./workspace-files-paths.js";
 import { MAX_UPLOAD_BYTES, UploadTooLargeError } from "./workspace-files-upload.js";
-import { THUMBNAIL_TYPE, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
+import { isRendition, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
 import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
 import type { Fence } from "@intentic/sandbox-contract";
@@ -107,14 +107,18 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         return c.body(new Uint8Array(bytes), 200, { "Content-Type": contentTypeForPath(target), "Content-Length": String(bytes.byteLength) });
     },
 
-    // GET /workspace/thumb: a picture downscaled to tile size. The guest asks for one per visible tile, so answering with
-    // the original (what /workspace/raw does) meant a folder of screenshots moved a gigabyte and decoded every file at
-    // full resolution to paint boxes an inch across. Not an error route: a file with nothing to draw answers 404 and the
-    // guest keeps the glyph it was already showing.
+    // GET /workspace/thumb: a picture re-encoded for how it is drawn (`size`: tile, strip or view), never the original. The
+    // guest asks for one per visible picture, so answering with the file (what /workspace/raw does) moved a gigabyte for a
+    // folder of screenshots and seconds per picture on a slow link. Not an error route: a file with nothing to draw
+    // answers 404 and the guest keeps the glyph it was already showing.
     thumb: async (c: Context<AppEnv>): Promise<Response> => {
         const path = c.req.query("path");
         if (path === undefined) {
             return c.json({ error: "invalid path" }, 400);
+        }
+        const size = c.req.query("size") ?? "tile";
+        if (!isRendition(size)) {
+            return c.json({ error: "unknown size" }, 400);
         }
         // Shared with the raw route, so a tile and the file it opens are read from the same scope.
         const scoped = await scopedFileTarget(services, path, c.req.query("agent"), c.get("identity"));
@@ -124,20 +128,25 @@ export const createWorkspaceBytesRoutes = (services: WorkspaceBytesRoutesDeps) =
         if (!thumbnailable(scoped.target)) {
             return c.json({ error: "not a picture this can draw" }, 415);
         }
-        const thumbnail = await workspaceThumbnail(services.workspace.root, scoped.target);
+        // The reader says what it decodes; a reader that names no AVIF gets WebP, which every engine draws.
+        const readsAvif = (c.req.header("accept") ?? "").includes("image/avif");
+        const thumbnail = await workspaceThumbnail(services.workspace.root, scoped.target, size, readsAvif);
         if (thumbnail === undefined) {
             return c.json({ error: "not found" }, 404);
         }
+        // One URL answers AVIF or WebP by Accept, so a cache must key on it too.
+        const vary = { Vary: "Accept" };
         // The tag is the source's own version, so a reload revalidates into a 304 rather than moving the bytes again.
         if (c.req.header("if-none-match") === `"${thumbnail.etag}"`) {
-            return c.body(null, 304, { ETag: `"${thumbnail.etag}"` });
+            return c.body(null, 304, { ETag: `"${thumbnail.etag}"`, ...vary });
         }
         return c.body(new Uint8Array(thumbnail.bytes), 200, {
-            "Content-Type": THUMBNAIL_TYPE,
+            "Content-Type": thumbnail.type,
             "Content-Length": String(thumbnail.bytes.byteLength),
             ETag: `"${thumbnail.etag}"`,
             // Revalidate rather than reuse blind: the URL names a path, and the file at a path can change.
             "Cache-Control": "private, no-cache",
+            ...vary,
         });
     },
 

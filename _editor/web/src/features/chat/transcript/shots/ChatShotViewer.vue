@@ -4,10 +4,11 @@ import { computed, nextTick, ref, useId, useTemplateRef, watch } from "vue";
 import { useT } from "@intentic/ui/i18n";
 import { useChatSurface } from "../../tools/chatToolSurface";
 import { type ChatShot, shotName } from "./shots";
-import { pictureAt, tileOf } from "./shotPictures";
+import { downloadOriginal, originalOf, stripOf, viewOf } from "./shotPictures";
 
 // The conversation's pictures one at a time and large, opened from a strip's tile or a tool card's picture; the arrows
-// walk every turn's strip in order and the filmstrip jumps. Fit to the window, or at actual size for a full-page capture.
+// walk every turn's strip in order and the filmstrip jumps. Fit draws the daemon's re-encoded view; actual size swaps in
+// the original file once it arrives, drawing the view at the same size until then.
 
 const t = useT();
 
@@ -43,10 +44,32 @@ watch(
 
 const index = computed(() => Math.max(0, props.shots.findIndex((shot) => shot.key === at.value)));
 const shot = computed<ChatShot | undefined>(() => props.shots[index.value]);
-const picture = computed(() => (shot.value === undefined ? undefined : pictureAt(props.agent, shot.value.path)));
+const view = computed(() => (shot.value === undefined ? undefined : viewOf(props.agent, shot.value.path)));
+// Asked for only at actual size, where pixels are what the reader came to look at.
+const original = computed(() => (shot.value === undefined || !actual.value ? undefined : originalOf(props.agent, shot.value.path)));
+// The view is the picture at its own size, so it stands in for the original until the file arrives.
+const picture = computed(() => (original.value?.url === undefined ? view.value : original.value));
 const name = computed(() => (shot.value === undefined ? `` : shotName(shot.value.path)));
-const fileName = computed(() => shot.value?.path.split(`/`).at(-1) ?? ``);
 const prompt = computed(() => (shot.value === undefined ? undefined : props.prompts.get(shot.value.turnId)));
+
+// The pictures either side of this one start coming now, so the arrows land on pictures already here.
+watch(
+    index,
+    (position) => {
+        for (const neighbour of [props.shots[position - 1], props.shots[position + 1]]) {
+            if (neighbour !== undefined) {
+                viewOf(props.agent, neighbour.path);
+            }
+        }
+    },
+    { immediate: true },
+);
+
+const download = (): void => {
+    if (shot.value !== undefined) {
+        void downloadOriginal(props.agent, shot.value.path);
+    }
+};
 
 const go = (to: number): void => {
     const next = props.shots[Math.min(props.shots.length - 1, Math.max(0, to))];
@@ -72,9 +95,9 @@ const onKey = (event: KeyboardEvent): void => {
 
 // One group per turn, in order: a divider between groups is where one turn's pictures end and the next one's begin.
 const groups = computed(() => {
-    const out: { turnId: number; items: { shot: ChatShot; index: number; tile: ReturnType<typeof tileOf> }[] }[] = [];
+    const out: { turnId: number; items: { shot: ChatShot; index: number; tile: ReturnType<typeof stripOf> }[] }[] = [];
     for (const [position, entry] of props.shots.entries()) {
-        const item = { shot: entry, index: position, tile: tileOf(props.agent, entry.path) };
+        const item = { shot: entry, index: position, tile: stripOf(props.agent, entry.path) };
         const last = out.at(-1);
         if (last?.turnId === entry.turnId) {
             last.items.push(item);
@@ -126,16 +149,16 @@ watch(at, async () => {
                 >
                     <Icon :name="actual ? `compress` : `expand`" class="text-xs" />
                 </button>
-                <a
-                    v-if="picture?.url"
+                <button
+                    v-if="view?.url"
+                    type="button"
                     :class="ui.iconButton()"
-                    :href="picture.url"
-                    :download="fileName"
                     :aria-label="t(`chat.chatShotViewer.download`)"
                     v-tooltip.bottom="t(`chat.chatShotViewer.download`)"
+                    @click="download"
                 >
                     <Icon name="download" class="text-xs" />
-                </a>
+                </button>
                 <button
                     v-if="surface.openFile"
                     type="button"

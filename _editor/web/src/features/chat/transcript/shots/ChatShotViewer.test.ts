@@ -21,11 +21,22 @@ mock.module("@intentic/ui", () => ({
     }),
 }));
 
-// What the file cache answers per path; a path it doesn't hold is gone.
+// What the caches answer per path; a path they don't hold is gone. Originals arrive only once a case says so.
 const files = new Map<string, string>();
+const originals = new Map<string, string>();
+// Every path a view was asked for, in order: the one on screen and the neighbours fetched ahead of the arrows.
+const viewAsks: string[] = [];
+const downloads: string[] = [];
 mock.module("./shotPictures", () => ({
-    pictureAt: (_agent: string | undefined, path: string) => ({ url: files.get(path) }),
-    tileOf: (_agent: string | undefined, path: string) => ({ url: files.get(path) }),
+    viewOf: (_agent: string | undefined, path: string) => {
+        viewAsks.push(path);
+        return { url: files.get(path) };
+    },
+    stripOf: (_agent: string | undefined, path: string) => ({ url: files.get(path) }),
+    originalOf: (_agent: string | undefined, path: string) => (originals.has(path) ? { url: originals.get(path) } : undefined),
+    downloadOriginal: async (_agent: string | undefined, path: string) => {
+        downloads.push(path);
+    },
 }));
 
 const { default: ChatShotViewer } = await import("./ChatShotViewer.vue");
@@ -80,6 +91,9 @@ const press = async (element: HTMLElement, key: string): Promise<void> => {
 beforeEach(() => {
     openFile.mockClear();
     files.clear();
+    originals.clear();
+    viewAsks.length = 0;
+    downloads.length = 0;
     for (const shot of SHOTS_OF_CHAT) {
         files.set(shot.path, `blob:${shot.path}`);
     }
@@ -143,5 +157,33 @@ describe(`ChatShotViewer`, () => {
         const element = mount(SHOTS_OF_CHAT[0]!.key);
         expect(element.querySelector(`img[alt="before"]`)).toBeNull();
         expect(element.textContent).toContain(`No longer available`);
+    });
+
+    it(`fetches the pictures either side of the one on screen, so the arrows land on pictures already here`, async () => {
+        mount(SHOTS_OF_CHAT[1]!.key);
+        await nextTick();
+        expect(new Set(viewAsks)).toEqual(new Set(SHOTS_OF_CHAT.map((shot) => shot.path)));
+    });
+
+    it(`draws the original at actual size once it arrives, and the view at the same size until then`, async () => {
+        const element = mount(SHOTS_OF_CHAT[0]!.key);
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Actual size"]`)?.click();
+        await nextTick();
+        expect(element.querySelector(`img[alt="before"]`)?.getAttribute(`src`)).toBe(`blob:${SHOTS}/before.png`);
+
+        originals.set(SHOTS_OF_CHAT[0]!.path, `blob:original`);
+        // The stand-in cache is not reactive, so leaving actual size and coming back is what reads it again.
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Fit to window"]`)?.click();
+        await nextTick();
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Actual size"]`)?.click();
+        await nextTick();
+        expect(element.querySelector(`img[alt="before"]`)?.getAttribute(`src`)).toBe(`blob:original`);
+    });
+
+    it(`downloads the original file, not the view it draws`, async () => {
+        const element = mount(SHOTS_OF_CHAT[2]!.key);
+        element.querySelector<HTMLButtonElement>(`button[aria-label="Download"]`)?.click();
+        await nextTick();
+        expect(downloads).toEqual([SHOTS_OF_CHAT[2]!.path]);
     });
 });

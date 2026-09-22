@@ -5,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import sharp from "sharp";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { createResidentEngine, type HealthRequest, type QueryRequest } from "@intentic/iq-engine";
 
@@ -418,6 +419,38 @@ test("GET /workspace/raw streams bytes with a content-type, 404s missing, 400s e
     expect((await app.request("/workspace/raw?path=app/huge.png")).status).toBe(413);
     expect((await app.request("/workspace/raw?path=app/missing.png")).status).toBe(404);
     expect((await app.request("/workspace/raw?path=../../etc/passwd")).status).toBe(400);
+});
+
+// Real picture and real encoder, since what is being pinned is which bytes come back for which Accept.
+test("GET /workspace/thumb answers the size asked for, in the format the reader decodes, and says it varies by Accept", async () => {
+    const root = await mkdtemp(join(tmpdir(), "thumb-route-"));
+    await writeFile(join(root, "shot.png"), await sharp({ create: { width: 1200, height: 800, channels: 3, background: { r: 10, g: 120, b: 200 } } }).png().toBuffer());
+    const app = createApp(services({ workspace: workspacePaths(root) }));
+    try {
+        // Vary as a list, since the CORS layer adds its own entry beside this route's.
+        const varies = (response: Response): string[] => (response.headers.get("vary") ?? "").split(/,\s*/);
+        const avif = await app.request("/workspace/thumb?path=shot.png&size=view", { headers: { accept: "image/avif,image/webp,*/*" } });
+        expect([avif.status, avif.headers.get("content-type")]).toEqual([200, "image/avif"]);
+        expect(varies(avif)).toContain("Accept");
+        expect((await sharp(Buffer.from(await avif.arrayBuffer())).metadata()).width).toBe(1200);
+
+        const webp = await app.request("/workspace/thumb?path=shot.png&size=view", { headers: { accept: "image/webp,*/*" } });
+        expect([webp.status, webp.headers.get("content-type")]).toEqual([200, "image/webp"]);
+
+        // No size is the home's tile, whole inside its 256px box.
+        const tile = await app.request("/workspace/thumb?path=shot.png");
+        expect((await sharp(Buffer.from(await tile.arrayBuffer())).metadata()).width).toBe(256);
+
+        const again = await app.request("/workspace/thumb?path=shot.png&size=view", {
+            headers: { accept: "image/avif", "if-none-match": avif.headers.get("etag") ?? "" },
+        });
+        expect(again.status).toBe(304);
+        expect(varies(again)).toContain("Accept");
+
+        expect((await app.request("/workspace/thumb?path=shot.png&size=poster")).status).toBe(400);
+    } finally {
+        await rm(root, { recursive: true, force: true });
+    }
 });
 
 // Real tmp file, since the route streams via createReadStream, not services.files; a fake would only test the fake.
