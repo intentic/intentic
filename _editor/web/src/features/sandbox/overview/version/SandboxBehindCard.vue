@@ -41,8 +41,7 @@ import { useT } from "@intentic/ui/i18n";
 //
 // EVERY SENTENCE HERE IS WRITTEN FOR SOMEONE WHO DID NOT BUILD THIS. No "contract", "route", "call", "daemon",
 // "compiled" or "working tree" reaches the screen; those words made the first two versions of this card unreadable.
-// And nothing here says RELOAD for what restarts the sandbox: to anyone with a browser open, reload is F5. The
-// sandbox restarts, the page reloads, and the card must never blur the two.
+// And nothing here says RELOAD for what restarts the sandbox: to anyone with a browser open, reload is F5.
 
 const t = useT();
 
@@ -52,8 +51,6 @@ const { slug, localImage } = useEnvironment();
 // A dev sandbox runs the code straight off the checkout, not out of the image: a restart picks a change up, a
 // full image rebuild is not needed for one.
 const restartCommand = computed(() => `sh _sandbox/sandbox/scripts/dev-restart.sh${slug.value === undefined ? `` : ` ${slug.value}`}`);
-// The one thing on this card that IS an F5, and the only thing allowed to be called a reload.
-const reloadPage = (): void => location.reload();
 
 // The environment holding this sandbox's checkout, when it is a connected device: then the restart is a button here
 // and the command below is only for a checkout nothing can reach. The checkout, not merely the machine — a PC reports
@@ -237,8 +234,7 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
             <div class="flex flex-col gap-3">
                 <div v-if="isDev" class="flex flex-col gap-2">
                     <div class="flex flex-wrap items-center gap-2">
-                        <!-- RESTART, NEVER "RELOAD": this rebuilds and restarts the whole sandbox out there, and the
-                             button beside it is the one that means F5. One word for each, so nobody presses the wrong. -->
+                        <!-- RESTART, NEVER "RELOAD": this rebuilds and restarts the whole sandbox out there. -->
                         <Button
                             v-if="hostId"
                             :label="restarting ? t(`sandbox.sandboxBehindCard.restarting`) : t(`sandbox.sandboxBehindCard.restartSandbox`)"
@@ -248,14 +244,6 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
                         >
                             <template #icon><Icon name="refresh" /></template>
                         </Button>
-                        <!-- Withheld while the sandbox is the stale side: this page is the fresher of the two, so refreshing it changes nothing. -->
-                        <Button
-                            v-if="(daemonDrifted && !contractUncompiled) || restarted"
-                            :label="t(`sandbox.sandboxBehindCard.reloadPage`)"
-                            size="small"
-                            severity="secondary"
-                            @click="reloadPage"
-                        />
                         <span v-if="hostId" class="text-2xs text-subtle">
                             <template v-if="restarted">{{ t(`sandbox.sandboxBehindCard.rebuiltOnReloadPage`, { hostId }) }}</template>
                             <template v-else-if="restarting">{{ t(`sandbox.sandboxBehindCard.restartingOn`, { hostId }) }}</template>
@@ -290,10 +278,7 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
                     <!-- Only where the button never had a chance: a refusal means the door is open and something else went wrong, which connecting a second time would not fix. -->
                     <ConnectDeviceHint v-if="!hostId" :slug="slug" gains="this becomes a button." />
                 </div>
-                <div v-else-if="daemonDrifted" class="flex flex-wrap items-center gap-2">
-                    <Button :label="t(`sandbox.sandboxBehindCard.reloadPage`)" size="small" @click="reloadPage" />
-                    <span class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.staysUpdateSandboxImage`) }}</span>
-                </div>
+                <p v-else-if="daemonDrifted" class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.staysUpdateSandboxImage`) }}</p>
                 <p v-else class="text-2xs text-subtle">{{ t(`sandbox.sandboxBehindCard.updateSandboxImage`) }}</p>
             </div>
         </RowNote>

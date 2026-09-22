@@ -112,7 +112,6 @@ it(`refuses to name a side when only the payloads disagree`, () => {
     expect(text).toContain(`everything on the Sandbox tabs`);
     expect(text).toContain(`may misbehave`);
     expect(text).not.toContain(`Your sandbox is older than this page`);
-    expect(text).toMatch(/reload page/i);
 });
 
 // The question the old card never answered: WHICH two programs. Each names itself, what it is, and how many calls
@@ -137,7 +136,7 @@ it(`says nothing in the vocabulary of whoever built it`, () => {
     }
 });
 
-// The rule the owner set: "reload" is F5 and nothing else. The sandbox restarts.
+// The sandbox restarts; nothing on the card duplicates F5 as a button.
 it(`never calls restarting the sandbox a reload`, () => {
     hostId.value = `ada-laptop`;
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
@@ -145,8 +144,7 @@ it(`never calls restarting the sandbox a reload`, () => {
     const text = el.textContent ?? ``;
     expect(text).toContain(`Restart sandbox`);
     expect(text).not.toMatch(/reload (the )?sandbox/i);
-    // The only reload on the card is the page's own, which genuinely is one.
-    expect([...el.querySelectorAll(`button`)].map((button) => button.textContent)).toContain(`Reload page`);
+    expect([...el.querySelectorAll(`button`)].map((button) => button.textContent)).not.toContain(`Reload page`);
 });
 
 // One shared schema reaches dozens of routes across areas that have nothing to do with each other; the card groups
@@ -197,7 +195,7 @@ it(`calls a total disagreement one mismatch rather than naming every area`, () =
 
 // The dev case the card used to misdiagnose: this app bundles the contract from source, the sandbox loads it compiled,
 // and an edit that has not been rebuilt looks exactly like two versions disagreeing.
-it(`names an uncompiled contract as the cause and withholds the page reload`, () => {
+it(`names an uncompiled contract as the cause`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     resetContractFreshness([`settings.get`]);
     const el = mount();

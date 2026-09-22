@@ -2971,7 +2971,6 @@
             "olderSide": "older",
             "rebuildsYourCodeOn": "Przebudowuje Twój kod na {hostId} i restartuje sandbox — około minuty.",
             "rebuiltOnReloadPage": "Przebudowane na {hostId} — przeładuj tę stronę, żeby to wziąć.",
-            "reloadPage": "Przeładuj stronę",
             "restartIsQuicker": "This takes about a minute and keeps your files and running work. The full rebuild takes several minutes, and you don't need it for this:",
             "restartSandbox": "Uruchom sandbox ponownie",
             "restarting": "Restarting…",

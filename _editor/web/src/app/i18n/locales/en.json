@@ -2935,7 +2935,6 @@
             "olderSide": "older",
             "rebuildsYourCodeOn": "Rebuilds your code on {hostId} and restarts the sandbox — about a minute.",
             "rebuiltOnReloadPage": "Done on {hostId} — reload this page to pick it up.",
-            "reloadPage": "Reload page",
             "restarting": "Restarting…",
             "restartingOn": "Rebuilding on {hostId} and restarting. This page will go quiet for a moment and come back on its own.",
             "restartIsQuicker": "It keeps your files and anything that's running. The full rebuild takes several minutes, and you don't need it for this:",
