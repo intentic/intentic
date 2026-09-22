@@ -504,11 +504,13 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     app.post("/children/answer", childrenRoutes.answer);
     app.get("/children", childrenRoutes.list);
 
-    // The fleet read surface: which conversations exist, what one is, and which said a phrase, joined from the
-    // registry, the record, the worktree composition and the phrase index.
-    // Read-only, so it can be scoped to the agent token like `services`/`capabilities`, unlike `/agents`.
+    // The fleet surface: which conversations exist, what one is, which said a phrase — joined from the registry, the
+    // record, the worktree composition and the phrase index — and saying something to one of them.
+    // Scoped to the agent token like `services`/`capabilities`, unlike `/agents`: the reads cannot change anything,
+    // and the one write only puts words in front of another conversation, which a person can do by typing.
     const fleetRoutes = createFleetRoutes(services);
     app.get("/fleet", fleetRoutes.list);
+    app.post("/fleet/message", fleetRoutes.message);
     app.get("/fleet/:handle", fleetRoutes.show);
 
     // Realtime-listener control for an extension's gateway process: reconciles via /state, POSTs inbound events to

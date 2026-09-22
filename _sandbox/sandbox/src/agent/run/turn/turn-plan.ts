@@ -1093,6 +1093,9 @@ export const planHarnessTurn = async (
             // rewritten line would name a binary that isn't there. A reader, not a snapshot, since the file is edited
             // live while someone watches the box.
             ...(queueRunEnabled() ? { heavyCommands: () => services.heavyCommands.read() } : {}),
+            // A `run_in_background` job outlives this turn, so its completion has to be delivered to a conversation
+            // rather than to the process that started it; same seed the watch takes, for the same reason.
+            ...(input.conversationId === undefined ? {} : { backgroundJobs: { conversationId: input.conversationId, turn: watchSeed(input) } }),
             ...(Object.keys(shellEnv).length > 0 ? { cliEnv: shellEnv } : {}),
             // Forwarded only where the owner actually moved a cap: an untouched one is left for the harness to answer,
             // since the nesting cap's real default is remote-config'd inside the CLI and restating today's value would

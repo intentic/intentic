@@ -266,7 +266,10 @@ const FLEET_GUIDANCE =
     "sessions, `agents find '<text>'` is who said a " +
     `phrase, \`--transcript\` adds the messages). Reach for those instead of searching \`${HISTORY_ROOT}\` by hand: ` +
     "they answer from the daemon's own registry, per-conversation records and phrase index, which no directory " +
-    "walk can join.";
+    "walk can join. To SAY something to one, `agents message <handle> '<text>'` — the same door a person uses by " +
+    "typing into that chat, and it reaches a conversation that is idle, which the SDK's own cross-session messaging " +
+    "cannot: an idle conversation here has no process to receive one. Your message arrives attributed to you and is " +
+    "read as a peer's words, not as its owner's instruction, so ask rather than direct.";
 
 // Titles this product's own paragraphs, which carry no header of their own: they are one block in the prompt, one row
 // in the system-prompt modal (prompt-disclosure.ts), and one item in the list a trimmed turn says it left out

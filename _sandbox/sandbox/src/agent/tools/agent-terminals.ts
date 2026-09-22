@@ -11,9 +11,15 @@ import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { type HeavyCommands, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
+import { type BackgroundJobSeed, jobCommandLine, openBackgroundJob } from "./background-jobs.js";
+import { turnRunOf } from "../run/turn/turn-runs.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
 // the terminal panel attaches to; subagent Bash calls land in the same session as extra windows.
+//
+// A `run_in_background: true` call is rewritten one step further, through tmux-run's `-b`: its pane must survive this
+// turn's CLI exiting, which is what the harness promises and what the ordinary path silently broke
+// (background-jobs.ts says how).
 
 // Off when the wrapper isn't baked into the image (local dev, tests) or the operator opts out.
 export const tmuxRunEnabled = (): boolean => process.env["INTENTIC_AGENT_TMUX"] !== "0" && existsSync(TMUX_RUN_BIN);
@@ -107,6 +113,9 @@ export const bashTmuxHooks = (
     secrets?: SecretAccess,
     // Reads .intentic/config/heavy-commands.json per call; absent when this sandbox does not queue at all.
     heavy?: () => Promise<HeavyCommands>,
+    // Conversation and routing a background job's completion wakes; absent leaves such a job ordinary, so it still
+    // dies with the turn — a conversationless turn has nowhere to deliver the wake anyway.
+    jobs?: BackgroundJobSeed,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> => {
     const envFlags = envKeyFlags(envKeys);
     return {
@@ -118,7 +127,7 @@ export const bashTmuxHooks = (
                         if (input.hook_event_name !== "PreToolUse") {
                             return {};
                         }
-                        const tool = input.tool_input as { command?: unknown; description?: unknown };
+                        const tool = input.tool_input as { command?: unknown; description?: unknown; run_in_background?: unknown };
                         if (typeof tool.command !== "string" || tool.command.startsWith(TMUX_RUN_BIN)) {
                             return {};
                         }
@@ -165,6 +174,20 @@ export const bashTmuxHooks = (
                             isolation?.anchor !== undefined
                                 ? `${stamp}${nsenterPrefix(isolation.anchor.pid, isolation.anchor.cwd)}${POLITE_PREFIX}${queue}bash -c ${shellQuote(executed)}`
                                 : `${stamp}${POLITE_PREFIX}${queue}bash -c ${shellQuote(executed)}`;
+                        // Filed before the command is rewritten, so the flag and the registry entry cannot disagree
+                        // about which dir holds this job's completion. A dir that cannot be made leaves the call
+                        // ordinary rather than failing it.
+                        const job = jobs === undefined || tool.run_in_background !== true ? undefined : openBackgroundJob(jobs, { command, session });
+                        if (job !== undefined) {
+                            // Said in the chat at the moment it starts, because the whole failure this replaces was
+                            // invisible: a job nobody could see running, in no terminal anyone could find, that a
+                            // conversation went on believing in for hours. The row is written inside the live turn —
+                            // the settle that adopts the job happens after the record is closed.
+                            turnRunOf(job.conversationId)?.note({
+                                role: "notice",
+                                text: `Background job started: \`${jobCommandLine(command)}\` — it outlives this turn, and its exit wakes this conversation.`,
+                            });
+                        }
                         return {
                             hookSpecificOutput: {
                                 hookEventName: "PreToolUse",
@@ -172,7 +195,7 @@ export const bashTmuxHooks = (
                                     ...(tool as Record<string, unknown>),
                                     // `-c` carries the command as written; cleaner matching reads it too, not the
                                     // wrapped line tmux-run executes.
-                                    command: `${TMUX_RUN_BIN} ${envFlags}-c ${shellQuote(command)} ${session} ${shellQuote(inner)} ${windowSlug(tool.description)}`,
+                                    command: `${TMUX_RUN_BIN} ${envFlags}${job === undefined ? "" : `-b ${shellQuote(job.dir)} `}-c ${shellQuote(command)} ${session} ${shellQuote(inner)} ${windowSlug(tool.description)}`,
                                 },
                             },
                         };

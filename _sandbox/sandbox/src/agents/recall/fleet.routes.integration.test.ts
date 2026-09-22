@@ -3,14 +3,15 @@ import type { Hono } from "hono";
 import { test, expect } from "bun:test";
 import { createApp } from "../../app.js";
 import type { AppEnv } from "../../app-env.js";
-import { clientFor, proven } from "../../harness/route-client.testing.js";
+import { clientFor, collect, proven } from "../../harness/route-client.testing.js";
 import { services } from "../../harness/route-services.testing.js";
 import { runAgentTurn } from "../../harness/route-turns.testing.js";
 import { testConfig } from "../../testing.js";
 import { recordPathOf, type FleetMessage, type FleetRecall, type FleetRow } from "./fleet-recall.js";
 
-// Pins the fleet read routes over HTTP with the agent token: exactly two GETs, read-only, any handle spelling resolves
-// in one call, ambiguous ones are named not picked.
+// Pins the fleet routes over HTTP with the agent token: two GETs that cannot change anything, any handle spelling
+// resolving in one call, ambiguous ones named not picked — and the one write, `message`, which puts an attributed
+// message in front of another conversation the way a person does by typing into its chat.
 
 // Shapes mirror what the routes actually return; there is no shared schema, so a field renamed there fails here first.
 interface FleetAnswer {
@@ -21,6 +22,9 @@ interface FleetAnswer {
     readonly ok?: boolean;
     readonly message?: string;
     readonly candidates?: readonly { readonly id: string }[];
+    readonly to?: string;
+    readonly delivery?: string;
+    readonly note?: string;
 }
 
 // Auth enabled: the grants middleware only exists on the exposed daemon and is half of what this tests. Two
@@ -53,7 +57,36 @@ const fleetApp = (): Hono<AppEnv> =>
         }),
     );
 
+// The same app, plus every prompt the runtime was handed: what a message actually puts in front of the target is the
+// whole point of the route, and the record here comes from the stub sessions, not from the turn that just ran.
+const recordingApp = (): { readonly app: Hono<AppEnv>; readonly prompts: string[] } => {
+    const prompts: string[] = [];
+    const app = createApp(
+        services({
+            auth: { authorize: async () => proven("owner@example.com", "owner") },
+            turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
+            async *agent(request) {
+                prompts.push(request.prompt);
+                yield { kind: "session", sessionId: "sess-any" };
+                yield { kind: "done" };
+            },
+            sessions: { list: async () => [], read: async () => [], readTail: async () => [], search: async () => [], exists: async () => true },
+        }),
+    );
+    return { app, prompts };
+};
+
 const AGENT = { headers: { "x-intentic-agent": "agent-secret" } };
+
+// A message as an agent's shell sends it: the agent token, and the sending conversation's own stamp.
+const sendMessage = async (app: Hono<AppEnv>, from: string | undefined, body: unknown): Promise<{ status: number; body: FleetAnswer }> => {
+    const response = await app.request("http://sandbox.test/fleet/message", {
+        method: "POST",
+        headers: { ...AGENT.headers, "content-type": "application/json", ...(from === undefined ? {} : { "x-intentic-conversation": from }) },
+        body: JSON.stringify(body),
+    });
+    return { status: response.status, body: (await response.json()) as FleetAnswer };
+};
 
 const fleet = async (app: Hono<AppEnv>, path: string): Promise<{ status: number; body: FleetAnswer }> => {
     const response = await app.request(`http://sandbox.test${path}`, AGENT);
@@ -184,7 +217,47 @@ test("a handle several conversations answer to is refused with the candidates, n
     expect(missing.body.message).toContain("agents find");
 });
 
-test("the agent token reaches the two reads and nothing that acts on a conversation", async () => {
+test("a message to an idle conversation opens a turn on it, carrying whose words they are", async () => {
+    const { app, prompts } = recordingApp();
+    const client = clientFor(app);
+    await runAgentTurn(client, { prompt: PIPELINE_PROMPT, conversationId: "fair-sage-ey2r", isolated: true });
+    await runAgentTurn(client, { prompt: PUBLISH_PROMPT, conversationId: "clear-marsh-8c46", isolated: true });
+    prompts.length = 0;
+    const { status, body } = await sendMessage(app, "fair-sage-ey2r", { to: "clear-marsh", message: "the lockfile is mine this hour, leave it alone" });
+    expect(status).toBe(200);
+    expect(body).toMatchObject({ ok: true, to: "clear-marsh-8c46", delivery: "turn" });
+    // The route answers the moment the run is registered, like every other detached start; attaching to it is the
+    // settle barrier here as it is for a turn a person sends.
+    await collect(await client.agent.attach({ conversationId: "clear-marsh-8c46" }));
+    // The target ran a turn, and what it read names the sender before anything the sender said.
+    expect(prompts).toHaveLength(1);
+    const delivered = prompts[0] ?? "";
+    expect(delivered).toStartWith("Message from another conversation in this workspace: `fair-sage-ey2r`");
+    expect(delivered).toContain("the lockfile is mine this hour, leave it alone");
+    // Read as a peer's words, and told how to answer back.
+    expect(delivered).toContain("not your user's");
+    expect(delivered).toContain("agents message fair-sage-ey2r");
+});
+
+test("a message names an unresolvable target instead of guessing, and refuses the sender's own conversation", async () => {
+    const { app, prompts } = recordingApp();
+    const client = clientFor(app);
+    await runAgentTurn(client, { prompt: "fix the pipeline autoopen", conversationId: "fair-sage-ey2r", isolated: true });
+    await runAgentTurn(client, { prompt: "follow up on the autoopen", conversationId: "fair-sage-other", isolated: true });
+    prompts.length = 0;
+    const ambiguous = await sendMessage(app, "clear-marsh-8c46", { to: "fair-sage", message: "which of you is it" });
+    expect(ambiguous.status).toBe(409);
+    expect(ambiguous.body.candidates?.map((candidate) => candidate.id)).toEqual(["fair-sage-other", "fair-sage-ey2r"]);
+    const missing = await sendMessage(app, "fair-sage-ey2r", { to: "nothing-like-this", message: "hello" });
+    expect(missing.status).toBe(404);
+    expect(missing.body.message).toContain("agents find");
+    const itself = await sendMessage(app, "fair-sage-ey2r", { to: "fair-sage-ey2r", message: "note to self" });
+    expect(itself.status).toBe(400);
+    // Not one of those started a turn on anybody.
+    expect(prompts).toEqual([]);
+});
+
+test("the agent token reaches the two reads and the one write, and nothing that acts on a conversation", async () => {
     const app = fleetApp();
     await twoConversations(app);
     expect((await app.request("http://sandbox.test/fleet", { method: "POST", ...AGENT })).status).toBe(403);

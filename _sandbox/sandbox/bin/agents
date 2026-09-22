@@ -56,6 +56,13 @@ LOOK UP — reach for these instead of searching /history by hand
   agents find '<text>' [--all] [--limit <n>] [--owner <who>] [--json]
                                        which conversations said this, with the line that proves it
 
+SAY SOMETHING TO ANOTHER CONVERSATION
+  agents message <handle> '<text>'     what a person does by typing into that conversation's chat: the words
+                                       are steered into its live turn, or open one on its own routing if it
+                                       is idle. Any conversation, not just a child of this one — which is
+                                       what \`send\` below is limited to. The message is attributed to this
+                                       conversation and read as a peer's words, not as its owner's
+
 SPAWN AND SUPERVISE
   agents providers                     what a child could run on right now: every connected provider, its
                                        models, and how much allowance each has left. Models whose every
@@ -498,6 +505,38 @@ const answerChild = async (argv) => {
     process.stdout.write(`${note ?? "answered"}\n`);
 };
 
+// Says something to ANY conversation in this workspace, which `send` cannot: that one reaches only this
+// conversation's own children. Steered into a live turn, or opening one on the target's own routing.
+const message = async (argv) => {
+    const { positional } = parseFlags(argv, []);
+    const [handle, ...rest] = positional;
+    const words = rest.join(" ").trim();
+    if (handle === undefined || words === "") {
+        return die(`agents: message needs a handle and something to say\n\n${USAGE}`);
+    }
+    const { status, text } = await call("POST", "/fleet/message", JSON.stringify({ to: handle, message: words }));
+    if (status !== 200) {
+        const parsed = (() => {
+            try {
+                return JSON.parse(text);
+            } catch {
+                return undefined;
+            }
+        })();
+        // An ambiguous handle names its candidates rather than making the caller search again.
+        if (Array.isArray(parsed?.candidates)) {
+            process.stderr.write(`agents: ${parsed.message}\n`);
+            for (const candidate of parsed.candidates) {
+                process.stderr.write(`  ${candidate.id}  [${candidate.status}]${candidate.title === undefined ? "" : `  ${candidate.title}`}\n`);
+            }
+            process.exit(1);
+        }
+        return die(`agents: ${refusalOf(text)}`);
+    }
+    const { to, note } = JSON.parse(text);
+    process.stdout.write(`${to}: ${note ?? "delivered"}\n`);
+};
+
 const list = async () => {
     const { status, text } = await call("GET", "/children");
     if (status !== 200) {
@@ -526,6 +565,7 @@ const main = async () => {
     if (command === "spawn") return spawn(rest);
     if (command === "wait") return wait(rest);
     if (command === "send") return send(rest);
+    if (command === "message") return message(rest);
     if (command === "answer") return answerChild(rest);
     if (command === "list") return list();
     process.stdout.write(`${USAGE}\n`);

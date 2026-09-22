@@ -260,6 +260,7 @@ import { createTerminalRunner, type TerminalRunner } from "./terminal/terminal-r
 import { panePids } from "./terminal/terminal-session.js";
 import { version } from "./version.js";
 import { type AgentTool, internalTools } from "./agent/tools/agent-tools.js";
+import { backgroundJobSessions } from "./agent/tools/background-jobs.js";
 import { type UsageStore, fileUsageStore } from "./usage/usage-store.js";
 import { extensionIdOf } from "@intentic/extension-manifest";
 import { createExtensionBackend, type ExtensionBackend } from "./extensions/backend/backend-supervisor.js";
@@ -906,12 +907,16 @@ export const createServices = (config: Config, logger: Logger): Services => {
         ownerLive: (owner) => owner === DAEMON_OWNER || turnActive(owner) || turnRunOf(owner)?.done === false,
         ownerKnown: (owner) => agents.entry(owner) !== undefined,
         liveSessionNames: () =>
-            new Set(
-                agents.liveSessionIds().flatMap((sessionId) => {
+            new Set([
+                ...agents.liveSessionIds().flatMap((sessionId) => {
                     const session = agentSessionName(sessionId);
                     return session === undefined ? [] : [session];
                 }),
-            ),
+                // A session still holding a background job, whose whole point is to outlive the turn that started it:
+                // without this the terminal sweep would kill the pane ten minutes after the conversation stopped, and
+                // the wake armed on the job would time out instead of firing (agent/tools/background-jobs.ts).
+                ...backgroundJobSessions(),
+            ]),
         panePids,
         onOwnerStopped: onTurnSettled,
         logger,

@@ -1,5 +1,7 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
 import { streamAgent } from "../agent/routes/agent.routes.js";
+import { adoptBackgroundJobs } from "../agent/tools/background-adoption.js";
+import { onTurnSettled } from "../agent/run/turn/turn-runs.js";
 import { startVerifyNudges } from "../agent/verification/verify-nudge.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
@@ -18,6 +20,15 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
 
     // Stop clears timers only; the watch journal survives for the next boot to restore.
     shutdown.push(startWatchers(services, streamAgent));
+
+    // A turn ending is the moment its background jobs become nobody's: each still running is handed to a watch of its
+    // own, so the conversation is woken when it exits. Beside the watchers because it arms one, and after them because
+    // it needs their runtime bound.
+    shutdown.push(
+        onTurnSettled((conversationId) => {
+            void adoptBackgroundJobs(conversationId, logger);
+        }),
+    );
 
     // For runtimes with no SDK Stop hook; wired here because the turn generator can't be imported from under the caller.
     shutdown.push(startVerifyNudges(services, streamAgent));

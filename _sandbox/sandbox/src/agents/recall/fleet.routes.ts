@@ -1,16 +1,29 @@
 import type { Context } from "hono";
+import { z } from "zod";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
+import { soleLiveConversation } from "../../agent/run/turn/turn-runs.js";
+import { messageConversation } from "./fleet-message.js";
 import { fleetMessages, fleetRecall, fleetRoster, fleetSearch, resolveHandle, type RosterOptions } from "./fleet-recall.js";
 
 // The shell door onto the daemon's fleet knowledge (registry, record, worktree composition, phrase index), joined into
-// one answer. Its own namespace, not `/agents`: the board's router can land, discard and rename, so a read-only route
-// here costs one grants.ts line and cannot grow teeth. Serves a CLI parsing JSON, not a typed client.
-
-export type FleetRoutesDeps = Pick<Services, "agents" | "agentWorktrees" | "transcripts" | "saidIndex" | "config">;
+// one answer. Its own namespace, not `/agents`: the board's router can land, discard and rename, so what lives here
+// costs one grants.ts line each and cannot reach those. Serves a CLI parsing JSON, not a typed client.
+//
+// Reads, and exactly one write: `message`, which says something to another conversation the way a person does by
+// typing into its chat (fleet-message.ts). It can start a turn, so it is rate-limited and attributed there; it cannot
+// land, archive, rename or discard anything.
 
 // Cap on a roster or search page; a caller asking for everything still gets a bounded answer.
 const MAX_LIMIT = 100;
+
+// Ceiling on one message: a peer needs a paragraph or two, not a file. Anything longer is a file to point at.
+const MAX_MESSAGE_CHARS = 8_000;
+
+const MessageBodySchema = z.object({
+    to: z.string().min(1),
+    message: z.string().min(1).max(MAX_MESSAGE_CHARS),
+});
 
 const numberQuery = (c: Context<AppEnv>, name: string, max: number): number | undefined => {
     const raw = c.req.query(name);
@@ -42,7 +55,8 @@ const rosterOptionsOf = (c: Context<AppEnv>): RosterOptions => {
     };
 };
 
-export const createFleetRoutes = (services: FleetRoutesDeps) => ({
+// Full Services, not a Pick: `message` starts turns, and a turn is the whole daemon.
+export const createFleetRoutes = (services: Services) => ({
     /** GET /fleet: paginated roster, newest first; `?q=` switches it to a phrase search, `?owner=` narrows to one member's. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
         const query = c.req.query("q")?.trim();
@@ -80,5 +94,27 @@ export const createFleetRoutes = (services: FleetRoutesDeps) => ({
             ...(grep === undefined || grep === "" ? {} : { grep }),
         });
         return c.json({ agent: recall, transcript });
+    },
+    /** POST /fleet/message: say something to another conversation — steered into its live turn, or opening one. */
+    message: async (c: Context<AppEnv>): Promise<Response> => {
+        const parsed = MessageBodySchema.safeParse(await c.req.json().catch(() => undefined));
+        if (!parsed.success) {
+            return c.json({ ok: false, message: 'Pass JSON like {"to": "<handle>", "message": "…"}.' }, 400);
+        }
+        // Same attribution the children routes use: the turn's own stamp, else the one turn in flight.
+        const from = c.req.header("x-intentic-conversation") ?? soleLiveConversation();
+        const outcome = await messageConversation(services, from === "" ? undefined : from, parsed.data.to, parsed.data.message);
+        return outcome.ok
+            ? c.json(outcome)
+            : c.json(
+                  {
+                      ok: false,
+                      message: outcome.message,
+                      ...(outcome.candidates === undefined
+                          ? {}
+                          : { candidates: outcome.candidates.map((entry) => ({ id: entry.id, title: entry.title, status: entry.status, updatedAt: entry.updatedAt })) }),
+                  },
+                  outcome.status,
+              );
     },
 });

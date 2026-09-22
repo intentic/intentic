@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tmux-run [-e NAME]... [-c AGENT-COMMAND] <session> <command-string> [window-name]
+# tmux-run [-e NAME]... [-c AGENT-COMMAND] [-b JOB-DIR] <session> <command-string> [window-name]
 #
 # Runs <command-string> inside a new window of tmux session <session> so the web terminal panel can watch
 # it live (and type into it — the command's stdin is the pane tty), while this wrapper streams the combined
@@ -20,6 +20,17 @@
 # new handler. Without it that report read `nsenter --mount=/proc/<pid>/ns/mnt … nice -n 10 ionice …` on every
 # row. Absent (the daemon's own terminal runner) the two are the same string, so it defaults to <command-string>.
 #
+# -b names the capture dir for a BACKGROUND JOB (Bash `run_in_background: true`), minted by the caller
+# instead of by mktemp here, because the daemon has to be able to read the job's completion after this
+# wrapper is gone (src/agent/tools/background-jobs.ts polls $JOB-DIR/status).
+#
+# A background job is the ONE case where this wrapper dying must not take the command with it. Intentic runs
+# every turn as its own short-lived CLI process, and that process SIGTERMs its background shells on the way
+# out — so the ordinary TERM trap below, which kills the pane to match the plain Bash tool's timeout
+# semantics, turned "keeps running across turns" into "dies fifteen seconds after the turn ends", silently.
+# Under -b the trap therefore leaves the pane (and the capture dir) alone, and the soft timeout is off: the
+# pane outlives the turn, and the daemon reads the status file whenever it lands.
+#
 # Capture is a plain file fed by `tee` inside the pane, NOT pipe-pane: a pane supports only one pipe-pane
 # and the global per-pane log hooks (src/logs/log-files.ts) already own it — creating the window triggers
 # those hooks, so commands land in the terminal history logs for free.
@@ -27,12 +38,14 @@ set -u
 
 envflags=()
 agentcmd=""
-while getopts e:c: opt; do
+jobdir=""
+while getopts e:c:b: opt; do
     case "$opt" in
         # Regex first: [[ ]] short-circuits, so an invalid name never reaches the (fatal under bash) indirect
         # expansion. Indirection, not printenv: command substitution would strip trailing newlines.
         e) [[ "$OPTARG" =~ ^[A-Za-z_][A-Za-z0-9_]*$ && -n "${!OPTARG+x}" ]] && envflags+=(-e "$OPTARG=${!OPTARG}") ;;
         c) agentcmd="$OPTARG" ;;
+        b) jobdir="$OPTARG" ;;
         *) exit 2 ;;
     esac
 done
@@ -66,6 +79,16 @@ fallback() {
     # stderr, not stdout: stdout is the tool RESULT and belongs to the command. And `--`, because the line
     # starts with dashes.
     printf -- '--- intentic: ran outside a terminal pane (%s): no live view, no capture, no output filter\n' "$reason" >&2
+    # A background job's status file is the daemon's ONLY completion signal, so even the degraded path publishes
+    # one — otherwise an adopted watch polls for a file no path left behind and reports a timeout for a command
+    # that finished. Same atomic rename the pane runner uses, for the same reason.
+    if [ -n "$jobdir" ]; then
+        mkdir -p "$jobdir" 2>/dev/null
+        bash -c "$cmd" 2>&1 | tee -a "$jobdir/out"
+        code=${PIPESTATUS[0]}
+        echo "$code" > "$jobdir/status.part" && mv "$jobdir/status.part" "$jobdir/status"
+        exit "$code"
+    fi
     exec bash -c "$cmd"
 }
 
@@ -93,7 +116,12 @@ tmux() { ${hop[@]+"${hop[@]}"} "$tmuxbin" "$@"; }
 # Named so the daemon's temp sweep can attribute it (platform/reaper.ts matches the intentic-run- prefix):
 # the soft-timeout path below deliberately leaves this dir behind for the still-running command to tee into,
 # and a SIGKILLed wrapper skips its trap — both used to be permanent /tmp residents.
-d="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")" || fallback "no capture dir under ${TMPDIR:-/tmp}"
+if [ -n "$jobdir" ]; then
+    mkdir -p "$jobdir" || fallback "job capture dir $jobdir could not be created"
+    d="$jobdir"
+else
+    d="$(mktemp -d "${TMPDIR:-/tmp}/intentic-run-XXXXXXXX")" || fallback "no capture dir under ${TMPDIR:-/tmp}"
+fi
 printf '%s\n' "$cmd" > "$d/cmd"
 : > "$d/out"
 # Runner executed inside the pane. tee mirrors output to the pane tty AND the capture file; PIPESTATUS[0]
@@ -196,7 +224,15 @@ tmux list-panes -s -t "=$session" -F '#{pane_dead} #{window_id}' 2>/dev/null \
 # A SIGTERM (the SDK's Bash timeout, or the daemon runner's abort/watchdog) takes the pane down with the
 # wrapper so timeout semantics match the plain Bash tool, and still returns whatever the command printed
 # before the kill. (A SIGKILLed wrapper leaves the pane running visibly; prune or the user cleans it up.)
-trap 'tmux kill-window -t "$pane" 2>/dev/null; emit 143; rm -rf "$d"; exit 143' TERM INT
+#
+# Except for a background job (-b), where the SIGTERM that arrives is the turn's own CLI exiting, not a
+# timeout: killing the pane there is what made `run_in_background` a promise the sandbox could not keep. The
+# capture dir stays too — the daemon reads the status file out of it long after this process is gone.
+if [ -n "$jobdir" ]; then
+    trap 'emit 143; exit 143' TERM INT
+else
+    trap 'tmux kill-window -t "$pane" 2>/dev/null; emit 143; rm -rf "$d"; exit 143' TERM INT
+fi
 
 # Completion is the status file, not tail/pane timing: the runner writes it strictly AFTER `tee` closes
 # $d/out (line above), so once it exists the captured output is complete and flushed — no tail-follow,
@@ -207,6 +243,9 @@ trap 'tmux kill-window -t "$pane" 2>/dev/null; emit 143; rm -rf "$d"; exit 143' 
 # $d — the runner still tees into it) stays alive; the dead-window prune sweeps it once it exits. Default
 # sits under the SDK's 2-minute Bash timeout; 0 disables (the daemon runner blocks to real completion).
 soft="${INTENTIC_RUN_SOFT_TIMEOUT_S:-110}"
+# A background job has no SDK Bash timeout to beat, and returning early would report it FINISHED to a caller
+# that asked to be told when it exits; it waits for the real status, and the turn ending is what releases it.
+[ -n "$jobdir" ] && soft=0
 while [ ! -f "$d/status" ]; do
     if [ "$soft" -ge 1 ] 2>/dev/null && [ "$SECONDS" -ge "$soft" ]; then
         emit running
@@ -226,5 +265,7 @@ code="$(cat "$d/status" 2>/dev/null)"
 case "$code" in '' | *[!0-9]*) code=1 ;; esac
 # Emit the complete captured output once — the SDK captures this stdout as the whole Bash tool result.
 emit "$code"
-rm -rf "$d"
+# A job dir is the daemon's, not this wrapper's: the adoption may not have read the status yet, and the tmp
+# sweep (platform/boot/reaper.ts, `intentic-run-` prefix) reclaims it on its own clock.
+[ -n "$jobdir" ] || rm -rf "$d"
 exit "$code"

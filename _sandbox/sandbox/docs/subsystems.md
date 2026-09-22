@@ -141,7 +141,9 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   levels down, nothing here holds a handle on them) carry the conversation's stamp
   ([src/platform/boot/leftovers.ts](../src/platform/boot/leftovers.ts)) and go a couple of minutes after the stop; the
   conversation's `agent-*` tmux sessions: live panes included, so a left-behind dev server no longer outlives
-  its turn by days: go minutes later unless somebody is attached; a session whose owner has NOT stopped is on
+  its turn by days: go minutes later unless somebody is attached, or unless the session still holds a BACKGROUND
+  JOB ([src/agent/tools/background-jobs.ts](../src/agent/tools/background-jobs.ts)), whose whole contract is to
+  outlive the turn that started it; a session whose owner has NOT stopped is on
   its own idle clock instead, because a conversation that goes on working never trips the clock above and so
   holds every session it ever opened (measured: a hung command held a queue slot for 26 minutes inside a session
   its conversation had long since replaced); its browser records close; and the temp

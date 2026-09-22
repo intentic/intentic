@@ -86,6 +86,31 @@ Every surface this one process owns, and the reason each one lives here rather t
   the arming turn ran with; the values are re-derived from the live capability store
   (src/capabilities/turn-env.ts), which reproduces the persona's withholding, picks up a rotated token, and
   declines to hand back one that has since been revoked.
+- Keep a background job alive past the turn that started it. `run_in_background: true` promises, in the SDK's
+  own words and in this harness's waiting guidance, that a command keeps running across turns and re-invokes
+  the agent when it exits. In interactive Claude Code that is true because one CLI spans every turn; here a
+  turn IS its own short-lived CLI process, which SIGTERMs its background shells on the way out, and
+  bin/tmux-run turned that signal into `tmux kill-window` so the job died with its pane. Measured at fifteen
+  seconds: a repo-wide test sweep launched at 14:08:23 was killed at 14:08:38.568, 168 ms after its turn
+  ended, having written not one byte; the conversation then armed a four-hour watch on a progress file nothing
+  would ever write, and sat believing the work was running. So a background command now carries `-b <dir>`
+  (src/agent/tools/agent-terminals.ts): tmux-run leaves the pane standing when its wrapper is signalled, waits
+  for the real exit rather than returning early at the soft timeout, and keeps the capture dir for a reader
+  that outlives it. The job is filed under its conversation while it runs
+  (src/agent/tools/background-jobs.ts), which is how the reaper knows not to reap its terminal at the ordinary
+  ten-minute grace, and when the turn settles every job still running is handed to a condition watch of its own
+  (src/agent/tools/background-adoption.ts) so the exit code and output tail wake the conversation. A row in the
+  chat says so at the moment the job starts, because the whole failure it replaces was invisible.
+- Say something to another conversation in this workspace. What a person does by typing into its chat, an agent
+  could not do at all: `agents send` reaches only a conversation's own children, and the SDK's cross-session
+  messaging reaches only sessions with a live process, which an idle conversation here does not have. The gap
+  was paid in copy-paste: an agent that found a stalled peer had to ask the human to carry the message. So
+  `agents message <handle> '<text>'` (POST /fleet/message, src/agents/recall/fleet-message.ts) steers the words
+  into the target's live turn, or opens one on the routing its registry entry already holds. What it is NOT is
+  the owner's voice: the prompt names the sender before anything the sender said, and the turn carries
+  `outsideWake`, so the command gate judges it as content from elsewhere. It can start turns, so each sender
+  has an hourly ceiling on how many it may start — two agents talking to each other is otherwise a way to spend
+  an allowance with nobody asking — and the route reaches nothing that lands, archives, renames or discards.
 - Open a brand-new sandbox with something running in it. A fresh workspace used to arrive empty, so the first
   screen of a product whose claim is "say what you want changed and watch it change" had nothing to change; the
   first boot now seeds a one-page starter site as its own repo and records it in `.intentic/config/autostart.json`, which the `autostart` boot step starts on every boot (a wake, a restart, a prewarmed pool volume); `SANDBOX_PREWARM=1` (`platform/prewarm.ts`) runs the same chain onto a pool machine's volume ahead of any owner and exits

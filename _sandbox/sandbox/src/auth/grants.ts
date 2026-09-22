@@ -58,6 +58,11 @@ const EXACT_ROUTES = new Set([
     "POST /children/answer",
     "GET /children",
     "GET /children/providers",
+    // Saying something to another conversation in this workspace: the one write under /fleet, and the only door an
+    // agent has to a peer that is idle (a child is not, and an idle conversation has no process to message). It puts
+    // words in front of a conversation and may start a turn on it, which is what a person does by typing into its
+    // chat; it cannot land, archive, rename or discard anything. Rate-limited and attributed in fleet-message.ts.
+    "POST /fleet/message",
     // The capability setup gate the `capabilities` CLI drives: discovery (names only, never config) and the ask.
     // The ask parks on an owner-decided card in chat; consent is enforced at the route.
     "GET /capabilities/connectable",
