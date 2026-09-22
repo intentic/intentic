@@ -1,10 +1,10 @@
-import { mkdtempSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdirSync, mkdtempSync } from "node:fs";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { agentHome } from "@intentic/local-agent";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
-import { test, expect, afterEach } from "bun:test";
-import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
+import { test, expect } from "bun:test";
 import { handleMcpMessage } from "./mcp.js";
 
 const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
@@ -16,9 +16,6 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     destructive: "on",
     ...overrides,
 });
-
-// Nothing restores a stub on its own, so one outlives its test and the home leaks down the file.
-afterEach(() => unstubAllEnvs());
 
 const call = async (name: string, args: Record<string, unknown>, grant: DeviceScopes): Promise<{ text: string; isError: boolean }> => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, grant)) as {
@@ -146,19 +143,27 @@ test("a write says whether it created or replaced, and a read gets it back", asy
 });
 
 test("trash moves the file somewhere recoverable instead of deleting it", async () => {
-    // The trash and the file's temp home must share a filesystem for files.ts's rename to work; a container job's
-    // $HOME (bind mount) and tmpdir() (image layer) are two devices, so this passed on laptops and failed only in CI.
-    stubEnv("HOME", mkdtempSync(join(tmpdir(), "host-home-")));
-    const root = mkdtempSync(join(tmpdir(), "host-fs-"));
+    // The file must share a filesystem with the real trash for files.ts's rename to work: Bun's homedir() ignores a
+    // stubbed $HOME, and a container job's $HOME (bind mount) and tmpdir() (image layer) are two devices.
+    const home = agentHome("machine").dir;
+    mkdirSync(home, { recursive: true });
+    const root = mkdtempSync(join(home, "test-trash-"));
     const path = join(root, "doomed.txt");
     await writeFile(path, "keep me");
     const trashed = await call("trash_file", { path }, scopes({ roots: root }));
-    expect(trashed.isError).toBe(false);
     const moved = /to (.+?)\. It is recoverable/.exec(trashed.text)?.[1];
-    // An absolute path, which is the claim the message makes ("to <path>. It is recoverable") and the part a
-    // reader would act on.
-    expect(moved).toMatch(/^\//);
-    expect(await readFile(moved ?? "", "utf8")).toBe("keep me");
+    try {
+        expect(trashed.isError, trashed.text).toBe(false);
+        // An absolute path, which is the claim the message makes ("to <path>. It is recoverable") and the part a
+        // reader would act on.
+        expect(moved).toMatch(/^\//);
+        expect(await readFile(moved ?? "", "utf8")).toBe("keep me");
+    } finally {
+        await rm(root, { recursive: true, force: true });
+        if (moved !== undefined) {
+            await rm(dirname(moved), { recursive: true, force: true });
+        }
+    }
 });
 
 test("trashing needs the write permission, like any other change to the user's files", async () => {

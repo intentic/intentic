@@ -35,6 +35,8 @@ const registeredKeys = (dir: string): Set<string> => {
 const declaringExtensions = (): { name: string; invalidates: string[]; keys: Set<string> }[] =>
     readdirSync(EXTENSIONS_ROOT, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
+        // readdir order is the filesystem's, not alphabetical: ext4 hashes names, so CI and a laptop list differently.
+        .toSorted((a, b) => a.name.localeCompare(b.name))
         .flatMap((entry) => {
             let manifest;
             try {
