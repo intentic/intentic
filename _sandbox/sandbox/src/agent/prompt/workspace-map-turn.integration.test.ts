@@ -12,6 +12,7 @@ import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
 import type { AgentRequest } from "../run/agent.js";
 import { planTurn, type TurnContext } from "../run/turn/turn-plan.js";
 import { ROOMY_MEMORY } from "../run/turn/turn-plan.testing.js";
+import { createMemoryWarnings } from "../../platform/resources/memory-admission.js";
 import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
 
@@ -55,6 +56,7 @@ const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, ov
     unstubbed<Services>("services", {
         tools: [],
         memoryHeadroom: ROOMY_MEMORY,
+        memoryWarnings: createMemoryWarnings(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {

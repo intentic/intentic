@@ -10,6 +10,7 @@ import { testConfig } from "../../../testing.js";
 import { UNATTENDED_ACCOUNTS_TITLE } from "../../../personas/personas.js";
 import { TURN_ENDING_NOTE_HEADER } from "../../../rules/turn-ending-note.js";
 import type { AgentRequest } from "../agent.js";
+import type { MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
 import { conversationExperimentArm, planTurn, ruleCommandIn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
 import * as harnessCredentialsOriginal from "../../providers/harness-credentials.js";
@@ -44,6 +45,47 @@ beforeEach(() => {
 });
 
 // the gates: each refuses for an ordinary state of a sandbox, and says which one
+
+const GIB = 1024 ** 3;
+const reading = (limitGib: number, residentGib: number, swapGib: number) => async (): Promise<MemoryHeadroom> => ({
+    limitBytes: limitGib * GIB,
+    usedBytes: (residentGib + swapGib) * GIB,
+    swapBytes: swapGib * GIB,
+    freeBytes: Math.max(0, limitGib - residentGib - swapGib) * GIB,
+    stalledPercent: 0,
+});
+
+// A warning the next press cannot get past is a wall: the send after the hold has to run.
+test("a short box holds a person's first turn with its reading, and runs the one after", async () => {
+    const services = harnessServices({
+        memoryHeadroom: reading(16, 12, 7),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+    });
+    const asAda = { ...turn(), actor: "ada@example.com" };
+
+    const held = await planTurn(services, asAda, context);
+    expect(held).toMatchObject({
+        ok: false,
+        code: "sandbox-memory-low",
+        memory: { limitBytes: 16 * GIB, residentBytes: 12 * GIB, swapBytes: 7 * GIB },
+    });
+
+    expect((await planTurn(services, asAda, context)).ok).toBe(true);
+});
+
+// Read off the turn itself: the request the plan is built from does not carry `unattended` yet at this point.
+test("a background turn is held to the stricter reserve on a box that still has room for a person", async () => {
+    const services = harnessServices({
+        memoryHeadroom: reading(10, 8.5, 0),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => undefined }),
+    });
+
+    const background = await planTurn(services, turn({ unattended: true, conversationId: "ci-fix-intentic-1" }), context);
+    expect(background).toMatchObject({ ok: false, code: "sandbox-memory-low" });
+    expect((background as { message: string }).message).toContain("This background turn did not start");
+
+    expect((await planTurn(services, turn(), context)).ok).toBe(true);
+});
 
 test("Codex with neither a translator subscription nor an api key names which of the two is missing", async () => {
     const noImage = await planTurn(servicesWith({ codexThreadExists: async () => true }), turn({ agent: "codex" }), context);

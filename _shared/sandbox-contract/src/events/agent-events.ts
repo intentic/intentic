@@ -229,8 +229,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 "context-window-too-small",
                 "subscription-required",
                 "agent-busy",
-                // The sandbox has no memory left to run this turn, refused before anything spawned; transient, no
-                // clock.
+                // The sandbox is short of memory, held before anything spawned: a person once per spell, after which
+                // their sends run; background work on every short reading. Transient, no clock.
                 "sandbox-memory-low",
                 // The runtime hit its own iteration ceiling and stopped; the work may be half done, so the user
                 // decides.

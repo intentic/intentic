@@ -928,6 +928,7 @@
             "releasingCoversRestConversation": "Zwolnienie obejmuje resztę tej rozmowy.",
             "requestedBecause": "Poproszono, ponieważ: {reason}",
             "sandboxRestartsMessageWaits": "(sandbox restartuje, a Twoja wiadomość czeka tutaj)",
+            "sendAnyway": "Wyślij mimo to",
             "setupDidntFinishWhile": "Konfiguracja nie skończyła się, kiedy agent czekał: poszedł dalej bez niej.",
             "showCheck": "Pokaż sprawdzenie",
             "showCommand": "Pokaż polecenie",

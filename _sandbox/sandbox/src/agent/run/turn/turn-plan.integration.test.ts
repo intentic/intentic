@@ -14,6 +14,7 @@ import type { AgentRequest } from "../agent.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
 import { planTurn, type TurnContext } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOMY_MEMORY, servicesWith, turn, wire } from "./turn-plan.testing.js";
+import { createMemoryWarnings } from "../../../platform/resources/memory-admission.js";
 
 // Every runtime is told the tree is behind, but the delivery differs: a full runtime gets readiness tools and hooks,
 // native runtimes (with no such seam) get the prose note instead.
@@ -57,6 +58,7 @@ const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =
     unstubbed<Services>("services", {
         tools: [],
         memoryHeadroom: ROOMY_MEMORY,
+        memoryWarnings: createMemoryWarnings(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", {

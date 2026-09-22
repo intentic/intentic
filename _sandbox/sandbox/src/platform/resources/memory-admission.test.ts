@@ -1,9 +1,17 @@
 import { test, expect } from "bun:test";
-import { admitTurn, headroomFrom, type MemoryHeadroom, readMemoryHeadroom, type TurnAdmission, waitForMemoryHeadroom } from "./memory-admission.js";
+import {
+    admitTurn,
+    createMemoryWarnings,
+    headroomFrom,
+    type MemoryHeadroom,
+    readMemoryHeadroom,
+    type TurnAdmission,
+    waitForMemoryHeadroom,
+} from "./memory-admission.js";
 
 const GIB = 1024 ** 3;
 
-// Refusal text, or "" when admitted.
+// The hold's text, or "" when admitted.
 const refusal = (admission: TurnAdmission): string => (admission.admit ? "" : admission.message);
 
 // MemoryHeadroom for a box with no stall and nothing paged out unless given them.
@@ -41,7 +49,13 @@ test("on a box with room for exactly one turn, the interactive one wins", () => 
     const tight = { ...box(10, 8.5), freeBytes: 1.5 * GIB };
     expect(admitTurn(tight, false).admit).toBe(true);
     expect(admitTurn(tight, true).admit).toBe(false);
-    expect(refusal(admitTurn(tight, true))).toMatch(/nothing is lost/u);
+});
+
+// Nothing retries a refused background turn, so its sentence must not promise that anything will.
+test("a background refusal says the turn did not start, and promises no later run", () => {
+    const refused = refusal(admitTurn({ ...box(10, 8.5), freeBytes: 1.5 * GIB }, true));
+    expect(refused).toContain("This background turn did not start");
+    expect(refused).not.toMatch(/will run|nothing is lost/u);
 });
 
 test("a stalled box is refused even when the byte count looks survivable", () => {
@@ -88,11 +102,11 @@ test("a stall refusal carries no reading, since its ceiling is not what is wrong
     expect(stalled.admit === false && stalled.memory).toBeUndefined();
 });
 
-// The sentence points at the control, not at the headless spelling: a reader at a composer has a button for this.
-test("an interactive refusal names the raise rather than the environment variable", () => {
-    const refused = refusal(admitTurn(box(10, 9.5)));
-    expect(refused).toContain("raise the sandbox's memory");
-    expect(refused).not.toContain("SANDBOX_MEMORY");
+// A person is told what is at stake and left to choose; the headless spelling is no use to a reader at a composer.
+test("an interactive hold states the stakes rather than telling the reader to wait", () => {
+    const held = refusal(admitTurn(box(10, 9.5)));
+    expect(held).toContain("the system kills processes");
+    expect(held).not.toMatch(/then send again|SANDBOX_MEMORY/u);
 });
 
 // Swap being unaccounted (cgroup v1, swapaccount off) must narrow nothing: it is the pre-existing reading, not a
@@ -113,6 +127,55 @@ test("a sandbox with no measurable ceiling admits rather than refusing on ignora
     expect(admitTurn({ ...unknown, stalledPercent: 95 })).toEqual({ admit: true });
 });
 
+const SHORT = box(10, 9.5);
+const ROOMY = box(10, 4);
+const person = (actor: string | undefined) => ({ unattended: false, actor });
+const background = { unattended: true, actor: undefined };
+
+// The hard stop this replaces: the same message refused press after press until the box happened to recover.
+test("a person is held once on a short box, and every turn after that goes ahead", () => {
+    const warnings = createMemoryWarnings();
+    const first = warnings.admit(SHORT, person("ada@example.com"));
+    expect(first.admit).toBe(false);
+    expect(refusal(first)).toContain("9.5 GiB of 10.0 GiB");
+    expect(warnings.admit(SHORT, person("ada@example.com"))).toEqual({ admit: true });
+    expect(warnings.admit(box(10, 3, 87), person("ada@example.com"))).toEqual({ admit: true });
+});
+
+test("each person is told for themselves", () => {
+    const warnings = createMemoryWarnings();
+    warnings.admit(SHORT, person("ada@example.com"));
+    expect(warnings.admit(SHORT, person("grace@example.com")).admit).toBe(false);
+    expect(warnings.admit(SHORT, person("grace@example.com")).admit).toBe(true);
+    // A caller the daemon could not name is one person too, not a pass for everybody.
+    expect(warnings.admit(SHORT, person(undefined)).admit).toBe(false);
+    expect(warnings.admit(SHORT, person(undefined)).admit).toBe(true);
+});
+
+test("a reading with room ends the spell, so the next shortage asks again", () => {
+    const warnings = createMemoryWarnings();
+    warnings.admit(SHORT, person("ada@example.com"));
+    expect(warnings.admit(ROOMY, person("ada@example.com"))).toEqual({ admit: true });
+    expect(warnings.admit(SHORT, person("ada@example.com")).admit).toBe(false);
+});
+
+// The spell is about room for a person, so a background turn that was itself refused can still be the reading that ends it.
+test("room for a person ends the spell even when a background turn took the reading", () => {
+    const warnings = createMemoryWarnings();
+    warnings.admit(SHORT, person("ada@example.com"));
+    expect(warnings.admit({ ...box(10, 8.5), freeBytes: 1.5 * GIB }, background).admit).toBe(false);
+    expect(warnings.admit(SHORT, person("ada@example.com")).admit).toBe(false);
+});
+
+test("background work is refused on every short reading and warns nobody", () => {
+    const warnings = createMemoryWarnings();
+    expect(warnings.admit(SHORT, background).admit).toBe(false);
+    expect(warnings.admit(SHORT, background).admit).toBe(false);
+    expect(warnings.admit(SHORT, person(undefined)).admit).toBe(false);
+    // A person going ahead does not wave background work through behind them.
+    expect(warnings.admit(SHORT, background).admit).toBe(false);
+});
+
 test("reading headroom degrades to an admitting verdict instead of throwing", async () => {
     const headroom = await readMemoryHeadroom();
     expect(typeof headroom.stalledPercent).toBe("number");
@@ -131,10 +194,11 @@ test("a transient peak is waited out, and the wait is reported", async () => {
     expect(wait.waitedMs).toBeGreaterThan(0);
 });
 
-test("an exhausted deadline reports unadmitted with the refusal's own words, never hangs", async () => {
+// The log line is about a command, not a turn, so it carries what was short and no sentence addressed to a composer.
+test("an exhausted deadline reports unadmitted with what was still short, never hangs", async () => {
     const wait = await waitForMemoryHeadroom({ intervalMs: 1, deadlineMs: 3, read: () => Promise.resolve(box(10, 9.9)) });
     expect(wait.admitted).toBe(false);
-    expect(wait.message).toContain("GiB");
+    expect(wait.message).toBe("Sandbox memory is low: 9.9 GiB of 10.0 GiB used");
 });
 
 test("the wait is held to the unattended reserve, not the interactive one", async () => {

@@ -483,24 +483,35 @@ describe(`a refusal that ran nothing`, () => {
         expect(rows.at(-1)?.text).toContain(`16,384 tokens`);
     });
 
-    // A refusal the reader can act on offers the press, and one they cannot does not. The reading is what tells
-    // the two apart: the headroom refusal carries it, the stall refusal names no ceiling to move.
-    it(`offers the memory raise only on a refusal that carried a reading`, () => {
+    // The daemon lets a person's next send through once it has warned them, so the row says so and always offers it;
+    // the raise joins only when the hold carried a ceiling to size it by, which a stall does not.
+    describe(`on a sandbox short of memory`, () => {
         const GIB = 1024 ** 3;
-        const outOfMemory = {
+        const lowMemory = {
             kind: `error`,
             code: `sandbox-memory-low`,
-            message: `Not enough sandbox memory to start this turn.`,
+            message: `Sandbox memory is low: 12.0 GiB resident + 4.0 GiB swapped, against 16.0 GiB.`,
             memory: { limitBytes: 16 * GIB, residentBytes: 12 * GIB, swapBytes: 4 * GIB },
         } as const satisfies AgentEvent;
 
-        const offered = foldOf(`land it`, [outOfMemory]).at(-1);
-        expect(offered?.noticeAction).toBe(`sandboxMemory`);
-        // Still a held refusal: the press is an addition to that row, not a replacement for it.
-        expect(offered?.text).toContain(`held for you to send again`);
+        it(`tells the reader that sending again starts it, and offers both presses when there is a ceiling to raise`, () => {
+            const row = foldOf(`land it`, [lowMemory]).at(-1);
+            expect(row?.text).toBe(`${lowMemory.message} Your message is held: send it again to start anyway.`);
+            expect(row?.noticeAction).toBe(`sandboxMemory`);
+        });
 
-        const { memory: _stalled, ...noReading } = outOfMemory;
-        expect(foldOf(`land it`, [noReading]).at(-1)?.noticeAction).toBeUndefined();
+        it(`offers only the send on a stall, which names no ceiling`, () => {
+            const { memory: _stalled, ...noReading } = lowMemory;
+            const row = foldOf(`land it`, [noReading]).at(-1);
+            expect(row?.noticeAction).toBe(`sendAnyway`);
+            expect(row?.text).toContain(`send it again to start anyway`);
+        });
+
+        it(`offers nothing on a background turn, which has no message to send`, () => {
+            const row = foldOf(`land it`, [{ ...lowMemory, unattended: true }]).at(-1);
+            expect(row?.noticeAction).toBeUndefined();
+            expect(row?.text).toContain(`started on its own`);
+        });
     });
 
     // The other held refusals share the sentence, not the button: nothing about a dead credential is fixed by a cap.

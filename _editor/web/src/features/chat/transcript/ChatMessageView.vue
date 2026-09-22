@@ -79,6 +79,8 @@ const {
     editing,
     beginEdit,
     streaming: conversationStreaming,
+    messages: paneMessages,
+    queued,
 } = usePaneView();
 
 // Browser-help's primary action links to /browsers (ChatDecisionButton's `to`) rather than deciding in place.
@@ -158,9 +160,23 @@ const stopThisWatch = async (): Promise<void> => {
     await stopWatching(conversation.value.conversationId, props.message.noticeWaitId).catch(() => undefined);
 };
 
-// THE RAISE OFFERED ON AN OUT-OF-MEMORY REFUSAL. The daemon says the box had no room; this says whether anything
-// can be done about it from here, which only the fleet knows: a machine that is not a connected device has no door
-// a reshape travels, and an engine already given away to the ceiling has nothing left to give.
+// The message a low-memory hold turned away is still waiting behind it: queued, nothing running, no row since. Both
+// presses on the hold act on that message, so both go once it has gone or a turn has started under them.
+const heldHere = computed(
+    () =>
+        (props.message.noticeAction === `sendAnyway` || props.message.noticeAction === `sandboxMemory`) &&
+        !conversationStreaming.value &&
+        queued.value.length > 0 &&
+        paneMessages.value.at(-1)?.id === props.message.id,
+);
+// The daemon lets this person's next send through once it has warned them, so the press only releases the queue.
+const sendAnyway = (): void => {
+    void conversation.value.resume();
+};
+
+// THE RAISE OFFERED ON A LOW-MEMORY HOLD. The daemon says the box is short; this says whether anything can be done
+// about it from here, which only the fleet knows: a machine that is not a connected device has no door a reshape
+// travels, and an engine already given away to the ceiling has nothing left to give.
 const selfResources = useSelfResources();
 // How much to offer, above what the container has now. Smaller than this and a raise buys less than the gibibyte a
 // turn must find free; larger and one press hands the box most of the machine without being asked.
@@ -180,8 +196,13 @@ const suggestedMemoryGib = computed(() => {
     }
     return Math.min(now + MEMORY_STEP_GIB, ceiling);
 });
+// Held too: its clause promises the message waits through the restart, and a restart under a running turn kills it.
 const memoryOffer = computed(
-    () => props.message.noticeAction === `sandboxMemory` && selfResources.reshapable.value && suggestedMemoryGib.value !== undefined,
+    () =>
+        props.message.noticeAction === `sandboxMemory` &&
+        heldHere.value &&
+        selfResources.reshapable.value &&
+        suggestedMemoryGib.value !== undefined,
 );
 const resizing = ref(false);
 const resizeFailed = ref<string | undefined>();
@@ -640,7 +661,11 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     {{ t(`chat.chatMessageView.watchInstall`) }}
                 </button>
             </template>
-            <!-- The refusal named a ceiling; this is the one press that moves it. Absent when nothing here could. -->
+            <!-- Low memory is a warning, not a wall: the held message goes out as it is. -->
+            <button v-if="heldHere" type="button" class="shrink-0 font-medium text-link hover:underline" @click="sendAnyway">
+                {{ t(`chat.chatMessageView.sendAnyway`) }}
+            </button>
+            <!-- The hold named a ceiling; this is the press that moves it. Absent when nothing here could. -->
             <template v-if="memoryOffer">
                 <button
                     type="button"

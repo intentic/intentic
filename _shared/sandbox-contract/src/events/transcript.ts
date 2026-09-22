@@ -226,9 +226,10 @@ export const TranscriptRowSchema = z.object({
         .describe(
             "A person wrote this in the agent's voice, with no turn behind it. Marked for the human re-reading the conversation months later, so their own words do not pass as the agent's. The agent itself never sees the mark.",
         ),
-    // The one-press follow-up this notice offers, by name; the chat decides what it does, and whether it stands.
+    // The follow-up this notice offers, by name; the chat decides what it does, and whether it stands. `sendAnyway` sends
+    // the held message; `sandboxMemory` offers that and a raise of the sandbox's memory.
     noticeAction: z
-        .enum(["landHold", "depsInstall", "watchStop", "sandboxMemory"])
+        .enum(["landHold", "depsInstall", "watchStop", "sandboxMemory", "sendAnyway"])
         .optional()
         .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
     // An unfinished wait this notice describes, by name; whether it's still running is live state, not stored here.

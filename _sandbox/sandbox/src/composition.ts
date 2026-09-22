@@ -94,7 +94,7 @@ import { type DismissalsStore, fileDismissalsStore } from "./capabilities/dismis
 import { filePersonasStore, type PersonasStore } from "./personas/personas-store.js";
 import { fileAreasStore, type AreasStore } from "./areas/areas-store.js";
 import { fileHeavyCommandsStore, type HeavyCommandsStore } from "./platform/resources/heavy-commands.js";
-import { type MemoryHeadroom, readMemoryHeadroom } from "./platform/resources/memory-admission.js";
+import { createMemoryWarnings, type MemoryHeadroom, type MemoryWarnings, readMemoryHeadroom } from "./platform/resources/memory-admission.js";
 import { type BlobSource, deriveBytes } from "./derived/derived-blob.js";
 import { deriveText, readDerivedText } from "./derived/derived-text.js";
 import { sidecarStatus } from "./derived/sidecar-service.js";
@@ -420,6 +420,8 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // direct call so a test can say what the box has: the reading is of live cgroup files at absolute paths, and once
     // it counts swap (memory-admission.ts) a suite running on a genuinely full machine refuses its own fixtures.
     readonly memoryHeadroom: () => Promise<MemoryHeadroom>;
+    // Who has already been told this spell that the box is short, so the gate holds each person's turn once, not forever.
+    readonly memoryWarnings: MemoryWarnings;
     // Scheduled agent wake-ups; run history is a separate ledger joined on read, so callers see one store.
     readonly automations: AutomationsStore;
     // Ralph loops: the pump drives them, /loops starts/stops them; `running` at boot is what the daemon died under.
@@ -1204,6 +1206,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         areas,
         heavyCommands,
         memoryHeadroom: readMemoryHeadroom,
+        memoryWarnings: createMemoryWarnings(),
         ciStore,
         verifyStore,
         ciRuns: createRunsCache(),

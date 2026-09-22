@@ -3,7 +3,7 @@ import { unstubbed } from "@intentic/testing";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { claudeStoreOf } from "../../../sessions/session-store.js";
 import type { Services } from "../../../composition.js";
-import type { MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
+import { createMemoryWarnings, type MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
 import { testConfig } from "../../../testing.js";
 import type { AgentRequest } from "../agent.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
@@ -45,6 +45,7 @@ export const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
         memoryHeadroom: ROOMY_MEMORY,
+        memoryWarnings: createMemoryWarnings(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: ROOT }),
         processes: unstubbed<Services["processes"]>("processes", { running: () => false }),
         dependencies: unstubbed<Services["dependencies"]>("dependencies", { status: async () => [], issueAt: async () => undefined }),

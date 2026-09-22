@@ -13,8 +13,16 @@ const clock = hoisted(() => ({ turnStartedAt: undefined as number | undefined })
 const roster = hoisted(() => ({ running: 0, watches: undefined as AgentWatch[] | undefined }));
 // Async like the action it stands in for: the row awaits it and swallows a failed disarm, so a sync stub rejects.
 const stopWatching = hoisted(() => mock(async () => undefined));
-// Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it.
-const pane = hoisted(() => ({ streaming: true, editing: undefined as ChatMessage | undefined }));
+// Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it. The rows and
+// the held queue are what a notice's send press reads to decide whether it still has anything to send.
+const pane = hoisted(() => ({
+    streaming: true,
+    editing: undefined as ChatMessage | undefined,
+    messages: [] as ChatMessage[],
+    queued: [] as { readonly id: string; readonly text: string }[],
+}));
+// The conversation's own release of a held queue, which is all a notice's send press asks of it.
+const resume = hoisted(() => mock(async () => undefined));
 const beginEdit = hoisted(() => mock());
 // Hoisted rather than fresh per call, so a card's answer can be read back from the one the pane actually holds.
 const answerQuestion = hoisted(() => mock());
@@ -132,6 +140,7 @@ mock.module("../panel/useChat-view", () => {
     const conversation = shallowRef({
         conversationId: `agent-1`,
         providerRetry: ref(undefined),
+        resume,
         turnStartedAt: {
             get value(): number | undefined {
                 return clock.turnStartedAt;
@@ -151,6 +160,8 @@ mock.module("../panel/useChat-view", () => {
             isDeciding: () => false,
             editing: computed(() => pane.editing),
             beginEdit,
+            messages: computed(() => pane.messages),
+            queued: computed(() => pane.queued),
         }),
     };
 });
@@ -171,6 +182,18 @@ mock.module("../../sandbox/overview/useSandboxSettings", () => {
         useSandboxSettings: () => ({ settings: ref(undefined), save: { mutateAsync: mock() } }),
     };
 });
+
+// A 16 GiB box on a 64 GiB engine a connected device can reshape, so a hold that named a ceiling has a raise to offer.
+mock.module("../../sandbox/devices/useSelfResources", () => ({
+    useSelfResources: () => ({
+        slug: computed(() => `box`),
+        current: computed(() => ({ memoryBytes: 16 * 1024 ** 3 })),
+        engine: computed(() => ({ memoryBytes: 64 * 1024 ** 3, cpus: 8 })),
+        reshapable: computed(() => true),
+        applying: ref(false),
+        apply: mock(async () => undefined),
+    }),
+}));
 
 const { default: ChatMessageView } = await import("./ChatMessageView.vue");
 // Imported so the loader suite's last test can mount it standalone, asserting the same status line with no message at
@@ -201,6 +224,9 @@ beforeEach(() => {
     markdown.parts = [];
     pane.streaming = true;
     pane.editing = undefined;
+    pane.messages = [];
+    pane.queued = [];
+    resume.mockClear();
     beginEdit.mockClear();
     resizers.length = 0;
 });
@@ -991,5 +1017,79 @@ describe(`condition watches`, () => {
 
     it(`offers no stop on a wake, which has already happened`, () => {
         expect(mount(wakeRow()).textContent).not.toContain(`Stop watching`);
+    });
+});
+
+// Low memory is a warning, not a wall: the daemon lets the next send through, so the row carries the press that makes it.
+describe(`a low-memory hold`, () => {
+    const hold = (noticeAction: `sendAnyway` | `sandboxMemory` = `sendAnyway`): ChatMessage => ({
+        id: 21,
+        role: `notice`,
+        text: `Sandbox memory is low: 9.5 GiB of 10.0 GiB used. Your message is held: send it again to start anyway.`,
+        noticeAction,
+    });
+    const buttons = (element: HTMLElement): HTMLButtonElement[] => [...element.querySelectorAll<HTMLButtonElement>(`button`)];
+    const sendAnyway = (element: HTMLElement): HTMLButtonElement | undefined =>
+        buttons(element).find((button) => button.textContent?.trim() === `Send anyway`);
+    // By its lead words, so a withdrawal cannot pass on a changed size alone.
+    const raise = (element: HTMLElement): HTMLButtonElement | undefined =>
+        buttons(element).find((button) => button.textContent?.trim().startsWith(`Raise its memory to`) === true);
+    const remount = (row: ChatMessage): HTMLElement => {
+        app?.unmount();
+        document.body.innerHTML = ``;
+        return mount(row);
+    };
+
+    beforeEach(() => {
+        pane.streaming = false;
+        pane.queued = [{ id: `held`, text: `fix the flaky test` }];
+    });
+
+    it(`sends the held message on one press, with no raise on a hold that named no ceiling`, () => {
+        const row = hold();
+        pane.messages = [row];
+        const element = mount(row);
+
+        expect(raise(element)).toBeUndefined();
+        sendAnyway(element)!.click();
+
+        expect(resume).toHaveBeenCalledTimes(1);
+    });
+
+    it(`offers the send beside the raise on a hold that named a ceiling`, () => {
+        const row = hold(`sandboxMemory`);
+        pane.messages = [row];
+        const element = mount(row);
+
+        // 16 GiB now plus the component's 4 GiB step, well under the 61 GiB this engine allows.
+        expect(raise(element)?.textContent?.trim()).toBe(`Raise its memory to 20 GiB`);
+        sendAnyway(element)!.click();
+
+        expect(resume).toHaveBeenCalledTimes(1);
+    });
+
+    // The raise promises the message waits through the restart: false once it has gone, and a restart kills a live turn.
+    it(`withdraws both presses once the conversation has moved past the warning`, () => {
+        const row = hold(`sandboxMemory`);
+        pane.messages = [row, { id: 22, role: `user`, text: `fix the flaky test` }];
+        const element = mount(row);
+
+        expect(sendAnyway(element)).toBeUndefined();
+        expect(raise(element)).toBeUndefined();
+    });
+
+    it(`withdraws both presses with nothing held to send, or a turn already running`, () => {
+        const row = hold(`sandboxMemory`);
+        pane.messages = [row];
+        pane.queued = [];
+        const empty = mount(row);
+        expect(sendAnyway(empty)).toBeUndefined();
+        expect(raise(empty)).toBeUndefined();
+
+        pane.queued = [{ id: `held`, text: `fix the flaky test` }];
+        pane.streaming = true;
+        const running = remount(row);
+        expect(sendAnyway(running)).toBeUndefined();
+        expect(raise(running)).toBeUndefined();
     });
 });

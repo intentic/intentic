@@ -93,7 +93,7 @@ export class TurnFailures {
                 this.host.requeue(turn.sent);
                 return;
             case `sandbox-memory-low`:
-                // Sandbox out of memory; not auto-resent, since retrying now would just refuse again.
+                // Held once so the person can decide; never auto-resent, since the next send is them saying go ahead.
                 this.host.requeue(turn.sent);
                 return;
             case `session-not-found`:

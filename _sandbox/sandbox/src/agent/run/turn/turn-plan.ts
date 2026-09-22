@@ -19,7 +19,6 @@ import {
 } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type IsolationAnchor, fromWorktree, inWorktree, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
-import { admitTurn } from "../../../platform/resources/memory-admission.js";
 import { dirtyPathsAcross } from "../../../git/changes/changes.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 import { accountsServer } from "../../../browser/tools/accounts-tools.js";
@@ -68,6 +67,7 @@ import { turnEndingNote } from "../../../rules/turn-ending-note.js";
 import { CHECKS_SESSION } from "../../../terminal/terminal-session.js";
 import { queueRunEnabled } from "../../../terminal/terminal-run.js";
 import type { AgentRequest } from "../agent.js";
+import type { TurnInput } from "./turn-actor.js";
 import { armSupervisor, type ChildSupervisor } from "../../subagents/children.js";
 import { SPAWN_NOTE_TITLE, spawnNote } from "../../subagents/spawn-note.js";
 import { adapterFor } from "../../providers/adapter-registry.js";
@@ -366,15 +366,17 @@ const mapDue = (briefing: TurnBriefing, settings: SandboxSettings, arm: boolean 
 const latchedAccount = (input: AgentTurn, entry: { readonly account?: string | undefined } | undefined): AgentTurn =>
     input.account === undefined && entry?.account !== undefined ? { ...input, account: entry.account } : input;
 
-export const planTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnPlan> => {
-    // Checked before anything else and above the dispatch, so a box out of memory refuses every provider arm alike, and
-    // a refused turn costs no settings read, capability list, dependency probe or persona load. Uncapped sandboxes and
-    // cgroup-blind daemons admit unconditionally.
-    const admission = admitTurn(await services.memoryHeadroom(), context.base.unattended === true);
+export const planTurn = async (services: Services, input: TurnInput, context: TurnContext): Promise<TurnPlan> => {
+    // Above the dispatch, so a short box holds every provider arm alike and a held turn costs no settings read,
+    // capability list, dependency probe or persona load. Holds a person once per spell (memory-admission.ts), so the
+    // press after it always runs; uncapped sandboxes and cgroup-blind daemons admit unconditionally.
+    const admission = services.memoryWarnings.admit(await services.memoryHeadroom(), {
+        unattended: input.unattended === true,
+        actor: input.actor,
+    });
     if (!admission.admit) {
-        // Spread whole rather than field by field: the reading rides through to the composer's notice, which can
-        // only size a raise it was told, and the stall refusal carries no `memory` key to begin with.
-        const { admit: _refused, ...refusal } = admission;
+        // Spread whole: the reading rides through to the composer's notice, which can only size a raise it was told.
+        const { admit: _held, ...refusal } = admission;
         return { ok: false, code: "sandbox-memory-low", ...refusal };
     }
     // Harness is orthogonal to provider: "native" runs each provider on its own runtime, "claude-code" forces the

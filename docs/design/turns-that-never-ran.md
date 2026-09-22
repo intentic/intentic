@@ -23,6 +23,10 @@ user      Running tests is one of the performance bottlenecks…      ← the pr
 It read as a rendering fault. It was not: all eight rows were in `/history/transcripts/<id>.jsonl`. Seven
 records on the machine this was found on held 24 such rows between them.
 
+Memory no longer refuses the second press: a person is held once and the next send runs
+(`low-memory-hold.md`). That one hold is still a refusal that ran nothing, and every other code on
+`HELD_FOR_RESEND` can still repeat the way this one did.
+
 **The mechanism.** A refusal is a value returned by `planTurn` and yielded as an `error` frame
 (`agent.routes.ts` `refusalFrame`). By then the run already exists: `startTurnRun` opened its fold on the
 user's message, and the frame folds in under it as a notice. The settle then appended `run.rows` — message

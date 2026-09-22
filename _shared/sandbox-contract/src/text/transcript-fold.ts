@@ -129,6 +129,20 @@ const HELD_FOR_RESEND: ReadonlySet<string> = new Set([
     "engine-version-floor",
 ]);
 
+// A memory hold is asked once and never again that spell (memory-admission.ts), so the next send always runs. The raise
+// rides along only when the hold carried a ceiling to size it by: a stall names none, and raising one would not clear it.
+const heldRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
+    const unattended = event.unattended === true;
+    if (event.code !== "sandbox-memory-low" || unattended) {
+        return { role: "notice", text: `${event.message} ${undelivered(unattended)}` };
+    }
+    return {
+        role: "notice",
+        text: `${event.message} Your message is held: send it again to start anyway.`,
+        noticeAction: event.memory === undefined ? "sendAnyway" : "sandboxMemory",
+    };
+};
+
 // Row for a turn-ending error: the provider's own message plus one clause on what happens next. The live wait itself is
 // drawn by the chat, not stored here.
 const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow => {
@@ -154,13 +168,7 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
     if (code === undefined || !HELD_FOR_RESEND.has(code)) {
         return { role: "notice", text: message };
     }
-    return {
-        role: "notice",
-        text: `${message} ${undelivered(event.unattended === true)}`,
-        // The one press that changes the answer, offered only when the refusal carried a reading to size it by:
-        // the stall refusal names no ceiling, and raising one would not clear it.
-        ...(event.memory === undefined ? {} : { noticeAction: "sandboxMemory" as const }),
-    };
+    return heldRow(event);
 };
 
 // The turn's opening user row: text, timestamp, attachments, and whatever the daemon later stamps onto it (checkpoint,
