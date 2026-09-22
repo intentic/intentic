@@ -109,7 +109,9 @@ export type DeviceFlowLine = z.infer<typeof DeviceFlowLineSchema>;
 // Every op stops the resident process mid-command; a stream ending with no terminal frame is normal, not a failure, and
 // confirmation is the version moving on the next poll. `restart` is just a bare `intentic-machine run`.
 // `forget-unreachable` drops the machine's links to sandboxes that have answered nothing for long enough to be gone
-// (peer-dial's LONG_OUTAGE_ATTEMPTS) — never the link carrying the request, which is by definition answering.
+// (peer-dial's LONG_OUTAGE_ATTEMPTS) — never the link carrying the request, which is by definition answering. Never
+// automatic either: a laptop closed for a fortnight must find its sandboxes again, so nothing expires on its own and
+// dropping one is always somebody's decision.
 export const DeviceAgentOpSchema = z.enum(["upgrade", "restart", "forget-unreachable"]);
 export type DeviceAgentOp = z.infer<typeof DeviceAgentOpSchema>;
 export const DeviceAgentFlowSchema = z.object({ op: DeviceAgentOpSchema });

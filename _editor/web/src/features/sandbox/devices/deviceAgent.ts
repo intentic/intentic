@@ -38,6 +38,9 @@ const upgrade = (): AgentAction<DeviceAgentOp> => ({
 
 // Update leads: it is the errand people come to this group for, and it restarts the loop on its way past,
 // which makes Restart the narrower of the two rather than the first thing to try.
+// `forget-unreachable` is deliberately NOT here. These two are standing verbs, offered whether or not anything is
+// wrong; the drop only means something when a machine is holding links that stopped answering, so it is raised as
+// that concern's own fix (health/deviceAttention.ts) and would be a question nobody asked anywhere else.
 const ACTIONS: readonly AgentAction<DeviceAgentOp>[] = [upgrade(), restartAgent()];
 
 // Every verb here travels over the device's own outbound socket, so a machine not holding one gets the

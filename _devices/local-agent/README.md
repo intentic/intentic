@@ -8,9 +8,11 @@ The plumbing every intentic CLI that lives on a **user's own computer** needs, a
         <agent>.log          spawnDetached()      — the agent's output has nowhere else to go
         <agent>.pid          livePid()            — find the agent again, pid + the boot it belongs to
 
-HKCU\…\Run                   registerAutostart()  — Windows, per-user, no elevation, through the launcher stub
-~/Library/LaunchAgents/      registerAutostart()  — macOS, opt-in per agent
-~/.config/autostart/         registerAutostart()  — Linux desktop session
+Task Scheduler\<name>        registerAutostart()  — Windows, per-user logon task, supervised, no elevation
+HKCU\…\Run                   registerAutostart()  — Windows fallback, one shot at logon, nothing watches it
+~/Library/LaunchAgents/      registerAutostart()  — macOS, opt-in per agent, KeepAlive on a non-zero exit
+~/.config/systemd/user/      registerAutostart()  — Linux, Restart=on-failure
+~/.config/autostart/         registerAutostart()  — Linux desktop session, where there is no user manager
 
 stdout                       createUi(process)    — the one renderer every agent speaks through
 ```
@@ -57,20 +59,35 @@ finds the other half of a Windows install, [`intentic-launch.exe`](../win-launch
 own executable.
 
 **`autostart.ts`**: `registerAutostart(spec, launcher, log)` against an `AutostartSpec` the agent declares.
-launchd and the desktop session, which supervise what they start, get the **foreground** command. So does
-Windows, but through the stub: `intentic-launch.exe --log <log> -- <agent> <foreground args>`. `launchAgent` is
+Every mechanism here supervises what it starts, so every one gets the **foreground** command; on Windows it goes
+through the stub, `intentic-launch.exe --log <log> --wait -- <agent> <foreground args>`. `launchAgent` is
 optional: an agent that has not been exercised on macOS says so and gets a note, rather than a file macOS never
 reads.
 
-Windows earns that indirection. Explorer starts a Run entry in the interactive session, and the loader gives
-every console-subsystem program a console — which on Windows 11, where the default console host is Windows
+Supervised is the word that matters, and it is what each mechanism is chosen for. systemd has
+`Restart=on-failure`; launchd gets `KeepAlive: {SuccessfulExit: false}`, which is the same bargain and safe to
+make because these agents exit 0 for every deliberate stop and 128+SIGNAL otherwise. Windows gets a per-user
+**logon task**: a Run value starts the agent once and nothing watches it afterwards, so a crash at ten in the
+morning stayed a crash until the next sign-in. The task restarts a failed action three times a minute apart, and
+a repeating trigger re-starts one that died some other way — `IgnoreNew` is what makes that repetition a no-op
+while the agent is healthy rather than a second agent every five minutes. `InteractiveToken` is what makes it
+need no password and no elevation; the `schtasks` form that *does* want a password is `/sc ONLOGON /ru`, which
+is why this registers XML instead.
+
+Windows earns the stub on top of that. Explorer starts a Run entry in the interactive session, and the loader
+gives every console-subsystem program a console — which on Windows 11, where the default console host is Windows
 Terminal, is a terminal window on the desktop. The entry used to name the agent's own **detached** command,
 which spawns the agent and exits, so what a user saw at every single boot was a black window for one to two
 seconds. Nothing softer works: `powershell -WindowStyle Hidden` hides the console *its* host owns while the
-window belongs to WindowsTerminal.exe, and a Task Scheduler logon task maps a window like anything else. Only a
-program whose PE subsystem is GUI never gets a console, which is the whole of what the stub is. `detachedArgs`
-remains the fallback for an install with no stub beside it (a developer running `node dist/cli.js`), and
+window belongs to WindowsTerminal.exe, and a logon task whose action is a **console** program maps a window like
+anything else. Only a program whose PE subsystem is GUI never gets a console, which is the whole of what the
+stub is — and it is why the logon task is registered only when the stub is there to be its action. Without one,
+`detachedArgs` in the Run key remains the fallback (a developer running `node dist/cli.js`), unsupervised, and
 registration says out loud that a window will flash.
+
+`registerAutostart` also takes `{ startNow: false }`, for the one caller that is the running agent re-asserting
+its own entry: every mechanism is idempotent, but the two that also *start* would hand that agent a rival, and
+on macOS the restart goes through booting the job out — which is to say, killing the caller.
 
 **`detached.ts`**: `spawnDetached`, `livePid`, `pidFileBody`, `isProcessAlive`. On POSIX the agent is spawned
 `detached` for its own session; on Windows because without it the agent is torn down the moment its parent

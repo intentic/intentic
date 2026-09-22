@@ -118,7 +118,10 @@ const xmlText = (value: string): string =>
     value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 // The task, in the element order Windows itself writes when it exports one: Task Scheduler's parser is positional
-// within <Settings>, so matching its own output is the only ordering that is not a guess.
+// within <Settings>, so matching its own output is the only ordering that is not a guess. Schema 1.2, which is also a
+// constraint on the CONTENT: `UseUnifiedSchedulingEngine` and `DisallowStartOnRemoteAppSession` are 1.4 nodes and a
+// 1.2 task is refused outright for carrying them ("the task XML contains an unexpected node"). Both were the default
+// anyway, so this stays at the version every supported Windows parses rather than bumping for two nodes it can lose.
 export const windowsTaskXml = (spec: AutostartSpec, launcher: CliLauncher, stub: string, account: string): string => {
     // `--wait` is what makes the task a supervisor rather than a launcher: a task counts as RUNNING only while its
     // action process does, which is what `IgnoreNew` swallows repetitions against and what a restart is measured from.
@@ -165,8 +168,6 @@ export const windowsTaskXml = (spec: AutostartSpec, launcher: CliLauncher, stub:
     <Enabled>true</Enabled>
     <Hidden>false</Hidden>
     <RunOnlyIfIdle>false</RunOnlyIfIdle>
-    <DisallowStartOnRemoteAppSession>false</DisallowStartOnRemoteAppSession>
-    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
     <WakeToRun>false</WakeToRun>
     <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
     <Priority>7</Priority>

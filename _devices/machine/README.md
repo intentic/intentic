@@ -106,7 +106,12 @@ halves in one process ([src/resident.ts](src/resident.ts)):
 - Unpairing one sandbox of several does **not** restart it (`startResidentIfStopped`): the sync half picks the
   drop up by itself, and this process holds the socket every sandbox reaches this machine over — bouncing it
   makes the sandbox that asked for the unpair watch its own device go offline.
-- The process exits — and takes the login entry with it — only when **both** halves have nothing to serve.
+- The process exits — and takes the login entry with it — only when **both** halves are **readably** empty. A
+  config that exists and will not parse propagates rather than reading as nothing: retiring the login entry is a
+  decision nothing but a fresh install undoes, and one unreadable file must not be able to make it.
+- It re-asserts that login entry on every start, without starting anything (`registerAutostart`'s
+  `startNow: false`): the running agent is the only process that knows there is still something to come back
+  for, so an entry lost to a tidied Run key or a reset profile repairs itself instead of never.
 - On a signal it exits `128+signal`, never 0: a supervisor must restart what it did not stop, and the incident
   that bought that rule is written out in [src/sync/mirror.ts](src/sync/mirror.ts).
 - It stamps **the build it is running** into its pidfile (`pid boot build`). Nothing else knows it: replacing the

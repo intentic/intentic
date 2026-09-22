@@ -445,6 +445,8 @@ test(`says nothing at all about a healthy, fully-permitted machine`, () => {
     expect(concernsOf({}, {}, undefined, GRANTED)).toEqual([]);
 });
 
+// The unreachable-links concern is covered further down, against the `links` key and the Forget-them fix it carries.
+
 test(`leads with whether the machine answers, then how old the reading is`, () => {
     // Granted, like every case here that isn't about permissions: an ungranted switch is a third concern of its own.
     const concerns = concernsOf({ gap: `no-agent` }, { capturedAt: NOW - 61_000 }, undefined, GRANTED);

@@ -21,6 +21,17 @@ const report = (overrides: Partial<Report> = {}): Report => ({
     ...overrides,
 });
 
+// What the agent says about the links it holds. Counts and an age, never the addresses: the sandboxes on the other
+// end belong to the same owner but not to this sandbox (DeviceFacts).
+const facts = (links: NonNullable<Device[`facts`]>[`links`]): NonNullable<Device[`facts`]> => ({
+    os: `linux`,
+    arch: `x64`,
+    shell: `bash`,
+    home: `/home/dev`,
+    roots: [`/home/dev`],
+    ...(links === undefined ? {} : { links }),
+});
+
 // A connected, reachable, currently-reporting machine: the shape every case below varies one fact of.
 const device = (overrides: Partial<Device> = {}): Device => ({
     key: `rog`,
@@ -63,6 +74,12 @@ test(`offers both verbs on a sandbox that does not know which release is newest`
 // Restart the narrower of the two rather than the first thing to try.
 test(`leads with the update, since a restart is the narrower errand`, () => {
     expect(verbs({}, {}, `1.9.0`)[0]).toBe(`Update agent`);
+});
+
+// The two standing verbs are the whole of this panel: `forget-unreachable` is raised as the unreachable-links
+// concern's own fix instead (health/deviceAttention.ts), where the count that makes it meaningful already is.
+test(`offers no third verb to a machine holding links it cannot reach: that one is the concern's`, () => {
+    expect(verbs({ facts: facts({ total: 5, unreachable: 4 }) })).toEqual([`Update agent`, `Restart agent`]);
 });
 
 // ── what the panel says ────────────────────────────────────────────────────

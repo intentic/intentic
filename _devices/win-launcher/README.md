@@ -4,14 +4,27 @@ The ~200 KB Windows program that starts another program without putting a window
 
 Everything the machine-side agent leaves resident — [`@intentic/machine`](../machine)'s one agent (sandbox
 connections + the mirror watcher), and Mutagen's daemon beside it — has to come back after a reboot,
-and on Windows that means a per-user `HKCU\…\Run` value. Explorer starts one in the interactive session, and
-the loader gives a console to any program whose PE subsystem says CONSOLE. Both are console programs. So every
-boot showed a black window for one to two seconds per entry, on machines whose owners had asked to see nothing
-at all.
+and on Windows that means a per-user `HKCU\…\Run` value or a logon task. Explorer starts a Run entry in the
+interactive session, and the loader gives a console to any program whose PE subsystem says CONSOLE. Both are
+console programs. So every boot showed a black window for one to two seconds per entry, on machines whose
+owners had asked to see nothing at all.
 
 This is the fix, and it is a whole separate executable because the property that fixes it is decided at link
 time: a **GUI-subsystem** program is never given a console, so there is nothing to map. It starts the real
 command with `CREATE_NO_WINDOW` and gets out of the way.
+
+The machine agent registers a **logon task**, because a Run value starts it once and nothing watches it
+afterwards — which is the whole of "it stopped running and nobody noticed". The task is the same launch with a
+supervisor attached, and `--wait` is what attaches it:
+
+```
+Task Scheduler\IntenticMachine   (logon trigger + a 5-minute repetition, IgnoreNew, RestartOnFailure 3×PT1M)
+  → intentic-launch.exe --log %USERPROFILE%\.intentic\machine\machine.log --wait
+                        -- intentic-machine.exe run --foreground
+```
+
+Mutagen's daemon, and any agent whose install found no stub beside it, still go in the Run key
+([`autostart.ts`](../local-agent/src/autostart.ts) falls back to it and says so):
 
 ```
 HKCU\…\Run\IntenticMachine
@@ -52,16 +65,19 @@ that has no window to show, and so does its children.
 
 Two callers want opposite lifetimes, which is the whole of `--wait`:
 
-- **An agent's Run value** wants this process gone at once. It exits after starting the agent and prints the
-  agent's pid on stdout, for the caller that has a pipe on it (`spawnDetached`) and to nowhere at logon.
-- **A Task Scheduler action** ([`setup-windows-runner.ps1`](../../_tools/scripts/ci/setup-windows-runner.ps1))
-  wants the opposite: a task counts as *running* only while its action process does, which is what makes
-  `-MultipleInstances IgnoreNew` swallow watchdog repetitions and `Stop-ScheduledTask` reach what it started.
-  `--wait` holds until the child exits and passes its exit code through.
+- **A Run value, and `spawnDetached`** want this process gone at once. It exits after starting the agent and
+  prints the agent's pid on stdout, for the caller that has a pipe on it and to nowhere at logon.
+- **A Task Scheduler action** — the machine agent's own logon task, and the CI listener's
+  ([`setup-windows-runner.ps1`](../../_tools/scripts/ci/setup-windows-runner.ps1)) — wants the opposite: a task
+  counts as *running* only while its action process does, which is what makes `IgnoreNew` swallow watchdog
+  repetitions and `Stop-ScheduledTask` reach what it started. `--wait` holds until the child exits and passes
+  its exit code through, which is also what Task Scheduler reads to decide whether to restart it.
 
-`--log` is required. A program started from the Run key has no terminal, no parent waiting on it and no exit
-code anyone will see, so the log file is the only surface on which "it did not start" can be a sentence rather
-than an absence.
+`--log` is required. A program started at logon has no terminal, no parent waiting on it and no exit code
+anyone will see, so the log file is the only surface on which "it did not start" can be a sentence rather than
+an absence. It is rolled here, at the open, once it passes 8 MB: the agent writes through the handle this
+process hands it, so it cannot roll the file itself — renaming the path from inside would move a name nothing
+is writing to.
 
 ## How it ships
 

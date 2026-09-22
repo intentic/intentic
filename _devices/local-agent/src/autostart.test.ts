@@ -205,6 +205,17 @@ describe("windowsTaskXml", () => {
         expect(xml.startsWith(`<?xml version="1.0" encoding="UTF-16"?>`)).toBe(true);
     });
 
+    // Measured against real Task Scheduler, which refused an earlier draft outright:
+    //   ERROR: The task XML contains an unexpected node. (43,7):DisallowStartOnRemoteAppSession:
+    // A schema-1.2 task may not carry 1.4 nodes, and the refusal is total — every Windows machine would have fallen
+    // back to the unsupervised Run key, silently, with only a note in a log nobody reads. Both nodes were the
+    // default anyway, so the version stays where every supported Windows parses it.
+    it("carries nothing newer than the schema version it declares", () => {
+        expect(xml).toContain(`<Task version="1.2"`);
+        expect(xml).not.toContain(`UseUnifiedSchedulingEngine`);
+        expect(xml).not.toContain(`DisallowStartOnRemoteAppSession`);
+    });
+
     it("deletes exactly the task it creates, or uninstall leaves it resurrecting every five minutes", () => {
         expect(windowsTaskCreateArgs(SPEC, "C:\\Temp\\t.xml")).toEqual(["/create", "/tn", "IntenticSyncMirror", "/xml", "C:\\Temp\\t.xml", "/f"]);
         expect(windowsTaskDeleteArgs(SPEC)).toEqual(["/delete", "/tn", "IntenticSyncMirror", "/f"]);

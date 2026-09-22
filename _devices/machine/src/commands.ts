@@ -28,6 +28,10 @@ const run = buildCommand<RunFlags>({
         if (flags.stop) {
             const pid = await stopResident();
             out(pid === undefined ? "not running." : `stopped (pid ${pid}).`);
+            // Said because it is no longer obvious: the login entry is supervised now (a Windows logon task with a
+            // watchdog, systemd's Restart=on-failure, launchd's KeepAlive), so this stops the process rather than the
+            // agent. Leaving that unsaid is how someone concludes the stop did not work.
+            out("It comes back at your next sign-in, and sooner if this machine's supervisor notices it gone. `intentic-machine device uninstall` is what stops it for good.");
             return;
         }
         if (!flags.foreground) {

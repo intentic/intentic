@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { arch, homedir, hostname, platform, release, type } from "node:os";
 import { promisify } from "node:util";
 import type { DeviceFacts, DeviceScopes } from "@intentic/sandbox-contract";
-import { readLinkStates, unreachableIn } from "../config.js";
+import { type LinkReading, readLinkStates, unreachableIn } from "../config.js";
 import { rootsOf } from "../policy.js";
 import { shellFor } from "./shell.js";
 import { wslEnvironment } from "../../wsl.js";
@@ -64,11 +64,12 @@ const wslDistros = async (): Promise<string[] | undefined> => {
     return distros.length === 0 ? undefined : distros;
 };
 
-// This machine's links as a count, read from the stamp the resident agent keeps (device/config.ts) rather than from
-// the sockets, since `describe` is answered on one of them and knows only its own. Which links count as unreachable is
+// This machine's links as a count, from the stamp the resident agent keeps (device/config.ts) rather than from the
+// sockets, since `describe` is answered on one of them and knows only its own. Which links count as unreachable is
 // `unreachableIn`'s to say, so this and the drop that acts on it can never disagree about what is gone.
-export const linkFacts = async (): Promise<DeviceFacts["links"]> => {
-    const stamped = await readLinkStates();
+// Takes the reading rather than fetching it: the decision is what is worth pinning, and a pure one is pinnable without
+// a filesystem. No stamp at all answers undefined rather than zero — an agent that has not stamped is not a tidy one.
+export const linkFacts = (stamped: Readonly<Record<string, LinkReading>> | undefined): DeviceFacts["links"] => {
     if (stamped === undefined) {
         return undefined;
     }
@@ -82,7 +83,8 @@ export const linkFacts = async (): Promise<DeviceFacts["links"]> => {
 };
 
 export const hostFacts = async (scopes: DeviceScopes): Promise<DeviceFacts> => {
-    const [os, engine, wsl, distros, links] = await Promise.all([osName(), engineFacts(), wslEnvironment(), wslDistros(), linkFacts()]);
+    const [os, engine, wsl, distros, stamped] = await Promise.all([osName(), engineFacts(), wslEnvironment(), wslDistros(), readLinkStates()]);
+    const links = linkFacts(stamped);
     return {
         os,
         arch: arch(),
