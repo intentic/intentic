@@ -108,7 +108,6 @@ it(`refuses to name a side when only the payloads disagree`, () => {
     setDaemonRoutes(LEVEL, reshaped(`settings.get`));
     const text = mount().textContent ?? ``;
     expect(text).toContain(`Some parts of this page may not work`);
-    expect(text).toContain(`The two know about the same features but disagree on the details.`);
     expect(text).toContain(`Sandbox settings`);
     expect(text).toContain(`everything on the Sandbox tabs`);
     expect(text).toContain(`may misbehave`);
@@ -150,17 +149,16 @@ it(`never calls restarting the sandbox a reload`, () => {
     expect([...el.querySelectorAll(`button`)].map((button) => button.textContent)).toContain(`Reload page`);
 });
 
-// One shared schema reaches dozens of routes across areas that have nothing to do with each other, so the area list
-// alone reads as that many separate things being broken. The count is what tells those apart.
-it(`counts the drifted routes, not just the areas they land in`, () => {
+// One shared schema reaches dozens of routes across areas that have nothing to do with each other; the card groups
+// them into one feature row rather than naming each wire.
+it(`groups many drifted routes into one feature row`, () => {
     const agentRoutes = Object.keys(SHAPES).filter((name) => name.startsWith(`agent.`));
     expect(agentRoutes.length).toBeGreaterThan(1);
     setDaemonRoutes(LEVEL, reshaped(...agentRoutes));
     const text = mount().textContent ?? ``;
     expect(text).toContain(`Running a turn`);
     expect(text).toContain(`may misbehave`);
-    // One row, whatever the endpoint count behind it: the reader's unit is the feature, not the wire.
-    expect(text).toContain(`1 feature affected`);
+    expect(text).not.toMatch(/\d+ features? affected/);
 });
 
 // The dotted route names are the evidence, not the report: they used to be all the card said, and now they are what

@@ -16,7 +16,6 @@ import {
     agreementLine,
     appParty,
     driftAreas,
-    driftedAreas,
     KIND_BADGE,
     KIND_ICON,
     KIND_IMPACT,
@@ -114,8 +113,6 @@ watchEffect(() => {
     }
 });
 
-const plural = (count: number, one: string, many: string): string => `${count} ${count === 1 ? one : many}`;
-
 // Each side lacking routes the other has: the two builds forked rather than one trailing the other, so neither "behind"
 // nor "out of sync" is true and no single restart is the answer.
 const forked = computed(() => daemonBehind.value && appBehind.value);
@@ -140,10 +137,8 @@ const heading = computed(() => {
 // saying once something else has proved the two disagree. Never on a fork, which says it better already.
 const leaning = computed(() => (appBehind.value && !forked.value && !contractUncompiled.value ? ` This page is the older of the two.` : ``));
 
-// WHY, in one sentence and no numbers. The partial case is the one this card existed to explain and never did: the
-// two sides know about the same features and disagree about the details inside them, which is what "out of sync"
-// always meant and never said.
-const cause = computed(() => {
+// WHY, in one sentence and no numbers. Partial drift has no cause row: the heading and per-feature rows carry it.
+const cause = computed((): string | undefined => {
     if (contractUncompiled.value) {
         return `You've changed code your sandbox hasn't rebuilt yet, so it's still running the old version. Refreshing this page won't help — the sandbox is the side that needs to catch up.`;
     }
@@ -156,7 +151,8 @@ const cause = computed(() => {
     if (driftScope.value === `wholesale`) {
         return `Almost nothing lines up — these are two quite different versions, not one small change.${leaning.value}`;
     }
-    return `The two know about the same features but disagree on the details.${leaning.value}`;
+    const extra = leaning.value.trim();
+    return extra === `` ? undefined : extra;
 });
 
 // Which machine the sandbox is actually on, said only when this app is sure of it: the fallback `hostId` above is a
@@ -171,7 +167,6 @@ const listed = computed(() => (driftScope.value === `wholesale` ? [] : driftedRo
 const areas = computed(() =>
     driftAreas({ missing: missingRoutes.value, drifted: listed.value, extra: unknownDaemonRoutes.value }),
 );
-const caption = computed(() => `${plural(driftedAreas.value.length, `feature affected`, `features affected`)}`);
 const wholesaleNote = computed(() =>
     driftScope.value === `wholesale` ? `Nearly every part of the app is affected, so they aren't listed one by one.` : undefined,
 );
@@ -191,9 +186,9 @@ const kindsOf = (area: (typeof areas.value)[number]) =>
 </script>
 
 <template>
-    <RowGroup v-if="daemonBehind || daemonDrifted" :label="heading" :caption="caption">
+    <RowGroup v-if="daemonBehind || daemonDrifted" :label="heading">
         <!-- The cause, before any list: a reader who misreads why is going to misread every row under it. -->
-        <RowNote icon="exclamation-triangle" tone="warning">{{ cause }}</RowNote>
+        <RowNote v-if="cause !== undefined" icon="exclamation-triangle" tone="warning">{{ cause }}</RowNote>
 
         <!-- WHICH TWO THINGS THESE ARE: the one being looked at, and the one behind it. The tag marks only the side
              something PROVES is behind — a guess here sends somebody to restart the wrong one. -->
