@@ -4,7 +4,7 @@ import { GIT_REMOTE_REPOS } from "../../../../lib/queryKeys";
 import { sandboxJson } from "../../client/sandboxClient";
 import { useSandboxQuery } from "../../client/useSandboxQuery";
 import { fetchWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
-import { workspaceTreeKey } from "../../../workspace/explorer/workspaceTreeKey";
+import { workspaceTreeKey } from "../../../workspace/health/workspaceTreeKey";
 
 // Whether this workspace holds work that exists only here: files in it, and no repository in it pointing at a
 // remote. Both halves matter — a fresh sandbox has no remote either, and telling somebody to connect a repository

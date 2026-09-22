@@ -1,5 +1,6 @@
 // jsdom mounts a component so vue-query's injection is in place; the import graph reads browser globals at load.
 import "@intentic/testing/dom";
+import { WORKSPACE_ROOT } from "@intentic/constants";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { test, expect, beforeEach, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
@@ -38,7 +39,7 @@ const daemon = (repos: readonly unknown[]): string[] => {
     const asked: string[] = [];
     jsonMock.mockImplementation(async (path: string) => {
         asked.push(path.split(`?`)[0] ?? path);
-        return path.startsWith(`/git/remote-repos`) ? { repos } : { root: `/work`, tree: [{ path: `notes.md`, name: `notes.md`, type: `file` }], hidden: 0 };
+        return path.startsWith(`/git/remote-repos`) ? { repos } : { root: WORKSPACE_ROOT, tree: [{ path: `notes.md`, name: `notes.md`, type: `file` }], hidden: 0 };
     });
     return asked;
 };

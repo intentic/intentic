@@ -2,7 +2,7 @@
 import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic/api-contract";
 import { ui, ResponsiveOverlay, SkeletonRows, vAction } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
-import { sharedWorkspaceTreeKey } from "../../workspace/explorer/workspaceTreeKey";
+import { sharedWorkspaceTreeKey } from "../../workspace/health/workspaceTreeKey";
 import { sandboxJson } from "../client/sandboxClient";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxQuery } from "../client/useSandboxQuery";

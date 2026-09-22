@@ -4,7 +4,7 @@ import { fetchPanels, panelsKey } from "../../../features/extensions/usePanels";
 import { fetchSubagents, subagentsKey } from "../../../features/chat/subagents/subagentsQuery";
 import { fetchModules, modulesKey } from "../../../features/workspace/health/useModules";
 import { fetchWorkspaceTree } from "../../../features/workspace/explorer/useWorkspaceTree";
-import { workspaceTreeKey } from "../../../features/workspace/explorer/workspaceTreeKey";
+import { workspaceTreeKey } from "../../../features/workspace/health/workspaceTreeKey";
 import type { WarmTask } from "../warmPlan";
 import { warmQuery } from "../warmQuery";
 

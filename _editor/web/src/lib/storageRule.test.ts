@@ -6,7 +6,7 @@ import { mirrors, UNPERSISTED } from "./queryPersistence";
 import { agentTranscriptKey } from "../features/chat/transcript/agentTranscript";
 import { agentFileDiffKey } from "../features/agents/review/useAgentChanges";
 import { changesKey, fileDiffKey } from "../features/workspace/changes/useChanges";
-import { sharedWorkspaceTreeKey, workspaceTreeKey } from "../features/workspace/explorer/workspaceTreeKey";
+import { sharedWorkspaceTreeKey, workspaceTreeKey } from "../features/workspace/health/workspaceTreeKey";
 import { capabilitiesKey } from "../features/capabilities/connect/useCapabilities";
 
 // The cache mirrors to disk whole, one clone per write, so an unmarked heavy entry taxes every other write and reads as

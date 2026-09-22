@@ -20,7 +20,7 @@ import { readExpandedDirs, writeExpandedDirs } from "../tabs/workspaceSnapshot";
 import { scopeQuery, workspaceAgent } from "../health/workspaceScope";
 import { basename, parentDir } from "@intentic/ui/path";
 import { WORKSPACE_TREE } from "../../../lib/queryKeys";
-import { workspaceTreeKey } from "./workspaceTreeKey";
+import { workspaceTreeKey } from "../health/workspaceTreeKey";
 
 // Shared busy/error state for file actions (rename, delete, save, move); drag-drop uploads use useUploadQueue.
 // Concurrent, not mutexed: these are independent writes to different paths, and one runner shared by the tree, the
