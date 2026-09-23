@@ -68,7 +68,7 @@
         "test": {
             "dependsOn": ["^build"],
             "outputs": [],
-            "passThroughEnv": ["TEST_WORKERS", "CI_HOST_JOBS"]
+            "passThroughEnv": ["TEST_WORKERS", "CI_HOST_JOBS", "SUITES_JUNIT_DIR"]
         },
         // Type-checks each package INCLUDING its test files, which `build` cannot: an emitting package excludes
         // *.test.ts to keep test code out of dist, so without this task the tests are the one part of the repo

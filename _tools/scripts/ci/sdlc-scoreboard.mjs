@@ -67,6 +67,8 @@ const blank = () => ({
     landGreen: 0,
     landRed: 0,
     installsFailed: 0,
+    repairs: 0,
+    fleetReruns: 0,
     commits: 0,
     fixCommits: 0,
     lockfileOnly: 0,
@@ -99,6 +101,10 @@ const ACTIVITY_COUNTERS = {
     "rule.blocked_push": "pushesRefused",
     "git.push_refused": "pushesRefused",
     "deps.install_failed": "installsFailed",
+    // Repairs started without a press: a land's new failures sent back to it, and main's CI red given a fix agent.
+    "deps.breakage_routed": "repairs",
+    "ci.repair_started": "repairs",
+    "ci.fleet_rerun": "fleetReruns",
 };
 for (const event of activity) {
     const row = at(dayOf(event.at));
@@ -214,6 +220,8 @@ const shape = (day, row) => ({
     pushesRefused: row.pushesRefused,
     land: `${row.landGreen}/${row.landRed}`,
     installsFailed: row.installsFailed,
+    repairs: row.repairs,
+    fleetReruns: row.fleetReruns,
     commits: row.commits,
     fixCommits: row.fixCommits,
     lockfileOnly: row.lockfileOnly,
@@ -229,12 +237,14 @@ if (asJson) {
 
 console.log(`## The chain, per day: last ${days} days to ${new Date(now).toISOString().slice(0, 16)}Z`);
 console.log("");
-console.log("| day | turns | unproven/editing | continued | follow-ups acted on | held | pushes refused | land green/red | installs failed | commits | fix-shaped | lockfile-only | CI green/red/cancelled | CI wall p50 |");
-console.log("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
+console.log(
+    "| day | turns | unproven/editing | continued | follow-ups acted on | held | pushes refused | land green/red | installs failed | repairs | fleet re-runs | commits | fix-shaped | lockfile-only | CI green/red/cancelled | CI wall p50 |",
+);
+console.log("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
 for (const row of table) {
     console.log(
         `| ${row.day} | ${row.turns} | ${row.unproven} | ${row.continued} | ${row.followUpsActed} | ${row.held} | ${row.pushesRefused} | ${row.land} | ` +
-            `${row.installsFailed} | ${row.commits} | ${row.fixCommits} | ${row.lockfileOnly} | ${row.ci} | ${row.ciWall} |`,
+            `${row.installsFailed} | ${row.repairs} | ${row.fleetReruns} | ${row.commits} | ${row.fixCommits} | ${row.lockfileOnly} | ${row.ci} | ${row.ciWall} |`,
     );
 }
 console.log("");
@@ -243,6 +253,7 @@ console.log(
         "unproven: turns that edited code and ended with nothing having checked it, over turns that edited at all.",
         "continued: turn.ending rules that sent a turn back; follow-ups acted on: those answered with an edit, a look or a command, where the outcome was recorded.",
         `pushes refused: the app's push check and the git hook together. land: whole-repository \`pnpm verify\` verdicts after a land. fix-shaped: subjects of ${FIX_SUBJECT_CHARS} characters or fewer.`,
+        "repairs: new failures after a land sent back to it, plus fix agents started on main's CI red; fleet re-runs: CI runs re-run because they died on the runners.",
         ...(ciNote === "" ? [] : [ciNote]),
     ].join("\n"),
 );

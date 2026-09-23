@@ -653,3 +653,42 @@ describe("what a follow-up bought", () => {
         expect(outcomes).toEqual([]);
     });
 });
+
+describe("the rebase a Stop makes before its checks", () => {
+    const CHECK = rule({ id: "turn-check", action: { kind: "command", command: "pnpm verify:turn", timeoutMs: 900_000 } });
+
+    test("runs before any check reads the tree, and a follow-up says the tree moved under the model", async () => {
+        const order: string[] = [];
+        const hooks = armed([CHECK], {
+            syncBeforeChecks: async () => {
+                order.push("sync");
+                return 3;
+            },
+            runCommand: async () => {
+                order.push("check");
+                return { status: "failed", exitCode: 1, output: "1 failed" };
+            },
+        });
+        const said = await stop(hooks);
+        expect(order).toEqual(["sync", "check"]);
+        expect(said?.startsWith("Main moved on while this turn ran: 3 commit(s)")).toBe(true);
+        expect(said).toContain("1 failed");
+    });
+
+    test("a Stop with nothing to say stays silent however far the tree moved", async () => {
+        const hooks = armed([CHECK], { syncBeforeChecks: async () => 5, runCommand: async () => ({ status: "passed", exitCode: 0, output: "ok" }) });
+        expect(await stop(hooks)).toBeUndefined();
+    });
+
+    test("a rebase that fails is a tree that did not move, never a Stop that cannot end", async () => {
+        const hooks = armed([CHECK], {
+            syncBeforeChecks: async () => {
+                throw new Error("rebase refused");
+            },
+            runCommand: async () => ({ status: "failed", exitCode: 1, output: "1 failed" }),
+        });
+        const said = await stop(hooks);
+        expect(said).not.toContain("Main moved on");
+        expect(said).toContain("1 failed");
+    });
+});

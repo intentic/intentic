@@ -1433,8 +1433,10 @@
         },
         "errands": {
             "checkingWorkJustDid": "Prüft die Arbeit, die er gerade getan hat",
+            "fixingWhatLandBroke": "Behebt, was das Landen seiner Arbeit kaputt gemacht hat",
             "resolvingLandConflict": "Löst den Landekonflikt",
             "sentByAppLanding": "Von der App gesendet, das Landen dieser Arbeit wurde verweigert",
+            "sentBySandboxLand": "Von der Sandbox gesendet, das Landen seiner Arbeit hat die Prüfung des Hauptbaums rot gemacht",
             "sentBySandboxTurn": "Von der Sandbox gesendet, jener Zug endete ungeprüft"
         },
         "hostModelPicker": {
@@ -1827,6 +1829,8 @@
             "prePushCheckCommand": "Prüfbefehl vor dem Push",
             "promptAssistantToOpen": "Den Assistenten auffordern, die Ansicht nach Änderungen an der Oberfläche zu öffnen.",
             "promptAssistantToRun": "Den Assistenten auffordern, nach Codeänderungen eine Prüfung laufen zu lassen.",
+            "repairAfterLanding": "Reparieren, was nach dem Landen kaputtgeht",
+            "repairAfterLandingNote": "Wenn eine gelandete Arbeit die Prüfung des Hauptbaums rot macht, geht sie an die Unterhaltung zurück, die sie gelandet hat. Bleibt die CI von main bei einem Fehler rot, startet ein Reparatur-Agent, sobald keine Pushes mehr kommen; ein Fehler der CI-Runner selbst wird neu gestartet.",
             "runOneCheckBefore": "Vor jedem Push eine Prüfung laufen lassen, gleich welches Repository hinausgeht. Der eigene Build eines Repositorys gehört ins Repository, siehe unten.",
             "verifyBeforeFinishing": "Vor dem Abschließen verifizieren"
         },

@@ -1,5 +1,5 @@
 import type { IconName } from "@intentic/ui";
-import { VERIFY_NUDGE_OPENING, withoutResumeNote } from "@intentic/sandbox-contract";
+import { LAND_BREAKAGE_OPENING, VERIFY_NUDGE_OPENING, withoutResumeNote } from "@intentic/sandbox-contract";
 import type { ChatMessage } from "../transcript/transcript";
 import { t } from "@intentic/ui/i18n";
 
@@ -34,6 +34,13 @@ export const errands = () =>
             label: t(`chat.errands.checkingWorkJustDid`),
             detail: t(`chat.errands.sentBySandboxTurn`),
             opening: VERIFY_NUDGE_OPENING,
+        },
+        // Composed by the daemon when this conversation's land turned the main tree's check red (land-breakage.ts).
+        landBreakage: {
+            icon: `wrench`,
+            label: t(`chat.errands.fixingWhatLandBroke`),
+            detail: t(`chat.errands.sentBySandboxLand`),
+            opening: LAND_BREAKAGE_OPENING,
         },
     }) as const satisfies Record<string, Errand>;
 

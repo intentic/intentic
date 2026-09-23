@@ -4,6 +4,7 @@ import { describe, it, expect } from "bun:test";
 import {
     linuxDesktopEntry,
     macLaunchAgentXml,
+    ROTATE_LOG_SH,
     systemdUserUnit,
     windowsRunAddArgs,
     windowsRunDeleteArgs,
@@ -123,8 +124,10 @@ describe("systemdUserUnit", () => {
     // never be the reason the agent does not start.
     it("rolls an oversized log before systemd opens it, and starts anyway if it cannot", () => {
         const unit = systemdUserUnit(SPEC, BINARY);
-        expect(unit).toContain(`ExecStartPre=-/bin/sh -c '[ -f "$1" ]`);
-        expect(unit).toContain(`-ge "$2" ] && mv -f "$1" "$1.1"' rotate "${LOG}" ${LOG_ROTATE_BYTES}`);
+        const rotate = /^ExecStartPre=-\/bin\/sh -c "((?:[^"\\]|\\.)*)" rotate "([^"]*)" (\d+)$/m.exec(unit);
+        // What systemd's parser hands `sh -c`: the double-quoted word with its C escapes undone, which must be the script.
+        expect(rotate?.[1]?.replaceAll(/\\(.)/g, "$1")).toBe(ROTATE_LOG_SH);
+        expect(rotate?.slice(2)).toEqual([LOG, String(LOG_ROTATE_BYTES)]);
     });
 });
 

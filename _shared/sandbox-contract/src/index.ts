@@ -111,6 +111,7 @@ export * from "./events/requests.js";
 export * from "./events/resume.js";
 export * from "./events/system-events.js";
 export * from "./events/transcript.js";
+export * from "./events/land-breakage.js";
 export * from "./events/verify-nudge.js";
 export * from "./events/watch-wake.js";
 export * from "./policy/request-status.js";
@@ -129,6 +130,7 @@ export * from "./state/runtime-state.js";
 export * from "./state/state-portability.js";
 export * from "./state/history-state.js";
 export * from "./state/fix-stance.js";
+export * from "./state/landed-commit.js";
 export * from "./state/fix-attempt-plan.js";
 // Provider vocabulary bottom-up: agent-runtimes, provider-specs, agent-catalog; three modules since the dependency
 // points one way.

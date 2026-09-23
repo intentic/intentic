@@ -1,15 +1,13 @@
 import { errorMessage } from "@intentic/base/errors";
-import { ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
+import { ciContract, type CiRepo } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { actorOf, areasOf, ownerOf } from "../auth/principal.js";
 import { opt } from "../opt.js";
-import { archiveAgents } from "../agents/registry/archive.js";
-import { startFixAttempt } from "./fix-attempts.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { isInfraStep } from "@intentic/constants/ci-infra-steps";
-import { ciClientFor, type FailedStep, type FetchFn } from "./providers.js";
+import { AttemptRefused, ciFailureEvidence, startCiFix } from "./ci-fix.js";
+import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects, type CiProject } from "./projects.js";
 
 // Backend for the Pipelines rail: reads serve the webhook-freshened cache, backfilled from the vendor's REST API when
@@ -17,9 +15,6 @@ import { ciProjects, type CiProject } from "./projects.js";
 // longer maps to; a vendor refusal becomes BAD_GATEWAY carrying its own message.
 
 const RUNS_PER_PROJECT = 15;
-// Failed-job log tail seeded into a fix conversation: enough to see the error, not to flood the context.
-const FIX_LOG_BYTES = 24_000;
-const TITLE_MAX = 80;
 
 // A vendor refusal is an upstream answer, not a daemon bug: rethrown as 502 carrying the vendor's own message.
 const upstream = async <T>(action: Promise<T>): Promise<T> => {
@@ -28,30 +23,6 @@ const upstream = async <T>(action: Promise<T>): Promise<T> => {
     } catch (error) {
         throw new ORPCError("BAD_GATEWAY", { message: errorMessage(error) });
     }
-};
-
-// What the fix conversation is handed about a failed run. A run whose every failure is a runner-owned step never ran a
-// line of this repository: the fleet is down, and an agent opened on it would fix code that is fine, so that run is
-// refused with the reason unless the caller forced it.
-const failureEvidence = async (
-    client: ReturnType<typeof ciClientFor>,
-    project: CiProject,
-    runId: number,
-    force: boolean | undefined,
-): Promise<{ failedJobs: string[]; logs: string }> => {
-    const [failedJobs, failedSteps, logs] = await Promise.all([
-        client.failedJobs(project, runId).catch(() => []),
-        client.failedSteps(project, runId).catch((): FailedStep[] => []),
-        client.failedJobLogs(project, runId, FIX_LOG_BYTES).catch(() => ""),
-    ]);
-    const infraOnly = failedSteps.length > 0 && failedSteps.every(({ step }) => step !== undefined && isInfraStep(step));
-    if (infraOnly && force !== true) {
-        const where = [...new Set(failedSteps.map(({ step }) => step))].join(", ");
-        throw new ORPCError("PRECONDITION_FAILED", {
-            message: `Every failed job died in its runner's own setup (${where}), before any step of this repository ran: the fleet, not the code. Bring the runner back and re-run the pipeline; force the fix to put an agent on it anyway.`,
-        });
-    }
-    return { failedJobs, logs };
 };
 
 export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => {
@@ -114,75 +85,37 @@ export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => 
         }),
         fix: i.fix.handler(async ({ input, context }) => {
             const project = await resolve(input.repo);
-            const client = ciClientFor(project.account.provider, fetchFn);
-            // Usually already in the cache, from the view the click came from; a cold daemon re-lists instead.
-            const run: PipelineRun | undefined =
-                (services.ciRuns.sweep() ?? []).find((candidate) => candidate.repo === input.repo && candidate.runId === input.runId) ??
-                (await client.listRuns(project, RUNS_PER_PROJECT).catch(() => [])).find((candidate) => candidate.runId === input.runId);
-            const { failedJobs, logs } = await failureEvidence(client, project, input.runId, input.force);
-            const where = run !== undefined ? `on branch ${run.branch} (${run.url})` : `(run ${input.runId})`;
-            // Names the environment boundary, not job names, so the prompt can't drift from .github/workflows/.
-            const prompt = [
-                `The CI pipeline for the workspace repo "${input.repo}" failed ${where}. Investigate and fix it.`,
-                ...(failedJobs.length > 0 ? [`Failed jobs: ${failedJobs.join(", ")}.`] : []),
-                `The logs below are the evidence — read them first; they are usually enough to name the cause.`,
-                `REPRODUCE LOCALLY ONLY IF THIS SANDBOX CAN. \`pnpm verify:push --suite\` runs the checkout gates, typecheck, build and tests, which is what the preflight and verify-* jobs run, so those reproduce here exactly. Jobs that need Docker, a fresh CI image, a desktop runner, a GPU, Windows or Xcode DO NOT: this sandbox has none of them, and an hour spent standing one up is an hour that ends in a guess anyway.`,
-                `For a job you cannot run here: make the change from the logs, then verify it in the place the constraints exist by dispatching the workflow on your own branch and reading the run it starts. NO \`gh\` OR \`glab\` IS INSTALLED IN THIS SANDBOX — the ${project.account.provider} REST API is how you reach the run, and the \`${project.account.provider}\` skill carries the connected token and the curl form for it. The same API serves a failed job's full log, which is worth fetching when the tail below cuts off the cause. Say plainly in your summary if you could not verify it and what would.`,
-                `You are in an isolated worktree: commit your fix and it goes through review.`,
-                ...(logs !== "" ? [`--- failed job logs (tails) ---\n${logs}`] : []),
-            ].join("\n\n");
-            // What a CONTINUED attempt is told: the failure is still open, the evidence is already in the conversation.
-            const nudge = [
-                `The CI failure on "${input.repo}" ${where} is still open, and this conversation is the attempt at it. Your earlier turn ended without landing a fix.`,
-                `Carry on from where you left off; the failed job logs earlier in this conversation are still the evidence. You are in an isolated worktree: commit your fix and it goes through review.`,
-            ].join("\n\n");
-            /* Fix attempts share an id derived from the failing run, so the board groups them. */
-            const outcome = await startFixAttempt(
+            const evidence = await ciFailureEvidence(project, input.runId, fetchFn);
+            // A run that died in its runner's own setup, or whose log names the fleet, never ran a line of this repository:
+            // an agent opened on it would fix code that is fine, so it is refused with the reason unless forced.
+            if (evidence.infra && input.force !== true) {
+                const where = evidence.infraSteps.length > 0 ? ` (${evidence.infraSteps.join(", ")})` : "";
+                throw new ORPCError("PRECONDITION_FAILED", {
+                    message: `Every failed job died on the fleet${where}, not in any step of this repository: bring the runner back and re-run the pipeline; force the fix to put an agent on it anyway.`,
+                });
+            }
+            const outcome = await startCiFix(
+                services,
                 {
-                    roster: () => services.agents.list(),
-                    archivedIds: () => services.agents.listArchived().map((agent) => agent.id),
-                    stop: async (conversationId) => {
-                        await services.turns.stop(conversationId);
-                    },
-                    archive: async (conversationId) => {
-                        const { failed } = await archiveAgents(services, [conversationId], Date.now());
-                        const refused = failed[0];
-                        if (refused !== undefined) {
-                            throw new ORPCError("CONFLICT", { message: `The earlier attempt could not be set aside: ${refused.reason}` });
-                        }
-                    },
-                    // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired;
-                    // no composer holds these words, so a refusal at the door leaves the sandbox keeping the turn.
-                    start: (turn) => services.turns.start(turn),
-                    // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.
-                    rerun: async (conversationId) =>
-                        input.pick === undefined && services.conversations.state(conversationId)?.resume.held?.reason === "door"
-                            ? services.turns.resume(conversationId)
-                            : undefined,
-                },
-                {
-                    base: ciFixConversationId(input.repo, input.runId),
-                    prompt,
-                    nudge,
-                    title: `Fix CI: ${run?.title ?? input.repo}`.slice(0, TITLE_MAX),
+                    project,
+                    runId: input.runId,
+                    evidence,
+                    // Never `unattended`: somebody pressed Fix and is watching the board it started from, so this is an
+                    // ordinary session with a prepared prompt. The pick's fields ARE the turn's, spread verbatim.
                     turn: {
-                        isolated: true,
-                        // Never `unattended`: somebody pressed Fix and is watching the board it started from, so this
-                        // is an ordinary session with a prepared prompt — cards, plan mode, the terminal hand-off and
-                        // the signed-in accounts all reach it. `runRole` alone is what pins the model (turn-resume.ts).
-                        runRole: `pipeline-fix`,
-                        // Spread verbatim: AgentRunPick's fields ARE the turn's (agent, model, account, harness,
-                        // effort, thinking, fast), so there is nothing to translate and nothing that can be forgotten.
                         ...input.pick,
-                        // Whoever pressed Fix, verified as POST /agent verifies it: the conversation is theirs, and a
-                        // memory hold warns that person once rather than nobody.
+                        // Whoever pressed Fix, verified as POST /agent verifies it: the conversation is theirs.
                         ...opt("actor", actorOf(context.identity, context.principal)),
                         ...opt("owner", ownerOf(context.identity)),
                         ...opt("areas", areasOf(context.identity)),
                     },
+                    picked: input.pick !== undefined,
                     resume: input.mode,
                 },
-            );
+                fetchFn,
+            ).catch((error: unknown) => {
+                throw error instanceof AttemptRefused ? new ORPCError("CONFLICT", { message: error.message }) : error;
+            });
             if (outcome.kind === "busy") {
                 // In words, not as a bug: the reader is sent to the attempt in play rather than handed a second one.
                 throw new ORPCError("CONFLICT", { message: outcome.reason });

@@ -47,94 +47,44 @@ described, changing an implementation detail it deliberately does not mention.
 
 ## What reads your edit, and when
 
-Four moments, each the cheapest one that can see the defect it is for, and each read by exactly one thing —
-there is no moment at which two of these run the same command. Two of them this repository declares for itself
-in `.intentic/checks.json` (the sandbox runs them once its owner has adopted that file); the push is the
-checkout's own git hook; the rest are rules in `.intentic/config/settings.json` (the Rules screen lists them).
-None of them is a convention.
+Every reader below runs without being asked, and each one tells you only about problems your change introduced:
+what main already failed, a test that passes when re-run alone, and anything a tool can fix by itself never reaches
+you. Do not run `pnpm verify:turn` yourself.
 
-**After every file you write** (`file.edited` rules, every runtime, edit tools and shell commands alike: the
-daemon reads the edit off the tree, so `sed`, a heredoc and a script count like Edit): the linter with
-`.oxlintrc.agent.json` (`.intentic/config/hooks/lint-edit.mjs`, autofixes silently and reports only what the
-edit introduced), and every checkout gate that can judge a file on its own
-(`node _tools/checks/run.mjs --paths {file}`, declared at `.intentic/checks.json`'s `edit` moment, ~100ms) —
-a hand-spelled `/work`, a `bg-[#4c4c58]` where a token belongs, a bare `<button>`, a script tag in an
-`.astro` frontmatter, a literal control byte. That last one is also what the sandbox's own `bytes-edit.mjs`
-rule reads, so that rule is aimed at the workspace's other repositories and stands down here, where
-`control-chars` already sees every edit. On Claude Code turns the same moment also type-checks the file. What a failing one
-prints rides back with the edit's own result, and says nothing at all when the file is clean. Fix it there:
-that is one edit, and nothing has been built on it yet.
+**After each file you write**: the linter (`.intentic/config/hooks/lint-edit.mjs`, `.oxlintrc.agent.json`,
+`.astro` included), which fixes what it can silently, and every check that can judge one file on its own
+(`node _tools/checks/run.mjs --paths {file}`). What they print rides back with the edit. Fix it there.
 
-**When the turn tries to end** (`Verify before you finish`, `pnpm verify:turn`, declared at
-`.intentic/checks.json`'s `turn` moment and run in this repository, after edits to it): the checkout gates (`_tools/checks/run.mjs`, ~1s), the linter over YOUR CHANGED FILES,
-the declarations emit, and `turbo run typecheck test --only` over the AFFECTED CLOSURE, the packages holding a
-changed file plus every package that depends on one. That is exactly the set whose fixtures can name a shape
-you just changed; nothing outside it can have been broken by this turn, and nothing inside it is somebody
-else's red. The gates are judged the same way, and LINE BY LINE: a check that fails here is re-run against a
-throwaway worktree at `HEAD`, and every problem line it printed there is named and not held against you — you
-inherited that tree, and the land will measure it. What IS held against you is a line that was not there
-before, whatever the check's gate: a `tidy` rule cannot refuse a push because a directory somebody else filled
-is nobody's push to stop, but a line this turn wrote is this turn's, and this is the only gate that can tell
-the two apart. A check that could not measure at all (its own tool moved) accuses nobody and holds nothing.
-Every one
-of those readers runs even when an earlier one failed, and the run ends with a digest naming each step that
-did (`_tools/scripts/lib/steps.mjs`), so one report is the whole list rather than the first item on it: you
-get two follow-ups, and a gate that named one problem per run could not spend them. Do not
-run or announce that gate yourself; failures return to the turn, and the check's last run decides whether
-the work lands: a red first run with a green second is a turn that passed, a turn still red when it ends is
-held on its branch as "Ready to land". On a runtime with no Stop hook (Cursor, Gemini, Codex, Kimi) the daemon
-runs the same command rules itself once the turn's frames end, records their verdict for the land decision, and
-sends what they found back as one follow-up turn on the same model and session (`verify-nudge.ts`); a turn whose
-follow-up is still red is held the same way.
+**When the turn ends** (`pnpm verify:turn`, `_tools/scripts/verify/verify-turn.mjs`): the branch is first rebased
+onto today's main, and you are told if that moved anything under you. Mechanical fixes come next: rustfmt on the
+crates you touched, a check's own `fix` (`_tools/checks/manifest.mjs`), and `contract.lock.json` regenerated when
+the contract changed. Then the checks run, judged line by line against the main-line commit your branch stands on,
+the linter runs on your changed files, and typecheck and tests run on the affected closure. Failures the last land
+verdict recorded for your base are listed but never held against you (`failure-units.mjs`), and a test that
+passes when re-run alone is logged as a flake (`flakes.mjs`). A turn still red when it ends waits on its branch.
+The `verify-tests` rule reads the test files you touched. If you weakened one on purpose, end your final message
+with one line `Test-Note: <why>`; the land writes it into the commit, and the push reads it there.
 
-Neither this nor the land check goes through `pnpm build`, which dies EXDEV under worktree isolation: the
-emit (`_tools/scripts/build/emit-declarations.mjs`, `tsgo -b`) writes every package's dist, and the tests run with
-`--only`, off turbo's `^build` edge. The dist each suite imports was compiled from the tree you are looking
-at, seconds ago.
-
-**After the land, on the main tree, off your clock:** the whole repository (`pnpm verify`, one prepass, one
-typecheck, one test run), serialized through the heavy-command pool, for every landed repo and every runtime,
-whether the land was the turn's own or the Land button's (`agents/land/verify-landed.ts`).
-This is the one moment that legitimately needs the whole suite against a tree nobody else is moving: it
-answers for another package's fixture, for main having moved under you, and for a runtime with no Stop hook.
-A red verdict wakes the fix chore with your land as the named cause; a green one is recorded against the
-tree so the push gate replays it (`_tools/scripts/lib/tree-verdict.mjs`, the newest twenty trees, so a land
-between the verify and the push does not erase it).
-
-The test files a turn touched get one more reader at the Stop, the `verify-tests` rule: each is compared with
-the same file at HEAD for assertions that got weaker, and a new test is re-run against the pre-turn source for
-one that passes without the change. Both findings are reports, not refusals; the push is where a weakening is
-refused.
+**After the land, off your clock** (`pnpm verify`, `_tools/scripts/verify/verify.mjs`, every land, either door):
+the whole repository, plus what the land itself added over the commit it landed on (`land-tiers.mjs`: lint on its
+files, tidy lines, rustfmt, weakened tests left undeclared). The verdict is recorded green or red with its
+failures, for the next turn's subtraction and the push. Failures that appeared with a land go back to the
+conversation that landed it as a follow-up (`agents/land/land-breakage.ts`).
 
 ## Before it leaves the machine
 
-The push is the one gate nothing routes around, and it runs `_tools/scripts/verify/verify-push.mjs` once, from
-`.githooks/pre-push`, for any BRANCH push git makes from the checkout — the app's Push button included, since it
-pushes by running `git push` here. A tag push is a pointer move onto commits a branch push already measured (the
-release tag, `stable`), so it stands down. The hook is the one reader that is TOLD its range, on stdin, rather
-than guessing it from `@{u}`, which is why neither this repository's `.intentic/checks.json` nor the sandbox's
-rules declare a push check of their own: either would be this same script, run a second time, over the same tree. Cheapest first: every check the manifest lists
-(`_tools/checks/run.mjs`, under two seconds, needing nothing installed), the assertion ratchet over the
-range's test files (`_tools/scripts/verify/assertion-ratchet.mjs`: a test file may get stronger by itself and weaker
-only with a `test!:` subject or a `Test-Note:` trailer saying why), the manifest/lockfile lockstep, the
-linter; then `cargo fmt --check` on any Rust crate the push touches. Only the checks whose `gate` is `code` can refuse any of that: a `tidy` failure (`_tools/checks/manifest.mjs`
-says which is which — layout, doc links, path literals, the UI tiers) prints as a warning here and is refused
-by `nightly.yml`'s `tidy` job instead, because a directory another conversation made one file too full is
-nobody's push to stop and no commit in that push can fix it. The two moments above it are where a tidy rule
-DOES refuse, because both can name the author: the edit moment reads the one file just written, and the turn
-holds you to the problem lines your diff added and to nothing else. The two cheap tiers collect — a push wrong in four readable ways is told about four — and they stop the run:
-a tree already refused by a reader that costs a second is not measured further.
+The push runs `_tools/scripts/verify/verify-push.mjs` once, from `.githooks/pre-push`, for any branch push from
+the checkout, the app's Push button included; a tag push stands down. Cheapest first: every check the manifest
+lists, with a `tidy` finding refused only when the pushed range added it; the assertion ratchet over the range's
+test files (weaker only with a `test!:` subject or a `Test-Note:` trailer); the manifest/lockfile lockstep; the
+linter; `cargo fmt --check` on crates the push touches. Typecheck, build and test are replayed from a verdict
+`pnpm verify` or an earlier push recorded for the tree, and otherwise left to CI; `pnpm verify:push --suite`
+runs them here. It measures the working tree, and CI measures the commit.
 
-The three steps CI's verify groups run (typecheck, build, test) are not run at the push. A verdict the land's
-`pnpm verify` or an earlier push check recorded for the working tree or for any pushed commit's own tree is
-replayed (a `verify` verdict leaves only the build to run); a tree no verdict covers is left to CI, which measures
-the commit in minutes, and the push says so. `pnpm verify:push --suite` runs the three steps here anyway, and
-`pnpm verify` measures the whole tree and records the verdict.
-
-It measures the working tree; CI measures the commit. The land now regenerates `pnpm-lock.yaml` in the
-worktree whenever the delta changed a manifest without it (`agents/lockfile-reconcile.ts`), so the pair
-arrives in one patch; the push still refuses by name a push that commits any of `package.json`,
-`pnpm-workspace.yaml` or `pnpm-lock.yaml` while another of them is changed and uncommitted.
+When main's CI goes red, `_sandbox/sandbox/src/ci/repair-gate.ts` acts only on main's newest run: a run that
+died on the fleet is re-run once, and the same jobs failing twice running, or main sitting red with nothing newer
+for thirty minutes, gets one fix agent. The Agent tab's "Repair what breaks after landing" switch turns this and
+the land follow-ups off.
 
 ## Tests
 

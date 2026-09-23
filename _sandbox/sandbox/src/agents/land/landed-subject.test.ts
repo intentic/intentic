@@ -32,12 +32,15 @@ const noteDraft = (draft: LandedMessageDraft | undefined): void => {
     }
 };
 
-const servicesWith = (): Services =>
+const servicesWith = (said?: string): Services =>
     unstubbed<Services>("services", {
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () => isolatedAgent([{ repo: "root", base: "a".repeat(40) }]),
             setLandedMessageDraft: (_id, draft) => noteDraft(draft),
-            setLandedSubject: async (_id, draft) => void steps.push(`wrote ${draft.subject}`),
+            setLandedSubject: async (_id, draft) => void steps.push(`wrote ${draft.subject}${draft.testNote === undefined ? `` : ` | ${draft.testNote}`}`),
+        }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", {
+            read: async () => (said === undefined ? [] : [{ role: "assistant", text: said }]) as never,
         }),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { mainDir: () => "/work" }),
         agentOrigins: unstubbed<Services["agentOrigins"]>("agentOrigins", { forRepo: async () => ({ "a.ts": ["c1"] }) }),
@@ -69,6 +72,12 @@ test("opens the report at the land, writes the sentence, and only then says the 
     ask.mockResolvedValue({ value: { subject: "fix: cascading markers", note: "", breaking: "" } });
     await describeLanding(servicesWith(), "c1");
     expect(steps).toEqual([`opened`, `wrote fix: cascading markers`, `ended written`]);
+});
+
+test("the Test-Note the conversation ended its last word on rides with the drafted message", async () => {
+    ask.mockResolvedValue({ value: { subject: "refactor: rows", note: "", breaking: "" } });
+    await describeLanding(servicesWith("Kept the looser assertion.\nTest-Note: rows became a table"), "c1");
+    expect(steps).toEqual([`opened`, `wrote refactor: rows | rows became a table`, `ended written`]);
 });
 
 // Every road out of the model call ends the report, `failed` with nothing written; only the job being unset opens no

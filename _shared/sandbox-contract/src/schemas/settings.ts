@@ -389,6 +389,15 @@ export const SandboxSettingsSchema = z.object({
         ),
     // Worth it since the container is recreated on every update or environment approval — otherwise approving a
     // Dockerfile change costs the run that asked for it.
+    // What happens to breakage found after the work that caused it has left the turn: a land that turns the main tree's own
+    // check red is sent back to the conversation that landed it, and main's CI staying red on one failure gets a fix agent
+    // once pushes go quiet, with a fleet failure re-run instead. Off, both are only reported.
+    autoRepair: z
+        .boolean()
+        .default(true)
+        .describe(
+            "Whether breakage found after the work left its turn is repaired without asking: a land that turns the main tree's check red goes back to the conversation that landed it, and main's CI staying red on the same failure gets a fix agent once pushes go quiet. A failure on the CI fleet itself is re-run once instead. Off, both are only reported.",
+        ),
     autoResumeOnRestart: z
         .boolean()
         .default(false)

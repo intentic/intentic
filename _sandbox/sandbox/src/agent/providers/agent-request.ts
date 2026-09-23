@@ -213,7 +213,7 @@ export interface TurnHooks {
     readonly logSafety?: CommandGuardOptions["log"];
     readonly safetyAnswered?: CommandGuardOptions["answered"];
     readonly rememberSafety?: CommandGuardOptions["remember"];
-    // Rebases onto main when the turn parks for a person; the model isn't told. Absent off-harness or main-tree.
+    // Rebases onto main when the turn parks for a person or reaches its Stop's checks. Absent off-harness or main-tree.
     readonly resync?: () => Promise<AgentEvent | undefined>;
     // Supervision surface for runtimes that mount child-agent tools as their own, not through the harness's SDK.
     readonly children?: ChildSupervisor;

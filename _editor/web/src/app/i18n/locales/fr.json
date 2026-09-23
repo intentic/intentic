@@ -1433,8 +1433,10 @@
         },
         "errands": {
             "checkingWorkJustDid": "Vérifie le travail qu'il vient de faire",
+            "fixingWhatLandBroke": "Répare ce que son intégration a cassé",
             "resolvingLandConflict": "Résout le conflit d'intégration",
             "sentByAppLanding": "Envoyé par l'application ; intégrer ce travail a été refusé",
+            "sentBySandboxLand": "Envoyé par le sandbox ; intégrer son travail a fait échouer la vérification de l'arbre principal",
             "sentBySandboxTurn": "Envoyé par le sandbox ; ce tour s'est terminé sans vérification"
         },
         "hostModelPicker": {
@@ -1827,6 +1829,8 @@
             "prePushCheckCommand": "Commande de vérification avant push",
             "promptAssistantToOpen": "Inviter l'assistant à ouvrir la vue après des changements d'interface.",
             "promptAssistantToRun": "Inviter l'assistant à lancer une vérification après des changements de code.",
+            "repairAfterLanding": "Réparer ce qui casse après l'intégration",
+            "repairAfterLandingNote": "Quand une intégration fait échouer la vérification de l'arbre principal, elle retourne à la conversation qui l'a intégrée. Quand la CI de main reste rouge sur un même échec, un agent de réparation démarre dès que les pushs cessent, et un échec des runners de CI eux-mêmes est relancé.",
             "runOneCheckBefore": "Lancer une vérification avant tout push, quel que soit le dépôt qui sort. La compilation propre à un dépôt appartient au dépôt, ci-dessous.",
             "verifyBeforeFinishing": "Vérifier avant de terminer"
         },

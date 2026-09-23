@@ -2,7 +2,8 @@ import { queueWhole } from "../../agent/tools/agent-terminals.js";
 import type { Services } from "../../composition.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
 import type { ReconcileOutcome } from "../../workspace/deps/reconcile-deps.js";
-import { queueVerify, type VerifyDeps } from "../../workspace/deps/verify-deps.js";
+import { type LandBreakage, queueVerify, type VerifyDeps } from "../../workspace/deps/verify-deps.js";
+import { breakageSettled } from "./land-breakage.js";
 import { announceUnwatchedWrite } from "../../workspace/watch/workspace-watch.js";
 
 // Every land that reached the tree gets the whole repository's check, whichever door it came through: the auto-land
@@ -14,8 +15,13 @@ export type LandVerifier = Pick<
     "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "heavyCommands" | "dependencies" | "events"
 >;
 
-// The check's verdict is announced as a workspace event (deps.broken, deps.fixed) for whatever reacts to it.
-export const verifyLandedTree = async (services: LandVerifier, origin: DependencyLandOrigin): Promise<ReconcileOutcome | undefined> => {
+// The check's verdict is announced as a workspace event (deps.broken, deps.fixed) for whatever reacts to it; a red that
+// names new failures is handed to `route` (land-breakage.ts), which sends it back to the land that caused them.
+export const verifyLandedTree = async (
+    services: LandVerifier,
+    origin: DependencyLandOrigin,
+    route?: (breakage: LandBreakage) => Promise<boolean>,
+): Promise<ReconcileOutcome | undefined> => {
     const verifier: VerifyDeps = {
         workspace: services.workspace,
         processes: services.processes,
@@ -25,6 +31,7 @@ export const verifyLandedTree = async (services: LandVerifier, origin: Dependenc
         emit: (event) => services.events.publish("workspace", event),
         announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
+        ...(route === undefined ? {} : { route, settled: breakageSettled }),
     };
     const deps = await services.dependencies.reconcileLand(origin);
     if (deps?.deferred !== true) {

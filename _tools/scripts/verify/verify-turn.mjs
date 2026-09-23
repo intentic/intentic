@@ -1,24 +1,30 @@
 #!/usr/bin/env node
 // `pnpm verify:turn`: what a turn can answer for at Stop, scoped to what it actually touched, since a model can
 // only act on its own diff (the full repository runs after the land, on main, in verify.mjs/verify-deps.ts). Three
-// independent readers, each judged against what the turn did: (1) the checks, diffed against HEAD line by line
+// independent readers, each judged against what the turn did: (1) the checks, diffed against the main-line base line by line
 // (turn-findings.mjs), so a problem already standing before this turn is reported but not held against it and a new one
 // is refused whatever its gate — which is the whole of what `tidy` means here, and why nothing coarser than a turn can
 // enforce it; (2) the linter, over the turn's own changed files, falling back to the whole repo when the changed set
 // isn't smaller; (3) typecheck+test over the affected closure (lib/workspace-graph.mjs), the packages holding a dirty
 // file plus everything that transitively depends on one.
-// The dirty set is the turn's own worktree diff (or, in the primary checkout, everyone's uncommitted work). All
+// The dirty set is everything since the main-line base, committed on the branch or not (in the primary checkout, everyone's uncommitted work). All
 // three readers report at once (lib/steps.mjs): the Stop sends a model back at most twice (MAX_FOLLOW_UPS,
 // sandbox/src/rules/turn-ending.ts), so a gate that stopped at its first failure could only ever name two of a
 // turn's problems.
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { affectedBy, readWorkspaceGraph } from "../../checks/lib/workspace-graph.mjs";
 import { repoRoot } from "../../constants/src/node.mjs";
-import { changedPaths } from "../lib/git.mjs";
+import { changedPaths, changedSince, mainLineBase } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
+import { ago, verdictForBase } from "../lib/tree-verdict.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
+import { againstBaseline, failedTasks, takeSummary, unitsOf } from "./failure-units.mjs";
+import { fixChecks, formatCrates, regenerateContractLock, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
+import { recordFlakes, rerunFailures } from "./flakes.mjs";
+import { LINTABLE } from "./land-tiers.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
 import { testWorkers } from "./test-workers.mjs";
 
@@ -27,13 +33,25 @@ const { say, step, skip, fail, finish } = createSteps("verify:turn", root);
 // Past this many changed paths the turn is not a delta any more (a rename, a generated bundle, a land in the
 // primary checkout), and a command line naming each of them is worse than the one that names none.
 const LINT_FILE_CEILING = 200;
-// What oxlint reads. A changed .md or .json is not a lint subject, and passing it one makes it exit non-zero
-// for the wrong reason.
-const LINTABLE = /\.(m|c)?[jt]sx?$|\.vue$/;
 
-/* 1. the checks, judged against HEAD */
+// The main-line commit this turn builds on; its work is everything since, committed on the branch or not.
+const base = mainLineBase(root);
+const turnPaths = () => (base === undefined ? changedPaths(root) : changedSince(root, base));
+
+/* 0. what a machine decides is written before anything is judged */
+const formatted = rustfmtAvailable(root) ? formatCrates(root, touchedCrates(root, turnPaths() ?? [])) : [];
+if (formatted.length > 0) {
+    say(`formatted before judging: ${formatted.join(", ")} (cargo fmt)`);
+}
+
+/* 1. the checks, judged against the main-line base */
 say("checkout gates …");
-const verdicts = checkVerdicts(root);
+let verdicts = checkVerdicts(root);
+const fixedChecks = verdicts === undefined ? [] : fixChecks(root, verdicts);
+if (fixedChecks.length > 0) {
+    say(`${fixedChecks.join(", ")} fixed the tree themselves before it was judged`);
+    verdicts = checkVerdicts(root);
+}
 if (verdicts === undefined) {
     fail("checkout gates", "could not be measured · node _tools/checks/run.mjs --tidy=warn");
 } else {
@@ -63,7 +81,7 @@ if (verdicts === undefined) {
         // measurement that put it there.
         const before = reportsAt(
             root,
-            "HEAD",
+            base ?? "HEAD",
             failed.map(({ id }) => id),
         );
         const judged = judgeAgainstBase(failed, before);
@@ -72,7 +90,7 @@ if (verdicts === undefined) {
         const theirs = judged.filter(({ added, unsure: lines }) => added.length === 0 && lines.length === 0);
         if (theirs.length > 0) {
             say(
-                `${theirs.map(({ verdict }) => verdict.id).join(", ")}: failing at HEAD too and no worse for this turn, so not this turn's to fix — the land measures the tree it leaves behind`,
+                `${theirs.map(({ verdict }) => verdict.id).join(", ")}: failing at this turn's base too and no worse for it, so not this turn's to fix — the land measures the tree it leaves behind`,
             );
         }
         // Reported in full and charged to nobody: the snapshot could not put these checks where the live run stands, so
@@ -80,7 +98,7 @@ if (verdicts === undefined) {
         // to be told what was found even when there is no one to hold to it.
         for (const { verdict, unsure: lines } of unsure) {
             process.stderr.write(
-                `\n? ${verdict.id} (${verdict.file}), ${lines.length} problem${lines.length === 1 ? "" : "s"} HEAD could not be asked about — reported, not laid at this turn's door\n${lines.join("\n")}\n`,
+                `\n? ${verdict.id} (${verdict.file}), ${lines.length} problem${lines.length === 1 ? "" : "s"} the base could not be asked about — reported, not laid at this turn's door\n${lines.join("\n")}\n`,
             );
         }
         for (const { verdict, added } of mine) {
@@ -97,7 +115,7 @@ if (verdicts === undefined) {
 
 // Staged, unstaged and untracked alike, a rename by its new name (lib/git.mjs). `undefined` (git couldn't answer)
 // widens this and the closure below to everything, rather than narrowing to nothing.
-const changed = changedPaths(root);
+const changed = turnPaths();
 const lintable = (changed ?? []).filter((path) => LINTABLE.test(path) && existsSync(join(root, path)));
 if (changed === undefined || lintable.length > LINT_FILE_CEILING) {
     say(
@@ -143,14 +161,67 @@ if (global !== undefined) {
     say(`${seeds.size} changed package${seeds.size === 1 ? "" : "s"}, ${affected.size} in the closure: ${[...affected].sort().join(", ")}`);
 }
 
+// Lines of a failure list shown before the rest is counted, so the digest after it survives the Stop's output tail.
+const LISTED = 30;
+const list = (units) => [...units.slice(0, LISTED).map((unit) => `  ${unit}`), ...(units.length > LISTED ? [`  …and ${units.length - LISTED} more`] : [])].join("\n");
+
+// Which main-line tree a land verdict measured, for the line that says a failure was already there.
+const measuredAt = ({ verdict, distance }) =>
+    `main at ${(verdict.head ?? base ?? "").slice(0, 9)}${distance > 0 ? `, ${distance} commit(s) before this turn's base` : ""}, measured ${ago(verdict.at)}`;
+
+// Failures that pass when re-run alone are logged as flakes and dropped from the verdict.
+const withoutFlakes = (tasks, units) => {
+    const { flaky, still } = rerunFailures(root, tasks, units);
+    if (flaky.length > 0) {
+        recordFlakes(root, flaky);
+        process.stderr.write(`\n~ ${flaky.length} failure(s) passed when re-run alone: flaky, logged, not held:\n${list(flaky)}\n`);
+    }
+    return still;
+};
+
+// The closure's failures against the land verdict for this turn's base: what main already failed is named, never held.
+const judgeClosure = (tasks, units) => {
+    if (units.length === 0) {
+        return { ok: false, why: "failed with no task summary to read the failures from" };
+    }
+    const current = withoutFlakes(tasks, units);
+    if (current.length === 0) {
+        return { ok: true, note: "every failure passed when re-run alone: flaky, logged" };
+    }
+    const found = base === undefined ? undefined : verdictForBase(root, base);
+    const { held, standing, unsure } = againstBaseline(current, found?.verdict);
+    if (standing.length > 0) {
+        process.stderr.write(`\n= ${standing.length} failure(s) already red on ${measuredAt(found)}, not this turn's to fix:\n${list(standing)}\n`);
+    }
+    if (unsure.length > 0) {
+        process.stderr.write(`\n? ${unsure.length} failure(s) in a task that verdict cut short, reported and not held:\n${list(unsure)}\n`);
+    }
+    if (held.length === 0) {
+        return { ok: true, note: `every failure was already red on ${measuredAt(found)}; nothing this turn introduced` };
+    }
+    process.stderr.write(`\n✗ ${held.length} failure(s) this turn introduced:\n${list(held)}\n`);
+    return { ok: false, why: found === undefined ? `no land verdict covers this turn's base, so every failure counts` : `${held.length} introduced by this turn` };
+};
+
 // The emit is the one thing the closure's check reads; after a failed one, typecheck would report missing modules
 // against correct files, which is why this pair is a dependency and the two steps above aren't.
 if (affected.size > 0) {
     if (step("emit declarations", process.execPath, [join(root, "_tools/scripts/build/emit-declarations.mjs")])) {
+        if (regenerateContractLock(root, changed)) {
+            say("contract.lock.json rewritten from the contract this turn changed");
+        }
         const filters = global !== undefined ? [] : [...affected].flatMap((name) => ["--filter", name]);
-        step("typecheck and test", "pnpm", ["turbo", "run", "typecheck", "test", "--only", "--continue=dependencies-successful", ...filters], {
-            env: { TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0" },
+        const junitDir = mkdtempSync(join(tmpdir(), "verify-turn-junit-"));
+        const since = Date.now();
+        step("typecheck and test", "pnpm", ["turbo", "run", "typecheck", "test", "--only", "--continue=dependencies-successful", "--summarize", ...filters], {
+            env: { TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0", SUITES_JUNIT_DIR: junitDir },
+            judge: () => {
+                const tasks = failedTasks(takeSummary(root, since));
+                return judgeClosure(tasks, unitsOf(root, tasks, junitDir));
+            },
         });
+        takeSummary(root, since);
+        rmSync(junitDir, { recursive: true, force: true });
     } else {
         skip("typecheck and test", "the declarations it reads were not emitted");
     }

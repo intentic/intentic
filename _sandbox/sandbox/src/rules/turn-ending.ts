@@ -84,7 +84,17 @@ export interface TurnEndingDeps {
     readonly tests?: (() => Promise<string | undefined>) | undefined;
     // Told, at the Stop after a follow-up, what the model did with it; absent records nothing.
     readonly onFollowUpOutcome?: ((rule: Rule, outcome: FollowUpOutcome) => void) | undefined;
+    // Rebases the turn's branch onto the main line before any check reads it, answering how many commits came under it;
+    // absent for a turn with no branch of its own.
+    readonly syncBeforeChecks?: (() => Promise<number>) | undefined;
 }
+
+// Said ahead of a follow-up whose checks ran on a tree the Stop had just rebased, since the files moved under the model.
+const syncedNote = (commits: number): string =>
+    `Main moved on while this turn ran: ${commits} commit(s) of other work were rebased under this branch before the checks below ran. Re-read a file before editing it.`;
+
+// A follow-up's parts, led by the note when the Stop's rebase moved the tree under them; nothing to say stays nothing.
+export const withSyncedNote = (parts: readonly string[], commits: number): string[] => (parts.length > 0 && commits > 0 ? [syncedNote(commits), ...parts] : [...parts]);
 
 // What happened between a rule's follow-up and the next Stop: the counts that say whether it was acted on.
 export interface FollowUpOutcome {
@@ -431,6 +441,8 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                             return {};
                         }
                         settleAsks();
+                        // The checks read the tree that would land, not the one the turn started on.
+                        const synced = deps.syncBeforeChecks === undefined ? 0 : await deps.syncBeforeChecks().catch(() => 0);
                         // Edited paths plus what the tree shows changed; a turn with nothing edited still fires
                         // unconditioned rules.
                         const edited = ledgers.verification.edited().map((path) => workspaceRelative(path, deps.cwd));
@@ -450,7 +462,7 @@ export const turnEndingHooks = (rules: readonly Rule[], deps: TurnEndingDeps = {
                         asked = spoke.map((rule) => ({ rule, edits, looks, commands }));
                         followUps += 1;
                         return {
-                            hookSpecificOutput: { hookEventName: "Stop", additionalContext: parts.join("\n\n") },
+                            hookSpecificOutput: { hookEventName: "Stop", additionalContext: withSyncedNote(parts, synced).join("\n\n") },
                         };
                     },
                 ],

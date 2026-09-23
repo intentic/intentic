@@ -15,7 +15,15 @@ import { automationConfig } from "../harness/route-stores.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
-import { automationIdle, createAutomationsScheduler, fireAutomation, nextOneTimeWakeAt } from "./scheduler.js";
+import {
+    automationIdle,
+    createAutomationsScheduler,
+    fireAutomation,
+    heldWakeQuiet,
+    LAND_QUIET_CAP_MS,
+    LAND_QUIET_MS,
+    nextOneTimeWakeAt,
+} from "./scheduler.js";
 import type { TurnStarter } from "../seams/turn-starter.js";
 import { conversationEntry, drivenBy } from "../testing.js";
 
@@ -788,4 +796,16 @@ test("the queue survives a run that fails: the next fire still gets its turn", a
     await first;
     await queued;
     expect(prompts).toHaveLength(2);
+});
+
+// A repair of the main tree is starved by lands, never by turns working in their own worktrees; anything else still waits
+// for nobody to be mid-turn.
+test("a held repair waits out lands rather than live turns, and a land stream cannot hold it past its cap", () => {
+    const due = 1_000_000;
+    const busyFleet = { lastLand: due - LAND_QUIET_MS - 1, liveTurns: 7, autoRunAt: due };
+    expect(heldWakeQuiet("workspace", due, busyFleet)).toBe(true);
+    expect(heldWakeQuiet("workspace", due, { ...busyFleet, lastLand: due - 1 })).toBe(false);
+    expect(heldWakeQuiet("workspace", due + LAND_QUIET_CAP_MS, { ...busyFleet, lastLand: due + LAND_QUIET_CAP_MS - 1 })).toBe(true);
+    expect(heldWakeQuiet("schedule", due, busyFleet)).toBe(false);
+    expect(heldWakeQuiet("schedule", due, { ...busyFleet, liveTurns: 0 })).toBe(true);
 });

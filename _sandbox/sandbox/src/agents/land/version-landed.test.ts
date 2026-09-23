@@ -19,15 +19,21 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rul
 const version = (id: string, over: Partial<Rule> = {}): Rule =>
     rule({ id, moment: "agent.landed", action: { kind: "builtin", name: "version-landed" }, ...over });
 
-const servicesWith = (rules: readonly Rule[], landedSubject?: string): Services =>
+const servicesWith = (rules: readonly Rule[], landedSubject?: string, landed: { testNote?: string; said?: string } = {}): Services =>
     unstubbed<Services>("services", {
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () =>
                 isolatedAgent([{ repo: "root", base: "a".repeat(40) }], {
                     social: { title: { text: "Recent commits", source: "derived" }, reactions: [] },
-                    landing: landedSubject === undefined ? {} : { message: { subject: landedSubject } },
+                    landing:
+                        landedSubject === undefined
+                            ? {}
+                            : { message: { subject: landedSubject, ...(landed.testNote === undefined ? {} : { testNote: landed.testNote }) } },
                 }),
+        }),
+        transcripts: unstubbed<Services["transcripts"]>("transcripts", {
+            read: async () => (landed.said === undefined ? [] : [{ role: "assistant", text: landed.said }]) as never,
         }),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
             mainDir: () => WORKSPACE_ROOT,
@@ -70,6 +76,15 @@ describe(`settling a landing`, () => {
         describeLanding.mockRejectedValue(new Error(`every model set for this job names an account this sandbox no longer has`));
         await settleLanding(servicesWith([version(`auto-version`)]), `c1`);
         expect(commitOnly).toHaveBeenCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits`);
+    });
+
+    // The push gate reads a weakened test's declaration off the commit; a land must not drop the conversation's.
+    test(`a drafted landing commits with its Test-Note trailer, and an undrafted one keeps the conversation's`, async () => {
+        await settleLanding(servicesWith([version(`auto-version`)], `refactor: rows`, { testNote: `rows became a table` }), `c1`);
+        expect(commitOnly).toHaveBeenLastCalledWith(WORKSPACE_ROOT, [`a.ts`], `refactor: rows\n\nTest-Note: rows became a table`);
+        describeLanding.mockRejectedValue(new Error(`no model`));
+        await settleLanding(servicesWith([version(`auto-version`)], undefined, { said: `Done.\nTest-Note: prose became structure` }), `c1`);
+        expect(commitOnly).toHaveBeenLastCalledWith(WORKSPACE_ROOT, [`a.ts`], `Agent: Recent commits\n\nTest-Note: prose became structure`);
     });
 
     test(`without the rule the subject is still drafted for the chip, and nothing is committed`, async () => {

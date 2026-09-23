@@ -1,11 +1,11 @@
-import type { Rule } from "@intentic/sandbox-contract";
+import { landedCommitMessage, type Rule } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { commitOnly } from "../../git/changes/changes-index.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
 import { reposOf } from "../registry/agents-store.js";
-import { describeLanding } from "./landed-subject.js";
+import { conversationTestNote, describeLanding } from "./landed-subject.js";
 
 // The `version-landed` built-in at `agent.landed`: keeps the main tree committed for a person who never commits.
 // Worktrees are cut from HEAD (worktrees.ts `snapshot`) and the pre-turn sync rebases onto HEAD, so a land left
@@ -30,7 +30,10 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
     if (entry === undefined) {
         return [];
     }
-    const subject = entry.landing.message?.subject ?? fallbackSubject(entry.social.title?.text, id);
+    // The drafted message with its trailers; a land nobody drafted keeps the conversation's Test-Note all the same.
+    const landed = entry.landing.message;
+    const testNote = landed === undefined ? await conversationTestNote(services, entry) : undefined;
+    const message = landedCommitMessage(landed ?? { subject: fallbackSubject(entry.social.title?.text, id), ...(testNote === undefined ? {} : { testNote }) });
     const committed: string[] = [];
     for (const composed of reposOf(entry)) {
         const dir = services.agentWorktrees.mainDir(composed.repo);
@@ -43,7 +46,7 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
         if (paths.length === 0) {
             continue;
         }
-        const did = await services.agentWorktrees.withRepoLock(composed.repo, () => commitOnly(dir, paths, subject, AGENT_GIT_AUTHOR));
+        const did = await services.agentWorktrees.withRepoLock(composed.repo, () => commitOnly(dir, paths, message, AGENT_GIT_AUTHOR));
         if (did) {
             committed.push(composed.repo);
         }

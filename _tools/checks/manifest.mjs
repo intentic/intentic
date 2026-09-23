@@ -15,6 +15,7 @@
 // `edit` moment), which is the only moment at which the model that wrote the line is still holding it. A check whose
 // finding is a property of the tree rather than of a file — a directory's size, a link's target, a cycle between two
 // subsystems — is not scopable and omits the flag; those are read whole or not at all.
+// `fix`: arguments that make the check write the tree into shape itself; the Stop runs it before judging a failure.
 export const CHECKS = [
     { id: "control-chars", file: "control-chars.mjs", needs: "checkout", gate: "code", scoped: true, about: "no literal control bytes in tracked text" },
     { id: "skill-descriptions", file: "skill-descriptions.mjs", needs: "checkout", gate: "tidy", about: "every skill description fits the catalog budget the prompt pays for on every call" },
@@ -54,7 +55,14 @@ export const CHECKS = [
     { id: "md-links", file: "md-links.mjs", needs: "checkout", gate: "tidy", about: "every relative link in the documentation resolves" },
     { id: "metaphor-home", file: "metaphor-home.mjs", needs: "checkout", gate: "tidy", about: "the four-noun picture is defined once, reached from the docs, and never from the home page" },
     { id: "alias-targets", file: "alias-targets.mjs", needs: "checkout", gate: "code", about: "every resolver alias points at a path that exists" },
-    { id: "i18n", file: "i18n-catalogs.mjs", needs: "checkout", gate: "code", about: "every message catalog holds the same keys in every shipped language (--fix seeds them)" },
+    {
+        id: "i18n",
+        file: "i18n-catalogs.mjs",
+        needs: "checkout",
+        gate: "code",
+        fix: ["--fix"],
+        about: "every message catalog holds the same keys in every shipped language (--fix seeds them)",
+    },
     {
         id: "i18n-literals",
         file: "i18n-literals.mjs",

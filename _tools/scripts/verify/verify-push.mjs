@@ -10,14 +10,15 @@
 // exists AND somebody is standing there. That is why tidiness is judged here against the range (the checkout-gates block
 // below), and it is the finding docs/audits/tidy-job.md was written from.
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { repoRoot } from "../../constants/src/node.mjs";
 import { isLinkedWorktree } from "../../checks/lib/repo.mjs";
 import { changedPaths as treeChangedPaths, git as gitIn } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { ago, commitTree, freshVerdicts, treeHash, writeVerdict } from "../lib/tree-verdict.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
+import { rustfmtAvailable, touchedCrates } from "./fixers.mjs";
 import { judgeAgainstBase } from "./turn-findings.mjs";
 import { testWorkers } from "./test-workers.mjs";
 
@@ -302,24 +303,9 @@ const changed = changedPaths();
     }
 }
 
-// Crates found by walking for Cargo.toml, not listed by name; a crate counts as touched when any changed path sits
-// under its directory.
-const CRATE_SKIP = new Set(["node_modules", "target", "dist", "generated", ".cache", ".turbo", "out-tsc", ".git"]);
-const crates = (dir, depth) =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-        if (CRATE_SKIP.has(entry.name) || (entry.isDirectory() && entry.name.startsWith("."))) {
-            return [];
-        }
-        if (entry.isDirectory()) {
-            return depth < 4 ? crates(join(dir, entry.name), depth + 1) : [];
-        }
-        return entry.name === "Cargo.toml" ? [relative(root, dir)] : [];
-    });
-const touched = crates(root, 0).filter(
-    (crate) => changed === undefined || [...changed].some((path) => path === crate || path.startsWith(`${crate}/`)),
-);
+const touched = touchedCrates(root, changed === undefined ? undefined : [...changed]);
 if (touched.length > 0) {
-    if (spawnSync("cargo", ["fmt", "--version"], { cwd: root, encoding: "utf8" }).status !== 0) {
+    if (!rustfmtAvailable(root)) {
         say(`rustfmt is not available here, so ic-check and desktop-check decide formatting in CI (${touched.join(", ")})`);
     } else {
         for (const crate of touched) {
@@ -402,6 +388,12 @@ if (passed !== undefined && passed.suite === "push") {
 const replay = passed !== undefined && passed.suite === "verify";
 if (replay) {
     say(`this tree passed \`pnpm verify\` ${ago(passed.at)}; running only the build it could not`);
+}
+const failedVerify = fresh.find((verdict) => verdict.status === "failed" && verdict.suite === "verify");
+if (!replay && failedVerify !== undefined) {
+    say(
+        `this tree FAILED \`pnpm verify\` ${ago(failedVerify.at)}${(failedVerify.failedTasks ?? []).length > 0 ? ` in ${failedVerify.failedTasks.join(", ")}` : ""}; CI's verify groups will fail the same`,
+    );
 }
 const failedPush = fresh.find((verdict) => verdict.status === "failed" && verdict.suite === "push");
 if (hook && !replay && failedPush !== undefined) {

@@ -2,6 +2,7 @@ import type { PipelineRun, ListenerMessage } from "@intentic/sandbox-contract";
 import { CI_PROVIDER } from "../automations/catalog.js";
 import { dispatchListenerMessage } from "../automations/listeners.js";
 import type { Services } from "../composition.js";
+import { observeCiRun } from "./repair-gate.js";
 
 // Turns a finished PipelineRun into `ci` listener messages for the webhook (ci/webhook.routes.ts) and the poller
 // (ci/poller.ts); the previous-conclusion memory is written only here. Canceled and skipped runs produce nothing.
@@ -82,5 +83,7 @@ export const dispatchCiRun = async (services: Services, run: PipelineRun, author
     for (const type of types) {
         await dispatchListenerMessage(services, ciMessageOf(run, type, author));
     }
+    // Off the webhook's clock: deciding whether main's red is ripe for a fix fetches logs and lists runs.
+    void observeCiRun(services, run).catch((error: unknown) => services.logger.warn({ err: error, runId: run.runId }, "ci repair: observing the run failed"));
     return types;
 };

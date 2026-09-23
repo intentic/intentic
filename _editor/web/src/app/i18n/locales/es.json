@@ -1433,8 +1433,10 @@
         },
         "errands": {
             "checkingWorkJustDid": "Comprobando el trabajo que acaba de hacer",
+            "fixingWhatLandBroke": "Arreglando lo que rompió su integración",
             "resolvingLandConflict": "Resolviendo el conflicto de integración",
             "sentByAppLanding": "Enviado por la aplicación; integrar este trabajo fue rechazado",
+            "sentBySandboxLand": "Enviado por el sandbox; integrar su trabajo dejó en rojo la comprobación del árbol principal",
             "sentBySandboxTurn": "Enviado por el sandbox; ese turno terminó sin verificar"
         },
         "hostModelPicker": {
@@ -1827,6 +1829,8 @@
             "prePushCheckCommand": "Comando de comprobación previa al push",
             "promptAssistantToOpen": "Pedir al asistente que abra la vista tras cambios en la interfaz.",
             "promptAssistantToRun": "Pedir al asistente que ejecute una comprobación tras cambios en el código.",
+            "repairAfterLanding": "Reparar lo que se rompe tras integrar",
+            "repairAfterLandingNote": "Cuando una integración deja en rojo la comprobación del árbol principal, vuelve a la conversación que la integró. Cuando la CI de main sigue en rojo por un mismo fallo, arranca un agente de reparación en cuanto dejan de llegar pushes, y relanza un fallo de los propios runners de CI.",
             "runOneCheckBefore": "Ejecutar una comprobación antes de cualquier push, salga el repositorio que salga. La compilación propia de un repositorio va en el repositorio, abajo.",
             "verifyBeforeFinishing": "Verificar antes de terminar"
         },

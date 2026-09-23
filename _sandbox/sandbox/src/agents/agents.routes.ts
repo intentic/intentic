@@ -38,6 +38,7 @@ import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scop
 import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
 import { settleLandingInBackground } from "./land/version-landed.js";
+import { routeLandBreakage } from "./land/land-breakage.js";
 
 // Fleet routes: list/get the registry, review a worktree's delta against its recorded bases, land it, archive it, or
 // discard it. Unknown id is NOT_FOUND; land/discard/archive on a running turn is CONFLICT.
@@ -654,13 +655,17 @@ export const createAgentsRoutes = (services: Services) => {
                     announceLanded(entry, span);
                     // The whole repository's check, the same one an auto-land queues; the Land button used to skip it, which
                     // is how a week of lands produced a dozen verdicts.
-                    void verifyLandedTree(services, {
-                        kind: "land",
-                        agentId: entry.id,
-                        ...opt("title", entry.social.title?.text),
-                        branch: entry.placement.branch,
-                        repos: [...span],
-                    }).catch((error: unknown) => services.logger.warn({ err: error, id: entry.id }, "agents: land verify could not be queued"));
+                    void verifyLandedTree(
+                        services,
+                        {
+                            kind: "land",
+                            agentId: entry.id,
+                            ...opt("title", entry.social.title?.text),
+                            branch: entry.placement.branch,
+                            repos: [...span],
+                        },
+                        (breakage) => routeLandBreakage(services, breakage),
+                    ).catch((error: unknown) => services.logger.warn({ err: error, id: entry.id }, "agents: land verify could not be queued"));
                 }
                 return {
                     landed: result.landed,

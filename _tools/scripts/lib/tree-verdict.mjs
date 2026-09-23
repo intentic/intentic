@@ -10,8 +10,10 @@ import { git } from "./git.mjs";
 
 // A verdict older than this is re-measured even for an identical tree: node_modules is not in the hash.
 export const VERDICT_TTL_MS = 12 * 60 * 60_000;
-// One slot held one verdict, so a land between the verify and the push erased it; a day of lands fits in this many.
-export const VERDICTS_KEPT = 20;
+// A day of lands, each writing one `verify` verdict green or red, plus the pushes between them.
+export const VERDICTS_KEPT = 40;
+// How far back along the main line a `verify` verdict still stands in for a base nobody measured exactly.
+export const BASE_DISTANCE_MAX = 20;
 
 // Hash of the working tree's content; `undefined` when git can't answer, which reads as "no verdict" and re-measures.
 export const treeHash = (root) => {
@@ -45,7 +47,7 @@ const verdictPath = (root) => {
     return dir === undefined ? undefined : join(dir, "intentic-push-verified");
 };
 
-// Every recorded `{ tree, status: "passed" | "failed", suite: "verify" | "push", at }`, newest first; empty when none.
+// Every recorded `{ tree, status: "passed" | "failed", suite: "verify" | "push", at, head?, failures? }`, newest first.
 export const readVerdicts = (root) => {
     const path = verdictPath(root);
     if (path === undefined) {
@@ -65,19 +67,40 @@ export const freshVerdicts = (root, trees, now = Date.now()) => {
     return readVerdicts(root).filter((verdict) => wanted.has(verdict.tree) && now - verdict.at < VERDICT_TTL_MS);
 };
 
-// Records one verdict ahead of the rest, replacing an older one about the same tree and suite.
-export const writeVerdict = (root, tree, status, suite) => {
+// Replaces an older verdict about the same tree and suite; `details` is `head` and, when red, failure-units' `verdictUnits`.
+export const writeVerdict = (root, tree, status, suite, details = {}) => {
     const path = verdictPath(root);
     if (path === undefined || tree === undefined) {
         return false;
     }
     const kept = readVerdicts(root).filter((verdict) => !(verdict.tree === tree && verdict.suite === suite));
     try {
-        writeFileSync(path, `${JSON.stringify([{ tree, status, suite, at: Date.now() }, ...kept].slice(0, VERDICTS_KEPT))}\n`);
+        writeFileSync(path, `${JSON.stringify([{ tree, status, suite, at: Date.now(), ...details }, ...kept].slice(0, VERDICTS_KEPT))}\n`);
         return true;
     } catch {
         return false;
     }
+};
+
+// The `verify` verdict about `base`'s tree, else its nearest measured ancestor within BASE_DISTANCE_MAX commits.
+export const verdictForBase = (root, base) => {
+    const tree = commitTree(root, base);
+    const verifies = readVerdicts(root).filter((verdict) => verdict.suite === "verify");
+    const exact = verifies.find((verdict) => verdict.tree === tree);
+    if (exact !== undefined) {
+        return { verdict: exact, distance: 0 };
+    }
+    let nearest;
+    for (const verdict of verifies) {
+        if (typeof verdict.head !== "string" || spawnSync("git", ["merge-base", "--is-ancestor", verdict.head, base], { cwd: root }).status !== 0) {
+            continue;
+        }
+        const distance = Number(git(root, "rev-list", "--count", `${verdict.head}..${base}`)?.trim());
+        if (Number.isInteger(distance) && distance <= BASE_DISTANCE_MAX && (nearest === undefined || distance < nearest.distance)) {
+            nearest = { verdict, distance };
+        }
+    }
+    return nearest;
 };
 
 export const ago = (at) => {

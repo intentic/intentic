@@ -173,6 +173,16 @@ describe("the daemon's Stop", () => {
         expect(await daemonStopFindings(services(), stop)).toStrictEqual([finding]);
     });
 
+    test("rebases before the checks, and says so ahead of what they then find", async () => {
+        const synced: AgentRequest = {
+            ...redSuite,
+            hooks: { ...redSuite.hooks, resync: async () => ({ kind: "worktree", branch: "agent/settle-1", base: "abc1234", sync: { commits: 3, blocked: [] } }) },
+        };
+        const [note, ...found] = await daemonStopFindings(services(), { ...stop, request: synced });
+        expect(note).toContain("3 commit(s) of other work were rebased under this branch");
+        expect(found).toStrictEqual([finding]);
+    });
+
     test("finds nothing on the main tree, which is everyone's, or for nobody's turn", async () => {
         expect(await daemonStopFindings(services(), { ...stop, isolated: false })).toStrictEqual([]);
         expect(await daemonStopFindings(services(), { ...stop, conversationId: undefined })).toStrictEqual([]);

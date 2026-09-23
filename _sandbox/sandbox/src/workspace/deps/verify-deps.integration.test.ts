@@ -9,7 +9,7 @@ import { freshImport } from "@intentic/testing/bun";
 import type { ManagedProcesses, ProcessSpec } from "../../processes/managed-processes.js";
 import type { DependencyLandOrigin } from "./dependency-origin.js";
 import { checkRunningIn } from "./checks-in-flight.js";
-import { checkCommandFor, type VerifyDeps } from "./verify-deps.js";
+import { checkCommandFor, type LandBreakage, type VerifyDeps } from "./verify-deps.js";
 import { fileVerifyStore } from "./verify-store.js";
 
 const workspace = async (): Promise<string> => mkdtemp(join(tmpdir(), "verify-"));
@@ -36,16 +36,27 @@ const ready = async (root: string, scripts: Record<string, string>): Promise<voi
     await write(root, "app/node_modules/left-pad/package.json");
 };
 
-// Simulates a panel by writing the status/log files the daemon reads back, with the exit code the test picks.
-const fakeProcesses = (root: string, exitCode: number | undefined, started: string[]): ManagedProcesses => {
+// Simulates a panel by writing the status/log files the daemon reads back, with the exit code the test picks, and the
+// failure report a check that writes one leaves beside them.
+const fakeProcesses = (
+    root: string,
+    exitCode: number | undefined,
+    started: string[],
+    report?: { readonly failures: readonly string[] },
+    commands: string[] = [],
+): ManagedProcesses => {
     const live = new Set<string>();
     return {
-        start: async (key: string, _spec: ProcessSpec) => {
+        start: async (key: string, spec: ProcessSpec) => {
             started.push(key);
+            commands.push(spec.command);
             live.add(key);
             const artifacts = join(root, `${STATE_DIR}/local/verify`);
             await mkdir(artifacts, { recursive: true });
             await writeFile(join(artifacts, `${key}.log`), "1 test failed\n");
+            if (report !== undefined) {
+                await writeFile(join(artifacts, `${key}.report.json`), JSON.stringify(report));
+            }
             if (exitCode !== undefined) {
                 await writeFile(join(artifacts, `${key}.status`), `${exitCode}\n`);
             }
@@ -318,4 +329,52 @@ test("a check the queue skipped is reported as not run, and changes no verdict",
         projects: Record<string, { attempt: number }>;
     };
     expect(status.projects["app"]?.attempt).toBe(1);
+});
+
+test("the check is told where to leave its failures and which commit the land departed from", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const feed: string[] = [];
+    const commands: string[] = [];
+    queueVerify(deps(root, fakeProcesses(root, 0, [], undefined, commands), [], feed), context, ["app"]);
+    await settle(() => feed.length > 0);
+    expect(commands[0]).toContain(`export INTENTIC_VERIFY_REPORT=${join(root, `${STATE_DIR}/local/verify/app--verify.report.json`)}`);
+    expect(commands[0]).toContain("export INTENTIC_LAND_FROM=abc");
+});
+
+test("failures a red names for the first time go back to the land, and no chore wakes on them as well", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const events: WorkspaceEvent[] = [];
+    const feed: string[] = [];
+    const routed: LandBreakage[] = [];
+    const route = async (breakage: LandBreakage): Promise<boolean> => {
+        routed.push(breakage);
+        return true;
+    };
+    queueVerify({ ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, feed), route }, context, ["app"]);
+    await settle(() => feed.length > 0 && routed.length > 0);
+    expect(routed).toEqual([{ project: "app", command: "pnpm run test", lands: [context], fresh: ["app#test a.test.ts › x"], logTail: "1 test failed\n" }]);
+    expect(events).toEqual([]);
+});
+
+test("a red that names nothing new since the last one is not sent back, and the chore hears of it as before", async () => {
+    const { queueVerify } = await freshQueue();
+    const root = await workspace();
+    await ready(root, { test: "vitest run" });
+    const store = fileVerifyStore(join(root, `${STATE_DIR}/records/verify.json`));
+    await store.record("app", "red", 1, ["app#test a.test.ts › x"]);
+    const events: WorkspaceEvent[] = [];
+    const routed: LandBreakage[] = [];
+    const route = async (breakage: LandBreakage): Promise<boolean> => {
+        routed.push(breakage);
+        return true;
+    };
+    queueVerify({ ...deps(root, fakeProcesses(root, 1, [], { failures: ["app#test a.test.ts › x"] }), events, []), route }, context, ["app"]);
+    await settle(() => events.length > 0);
+    expect(routed).toEqual([]);
+    expect(events[0]?.event).toBe("deps.broken");
+    expect(events[0]?.deps?.attempt).toBe(2);
 });

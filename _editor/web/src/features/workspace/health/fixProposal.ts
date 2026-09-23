@@ -57,9 +57,10 @@ export const pushNudgePrompt = (runs: readonly PushRun[]): string => {
     return runs.map(one).join(`\n\n---\n\n`);
 };
 
-// Identity is the digest's step names only, read from the summary line, never the `✗` lines (which vary per
-// test); parentheses are dropped since they vary per push. No digest: keyed by the last line, numbers blanked.
+// Identity is the failed steps (parentheses dropped) plus every path the output names; no digest: the last line, numbers blanked.
 const DIGEST = /^\s*\S+: \d+ of \d+ steps failed in \d+s: (.+)$/m;
+const NAMED_PATH = /(?:^|[\s(])((?:[\w@.-]+\/)+[\w@.-]+)/g;
+const sorted = (values: Iterable<string>): string[] => [...new Set(values)].sort((left, right) => left.localeCompare(right));
 export const fixSignature = (output: string): string => {
     const listed = DIGEST.exec(output)?.[1];
     if (listed !== undefined) {
@@ -68,7 +69,8 @@ export const fixSignature = (output: string): string => {
             .map((label) => label.replace(/\s*\([^)]*\)/g, ``).trim())
             .filter((label) => label !== ``);
         if (steps.length > 0) {
-            return [...new Set(steps)].sort((left, right) => left.localeCompare(right)).join(`,`);
+            const paths = sorted([...output.matchAll(NAMED_PATH)].map((found) => found[1]!.replace(/[.,;:]+$/, ``)));
+            return [sorted(steps).join(`,`), ...(paths.length > 0 ? [paths.join(`,`)] : [])].join(`|`);
         }
     }
     const lines = output

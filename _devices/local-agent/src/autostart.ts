@@ -265,7 +265,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=-/bin/sh -c '${ROTATE_LOG_SH}' rotate ${systemdQuoted(spec.logPath)} ${LOG_ROTATE_BYTES}
+ExecStartPre=-/bin/sh -c ${systemdQuoted(ROTATE_LOG_SH)} rotate ${systemdQuoted(spec.logPath)} ${LOG_ROTATE_BYTES}
 ExecStart=${quotedCommandLine([...launcher, ...spec.foregroundArgs])}
 StandardOutput=append:${spec.logPath}
 StandardError=append:${spec.logPath}

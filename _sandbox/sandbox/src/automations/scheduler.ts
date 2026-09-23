@@ -8,7 +8,7 @@ import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import type { Services } from "../composition.js";
-import type { PersistedAgent } from "../agents/registry/agents-store.js";
+import { type PersistedAgent, reposOf } from "../agents/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
@@ -678,14 +678,46 @@ const fireIfDue = async (services: Services, automation: AutomationRecord, windo
     );
 };
 
-// Releases countdown holds past deadline while no turn is live; removed before running so it can't re-fire. A retired
-// one-time wake still releases: it was switched off by the very fire now waiting in the queue.
+// A repair of the main tree waits for lands to stop moving it, and no longer than this once its countdown is over.
+export const LAND_QUIET_MS = 5 * 60_000;
+export const LAND_QUIET_CAP_MS = 60 * 60_000;
+
+// The newest land any conversation made, epoch ms; 0 when none has.
+const lastLandAt = (services: Services): number =>
+    Math.max(
+        0,
+        ...services.agents.list().flatMap((summary) => {
+            const entry = services.agents.entry(summary.id);
+            return (entry === undefined ? [] : reposOf(entry)).map((repo) => repo.landedAt ?? 0);
+        }),
+    );
+
+// Whether a held wake past its countdown may start: one woken by the workspace repairs the main tree, which only lands
+// move, so it waits out lands; any other waits out every live turn, since it would start work under someone.
+export const heldWakeQuiet = (
+    trigger: Trigger["kind"] | undefined,
+    now: number,
+    fleet: { readonly lastLand: number; readonly liveTurns: number; readonly autoRunAt: number },
+): boolean =>
+    trigger === "workspace" ? now - fleet.lastLand >= LAND_QUIET_MS || now - fleet.autoRunAt >= LAND_QUIET_CAP_MS : fleet.liveTurns === 0;
+
+// What heldWakeQuiet reads, asking only what the trigger's rule needs: land times for a repair, live turns otherwise.
+const fleetFor = (services: Services, trigger: Trigger["kind"] | undefined, autoRunAt: number) =>
+    trigger === "workspace"
+        ? { lastLand: lastLandAt(services), liveTurns: 0, autoRunAt }
+        : { lastLand: 0, liveTurns: services.conversations.liveSessionIds().length, autoRunAt };
+
+// Releases countdown holds past deadline once quiet (heldWakeQuiet); removed before running so it can't re-fire. A
+// retired one-time wake still releases: it was switched off by the very fire now waiting in the queue.
 const releaseCountdownHolds = async (services: Services, now: number): Promise<void> => {
     for (const held of await services.heldWakes.list()) {
-        if (held.autoRunAt === undefined || held.autoRunAt > now || services.conversations.liveSessionIds().length > 0) {
+        if (held.autoRunAt === undefined || held.autoRunAt > now) {
             continue;
         }
         const automation = await services.automations.get(held.automationId);
+        if (!heldWakeQuiet(automation?.trigger.kind, now, fleetFor(services, automation?.trigger.kind, held.autoRunAt))) {
+            continue;
+        }
         await services.heldWakes.remove(held.id);
         if (automation === undefined || !resumable(automation)) {
             continue;

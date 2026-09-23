@@ -2,6 +2,7 @@ import { queueWhole } from "../agent/tools/agent-terminals.js";
 import type { Services } from "../composition.js";
 import type { DependencyOrigin } from "../workspace/deps/dependency-origin.js";
 import { queueVerify, type VerifyDeps } from "../workspace/deps/verify-deps.js";
+import { type BreakageRouter, breakageSettled, routeLandBreakage } from "../agents/land/land-breakage.js";
 import { announceUnwatchedWrite, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 
 // Wired before the data gate opens, so a turn arriving as boot finishes queues behind an already reserved repair.
@@ -31,7 +32,8 @@ const attribution = (origin: DependencyOrigin): { conversationId?: string; title
 };
 
 export const wireDependencyCoordinator = (
-    services: Pick<Services, "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "events" | "heavyCommands" | "dependencies">,
+    services: Pick<Services, "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "events" | "heavyCommands" | "dependencies"> &
+        BreakageRouter,
 ): void => {
     const dependencyChecks: VerifyDeps = {
         workspace: services.workspace,
@@ -42,6 +44,8 @@ export const wireDependencyCoordinator = (
         emit: (event) => services.events.publish("workspace", event),
         announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
+        route: (breakage) => routeLandBreakage(services, breakage),
+        settled: breakageSettled,
     };
     services.dependencies.subscribe(({ dir, origin }) => {
         const named = dir === "" ? `the workspace root` : dir;

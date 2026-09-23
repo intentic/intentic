@@ -33,7 +33,7 @@ which jobs a push starts — and it asserts each one exists rather than silently
 | [dind-host.sh](lib/dind-host.sh) | a clean Docker-in-Docker host to run a user's setup on (`start_dind_host`, `in_host`) |
 | [git.mjs](lib/git.mjs) | `git`, `changedPaths` — one spawn wrapper with the buffer a release range needs (`isLinkedWorktree` lives beside the checks that ratchet, in [repo.mjs](../checks/lib/repo.mjs)) |
 | [steps.mjs](lib/steps.mjs) | the step runner the three verify tiers share: every reader speaks, then one digest |
-| [tree-verdict.mjs](lib/tree-verdict.mjs) | the newest twenty measurements, keyed by tree content (the working tree or a commit's), shared across checkouts |
+| [tree-verdict.mjs](lib/tree-verdict.mjs) | the newest forty measurements, green or red with their failures, keyed by tree content and HEAD, shared across checkouts |
 
 ### [verify/](verify) — the gates
 
@@ -45,6 +45,10 @@ which jobs a push starts — and it asserts each one exists rather than silently
 | [test-workers.mjs](verify/test-workers.mjs) | how many workers each `bun test` in a repo-wide run may fork, sized to the cgroup's memory; the three tiers and the root `test` script read it |
 | [affected.mjs](verify/affected.mjs) | which parts of the repo a push touched — CI's `changes` job, walked off the package graph |
 | [assertion-ratchet.mjs](verify/assertion-ratchet.mjs) | a test file may get stronger by itself and weaker only on purpose |
+| [failure-units.mjs](verify/failure-units.mjs) | a failed turbo run as units (a type error, a failing test, an unhandled error), so a turn is charged only with what main did not already fail |
+| [flakes.mjs](verify/flakes.mjs) | a failing test re-run once alone; one that passes is logged as a flake, never charged; `--worst` names the one to repair |
+| [fixers.mjs](verify/fixers.mjs) | what a machine decides before anything is judged: rustfmt, a check's own `fix`, the contract lock |
+| [land-tiers.mjs](verify/land-tiers.mjs) | what one land added over the commit it landed on, read by `pnpm verify` after the land |
 | [check-migrations.sh](verify/check-migrations.sh) | applied migrations are immutable, new ones can run on a database that has rows |
 | [lint-workflows.sh](verify/lint-workflows.sh) | actionlint + zizmor over `.github`, at pinned bytes |
 

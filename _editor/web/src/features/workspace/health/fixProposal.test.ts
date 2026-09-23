@@ -107,9 +107,9 @@ const digest = (steps: readonly string[], seconds: number): string =>
         ...steps.map((step) => `  ✗ ${step}  exit 1 · pnpm ${step}`),
     ].join(`\n`);
 
-test(`the signature is the failed steps, and survives what changes between two runs of one breakage`, () => {
+test(`the signature is the failed steps and the files they name, and survives what changes between two runs of one breakage`, () => {
     const first = fixSignature(digest([`checkout gates`, `lint`], 12));
-    expect(first).toBe(`checkout gates,lint`);
+    expect(first).toBe(`checkout gates,lint|src/a.test.ts`);
     // A second run of the same broken tree: slower, and the digest lists the same two the other way round.
     expect(fixSignature(digest([`lint`, `checkout gates`], 340))).toBe(first);
 });
@@ -117,7 +117,15 @@ test(`the signature is the failed steps, and survives what changes between two r
 // A range differs on every push; the gate itself is what's the same.
 test(`what a step name carries in parentheses is not part of the signature`, () => {
     expect(fixSignature(digest([`assertion ratchet (a1b2c3d..e4f5g6h)`], 9))).toBe(fixSignature(digest([`assertion ratchet (99f00aa..12b34cd)`], 9)));
-    expect(fixSignature(digest([`assertion ratchet (a1b2c3d..e4f5g6h)`], 9))).toBe(`assertion ratchet`);
+    expect(fixSignature(digest([`assertion ratchet (a1b2c3d..e4f5g6h)`], 9))).toBe(`assertion ratchet|src/a.test.ts`);
+});
+
+// Four days of unrelated tidy failures once shared one id and were told to carry on from each other's attempts.
+test(`the same gate red on other files is another failure, and the same files at other lines are this one`, () => {
+    const on = (anchor: string): string => fixSignature(`✗ paths (path-literals.mjs)\n${anchor}  spells a root\nverify-push: 1 of 5 steps failed in 3s: tidiness`);
+    expect(on(`_sandbox/sandbox/src/a.ts:32`)).toBe(`tidiness|_sandbox/sandbox/src/a.ts`);
+    expect(on(`_sandbox/sandbox/src/a.ts:40`)).toBe(on(`_sandbox/sandbox/src/a.ts:32`));
+    expect(on(`_tools/scripts/repair-transcripts.mjs:9`)).not.toBe(on(`_sandbox/sandbox/src/a.ts:32`));
 });
 
 // A grown failure is not the one the agent is already on.

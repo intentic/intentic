@@ -3,7 +3,7 @@ import type { AgentTurn, ModelPin, Rule, SandboxSettings } from "@intentic/sandb
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
 import type { Services } from "../../../composition.js";
-import { dirtyPathsAcross } from "../../../git/changes/changes.js";
+import { dirtyPathsAcross, turnPathsAcross } from "../../../git/changes/changes.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
 import { type RuleCommandDeps, type RuleCommandRun, runRuleCommand } from "../../../rules/rule-command.js";
@@ -137,13 +137,14 @@ const ruleRunnerIn =
         return run;
     };
 
-// What the tree says an isolated turn changed, and the verify-tests built-in over the same dirty set. Only there: its
-// worktree starts clean so its dirty paths are its own, while the main checkout's test files are everyone's.
+// What the tree says an isolated turn changed, and the verify-tests built-in over the same set. Only there: its branch
+// holds nothing but its own work since the main-line base, committed by a sync or not, while the main checkout's test
+// files are everyone's.
 const isolatedStopHooks = (deps: HarnessHooksDeps, context: TurnContext): Pick<TurnHooks, "changedPaths" | "verifyTests"> => {
     if (context.localCwd === deps.workspace.root) {
         return {};
     }
-    const changed = async (): Promise<string[]> => dirtyPathsAcross(context.localCwd, await discoverRepos(context.localCwd));
+    const changed = async (): Promise<string[]> => turnPathsAcross(context.localCwd, await discoverRepos(context.localCwd));
     return {
         changedPaths: changed,
         verifyTests: () =>

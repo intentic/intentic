@@ -70,8 +70,32 @@ import type { ConversationActors } from "../../agents/actor/conversation-actors.
 // container's own credential.
 export type HarnessRequest = AgentRequest<HarnessCredential>;
 
-// Rebases only on an actual answer, not a dismissal/rejection; and only when quiet, skipped if the turn's shell or a
-// subagent is still writing. Either case leaves the branch exactly where it was.
+// Rebases only when quiet, skipped if the turn's shell or a subagent is still writing, which leaves the branch exactly
+// where it was; answers the frame it pushed, if the branch moved.
+const quietResync = async (
+    conversations: Pick<ConversationActors, "holdings">,
+    request: AgentRequest,
+    push: (event: AgentEvent) => void,
+    shell: { sessionId: string | undefined },
+): Promise<AgentEvent | undefined> => {
+    if (request.hooks.resync === undefined) {
+        return undefined;
+    }
+    if (request.spec.conversationId !== undefined && subagentInParentTree(conversations, request.spec.conversationId)) {
+        return undefined;
+    }
+    if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId))) {
+        return undefined;
+    }
+    // Swallowed here so a rebase fault can't fail what called it; resync owns its own logging.
+    const frame = await request.hooks.resync().catch(() => undefined);
+    if (frame !== undefined) {
+        push(frame);
+    }
+    return frame;
+};
+
+// Rebases only on an actual answer, not a dismissal/rejection.
 const syncOnAnswer = async (
     conversations: Pick<ConversationActors, "holdings">,
     request: HarnessRequest,
@@ -79,21 +103,22 @@ const syncOnAnswer = async (
     shell: { sessionId: string | undefined },
     answered: boolean,
 ): Promise<void> => {
-    if (!answered || request.hooks.resync === undefined) {
-        return;
-    }
-    if (request.spec.conversationId !== undefined && subagentInParentTree(conversations, request.spec.conversationId)) {
-        return;
-    }
-    if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId))) {
-        return;
-    }
-    // Swallowed here so a rebase fault can't fail a card the user already answered; resync owns its own logging.
-    const frame = await request.hooks.resync().catch(() => undefined);
-    if (frame !== undefined) {
-        push(frame);
+    if (answered) {
+        await quietResync(conversations, request, push, shell);
     }
 };
+
+// Commits the rebase at a Stop brought under the branch; 0 when it moved nothing or was skipped.
+const syncedCommits = (frame: AgentEvent | undefined): number => (frame?.kind === "worktree" ? (frame.sync?.commits ?? 0) : 0);
+
+// The Stop's rebase for a turn that has a branch to rebase; undefined for one that has not.
+const stopSync = (
+    conversations: Pick<ConversationActors, "holdings">,
+    request: AgentRequest,
+    push: (event: AgentEvent) => void,
+    shell: { sessionId: string | undefined },
+): (() => Promise<number>) | undefined =>
+    request.hooks.resync === undefined ? undefined : async () => syncedCommits(await quietResync(conversations, request, push, shell));
 
 // Cap the stderr tail folded into an error message so a chatty failure can't flood the UI.
 const STDERR_TAIL = 2000;
@@ -249,6 +274,10 @@ const baseOptions = (
     subagents: SubagentTurn | undefined,
     // Turn's event sink; the command gate uses it to park the turn on a card without ever calling canUseTool.
     push: (event: AgentEvent) => void,
+    // Where a Stop's rebase learns a subagent is still writing in the parent's tree.
+    conversations: Pick<ConversationActors, "holdings">,
+    // The turn's own shell, so a Stop's rebase waits out a command still writing in it.
+    shell: { sessionId: string | undefined },
 ): OauthRecoveryOptions => {
     // This turn's outside-content bit, set once here; the wrap hook sets it, the gate reads it per command.
     const taint = createTurnTaint(request.policy.outsideWake);
@@ -359,6 +388,7 @@ const baseOptions = (
                 tests: request.hooks.verifyTests,
                 changedPaths: request.hooks.changedPaths,
                 repos: request.hooks.turnRepos,
+                syncBeforeChecks: stopSync(conversations, request, push, shell),
             }),
             // The harness's own ask beside the owner's rules: a checklist about to be left open is said back once, since
             // the board reads that list to tell a finished session from one that stopped short.
@@ -747,7 +777,7 @@ export async function* runAgent(
     const writing = new Map<string, RequestDocument>();
     let stderr = "";
     const options: Options = {
-        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push),
+        ...baseOptions(request, abortController, permissionMode, tmuxEnabled, subagents, push, conversations, shell),
         // Either built-in base plus this harness's guidance, or the owner's own prompt alone; SDK sends an empty prompt if
         // omitted.
         systemPrompt,

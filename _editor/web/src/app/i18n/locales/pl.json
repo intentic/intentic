@@ -1433,8 +1433,10 @@
         },
         "errands": {
             "checkingWorkJustDid": "Sprawdza pracę, którą właśnie wykonał",
+            "fixingWhatLandBroke": "Naprawia to, co zepsuło scalenie jego pracy",
             "resolvingLandConflict": "Rozwiązuje konflikt przy scalaniu",
             "sentByAppLanding": "Wysłane przez aplikację — scalenie tej pracy zostało odrzucone",
+            "sentBySandboxLand": "Wysłane przez sandbox — scalenie jego pracy wywróciło sprawdzenie głównego drzewa",
             "sentBySandboxTurn": "Wysłane przez sandbox — tamta tura skończyła się niezweryfikowana"
         },
         "hostModelPicker": {
@@ -1827,6 +1829,8 @@
             "prePushCheckCommand": "Polecenie sprawdzające przed pushem",
             "promptAssistantToOpen": "Poproś asystenta, żeby otworzył widok po zmianach w interfejsie.",
             "promptAssistantToRun": "Poproś asystenta, żeby uruchomił sprawdzenie po zmianach w kodzie.",
+            "repairAfterLanding": "Naprawiaj to, co psuje się po scaleniu",
+            "repairAfterLandingNote": "Gdy scalenie wywraca sprawdzenie głównego drzewa, wraca ono do rozmowy, która je scaliła. Gdy CI na main pozostaje czerwone na tym samym błędzie, po ucichnięciu pushy startuje agent naprawczy, a błąd samych runnerów CI jest uruchamiany ponownie.",
             "runOneCheckBefore": "Uruchamiaj jedno sprawdzenie przed każdym pushem, niezależnie od tego, które repozytorium wychodzi. Własny build repozytorium należy do repozytorium, poniżej.",
             "verifyBeforeFinishing": "Zweryfikuj przed zakończeniem"
         },

@@ -109,6 +109,12 @@ export const LandedMessageSchema = z.object({
         .string()
         .optional()
         .describe("What this change takes away, for anything already relying on it. Nearly always absent: it is for removals, not for additions."),
+    // Present only when the conversation said why a test it weakened should stay weaker; the push gate reads it as the
+    // weakening's declaration.
+    testNote: z
+        .string()
+        .optional()
+        .describe("Why a test this change weakened is meant to be weaker, in the conversation's own words. Nearly always absent."),
 });
 export type LandedMessage = z.infer<typeof LandedMessageSchema>;
 // One model's turn in the drafting walk (agent/role-model.ts tries connected models in order), in spend order:

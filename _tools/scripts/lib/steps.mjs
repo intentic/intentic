@@ -20,7 +20,8 @@ export const createSteps = (name, root) => {
 
     // Runs one step; returns pass/fail and never exits, so an independent step still runs. A command that can't start
     // is recorded as a failure, not silently skipped.
-    const step = (label, command, args, { env = {} } = {}) => {
+    // `judge` reads a non-zero exit before it is recorded: `{ ok: true, note }` clears it, `{ ok: false, why }` names it.
+    const step = (label, command, args, { env = {}, judge } = {}) => {
         say(`${label} …`);
         const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32", env: { ...process.env, ...env } });
         const spelling = spell(command, args, root);
@@ -29,14 +30,25 @@ export const createSteps = (name, root) => {
             results.push({ label, spelling, status: "failed", why: result.error.message });
             return false;
         }
-        if (result.status !== 0) {
-            say(`${label} failed`);
-            results.push({ label, spelling, status: "failed", why: `exit ${result.status ?? "signal"}` });
-            return false;
-        }
-        results.push({ label, spelling, status: "passed" });
-        return true;
+        return settle(label, spelling, result.status === 0 ? { ok: true } : (judge?.() ?? { ok: false }), result.status);
     };
+
+    // Records a spawned step's verdict; a failure without a reason is named by its exit.
+    const settle = (label, spelling, verdict, status) => {
+        if (verdict.ok) {
+            if (verdict.note !== undefined) {
+                say(`${label}: ${verdict.note}`);
+            }
+            results.push({ label, spelling, status: "passed" });
+            return true;
+        }
+        say(`${label} failed`);
+        results.push({ label, spelling, status: "failed", why: verdict.why ?? `exit ${status ?? "signal"}` });
+        return false;
+    };
+
+    // Whether any step so far failed.
+    const failing = () => results.some((result) => result.status === "failed");
 
     // Records a step skipped because a real dependency already failed, so the digest can say that part of the tree is
     // unmeasured.
@@ -81,5 +93,5 @@ export const createSteps = (name, root) => {
         process.exit(1);
     };
 
-    return { say, step, skip, fail, finish };
+    return { say, step, skip, fail, failing, finish };
 };

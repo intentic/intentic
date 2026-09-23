@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type AssertionMeasure, measureFile, TEST_FILE, type Weakening, weakened } from "@intentic/constants/assertion-measure";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
+import { mainLineBaseOf } from "../../git/changes/changes.js";
 
 // verify-tests, read at the Stop: flags a test whose assertions were widened until a failing check passed, or a new
 // test that passes without the change it covers. Two measurements report, never refuse: the ratchet (assertion strength
@@ -29,7 +30,7 @@ export type FaultCheck = (testFile: string) => Promise<readonly string[] | undef
 export interface VerifyTestsDeps {
     // Tree the turn worked in; git runs here and `changed` is relative to it.
     readonly root: string;
-    // Root-relative paths the tree says changed (git/changes.ts dirtyPathsAcross).
+    // Root-relative paths the tree says changed (git/changes.ts turnPathsAcross).
     readonly changed: () => Promise<readonly string[]>;
     // Absent ⇒ only the ratchet speaks.
     readonly faults?: FaultCheck | undefined;
@@ -40,17 +41,19 @@ export interface VerifyTestsDeps {
 const readOrUndefined = (path: string): Promise<string | undefined> => readFile(path, "utf8").catch(() => undefined);
 
 const describeWeakening = (path: string, shape: Weakening, before: AssertionMeasure, after: AssertionMeasure): string =>
-    `- ${path} got weaker than at HEAD: ${shape} (exact ${before.exact}→${after.exact}, loose ${before.loose}→${after.loose}, ` +
+    `- ${path} got weaker than on the main line: ${shape} (exact ${before.exact}→${after.exact}, loose ${before.loose}→${after.loose}, ` +
     `asserted chars ${before.chars}→${after.chars}, tests ${before.tests}→${after.tests}).`;
 
 const describePassing = (path: string, restored: readonly string[]): string =>
     `- ${path} passes against the code as it was before this turn (re-run with ${restored.join(", ")} restored to HEAD): ` +
     `it does not depend on what the change did, and would stay green if that behaviour broke.`;
 
-// One line per touched test file whose assertions are weaker than the same file at HEAD.
+// One line per touched test file whose assertions are weaker than the same file where the turn's branch left the main
+// line, since a sync commits the turn's own edits and HEAD would then hold them.
 const ratchetFindings = async (deps: VerifyTestsDeps, files: readonly string[]): Promise<string[]> => {
     const git = deps.git ?? defaultGit;
     const read = deps.read ?? readOrUndefined;
+    const base = (await mainLineBaseOf(deps.root, git)) ?? "HEAD";
     const findings: string[] = [];
     for (const path of files) {
         const after = await read(join(deps.root, path));
@@ -59,7 +62,7 @@ const ratchetFindings = async (deps: VerifyTestsDeps, files: readonly string[]):
             continue;
         }
         // No HEAD means the file is new, only ever stronger; both sides are measured by the file's own language.
-        const before = await git(deps.root, ["show", `HEAD:${path}`])
+        const before = await git(deps.root, ["show", `${base}:${path}`])
             .then((result) => measureFile(result.stdout, path))
             .catch(() => undefined);
         const now = measureFile(after, path);
@@ -88,7 +91,8 @@ const guidance = (weaker: number, passing: number): string[] => [
     ...(weaker > 0
         ? [
               "A failing test is fixed by updating the value it expects to the new truth, not by widening the matcher. Restore the " +
-                  "assertions that got weaker, or say plainly why the weakening is right (a refactor from prose to structure is one honest reason).",
+                  "assertions that got weaker. If the weakening is right (a refactor from prose to structure is one honest reason), end " +
+                  "your final message with one line `Test-Note: <why, one sentence>`: it goes into the commit, where the push gate reads it.",
           ]
         : []),
     ...(passing > 0

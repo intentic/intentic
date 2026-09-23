@@ -1,5 +1,5 @@
 import type { Services } from "../../../composition.js";
-import { commandRuleFindings, touchedRepos, workspaceRelative } from "../../../rules/turn-ending.js";
+import { commandRuleFindings, touchedRepos, withSyncedNote, workspaceRelative } from "../../../rules/turn-ending.js";
 import { nudgeUnverifiedWork } from "../../verification/verify-nudge.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
 import type { DaemonStopTurn, SettlementPlan } from "./turn-settlement.js";
@@ -7,6 +7,12 @@ import type { DaemonStopTurn, SettlementPlan } from "./turn-settlement.js";
 // Carries a settlement plan out in the order a turn's exit always has: the resume records first, then the rows and
 // re-reads, each fire-and-forget with its own named failure line. The daemon's Stop alone is awaited, since the land
 // decision reads the verdict its rules record and the follow-up carries what they found.
+
+// Commits a rebase brought under the branch before the daemon runs a Stop's checks itself; 0 when nothing moved.
+const syncForChecks = async (request: DaemonStopTurn["request"]): Promise<number> => {
+    const synced = await request.hooks.resync?.().catch(() => undefined);
+    return synced?.kind === "worktree" ? (synced.sync?.commits ?? 0) : 0;
+};
 
 // What the turn.ending command rules found on a daemon-stopped isolated turn, worded for the model; empty when the
 // turn is not one, is unisolated (the main tree is everyone's), or the rules passed. Their verdict is recorded through
@@ -17,10 +23,12 @@ export const daemonStopFindings = async (deps: Pick<Services, "logger">, turn: D
     }
     const { request } = turn;
     try {
+        // The checks read the tree that would land, as the hook path's Stop does.
+        const commits = await syncForChecks(request);
         const changed = request.hooks.changedPaths === undefined ? [] : await request.hooks.changedPaths().catch((): readonly string[] => []);
         const rules = request.policy.turnEndingRules ?? [];
         const paths = [...new Set([...turn.edited.map((path) => workspaceRelative(path, turn.cwd)), ...changed])];
-        return await commandRuleFindings(
+        const findings = await commandRuleFindings(
             rules,
             // Same facts the hook path builds at its own Stop, repositories included, or the same rule would mean two
             // different things depending on which runtime ran the turn.
@@ -34,6 +42,7 @@ export const daemonStopFindings = async (deps: Pick<Services, "logger">, turn: D
                 ...(turn.isolation !== undefined ? { isolation: turn.isolation.plan } : {}),
             },
         );
+        return withSyncedNote(findings, commits);
     } catch (error) {
         deps.logger.warn({ err: error, conversationId: turn.conversationId }, "turn-ending checks: could not run after the turn");
         return [];

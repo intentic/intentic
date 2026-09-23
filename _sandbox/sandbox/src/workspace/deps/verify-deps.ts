@@ -6,15 +6,18 @@ import type { Logger } from "pino";
 import type { ActivityStore } from "../../activity/activity-store.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { QUEUE_SKIPPED_EXIT_CODE } from "../../platform/resources/heavy-commands.js";
+import { shellQuote } from "@intentic/sandbox-run/quote";
+import { z } from "zod";
 import { markCheckRunning } from "./checks-in-flight.js";
-import type { DependencyOrigin } from "./dependency-origin.js";
+import type { DependencyLandOrigin, DependencyOrigin } from "./dependency-origin.js";
 import { statePath } from "../../state-paths.js";
 import type { VerifyStore } from "./verify-store.js";
 import { installPanelKey, workspaceSetup } from "../layout/workspace-setup.js";
 
-// Runs a project's own check (`verify` script, else `test`) after its install settles, records the verdict, and emits
-// `deps.broken`/`deps.fixed` for a chore to wake on. A causeless run (the reconciler's own installs, not a land) still
-// checks and records, but never wakes anyone.
+// Runs a project's own check (`verify` script, else `test`) after its install settles, records the verdict, hands
+// failures that appeared with a land back to it (`route`), and emits `deps.broken`/`deps.fixed` for a chore to wake on
+// when nobody took them. A causeless run (the reconciler's own installs, not a land) still checks and records, but never
+// wakes anyone.
 
 export const verifyPanelKey = (dir: string): string => `${dir === "" ? "root" : dir.replace(/[^a-zA-Z0-9_-]/g, "_")}--verify`;
 
@@ -38,16 +41,38 @@ export interface VerifyDeps {
     readonly announce: () => void;
     // Same queue an agent's turn uses, so a check can't stack beside live turns; absent means unqueued.
     readonly queue?: (command: string) => Promise<string>;
+    // Hands a red that named new failures to the land that caused them; true when it did, so no chore wakes on it too.
+    readonly route?: (breakage: LandBreakage) => Promise<boolean>;
+    // Told when a project comes back green, so whatever `route` counted for it starts over.
+    readonly settled?: (project: string) => void;
     // Test dials; the daemon uses the defaults.
     readonly pollMs?: number;
     readonly watchMaxMs?: number;
+}
+
+// A red land verdict's news: the failures that appeared with it and the lands its run covered, oldest first.
+export interface LandBreakage {
+    readonly project: string;
+    readonly command: string;
+    readonly lands: readonly DependencyLandOrigin[];
+    readonly fresh: readonly string[];
+    readonly logTail: string;
 }
 
 interface PendingVerify {
     readonly deps: VerifyDeps;
     readonly origin: DependencyOrigin;
     readonly dirs: readonly string[];
+    // Every land a coalesced run answers for, oldest first; the check measures their sum.
+    readonly lands: readonly DependencyLandOrigin[];
 }
+
+// The report a project's check may write (INTENTIC_VERIFY_REPORT): what it failed on, as units it names itself.
+const ReportSchema = z.object({ failures: z.array(z.string()) });
+
+// The land span's entry for a project dir; the workspace repo is "root" in a span and "" as a dir.
+const spanOf = (land: DependencyLandOrigin, dir: string): DependencyLandOrigin["repos"][number] | undefined =>
+    land.repos.find(({ repo }) => (repo === "root" ? "" : repo) === dir);
 
 const pending: PendingVerify[] = [];
 let running = false;
@@ -108,27 +133,33 @@ const paneOutcome = async (statusPath: string, logPath: string): Promise<{ reado
     return { exitCode: Number.isNaN(status) ? -1 : status, logTail };
 };
 
-// Runs one project's check to a verdict: panel up, exit code read back, store updated, edge announced. The wrapped
-// command is one zsh line; `pipestatus[1]` is the check's exit, not tee's.
-const verifyProject = async (verify: PendingVerify, dir: string, command: string): Promise<void> => {
-    const { deps, origin } = verify;
+// Where one project's run leaves its log, exit status and report; under .intentic, outside the repo, so a check never
+// dirties the tree.
+const artifactsOf = (deps: VerifyDeps, dir: string): { key: string; dir: string; log: string; status: string; report: string } => {
     const key = verifyPanelKey(dir);
-    // Under .intentic, outside the repo, so a check never dirties the tree; statePath keeps the name in step.
-    const artifacts = statePath(deps.workspace.root, ".intentic/local/verify/");
-    const logPath = join(artifacts, `${key}.log`);
-    const statusPath = join(artifacts, `${key}.status`);
+    const at = statePath(deps.workspace.root, ".intentic/local/verify/");
+    return { key, dir: at, log: join(at, `${key}.log`), status: join(at, `${key}.status`), report: join(at, `${key}.report.json`) };
+};
+
+// Runs the check in its panel until it settles or outruns the watch; the wrapped command is one zsh line, and
+// `pipestatus[1]` is the check's exit, not tee's.
+const runPanel = async (verify: PendingVerify, dir: string, command: string): Promise<boolean> => {
+    const { deps } = verify;
+    const paths = artifactsOf(deps, dir);
     const queued = await queuedCommand(command, deps);
+    // What the check is told: where to leave its failures as data, and the main-line commit the oldest land it covers left.
+    const from = verify.lands.map((land) => spanOf(land, dir)?.from).find((sha) => sha !== undefined);
+    const exported = [`export INTENTIC_VERIFY_REPORT=${shellQuote(paths.report)}`, ...(from === undefined ? [] : [`export INTENTIC_LAND_FROM=${shellQuote(from)}`])];
     // Open across the whole run: the build inside it empties and rewrites an output dir the repo may track, and a
     // review scanning mid-build would otherwise report the rewrite as the owner's own deletion.
     const checkDone = markCheckRunning(dir);
-    let settled = false;
     try {
-        await deps.processes.start(key, {
-            command: `mkdir -p ${artifacts} && rm -f ${statusPath} && { ${queued}; } 2>&1 | tee ${logPath}; echo $pipestatus[1] > ${statusPath}`,
+        await deps.processes.start(paths.key, {
+            command: `mkdir -p ${paths.dir} && rm -f ${paths.status} ${paths.report} && { ${exported.join("; ")}; ${queued}; } 2>&1 | tee ${paths.log}; echo $pipestatus[1] > ${paths.status}`,
             cwd: join(deps.workspace.root, dir),
             oneShot: true,
         });
-        settled = await watchPanel(deps, key);
+        return await watchPanel(deps, paths.key);
     } finally {
         // Closed before the announcement, so the rescan it triggers reads the settled tree rather than the held-back
         // one.
@@ -138,18 +169,24 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         // either way.
         deps.announce();
     }
-    if (!settled) {
-        await deps.processes.stop(key);
+};
+
+// Runs one project's check to a verdict: panel up, exit code read back, store updated, edge announced.
+const verifyProject = async (verify: PendingVerify, dir: string, command: string): Promise<void> => {
+    const { deps, origin } = verify;
+    const paths = artifactsOf(deps, dir);
+    if (!(await runPanel(verify, dir, command))) {
+        await deps.processes.stop(paths.key);
         activity(
             deps,
             "deps.verify_lost",
-            `Checks for ${whereOf(dir)} (${command}) outran the daemon's watch window: verdict not recorded; see the ${key} terminal.`,
+            `Checks for ${whereOf(dir)} (${command}) outran the daemon's watch window: verdict not recorded; see the ${paths.key} terminal.`,
             "error",
             origin,
         );
         return;
     }
-    const { exitCode, logTail } = await paneOutcome(statusPath, logPath);
+    const { exitCode, logTail } = await paneOutcome(paths.status, paths.log);
     // The queue ran nothing: its slot stayed held past the wait, and this check may not run beside the holder. Not a
     // verdict, so the store keeps what it had; the next land checks the whole tree again.
     if (exitCode === QUEUE_SKIPPED_EXIT_CODE) {
@@ -162,30 +199,79 @@ const verifyProject = async (verify: PendingVerify, dir: string, command: string
         );
         return;
     }
-    const verdict = await deps.verifyStore.record(dir, exitCode === 0 ? "green" : "red", Date.now());
+    await settleVerdict(verify, dir, command, { exitCode, logTail, report: paths.report, key: paths.key });
+};
+
+// Records a settled run and says what it means: the activity row, the new failures to the lands that caused them, and
+// the edge to any chore when nobody took them.
+const settleVerdict = async (
+    verify: PendingVerify,
+    dir: string,
+    command: string,
+    run: { readonly exitCode: number; readonly logTail: string; readonly report: string; readonly key: string },
+): Promise<void> => {
+    const { deps, origin } = verify;
+    const { exitCode, logTail } = run;
+    const verdict = await deps.verifyStore.record(dir, exitCode === 0 ? "green" : "red", Date.now(), await readReport(run.report));
     if (exitCode === 0) {
+        deps.settled?.(dir);
         activity(deps, "deps.verify_green", `Checks green for ${whereOf(dir)} (${command}).`, "ok", origin);
     } else {
         activity(
             deps,
             "deps.verify_red",
-            `Checks failed for ${whereOf(dir)} (${command}, exit ${exitCode}, attempt ${verdict.attempt}): full output in the ${key} terminal.`,
+            `Checks failed for ${whereOf(dir)} (${command}, exit ${exitCode}, attempt ${verdict.attempt}): full output in the ${run.key} terminal.`,
             "error",
             origin,
         );
     }
-    // Emitted only with a cause to name: a chore reads `repos` as a git span to work, which a causeless run lacks.
-    if (verdict.edge !== undefined && origin.kind === "land") {
-        deps.emit?.({
-            event: verdict.edge === "broken" ? "deps.broken" : "deps.fixed",
-            agentId: origin.agentId,
-            ...(origin.title !== undefined ? { title: origin.title } : {}),
-            branch: origin.branch,
-            outcome: "landed",
-            repos: origin.repos,
-            deps: { project: dir, command, exitCode, attempt: verdict.attempt, logTail },
-        });
+    const routed = await routeFresh(verify, dir, command, verdict.fresh ?? [], logTail);
+    // A breakage handed to the land that caused it wakes no chore as well: one repair per failure.
+    if (verdict.edge === "fixed" || (verdict.edge === "broken" && !routed)) {
+        announceEdge(verify, dir, command, { exitCode, logTail, edge: verdict.edge, attempt: verdict.attempt });
     }
+};
+
+// Emitted only with a cause to name: a chore reads `repos` as a git span to work, which a causeless run lacks.
+const announceEdge = (
+    verify: PendingVerify,
+    dir: string,
+    command: string,
+    run: { readonly exitCode: number; readonly logTail: string; readonly edge: "broken" | "fixed"; readonly attempt: number },
+): void => {
+    const { origin } = verify;
+    if (origin.kind !== "land") {
+        return;
+    }
+    verify.deps.emit?.({
+        event: run.edge === "broken" ? "deps.broken" : "deps.fixed",
+        agentId: origin.agentId,
+        ...(origin.title !== undefined ? { title: origin.title } : {}),
+        branch: origin.branch,
+        outcome: "landed",
+        repos: origin.repos,
+        deps: { project: dir, command, exitCode: run.exitCode, attempt: run.attempt, logTail: run.logTail },
+    });
+};
+
+// The failures a report named, or undefined when the check wrote none or none that parses.
+const readReport = async (path: string): Promise<readonly string[] | undefined> => {
+    try {
+        return ReportSchema.parse(JSON.parse(await readFile(path, "utf8"))).failures;
+    } catch {
+        return undefined;
+    }
+};
+
+// Offers what appeared with this run to the lands it covered; false when there is nothing new or nobody to hand it to.
+const routeFresh = async (verify: PendingVerify, dir: string, command: string, fresh: readonly string[], logTail: string): Promise<boolean> => {
+    if (fresh.length === 0 || verify.lands.length === 0 || verify.deps.route === undefined) {
+        return false;
+    }
+    return verify.deps.route({ project: dir, command, lands: verify.lands, fresh, logTail }).catch((error: unknown) => {
+        verify.deps.logger.warn({ err: error, project: dir }, "dependency verify: routing the breakage failed");
+        return false;
+    });
 };
 
 // One pass over the pending request. Installs first, or a half-installed tree's failure would misread as the code's
@@ -244,12 +330,11 @@ export const queueVerify = (deps: VerifyDeps, origin: DependencyOrigin, dirs: re
         return;
     }
     const wanted = [...new Set(dirs)];
-    // One check per tree, not per land: a still-pending request for the same dirs is replaced by the newer one.
+    // One check per tree, not per land: a still-pending request for the same dirs is replaced by the newer one, which
+    // then answers for the lands the replaced one carried.
     const same = pending.findIndex((entry) => entry.dirs.length === wanted.length && entry.dirs.every((dir) => wanted.includes(dir)));
-    if (same !== -1) {
-        pending.splice(same, 1);
-    }
-    pending.push({ deps, origin, dirs: wanted });
+    const carried = same === -1 ? [] : (pending.splice(same, 1)[0]?.lands ?? []);
+    pending.push({ deps, origin, dirs: wanted, lands: [...carried, ...(origin.kind === "land" ? [origin] : [])] });
     if (running) {
         return;
     }

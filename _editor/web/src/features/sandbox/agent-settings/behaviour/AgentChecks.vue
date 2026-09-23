@@ -4,6 +4,7 @@ import ToggleSwitch from "primevue/toggleswitch";
 import { useDraft } from "../../../../lib/useDraft";
 import { NAMED_RULES } from "../../environment/rules";
 import { useRules } from "../../environment/useRules";
+import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useT } from "@intentic/ui/i18n";
 
 // Five named toggles over the general rules engine (useRules.ts / NAMED_RULES); nothing here it can't already
@@ -13,6 +14,7 @@ import { useT } from "@intentic/ui/i18n";
 const t = useT();
 
 const { settings, byId, upsert, remove, setEnabled } = useRules();
+const { patch } = useSandboxSettings();
 
 const verify = () => byId(NAMED_RULES.verify);
 const removals = () => byId(NAMED_RULES.removals);
@@ -143,6 +145,18 @@ const savePrepush = (): void => {
         <Row icon="list-check" :title="t(`sandbox.agentChecks.checkWhatDidTo`)" :description="t(`sandbox.agentChecks.askAboutAssertionsGot`)">
             <template #control>
                 <ToggleSwitch :model-value="tests()?.enabled ?? false" :disabled="settings === undefined" @update:model-value="setTests" />
+            </template>
+        </Row>
+
+        <!-- Breakage found after the work left its turn: a land that turns main red goes back to its conversation, and
+             main's CI red on one failure gets a fix agent once pushes go quiet. -->
+        <Row icon="wrench" :title="t(`sandbox.agentChecks.repairAfterLanding`)" :description="t(`sandbox.agentChecks.repairAfterLandingNote`)">
+            <template #control>
+                <ToggleSwitch
+                    :model-value="settings?.autoRepair ?? true"
+                    :disabled="settings === undefined"
+                    @update:model-value="(value: boolean) => patch({ autoRepair: value })"
+                />
             </template>
         </Row>
 

@@ -1433,8 +1433,10 @@
         },
         "errands": {
             "checkingWorkJustDid": "Checking the work it just did",
+            "fixingWhatLandBroke": "Fixing what its land broke",
             "resolvingLandConflict": "Resolving the land conflict",
             "sentByAppLanding": "Sent by the app, landing this work refused",
+            "sentBySandboxLand": "Sent by the sandbox, its land turned the main tree's check red",
             "sentBySandboxTurn": "Sent by the sandbox, that turn ended unverified"
         },
         "hostModelPicker": {
@@ -1827,6 +1829,8 @@
             "prePushCheckCommand": "Pre-push check command",
             "promptAssistantToOpen": "Prompt the assistant to open the view after changes to the interface.",
             "promptAssistantToRun": "Prompt the assistant to run a check after code changes.",
+            "repairAfterLanding": "Repair what breaks after landing",
+            "repairAfterLandingNote": "When a land turns the main tree's check red, send it back to the conversation that landed it. When main's CI stays red on one failure, start a fix agent once pushes go quiet, and re-run a failure on the CI fleet itself.",
             "runOneCheckBefore": "Run one check before any push, whichever repository is going out. A repository's own build belongs in the repository, below.",
             "verifyBeforeFinishing": "Verify before finishing"
         },

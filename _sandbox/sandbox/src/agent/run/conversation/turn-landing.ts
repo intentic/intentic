@@ -7,6 +7,7 @@ import type { Services } from "../../../composition.js";
 import { landingVerdict, type RuleFacts, standing } from "../../../rules/rules.js";
 import type { DependencyLandOrigin } from "../../../workspace/deps/dependency-origin.js";
 import type { ReconcileOutcome } from "../../../workspace/deps/reconcile-deps.js";
+import type { LandBreakage } from "../../../workspace/deps/verify-deps.js";
 import { type CheckVerdict, landingOutcome } from "../../verification/turn-checks.js";
 import { opt } from "../../../opt.js";
 
@@ -81,6 +82,9 @@ export type LandingDeps = Pick<
 export interface LandingHooks {
     // Drafts what a land did and commits it where the version rule stands, off the turn's clock.
     readonly settleLanding: (conversationId: string) => void;
+    // Hands the failures a land's whole-repository check found new back to the conversation that landed them; false
+    // when none is named for them.
+    readonly routeBreakage: (breakage: LandBreakage) => Promise<boolean>;
 }
 
 export interface LandingTurn {
@@ -152,7 +156,7 @@ async function* recordLand(
     }
     // The moment a dependency change starts costing every later turn's node_modules.
     const origin: DependencyLandOrigin = { kind: "land", agentId: id, ...opt("title", finished.social.title?.text), branch: books.branch, repos: books.span };
-    const reconciled = landed.landed ? await verifyLandedTree(deps, origin) : undefined;
+    const reconciled = landed.landed ? await verifyLandedTree(deps, origin, hooks.routeBreakage) : undefined;
     yield landedFrame(landed, reconciled);
     if (!landed.landed) {
         return;

@@ -216,7 +216,7 @@ describe(`the verify-tests built-in`, () => {
 
     test(`a touched test file whose assertions got weaker is named, with the numbers`, async () => {
         const message = await verifyTestsMessage(tree({ "src/a.test.ts": STRONG }, { "src/a.test.ts": WEAK }));
-        expect(message).toContain("src/a.test.ts got weaker than at HEAD: downgrade (exact 1→0, loose 0→2");
+        expect(message).toContain("src/a.test.ts got weaker than on the main line: downgrade (exact 1→0, loose 0→2");
         expect(message).toContain("not by widening the matcher");
         // Only the guidance for the kind found: nothing about the fault check when it had nothing to say.
         expect(message).not.toContain("passes without the change");
@@ -259,6 +259,6 @@ describe(`the verify-tests built-in`, () => {
         };
         const message = await verifyTestsMessage(tree(Object.fromEntries(Object.keys(files).map((k) => [k, STRONG])), files, faults));
         expect(asked).toHaveLength(3);
-        expect(message?.match(/got weaker than at HEAD/g)).toHaveLength(6);
+        expect(message?.match(/got weaker than on the main line/g)).toHaveLength(6);
     });
 });

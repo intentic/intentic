@@ -1,4 +1,5 @@
 import type { GitDiffSide, LandedMessage, LandedMessageDraft, LandedMessageStep, RepoChanges } from "@intentic/api-contract";
+import { landedCommitMessage } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Attribution layer over each repo's `origins` map (path -> agent ids that landed it, newest first); cleared on commit.
@@ -79,20 +80,8 @@ type MessageCarrier = { readonly landedMessage?: LandedMessage } | undefined;
 export const landedMessage = (card: MessageCarrier, origin: MessageCarrier): LandedMessage | undefined =>
     card?.landedMessage ?? origin?.landedMessage;
 
-// Composes the commit message from a landed message's subject and its Release-Note/Breaking-Note trailers.
-// Both trailers share one paragraph — git only reads the message's final block as trailers.
-export const commitMessageOf = (landed: LandedMessage | undefined): string | undefined => {
-    if (landed === undefined) {
-        return undefined;
-    }
-    const trailers = [
-        landed.note === undefined ? `` : `Release-Note: ${landed.note}`,
-        landed.breaking === undefined ? `` : `Breaking-Note: ${landed.breaking}`,
-    ]
-        .filter((line) => line !== ``)
-        .join(`\n`);
-    return [landed.subject, trailers].filter((part) => part !== ``).join(`\n\n`);
-};
+// The commit message a landed message makes (landedCommitMessage), or undefined when nothing is written yet.
+export const commitMessageOf = (landed: LandedMessage | undefined): string | undefined => (landed === undefined ? undefined : landedCommitMessage(landed));
 
 // True while a draft has no outcome yet — the state every wait-related surface keys on.
 export const draftRunning = (draft: LandedMessageDraft | undefined): boolean => draft !== undefined && draft.outcome === undefined;
