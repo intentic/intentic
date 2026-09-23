@@ -7,14 +7,20 @@ import { type AgentTurn, type Persona, DEFAULT_SAFETY_POLICY, SandboxSettingsSch
 import { test, expect, mock } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import { testConfig } from "../../testing.js";
+import { conversationAfter, testConfig, memoryFleet } from "../../testing.js";
 import { workspaceSetup } from "../../workspace/layout/workspace-setup.js";
-import type { AgentRequest } from "../run/agent.js";
-import { planTurn, type TurnContext } from "../run/turn/turn-plan.js";
+import type { AgentRequest } from "../providers/agent-request.js";
+import type { TurnContext } from "../providers/adapter.js";
+import { planTurn } from "../run/turn/turn-plan.js";
 import { ROOMY_MEMORY } from "../run/turn/turn-plan.testing.js";
 import { createMemoryWarnings } from "../../platform/resources/memory-admission.js";
 import { composeWirePrompt, preambleNotes, stripTurnPreamble } from "./turn-preamble.js";
 import { WORKSPACE_MAP_NOTE_HEADER } from "./workspace-map.js";
+import { RUNTIME_ADAPTERS } from "../../runtimes/runtime-table.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Pins the four turn-plan gates around the workspace map (the generator itself has its own suite): off must mean off,
 // sent once per conversation, honoured on every runtime, and built against the run's actual tree, not the shared
@@ -42,9 +48,9 @@ const projectAt = async (prefix: string, marker: string): Promise<string> => {
     return root;
 };
 
-// The model's message comes from CONTEXT.base.prompt, not the turn's; attachments are already folded in by then.
+// The model's message comes from CONTEXT.base.spec.prompt, not the turn's; attachments are already folded in by then.
 const contextIn = (root: string, localCwd = root, prompt = "do the thing"): TurnContext => ({
-    base: { prompt, cwd: root, signal: new AbortController().signal },
+    base: { spec: { prompt, cwd: root }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
     attachmentPaths: [],
     localCwd,
     effectiveCwd: localCwd,
@@ -55,6 +61,8 @@ const contextIn = (root: string, localCwd = root, prompt = "do the thing"): Turn
 const servicesIn = (root: string, settings: Partial<Record<string, unknown>>, overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
+        // The real table: which arm a (provider, harness) pair reaches is part of what a plan is.
+        adapters: RUNTIME_ADAPTERS,
         memoryHeadroom: ROOMY_MEMORY,
         memoryWarnings: createMemoryWarnings(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -100,7 +108,7 @@ const promptOf = async (services: Services, turn: AgentTurn, context: TurnContex
     const plan = await planTurn(services, turn, context);
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
-    return composeWirePrompt(request.notes ?? [], request.prompt);
+    return composeWirePrompt(request.spec.notes ?? [], request.spec.prompt);
 };
 
 test("the map rides the opening message when the setting is on, and the user's words still end it", async () => {
@@ -129,7 +137,7 @@ test("a follow-up in the same conversation is not charged for the map again", as
         { workspaceMap: true },
         {
             // Non-zero `turns` means the conversation already carries the map in its own transcript.
-            agents: unstubbed<Services["agents"]>("agents", { entry: () => ({ turns: 3 }) as ReturnType<Services["agents"]["entry"]> }),
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(3) }),
         },
     );
 
@@ -192,7 +200,7 @@ test("a persona that drops the map gets none of it, however the sandbox is set",
 
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
-    expect(composeWirePrompt(request.notes ?? [], request.prompt)).toBe("do the thing");
+    expect(composeWirePrompt(request.spec.notes ?? [], request.spec.prompt)).toBe("do the thing");
     expect(plan).not.toHaveProperty("experiments.mapArm");
 });
 

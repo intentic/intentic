@@ -8,9 +8,9 @@ import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import type { PerfTracker } from "../../platform/resources/perf.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
-import { dropAgentRef, dropOrphanParkedRefs, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
-import { claudeStoreOf, sessionsDir, sessionsRoot, type StoreOwner } from "../../sessions/session-store.js";
-import { mirroredDirs, overlaysDir, overlaysRoot, type TurnIsolation } from "./isolation.js";
+import { dropAgentRef, parkAgentRefs, unparkAgentRef } from "../land/agent-refs.js";
+import { claudeStoreOf, type StoreOwner } from "../../sessions/session-store.js";
+import { mirroredDirs, overlaysDir, type TurnIsolation } from "./isolation.js";
 import { coneFor, fencedComposition } from "./worktree-cone.js";
 import type { Fence } from "@intentic/sandbox-contract";
 
@@ -85,10 +85,9 @@ export interface AgentWorktrees {
     // Left alone, its untracked-by-exclude tree would be swept onto the agent's branch by the next `add -A`; moved to
     // trash rather than deleted, like the git dir that went with it.
     readonly reapRepoCheckout: (id: string, repo: string) => Promise<void>;
-    // Boot sweep: deletes conversation dirs with no registry entry, prunes worktree admin, parks off-board branches,
-    // drops orphan parked refs.
-    // The id sets are callbacks re-read at each decision since this runs detached behind boot, not off a roster
-    // snapshot.
+    // Boot sweep: prunes worktree admin and parks off-board branches. Deletes nothing no conversation record names: a
+    // discard or purge removes its checkout, overlay and refs before its rows, so an unnamed one is data this store never
+    // held. The id sets are callbacks re-read at each decision since this runs detached behind boot.
     readonly prune: (knownIds: () => readonly string[], archivedIds: () => readonly string[]) => Promise<void>;
     // Serialize git ops that touch a repo's shared worktree admin area / main index (create/remove/land).
     readonly withRepoLock: <T>(repo: string, task: () => Promise<T>) => Promise<T>;
@@ -609,28 +608,10 @@ export const createAgentWorktrees = (
             }
         },
         prune: async (knownIds, archivedIds) => {
-            for (const name of await readdir(worktreesRoot).catch(() => [])) {
-                // Asked of the registry at the decision: a conversation minted after this sweep started isn't judged an
-                // orphan.
-                if (!knownIds().includes(name)) {
-                    logger.warn({ id: name }, "agents: pruning orphaned worktree dir");
-                    await rm(conversationDir(name), { recursive: true, force: true });
-                }
-            }
-            // Swept separately: an overlay outlives its checkout by design (retire drops the worktree, keeps the
-            // branch).
-            // These are conversations gone entirely, including any a crash left behind between the two removals above.
-            for (const name of await readdir(overlaysRoot(historyRoot)).catch(() => [])) {
-                if (!knownIds().includes(name)) {
-                    await rm(overlaysFor(name), { recursive: true, force: true });
-                }
-            }
-            // A fenced conversation's own session store, swept on the same terms: it outlives the checkout too, and
-            // holds the one copy of that conversation's transcripts.
-            for (const name of await readdir(sessionsRoot(historyRoot)).catch(() => [])) {
-                if (!knownIds().includes(name)) {
-                    await rm(sessionsDir(historyRoot, name), { recursive: true, force: true });
-                }
+            // Asked of the registry at the decision, so a conversation minted after this sweep started is never unnamed.
+            const unnamed = (await readdir(worktreesRoot).catch(() => [])).filter((name) => !knownIds().includes(name));
+            if (unnamed.length > 0) {
+                logger.info({ count: unnamed.length }, "agents: checkouts no conversation record names, left in place");
             }
             for (const repo of await liveRepos()) {
                 // Under the repo lock since the sweep now runs concurrently with turns, touching what ensure/remove
@@ -638,20 +619,13 @@ export const createAgentWorktrees = (
                 await withRepoLock(repo, async () => {
                     const main = mainDir(repo);
                     await git(main, ["worktree", "prune"]).catch(() => undefined);
-                    // The ref half of the sweep: converges an archive taken before parking existed, or one that lost
-                    // its repo lock to a crash.
-                    // Orphan parked refs drop against `knownIds`, not `archivedIds`: a ref the registry has forgotten
-                    // holds commits nothing can reach again.
+                    // The ref half of the sweep: converges an archive that lost its repo lock to a crash.
                     const parked = await parkAgentRefs(main, new Set(archivedIds()), git).catch((error: unknown) => {
                         logger.warn({ err: error, repo }, "agents: branch park sweep failed");
                         return [];
                     });
-                    const dropped = await dropOrphanParkedRefs(main, new Set(knownIds()), git).catch((error: unknown) => {
-                        logger.warn({ err: error, repo }, "agents: parked ref sweep failed");
-                        return 0;
-                    });
-                    if (parked.length > 0 || dropped > 0) {
-                        logger.info({ repo, parked: parked.length, dropped }, "agents: swept agent branches off refs/heads");
+                    if (parked.length > 0) {
+                        logger.info({ repo, parked: parked.length }, "agents: swept agent branches off refs/heads");
                     }
                 });
             }

@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { sdk } from "../runtimes/claude/claude-sdk.js";
+import { sdk } from "../engines/claude-sdk.js";
 import {
     AskQuestionSchema,
     type MatchSnippet,

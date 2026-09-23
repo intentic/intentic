@@ -17,7 +17,7 @@ import {
 import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { repoGitDir, syncRootExcludes } from "../history/history.js";
+import { repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
 import { checkRunningIn, isBuildOutputPath } from "../workspace/deps/checks-in-flight.js";
 import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { currentRepos } from "../workspace/watch/repo-watch.js";

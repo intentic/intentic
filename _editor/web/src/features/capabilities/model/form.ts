@@ -1,6 +1,7 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { type CapabilityField, fieldApplies } from "@intentic/extension-manifest";
 import {
+    type CapabilityKind,
     type ForticlientConnection,
     isForticlientCiphertext,
     LOCAL_MODEL_WINDOW_MAX,
@@ -121,6 +122,34 @@ export const fieldInvalid = (field: CapabilityField, value: string | undefined, 
 export const fieldError = (field: CapabilityField, value: string | undefined, stored: StoredSecrets = NOTHING_STORED): string | undefined =>
     fieldMissing(field, value, stored) ? `This field is required.` : fieldInvalid(field, value, stored);
 
+/** Whether a box has been left (blurred) and whether a submit was refused: what decides how loudly it may object. */
+export interface FieldVisit {
+    readonly touched: boolean;
+    readonly attempted: boolean;
+}
+
+// Refusals split by severity: `alarm` is red (a malformed value, or after a refused submit, a required empty box);
+// `quiet` is the muted "Required" for a box merely tabbed past. Silent until the box is left or a submit refused.
+export const fieldRefusal = (
+    field: CapabilityField,
+    value: string | undefined,
+    stored: StoredSecrets,
+    visit: FieldVisit,
+): { readonly alarm: string | undefined; readonly quiet: boolean } => {
+    if (!visit.touched && !visit.attempted) {
+        return { alarm: undefined, quiet: false };
+    }
+    const missing = fieldMissing(field, value, stored);
+    return {
+        alarm: fieldInvalid(field, value, stored) ?? (visit.attempted && missing ? `This field is required.` : undefined),
+        quiet: !visit.attempted && missing,
+    };
+};
+
+// An empty credential box's placeholder: the tile's own on add, or "already set, leave blank to keep" over a stored one.
+export const placeholderFor = (field: CapabilityField, value: string | undefined, stored: StoredSecrets): string | undefined =>
+    keepsSecret(field, value, stored) ? `•••••••••••• already set, leave blank to keep it` : field.placeholder;
+
 // The green check, shown only for fields with a rule that can genuinely vouch for the value (sha,
 // URL, port); free text earns none.
 export const fieldVerified = (field: CapabilityField, value: string | undefined): boolean => {
@@ -141,6 +170,29 @@ export const fieldVerified = (field: CapabilityField, value: string | undefined)
 // `fieldApplies` (the daemon's own install-time check) holds.
 export const shownFields = (entry: CapabilityCatalogEntry, values: FormValues): readonly CapabilityField[] =>
     entry.fields.filter((field) => field.value === undefined && fieldApplies(field, values));
+
+// A field's answer before anyone gives one: its declared default, and a switch's "off" rather than empty, so it's
+// always answered.
+export const defaultAnswer = (field: CapabilityField): string => field.default ?? (field.boolean === true ? `off` : ``);
+
+// Advanced fields default correctly for nearly everyone and fold behind one line. A browser tile's fold is a specific
+// offer (stored sign-in credentials), not generic "Advanced".
+export const advancedLabel = (entry: CapabilityCatalogEntry): string =>
+    entry.kind === `browser` ? `Let the agent sign in for you (optional)` : `Advanced`;
+
+// Whether the fold opens on arrival: only when it holds a value other than its default, so an edit never hides what
+// it's set to.
+export const foldHoldsChoice = (entry: CapabilityCatalogEntry, values: FormValues): boolean =>
+    entry.fields.some((field) => field.advanced === true && (values[field.key] ?? ``) !== defaultAnswer(field));
+
+// Whether what refuses a submit sits in the fold, which then has to open: a refusal the reader cannot see is a form
+// that looks broken.
+export const refusedInFold = (entry: CapabilityCatalogEntry, values: FormValues, stored: StoredSecrets): boolean =>
+    shownFields(entry, values).some(
+        (field) =>
+            field.advanced === true &&
+            (fieldMissing(field, values[field.key], stored) || fieldInvalid(field, values[field.key], stored) !== undefined),
+    );
 
 // Judged by total label width, not option count: short labels fit inline, longer ones wrap or stack.
 const INLINE_OPTIONS_BUDGET = 24;
@@ -169,8 +221,25 @@ const SHA_RE = /^[0-9a-f]{40}$/u;
 
 export const isCommitSha = (value: string | undefined): boolean => SHA_RE.test(value ?? ``);
 
+// Submit's word in the tile's own vocabulary: editing leads, since a pre-filled form must not offer to "Add" a live
+// connection; DevOps activates.
+export const submitWord = (editing: boolean, kind: CapabilityKind | undefined): string => {
+    if (editing) {
+        return `Save changes`;
+    }
+    return kind === `devops` ? `Activate` : `Add`;
+};
+
+// Booleans arrive from the daemon's echo as booleans and from the form as "on"/"off".
+const echoedAnswer = (value: string | number | boolean | undefined): string => {
+    if (typeof value !== `boolean`) {
+        return String(value);
+    }
+    return value ? `on` : `off`;
+};
+
 // Seed order: tile defaults, then live config (never a credential), then workspace prefill; dev
-// autofill layers on in ./devSecrets. A switch seeds to "off", not empty, so it's always answered.
+// autofill layers on in ./devSecrets.
 export const seedValues = (
     entry: CapabilityCatalogEntry,
     live: Record<string, string | number | boolean | undefined> | undefined,
@@ -179,12 +248,11 @@ export const seedValues = (
     const values: FormValues = {};
     for (const field of entry.fields) {
         if (field.value === undefined) {
-            values[field.key] = field.default ?? (field.boolean === true ? `off` : ``);
+            values[field.key] = defaultAnswer(field);
         }
     }
-    // Booleans arrive from the daemon's echo as booleans and from the form as "on"/"off".
     for (const [key, value] of Object.entries(live ?? {})) {
-        values[key] = typeof value === `boolean` ? (value ? `on` : `off`) : String(value);
+        values[key] = echoedAnswer(value);
     }
     // Never seeds a secret; a prefill for a field the tile doesn't declare, or one the tile fixes, is
     // dropped.

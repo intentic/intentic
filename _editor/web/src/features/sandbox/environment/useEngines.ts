@@ -1,6 +1,7 @@
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { type EngineRow, type EnginesView, EnginesViewSchema } from "@intentic/api-contract";
 import type { NoticeModel } from "@intentic/ui";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { ENGINES } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { jsonBody } from "../client/jsonBody";
@@ -10,14 +11,14 @@ import { t } from "@intentic/ui/i18n";
 
 // The agent engines this sandbox runs (Claude Code, codex, Cursor SDK, opencode, ...) and which version each is on,
 // read from the daemon's /engines route. In-flight update/revert/channel state lives at module scope, so switching tabs
-// doesn't drop what's mid-flight.
+// doesn't drop what's mid-flight; a switch of sandbox does, since those engines are the other box's.
 // Never polled: the daemon's `engines` push lands every install's start and end, whoever started it.
 
 export const ENGINES_KEY = ENGINES.of();
 
-const inFlight = ref<Map<string, "update" | "revert" | "channel">>(new Map());
-const updatingAll = ref(false);
-const actionNotice = ref<NoticeModel | undefined>();
+const inFlight = sandboxRef<Map<string, "update" | "revert" | "channel">>(() => new Map());
+const updatingAll = sandboxRef(() => false);
+const actionNotice = sandboxRef<NoticeModel | undefined>(() => undefined);
 
 const setInFlight = (id: string, action: "update" | "revert" | "channel") => {
     const next = new Map(inFlight.value);
@@ -31,11 +32,18 @@ const clearInFlight = (id: string) => {
     inFlight.value = next;
 };
 
+// An answer after a switch describes the box left behind: it is filed nowhere, and says nothing here.
 const postAction = async (path: string, body: object, fallbackMessage: string): Promise<void> => {
+    const current = sandboxScopeGuard();
     try {
         const answer = (await sandboxJson(path, jsonBody(`POST`, body))) as { engines: unknown };
-        queryClient.setQueryData(ENGINES_KEY, EnginesViewSchema.parse(answer.engines));
+        if (current()) {
+            queryClient.setQueryData(ENGINES_KEY, EnginesViewSchema.parse(answer.engines));
+        }
     } catch (err: unknown) {
+        if (!current()) {
+            throw err;
+        }
         const message = err instanceof Error ? err.message : fallbackMessage;
         actionNotice.value =
             message === `not a sandbox maintainer`

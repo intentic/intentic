@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { ShareCreateSchema, SharedConversationSchema, ShareListSchema, ShareRemoveSchema, ShareUpdateSchema } from "../schemas/share.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -6,7 +6,7 @@ import { OkSchema } from "../schemas/shared.js";
 // `public` copies bytes at a workspace path. No route reads a share back, the page itself is the read, on the
 // unauthenticated `public-<slot>` hostname.
 export const shareContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/share",
@@ -16,7 +16,7 @@ export const shareContract = {
         })
         .output(ShareListSchema),
     // Answers with the row it just wrote, link included, so the dialog can show the address without re-listing.
-    create: oc
+    create: procedure
         .route({
             method: "POST",
             path: "/share",
@@ -27,7 +27,7 @@ export const shareContract = {
         .input(ShareCreateSchema)
         .output(SharedConversationSchema),
     // Re-render an existing share from the conversation as it stands now. Same id, same link, new snapshot.
-    update: oc
+    update: procedure
         .route({
             method: "POST",
             path: "/share/update",
@@ -36,7 +36,7 @@ export const shareContract = {
         })
         .input(ShareUpdateSchema)
         .output(SharedConversationSchema),
-    remove: oc
+    remove: procedure
         .route({
             method: "POST",
             path: "/share/remove",

@@ -3,27 +3,28 @@ import {
     type DeviceAgentOp,
     type DeviceCommand,
     type DeviceCommandResult,
+    type DeviceFlowLine,
     type DeviceSandboxFlowInput,
     type DeviceSandboxOp,
     type SandboxResourcesAsk,
-    DevicesListSchema,
-    DeviceCommandResultSchema,
     hostHoldingPath,
     hostRunningSandbox,
     SyncStatusSchema,
 } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, type ComputedRef, type Ref } from "vue";
-import { sandboxError, SandboxHttpError, sandboxJson, sandboxRequest } from "../client/sandboxClient";
+import { sandboxError, sandboxJson, sandboxRequest } from "../client/sandboxClient";
+import { SandboxHttpError } from "../client/sandboxHttpError";
+import { rpcQuery } from "../client/rpcQuery";
+import { sandboxRpc } from "../client/sandboxRpc";
 import { readIntenticLines } from "../../../lib/intenticStream";
-import { DEVICES, SYNC_HEALTH } from "../../../lib/queryKeys";
+import { SYNC_HEALTH } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
 // Devices the daemon can see, merging both report paths (see hosts/device-reports.ts). Polled on a slow cadence and
 // pushed on the `hosts` domain when a machine's reading actually moves, so state is a snapshot cached by the daemon
 // between polls and an idle tab costs nothing extra.
 
-const QUERY_KEY = DEVICES.of();
 const POLL_MS = 10_000;
 
 // Callers opt into polling; a non-polling reader still gets the shared cache, refreshed once on mount.
@@ -35,11 +36,7 @@ export function useDevices({ poll = true }: { poll?: boolean } = {}): {
     isLoading: Ref<boolean>;
     refetch: () => void;
 } {
-    const { query, error } = useSandboxQuery({
-        queryKey: QUERY_KEY,
-        queryFn: async () => DevicesListSchema.parse(await sandboxJson(`/system/devices`)),
-        refetchInterval: poll ? POLL_MS : false,
-    });
+    const { query, error } = useSandboxQuery({ ...rpcQuery(`system.devices`), refetchInterval: poll ? POLL_MS : false });
     return {
         devices: computed(() => query.data.value?.devices ?? []),
         // Restored with the cache on reload, so a hydrated list is aged from when it was actually read, not from now.
@@ -92,11 +89,11 @@ const severedOutcome = (op: DeviceSandboxOp, slug: string): string =>
 // Everything the flow said: its result sentence, and its refusal if it sent one. A refusal is returned rather than
 // thrown so the caller can tell one the device SENT from the connection dying under it.
 const flowSaid = async (
-    body: ReadableStream<Uint8Array>,
+    frames: AsyncIterable<DeviceFlowLine>,
     onLine: ((line: string) => void) | undefined,
 ): Promise<{ outcome: string | undefined; refusal: string | undefined }> => {
     let outcome: string | undefined;
-    for await (const line of readIntenticLines(body)) {
+    for await (const line of readIntenticLines(frames)) {
         if (line[`kind`] === `line`) {
             const text = frameText(line, `text`);
             if (text !== undefined) {
@@ -128,11 +125,11 @@ export class DeviceFlowLostError extends Error {
 // A stream ending without a terminal frame means the connection dropped, not that the operation stopped;
 // the next fleet read reflects the real outcome. `severed` is that drop's answer for an op that causes it.
 const outcomeOf = async (
-    body: ReadableStream<Uint8Array>,
+    frames: AsyncIterable<DeviceFlowLine>,
     onLine: ((line: string) => void) | undefined,
     severed: string | undefined,
 ): Promise<string> => {
-    const said = await flowSaid(body, onLine).catch((error: unknown) => {
+    const said = await flowSaid(frames, onLine).catch((error: unknown) => {
         if (severed === undefined) {
             // Read by shape: the browser's own abort is a DOMException, which not every DOM makes an Error.
             const browser = errorMessage(error, ``);
@@ -153,15 +150,8 @@ const outcomeOf = async (
 };
 
 export async function manageDeviceSandbox(hostId: string, slug: string, op: DeviceSandboxOp, payload: DeviceSandboxPayload = {}): Promise<string> {
-    const response = await sandboxRequest(`/system/devices/${encodeURIComponent(hostId)}/sandboxes/${encodeURIComponent(slug)}`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify(flowInput(hostId, slug, op, payload)),
-    });
-    if (!response.ok || !response.body) {
-        throw await sandboxError(response, { method: `POST`, path: `/system/devices/{id}/sandboxes/{slug}` });
-    }
-    return outcomeOf(response.body, payload.onLine, payload.severing === true ? severedOutcome(op, slug) : undefined);
+    const frames = await sandboxRpc.system.manageDeviceSandbox(flowInput(hostId, slug, op, payload));
+    return outcomeOf(frames, payload.onLine, payload.severing === true ? severedOutcome(op, slug) : undefined);
 }
 
 // Update/restart kills the process serving the request, so an untimely stream end here is success, not
@@ -172,16 +162,9 @@ export async function runDeviceAgentFlow(
     op: DeviceAgentOp,
     { onLine }: { onLine?: (line: string) => void } = {},
 ): Promise<{ message: string | undefined; settled: boolean }> {
-    const response = await sandboxRequest(`/system/devices/${encodeURIComponent(hostId)}/agent/${encodeURIComponent(op)}`, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify({ id: hostId, op }),
-    });
-    if (!response.ok || !response.body) {
-        throw await sandboxError(response, { method: `POST`, path: `/system/devices/{id}/agent/{op}` });
-    }
+    const frames = await sandboxRpc.system.runDeviceAgentFlow({ id: hostId, op });
     let message: string | undefined;
-    for await (const line of readIntenticLines(response.body)) {
+    for await (const line of readIntenticLines(frames)) {
         if (line[`kind`] === `line`) {
             const text = frameText(line, `text`);
             if (text !== undefined) {
@@ -214,23 +197,14 @@ export interface DeviceCommandAsk {
 // never forwarding free text. `ok: false` is the device's own refusal as a result; only an unreachable
 // device rejects the promise.
 export async function runDeviceCommand(hostId: string, command: DeviceCommand, ask: DeviceCommandAsk = {}): Promise<DeviceCommandResult> {
-    const path = `/system/devices/${encodeURIComponent(hostId)}/commands/${encodeURIComponent(command)}`;
-    const response = await sandboxRequest(path, {
-        method: `POST`,
-        headers: { "content-type": `application/json` },
-        body: JSON.stringify({
-            id: hostId,
-            command,
-            ...(ask.sandboxId === undefined ? {} : { sandboxId: ask.sandboxId }),
-            ...(ask.mode === undefined ? {} : { mode: ask.mode }),
-            ...(ask.localDir === undefined ? {} : { localDir: ask.localDir }),
-            ...(ask.port === undefined ? {} : { port: ask.port }),
-        }),
+    return sandboxRpc.system.runDeviceCommand({
+        id: hostId,
+        command,
+        ...(ask.sandboxId === undefined ? {} : { sandboxId: ask.sandboxId }),
+        ...(ask.mode === undefined ? {} : { mode: ask.mode }),
+        ...(ask.localDir === undefined ? {} : { localDir: ask.localDir }),
+        ...(ask.port === undefined ? {} : { port: ask.port }),
     });
-    if (!response.ok) {
-        throw await sandboxError(response, { method: `POST`, path: `/system/devices/{id}/commands/{command}` });
-    }
-    return DeviceCommandResultSchema.parse(await response.json());
 }
 
 // The same call for a command that takes its own answer down with it: `dev-restart` restarts the container serving

@@ -1,5 +1,5 @@
 import type { AgentTurn, TurnNote } from "@intentic/sandbox-contract";
-import { compactedSinceLastTurn, type Composition } from "../../agents/registry/agents-store.js";
+import { compactedSinceLastTurn, type Composition, worktreeOf } from "../../agents/registry/agents-store.js";
 import type { ConversationWorktree } from "../../agents/worktrees/worktrees.js";
 import type { Services } from "../../composition.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
@@ -38,12 +38,13 @@ export const ensureComposedWorktree = async (
     base: readonly { repo: string; base: string }[] | undefined,
     namespaced: boolean,
 ): Promise<ConversationWorktree> => {
-    const recorded = services.agents.entry(conversationId)?.repos ?? [];
+    const entry = services.agents.entry(conversationId);
+    const recorded = worktreeOf(entry)?.repos ?? [];
     const opening = recorded.length === 0;
-    const composition = opening ? await decideComposition(services, input) : services.agents.entry(conversationId)?.composition;
+    const composition = opening ? await decideComposition(services, input) : worktreeOf(entry)?.composition;
     // The conversation's own fence, from the areas its starter held. Resolved here rather than latched as folders,
     // so editing an area narrows an existing conversation's checkout on its next turn.
-    const fence = conversationFence(await services.areas.list(), services.agents.entry(conversationId));
+    const fence = conversationFence(await services.areas.list(), entry?.identity);
     const worktree = await services.agentWorktrees.ensure(conversationId, recorded, base, namespaced, composition?.repos, fence);
     if (opening || !sameRepos(recorded, worktree.repos)) {
         await services.agents.recordWorktree(conversationId, worktree.repos, composition);
@@ -54,7 +55,7 @@ export const ensureComposedWorktree = async (
 // Builds the note only for turns that owe it: the opening turn and the one after a compaction, when history can't carry
 // it. Reads the just-recorded composition, so the note matches the tree the turn opens on.
 export const contextNoteIfDue = (
-    services: Services,
+    services: Pick<Services, "agents" | "workspace" | "personas">,
     input: AgentTurn,
     entry: { readonly compactedTurn?: number | undefined } | undefined,
     conversationTurns: number,
@@ -67,8 +68,8 @@ export const contextNoteIfDue = (
 
 // The preamble's account of the composition; undefined when the conversation carries everything (nothing to tell). The
 // card is re-read for its label only — repos come from the record, so an edited card changes nothing here.
-export const contextNoteFor = async (services: Services, conversationId: string): Promise<TurnNote | undefined> => {
-    const composition = services.agents.entry(conversationId)?.composition;
+export const contextNoteFor = async (services: Pick<Services, "agents" | "workspace" | "personas">, conversationId: string): Promise<TurnNote | undefined> => {
+    const composition = worktreeOf(services.agents.entry(conversationId))?.composition;
     if (composition === undefined) {
         return undefined;
     }

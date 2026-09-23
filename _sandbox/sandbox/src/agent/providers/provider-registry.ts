@@ -1,51 +1,30 @@
-import { type Model, NATIVE_PROVIDERS, type NativeProvider, type OauthAccount, type SecretInventoryEntry } from "@intentic/sandbox-contract";
+import type { Model, NativeProvider, OauthAccount, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { claudeProvider } from "../../runtimes/claude/claude-provider.js";
-import { codexProvider } from "../../runtimes/codex/codex-provider.js";
 import type { Services } from "../../composition.js";
-import { cursorProvider } from "../../runtimes/cursor/cursor-provider.js";
-import { geminiProvider } from "../../runtimes/gemini/gemini-provider.js";
-import { grokProvider } from "../../runtimes/grok/grok-provider.js";
-import { MINTED_PROVIDER_MODULES } from "../../runtimes/minted/minted-provider.js";
-import { kimiProvider } from "../../runtimes/kimi/kimi-provider.js";
-import type { AgentAdapter } from "./adapter.js";
+import type { ProviderDeps } from "../../runtimes/runtime-table.js";
 import type { BootRole, ProviderCatalog, ProviderModule, SharedProviderReads } from "./provider-module.js";
 
 export type { ProviderCatalog } from "./provider-module.js";
 
-// List order feeds the pack overlay hash and must stay stable across daemon versions.
-export const PROVIDER_MODULES: readonly ProviderModule[] = [
-    claudeProvider,
-    codexProvider,
-    cursorProvider,
-    grokProvider,
-    geminiProvider,
-    kimiProvider,
-    // Minted providers are generated from the spec table, not listed here by hand.
-    ...MINTED_PROVIDER_MODULES,
-];
-
-// Fails fast at init if a native provider has no module, instead of shipping an incomplete picker.
-const ids = PROVIDER_MODULES.map((module) => module.id);
-if (new Set(ids).size !== ids.length || NATIVE_PROVIDERS.some((provider) => !ids.includes(provider)) || ids.length !== NATIVE_PROVIDERS.length) {
-    throw new Error(`provider registry drift: modules [${ids.join(", ")}] must be exactly the native providers [${NATIVE_PROVIDERS.join(", ")}]`);
-}
-
-// Adapter rows from native providers, in module order; ACP/Pi are appended in adapter-registry.ts.
-export const PROVIDER_ADAPTERS: readonly AgentAdapter[] = PROVIDER_MODULES.flatMap((module) => module.adapters);
+// The shared surfaces every provider module feeds, each iterating the modules composition wired rather than a list of its
+// own; the list itself is runtimes/runtime-table.ts. Every aggregate hands the modules what they read of the daemon.
+type ProviderRegistry = ProviderDeps & Pick<Services, "cliProxy" | "providerModules">;
 
 // Reads shared across modules per sweep, memoized so iterating them costs one round trip. Scoped to one sweep:
 // outliving it would answer a later readiness check with stale sign-ins.
-export const sharedProviderReads = (services: Services): SharedProviderReads => {
+export const sharedProviderReads = (services: Pick<Services, "cliProxy">): SharedProviderReads => {
     let translator: Promise<Awaited<ReturnType<Services["cliProxy"]["accounts"]>>> | undefined;
     return { translatorAccounts: () => (translator ??= services.cliProxy.accounts()) };
 };
 
 // Builds the catalog record every picker, comparison and routed-turn validation reads. `services` is late-bound since
 // this record is itself one of its members.
-export const providerCatalogsOf = (services: () => Services): Record<NativeProvider, ProviderCatalog> =>
+export const providerCatalogsOf = (
+    modules: readonly ProviderModule<ProviderDeps>[],
+    services: () => ProviderDeps & Pick<Services, "modelCooldowns" | "modelRefusals">,
+): Record<NativeProvider, ProviderCatalog> =>
     Object.fromEntries(
-        PROVIDER_MODULES.map((module) => [module.id, { models: () => servedModels(services(), module.id, module.catalog(services())) }]),
+        modules.map((module) => [module.id, { models: () => servedModels(services(), module.id, module.catalog(services())) }]),
     ) as Record<NativeProvider, ProviderCatalog>;
 
 // Catalog minus models this sandbox's credentials can't run; a refusal (agent.routes.ts) removes a row until it's no
@@ -78,15 +57,15 @@ const withCooldown = (model: Model, cooldown: { readonly until: number } | undef
     cooldown === undefined ? model : { ...model, availableAt: Math.ceil(cooldown.until / 1000) };
 
 // Report readiness for every native provider guarded by initialization.
-export const providerReadiness = async (services: Services): Promise<Record<NativeProvider, boolean>> => {
+export const providerReadiness = async (services: ProviderRegistry): Promise<Record<NativeProvider, boolean>> => {
     const shared = sharedProviderReads(services);
-    const entries = await Promise.all(PROVIDER_MODULES.map(async (module) => [module.id, await module.ready(services, shared)] as const));
+    const entries = await Promise.all(services.providerModules.map(async (module) => [module.id, await module.ready(services, shared)] as const));
     return Object.fromEntries(entries) as Record<NativeProvider, boolean>;
 };
 
 // Starts every module's boot tasks; fire-and-forget and best-effort, so a throw is only that module's log line.
-export const startProviderBoot = (services: Services, role: BootRole, logger: Logger): void => {
-    for (const module of PROVIDER_MODULES) {
+export const startProviderBoot = (services: ProviderRegistry, role: BootRole, logger: Logger): void => {
+    for (const module of services.providerModules) {
         try {
             module.boot?.(services, role, logger);
         } catch (error) {
@@ -96,15 +75,15 @@ export const startProviderBoot = (services: Services, role: BootRole, logger: Lo
 };
 
 // Pack names connected providers want baked in, in module order.
-export const providerPackWants = async (services: Services): Promise<string[]> =>
-    (await Promise.all(PROVIDER_MODULES.map((module) => module.packs?.(services) ?? []))).flat();
+export const providerPackWants = async (services: ProviderRegistry): Promise<string[]> =>
+    (await Promise.all(services.providerModules.map((module) => module.packs?.(services) ?? []))).flat();
 
 // Every provider's own connected accounts, in module order; a provider with no door answers with an empty list, which
 // is a real state (a plain key, a container credential) and not an error. `list(false)` reads what is on file rather
 // than re-measuring: a caller wanting fresh plan limits asks the headroom service, not this.
-export const providerAccountLists = async (services: Services): Promise<Record<NativeProvider, readonly OauthAccount[]>> => {
+export const providerAccountLists = async (services: ProviderRegistry): Promise<Record<NativeProvider, readonly OauthAccount[]>> => {
     const entries = await Promise.all(
-        PROVIDER_MODULES.map(async (module) => {
+        services.providerModules.map(async (module) => {
             const accounts: readonly OauthAccount[] = await (module.accounts?.(services).list(false) ?? []);
             return [module.id, accounts] as const;
         }),
@@ -113,7 +92,7 @@ export const providerAccountLists = async (services: Services): Promise<Record<N
 };
 
 // Every provider's connected-account rows for the secrets inventory, in module order; derived, not hand-kept.
-export const providerSecretEntries = async (services: Services): Promise<SecretInventoryEntry[]> => {
+export const providerSecretEntries = async (services: ProviderRegistry): Promise<SecretInventoryEntry[]> => {
     const shared = sharedProviderReads(services);
-    return (await Promise.all(PROVIDER_MODULES.map((module) => module.secretEntries?.(services, shared) ?? []))).flat();
+    return (await Promise.all(services.providerModules.map((module) => module.secretEntries?.(services, shared) ?? []))).flat();
 };

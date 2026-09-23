@@ -3,10 +3,17 @@ import type { AgentEvent, AgentSummary, LandConflictReason } from "@intentic/san
 import { describe, it, expect } from "bun:test";
 import { noteSubagentTask, resetSubagents, type SubagentTaskMessage, type SubagentTurn } from "../../agent/subagents/subagents.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
-import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
-import type { AgentsStore, PersistedAgent } from "./agents-store.js";
+import { beginTurn, conversationEntry, fleetStoreOver, isolatedAgent } from "../../testing.js";
+import type { BeginTurn } from "../actor/conversation-decide.js";
+import { openConversationsDb } from "../../store/conversations-db.js";
+import { IN_MEMORY } from "../../store/sqlite.js";
+import { createFleet, type FleetStore } from "./agents-registry.js";
+import { type PersistedAgent, sqliteAgentsStore, worktreeOf } from "./agents-store.js";
+import { sqliteTurnCheckpoints } from "../../agent/checkpoints/turn-checkpoints.js";
+import { type JournalledTurn, sqliteTurnJournal } from "../../agent/run/turn/turn-journal.js";
 import type { LandedPresence, LandedPresences } from "../land/landed-presence.js";
 import type { LandStanding, LandStandings } from "../land/standing.js";
+
 
 // Hand-dialed stand-in for land standing; real derivation needs a git repo per case (standing.integration.test.ts).
 // This suite only pins the projection: which half wins, and what each surface reads off it.
@@ -42,31 +49,26 @@ const presences = (): LandedPresences & { set: (id: string, presence: LandedPres
     };
 };
 
-const memoryStore = (initial: PersistedAgent[] = []): AgentsStore & { saved: () => PersistedAgent[] } => {
-    let data = initial;
-    return {
-        load: async () => data,
-        save: async (agents) => {
-            data = [...agents];
-        },
-        saved: () => data,
-    };
+// The real store over an in-memory database, seeded with `initial`, and what the database holds right now.
+const memoryStore = (initial: PersistedAgent[] = []): FleetStore & { saved: () => PersistedAgent[] } => {
+    const store = fleetStoreOver(openConversationsDb(IN_MEMORY));
+    store.agents.save(initial);
+    return { ...store, saved: () => store.agents.load() };
 };
 
-const turn = (overrides: Partial<AgentTurnIdentity> = {}): AgentTurnIdentity => ({
+const turn = (overrides: Partial<BeginTurn> = {}): BeginTurn => ({
     conversationId: "c1",
     isolated: true,
     prompt: "Fix the login bug",
-    provider: "claude",
-    harness: "native",
+    profile: { agent: "claude", harness: "native" },
     ...overrides,
 });
 
 describe("agents registry", () => {
     it("begin creates an entry with title, branch, and running status", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        expect(await registry.begin(turn(), 1_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe(true);
         const summary = registry.get("c1");
         expect(summary?.status).toBe("running");
         expect(summary?.branch).toBe("agent/c1");
@@ -80,113 +82,104 @@ describe("agents registry", () => {
     // is behind.
     it("publishes the running card before the roster write lands", async () => {
         const store = memoryStore();
-        let release = (): void => undefined;
-        let entered = (): void => undefined;
-        // The write is a chained microtask, not a synchronous call, so the release waits to be told the save is in.
-        const entering = new Promise<void>((resolve) => {
-            entered = resolve;
-        });
-        const held: AgentsStore & { saved: () => PersistedAgent[] } = {
+        const frames: string[][] = [];
+        // What the board had been sent at the moment each write came in.
+        const publishedAtWrite: string[][][] = [];
+        const watched: FleetStore = {
             ...store,
-            save: async (agents) => {
-                entered();
-                await new Promise<void>((resolve) => {
-                    release = resolve;
-                });
-                await store.save(agents);
+            agents: {
+                ...store.agents,
+                save: (entries) => {
+                    publishedAtWrite.push([...frames]);
+                    store.agents.save(entries);
+                },
             },
         };
-        const registry = createAgentsRegistry(held, standings(), presences());
+        const { agents: registry, conversations } = createFleet(watched, standings(), presences());
         await registry.init();
-        const frames: string[][] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents.map((agent) => agent.status)));
 
-        const settling = registry.begin(turn(), 1_000);
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe(true);
 
-        // Asserted before anything is awaited: the frame is already out.
-        expect(frames.at(-1)).toEqual(["running"]);
-        expect(held.saved()).toEqual([]);
-        await entering;
-        release();
-        expect(await settling).toBe(true);
-        expect(held.saved().map((agent) => agent.id)).toEqual(["c1"]);
+        expect(publishedAtWrite).toEqual([[[], ["running"]]]);
+        expect(store.saved().map((agent) => agent.id)).toEqual(["c1"]);
         unsubscribe();
     });
 
     // Naming a runner forces a branch even if the request omits `isolated`: a remote conversation is isolated by
     // construction.
     it("a runner latches on the first turn, survives turns that name none, and cannot be moved", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        expect(await registry.begin(turn({ runner: "rog", isolated: false }), 1_000)).toBe(true);
-        expect(registry.entry("c1")?.runner).toBe("rog");
-        expect(registry.entry("c1")?.branch).toBe("agent/c1");
-        await registry.finish("c1", 1_500);
-        expect(await registry.begin(turn(), 2_000)).toBe(true);
-        expect(registry.entry("c1")?.runner).toBe("rog");
-        await registry.finish("c1", 2_500);
-        expect(await registry.begin(turn({ runner: "other" }), 3_000)).toBe(true);
-        expect(registry.entry("c1")?.runner).toBe("rog");
+        expect(await beginTurn(conversations, turn({ runner: "rog", isolated: false }), 1_000)).toBe(true);
+        expect(worktreeOf(registry.entry("c1"))?.runner).toBe("rog");
+        expect(worktreeOf(registry.entry("c1"))?.branch).toBe("agent/c1");
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
+        expect(await beginTurn(conversations, turn(), 2_000)).toBe(true);
+        expect(worktreeOf(registry.entry("c1"))?.runner).toBe("rog");
+        await conversations.send("c1", { kind: "settle" }, 2_500).settled;
+        expect(await beginTurn(conversations, turn({ runner: "other" }), 3_000)).toBe(true);
+        expect(worktreeOf(registry.entry("c1"))?.runner).toBe("rog");
     });
 
     it("a conversation that ran here never picks up a runner from a later request", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        expect(await registry.begin(turn(), 1_000)).toBe(true);
-        await registry.finish("c1", 1_500);
-        expect(await registry.begin(turn({ runner: "rog" }), 2_000)).toBe(true);
-        expect(registry.entry("c1")?.runner).toBeUndefined();
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe(true);
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
+        expect(await beginTurn(conversations, turn({ runner: "rog" }), 2_000)).toBe(true);
+        expect(worktreeOf(registry.entry("c1"))?.runner).toBeUndefined();
     });
 
     // The rewind lease and the turn mutex are the same lock; splitting them would let a rewind and a turn miss each
     // other.
     it("refuses a turn while a rewind holds the conversation, and readmits it after", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
 
         let beganDuringRewind: boolean | undefined;
-        const held = await registry.withRewindLease("c1", async () => {
-            beganDuringRewind = await registry.begin(turn(), 1_000);
+        const held = await conversations.withRewindLease("c1", async () => {
+            beganDuringRewind = await beginTurn(conversations, turn(), 1_000);
             return "restored";
         });
 
         expect(held).toBe("restored");
         expect(beganDuringRewind).toBe(false);
-        expect(await registry.begin(turn(), 2_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 2_000)).toBe(true);
     });
 
     it("refuses a rewind while a turn is running, and releases the lease even when the rewind throws", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
 
-        expect(await registry.withRewindLease("c1", async () => "restored")).toBeUndefined();
+        expect(await conversations.withRewindLease("c1", async () => "restored")).toBeUndefined();
         // Mutex is per conversation; a different one is unaffected.
-        expect(await registry.withRewindLease("c2", async () => "restored")).toBe("restored");
+        expect(await conversations.withRewindLease("c2", async () => "restored")).toBe("restored");
 
-        await registry.finish("c1", 2_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await expect(
-            registry.withRewindLease("c1", () => {
+            conversations.withRewindLease("c1", () => {
                 throw new Error("restore blew up");
             }),
         ).rejects.toThrow("restore blew up");
-        expect(await registry.begin(turn(), 3_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 3_000)).toBe(true);
     });
 
     it("writes the session id through to the store as the frame arrives, not at the finish that flushes it", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "session", sessionId: "sess-1" });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "sess-1" } });
 
         // Awaits `setTitle` to flush the fire-and-forget session write, like a persisting caller would.
         await registry.setTitle("c1", "Fix the login bug", "user");
         expect(store.saved().find((entry) => entry.id === "c1")?.sessionId).toBe("sess-1");
 
         // A session switch mid-turn (a handoff) moves the pointer with it.
-        registry.observe("c1", { kind: "session", sessionId: "sess-2" });
-        await registry.finish("c1", 2_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "sess-2" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(store.saved().find((entry) => entry.id === "c1")?.sessionId).toBe("sess-2");
     });
 
@@ -194,125 +187,125 @@ describe("agents registry", () => {
     // has headroom.
     it("records the account that actually served the turn, whatever the request asked for", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
 
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "session", sessionId: "sess-1", account: "acct-work" });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "sess-1", account: "acct-work" } });
         await registry.setTitle("c1", "Fix the login bug", "user");
-        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-1", account: "acct-work" });
+        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-1", profile: { account: "acct-work" } });
 
         // A frame naming no account does not clear a previously recorded one.
-        registry.observe("c1", { kind: "session", sessionId: "sess-2" });
-        await registry.finish("c1", 2_000);
-        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-2", account: "acct-work" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "sess-2" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-2", profile: { account: "acct-work" } });
     });
 
     it("moves the recorded account when a later turn runs on a different one", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn({ account: "acct-work" }), 1_000);
-        registry.observe("c1", { kind: "session", sessionId: "sess-1", account: "acct-work" });
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native", account: "acct-work" } }), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "sess-1", account: "acct-work" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
-        await registry.begin(turn({ account: "acct-personal" }), 3_000);
-        registry.observe("c1", { kind: "session", sessionId: "sess-2", account: "acct-personal" });
-        await registry.finish("c1", 4_000);
+        await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native", account: "acct-personal" } }), 3_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "sess-2", account: "acct-personal" } });
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
 
-        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-2", account: "acct-personal" });
+        expect(store.saved().find((entry) => entry.id === "c1")).toMatchObject({ sessionId: "sess-2", profile: { account: "acct-personal" } });
     });
 
     it("clearSession drops the pointer so the next turn opens a fresh provider thread", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "session", sessionId: "sess-1" });
-        expect(registry.sessionIdOf("c1")).toBe("sess-1");
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "sess-1" } });
+        expect(conversations.sessionIdOf("c1")).toBe("sess-1");
 
-        await registry.clearSession("c1");
+        await conversations.send("c1", { kind: "session-cleared" }).settled;
         // `sessionIdOf` checks the live pending id and the persisted one.
-        expect(registry.sessionIdOf("c1")).toBeUndefined();
-        await registry.finish("c1", 2_000);
-        expect(registry.sessionIdOf("c1")).toBeUndefined();
+        expect(conversations.sessionIdOf("c1")).toBeUndefined();
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        expect(conversations.sessionIdOf("c1")).toBeUndefined();
     });
 
     it("registers a workspace conversation without inventing a branch and projects its clean completion as idle", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn({ isolated: false }), 1_000);
+        await beginTurn(conversations, turn({ isolated: false }), 1_000);
 
         expect(registry.get("c1")).toMatchObject({ id: "c1", status: "running", title: "Fix the login bug" });
         expect(registry.get("c1")).not.toHaveProperty("branch");
 
-        registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
+        conversations.send("c1", { kind: "frame", frame: { kind: "question", requestId: "q1", questions: [] } });
         expect(registry.get("c1")?.status).toBe("awaiting");
-        await registry.finish("c1", 2_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("idle");
     });
 
     it("latches placement to the conversation instead of accepting a later request's stale posture", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
 
-        await registry.begin(turn({ conversationId: "workspace", isolated: false }), 1_000);
-        await registry.finish("workspace", 1_100);
-        await registry.begin(turn({ conversationId: "workspace", isolated: true }), 1_200);
+        await beginTurn(conversations, turn({ conversationId: "workspace", isolated: false }), 1_000);
+        await conversations.send("workspace", { kind: "settle" }, 1_100).settled;
+        await beginTurn(conversations, turn({ conversationId: "workspace", isolated: true }), 1_200);
         expect(registry.get("workspace")).not.toHaveProperty("branch");
 
-        await registry.begin(turn({ conversationId: "isolated", isolated: true }), 2_000);
-        await registry.finish("isolated", 2_100);
-        await registry.begin(turn({ conversationId: "isolated", isolated: false }), 2_200);
+        await beginTurn(conversations, turn({ conversationId: "isolated", isolated: true }), 2_000);
+        await conversations.send("isolated", { kind: "settle" }, 2_100).settled;
+        await beginTurn(conversations, turn({ conversationId: "isolated", isolated: false }), 2_200);
         expect(registry.get("isolated")?.branch).toBe("agent/isolated");
     });
 
     it("records where an outside message came from and keeps it across the user's own follow-up turns", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         const origin = { automationId: "support", provider: "discord", channelId: "c-general", author: "alice" };
-        await registry.begin(turn({ origin, title: "alice: the build is red" }), 1_000);
+        await beginTurn(conversations, turn({ origin, title: "alice: the build is red" }), 1_000);
         expect(registry.get("c1")?.origin).toEqual(origin);
-        await registry.finish("c1", 2_000);
-        await registry.begin(turn({ prompt: "try the other fix" }), 3_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ prompt: "try the other fix" }), 3_000);
         expect(registry.get("c1")?.origin).toEqual(origin);
     });
 
     it("records the settings a turn ran under and keeps them for a turn that states none", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false }), 1_000);
+        await beginTurn(conversations, turn({ profile: { agent: "claude", harness: "native", model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false } }), 1_000);
         expect(registry.get("c1")).toMatchObject({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false });
-        await registry.finish("c1", 2_000);
-        await registry.begin(turn({ prompt: "keep going" }), 3_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ prompt: "keep going" }), 3_000);
         expect(registry.get("c1")).toMatchObject({ model: "claude-sonnet-4-5-20250929", effort: "medium", thinking: false });
     });
 
     it("holds the autoLand override across turns and clears it on null", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         // Set mid-turn; read at the turn's completion.
         expect((await registry.setAutoLand("c1", false))?.autoLand).toBe(false);
-        await registry.finish("c1", 2_000);
-        await registry.begin(turn({ prompt: "keep going" }), 3_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ prompt: "keep going" }), 3_000);
         expect(registry.get("c1")?.autoLand).toBe(false);
-        await registry.finish("c1", 4_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
         // null clears to absent ('inherit the sandbox setting'), not to a stored `false`.
         expect((await registry.setAutoLand("c1", null))?.autoLand).toBeUndefined();
-        expect(registry.entry("c1")?.autoLand).toBeUndefined();
+        expect(registry.entry("c1")?.postures.autoLand).toBeUndefined();
         expect(await registry.setAutoLand("nope", true)).toBeUndefined();
     });
 
     it("holds an ending's own answer across turns and clears it on null", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         // Set mid-turn: the offer is typically pressed while the dead turn is still unwinding.
         expect((await registry.setBreakPolicy("c1", "outage", "retry"))?.outagePolicy).toBe("retry");
-        await registry.finish("c1", 2_000);
-        await registry.begin(turn({ prompt: "keep going" }), 3_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ prompt: "keep going" }), 3_000);
         expect(registry.get("c1")?.outagePolicy).toBe("retry");
-        await registry.finish("c1", 4_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
         // `wait` is a real answer ('stop resuming'), distinct from the default, which may itself be `retry`.
         expect((await registry.setBreakPolicy("c1", "outage", "wait"))?.outagePolicy).toBe("wait");
         // Only the named ending moves; the other two keep whatever this conversation already said.
@@ -320,54 +313,54 @@ describe("agents registry", () => {
         expect((await registry.setBreakPolicy("c1", "outage", "retry"))?.limitPolicy).toBe("move");
         // null is what hands that one ending back to the default.
         expect((await registry.setBreakPolicy("c1", "outage", null))?.outagePolicy).toBeUndefined();
-        expect(registry.entry("c1")?.outagePolicy).toBeUndefined();
+        expect(registry.entry("c1")?.postures.outage).toBeUndefined();
         expect(await registry.setBreakPolicy("nope", "outage", "retry")).toBeUndefined();
         // An answer the ending cannot take is refused rather than stored: no pass would ever read it.
         expect(await registry.setBreakPolicy("c1", "outage", "move")).toBeUndefined();
-        expect(registry.entry("c1")?.outagePolicy).toBeUndefined();
+        expect(registry.entry("c1")?.postures.outage).toBeUndefined();
     });
 
     it("begin is a mutex: a second concurrent turn is refused until finish", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        expect(await registry.begin(turn(), 2_000)).toBe(false);
-        await registry.finish("c1", 3_000);
-        expect(await registry.begin(turn(), 4_000)).toBe(true);
+        await beginTurn(conversations, turn(), 1_000);
+        expect(await beginTurn(conversations, turn(), 2_000)).toBe(false);
+        await conversations.send("c1", { kind: "settle" }, 3_000).settled;
+        expect(await beginTurn(conversations, turn(), 4_000)).toBe(true);
     });
 
     it("keeps the first title and accumulates usage across turns", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "usage", costUsd: 0.5, inputTokens: 100, outputTokens: 50 });
-        await registry.finish("c1", 2_000);
-        await registry.begin(turn({ prompt: "another prompt" }), 3_000);
-        registry.observe("c1", { kind: "usage", costUsd: 0.25, inputTokens: 10, outputTokens: 5 });
-        await registry.finish("c1", 4_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "usage", costUsd: 0.5, inputTokens: 100, outputTokens: 50 } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ prompt: "another prompt" }), 3_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "usage", costUsd: 0.25, inputTokens: 10, outputTokens: 5 } });
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
         const summary = registry.get("c1");
         expect(summary?.title).toBe("Fix the login bug");
         expect(summary?.costUsd).toBeCloseTo(0.75);
         expect(summary?.inputTokens).toBe(110);
         expect(summary?.outputTokens).toBe(55);
-        expect(store.saved().find((entry) => entry.id === "c1")?.costUsd).toBeCloseTo(0.75);
+        expect(store.saved().find((entry) => entry.id === "c1")?.totals.costUsd).toBeCloseTo(0.75);
     });
 
     it("begin prefers the turn's title over the prompt; a whitespace title falls back to the prompt", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn({ title: "My renamed draft" }), 1_000);
+        await beginTurn(conversations, turn({ title: "My renamed draft" }), 1_000);
         expect(registry.get("c1")?.title).toBe("My renamed draft");
-        await registry.begin(turn({ conversationId: "c2", title: "   " }), 2_000);
+        await beginTurn(conversations, turn({ conversationId: "c2", title: "   " }), 2_000);
         expect(registry.get("c2")?.title).toBe("Fix the login bug");
     });
 
     it("setTitle persists, broadcasts, keeps updatedAt, and survives a running turn's finish", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         const frames: (string | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.title));
         const before = registry.get("c1")?.updatedAt;
@@ -375,24 +368,30 @@ describe("agents registry", () => {
         expect(summary?.title).toBe("Login fix");
         expect(frames.at(-1)).toBe("Login fix");
         expect(registry.get("c1")?.updatedAt).toBe(before);
-        expect(store.saved().find((entry) => entry.id === "c1")?.title).toBe("Login fix");
-        await registry.finish("c1", 2_000);
+        expect(store.saved().find((entry) => entry.id === "c1")?.social.title?.text).toBe("Login fix");
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.title).toBe("Login fix");
         expect(await registry.setTitle("nope", "x", "user")).toBeUndefined();
         expect(await registry.setTitle("c1", " \u0000 ", "user")).toBeUndefined();
         unsubscribe();
     });
 
-    // Counts come from the subagent registry via `summaryOf`; this only pins the publish. Runs against the real
-    // registry, not a stub, since the projection is what's under test.
+    // Counts come from the roster the fleet's own actors hold, via `summaryOf`; this only pins the publish. Runs against
+    // the real registry, not a stub, since the projection is what's under test, so the roster's doors are lent it.
     it("publishes the fleet when a child is born and when it settles, but not for its progress", async () => {
-        resetSubagents();
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        const child: SubagentTurn = { conversationId: "c1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined };
-        const frame = (message: SubagentTaskMessage): AgentEvent => {
-            const born = noteSubagentTask(child, message);
+        await beginTurn(conversations, turn(), 1_000);
+        // The turn's handle on the fleet whose actors hold its children, which is what the card counts.
+        const child = (held: SubagentTurn["conversations"]): SubagentTurn => ({
+            conversationId: "c1",
+            conversations: held,
+            cwd: WORKSPACE_ROOT,
+            sessionId: "sess-1",
+            subagentsDir: undefined,
+        });
+        const frame = (message: SubagentTaskMessage, held: SubagentTurn["conversations"] = conversations): AgentEvent => {
+            const born = noteSubagentTask(child(held), message);
             if (born === undefined) {
                 throw new Error(`the subagent registry ignored a ${message.subtype}`);
             }
@@ -402,56 +401,59 @@ describe("agents registry", () => {
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.subagents));
         expect(frames).toEqual([undefined]);
 
-        registry.observe(
-            "c1",
-            frame({ subtype: "task_started", task_id: "task-a", tool_use_id: "call-1", description: "Locate the handler", subagent_type: "Explore" }),
-        );
+        conversations.send("c1", { kind: "frame", frame: frame({ subtype: "task_started", task_id: "task-a", tool_use_id: "call-1", description: "Locate the handler", subagent_type: "Explore" }) });
         expect(frames).toEqual([undefined, { running: 1, total: 1 }]);
 
-        registry.observe("c1", frame({ subtype: "task_progress", task_id: "task-a", tool_use_id: "call-1", usage: { total_tokens: 9_000 } }));
+        conversations.send("c1", { kind: "frame", frame: frame({ subtype: "task_progress", task_id: "task-a", tool_use_id: "call-1", usage: { total_tokens: 9_000 } }) });
         expect(frames).toEqual([undefined, { running: 1, total: 1 }]);
 
-        registry.observe("c1", frame({ subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } }));
+        conversations.send("c1", { kind: "frame", frame: frame({ subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } }) });
         expect(frames).toEqual([undefined, { running: 1, total: 1 }, { running: 0, total: 1 }]);
         unsubscribe();
 
-        // `resetSubagents()` simulates a restart; `total`, persisted on the entry, survives it.
+        // `resetSubagents` simulates a restart; `total`, persisted on the entry, survives it.
         const store = memoryStore();
-        const persisted = createAgentsRegistry(store, standings(), presences());
+        const { agents: persisted, conversations: persistedConversations } = createFleet(store, standings(), presences());
         await persisted.init();
-        await persisted.begin(turn(), 1_000);
-        persisted.observe(
-            "c1",
-            frame({ subtype: "task_started", task_id: "task-b", tool_use_id: "call-2", description: "Audit the deps", subagent_type: "Explore" }),
-        );
-        await persisted.finish("c1", 2_000);
-        resetSubagents();
+        await beginTurn(persistedConversations, turn(), 1_000);
+        persistedConversations.send("c1", {
+            kind: "frame",
+            frame: frame(
+                { subtype: "task_started", task_id: "task-b", tool_use_id: "call-2", description: "Audit the deps", subagent_type: "Explore" },
+                persistedConversations,
+            ),
+        });
+        await persistedConversations.send("c1", { kind: "settle" }, 2_000).settled;
+        resetSubagents(persistedConversations);
         expect(persisted.get("c1")?.subagents).toEqual({ running: 0, total: 1 });
-        expect(store.saved().find((entry) => entry.id === "c1")?.subagents).toBe(1);
+        expect(store.saved().find((entry) => entry.id === "c1")?.totals.subagents).toBe(1);
         // Subagent totals accumulate across turns rather than resetting.
-        await persisted.begin(turn(), 3_000);
-        persisted.observe(
-            "c1",
-            frame({ subtype: "task_started", task_id: "task-c", tool_use_id: "call-3", description: "Draft the fix", subagent_type: "claude" }),
-        );
+        await beginTurn(persistedConversations, turn(), 3_000);
+        persistedConversations.send("c1", {
+            kind: "frame",
+            frame: frame(
+                { subtype: "task_started", task_id: "task-c", tool_use_id: "call-3", description: "Draft the fix", subagent_type: "claude" },
+                persistedConversations,
+            ),
+        });
         expect(persisted.get("c1")?.subagents).toEqual({ running: 1, total: 2 });
     });
 
     it("leaves updatedAt on a settled card alone: observe must not steal recency from a fresher finish", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
-        registry.observe("c1", { kind: "delta", text: "a subagent frame on a parent that already settled" });
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        conversations.send("c1", { kind: "frame", frame: { kind: "delta", text: "a subagent frame on a parent that already settled" } });
         expect(registry.get("c1")?.updatedAt).toBe(2_000);
     });
 
     it("markSeen persists the read marker, broadcasts it, and leaves updatedAt alone", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const frames: (number | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.seenAt));
         expect(registry.get("c1")?.seenAt).toBeUndefined();
@@ -459,10 +461,10 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.seenAt).toBe(3_000);
         expect(registry.get("c1")?.updatedAt).toBe(2_000);
         expect(frames.at(-1)).toBe(3_000);
-        expect(store.saved().find((entry) => entry.id === "c1")?.seenAt).toBe(3_000);
+        expect(store.saved().find((entry) => entry.id === "c1")?.social.seenAt).toBe(3_000);
         // The read marker survives the next turn's entry rebuild.
-        await registry.begin(turn(), 4_000);
-        await registry.finish("c1", 5_000);
+        await beginTurn(conversations, turn(), 4_000);
+        await conversations.send("c1", { kind: "settle" }, 5_000).settled;
         expect(registry.get("c1")?.seenAt).toBe(3_000);
         expect(await registry.markSeen("nope", 6_000)).toBeUndefined();
         unsubscribe();
@@ -470,66 +472,66 @@ describe("agents registry", () => {
 
     it("markAllSeen stamps the whole fleet: the board's one escape hatch", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.begin(turn({ conversationId: "c2" }), 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await beginTurn(conversations, turn({ conversationId: "c2" }), 2_000);
         await registry.markAllSeen(9_000);
         expect(registry.list().map((agent) => agent.seenAt)).toEqual([9_000, 9_000]);
-        expect(store.saved().every((entry) => entry.seenAt === 9_000)).toBe(true);
+        expect(store.saved().every((entry) => entry.social.seenAt === 9_000)).toBe(true);
     });
 
     it("promotes the title to a plan's heading, which names the job the opening prompt only hinted at", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn({ prompt: "the login page throws on submit" }), 1_000);
+        await beginTurn(conversations, turn({ prompt: "the login page throws on submit" }), 1_000);
         const frames: (string | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.title));
 
-        registry.observe("c1", { kind: "plan", requestId: "r1", text: "## Fix the login submit handler\n\nFirst, read the form." });
+        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "r1", text: "## Fix the login submit handler\n\nFirst, read the form." } });
 
         // Rides the plan frame's own broadcast; no extra one is sent.
         expect(registry.get("c1")?.title).toBe("Fix the login submit handler");
         expect(frames.at(-1)).toBe("Fix the login submit handler");
         // Persisted out of band; the `setTimeout(0)` lets that write land before checking the store.
         await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(store.saved().find((entry) => entry.id === "c1")?.title).toBe("Fix the login submit handler");
+        expect(store.saved().find((entry) => entry.id === "c1")?.social.title?.text).toBe("Fix the login submit handler");
         unsubscribe();
     });
 
     it("leaves the title alone for a plan with no heading to take it from", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn({ prompt: "the login page throws on submit" }), 1_000);
+        await beginTurn(conversations, turn({ prompt: "the login page throws on submit" }), 1_000);
 
-        registry.observe("c1", { kind: "plan", requestId: "r1", text: "Read the form, then fix the handler." });
+        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "r1", text: "Read the form, then fix the handler." } });
 
         expect(registry.get("c1")?.title).toBe("The login page throws on submit");
     });
 
     it("lets the first plan name the job and refuses to let a replan rename it", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
 
-        registry.observe("c1", { kind: "plan", requestId: "r1", text: "# Fix the login submit handler" });
-        registry.observe("c1", { kind: "plan", requestId: "r2", text: "# Rewrite the form validation instead" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "r1", text: "# Fix the login submit handler" } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "r2", text: "# Rewrite the form validation instead" } });
 
         expect(registry.get("c1")?.title).toBe("Fix the login submit handler");
     });
 
     it("slots a model name above the derived guess and below a plan's own name", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn({ prompt: "we have recently added the fleet board" }), 1_000);
+        await beginTurn(conversations, turn({ prompt: "we have recently added the fleet board" }), 1_000);
 
         expect((await registry.setTitle("c1", "Fleet board broadcast", "model", "wire"))?.title).toBe("Fleet board broadcast");
         // A repeated model-sourced title does not override the first.
         await registry.setTitle("c1", "A second reading", "model");
         expect(registry.get("c1")?.title).toBe("Fleet board broadcast");
 
-        registry.observe("c1", { kind: "plan", requestId: "r1", text: "# Fix the fleet broadcast fan-out" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "r1", text: "# Fix the fleet broadcast fan-out" } });
         expect(registry.get("c1")?.title).toBe("Fix the fleet broadcast fan-out");
         // A plan's title is never replaced by a later model-sourced one.
         await registry.setTitle("c1", "A late reading", "model");
@@ -537,9 +539,9 @@ describe("agents registry", () => {
     });
 
     it("keeps the naming pass's action word beside the title, and drops it when another source renames", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
 
         // The word is never part of the name; it rides the summary so a board can read the kind of work.
         expect(await registry.setTitle("c1", "Fleet board broadcast", "model", "wire")).toMatchObject({
@@ -562,9 +564,9 @@ describe("agents registry", () => {
     ];
 
     it.each(FAILURE_SENTENCES)("refuses %s as any automatic title: it names the failure, not the work", async (sentence) => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
 
         // The derived title must stay replaceable; a later honest model title still lands.
         await registry.setTitle("c1", sentence, "model");
@@ -574,33 +576,19 @@ describe("agents registry", () => {
 
     it.each(FAILURE_SENTENCES)("a stolen title reading %s forfeits its rank, so the next name heals it", async (sentence) => {
         // Fixture: an entry already titled with a failure sentence, at `model` rank, predating this guard.
-        const poisoned: PersistedAgent = {
-            id: "c1",
-            branch: "agent/c1",
-            provider: "claude",
-            harness: "native",
-            repos: [],
-            status: "idle",
-            costUsd: 0,
-            inputTokens: 0,
-            outputTokens: 0,
-            createdAt: 1_000,
-            updatedAt: 1_000,
-            title: sentence,
-            titleSource: "model",
-        };
-        const registry = createAgentsRegistry(memoryStore([poisoned]), standings(), presences());
+        const poisoned = isolatedAgent([], { social: { title: { text: sentence, source: "model" }, reactions: [] }, createdAt: 1_000, updatedAt: 1_000 });
+        const { agents: registry } = createFleet(memoryStore([poisoned]), standings(), presences());
         await registry.init();
         expect((await registry.setTitle("c1", "Fleet board broadcast", "model"))?.title).toBe("Fleet board broadcast");
     });
 
     it("never lets a plan rename what the user named, and still allows a second rename", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.setTitle("c1", "Login bug", "user");
 
-        registry.observe("c1", { kind: "plan", requestId: "r1", text: "# Fix the login submit handler" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "r1", text: "# Fix the login submit handler" } });
         expect(registry.get("c1")?.title).toBe("Login bug");
 
         // A user rename is not ranked; a second one is not a rejected sideways move.
@@ -608,58 +596,58 @@ describe("agents registry", () => {
     });
 
     it("a card parks the agent until its own release: the frames trailing it do not", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         // The `ask` tool's question can arrive before its own `tool_call` frame (dispatch vs queued stream); a `delta`
         // afterward must not read as an answer.
-        registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
-        registry.observe("c1", { kind: "tool_call", id: "t1", name: "AskUserQuestion", category: "other", status: "in_progress" });
-        registry.observe("c1", { kind: "delta", text: "still waiting" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "question", requestId: "q1", questions: [] } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "t1", name: "AskUserQuestion", category: "other", status: "in_progress" } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "delta", text: "still waiting" } });
         expect(registry.get("c1")?.status).toBe("awaiting");
         expect(registry.get("c1")?.attention.question).toBe(true);
-        registry.observe("c1", { kind: "resolved", requestId: "q1" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "resolved", requestId: "q1" } });
         expect(registry.get("c1")?.status).toBe("running");
         expect(registry.get("c1")?.attention.question).toBe(false);
     });
 
     it("cards are released one at a time; a release for one nobody raised changes nothing", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "plan", requestId: "p1", text: "the plan" });
-        registry.observe("c1", { kind: "permission", requestId: "perm1", toolName: "Bash" });
-        registry.observe("c1", { kind: "resolved", requestId: "p1" });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "plan", requestId: "p1", text: "the plan" } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "permission", requestId: "perm1", toolName: "Bash" } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "resolved", requestId: "p1" } });
         expect(registry.get("c1")?.status).toBe("awaiting");
         expect(registry.get("c1")?.attention).toMatchObject({ plan: false, permission: true });
-        registry.observe("c1", { kind: "resolved", requestId: "unknown" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "resolved", requestId: "unknown" } });
         expect(registry.get("c1")?.status).toBe("awaiting");
-        registry.observe("c1", { kind: "resolved", requestId: "perm1" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "resolved", requestId: "perm1" } });
         expect(registry.get("c1")?.status).toBe("running");
         expect(registry.get("c1")?.attention.permission).toBe(false);
     });
 
     it("stopping a parked turn takes its card off the board: the release may never arrive", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "question", requestId: "q1", questions: [] } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("idle");
         expect(registry.get("c1")?.attention.question).toBe(false);
     });
 
     it("publishes the stop the instant it lands, ahead of the unwind", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         const frames: (string | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.status));
-        registry.stopping("c1", "stopped");
+        conversations.send("c1", { kind: "stop", ending: "stopped" });
         expect(registry.get("c1")?.status).toBe("stopping");
         expect(frames.at(-1)).toBe("stopping");
         // Mutex is still held during `stopping`; a new turn would still collide with it.
-        expect(registry.running("c1")).toBe(true);
+        expect(conversations.running("c1")).toBe(true);
         unsubscribe();
     });
 
@@ -667,17 +655,17 @@ describe("agents registry", () => {
     // stop must never come back on its own.
     it("settles a stopped turn as stopped, on the entry the next boot reads", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.stopping("c1", "stopped");
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "stop", ending: "stopped" });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("stopped");
-        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("stopped");
+        expect(store.saved().find((entry) => entry.id === "c1")?.ending).toEqual({ kind: "stopped" });
         // Does not leak into the next turn on the same conversation.
-        await registry.begin(turn(), 3_000);
+        await beginTurn(conversations, turn(), 3_000);
         expect(registry.get("c1")?.status).toBe("running");
-        await registry.finish("c1", 4_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
         expect(registry.get("c1")?.status).toBe("idle");
     });
 
@@ -685,20 +673,20 @@ describe("agents registry", () => {
     // transitional `dismissing` publish is skipped and finish's own broadcast covers the gap.
     it("publishes a dismissal at the press, under the ending it is heading for", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "question", requestId: "q1", questions: [] } });
         const frames: (string | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.status));
-        registry.stopping("c1", "dismissed");
+        conversations.send("c1", { kind: "stop", ending: "dismissed" });
         expect(frames.at(-1)).toBe("dismissing");
         // The turn is still live; only the card's question is gone.
         expect(registry.get("c1")?.attention.question).toBe(false);
-        expect(registry.running("c1")).toBe(true);
-        await registry.finish("c1", 2_000);
+        expect(conversations.running("c1")).toBe(true);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("idle");
-        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
+        expect(store.saved().find((entry) => entry.id === "c1")?.ending).toEqual({ kind: "idle" });
         // `dismissing` and `idle` are both filed under the Finished lane (`laneOf`), so the card never moves lanes.
         expect(frames.at(-1)).toBe("idle");
         expect(frames).not.toContain("running");
@@ -706,41 +694,41 @@ describe("agents registry", () => {
     });
 
     it("drops the cards a stopping turn was parked on, and refuses to raise new ones", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "question", requestId: "q1", questions: [] });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "question", requestId: "q1", questions: [] } });
         expect(registry.get("c1")?.status).toBe("awaiting");
-        registry.stopping("c1", "stopped");
+        conversations.send("c1", { kind: "stop", ending: "stopped" });
         expect(registry.get("c1")?.status).toBe("stopping");
         expect(registry.get("c1")?.attention.question).toBe(false);
-        registry.observe("c1", { kind: "permission", requestId: "perm1", toolName: "Bash" });
+        conversations.send("c1", { kind: "frame", frame: { kind: "permission", requestId: "perm1", toolName: "Bash" } });
         expect(registry.get("c1")?.status).toBe("stopping");
         expect(registry.get("c1")?.attention.permission).toBe(false);
     });
 
     // Would otherwise leak a stale flag into the conversation's next turn.
     it("says nothing for a stop with no live turn under it", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const frames: number[] = [];
         const unsubscribe = registry.subscribe(() => frames.push(1));
-        registry.stopping("c1", "stopped");
-        registry.stopping("never-heard-of-it", "stopped");
+        conversations.send("c1", { kind: "stop", ending: "stopped" });
+        conversations.send("never-heard-of-it", { kind: "stop", ending: "stopped" });
         expect(registry.get("c1")?.status).toBe("idle");
         expect(frames.length).toBe(1);
         unsubscribe();
     });
 
     it("keeps an error that preceded the stop", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", message: "boom" });
-        registry.stopping("c1", "stopped");
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "boom" } });
+        conversations.send("c1", { kind: "stop", ending: "stopped" });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("error");
     });
 
@@ -748,32 +736,32 @@ describe("agents registry", () => {
     // survives a crash, which is why a crashed turn must read back as `interrupted`, not `idle`.
     it("a turn the daemon died under comes back interrupted, not idle", async () => {
         const store = memoryStore();
-        const first = createAgentsRegistry(store, standings(), presences());
+        const { agents: first, conversations: firstConversations } = createFleet(store, standings(), presences());
         await first.init();
-        await first.begin(turn(), 1_000);
-        first.observe("c1", { kind: "question", requestId: "q1", questions: [] });
+        await beginTurn(firstConversations, turn(), 1_000);
+        firstConversations.send("c1", { kind: "frame", frame: { kind: "question", requestId: "q1", questions: [] } });
         expect(first.get("c1")?.status).toBe("awaiting");
 
         // No `finish()`: simulates the process dying with the write already on disk.
-        const rebooted = createAgentsRegistry(store, standings(), presences());
+        const { agents: rebooted, conversations: rebootedConversations } = createFleet(store, standings(), presences());
         await rebooted.init();
         expect(rebooted.get("c1")?.status).toBe("interrupted");
-        expect(rebooted.running("c1")).toBe(false);
+        expect(rebootedConversations.running("c1")).toBe(false);
     });
 
     // `interrupted` is a placeholder; any ordinary ending overwrites it, so a later boot reads the real status instead.
     it("finishing overwrites the interrupted placeholder, and it does not survive the next boot", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const landed = standings();
         landed.set("c1", "landed");
-        const rebooted = createAgentsRegistry(store, landed, presences());
+        const { agents: rebooted } = createFleet(store, landed, presences());
         await rebooted.init();
         expect(rebooted.get("c1")?.status).toBe("landed");
-        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
+        expect(store.saved().find((entry) => entry.id === "c1")?.ending).toEqual({ kind: "idle" });
     });
 
     // Guards the whole roster refresh in one `finally`; a repo throwing here must not silence any other conversation's
@@ -789,12 +777,12 @@ describe("agents registry", () => {
         };
         const moving = presences();
         // Presence refresh still succeeds; only standings is made to throw.
-        const registry = createAgentsRegistry(memoryStore(), failing, { ...moving, refresh: async () => true });
+        const { agents: registry, conversations } = createFleet(memoryStore(), failing, { ...moving, refresh: async () => true });
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         const frames: (string | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.status));
-        await expect(registry.finish("c1", 2_000)).resolves.toBeUndefined();
+        await expect(conversations.send("c1", { kind: "settle" }, 2_000).settled).resolves.toBeUndefined();
         await expect(registry.refreshStandings()).resolves.toBeUndefined();
         unsubscribe();
         expect(registry.get("c1")?.status).toBe("idle");
@@ -802,146 +790,146 @@ describe("agents registry", () => {
     });
 
     it("error during the turn persists as error status at finish", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", message: "boom" });
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "boom" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("error");
     });
 
     // A failure with a resume already scheduled must read neither `error` (not done failing) nor `idle` (not done):
     // only `resuming` says work is still coming back.
     it("a failure with a scheduled resume publishes the card as still coming back", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
         // Status stays `running` until finish; the error frame lands mid-stream.
         expect(registry.get("c1")?.status).toBe("running");
-        await registry.finish("c1", 2_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("resuming");
         // Persisted status stays `idle`; `resuming` is a live-only projection, never written.
-        expect(registry.entry("c1")?.status).toBe("idle");
+        expect(registry.entry("c1")?.ending).toEqual({ kind: "idle" });
     });
 
     it("the resumed turn takes the card straight back to running", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
-        await registry.finish("c1", 2_000);
-        expect(await registry.begin(turn({ prompt: "…resumed automatically. Fix the login bug" }), 3_000)).toBe(true);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        expect(await beginTurn(conversations, turn({ prompt: "…resumed automatically. Fix the login bug" }), 3_000)).toBe(true);
         expect(registry.get("c1")?.status).toBe("running");
-        await registry.finish("c1", 4_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
         expect(registry.get("c1")?.status).toBe("idle");
     });
 
     // A restored card's placeholder turn finishes seconds before the real resumed turn begins; `markResuming` holds the
     // card through that gap.
     it("markResuming holds the card through the settle that precedes its resumed turn", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.markResuming("c1");
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "resume-promised" });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("resuming");
         // The resumed turn's own `begin` ends the wait, same as the error-frame path.
-        expect(await registry.begin(turn({ prompt: "…their response follows below. Approved." }), 3_000)).toBe(true);
+        expect(await beginTurn(conversations, turn({ prompt: "…their response follows below. Approved." }), 3_000)).toBe(true);
         expect(registry.get("c1")?.status).toBe("running");
     });
 
     // Settles into `error`/Attention, never back into the clean `idle` the dead turn left behind.
     it("an abandoned resume settles the card into the failure it was holding open", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const failure = "The Claude sign-in this turn ran on could not be renewed.";
-        expect(await registry.abandonResume("c1", 3_000, failure)).toBe(true);
+        expect(await conversations.send("c1", { kind: "resume-abandoned", reason: failure }, 3_000).settled).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
         // `failure` names the reason; `error` alone does not say why the wait ended.
         expect(registry.get("c1")?.failure).toBe(failure);
         // Idempotent: a second `abandonResume` still answers true, since the wait is already over.
-        expect(await registry.abandonResume("c1", 4_000, failure)).toBe(true);
+        expect(await conversations.send("c1", { kind: "resume-abandoned", reason: failure }, 4_000).settled).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
     });
 
     // A write in this window is overwritten by the finish that follows; the caller must retry.
     it("an abandon that lands while the turn is still unwinding reports that it did not take", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
         // No `finish()` yet: the generator is still unwinding.
-        expect(await registry.abandonResume("c1", 2_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(false);
+        expect(await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 2_000).settled).toBe(false);
         expect(registry.get("c1")?.status).toBe("running");
-        await registry.finish("c1", 3_000);
-        expect(await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(true);
+        await conversations.send("c1", { kind: "settle" }, 3_000).settled;
+        expect(await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 4_000).settled).toBe(true);
         expect(registry.get("c1")?.status).toBe("error");
     });
 
     // The only record of a session that failed before producing any other output, such as a report or screenshot.
     it("keeps the sentence a failed turn died on, so the card can say why", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         const message = "Your organization has disabled Claude subscription access for Claude Code";
-        registry.observe("c1", {
+        conversations.send("c1", { kind: "frame", frame: {
             kind: "error",
             code: "claude-not-entitled",
             message,
-        });
-        await registry.finish("c1", 2_000);
+        } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("error");
         expect(registry.get("c1")?.failure).toBe(message);
     });
 
     // `failure` describes only the last turn; a clean rerun must drop it.
     it("drops the explanation the moment the conversation runs again", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", message: "API Error: 403 organization not allowed" });
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "API Error: 403 organization not allowed" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.failure).not.toBeUndefined();
-        await registry.begin(turn({ prompt: "try again" }), 3_000);
-        await registry.finish("c1", 4_000);
+        await beginTurn(conversations, turn({ prompt: "try again" }), 3_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
         expect(registry.get("c1")?.status).toBe("idle");
         expect(registry.get("c1")?.failure).toBeUndefined();
-        expect(registry.entry("c1")?.failure).toBeUndefined();
+        expect(registry.entry("c1")?.ending).toEqual({ kind: "idle" });
     });
 
     // The user's own restart can beat the scheduler; abandon must not overwrite a turn that is now running.
     it("an abandoned resume leaves a turn the user already restarted alone", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" });
-        await registry.finish("c1", 2_000);
-        await registry.begin(turn({ prompt: "try again" }), 3_000);
-        expect(await registry.abandonResume("c1", 4_000, "The Claude sign-in this turn ran on could not be renewed.")).toBe(false);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "claude-token-refused", message: "API Error: 401", autoResume: "scheduled" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ prompt: "try again" }), 3_000);
+        expect(await conversations.send("c1", { kind: "resume-abandoned", reason: "The Claude sign-in this turn ran on could not be renewed." }, 4_000).settled).toBe(false);
         expect(registry.get("c1")?.status).toBe("running");
     });
 
     // `available` means nothing is armed yet; unlike `scheduled`, the failure stands as error.
     it("a failure whose resume is merely on offer still ends the turn in error", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", code: "provider-outage", message: "API Error: 529", autoResume: "available" });
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", code: "provider-outage", message: "API Error: 529", autoResume: "available" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("error");
     });
 
     it("session and worktree composition persist across a turn's finish", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "session", sessionId: "s9" });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "s9" } });
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
-        await registry.finish("c1", 2_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.sessionId).toBe("s9");
         expect(registry.get("c1")?.base).toBe("aaaaaaa");
     });
@@ -951,10 +939,10 @@ describe("agents registry", () => {
     it("projects the land standing under a clean ending, and never over an error or an interruption", async () => {
         const store = memoryStore();
         const land = standings();
-        const registry = createAgentsRegistry(store, land, presences());
+        const { agents: registry, conversations } = createFleet(store, land, presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("idle");
 
         land.set("c1", "conflict", ["workspace"]);
@@ -964,7 +952,7 @@ describe("agents registry", () => {
         // ...and the causes ride the same verdict, so a card can tell whose press clears it.
         expect(registry.get("c1")?.conflictCauses).toEqual(["workspace"]);
         // The land verdict is never persisted; the stored status stays `idle`.
-        expect(store.saved().find((entry) => entry.id === "c1")?.status).toBe("idle");
+        expect(store.saved().find((entry) => entry.id === "c1")?.ending).toEqual({ kind: "idle" });
 
         land.set("c1", "ready");
         expect(registry.get("c1")?.status).toBe("ready");
@@ -973,36 +961,36 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.conflictCauses).toBeUndefined();
 
         // An error outranks the branch's land standing.
-        await registry.begin(turn(), 3_000);
-        registry.observe("c1", { kind: "error", message: "boom" });
-        await registry.finish("c1", 4_000);
+        await beginTurn(conversations, turn(), 3_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "boom" } });
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
         expect(registry.get("c1")?.status).toBe("error");
     });
 
     // The lease is what keeps a second press from rebasing the worktree the first land is reading; the status is what
     // the card wears meanwhile, above the ending the last turn wrote, below a live turn.
     it("a land lease reads as `landing` from the claim to the last release, and queues a second land behind the first", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "error", message: "boom" });
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "boom" } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.status).toBe("error");
 
         let release: () => void = () => undefined;
         const gate = new Promise<void>((resolve) => {
             release = resolve;
         });
-        const first = registry.withLandLease("c1", async () => {
+        const first = conversations.withLandLease("c1", async () => {
             await gate;
             return "first";
         });
         // Claimed synchronously: a request asking right after the claim already sees it.
-        expect(registry.landing("c1")).toBe(true);
+        expect(conversations.landing("c1")).toBe(true);
         expect(registry.get("c1")?.status).toBe("landing");
 
         let secondRan = false;
-        const second = registry.withLandLease("c1", async () => {
+        const second = conversations.withLandLease("c1", async () => {
             secondRan = true;
             return "second";
         });
@@ -1012,47 +1000,44 @@ describe("agents registry", () => {
         release();
         expect(await first).toBe("first");
         expect(await second).toBe("second");
-        expect(registry.landing("c1")).toBe(false);
+        expect(conversations.landing("c1")).toBe(false);
         expect(registry.get("c1")?.status).toBe("error");
     });
 
     it("a land lease is released when its work throws, and a running turn keeps its own status over it", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await expect(
-            registry.withLandLease("c1", async () => {
+            conversations.withLandLease("c1", async () => {
                 throw new Error("git refused");
             }),
         ).rejects.toThrow("git refused");
-        expect(registry.landing("c1")).toBe(false);
+        expect(conversations.landing("c1")).toBe(false);
         expect(registry.get("c1")?.status).toBe("idle");
 
         // A running turn's own end-of-turn land is still that turn running, not a card that stopped to land.
-        await registry.begin(turn(), 3_000);
+        await beginTurn(conversations, turn(), 3_000);
         let release: () => void = () => undefined;
-        const lease = registry.withLandLease(
-            "c1",
-            () =>
+        const lease = conversations.withLandLease("c1", () =>
                 new Promise<void>((resolve) => {
                     release = resolve;
-                }),
-        );
-        expect(registry.landing("c1")).toBe(true);
+                }));
+        expect(conversations.landing("c1")).toBe(true);
         expect(registry.get("c1")?.status).toBe("running");
         // The lease's work starts on the next tick; `release` is bound only once it has.
         await new Promise((resolve) => setTimeout(resolve, 0));
         release();
         await lease;
-        await registry.finish("c1", 4_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
     });
 
     it("recordLanded persists advanced landedTips and the cumulative diffstat", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
         await registry.recordLanded("c1", {
             landed: true,
@@ -1061,8 +1046,8 @@ describe("agents registry", () => {
             diff: { files: 12, insertions: 412, deletions: 96 },
             adjudicated: true,
         });
-        await registry.finish("c1", 2_000);
-        expect(store.saved().find((entry) => entry.id === "c1")?.repos).toEqual([{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }]);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        expect(worktreeOf(store.saved().find((entry) => entry.id === "c1"))?.repos).toEqual([{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) }]);
         expect(registry.get("c1")?.diff).toEqual({ files: 12, insertions: 412, deletions: 96 });
     });
 
@@ -1070,9 +1055,9 @@ describe("agents registry", () => {
     // and the old sentence would head its commit; a measure that moves none changes nothing it described.
     it("recordLanded retires the drafted message once a landedTip moves, and keeps it across a land that moves none", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
         const landedAt = (tip: string, landed: boolean) =>
             registry.recordLanded("c1", {
@@ -1094,35 +1079,34 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.landedMessage).toBeUndefined();
         expect(registry.get("c1")?.landedMessageDraft).toBeUndefined();
         const saved = store.saved().find((entry) => entry.id === "c1");
-        expect(saved?.landedSubject).toBeUndefined();
-        expect(saved?.landedNote).toBeUndefined();
+        expect(saved?.landing.message).toBeUndefined();
     });
 
     it("setLandedSubject keeps the release note and the breaking warning whole, and bounds the subject by git's header limit rather than a card's width", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         const note = "You can now create, edit, and manage custom skills for your agent directly in the sandbox, without editing a file by hand.";
         const breaking =
             "The old skills folder is no longer read — move anything you keep there into the skills panel before updating, or it stops loading.";
         await registry.setLandedSubject("c1", { subject: "f".repeat(120), note, breaking });
         const saved = () => store.saved().find((entry) => entry.id === "c1");
-        expect(saved()?.landedNote).toBe(note);
-        expect(saved()?.landedBreaking).toBe(breaking);
-        expect(saved()?.landedSubject).toHaveLength(MAX_SUBJECT_LENGTH);
+        expect(saved()?.landing.message?.note).toBe(note);
+        expect(saved()?.landing.message?.breaking).toBe(breaking);
+        expect(saved()?.landing.message?.subject).toHaveLength(MAX_SUBJECT_LENGTH);
         expect(MAX_SUBJECT_LENGTH).toBeGreaterThan(80);
 
         // Same cap enforced even if the model ignores the 'one sentence' guidance in the prompt.
         await registry.setLandedSubject("c1", { subject: "skills panel", note: "n".repeat(500) });
-        expect(saved()?.landedNote).toHaveLength(MAX_NOTE_LENGTH);
+        expect(saved()?.landing.message?.note).toHaveLength(MAX_NOTE_LENGTH);
     });
 
     it("setLandedSubject puts the message on the card and broadcasts it", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         const frames: (AgentSummary["landedMessage"] | undefined)[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents[0]?.landedMessage));
         expect(frames).toEqual([undefined]);
@@ -1141,9 +1125,9 @@ describe("agents registry", () => {
     // clean land clears the delta it described.
     it("recordLanded stores the land's conflict report, and a later clean land clears it", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
         const conflicts = [{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" as const }], clean: 2 }];
         await registry.recordLanded("c1", {
@@ -1154,7 +1138,7 @@ describe("agents registry", () => {
             adjudicated: true,
             conflicts,
         });
-        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toEqual(conflicts);
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toEqual(conflicts);
 
         await registry.recordLanded("c1", {
             landed: true,
@@ -1163,16 +1147,16 @@ describe("agents registry", () => {
             diff: { files: 3, insertions: 10, deletions: 1 },
             adjudicated: true,
         });
-        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toBeUndefined();
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toBeUndefined();
     });
 
     // Every surface that explains a conflict (standing, review, the resolve action) reads off the stored report; a
     // measure land touches none of that and must not clear it.
     it("a measure land settles the books without retiring the last refusal", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
         const conflicts = [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" as const }], clean: 2 }];
         await registry.recordLanded("c1", {
@@ -1194,9 +1178,9 @@ describe("agents registry", () => {
             adjudicated: false,
         });
         const settled = store.saved().find((entry) => entry.id === "c1");
-        expect(settled?.conflicts).toEqual(conflicts);
+        expect(settled?.landing.conflicts).toEqual(conflicts);
         // The diffstat still refreshes; only the conflict report and land outcome are held.
-        expect(settled?.diffFiles).toBe(4);
+        expect(settled?.landing.diff?.files).toBe(4);
 
         // A real land still has the final say, clearing the conflict report.
         await registry.recordLanded("c1", {
@@ -1206,16 +1190,16 @@ describe("agents registry", () => {
             diff: { files: 4, insertions: 12, deletions: 1 },
             adjudicated: true,
         });
-        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toBeUndefined();
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toBeUndefined();
     });
 
     // `begin` rebuilds the entry from an explicit field list; anything left off is dropped on the next turn.
     // `conflicts` and `landRequested` must survive it, since one more turn resolves neither.
     it("a follow-up turn keeps the land refusal and the ask still waiting on one", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
         const conflicts = [{ repo: "root", paths: [{ path: "app.ts", reason: "diverged" as const }], clean: 2 }];
         await registry.recordLanded("c1", {
@@ -1228,12 +1212,12 @@ describe("agents registry", () => {
         });
         await registry.requestLand("c1", { email: "m@x.com", name: "Mo" }, 1_500);
         // The refused land runs after `finish`; `begin` would otherwise refuse while a turn is still running.
-        await registry.finish("c1", 1_800);
+        await conversations.send("c1", { kind: "settle" }, 1_800).settled;
 
-        expect(await registry.begin(turn({ prompt: "rebase onto main" }), 2_000)).toBe(true);
+        expect(await beginTurn(conversations, turn({ prompt: "rebase onto main" }), 2_000)).toBe(true);
 
         // Checked on the persisted entry; the live summary carries only the derived standing, not `conflicts`.
-        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toEqual(conflicts);
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toEqual(conflicts);
         expect(registry.get("c1")?.landRequested).toMatchObject({ email: "m@x.com", name: "Mo" });
 
         await registry.recordLanded("c1", {
@@ -1244,24 +1228,24 @@ describe("agents registry", () => {
             diff: { files: 4, insertions: 12, deletions: 1 },
             adjudicated: false,
         });
-        expect(store.saved().find((entry) => entry.id === "c1")?.conflicts).toEqual(conflicts);
+        expect(store.saved().find((entry) => entry.id === "c1")?.landing.conflicts).toEqual(conflicts);
     });
 
     it("counts turns and tool uses: live during the turn, folded at finish, never inflated by manual lands", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress" });
-        registry.observe("c1", { kind: "tool_call", id: "t2", name: "Bash", category: "execute", status: "in_progress" });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress" } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "t2", name: "Bash", category: "execute", status: "in_progress" } });
         expect(registry.get("c1")?.toolUses).toBe(2);
-        await registry.finish("c1", 2_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.get("c1")?.turns).toBe(1);
         expect(registry.get("c1")?.toolUses).toBe(2);
-        await registry.finish("c1", 3_000);
+        await conversations.send("c1", { kind: "settle" }, 3_000).settled;
         expect(registry.get("c1")?.turns).toBe(1);
-        await registry.begin(turn({ prompt: "again" }), 4_000);
-        registry.observe("c1", { kind: "tool_call", id: "t3", name: "Read", category: "read", status: "in_progress" });
-        await registry.finish("c1", 5_000);
+        await beginTurn(conversations, turn({ prompt: "again" }), 4_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "t3", name: "Read", category: "read", status: "in_progress" } });
+        await conversations.send("c1", { kind: "settle" }, 5_000).settled;
         expect(registry.get("c1")?.turns).toBe(2);
         expect(registry.get("c1")?.toolUses).toBe(3);
     });
@@ -1269,57 +1253,57 @@ describe("agents registry", () => {
     // Needed so the next turn's plan re-states preamble notes a compaction summarized away (turn-plan.ts).
     it("files a compaction under the turn it happened in, once per turn, and persists it", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "compact", trigger: "auto" });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "compact", trigger: "auto" } });
         // Filed against the pre-increment count: the first turn is 0, turn 1 is the one retold.
         expect(registry.entry("c1")?.compactedTurn).toBe(0);
-        await registry.finish("c1", 2_000);
-        expect(registry.entry("c1")?.turns).toBe(1);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        expect(registry.entry("c1")?.totals.turns).toBe(1);
 
-        await registry.begin(turn({ prompt: "again" }), 3_000);
-        registry.observe("c1", { kind: "compact", trigger: "auto" });
-        registry.observe("c1", { kind: "compact", trigger: "manual" });
+        await beginTurn(conversations, turn({ prompt: "again" }), 3_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "compact", trigger: "auto" } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "compact", trigger: "manual" } });
         expect(registry.entry("c1")?.compactedTurn).toBe(1);
-        await registry.finish("c1", 4_000);
+        await conversations.send("c1", { kind: "settle" }, 4_000).settled;
 
         expect(store.saved().find((entry) => entry.id === "c1")?.compactedTurn).toBe(1);
     });
 
     it("liveSessionIds reports the in-flight turns' sdk sessions, the terminals list's 'still working' signal", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        expect(registry.liveSessionIds()).toEqual([]);
-        await registry.begin(turn(), 1_000);
+        expect(conversations.liveSessionIds()).toEqual([]);
+        await beginTurn(conversations, turn(), 1_000);
         // The session id lands on the turn's first frame, before any Bash runs.
-        registry.observe("c1", { kind: "session", sessionId: "3f2a9b1c-0000-4000-8000-000000000000" });
-        expect(registry.liveSessionIds()).toEqual(["3f2a9b1c-0000-4000-8000-000000000000"]);
+        conversations.send("c1", { kind: "frame", frame: { kind: "session", sessionId: "3f2a9b1c-0000-4000-8000-000000000000" } });
+        expect(conversations.liveSessionIds()).toEqual(["3f2a9b1c-0000-4000-8000-000000000000"]);
         // A second conversation's session joins the set; each id drops once its own turn ends.
-        await registry.begin(turn({ conversationId: "c2" }), 1_100);
-        registry.observe("c2", { kind: "session", sessionId: "7c0e1ad7-0000-4000-8000-000000000000" });
-        expect(registry.liveSessionIds().toSorted()).toEqual(["3f2a9b1c-0000-4000-8000-000000000000", "7c0e1ad7-0000-4000-8000-000000000000"]);
-        await registry.finish("c1", 2_000);
-        expect(registry.liveSessionIds()).toEqual(["7c0e1ad7-0000-4000-8000-000000000000"]);
-        await registry.finish("c2", 2_100);
-        expect(registry.liveSessionIds()).toEqual([]);
+        await beginTurn(conversations, turn({ conversationId: "c2" }), 1_100);
+        conversations.send("c2", { kind: "frame", frame: { kind: "session", sessionId: "7c0e1ad7-0000-4000-8000-000000000000" } });
+        expect(conversations.liveSessionIds().toSorted()).toEqual(["3f2a9b1c-0000-4000-8000-000000000000", "7c0e1ad7-0000-4000-8000-000000000000"]);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        expect(conversations.liveSessionIds()).toEqual(["7c0e1ad7-0000-4000-8000-000000000000"]);
+        await conversations.send("c2", { kind: "settle" }, 2_100).settled;
+        expect(conversations.liveSessionIds()).toEqual([]);
         // Before its first frame, a resumed turn falls back to the session the last turn flushed.
-        await registry.begin(turn({ prompt: "again" }), 3_000);
-        expect(registry.liveSessionIds()).toEqual(["3f2a9b1c-0000-4000-8000-000000000000"]);
+        await beginTurn(conversations, turn({ prompt: "again" }), 3_000);
+        expect(conversations.liveSessionIds()).toEqual(["3f2a9b1c-0000-4000-8000-000000000000"]);
     });
 
     it("activity tracks the last tool and current todo", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress", target: "src/app.ts" });
-        registry.observe("c1", {
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "tool_call", id: "t1", name: "Edit", category: "edit", status: "in_progress", target: "src/app.ts" } });
+        conversations.send("c1", { kind: "frame", frame: {
             kind: "todos",
             items: [
                 { content: "done thing", status: "completed", activeForm: "doing" },
                 { content: "current thing", status: "in_progress", activeForm: "doing" },
             ],
-        });
+        } });
         expect(registry.get("c1")?.activity).toEqual({ tool: "Edit", target: "src/app.ts", todo: "current thing" });
     });
 
@@ -1332,190 +1316,187 @@ describe("agents registry", () => {
         });
 
         it("counts what the last turn left on its own list, and names what it would have done next", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 2, total: 3, next: "Draw the mark" } });
         });
 
         it("says nothing about a turn that finished its own list", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Read the registry", "completed"], ["Draw the mark", "completed"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Read the registry", "completed"], ["Draw the mark", "completed"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toBeUndefined();
         });
 
         // Re-measured every turn rather than stamped once, so finishing the work later actually clears it.
         it("clears once a later turn completes the list", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Draw the mark", "in_progress"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "in_progress"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished?.steps).toEqual({ open: 1, total: 1, next: "Draw the mark" });
 
-            await registry.begin(turn({ prompt: "carry on" }), 3_000);
-            registry.observe("c1", list(["Draw the mark", "completed"]));
-            await registry.finish("c1", 4_000);
+            await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "completed"]) });
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
             expect(registry.get("c1")?.unfinished).toBeUndefined();
         });
 
         it("re-stamps when a turn moves the list and still leaves something on it", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
-            await registry.begin(turn({ prompt: "carry on" }), 3_000);
-            registry.observe("c1", list(["Draw the mark", "completed"], ["Cover it with tests", "in_progress"]));
-            await registry.finish("c1", 4_000);
+            await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "completed"], ["Cover it with tests", "in_progress"]) });
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 4_000, steps: { open: 1, total: 2, next: "Cover it with tests" } });
         });
 
         /* A turn that reaches its own end without a list clears the prior unfinished state. */
         it("clears through a turn that ran to its own end without a list in view", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
-            await registry.begin(turn({ prompt: "Continue" }), 3_000);
-            await registry.finish("c1", 4_000);
+            await beginTurn(conversations, turn({ prompt: "Continue" }), 3_000);
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
             expect(registry.get("c1")?.unfinished).toBeUndefined();
         });
 
         it("keeps what it knew through a turn the allowance refused", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "pending"], ["Cover it with tests", "pending"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
-            await registry.begin(turn({ prompt: "carry on" }), 3_000);
-            registry.observe("c1", { kind: "error", message: "Individual quota reached." });
-            await registry.finish("c1", 4_000);
+            await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
+            conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "Individual quota reached." } });
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
             // `at` stays the turn that measured the list; a refusal must not reset that clock.
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 2, total: 2, next: "Draw the mark" } });
         });
 
         it("keeps what it knew through a turn the user stopped before it looked", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Draw the mark", "pending"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "pending"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
-            await registry.begin(turn({ prompt: "carry on" }), 3_000);
-            registry.stopping("c1", "stopped");
-            await registry.finish("c1", 4_000);
+            await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
+            conversations.send("c1", { kind: "stop", ending: "stopped" });
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 1, total: 1, next: "Draw the mark" } });
         });
 
         // A cut-short turn that did see the list reports what it saw: the measurement is the turn's, whatever ended it.
         it("measures a list a refused turn had already moved", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Draw the mark", "completed"], ["Cover it with tests", "in_progress"]));
-            registry.observe("c1", { kind: "error", message: "Individual quota reached." });
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "completed"], ["Cover it with tests", "in_progress"]) });
+            conversations.send("c1", { kind: "frame", frame: { kind: "error", message: "Individual quota reached." } });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 1, total: 2, next: "Cover it with tests" } });
         });
 
         // A manual land finishes the card without a turn; the runtime state it reads is the last turn's, checklist
         // included, and re-measuring that would stamp an old abandonment with the land's date.
         it("leaves the mark exactly as it was through a land, which is no turn", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Draw the mark", "pending"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "pending"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
-            await registry.finish("c1", 9_000);
+            await conversations.send("c1", { kind: "settle" }, 9_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: { open: 1, total: 1, next: "Draw the mark" } });
         });
 
         // The workspace's own end-of-turn check, independent of any todo list: a turn gets two rounds to repair a
         // failing check and may still end red (rules/turn-ending.ts).
         it("marks a turn that ended with its own check still failing", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.noteCheck("c1", { label: "Verify before you finish", failed: true });
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "check-ran", check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" } });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, check: "Verify before you finish" });
         });
 
         it("takes the repaired re-run as the verdict", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.noteCheck("c1", { label: "Verify before you finish", failed: true });
-            registry.noteCheck("c1", { label: "Verify before you finish", failed: false });
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "check-ran", check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" } });
+            conversations.send("c1", { kind: "check-ran", check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "passed" } });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             expect(registry.get("c1")?.unfinished).toBeUndefined();
         });
 
         // Unlike the todo mark, a check verdict is spent with the turn that earned it, not carried into the next.
         it("does not carry a red check into the next turn", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.noteCheck("c1", { label: "Verify before you finish", failed: true });
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "check-ran", check: { ruleId: "verify", label: "Verify before you finish", command: "pnpm verify", status: "failed" } });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
-            await registry.begin(turn({ prompt: "carry on" }), 3_000);
-            await registry.finish("c1", 4_000);
+            await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
             expect(registry.get("c1")?.unfinished).toBeUndefined();
         });
 
         // The entry keeps the fact throughout; only what the card shows is held back while a turn works through that
         // very list.
         it("holds the mark back while a turn is in flight and reports it again once the turn settles", async () => {
-            const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+            const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
             await registry.init();
-            await registry.begin(turn(), 1_000);
-            registry.observe("c1", list(["Draw the mark", "pending"]));
-            await registry.finish("c1", 2_000);
+            await beginTurn(conversations, turn(), 1_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "pending"]) });
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
             const left = { open: 1, total: 1, next: "Draw the mark" };
             expect(registry.get("c1")?.unfinished).toEqual({ at: 2_000, steps: left });
 
-            await registry.begin(turn({ prompt: "carry on" }), 3_000);
+            await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
             expect(registry.get("c1")?.unfinished).toBeUndefined();
             expect(registry.entry("c1")?.unfinished).toEqual({ at: 2_000, steps: left });
 
             // The resumed session re-publishes its list on the provider's first answer; still open, it is reported
             // again the moment the turn settles, dated to the turn that last saw it.
-            registry.observe("c1", list(["Draw the mark", "in_progress"]));
-            await registry.finish("c1", 4_000);
+            conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "in_progress"]) });
+            await conversations.send("c1", { kind: "settle" }, 4_000).settled;
             expect(registry.get("c1")?.unfinished).toEqual({ at: 4_000, steps: left });
         });
 
         // The card's rim, unlike the mark above, is NOT held back mid-turn: watching it fill is the whole point.
         describe("checklist progress", () => {
             it("counts the live list the moment a turn publishes one", async () => {
-                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
                 await registry.init();
-                await registry.begin(turn(), 1_000);
-                registry.observe(
-                    "c1",
-                    list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]),
-                );
+                await beginTurn(conversations, turn(), 1_000);
+                conversations.send("c1", { kind: "frame", frame: list(["Read the registry", "completed"], ["Draw the mark", "in_progress"], ["Cover it with tests", "pending"]) });
                 expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
             });
 
             it("reads a settled turn's completed list as whole", async () => {
-                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
                 await registry.init();
-                await registry.begin(turn(), 1_000);
-                registry.observe("c1", list(["Read the registry", "completed"], ["Draw the mark", "completed"]));
-                await registry.finish("c1", 2_000);
+                await beginTurn(conversations, turn(), 1_000);
+                conversations.send("c1", { kind: "frame", frame: list(["Read the registry", "completed"], ["Draw the mark", "completed"]) });
+                await conversations.send("c1", { kind: "settle" }, 2_000).settled;
                 // `unfinished` is cleared by the same turn: nothing was left open, and the rim still says 2 of 2.
                 expect(registry.get("c1")?.unfinished).toBeUndefined();
                 expect(registry.get("c1")?.checklist).toEqual({ done: 2, total: 2 });
@@ -1524,66 +1505,66 @@ describe("agents registry", () => {
             // `begin` installs a blank runtime state, so between it and the turn's first `todos` frame the only
             // surviving reading is what the last turn recorded as left open.
             it("carries the last turn's standing across the start of the next one", async () => {
-                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
                 await registry.init();
-                await registry.begin(turn(), 1_000);
-                registry.observe("c1", list(["Draw the mark", "completed"], ["Cover it with tests", "pending"], ["Update the pages", "pending"]));
-                await registry.finish("c1", 2_000);
+                await beginTurn(conversations, turn(), 1_000);
+                conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "completed"], ["Cover it with tests", "pending"], ["Update the pages", "pending"]) });
+                await conversations.send("c1", { kind: "settle" }, 2_000).settled;
                 expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
 
-                await registry.begin(turn({ prompt: "carry on" }), 3_000);
+                await beginTurn(conversations, turn({ prompt: "carry on" }), 3_000);
                 expect(registry.get("c1")?.checklist).toEqual({ done: 1, total: 3 });
 
-                registry.observe("c1", list(["Draw the mark", "completed"], ["Cover it with tests", "completed"], ["Update the pages", "pending"]));
+                conversations.send("c1", { kind: "frame", frame: list(["Draw the mark", "completed"], ["Cover it with tests", "completed"], ["Update the pages", "pending"]) });
                 expect(registry.get("c1")?.checklist).toEqual({ done: 2, total: 3 });
             });
 
             it("carries nothing for a conversation that kept no list", async () => {
-                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
                 await registry.init();
-                await registry.begin(turn(), 1_000);
-                await registry.finish("c1", 2_000);
+                await beginTurn(conversations, turn(), 1_000);
+                await conversations.send("c1", { kind: "settle" }, 2_000).settled;
                 expect(Object.keys(registry.get("c1") ?? {})).not.toContain("checklist");
             });
 
             // An empty list is no list: a zero-segment rim would be a ring saying nothing, not a ring saying none done.
             it("carries nothing for an empty list", async () => {
-                const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+                const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
                 await registry.init();
-                await registry.begin(turn(), 1_000);
-                registry.observe("c1", list());
+                await beginTurn(conversations, turn(), 1_000);
+                conversations.send("c1", { kind: "frame", frame: list() });
                 expect(Object.keys(registry.get("c1") ?? {})).not.toContain("checklist");
             });
         });
     });
 
     it("subscribe delivers an immediate snapshot and change broadcasts", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         const frames: number[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents.length));
         expect(frames).toEqual([0]);
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         expect(frames.at(-1)).toBe(1);
         // Delta frames are not card-visible; they never broadcast.
         const count = frames.length;
-        registry.observe("c1", { kind: "delta", text: "..." });
+        conversations.send("c1", { kind: "frame", frame: { kind: "delta", text: "..." } });
         expect(frames.length).toBe(count);
         unsubscribe();
     });
 
     it("archiving takes an agent off the roster without touching the entry", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
 
         await registry.setArchived(["c1"], 5_000);
         expect(registry.list()).toEqual([]);
         expect(registry.listArchived().map((agent) => agent.id)).toEqual(["c1"]);
         expect(registry.get("c1")?.archivedAt).toBe(5_000);
-        expect(registry.entry("c1")?.title).toBe("Fix the login bug");
+        expect(registry.entry("c1")?.social.title?.text).toBe("Fix the login bug");
         expect(registry.ids()).toEqual(["c1"]);
 
         await registry.clearArchived(["c1"]);
@@ -1593,60 +1574,48 @@ describe("agents registry", () => {
     });
 
     it("a new turn un-archives the agent it runs on", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await registry.setArchived(["c1"], 5_000);
 
-        expect(await registry.begin(turn(), 6_000)).toBe(true);
+        expect(await beginTurn(conversations, turn(), 6_000)).toBe(true);
         expect(registry.get("c1")?.archivedAt).toBeUndefined();
         expect(registry.list().map((agent) => agent.id)).toEqual(["c1"]);
         expect(registry.listArchived()).toEqual([]);
     });
 
-    // Each write path replaces `entries` wholesale; two overlapping persists can each serialize their own captured
-    // snapshot, and the later one silently drops the other's change.
+    // Each write path replaces `entries` wholesale; a write that carried the whole roster would let one overlapping change
+    // land on top of another's and silently drop it.
     it("concurrent writes all survive the round-trip to disk", async () => {
-        // `delays` staggers the three concurrent saves to finish in reverse order, the shape that actually loses data:
-        // the slowest save holds the oldest snapshot and lands on top of the rest.
-        let data: PersistedAgent[] = [];
-        const delays: number[] = [];
-        const store: AgentsStore & { saved: () => PersistedAgent[] } = {
-            load: async () => data,
-            save: async (agents) => {
-                await new Promise((resolve) => setTimeout(resolve, delays.shift() ?? 0));
-                data = JSON.parse(JSON.stringify(agents)) as PersistedAgent[];
-            },
-            saved: () => data,
-        };
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const store = memoryStore();
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
         for (const id of ["c1", "c2", "c3"]) {
-            await registry.begin(turn({ conversationId: id }), 1_000);
-            await registry.finish(id, 2_000);
+            await beginTurn(conversations, turn({ conversationId: id }), 1_000);
+            await conversations.send(id, { kind: "settle" }, 2_000).settled;
         }
 
-        delays.push(20, 10, 0);
         await Promise.all([registry.setArchived(["c1"], 5_000), registry.setArchived(["c2"], 5_001), registry.markSeen("c3", 5_002)]);
 
         expect(store.saved().find((entry) => entry.id === "c1")?.archivedAt).toBe(5_000);
         expect(store.saved().find((entry) => entry.id === "c2")?.archivedAt).toBe(5_001);
-        expect(store.saved().find((entry) => entry.id === "c3")?.seenAt).toBe(5_002);
+        expect(store.saved().find((entry) => entry.id === "c3")?.social.seenAt).toBe(5_002);
     });
 
     it("the archived list survives a restart, newest first", async () => {
         const store = memoryStore();
-        const first = createAgentsRegistry(store, standings(), presences());
+        const { agents: first, conversations: firstConversations } = createFleet(store, standings(), presences());
         await first.init();
-        await first.begin(turn(), 1_000);
-        await first.finish("c1", 1_500);
-        await first.begin(turn({ conversationId: "c2" }), 2_000);
-        await first.finish("c2", 2_500);
+        await beginTurn(firstConversations, turn(), 1_000);
+        await firstConversations.send("c1", { kind: "settle" }, 1_500).settled;
+        await beginTurn(firstConversations, turn({ conversationId: "c2" }), 2_000);
+        await firstConversations.send("c2", { kind: "settle" }, 2_500).settled;
         await first.setArchived(["c1"], 5_000);
         await first.setArchived(["c2"], 6_000);
 
-        const second = createAgentsRegistry(store, standings(), presences());
+        const { agents: second } = createFleet(store, standings(), presences());
         await second.init();
         expect(second.list()).toEqual([]);
         expect(second.listArchived().map((agent) => agent.id)).toEqual(["c2", "c1"]);
@@ -1654,14 +1623,14 @@ describe("agents registry", () => {
 
     it("remove drops the entry and rehydration restores persisted entries", async () => {
         const store = memoryStore();
-        const first = createAgentsRegistry(store, standings(), presences());
+        const { agents: first, conversations: firstConversations } = createFleet(store, standings(), presences());
         await first.init();
-        await first.begin(turn(), 1_000);
-        await first.finish("c1", 2_000);
-        const second = createAgentsRegistry(store, standings(), presences());
+        await beginTurn(firstConversations, turn(), 1_000);
+        await firstConversations.send("c1", { kind: "settle" }, 2_000).settled;
+        const { agents: second, conversations: secondConversations } = createFleet(store, standings(), presences());
         await second.init();
         expect(second.get("c1")?.status).toBe("idle");
-        await second.remove(["c1"]);
+        await secondConversations.dispose(["c1"]);
         expect(second.get("c1")).toBeUndefined();
         expect(store.saved()).toEqual([]);
     });
@@ -1669,10 +1638,10 @@ describe("agents registry", () => {
     // Only the exact (landedHead, landedTip) pair the scan measured may take the mark; anything else is stale.
     it("markLandingAbsorbed stamps the measured landing, persists it, and refuses every other row", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         await registry.recordLanded("c1", {
             landed: true,
             changed: true,
@@ -1683,21 +1652,21 @@ describe("agents registry", () => {
 
         // A mismatched hash (a stale scan racing a newer land) is a no-op.
         await registry.markLandingAbsorbed("c1", "root", "h0", "t1", 4);
-        expect(registry.entry("c1")?.repos[0]?.absorbed).toBeUndefined();
+        expect(worktreeOf(registry.entry("c1"))?.repos[0]?.absorbed).toBeUndefined();
 
         await registry.markLandingAbsorbed("c1", "root", "h1", "t1", 4);
-        expect(registry.entry("c1")?.repos[0]?.absorbed).toBe(4);
+        expect(worktreeOf(registry.entry("c1"))?.repos[0]?.absorbed).toBe(4);
         // Idempotent: a second mark, even with a different size, changes nothing.
         await registry.markLandingAbsorbed("c1", "root", "h1", "t1", 9);
-        expect(registry.entry("c1")?.repos[0]?.absorbed).toBe(4);
+        expect(worktreeOf(registry.entry("c1"))?.repos[0]?.absorbed).toBe(4);
         // Unknown agent or repo ids are silently ignored.
         await registry.markLandingAbsorbed("gone", "root", "h1", "t1", 1);
         await registry.markLandingAbsorbed("c1", "nested", "h1", "t1", 1);
 
         // Persists across a restart; the store round-trip is what this proves.
-        const restarted = createAgentsRegistry(store, standings(), presences());
+        const { agents: restarted } = createFleet(store, standings(), presences());
         await restarted.init();
-        expect(restarted.entry("c1")?.repos[0]?.absorbed).toBe(4);
+        expect(worktreeOf(restarted.entry("c1"))?.repos[0]?.absorbed).toBe(4);
 
         // A fresh `recordLanded` row has no `absorbed` mark: a landing just landed cannot already be absorbed.
         await registry.recordLanded("c1", {
@@ -1707,40 +1676,40 @@ describe("agents registry", () => {
             diff: { files: 1, insertions: 1, deletions: 0 },
             adjudicated: true,
         });
-        expect(registry.entry("c1")?.repos[0]?.absorbed).toBeUndefined();
+        expect(worktreeOf(registry.entry("c1"))?.repos[0]?.absorbed).toBeUndefined();
     });
 
     // The whole point of carrying the deadline: it has to outlive the turn that set it, since the entry it names goes
     // on expiring whether or not this conversation is running, and the card is read long after the turn ends.
     it("keeps the prompt-cache deadline past the end of the turn that measured it", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "context_usage", tokens: 142_000, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 3_600_000 });
-        await registry.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 142_000, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 3_600_000 } });
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 3_600_000 });
     });
 
     // Half a pair names no deadline, and a frame that carries neither is a turn that used no cache this time, not one
     // that killed the entry: neither may quietly replace a deadline already standing.
     it("takes a prompt-cache deadline only whole, and never unsets one", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        registry.observe("c1", { kind: "context_usage", tokens: 10, contextWindow: 200_000, cachedAt: 1_500 });
+        await beginTurn(conversations, turn(), 1_000);
+        conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 10, contextWindow: 200_000, cachedAt: 1_500 } });
         expect(registry.list()[0]?.promptCache).toBeUndefined();
 
-        registry.observe("c1", { kind: "context_usage", tokens: 20, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 300_000 });
-        registry.observe("c1", { kind: "context_usage", tokens: 30, contextWindow: 200_000 });
+        conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 20, contextWindow: 200_000, cachedAt: 1_500, cacheTtlMs: 300_000 } });
+        conversations.send("c1", { kind: "frame", frame: { kind: "context_usage", tokens: 30, contextWindow: 200_000 } });
         expect(registry.list()[0]?.promptCache).toEqual({ at: 1_500, ttlMs: 300_000 });
     });
 
     // A chip is worth nothing without the names behind it, which is the whole reason the wire carries people rather
     // than a count.
     it("groups reactions per emoji, naming everyone who left one, in the order they were left", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.react("c1", "👍", { email: "ada@example.com", name: "Ada" }, true, 2_000);
         await registry.react("c1", "🎉", { email: "ada@example.com", name: "Ada" }, true, 2_100);
         await registry.react("c1", "👍", { email: "bob@example.com" }, true, 2_200);
@@ -1761,10 +1730,10 @@ describe("agents registry", () => {
     // one press did, and none of them may restamp the instant the first press recorded.
     it("a second press of the same mark changes nothing at all", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 1_500);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
         await registry.react("c1", "👍", { email: "ada@example.com", name: "Ada" }, true, 2_000);
         const frames: number[] = [];
         const unsubscribe = registry.subscribe((agents) => frames.push(agents.length));
@@ -1779,10 +1748,10 @@ describe("agents registry", () => {
     // Reacting is not the conversation doing something, so the card must not move to the top of a board sorted by
     // when work last happened.
     it("leaves updatedAt where the last turn left it", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
-        await registry.finish("c1", 1_500);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
         const before = registry.get("c1")?.updatedAt;
         await registry.react("c1", "👀", { email: "ada@example.com" }, true, 8_000);
         expect(registry.get("c1")?.updatedAt).toBe(before);
@@ -1792,9 +1761,9 @@ describe("agents registry", () => {
     // the chip with them rather than leaving an empty one behind.
     it("takes a mark back, and the last one takes the chip with it", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.react("c1", "👍", { email: "ada@example.com", name: "Ada" }, true, 2_000);
         await registry.react("c1", "👍", { email: "bob@example.com" }, true, 2_100);
 
@@ -1804,23 +1773,23 @@ describe("agents registry", () => {
         await registry.react("c1", "👍", { email: "bob@example.com" }, false, 3_100);
         expect(registry.get("c1")?.reactions).toBeUndefined();
         // Absent rather than an empty list on disk too: a card nobody marks must read like one nobody ever did.
-        expect(store.saved()[0]?.reactions).toBeUndefined();
+        expect(store.saved()[0]?.social.reactions).toEqual([]);
 
-        const restarted = createAgentsRegistry(store, standings(), presences());
+        const { agents: restarted } = createFleet(store, standings(), presences());
         await restarted.init();
         expect(restarted.get("c1")?.reactions).toBeUndefined();
     });
 
     it("takes back a mark nobody left without touching the card", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn(), 1_000);
+        await beginTurn(conversations, turn(), 1_000);
         await registry.react("c1", "👍", { email: "ada@example.com" }, false, 2_000);
         expect(registry.get("c1")?.reactions).toBeUndefined();
     });
 
     it("answers an unknown conversation with nothing rather than minting one", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
         expect(await registry.react("nope", "👍", { email: "ada@example.com" }, true, 2_000)).toBeUndefined();
     });
@@ -1830,44 +1799,198 @@ describe("agents registry", () => {
 // an explicit assignment. Ownership never follows a later turn's caller.
 describe("session ownership", () => {
     it("latches the opening member as owner and keeps them through another member's turns", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn({ startedBy: "ania@example.com", owner: { email: "ania@example.com", name: "Ania" } }), 1_000);
+        await beginTurn(conversations, turn({ startedBy: "ania@example.com", owner: { email: "ania@example.com", name: "Ania" } }), 1_000);
         expect(registry.get("c1")?.owner).toEqual({ email: "ania@example.com", name: "Ania", since: 1_000 });
         expect(registry.get("c1")?.startedBy).toBe("ania@example.com");
-        await registry.finish("c1", 1_500);
-        await registry.begin(turn({ startedBy: "bob@example.com", owner: { email: "bob@example.com" } }), 2_000);
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
+        await beginTurn(conversations, turn({ startedBy: "bob@example.com", owner: { email: "bob@example.com" } }), 2_000);
         expect(registry.get("c1")?.owner).toEqual({ email: "ania@example.com", name: "Ania", since: 1_000 });
         expect(registry.get("c1")?.startedBy).toBe("ania@example.com");
     });
 
     it("leaves a program's conversation unowned, and a child inherits its parent's owner as of its own birth", async () => {
-        const registry = createAgentsRegistry(memoryStore(), standings(), presences());
+        const { agents: registry, conversations } = createFleet(memoryStore(), standings(), presences());
         await registry.init();
-        await registry.begin(turn({ conversationId: "bot", startedBy: "token:nightly" }), 1_000);
+        await beginTurn(conversations, turn({ conversationId: "bot", startedBy: "token:nightly" }), 1_000);
         expect(registry.get("bot")?.owner).toBeUndefined();
-        await registry.begin(turn({ conversationId: "parent", startedBy: "ania@example.com", owner: { email: "ania@example.com" } }), 1_000);
-        await registry.begin(turn({ conversationId: "sub-1", startedBy: "agent:parent" }), 3_000);
+        await beginTurn(conversations, turn({ conversationId: "parent", startedBy: "ania@example.com", owner: { email: "ania@example.com" } }), 1_000);
+        await beginTurn(conversations, turn({ conversationId: "sub-1", startedBy: "agent:parent" }), 3_000);
         expect(registry.get("sub-1")?.owner).toEqual({ email: "ania@example.com", since: 3_000 });
         expect(registry.get("sub-1")?.startedBy).toBe("agent:parent");
         // A child of an unowned parent, or of a parent the registry has never seen, is unowned too.
-        await registry.begin(turn({ conversationId: "sub-2", startedBy: "agent:bot" }), 4_000);
+        await beginTurn(conversations, turn({ conversationId: "sub-2", startedBy: "agent:bot" }), 4_000);
         expect(registry.get("sub-2")?.owner).toBeUndefined();
     });
 
     it("assign moves it without counting as activity, and the moved owner survives the next turn", async () => {
         const store = memoryStore();
-        const registry = createAgentsRegistry(store, standings(), presences());
+        const { agents: registry, conversations } = createFleet(store, standings(), presences());
         await registry.init();
-        await registry.begin(turn({ owner: { email: "ania@example.com" } }), 1_000);
-        await registry.finish("c1", 1_500);
+        await beginTurn(conversations, turn({ owner: { email: "ania@example.com" } }), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
         const before = registry.get("c1")?.updatedAt;
         const moved = await registry.assign("c1", { email: "bob@example.com", name: "Bob" }, 5_000);
         expect(moved?.owner).toEqual({ email: "bob@example.com", name: "Bob", since: 5_000 });
         expect(moved?.updatedAt).toBe(before);
-        expect(store.saved().find((entry) => entry.id === "c1")?.owner?.email).toBe("bob@example.com");
-        await registry.begin(turn({ owner: { email: "ania@example.com" } }), 6_000);
+        expect(store.saved().find((entry) => entry.id === "c1")?.social.owner?.email).toBe("bob@example.com");
+        await beginTurn(conversations, turn({ owner: { email: "ania@example.com" } }), 6_000);
         expect(registry.get("c1")?.owner?.email).toBe("bob@example.com");
         expect(await registry.assign("missing", { email: "bob@example.com" }, 7_000)).toBeUndefined();
     });
+});
+
+// The facts that must agree are written as one: each of these injects a failure partway through the write and finds the
+// database exactly as it was before the fact.
+describe("one write per fact", () => {
+    const IN_FLIGHT: JournalledTurn = { kind: "turn", turn: { conversationId: "c1", prompt: "Fix the login bug" }, startedAt: 1_000, attempts: 0 };
+
+    it("a turn's opening entry and its journal row go down together", async () => {
+        const db = openConversationsDb(IN_MEMORY);
+        const { agents: registry, conversations } = createFleet(fleetStoreOver(db), standings(), presences());
+        await registry.init();
+        // Filed by the run before its turn begins, and written by nothing until the begin.
+        conversations.send("c1", { kind: "journalled", entry: IN_FLIGHT });
+        expect(db.rowsOf("c1")).toEqual({});
+
+        expect(await beginTurn(conversations, turn(), 1_000)).toBe(true);
+
+        expect(Object.keys(db.rowsOf("c1")).toSorted()).toEqual(["conversation", "turn_journal"]);
+        expect(await sqliteTurnJournal(db).list()).toEqual([IN_FLIGHT]);
+    });
+
+    it("a turn whose journal row cannot be written leaves no opening entry either", async () => {
+        const db = openConversationsDb(IN_MEMORY);
+        const store = fleetStoreOver(db);
+        const failing: FleetStore = {
+            ...store,
+            journal: {
+                ...store.journal,
+                putTurn: () => {
+                    throw new Error("disk full");
+                },
+            },
+        };
+        const { agents: registry, conversations } = createFleet(failing, standings(), presences());
+        await registry.init();
+        conversations.send("c1", { kind: "journalled", entry: IN_FLIGHT });
+
+        await expect(beginTurn(conversations, turn(), 1_000)).rejects.toThrow("disk full");
+
+        expect(db.rowsOf("c1")).toEqual({});
+    });
+
+    it("a land's outcome and its per-repo provenance go down together, or the record stays as it was", async () => {
+        const db = openConversationsDb(IN_MEMORY);
+        const { agents: registry, conversations } = createFleet(fleetStoreOver(db), standings(), presences());
+        await registry.init();
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
+        await registry.recordWorktree("c1", [{ repo: "root", base: "a".repeat(40) }]);
+        const before = db.rowsOf("c1");
+
+        // The same repo twice: the second provenance row collides after the record and the first row are written.
+        await expect(
+            registry.recordLanded("c1", {
+                landed: true,
+                changed: true,
+                repos: [
+                    { repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40) },
+                    { repo: "root", base: "a".repeat(40), landedTip: "c".repeat(40) },
+                ],
+                diff: { files: 1, insertions: 1, deletions: 0 },
+                adjudicated: true,
+            }),
+        ).rejects.toThrow("UNIQUE constraint failed");
+        expect(db.rowsOf("c1")).toEqual(before);
+
+        await registry.recordLanded("c1", {
+            landed: true,
+            changed: true,
+            repos: [{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40), landedHead: "h".repeat(40), landedAt: 2_000 }],
+            diff: { files: 1, insertions: 1, deletions: 0 },
+            adjudicated: true,
+        });
+        const landed = sqliteAgentsStore(db).load()[0];
+        expect(worktreeOf(landed)?.repos).toEqual([{ repo: "root", base: "a".repeat(40), landedTip: "b".repeat(40), landedHead: "h".repeat(40), landedAt: 2_000 }]);
+        expect(landed?.landing.diff).toEqual({ files: 1, insertions: 1, deletions: 0 });
+    });
+
+    it("a removed conversation leaves no row in any table, and its directory goes with it", async () => {
+        const db = openConversationsDb(IN_MEMORY);
+        const removed: string[][] = [];
+        const { agents: registry, conversations } = createFleet(
+            fleetStoreOver(db, { remove: async (ids) => void removed.push([...ids]) }),
+            standings(),
+            presences(),
+        );
+        await registry.init();
+        conversations.send("c1", { kind: "journalled", entry: IN_FLIGHT });
+        await beginTurn(conversations, turn(), 1_000);
+        await sqliteTurnCheckpoints(db).record("c1", 0, { kind: "tree", snapshot: "s-0" });
+        await conversations.send("c1", { kind: "settle" }, 1_500).settled;
+
+        await conversations.dispose(["c1"]);
+
+        expect(db.rowsOf("c1")).toEqual({});
+        expect(removed).toEqual([["c1"]]);
+        expect(registry.entry("c1")).toBeUndefined();
+    });
+});
+
+// An arrival lands rows under a running daemon: what it brought replaces what was here for those ids, and nothing else
+// is read again, so a hold this process made for another conversation survives it.
+it("an arrival takes in only the conversations it brought, replacing those whole", async () => {
+    const db = openConversationsDb(IN_MEMORY);
+    const { agents: registry, conversations } = createFleet(fleetStoreOver(db), standings(), presences());
+    await registry.init();
+    await beginTurn(conversations, turn(), 1_000);
+    conversations.send("c1", {
+        kind: "frame",
+        frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "scheduled", resetsAt: 9_000, held: { ran: true } },
+    });
+    await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+    await beginTurn(conversations, turn({ conversationId: "c2" }), 1_000);
+    await conversations.send("c2", { kind: "settle" }, 2_000).settled;
+    const here = registry.entry("c2");
+    if (here === undefined) {
+        throw new Error("c2 never registered");
+    }
+    // What the arrival wrote: a conversation this fleet never had, and another copy of one it has.
+    const brought = conversationEntry({ id: "new-1", createdAt: 3_000, updatedAt: 3_000 });
+    sqliteAgentsStore(db).save([brought, { ...here, social: { title: { text: "Arrived title", source: "user" }, reactions: [] } }]);
+
+    registry.adopted(["new-1", "c2"]);
+
+    expect(registry.entry("new-1")).toEqual(brought);
+    expect(registry.entry("c2")?.social.title).toEqual({ text: "Arrived title", source: "user" });
+    expect(registry.get("c1")).toMatchObject({ limitHeld: true, limitScheduled: true });
+});
+
+// A spent allowance's hold, booking and move are memory of the process that made them; the refusal itself persists.
+it("a restarted fleet reads a spent allowance back without the hold, the booking or the move", async () => {
+    const store = memoryStore();
+    const { agents: registry, conversations } = createFleet(store, standings(), presences());
+    await registry.init();
+    await beginTurn(conversations, turn(), 1_000);
+    conversations.send("c1", {
+        kind: "frame",
+        frame: { kind: "error", code: "rate_limit", message: "spent", autoResume: "scheduled", resetsAt: 9_000, held: { ran: true, moving: "acct-2" } },
+    });
+    await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+    expect(registry.get("c1")).toMatchObject({ failureCode: "rate_limit", limitResetsAt: 9_000, limitHeld: true, limitScheduled: true, limitMoving: "acct-2" });
+
+    const { agents: restarted } = createFleet(store, standings(), presences());
+    await restarted.init();
+    expect(restarted.entry("c1")?.ending).toEqual({ kind: "limited", failure: "spent", resetsAt: 9_000, held: false, scheduled: false });
+    const summary = restarted.get("c1");
+    expect([summary?.status, summary?.failureCode, summary?.limitResetsAt, summary?.limitHeld, summary?.limitScheduled, summary?.limitMoving]).toEqual([
+        "error",
+        "rate_limit",
+        9_000,
+        undefined,
+        undefined,
+        undefined,
+    ]);
 });

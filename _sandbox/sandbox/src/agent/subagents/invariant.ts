@@ -1,8 +1,9 @@
-import { liveTurnConversations } from "../run/turn/turn-runs.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import { liveTurnConversations } from "../../agents/actor/conversation-holdings.js";
 import type { InvariantCheck } from "../../invariants/invariants.js";
 import { childLedger } from "./children.js";
 
-// Checks that the child ledger's `running` and the turn-runs map agree. The dangerous direction is turn live plus
+// Checks that the child ledger's `running` and the runs the conversation actors hold agree. The dangerous direction is turn live plus
 // ledger settled: a child that reads as finished everywhere but keeps spending against the owner's allowance
 // unsupervised.
 
@@ -10,15 +11,22 @@ import { childLedger } from "./children.js";
 const LEDGER_GRACE_MS = 10_000;
 
 export interface ChildLedgerDeps {
-    // Overridden by tests; production reads the module ledgers.
-    readonly children?: typeof childLedger;
+    // Where the live runs and the child ledger are held: each conversation's actor.
+    readonly conversations: Pick<ConversationActors, "holdings">;
+    // Overridden by tests; production reads the ledger the actors hold.
+    readonly children?: () => ReturnType<typeof childLedger>;
     readonly live?: () => readonly { readonly conversationId: string; readonly startedAt: number }[];
     readonly now?: () => number;
 }
 
 export const owner = "children";
 
-export const checks = ({ children = childLedger, live = liveTurnConversations, now = Date.now }: ChildLedgerDeps = {}): readonly InvariantCheck[] => [
+export const checks = ({
+    conversations,
+    children = () => childLedger(conversations),
+    live = () => liveTurnConversations(conversations),
+    now = Date.now,
+}: ChildLedgerDeps): readonly InvariantCheck[] => [
     {
         name: "settled-children-have-no-live-turn",
         // Checked at settle and the standing patrol, not boot: the ledger is empty then, a daemon death ends every

@@ -88,8 +88,8 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
 
     // The owner's standing choice: bring the server up with the sandbox rather than on the first document. Read once at
     // boot; a later flip is acted on by the viewer, which starts the server as it saves the setting.
-    const settings = await api.daemon
-        .json<{ settings: Record<string, unknown> }>(`/extensions/${encodeURIComponent(context.extensionId)}/settings`)
+    const settings = await api.daemon.rpc.extensions
+        .settings({ id: context.extensionId })
         .catch((error: unknown) => {
             api.log(`settings unreadable, treating auto-start as off: ${error instanceof Error ? error.message : String(error)}`);
             return undefined;
@@ -105,10 +105,7 @@ export const activateServer = async (api: ExtensionServerApi, context: Extension
     // The last origin the daemon handed out; the listener names it to the document server on every proxied request.
     let publicOrigin: string | undefined;
     const exposure = async (): Promise<string | undefined> => {
-        const { previewUrl } = await api.daemon.json<{ previewUrl?: string }>("/ports/forward", {
-            method: "POST",
-            body: JSON.stringify({ port: listenerPort }),
-        });
+        const { previewUrl } = await api.daemon.rpc.ports.forward({ port: listenerPort });
         publicOrigin = previewUrl?.replace(/\/$/, "");
         return publicOrigin;
     };

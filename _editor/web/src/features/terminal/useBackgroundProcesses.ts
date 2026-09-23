@@ -1,11 +1,11 @@
 import { computed, type ComputedRef, ref, type Ref } from "vue";
 import { useExtensions } from "../extensions/useExtensions";
-import { sandboxJson } from "../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../sandbox/client/sandboxRpc";
 import { useTerminalsQuery } from "./terminalsQuery";
 import { useTerminalPanel } from "./useTerminalPanel";
 
 // Background-process rows: extensions' declared processes (listed even while stopped) merged with the daemon's live
-// `process` sessions. Extension rows start/stop via /extensions routes; session-only rows can only be stopped. Backed
+// `process` sessions. Extension rows start/stop via the extensions routes; session-only rows can only be stopped. Backed
 // by the shared terminals query, not a mounted panel: health is a sandbox fact any surface can ask.
 
 export interface BackgroundProcessRow {
@@ -23,8 +23,7 @@ export interface BackgroundProcessRow {
 
 // Delayed relist after an action, to catch a service that reports running then crashes instantly.
 const SETTLE_MS = 1500;
-const processRoute = (row: BackgroundProcessRow, action: string): string =>
-    `/extensions/${encodeURIComponent(row.extensionId ?? ``)}/processes/${encodeURIComponent(row.processName ?? ``)}/${action}`;
+const processOf = (row: BackgroundProcessRow): { id: string; name: string } => ({ id: row.extensionId ?? ``, name: row.processName ?? `` });
 
 // Opens a row's read-only logs via the global panel channel rather than a local tab call, so it works with no panel
 // mounted.
@@ -88,18 +87,18 @@ export function useBackgroundProcesses(): {
     // covers fresh, crashed, and running alike with one call.
     const start = (row: BackgroundProcessRow): Promise<void> =>
         act(row, async () => {
-            await sandboxJson(processRoute(row, `stop`), { method: `POST` });
-            await sandboxJson(processRoute(row, `start`), { method: `POST` });
+            await sandboxRpc.extensions.processStop(processOf(row));
+            await sandboxRpc.extensions.processStart(processOf(row));
         });
 
     const stop = (row: BackgroundProcessRow): Promise<void> =>
         act(row, async () => {
             if (row.extensionId !== undefined) {
-                await sandboxJson(processRoute(row, `stop`), { method: `POST` });
+                await sandboxRpc.extensions.processStop(processOf(row));
                 return;
             }
             if (row.session !== undefined) {
-                await sandboxJson(`/system/terminals/${encodeURIComponent(row.session)}`, { method: `DELETE` });
+                await sandboxRpc.system.killTerminal({ name: row.session });
             }
         });
 

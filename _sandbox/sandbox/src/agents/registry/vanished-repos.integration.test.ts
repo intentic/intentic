@@ -6,14 +6,15 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { gitInit } from "@intentic/scaffold";
 import { test, expect, afterEach } from "bun:test";
-import { noIsolation } from "../../testing.js";
+import { conversationsDbPath, openConversationsDb } from "../../store/conversations-db.js";
+import { beginTurn, fleetStoreOver, noIsolation } from "../../testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
-import { repoGitDir } from "../../history/history.js";
+import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../platform/resources/perf.js";
 import { workspacePaths } from "../../workspace/workspace.js";
-import { createAgentsRegistry, type AgentsRegistry } from "./agents-registry.js";
-import type { AgentsStore, PersistedAgent } from "./agents-store.js";
+import { type AgentsRegistry, createFleet, type FleetStore } from "./agents-registry.js";
+import { type PersistedAgent, worktreeOf } from "./agents-store.js";
 import { dropVanishedRepos } from "./vanished-repos.js";
 import { createAgentWorktrees, type AgentWorktrees } from "../worktrees/worktrees.js";
 
@@ -30,15 +31,10 @@ afterEach(async () => {
     }
 });
 
-const memoryStore = (initial: PersistedAgent[] = []): AgentsStore & { saved: () => PersistedAgent[] } => {
-    let data = initial;
-    return {
-        load: async () => data,
-        save: async (agents) => {
-            data = [...agents];
-        },
-        saved: () => data,
-    };
+// The real store in the workspace's own history volume, and what it holds right now.
+const storeIn = (historyRoot: string): FleetStore & { saved: () => PersistedAgent[] } => {
+    const store = fleetStoreOver(openConversationsDb(conversationsDbPath(historyRoot)));
+    return { ...store, saved: () => store.agents.load() };
 };
 
 const noStandings = { of: () => "idle" as const, causesOf: () => [], refresh: async () => false, forget: () => {} };
@@ -51,7 +47,7 @@ const setup = async (): Promise<{
     historyRoot: string;
     worktrees: AgentWorktrees;
     agents: AgentsRegistry;
-    store: ReturnType<typeof memoryStore>;
+    store: ReturnType<typeof storeIn>;
 }> => {
     const base = await mkdtemp(join(tmpdir(), "intentic-vanished-"));
     tempDirs.push(base);
@@ -77,11 +73,11 @@ const setup = async (): Promise<{
         logger,
         perf,
     });
-    const store = memoryStore();
-    const agents = createAgentsRegistry(store, noStandings, noPresences);
+    const store = storeIn(historyRoot);
+    const { agents, conversations } = createFleet(store, noStandings, noPresences);
     await agents.init();
     for (const id of ["c1", "c2"]) {
-        await agents.begin({ conversationId: id, isolated: true, prompt: "work", provider: "claude", harness: "native" }, 1_000);
+        await beginTurn(conversations, { conversationId: id, isolated: true, prompt: "work", profile: { agent: "claude", harness: "native" } }, 1_000);
         const conversation = await worktrees.ensure(id, []);
         await agents.recordWorktree(id, conversation.repos);
     }
@@ -90,7 +86,7 @@ const setup = async (): Promise<{
     return { work, historyRoot, worktrees, agents, store };
 };
 
-const reposOf = (agents: AgentsRegistry, id: string): string[] => (agents.entry(id)?.repos ?? []).map(({ repo }) => repo);
+const reposOf = (agents: AgentsRegistry, id: string): string[] => (worktreeOf(agents.entry(id))?.repos ?? []).map(({ repo }) => repo);
 
 test("a workspace with nothing deleted is left exactly as it is", async () => {
     const { worktrees, agents, historyRoot } = await setup();
@@ -112,7 +108,7 @@ test("a repo deleted from the workspace leaves every composition, live and archi
 
     expect(reposOf(agents, "c1")).toEqual(["root"]);
     expect(reposOf(agents, "c2")).toEqual(["root"]);
-    expect(store.saved().map((entry) => entry.repos.map(({ repo }) => repo))).toEqual([["root"], ["root"]]);
+    expect(store.saved().map((entry) => (worktreeOf(entry)?.repos ?? []).map(({ repo }) => repo))).toEqual([["root"], ["root"]]);
     // Idempotent: a repeat sweep costs nothing once the rows are gone.
     expect(await dropVanishedRepos({ agents, agentWorktrees: worktrees, logger })).toEqual([]);
 });

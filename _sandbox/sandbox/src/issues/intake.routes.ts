@@ -8,16 +8,14 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import type { z } from "zod";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { createPublicDoor, type PublicDoor, type PublicDoorSpec } from "../automations/public-door.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import type { InstallsStore } from "../store/installs.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 import { fingerprintOf } from "./fingerprint.js";
-import { ISSUES_PROVIDER } from "./provider.js";
+import { ISSUES_PROVIDER } from "../automations/catalog.js";
 import { wakeBrief } from "./issue-payload.js";
 import { fileIssuesStore, type IssuesStore } from "./issues-store.js";
 
@@ -132,7 +130,6 @@ const gated = async (
 
 export const createIntakeRoutes = (
     services: Services,
-    wake: WakeFn = streamAgent,
     issues: IssuesStore = fileIssuesStore(statePath(services.workspace.root, ".intentic/records/issues/")),
     installs?: InstallsStore,
 ) => {
@@ -167,7 +164,7 @@ export const createIntakeRoutes = (
             // New always wakes; known only past its escalation step. Filters apply here, after recording, not
             // admission.
             if (wakeWanted(automation, report.kind, origin) && (outcome.fresh || outcome.escalated)) {
-                void startWake(services, wake, issues, automation, outcome.issue, outcome.fresh ? "new" : "recurring").catch((error: unknown) =>
+                void startWake(services, issues, automation, outcome.issue, outcome.fresh ? "new" : "recurring").catch((error: unknown) =>
                     services.logger.error({ err: error, automation: automation.id, issue: fingerprint }, "issue wake failed"),
                 );
             }
@@ -183,7 +180,6 @@ export const createIntakeRoutes = (
 // held wake would queue a fresh card for every crash.
 export const startWake = async (
     services: Services,
-    wake: WakeFn,
     issues: IssuesStore,
     automation: AutomationRecord,
     issue: Parameters<typeof wakeBrief>[0],
@@ -207,7 +203,6 @@ export const startWake = async (
         automation,
         thread,
         ISSUE_THREAD_TTL_MS,
-        wake,
         {
             payload: brief.payload,
             // An issue's turns never overlap; a second escalation mid-fix queues rather than being lost.

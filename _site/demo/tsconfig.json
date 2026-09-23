@@ -30,6 +30,6 @@
         }
     },
 /* The app's ambient declarations, for the same reason as the path map above: this checks the app's source. */
-    "include": ["./src/**/*.ts", "./vite.config.ts", "../../_editor/web/env.d.ts", "../../_editor/web/src/virtual-modules.d.ts"],
+    "include": ["./src/**/*.ts", "./scripts/**/*.ts", "./vite.config.ts", "../../_editor/web/env.d.ts", "../../_editor/web/src/virtual-modules.d.ts"],
     "extends": "@intentic/tsconfig/tsconfig.vue.json"
 }

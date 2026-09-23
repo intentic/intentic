@@ -1,5 +1,7 @@
 import { test, expect } from "bun:test";
 import { checks } from "./invariant.js";
+import { unstubbed } from "@intentic/testing";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
 /* The failure the owner pays for: a child the parent has been told is finished, still running against. */
 
@@ -12,7 +14,12 @@ const NOW = 1_800_000_000_000;
 type Ledger = readonly { readonly conversationId: string; readonly parent: string; readonly running: boolean; readonly startedAt: number }[];
 
 const run = async (ledger: Ledger, live: readonly { conversationId: string; startedAt: number }[]): Promise<void> => {
-    const [check] = checks({ children: () => ledger, live: () => live, now: () => NOW });
+    const [check] = checks({
+        conversations: unstubbed<ConversationActors>("conversations", {}),
+        children: () => ledger,
+        live: () => live,
+        now: () => NOW,
+    });
     await check?.run({ moment: "turn-settled", fail });
 };
 

@@ -1,6 +1,5 @@
 import { endpointProvider, type ModelPin, type ModelRole, type ModelSource, NATIVE_PROVIDERS, readyChain } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
-import { harnessReadyProviders } from "../providers/harness-credentials.js";
 import { failingStreak } from "./role-model-health.js";
 import { spentRung } from "./role-model-quota.js";
 
@@ -11,7 +10,7 @@ import { spentRung } from "./role-model-quota.js";
 // No catalogs are read: pins are taken verbatim (the picker's custom-id escape hatch), so readiness is the only fact
 // needed here.
 const readinessSources = async (services: Services): Promise<ModelSource[]> => {
-    const [ready, capabilities] = await Promise.all([harnessReadyProviders(services), services.capabilities.list()]);
+    const [ready, capabilities] = await Promise.all([services.providerReadiness(), services.capabilities.list()]);
     return [
         ...NATIVE_PROVIDERS.map((provider) => ({ provider, ready: ready[provider], models: [] })),
         // An endpoint counts ready simply by being installed; no separate connection to check.

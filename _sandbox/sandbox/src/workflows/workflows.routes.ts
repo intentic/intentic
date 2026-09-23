@@ -7,7 +7,6 @@ import {
     type WorkflowSummary,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import { archiveAgents } from "../agents/registry/archive.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
@@ -101,7 +100,7 @@ export const createWorkflowsRoutes = (services: Services) => {
             }
             const run = await services.workflowRuns.start(openRun(workflow, repos, Date.now(), input.request));
             // Detached, like every route that starts a turn: the first step alone can take minutes.
-            void runWorkflow(services, run, streamAgent);
+            void runWorkflow(services, run);
             return run;
         }),
         runs: i.runs.handler(async () => ({ runs: await services.workflowRuns.list() })),

@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import {
     LoopDesignIdParamSchema,
     LoopDesignSaveSchema,
@@ -16,7 +16,7 @@ import { OkSchema } from "../schemas/shared.js";
 // with the design's fields. `start` acks at once and runs detached; the record comes back, not the outcome.
 export const loopsContract = {
     // Kept after the loop ends: the iteration history is the answer to why it stopped when it did.
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/loops",
@@ -26,7 +26,7 @@ export const loopsContract = {
         })
         .output(LoopsListSchema),
     // Rejects an already-looping conversation; a fresh conversation id opens it, like a first turn.
-    start: oc
+    start: procedure
         .route({
             method: "POST",
             path: "/loops",
@@ -37,7 +37,7 @@ export const loopsContract = {
         .input(LoopSchema)
         .output(LoopRecordSchema),
     // Stops future rounds only; the round in flight keeps going. Use /agent/stop to kill it too.
-    stop: oc
+    stop: procedure
         .route({
             method: "POST",
             path: "/loops/{conversationId}/stop",
@@ -49,7 +49,7 @@ export const loopsContract = {
         .output(OkSchema),
 
     // A saved loop is the same loop with its goal left blank, not a separate feature.
-    designs: oc
+    designs: procedure
         .route({
             method: "GET",
             path: "/loops/designs",
@@ -59,7 +59,7 @@ export const loopsContract = {
         })
         .output(LoopDesignsListSchema),
     // Names create vs replace explicitly, rather than upserting; refuses a design with nothing to produce or check.
-    saveDesign: oc
+    saveDesign: procedure
         .route({
             method: "POST",
             path: "/loops/designs",
@@ -70,7 +70,7 @@ export const loopsContract = {
         .input(LoopDesignSaveSchema)
         .output(LoopDesignSchema),
     // Deleting a design does not stop a loop running from it; it already copied the fields it needed.
-    removeDesign: oc
+    removeDesign: procedure
         .route({
             method: "DELETE",
             path: "/loops/designs/{id}",

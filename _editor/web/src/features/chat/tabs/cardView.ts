@@ -58,8 +58,8 @@ const statusOf = (entry: OpenChat): CardView[`status`] => {
 // what last ran; `model` is what the composer would send next.
 const modelOf = (entry: OpenChat): string | undefined => {
     const { agent, conversation } = entry;
-    const provider = agent?.provider ?? conversation.provider.value;
-    const model = agent?.model ?? conversation.activeModel.value ?? conversation.model.value;
+    const provider = agent?.provider ?? conversation.selection.provider.value;
+    const model = agent?.model ?? conversation.activeModel.value ?? conversation.selection.model.value;
     if (model !== null && model !== ``) {
         return modelLabelFor(provider, model);
     }
@@ -77,8 +77,8 @@ const liveOf = (entry: OpenChat): CardView[`live`] => {
             since: agent.startedAt,
         };
     }
-    if (conversation.streaming.value) {
-        return { icon: activityIcon(undefined), text: t(`chat.cardView.working`), since: conversation.turnStartedAt.value };
+    if (conversation.turn.streaming.value) {
+        return { icon: activityIcon(undefined), text: t(`chat.cardView.working`), since: conversation.turn.turnStartedAt.value };
     }
     return undefined;
 };

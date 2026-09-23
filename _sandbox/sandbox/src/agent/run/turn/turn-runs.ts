@@ -1,40 +1,24 @@
-import {
-    type AgentEvent,
-    type AgentTurn,
-    type AttachFrame,
-    isTurnFact,
-    type ParkedRequest,
-    type TranscriptPatch,
-    type TranscriptRow,
-    type TurnFact,
-} from "@intentic/sandbox-contract";
+import { type AgentEvent, isTurnFact, type ParkedRequest, type TranscriptPatch, type TranscriptRow, type TurnFact } from "@intentic/sandbox-contract";
 import { TranscriptFold, type TurnEnding } from "@intentic/sandbox-contract/transcript-fold";
+import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
+import { type AttachEntry, type AttachHead, type LiveRun, RUN_RETAINED_MS, RUNS } from "../../../agents/actor/conversation-holdings.js";
+import type { AwaitingKind, DomainEvents } from "../../../seams/domain-events.js";
+import type { TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
+import type { JournalledTurn } from "./turn-journal.js";
 import { recordCommands } from "../../providers/agent-commands.js";
-import type { TurnJournal } from "./turn-journal.js";
 
 // Turn execution decoupled from any client connection: POST /agent starts a run, folds the transcript frame by frame,
-// and any number of clients attach to it live. Holds rows, not frames, keyed by conversationId; a finished run is
-// retained briefly so a late attach still finds it, then reports NOT_FOUND.
-
-// The turn generator a run pumps, streamAgent's shape; injected to keep this module free of a cycle with agent.routes
-// (and swappable in tests).
-export type TurnFn = (input: AgentTurn, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
+// and any number of clients attach to it live. Holds rows, not frames; each run is held by its conversation's actor
+// (RUNS), retained briefly past its settle so a late attach still finds it, then reports NOT_FOUND.
 
 // The two moments a turn's starter might want reported: when it parks and when it settles. This module knows only WHEN;
-// agent.routes owns the wording and whether to send at all.
+// the starter owns the wording and whether to send at all.
 export interface TurnObserver {
     // Agent waits on the user (plan, question, permission, browser/terminal handover); may fire several times.
-    readonly awaiting: (kind: "plan" | "question" | "permission" | "browser_help" | "terminal_help") => void;
+    readonly awaiting: (kind: AwaitingKind) => void;
     // Run ended, exactly once; `error` only for a real failure, a /agent/stop abort settles as a clean "done".
     readonly settled: (outcome: { readonly ok: boolean; readonly error?: string }) => void;
 }
-
-// A reconnect retries within seconds; one minute covers the reconnect ladder with ample margin.
-const RETAIN_MS = 60_000;
-
-// One entry of the attach stream past its head: a change to the rows, or a fact about the turn.
-export type AttachEntry = Extract<AttachFrame, { kind: "patch" | "fact" }>;
-export type AttachHead = Extract<AttachFrame, { kind: "attached" }>;
 
 // One subscriber's queue; a follower holds only what it has not yet read, so a stalled reader's backlog never reaches
 // the others.
@@ -79,7 +63,7 @@ class Mailbox<T> {
     }
 }
 
-export class TurnRun {
+export class TurnRun implements LiveRun {
     readonly id = crypto.randomUUID();
     private finishedAt: number | undefined;
     private readonly fold: TranscriptFold;
@@ -106,7 +90,7 @@ export class TurnRun {
 
     // True once the run is finished AND past retention; attach then reports NOT_FOUND and the map entry drops.
     expired(now: number): boolean {
-        return this.finishedAt !== undefined && now - this.finishedAt > RETAIN_MS;
+        return this.finishedAt !== undefined && now - this.finishedAt > RUN_RETAINED_MS;
     }
 
     // The transcript as it stands, live: what the record keeps once whole, and what a reopened tab draws meanwhile.
@@ -245,56 +229,18 @@ export class TurnRun {
     }
 }
 
-const runs = new Map<string, TurnRun>();
-
-// One settled turn, as every settle listener sees it.
-export interface TurnSettled {
-    readonly conversationId: string;
-    // Who asked for the turn (turn-actor.ts); undefined for one the daemon started itself.
-    readonly actor: string | undefined;
-    // Undefined for a turn that ended well or was stopped.
-    readonly failure: string | undefined;
-    // Its last top-level prose; empty when it said nothing.
-    readonly closing: string;
-}
-
-// Module-level settle notice for machinery watching every run (the resource reaper); guarded like `tell`.
-const settleListeners = new Set<(settled: TurnSettled) => void>();
-export const onTurnSettled = (listener: (settled: TurnSettled) => void): (() => void) => {
-    settleListeners.add(listener);
-    return () => settleListeners.delete(listener);
-};
-
-const notifySettled = (settled: TurnSettled): void => {
-    for (const listener of settleListeners) {
-        try {
-            listener(settled);
-        } catch {
-            // Nothing to do and nowhere to report it.
-        }
-    }
-};
-
 const closingOf = (rows: readonly TranscriptRow[]): string =>
     rows.findLast((row) => row.role === "assistant" && row.text.trim() !== "")?.text.trim() ?? "";
 
 // A refusal whose turn the daemon keeps whole: `ran: false`, since a door refusal is decided before any request.
 const heldWhole = (event: AgentEvent): AgentEvent => (event.kind === "error" ? { ...event, held: { ran: false } } : event);
 
-const sweep = (): void => {
-    const now = Date.now();
-    for (const [conversationId, run] of runs) {
-        if (run.expired(now)) {
-            runs.delete(conversationId);
-        }
-    }
-};
-
 // Everything a run needs beyond the turn; every field optional, since the turn must run without any of them.
 export interface RunOptions {
     readonly observer?: TurnObserver;
-    // Where the in-flight turn is written down so a daemon death doesn't lose it; injected like TurnFn.
-    readonly journal?: TurnJournal;
+    // Whether the in-flight turn is written down so a daemon death doesn't lose it: filed with the conversation's actor,
+    // whose `begin` writes it with the turn's opening entry (turn-journal.ts).
+    readonly journalled?: boolean;
     // What the transcript opens with, at start time; built by whoever holds the prompt (turn-transcript.ts).
     readonly opening?: (startedAt: number) => readonly TranscriptRow[];
     // Where the settled turn's durable transcript is written down (sessions/transcript-record.ts).
@@ -306,47 +252,52 @@ export interface RunOptions {
     // Keeps a turn turned away at the door when no sender keeps its words: the refusal goes out marked held, so its
     // message stays in the record, and this is handed the turn to hold for a press. Absent, the sender keeps them (the
     // composer behind POST /agent), and the refusal hands them back instead.
-    readonly holdTurnedAway?: (turnedAway: { readonly input: AgentTurn & { conversationId: string }; readonly run: string }) => void;
+    readonly holdTurnedAway?: (turnedAway: { readonly input: TurnInput & { readonly conversationId: string }; readonly run: string }) => void;
+}
+
+// Where a run is filed and announced: its conversation's actor holds it, and its settle is told to whoever reacts.
+export interface RunDeps {
+    readonly conversations: Pick<ConversationActors, "holdings" | "send">;
+    readonly events: Pick<DomainEvents, "publish">;
 }
 
 // Starts a detached run for the conversation's turn, or undefined if one is already live (caller 409s). Owns the
 // generator: a thrown turn folds into the transcript as an error, so followers always see the run settle.
 export function startTurnRun(
-    turnFn: TurnFn,
-    input: AgentTurn & { conversationId: string },
-    { observer, journal, opening, transcript, before, attempts = 0, holdTurnedAway }: RunOptions = {},
+    deps: RunDeps,
+    turnFn: TurnStarter["stream"],
+    input: TurnInput & { readonly conversationId: string },
+    { observer, journalled = false, opening, transcript, before, attempts = 0, holdTurnedAway }: RunOptions = {},
 ): TurnRun | undefined {
-    sweep();
-    const existing = runs.get(input.conversationId);
-    if (existing !== undefined && !existing.done) {
+    const runs = deps.conversations.holdings(RUNS);
+    if (runs.get(input.conversationId)?.done === false) {
         return undefined;
     }
     const startedAt = Date.now();
     const run = new TurnRun(opening?.(startedAt) ?? [], startedAt);
-    runs.set(input.conversationId, run);
+    runs.hold(input.conversationId, input.conversationId, run);
     const provider = input.agent ?? "claude";
-    // Journal writes are serialized so a clear can never race the opening write or a session update.
-    let journalled: Promise<unknown> = Promise.resolve();
-    const journalOp = (op: (target: TurnJournal) => Promise<void>): void => {
-        if (journal === undefined) {
-            return;
+    // Told to the actor in order, which writes them in order; a failed write costs the journal, never the turn.
+    const journal = (event: { readonly kind: "journalled"; readonly entry: JournalledTurn } | { readonly kind: "unjournalled" }): void => {
+        if (journalled) {
+            void deps.conversations.send(input.conversationId, event).settled.catch(() => undefined);
         }
-        journalled = journalled.then(() => op(journal)).catch(() => undefined);
     };
     // Journal entry's live fields; snapshotted synchronously so a rewrite always carries all of them.
     let sessionId: string | undefined;
     const parked: ParkedRequest[] = [];
-    const journalEntry = (): void => {
-        const entry = {
-            kind: "turn" as const,
-            turn: input,
-            startedAt: run.startedAt,
-            attempts,
-            ...(sessionId !== undefined ? { sessionId } : {}),
-            ...(parked.length > 0 ? { parked: [...parked] } : {}),
-        };
-        journalOp((target) => target.recordTurn(entry));
-    };
+    const journalEntry = (): void =>
+        journal({
+            kind: "journalled",
+            entry: {
+                kind: "turn",
+                turn: input,
+                startedAt: run.startedAt,
+                attempts,
+                ...(sessionId !== undefined ? { sessionId } : {}),
+                ...(parked.length > 0 ? { parked: [...parked] } : {}),
+            },
+        });
     journalEntry();
     // An observer is an optional side-channel; a throw from it must not abort an otherwise-fine run.
     const tell = (report: (target: TurnObserver) => void): void => {
@@ -425,9 +376,9 @@ export function startTurnRun(
             // Expiry is proactive, or the last completed run in a quiet sandbox would hold its rows forever.
             const expiry = setTimeout(() => {
                 if (runs.get(input.conversationId) === run) {
-                    runs.delete(input.conversationId);
+                    runs.drop(input.conversationId);
                 }
-            }, RETAIN_MS);
+            }, RUN_RETAINED_MS);
             expiry.unref();
             // Durable transcript, written once the turn is whole, including a settled failure or an abort; a turn
             // refused before it ran is not written at all, since the composer holds its message for another press.
@@ -439,13 +390,12 @@ export function startTurnRun(
                     // Nothing to do and nowhere to report it.
                 }
             }
-            // No longer in flight, however it ended; only an unseen turn deserves resuming. Queued behind the writes
-            // above.
-            journalOp((target) => target.clearTurn(input.conversationId));
+            // No longer in flight, however it ended; only an unseen turn deserves resuming.
+            journal({ kind: "unjournalled" });
             tell((target) => target.settled(failure === undefined ? { ok: true } : { ok: false, error: failure }));
-            notifySettled({
+            deps.events.publish("run.settled", {
                 conversationId: input.conversationId,
-                actor: (input as { readonly actor?: string }).actor,
+                actor: input.actor,
                 failure,
                 closing: closingOf(run.rows),
             });
@@ -453,49 +403,3 @@ export function startTurnRun(
     })();
     return run;
 }
-
-// The conversation's current run, live or finished within retention; undefined means nothing to attach to.
-export function turnRunOf(conversationId: string): TurnRun | undefined {
-    sweep();
-    return runs.get(conversationId);
-}
-
-// The one conversation with a live run, when exactly one exists. Two live runs are an honest "don't know": guessing
-// would park a card in the wrong conversation.
-export function soleLiveConversation(): string | undefined {
-    sweep();
-    let found: string | undefined;
-    for (const [conversationId, run] of runs) {
-        if (run.done) {
-            continue;
-        }
-        if (found !== undefined) {
-            return undefined;
-        }
-        found = conversationId;
-    }
-    return found;
-}
-
-// Every conversation with a turn still running, with when it started; the full set, for readers comparing it against a
-// second record of the same fact (journal, fleet registry).
-export function liveTurnConversations(): readonly { readonly conversationId: string; readonly startedAt: number }[] {
-    sweep();
-    return [...runs].filter(([, run]) => !run.done).map(([conversationId, run]) => ({ conversationId, startedAt: run.startedAt }));
-}
-
-export const turnRunMetrics = (): Readonly<Record<string, number>> => {
-    sweep();
-    let live = 0;
-    let retained = 0;
-    let rows = 0;
-    let followers = 0;
-    for (const run of runs.values()) {
-        live += run.done ? 0 : 1;
-        retained += run.done ? 1 : 0;
-        const held = run.metrics();
-        rows += held.rows;
-        followers += held.followers;
-    }
-    return { runs: runs.size, live, retained, rows, followers };
-};

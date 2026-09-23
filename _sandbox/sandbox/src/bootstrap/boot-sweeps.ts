@@ -1,4 +1,3 @@
-import { onTurnSettled } from "../agent/run/turn/turn-runs.js";
 import { sweepAgedAgents } from "../agents/registry/archive.js";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { unloadIdleLocalModels } from "../capabilities/handlers/localmodel.handler.js";
@@ -21,7 +20,7 @@ const sweepVanishedWorktrees = async ({ logger, services }: BootPhase): Promise<
     for (const id of services.agents.ids()) {
         const entry = services.agents.entry(id);
         // Workspace conversations own no checkout; an archived entry is held by its commits, not a worktree.
-        if (entry?.branch === undefined || entry.archivedAt !== undefined) {
+        if (entry?.placement.kind !== "worktree" || entry.archivedAt !== undefined) {
             continue;
         }
         if (!(await services.agentWorktrees.exists(id))) {
@@ -34,13 +33,20 @@ const sweepVanishedWorktrees = async ({ logger, services }: BootPhase): Promise<
         logger.info({ count: vanished.length }, "agents: archived entries whose worktree vanished");
     }
     // Membership is re-read per decision inside prune.
+    const isolated = (id: string): boolean => services.agents.entry(id)?.placement.kind === "worktree";
     await services.agentWorktrees.prune(
-        () => services.agents.ids().filter((id) => services.agents.entry(id)?.branch !== undefined),
-        () =>
-            services.agents
-                .ids()
-                .filter((id) => services.agents.entry(id)?.branch !== undefined && services.agents.entry(id)?.archivedAt !== undefined),
+        () => services.agents.ids().filter(isolated),
+        () => services.agents.ids().filter((id) => isolated(id) && services.agents.entry(id)?.archivedAt !== undefined),
     );
+};
+
+// Directories no conversation row owns: a purge that deleted the rows and died before the directory, or a fork whose
+// opening turn never began.
+const sweepOrphanUnits = async ({ logger, services }: BootPhase): Promise<void> => {
+    const swept = await services.conversationUnits.sweep(Date.now());
+    if (swept.length > 0) {
+        logger.info({ count: swept.length }, "conversations: swept directories no conversation owns");
+    }
 };
 
 // agentRetentionDays 0 disables.
@@ -66,6 +72,7 @@ const startRootSweeps = (phase: BootPhase): void => {
         return;
     }
     void sweepVanishedWorktrees(phase).catch((error: unknown) => logger.warn({ err: error }, "agents: boot worktree sweep failed"));
+    void sweepOrphanUnits(phase).catch((error: unknown) => logger.warn({ err: error }, "conversations: boot directory sweep failed"));
     void sweepAgedArchive(phase);
     setInterval(() => void sweepAgedArchive(phase), HOURLY_MS).unref();
     void sweepStateAtBoot(services.workspace.root, logger).catch((error: unknown) => logger.warn({ err: error }, "state janitor: boot sweep failed"));
@@ -117,7 +124,7 @@ export const startBootSweeps = (phase: BootPhase): void => {
     void services.invariants.run("boot");
     const invariantSweep = setInterval(() => void services.invariants.run("sweep"), 300_000);
     shutdown.push(() => clearInterval(invariantSweep));
-    shutdown.push(onTurnSettled(() => void services.invariants.run("turn-settled")));
+    shutdown.push(services.events.subscribe("run.settled", () => services.invariants.run("turn-settled")));
 
     // Detached; routes report `indexing` meanwhile.
     const backfillSaid = (): void => {

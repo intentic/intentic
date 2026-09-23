@@ -4,6 +4,7 @@ import { commitOnly } from "../../git/changes/changes-index.js";
 import { AGENT_GIT_AUTHOR } from "../../git-identity.js";
 import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { standing } from "../../rules/rules.js";
+import { reposOf } from "../registry/agents-store.js";
 import { describeLanding } from "./landed-subject.js";
 
 // The `version-landed` built-in at `agent.landed`: keeps the main tree committed for a person who never commits.
@@ -29,9 +30,9 @@ const commitClaim = async (services: Services, id: string): Promise<string[]> =>
     if (entry === undefined) {
         return [];
     }
-    const subject = entry.landedSubject ?? fallbackSubject(entry.title, id);
+    const subject = entry.landing.message?.subject ?? fallbackSubject(entry.social.title?.text, id);
     const committed: string[] = [];
-    for (const composed of entry.repos) {
+    for (const composed of reposOf(entry)) {
         const dir = services.agentWorktrees.mainDir(composed.repo);
         // The claim is read off git (origins.ts): the paths this agent's landing put in the tree that history has
         // not absorbed yet, which is exactly the set a commit should carry.

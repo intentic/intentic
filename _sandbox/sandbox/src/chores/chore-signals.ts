@@ -137,7 +137,7 @@ export const choreShape = (repoDir: string, workspaceRoot = false): ChoreShape =
     deps: declaredDeps(repoDir),
 });
 
-export const choreSignals = async (services: Services, repo: string): Promise<ChoreSignals> => {
+export const choreSignals = async (services: Pick<Services, "iq" | "workspace">, repo: string): Promise<ChoreSignals> => {
     const health = await services.iq.health({ scope: { repo }, limit: RANKING_LIMIT });
     const repoDir = join(services.workspace.root, repo);
     return {

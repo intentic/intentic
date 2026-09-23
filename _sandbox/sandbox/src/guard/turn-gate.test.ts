@@ -2,11 +2,17 @@ import { test, expect } from "bun:test";
 import { vendorSubject } from "./command-guard.js";
 import { createTurnGate, type TurnGateInput, turnIsGated } from "./turn-gate.js";
 import { conversationTainted } from "./turn-taint.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
+import { memoryFleet } from "../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Built by the production helper rather than spelled out, so this file isn't a second opinion on its shape.
 const SUBJECT = vendorSubject("bash");
 
 const turn = (overrides: Partial<Parameters<typeof createTurnGate>[0]> = {}): Parameters<typeof createTurnGate>[0] => ({
+    cards,
     signal: new AbortController().signal,
     ...overrides,
 });

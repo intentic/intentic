@@ -7,7 +7,7 @@ import type { AppEnv } from "../app-env.js";
 import { enrollHost } from "./enroll-host.js";
 
 // POST /enroll. Deploy-target enrollment from the connect-host script (curl, not a browser): authenticated by
-// the connect token alone (exempt from the bearer middleware in app.ts), so it self-registers a host without a
+// the connect token alone (a door in the contract's RAW_ROUTES), so it self-registers a host without a
 // Google login. Loopback mode (no services.auth) accepts any caller, like every other route.
 export const createEnrollRoute =
     (services: Services) =>

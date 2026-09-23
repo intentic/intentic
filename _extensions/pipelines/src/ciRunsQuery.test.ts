@@ -7,16 +7,20 @@ import { bindHost } from "./host";
 const answer = { repos: [], runs: [] };
 
 const fakeHost = (reachable = true) => {
-    const paths: string[] = [];
+    const procedures: string[] = [];
     const views: ViewRegistration[] = [];
     const fetched: HostQuery[] = [];
     const api = {
         sandbox: {
             key: (...parts: readonly string[]) => [`sandbox`, `box`, ...parts],
             reachable: () => reachable,
-            json: async (path: string) => {
-                paths.push(path);
-                return answer;
+            rpc: {
+                ci: {
+                    runs: async () => {
+                        procedures.push(`ci.runs`);
+                        return answer;
+                    },
+                },
             },
             fetch: async <T>(query: HostQuery<T>): Promise<T> => {
                 fetched.push(query);
@@ -30,7 +34,7 @@ const fakeHost = (reachable = true) => {
             },
         },
     } as unknown as IntenticApi;
-    return { api, paths, views, fetched };
+    return { api, procedures, views, fetched };
 };
 
 const subscriptions: { dispose(): void }[] = [];
@@ -43,7 +47,7 @@ afterEach(() => {
 
 describe(`the Pipelines opening query`, () => {
     it(`uses one sandbox-scoped entry and the daemon sweep's freshness window`, async () => {
-        const { api, paths } = fakeHost();
+        const { api, procedures } = fakeHost();
         bindHost(api);
 
         const query = ciRunsQuery();
@@ -51,7 +55,7 @@ describe(`the Pipelines opening query`, () => {
         expect(query.queryKey).toEqual([`sandbox`, `box`, `ci-runs`]);
         expect(query.staleTime).toBe(CI_RUNS_STALE_MS);
         await expect(query.queryFn()).resolves.toEqual(answer);
-        expect(paths).toEqual([`/ci/runs`]);
+        expect(procedures).toEqual([`ci.runs`]);
     });
 
     it(`opts the rail view into warming that exact query`, () => {

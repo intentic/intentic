@@ -1,12 +1,13 @@
 import type { MatchSnippet, TranscriptRow } from "@intentic/sandbox-contract";
-import { ref, watch } from "vue";
+import { sandboxRef, sandboxValue } from "@intentic/extension-api";
+import { watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { agentTranscript, type AgentTranscript } from "../transcript/agentTranscript";
 import { drawsChat } from "./chatEcho";
 import type { Conversation } from "../session/conversation";
 import type { PickUp } from "./pickUp";
-import { activeId, conversations, setConversations } from "../tabs/useChat-tabs";
-import { sandboxRequest, sandboxRequestVia } from "../../sandbox/client/sandboxClient";
+import { activeId, conversations, scopedSandboxId, setConversations } from "../tabs/useChat-tabs";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 
 // One past conversation in the sandbox's SDK session store, for the history menu.
@@ -21,24 +22,23 @@ export interface ChatSession {
 const { reachable } = useSandbox();
 
 // Past conversations from the sandbox's session store, loaded on demand for the history menu.
-export const sessions = ref<ChatSession[]>([]);
+export const sessions = sandboxRef<ChatSession[]>(() => []);
 
 // Refreshes the history list from the session store; a query filters by title or content server-side. Each
-// call aborts the one before it, so a burst of keystroke-driven searches can't land out of order.
-let sessionsLoad: AbortController | undefined;
+// call aborts the one before it, so a burst of keystroke-driven searches can't land out of order, and so does a
+// switch, whose history is another store's.
+const sessionsLoad = sandboxValue<AbortController | undefined>(
+    () => undefined,
+    (load) => load?.abort(),
+);
 export const loadSessions = async (query?: string): Promise<void> => {
-    sessionsLoad?.abort();
+    sessionsLoad.value?.abort();
     const controller = new AbortController();
-    sessionsLoad = controller;
+    sessionsLoad.value = controller;
     try {
-        const response = await sandboxRequest(query ? `/sessions?query=${encodeURIComponent(query)}` : `/sessions`, { signal: controller.signal });
-        if (!response.ok) {
-            return;
-        }
-        const body = (await response.json()) as { sessions?: ChatSession[] };
-        sessions.value = body.sessions ?? [];
+        sessions.value = (await sandboxRpc.sessions.list(query ? { query } : {}, { signal: controller.signal })).sessions;
     } catch {
-        // Non-fatal (including our own abort); the menu shows whatever was loaded last.
+        // Non-fatal (a refusal, or our own abort); the menu shows whatever was loaded last.
     }
 };
 
@@ -46,13 +46,7 @@ export const loadSessions = async (query?: string): Promise<void> => {
 // means the daemon had nothing; asks the conversation's own box, since a session lives on the runtime that minted it.
 export const fetchTranscript = async (conversation: Conversation, id: string): Promise<TranscriptRow[] | undefined> => {
     try {
-        const response = await sandboxRequestVia(conversation.box.value, `/sessions/${encodeURIComponent(id)}`);
-        if (!response.ok) {
-            conversation.error.value = `Could not open that conversation.`;
-            return undefined;
-        }
-        const body = (await response.json()) as { messages?: TranscriptRow[] };
-        return body.messages ?? [];
+        return (await sandboxRpc.sessions.get({ id }, { context: { at: conversation.box.value } })).messages;
     } catch {
         conversation.error.value = `Could not open that conversation.`;
         return undefined;
@@ -74,21 +68,21 @@ const fetchAgentTranscript = async (conversation: Conversation): Promise<AgentTr
 // session. False means the round-trip failed; the caller retries on the next reachability flip.
 const hydrate = async (conversation: Conversation): Promise<boolean> => {
     // Must run before attaching, or the live turn paints over an empty transcript and clobbers the mirror.
-    await conversation.paintCached();
+    await conversation.transcript.paintCached();
     // Whether anything is there already, not whether this call put it there (the sweep may have painted it).
-    const seeded = conversation.messages.value.length === 0;
+    const seeded = conversation.transcript.messages.value.length === 0;
     // Only case with nothing to show meanwhile: report loading rather than inviting a fresh start.
-    conversation.loading.value = seeded;
+    conversation.transcript.loading.value = seeded;
     try {
         // A failed seed still lets the attach run; the failure rides the return value so the caller retries.
         const seededOk = seeded ? await replayStoredSession(conversation) : true;
-        if (await conversation.reattach()) {
+        if (await conversation.turn.reattach()) {
             return seededOk;
         }
         // With nothing running, reconcile the mirror against the daemon unless seeding just did.
         return seeded ? seededOk : await replayStoredSession(conversation);
     } finally {
-        conversation.loading.value = false;
+        conversation.transcript.loading.value = false;
     }
 };
 
@@ -99,7 +93,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     let restored: TranscriptRow[] | undefined;
     // Position of these rows in the daemon's record; absent for the SDK-session fallback, which has none.
     let page: { readonly from: number; readonly more: boolean } | undefined;
-    // How the last turn ended; applied once the transcript below is in place (see Conversation.adoptEnding).
+    // How the last turn ended; applied once the transcript below is in place (see TurnFailures.adoptEnding).
     let ending: PickUp | undefined;
     if (conversation.registered.value) {
         const transcript = await fetchAgentTranscript(conversation);
@@ -118,7 +112,7 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
             // Session as the daemon actually has it; the tab's own picks would drift the moment
             // account/provider/harness switches mid-chat. No session in the record leaves the tab's existing ref alone.
             if (transcript.session !== undefined) {
-                conversation.bindSession(transcript.session);
+                conversation.selection.apply({ kind: `bindSession`, session: transcript.session });
             }
         }
     }
@@ -135,12 +129,12 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
     }
     // A record read can only delete a live turn: the daemon writes it on settle, so a redraw skips while
     // streaming. An empty replay is absence, not a transcript, and must not blank an already-painted or cached one.
-    if (restored.length > 0 && !conversation.streaming.value) {
-        conversation.restoreMessages(restored, page);
+    if (restored.length > 0 && !conversation.turn.streaming.value) {
+        conversation.transcript.restoreMessages(restored, page);
     }
     // Applied last, over a painted transcript rather than the blank interim pane. Handed the verdict, not gated
     // on it: adoptEnding itself refuses a live turn, an empty transcript, or an already-armed pick-up.
-    conversation.adoptEnding(ending);
+    conversation.failures.adoptEnding(ending);
     return true;
 };
 
@@ -148,17 +142,17 @@ const replayStoredSession = async (conversation: Conversation): Promise<boolean>
 const hydrateInFlight = new WeakMap<Conversation, Promise<void>>();
 
 // A first turn the daemon never heard of: the words sit in the tab's queue, where a send holds them until the ack
-// (Conversation.drainQueue), and the window that was delivering them is gone — a reload, a closed window. The daemon
+// (TurnClient.drainQueue), and the window that was delivering them is gone — a reload, a closed window. The daemon
 // has just said it knows nothing of this conversation, so there is no turn for a resend to collide with, and the press
 // finishes itself instead of coming back as a blank chat nobody asked for.
 const resumeUndelivered = (conversation: Conversation): void => {
-    if (!drawsChat.value || conversation.streaming.value || conversation.registered.value || conversation.queued.value.length === 0) {
+    if (!drawsChat.value || conversation.turn.streaming.value || conversation.registered.value || conversation.turn.queued.value.length === 0) {
         return;
     }
-    if (conversation.session.value !== undefined || conversation.messages.value.length > 0) {
+    if (conversation.session.value !== undefined || conversation.transcript.messages.value.length > 0) {
         return;
     }
-    void conversation.drainQueue();
+    void conversation.turn.drainQueue();
 };
 
 // Hydrates a tab once, holding the in-flight mark while the daemon answers. Exported for the pane's fleet
@@ -188,12 +182,12 @@ export const hydrateOnce = (conversation: Conversation): void => {
 // blank transcript the daemon's record won't redraw, since a redraw refuses a live turn (replayStoredSession).
 export const transcriptShown = (conversation: Conversation): Promise<void> => {
     const pass = hydrateInFlight.get(conversation);
-    if (pass === undefined || conversation.messages.value.length > 0) {
+    if (pass === undefined || conversation.transcript.messages.value.length > 0) {
         return Promise.resolve();
     }
     return new Promise((shown) => {
         const painted = watch(
-            () => conversation.messages.value.length > 0,
+            () => conversation.transcript.messages.value.length > 0,
             (drawn) => {
                 if (drawn) {
                     painted();
@@ -214,24 +208,27 @@ const hydrating = new WeakSet<Conversation>();
 const painted = new WeakSet<Conversation>();
 
 // Paints every restored tab from the local mirror immediately, without waiting on reachability: a reopened
-// chat is readable before any round-trip (see transcriptCache).
-export const paintCachedTranscripts = (list: readonly Conversation[]): void => {
-    for (const conversation of list) {
-        void conversation.paintCached().then((didPaint) => {
-            if (didPaint) {
-                painted.add(conversation);
-            }
-        });
-    }
-};
-paintCachedTranscripts(conversations.value);
+// chat is readable before any round-trip (see transcriptCache). At load, and each time a sandbox's tabs come back.
+watch(
+    scopedSandboxId,
+    () => {
+        for (const conversation of conversations.value) {
+            void conversation.transcript.paintCached().then((didPaint) => {
+                if (didPaint) {
+                    painted.add(conversation);
+                }
+            });
+        }
+    },
+    { immediate: true },
+);
 
 watch([reachable, conversations], ([isReachable]) => {
     if (!isReachable) {
         return;
     }
     for (const conversation of conversations.value) {
-        if ((conversation.messages.value.length > 0 && !painted.has(conversation)) || conversation.streaming.value || hydrating.has(conversation)) {
+        if ((conversation.transcript.messages.value.length > 0 && !painted.has(conversation)) || conversation.turn.streaming.value || hydrating.has(conversation)) {
             continue;
         }
         hydrateOnce(conversation);
@@ -242,7 +239,7 @@ watch([reachable, conversations], ([isReachable]) => {
 // hydrates). Driven by the roster stream; touches only a tab with nothing painted yet.
 export const attachStarted = (ids: ReadonlySet<string>): void => {
     for (const conversation of conversations.value) {
-        if (!ids.has(conversation.conversationId) || conversation.streaming.value || conversation.messages.value.length > 0) {
+        if (!ids.has(conversation.conversationId) || conversation.turn.streaming.value || conversation.transcript.messages.value.length > 0) {
             continue;
         }
         hydrateOnce(conversation);

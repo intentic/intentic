@@ -18,24 +18,19 @@ mock.module("../client/useSandbox", () => {
 mock.module("../client/sandboxClient", () => ({
     sandboxJson: mock(),
     sandboxRequest: mock(),
-    sandboxRequestVia: mock(),
-    sandboxJsonAt: mock(),
-    sandboxJsonQuietly: mock(),
-    sandboxJsonVia: mock(),
     sandboxBlob: mock(),
     sandboxUpload: mock(),
     sandboxError: mock(async () => new Error(`unused`)),
-    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 // The two fields this import chain reads, both only as `.value`: `streaming` here, `conversations` in useChanges' own
 // module-scope watch. Hoisted so a case can flip `streaming` before the frame is routed.
 const streaming = hoisted(() => ({ value: false }));
 const conversations = hoisted(() => ({ value: [] as { streaming: { value: boolean } }[] }));
-mock.module("../../chat/run/useChat", () => ({ useChat: () => ({ streaming, conversations }), resetChat: mock() }));
+mock.module("../../chat/run/useChat", () => ({ useChat: () => ({ streaming, conversations }) }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { AGENT_DIFF, AGENTS, GIT_CHANGES } from "../../../lib/queryKeys";
-import { queryClient } from "../../../lib/queryPersistence";
+import { rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
+import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { registry } from "../../agents/fleet/useAgents-registry";
 import { applySystemEvent, CHANGES_REFRESH_MS } from "./systemEvents";
 
@@ -89,14 +84,16 @@ it(`refreshes every open agent review when a commit moves the refs`, () => {
     applySystemEvent({ kind: `refsChanged`, repos: [`root`] }, SANDBOX);
 
     // Accepting a landing changes every review's answer about those files, in this box and any cached other.
-    expect(reaches(AGENT_DIFF.of(`a1`))).toBe(true);
-    expect(reaches(AGENT_DIFF.ofSandbox(`sbx-laptop`, `a2`))).toBe(true);
-    // The rows a review opens are filed under it, so they go with it rather than outliving their own list.
-    expect(reaches([...AGENT_DIFF.of(`a1`), `file`, `root`, `src/app.ts`])).toBe(true);
+    expect(reaches(rpcKey(`agents.diff`, { id: `a1` }))).toBe(true);
+    expect(reaches(rpcKeyAt(`sbx-laptop`, `agents.diff`, { id: `a2` }))).toBe(true);
+    // The rows a review opens go with it rather than outliving their own list.
+    expect(reaches(rpcKey(`agents.fileDiff`, { id: `a1`, repo: `root`, path: `src/app.ts` }, UNPERSISTED))).toBe(true);
+    // Where its landed work went is part of the same review, and goes stale with it.
+    expect(reaches(rpcKey(`agents.history`, { id: `a1` }))).toBe(true);
     // The workspace's own review still refreshes, which is what this signal always did.
-    expect(reaches(GIT_CHANGES.of())).toBe(true);
+    expect(reaches(rpcKey(`git.changes`))).toBe(true);
     // Transcripts don't refresh: a commit says nothing about what anyone said, and rereading one is expensive.
-    expect(reaches(AGENTS.of(`a1`, `transcript`))).toBe(false);
+    expect(reaches(rpcKey(`agents.transcript`, { id: `a1` }, UNPERSISTED))).toBe(false);
 });
 
 // A turn's writes are named, and scanning per name would spend a `git status` per repo on each one — but an unnamed
@@ -107,10 +104,10 @@ it(`re-reads the review on an unnamed batch mid-turn, and still not on a named o
     streaming.value = true;
 
     applySystemEvent({ kind: `workspaceChanged`, paths: [`app/src/main.ts`] }, SANDBOX);
-    expect(reaches(GIT_CHANGES.of())).toBe(false);
+    expect(reaches(rpcKey(`git.changes`))).toBe(false);
 
     applySystemEvent({ kind: `workspaceChanged`, paths: [] }, SANDBOX);
-    expect(reaches(GIT_CHANGES.of())).toBe(true);
+    expect(reaches(rpcKey(`git.changes`))).toBe(true);
 });
 
 // A land writes the tree file by file and moves refs as it goes, so it fires this signal repeatedly against a patch
@@ -120,13 +117,13 @@ it(`leaves the review alone while a land is applying`, () => {
     registry.value = [LANDING];
 
     applySystemEvent({ kind: `refsChanged`, repos: [`root`] }, SANDBOX);
-    expect(reaches(GIT_CHANGES.of())).toBe(false);
-    expect(reaches(AGENT_DIFF.of(`a1`))).toBe(false);
+    expect(reaches(rpcKey(`git.changes`))).toBe(false);
+    expect(reaches(rpcKey(`agents.diff`, { id: `a1` }))).toBe(false);
 
     // Bounded by the land itself: the throttle's own trailing run reads the tree once the lease has cleared, and
     // useChanges refetches on the same transition for a browser sitting on a quiet workspace.
     applySystemEvent({ kind: `refsChanged`, repos: [`root`] }, SANDBOX);
     registry.value = [];
     jest.advanceTimersByTime(CHANGES_REFRESH_MS);
-    expect(reaches(GIT_CHANGES.of())).toBe(true);
+    expect(reaches(rpcKey(`git.changes`))).toBe(true);
 });

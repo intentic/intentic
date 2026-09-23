@@ -1,9 +1,13 @@
 import type { AgentEvent, CredentialGate as GatePolicy } from "@intentic/sandbox-contract";
 import { it, expect } from "bun:test";
-import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { createCredentialGate, type CredentialCheck, type CredentialGateDeps } from "./credential-gate.js";
 import type { CredentialGatesStore } from "./credential-gates.js";
 import { createCredentialGrants } from "./credential-grants.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
+import { memoryFleet } from "../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Drives the gate end to end with a fake policy store and live turn: a credential releases only for a named, verified
 // click, and every other path uses nothing. Each fail-closed ending gets its own test.
@@ -45,6 +49,7 @@ const fake = (gates: readonly GatePolicy[], over: Partial<CredentialGateDeps> = 
     const notified: string[] = [];
     const grants = createCredentialGrants();
     const deps: CredentialGateDeps = {
+        cards,
         gates: memoryGates(gates, broken),
         grants,
         liveRun: (conversationId) => ({ conversationId: conversationId ?? "sole-conv", push: (event) => frames.push(event) }),
@@ -80,7 +85,7 @@ const answerFrom = async (frames: AgentEvent[], from: number, approve: boolean, 
     if (raised?.kind !== "credential_offer") {
         throw new Error(`no credential_offer frame was raised at or after ${from}`);
     }
-    return resolveRequest({ kind: "credential_offer", requestId: raised.requestId, approve }, caller);
+    return cards.resolve({ kind: "credential_offer", requestId: raised.requestId, approve }, caller);
 };
 
 const answerCard = (frames: AgentEvent[], approve: boolean, caller?: typeof BOB | typeof EVE) => answerFrom(frames, 0, approve, caller);

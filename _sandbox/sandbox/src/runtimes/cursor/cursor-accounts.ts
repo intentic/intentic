@@ -1,6 +1,5 @@
 import type { Services } from "../../composition.js";
 import type { AccountDoor } from "../../agent/providers/provider-module.js";
-import { composeEnvironment } from "../../environment/environment.js";
 import { cancelCursorLogin, startCursorLogin, toAccount } from "./cursor-credentials.js";
 
 // Cursor's account door (agent/provider-module.ts): start begins a device-style flow, keeps the PKCE verifier in memory
@@ -12,9 +11,12 @@ import { cancelCursorLogin, startCursorLogin, toAccount } from "./cursor-credent
 // the right key doesn't require guessing.
 const keyName = (): string => `intentic sandbox (${process.env["INTENTIC_WORKSPACE_NAME"] ?? "workspace"})`;
 
-export const cursorAccountDoor = (services: Services): AccountDoor => ({
+// What the door reads: the account store, the headroom it refreshes a list against, and the overlay it recomposes.
+export type CursorAccountDeps = Pick<Services, "accountUsage" | "composeEnvironment" | "cursorStore" | "headroom">;
+
+export const cursorAccountDoor = (services: CursorAccountDeps): AccountDoor => ({
     start: async () => {
-        const started = await startCursorLogin({ store: services.cursorStore, keyName: keyName(), connected: () => composeEnvironment(services) });
+        const started = await startCursorLogin({ store: services.cursorStore, keyName: keyName(), connected: () => services.composeEnvironment() });
         return { url: started.url, code: "", state: "", flow: "device", variant: "", handshake: started.handshake, expiresAt: started.expiresAt };
     },
     cancel: cancelCursorLogin,
@@ -43,6 +45,6 @@ export const cursorAccountDoor = (services: Services): AccountDoor => ({
     // image.
     disconnect: async (id) => {
         await services.cursorStore.clear(id);
-        await composeEnvironment(services);
+        await services.composeEnvironment();
     },
 });

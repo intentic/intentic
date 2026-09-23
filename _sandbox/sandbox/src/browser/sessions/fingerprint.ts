@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { SingleFlight } from "@intentic/base/async";
-import { statePath } from "../../workspace/layout/state-paths.js";
+import { statePath } from "../../state-paths.js";
 
 // Deterministic per-(sandbox seed, profile owner) device: same owner gets the same GPU, cores, memory, locale and
 // timezone on every launch; different owners in one sandbox get different machines, different sandboxes get different

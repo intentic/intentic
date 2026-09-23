@@ -75,7 +75,7 @@ test("work held on the branch reads ready, and a refused land makes the same del
 
     expect(await standingOf(worktrees, isolatedAgent(conversation.repos))).toBe("ready");
     // Same delta: only the entry's stored refusal differs between `ready` and `conflict` here.
-    expect(await standingOf(worktrees, isolatedAgent(conversation.repos, { conflicts: report }))).toBe("conflict");
+    expect(await standingOf(worktrees, isolatedAgent(conversation.repos, { landing: { conflicts: report } }))).toBe("conflict");
 });
 
 // Derived, the stale-conflict case cannot arise: `conflict` has a premise, an outstanding delta, and merging the branch
@@ -85,7 +85,7 @@ test("a conflict report cannot outlive its delta: work merged into main by hand 
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await commit(conversation.cwd, "agent work");
-    const stranded = isolatedAgent(conversation.repos, { conflicts: report });
+    const stranded = isolatedAgent(conversation.repos, { landing: { conflicts: report } });
     expect(await standingOf(worktrees, stranded)).toBe("conflict");
 
     // The daemon sees none of this; the entry still carries the report and no landedTip.
@@ -151,7 +151,7 @@ test("a refused land arms the conflict against the same shas", async () => {
     const refused = await landAgent(worktrees, entry);
     expect(refused.landed).toBe(false);
 
-    expect(await standings.refresh([isolatedAgent(refused.repos, { conflicts: refused.conflicts })])).toBe(true);
+    expect(await standings.refresh([isolatedAgent(refused.repos, { landing: { conflicts: refused.conflicts } })])).toBe(true);
     expect(standings.of("c1")).toBe("conflict");
 });
 
@@ -168,7 +168,7 @@ test("clearing the uncommitted edit a refusal named puts the card back to ready,
     await writeFile(join(work, "app.ts"), "line one MINE\nline two\nline three\n");
     const refused = await landAgent(worktrees, isolatedAgent(conversation.repos));
     expect(refused.conflicts?.[0]?.paths).toEqual([{ path: "app.ts", reason: "workspace" }]);
-    const entry = isolatedAgent(refused.repos, { conflicts: refused.conflicts });
+    const entry = isolatedAgent(refused.repos, { landing: { conflicts: refused.conflicts } });
     await standings.refresh([entry]);
     expect(standings.of("c1")).toBe("conflict");
     // Named, not just counted: the board offers a press per cause, and this is the one only the user can make.
@@ -190,7 +190,7 @@ test("a refusal the workspace never caused survives a tidy tree", async () => {
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await commit(conversation.cwd, "agent work");
-    const entry = isolatedAgent(conversation.repos, { conflicts: report });
+    const entry = isolatedAgent(conversation.repos, { landing: { conflicts: report } });
     await standings.refresh([entry]);
     expect(standings.of("c1")).toBe("conflict");
     expect(standings.causesOf("c1")).toEqual(["diverged"]);
@@ -224,7 +224,7 @@ test("clearing the user's half of a mixed refusal leaves the agent's half standi
             clean: 0,
         },
     ];
-    const entry = isolatedAgent(conversation.repos, { conflicts: mixed });
+    const entry = isolatedAgent(conversation.repos, { landing: { conflicts: mixed } });
     await standings.refresh([entry]);
     expect(standings.causesOf("c1")).toEqual(["workspace", "diverged"]);
 
@@ -289,7 +289,7 @@ test("a repo whose branch has been deleted contributes nothing outstanding", asy
     await writeFile(join(conversation.cwd, "app.ts"), "line one EDITED\nline two\nline three\n");
     await sh(conversation.cwd, "add", "-A");
     await commit(conversation.cwd, "agent work");
-    const entry = isolatedAgent(conversation.repos, { conflicts: report });
+    const entry = isolatedAgent(conversation.repos, { landing: { conflicts: report } });
     expect(await standingOf(worktrees, entry)).toBe("conflict");
 
     await worktrees.remove("c1", conversation.repos);

@@ -8,7 +8,6 @@ const readWindow = mock<(path: string, opts?: { offset?: number; limit?: number 
 const daemonBase = ref<string | undefined>(`https://sandbox-1.example`);
 
 mock.module("../../workspace/files/fileWindow", () => ({ readFileWindow: (path: string, opts?: object) => readWindow(path, opts) }));
-mock.module("../../sandbox/client/sandboxClient", () => ({ SandboxHttpError: class extends Error {} }));
 mock.module("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 const { attachmentPeek } = await import("./attachmentPeeks");

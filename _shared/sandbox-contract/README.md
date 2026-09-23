@@ -9,6 +9,14 @@ mismatch is a type error rather than a runtime surprise.
 ## Responsibilities
 
 - Declare the contracts, one file per subject area (`src/contracts/`).
+- Declare every route's policy beside it ([src/protocol/route-meta.ts](src/protocol/route-meta.ts)): whether the
+  session middleware or the route's own credential check admits a request, the member floor, the guest list, which
+  machine credentials (panel, agent, sync, control rungs) reach it, and whether it answers before boot or streams.
+  Every procedure is built from the one `procedure` builder, so each carries a `RouteMeta` whose absent fields are the
+  defaults. The routes the daemon serves outside oRPC are rows of
+  [src/protocol/raw-routes.ts](src/protocol/raw-routes.ts) with the same meta, and `sandboxRouteFor`
+  ([src/protocol/routes.ts](src/protocol/routes.ts)) resolves a request to the route that serves it, reading the path
+  the way Hono or oRPC's router will. The daemon derives every gate from these and keeps no path table of its own.
 - Declare the wire shapes those contracts are built from, one module per subject area (`src/schemas/`).
 - Declare the event union the daemon pushes over SSE (`src/events.ts`), and the transcript a turn becomes: the
   rows, the patches that change them and the facts about a turn that `/agent/attach` carries.
@@ -146,6 +154,10 @@ the wire without a cycle.
 
 ## Conventions & gotchas
 
+- **A route's policy is its meta.** A new procedure uses its file's builder (`secretRoute`, `systemRoute`, …, or
+  `procedure`) and declares only what differs from the defaults; a raw route is a `RAW_ROUTES` row before the daemon can
+  register it at all. The daemon's `auth/route-reach.test.ts` records every route's decisions, so a new route fails it
+  until its row is written, and a changed row is a route that became more or less reachable.
 - **Logic lives here only when both sides must agree on it.** A chore's verdict qualifies; a view's layout does
   not. When in doubt, the test is whether disagreement between daemon and browser would be a bug.
 - A cross-package type change may not resolve until the workspace settles: `@intentic/*` imports go through

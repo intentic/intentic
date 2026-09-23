@@ -1,4 +1,5 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
+import { sandboxRouteFor } from "@intentic/sandbox-contract";
 import { tokenEquals } from "./auth.js";
 import { type ControlTokens, controlScoped } from "./control-tokens.js";
 import type { Principal } from "./principal.js";
@@ -28,7 +29,7 @@ export interface Grant {
     readonly authorize: (presented: string, method: string, path: string) => Promise<GrantOutcome>;
 }
 
-// The shape three of the four share: one secret fixed for the daemon's lifetime, one static allowlist.
+// The shape the panel and agent grants share: one secret fixed for the daemon's lifetime, one declared reach.
 // Scope is checked before the secret on purpose: a wrong-route holder should be told which failure it is, not just
 // "your token is wrong".
 const fixedSecretGrant = (header: string, name: string, reaches: (method: string, path: string) => boolean, secret: string): Grant => ({
@@ -42,84 +43,17 @@ const fixedSecretGrant = (header: string, name: string, reaches: (method: string
     },
 });
 
-// The vpn/otp/services/capabilities/wallet/agents/secrets CLIs on the agent's PATH reach the daemon over loopback with
-// the per-boot agent token.
-// Scoped hard: dial/drop configured tunnels, mint expiring codes, spend the owner's credit allowance, ask to connect or
-// release a credential — never read a value directly.
-// A SET, not more chain clauses: this is an allowlist, every entry of it cost two branches in the chain, and the chain
-// was already past the complexity ceiling with a third of these on it. One `METHOD /path` per door, each grouped under
-// what it is for.
-const EXACT_ROUTES = new Set([
-    // The child-agent surface the `agents` CLI drives: start/steer/follow-up a child, answer its question (never its
-    // consent cards), list children.
-    "POST /children/spawn",
-    "POST /children/wait",
-    "POST /children/send",
-    "POST /children/answer",
-    "GET /children",
-    "GET /children/providers",
-    // Saying something to another conversation in this workspace: the one write under /fleet, and the only door an
-    // agent has to a peer that is idle (a child is not, and an idle conversation has no process to message). It puts
-    // words in front of a conversation and may start a turn on it, which is what a person does by typing into its
-    // chat; it cannot land, archive, rename or discard anything. Rate-limited and attributed in fleet-message.ts.
-    "POST /fleet/message",
-    // The capability setup gate the `capabilities` CLI drives: discovery (names only, never config) and the ask.
-    // The ask parks on an owner-decided card in chat; consent is enforced at the route.
-    "GET /capabilities/connectable",
-    "POST /capabilities/ask",
-    // The wallet surface the `wallet` CLI drives: balance, one paid fetch, history; spend is bounded by the owner's
-    // policy twice over. Anything outside the standing auto-approve band parks on an approval card before signing; the
-    // container never holds a key.
-    "GET /wallet/status",
-    "POST /wallet/fetch",
-    "GET /wallet/history",
-    // The `sandboxes` CLI: the owner's other sandboxes, and the one door a new one is created through. As gated as the
-    // wallet's spend — the provisioning token stays with the daemon, and every create parks on a card in the owner's
-    // chat before the platform is asked for anything.
-    "GET /sandboxes",
-    "POST /sandboxes",
-    // The credential-approval surface the `secrets` CLI drives, and the only two doors under /secrets this token gets:
-    // they answer with names, never values.
-    // `gates` tells the model which connected account is withheld so it can ask for the right one instead of guessing;
-    // `request` raises the release card and parks (consent checked on the reply).
-    "GET /secrets/gates",
-    "POST /secrets/request",
-]);
+// Every route-scoped grant's reach is declared on the routes themselves (sandbox-contract route-meta.ts) and resolved
+// by the one route matcher, so no allowlist here can drift from the surface it guards.
+const declared = (method: string, path: string) => sandboxRouteFor(method, path)?.meta;
 
-// The live-link surfaces the `vpn`, `geo` and `netdisk` CLIs drive: dial/drop a tunnel, start/move/rotate/stop an exit,
-// mount/unmount a disk. One bargain for all three: operate what's already configured, never read the credential behind
-// it, which stays on the manifest this token never reaches.
-const LIVE_LINK_ROUTES = /^\/(?:vpn|exit|netdisk)(?:\/|$)/;
+// The vpn/otp/capabilities/wallet/sandboxes/agents/secrets CLIs on the agent's PATH, over loopback with the per-boot
+// agent token: operate what is configured, ask for what is not, never read a credential's value.
+const agentReach = (method: string, path: string): boolean => declared(method, path)?.agent === true;
 
-// The conversation-fleet read surface the `agents` CLI drives: which conversations exist, what one is, which said a
-// phrase — nothing new, only cheaper than an agent reading the files by hand. A pattern rather than an exact route,
-// since the handle is in the path. Not `/agents`: its neighbours land, discard, archive and rename, so a read-only
-// namespace here can't grow teeth by accident.
-const FLEET_READS = /^\/fleet(?:\/[^/]+)?$/;
-
-// One-time codes for a connected account, by capability id: mint only, never a read of the secret behind it.
-const OTP_READS = /^\/capabilities\/[^/]+\/otp$/;
-
-const agentReach = (method: string, path: string): boolean =>
-    LIVE_LINK_ROUTES.test(path) ||
-    EXACT_ROUTES.has(`${method} ${path}`) ||
-    (method === "GET" && (OTP_READS.test(path) || FLEET_READS.test(path)));
-
-// The panel grant is broad on purpose (an open-ended app), except two routes that put a stored credential in motion:
-// `/capabilities/<id>/connection` returns a config with secrets included.
-// `/capabilities/probe` sends a stored key to a caller-supplied destination instead; both are carved out as denied
-// routes, since an allowlist here would be fiction.
-const CREDENTIAL_ROUTES = /^\/capabilities\/(?:probe$|[^/]+\/connection$)/;
-const panelReach = (_method: string, path: string): boolean => !CREDENTIAL_ROUTES.test(path);
-
-// The desktop-sync agent's two routes: reads the ports list (read-only, never a mutation) and writes its own machine
-// report — the only view the daemon ever gets of SYNC_DIR, since that stays local otherwise.
-// Also opens the SSH transport (sync-ssh.ts), a bare byte pipe guarded again by sshd's own public-key check against
-// this same enrollment's key.
-const SYNC_TRANSPORT = "/system/sync/ssh";
-
-const syncReach = (method: string, path: string): boolean =>
-    (method === "GET" && path === "/ports") || (method === "GET" && path === SYNC_TRANSPORT) || (method === "POST" && path === "/system/sync/report");
+// Broad on purpose (a panel is an open-ended app), except the routes that put a stored credential in motion; an
+// allowlist here would be fiction.
+const panelReach = (method: string, path: string): boolean => declared(method, path)?.panel !== false;
 
 // The grant loop: a non-empty header selects a grant and commits the request to it, the first grant whose header is
 // present answers.
@@ -198,15 +132,17 @@ export const grantsOf = ({ panelToken, agentToken, controlTokens, verifySync, ve
         },
     },
     {
+        // The desktop-sync agent's token lives on a laptop, so its reach is what a stolen laptop reaches: the routes
+        // that declare `sync`, and nothing else.
         header: "x-intentic-sync",
         name: "sync token",
         authorize: async (presented, method, path) => {
-            if (!syncReach(method, path)) {
+            const sync = declared(method, path)?.sync;
+            if (sync === undefined) {
                 return OUT_OF_SCOPE;
             }
-            // Not a check-in: the transport is a pipe Mutagen holds open regardless; only the polls refresh the
-            // heartbeat.
-            return (await verifySync(presented, path !== SYNC_TRANSPORT)) ? OK : UNAUTHORIZED;
+            // Mutagen holds the transport pipe open regardless; only a poll is a check-in that refreshes the heartbeat.
+            return (await verifySync(presented, sync === "poll")) ? OK : UNAUTHORIZED;
         },
     },
 ];

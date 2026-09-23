@@ -5,7 +5,7 @@ import { STATE_DIR } from "@intentic/constants";
 import { type AsyncSubscription, subscribe } from "@parcel/watcher";
 import type { Logger } from "pino";
 import { IGNORED_DIRS, isAgentWorktreePath, isBrowserProfilePath, isReferencePath, REFERENCE_DIR, toRelPath } from "@intentic/workspace-ignore";
-import { stateRelPath } from "../layout/state-paths.js";
+import { stateRelPath } from "../../state-paths.js";
 
 // Live file-change push: the agent edits /work out-of-band, so nothing else tells the browser its view is stale. One
 // watcher on the workspace root batches changed paths and forwards them over /events, debounced into one frame per

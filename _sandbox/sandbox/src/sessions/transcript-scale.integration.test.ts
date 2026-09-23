@@ -5,7 +5,7 @@ import type { TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { describe, it, expect } from "bun:test";
 import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { agentToolChildren, type AgentTranscriptDeps, agentTranscriptPage, PAGE_TEXT_CAP } from "./agent-transcript.js";
-import { fileTranscriptRecord, MAX_WINDOW_BYTES } from "./transcript-record.js";
+import { fileTranscriptRecord, MAX_WINDOW_BYTES, transcriptFile } from "./transcript-record.js";
 
 // Pins that a window's cost scales with the window, not the conversation's length. Assertions are on byte and row
 // counts only; elapsed time is logged for visibility, never asserted, since CI timing is not deterministic.
@@ -73,10 +73,10 @@ interface Reading {
 // Runs the same read the route makes; every user row carries an anchor, as the real read stamps them.
 const measure = async (root: string, conversationId: string, turns: number): Promise<Reading> => {
     const record = fileTranscriptRecord(root);
-    const fileBytes = (await stat(join(root, `${conversationId}.jsonl`))).size;
+    const fileBytes = (await stat(transcriptFile(root, conversationId))).size;
     const deps = { record, turnCheckpoints: anchorsOf(Array.from({ length: turns }, (_, turn) => turn * ROWS_PER_TURN)) };
     const started = performance.now();
-    const page = await agentTranscriptPage(deps, { id: conversationId, provider: "claude", harness: "claude-code" });
+    const page = await agentTranscriptPage(deps, { id: conversationId });
     const readMs = performance.now() - started;
     return { rows: page.rows.length, fileBytes, payloadBytes: Buffer.byteLength(JSON.stringify(page)), readMs };
 };
@@ -152,7 +152,7 @@ describe("the transcript window", () => {
         const userRows = Array.from({ length: turns }, (_, turn) => turn * ROWS_PER_TURN);
         const deps = { record, turnCheckpoints: anchorsOf(userRows) };
 
-        const windowed = await agentTranscriptPage(deps, { id: "c-anchors", provider: "claude", harness: "claude-code" }, { turns: 5 });
+        const windowed = await agentTranscriptPage(deps, { id: "c-anchors" }, { turns: 5 });
 
         const stamped = windowed.rows.filter((row) => row.rewindIndex !== undefined);
         expect(stamped.length).toBe(5);
@@ -314,7 +314,7 @@ describe("what a page carries of a heavy turn", () => {
 
         const page = await agentTranscriptPage(deps, agentOf("c-dumps"));
 
-        expect((await stat(join(root, "c-dumps.jsonl"))).size).toBeGreaterThan(9_000_000);
+        expect((await stat(transcriptFile(root, "c-dumps"))).size).toBeGreaterThan(9_000_000);
         expect(page.rows.filter((row) => row.role === "user").length).toBe(20);
         expect(servedBytes(page)).toBeLessThan(MAX_WINDOW_BYTES);
     });

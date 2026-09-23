@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { NativeProviderParamSchema } from "../schemas/agent.js";
 import {
     AccountIdSchema,
@@ -18,7 +18,7 @@ import { OkSchema } from "../schemas/shared.js";
 // slice per provider. Distinct from the translator routes (subscriptions proxied through CLIProxyAPI): these
 // credentials live in this daemon's own auth tree, and no credential ever rides in an answer.
 export const accountsContract = {
-    start: oc
+    start: procedure
         .route({
             method: "POST",
             path: "/accounts/{provider}/login/start",
@@ -28,7 +28,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(LoginRequestSchema.shape))
         .output(LoginStartSchema),
-    complete: oc
+    complete: procedure
         .route({
             method: "POST",
             path: "/accounts/{provider}/login/complete",
@@ -38,7 +38,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(LoginCompleteSchema.shape))
         .output(LoginCompletedSchema),
-    cancel: oc
+    cancel: procedure
         .route({
             method: "POST",
             path: "/accounts/{provider}/login/cancel",
@@ -48,7 +48,7 @@ export const accountsContract = {
         .input(NativeProviderParamSchema.extend(LoginCancelSchema.shape))
         .output(OkSchema),
     // `force` re-measures before answering; a provider with nothing to measure accepts it and answers at once.
-    accounts: oc
+    accounts: procedure
         .route({
             method: "GET",
             path: "/accounts/{provider}",
@@ -58,7 +58,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(AccountListQuerySchema.shape))
         .output(OauthAccountListSchema),
-    rename: oc
+    rename: procedure
         .route({
             method: "POST",
             path: "/accounts/{provider}/rename",
@@ -67,7 +67,7 @@ export const accountsContract = {
         })
         .input(NativeProviderParamSchema.extend(AccountRenameSchema.shape))
         .output(OauthAccountSchema),
-    disconnect: oc
+    disconnect: procedure
         .route({
             method: "POST",
             path: "/accounts/{provider}/disconnect",

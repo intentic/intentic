@@ -1,10 +1,7 @@
 import { peerMessagePrompt } from "@intentic/sandbox-contract";
-import { steerTurn } from "../../agent/checkpoints/agent-steering.js";
-import { streamAgent } from "../../agent/routes/agent.routes.js";
-import { startConversationTurn } from "../../agent/run/turn/turn-resume.js";
-import { conversationRouting } from "../../agent/run/turn/wake-doors.js";
 import type { Services } from "../../composition.js";
-import type { PersistedAgent } from "../registry/agents-store.js";
+import type { Holding, Holdings } from "../actor/conversation-holdings.js";
+import { conversationProfile, type PersistedAgent } from "../registry/agents-store.js";
 import { resolveHandle } from "./fleet-recall.js";
 
 // One agent saying something to another conversation in this workspace — the thing a person does by typing into its
@@ -22,17 +19,18 @@ const WINDOW_MS = 3_600_000;
 // Sender key for a shell that carries no conversation stamp; it is still one budget, not an unbounded one.
 const UNSTAMPED = "(unstamped)";
 
-const starts = new Map<string, number[]>();
+// When each sender started a turn elsewhere, held by the sender; the unstamped shell's budget is held by none.
+const STARTS: Holding<readonly number[]> = { name: "peer turn starts" };
 
 // True when the sender may start one more turn elsewhere, and books it; prunes its own window as it reads.
-const spendTurn = (sender: string, now: number): boolean => {
+const spendTurn = (starts: Holdings<readonly number[]>, from: string | undefined, now: number): boolean => {
+    const sender = from ?? UNSTAMPED;
     const recent = (starts.get(sender) ?? []).filter((at) => now - at < WINDOW_MS);
     if (recent.length >= TURNS_PER_HOUR) {
-        starts.set(sender, recent);
+        starts.hold(from, sender, recent);
         return false;
     }
-    recent.push(now);
-    starts.set(sender, recent);
+    starts.hold(from, sender, [...recent, now]);
     return true;
 };
 
@@ -84,22 +82,22 @@ export const messageConversation = async (services: Services, from: string | und
     }
     const sender = from ?? UNSTAMPED;
     const peer = `agent:${sender}`;
-    const steer = { text: peerMessagePrompt({ from: sender, title: entry.title, message }), voice: "agent", outside: peer } as const;
+    const steer = { text: peerMessagePrompt({ from: sender, title: entry.social.title?.text, message }), voice: "agent", outside: peer } as const;
     // A live turn takes it between tool calls, which costs nothing and lands sooner than a turn of its own would.
-    if (steerTurn(entry.id, steer)) {
+    if ((await services.turns.steer(entry.id, steer)) === true) {
         services.logger.info({ from, to: entry.id }, "fleet message: steered into the live turn");
         return { ...STEERED, to: entry.id };
     }
-    if (!spendTurn(sender, Date.now())) {
+    if (!spendTurn(services.conversations.holdings(STARTS), from, Date.now())) {
         return {
             ok: false,
             status: 429,
             message: `This conversation has started ${TURNS_PER_HOUR} turns on other conversations in the last hour, which is the ceiling. Wait, or ask the owner to carry the message.`,
         };
     }
-    const sessionId = services.agents.sessionIdOf(entry.id) ?? entry.sessionId;
-    const run = await startConversationTurn(services, streamAgent, {
-        ...conversationRouting(entry),
+    const sessionId = services.conversations.sessionIdOf(entry.id) ?? entry.sessionId;
+    const run = await services.turns.start({
+        ...conversationProfile(entry),
         ...(sessionId === undefined ? {} : { sessionId }),
         conversationId: entry.id,
         prompt: steer.text,
@@ -111,7 +109,7 @@ export const messageConversation = async (services: Services, from: string | und
     if (run === undefined) {
         // A turn is in flight after all: it either started between the steer attempt and this call, or it was already
         // running and unsteerable — parked on a card only its owner can answer, or on a runtime with no steering seam.
-        return steerTurn(entry.id, steer)
+        return (await services.turns.steer(entry.id, steer)) === true
             ? { ...STEERED, to: entry.id }
             : {
                   ok: false,

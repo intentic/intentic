@@ -4,15 +4,14 @@ import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Backoff, createBackoff } from "@intentic/base/async";
 import type { Logger } from "pino";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { SERVICE_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import { freePort } from "./free-port.js";
 
 // Daemon-supervised background services (messaging gateways, `contributes.processes` extensions), not terminal panels:
 // exits are events, and a crash respawns on the shared backoff ladder. dockerd and local model servers stay out, since
 // they must survive a daemon restart and a child cannot outlive its parent.
 
-// Own prefix so terminal.ts knows to tail this log, not attach a tmux session; none exists here.
-export const SERVICE_SESSION_PREFIX = "svc-";
 export const serviceSession = (key: string): string => `${SERVICE_SESSION_PREFIX}${key}`;
 
 // Stamped into every child's env so a later boot can find one orphaned by an unclean daemon death.

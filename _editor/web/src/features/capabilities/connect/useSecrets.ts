@@ -1,17 +1,11 @@
-import {
-    type CredentialGate,
-    CredentialGatesSchema,
-    type SecretInventoryEntry,
-    SecretInventorySchema,
-    SecretKeysSchema,
-    SecretRevealSchema,
-} from "@intentic/sandbox-contract";
+import type { CredentialGate, SecretInventoryEntry } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { devFillSet } from "../../setup/devFill";
 import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { SANDBOX_MEMBERS, SECRET_GATES, SECRETS, SECRETS_INVENTORY } from "../../../lib/queryKeys";
+import { rpcQuery } from "../../sandbox/client/rpcQuery";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { rpcKey, SANDBOX_MEMBERS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { useSandboxSession } from "../../sandbox/session/sandboxSession";
 
@@ -20,28 +14,19 @@ import { useSandboxSession } from "../../sandbox/session/sandboxSession";
 // and deliberately not a query, so a value never enters the cache.
 
 // Owner-only; a member gets the daemon's 403 message as a thrown Error. Plain async on purpose (no cache).
-export const reveal = async (key: string): Promise<string> =>
-    SecretRevealSchema.parse(await sandboxJson(`/secrets/reveal`, jsonBody(`POST`, { key }))).value;
+export const reveal = async (key: string): Promise<string> => (await sandboxRpc.secrets.reveal({ key })).value;
 
 export function useSecretKeys() {
     const { query } = useSandboxQuery({
-        queryKey: SECRETS.of(),
+        queryKey: rpcKey(`secrets.list`),
         // 412 until DevOps is active, treat as "no keys yet" rather than surfacing an error.
-        queryFn: async (): Promise<string[]> => {
-            try {
-                return SecretKeysSchema.parse(await sandboxJson(`/secrets`)).keys;
-            } catch {
-                return [];
-            }
-        },
+        queryFn: () => sandboxRpc.secrets.list().catch(() => ({ keys: [] })),
     });
     return {
-        keys: computed<string[]>(() => query.data.value ?? []),
-        hasKey: (key: string): boolean => (query.data.value ?? []).includes(key),
+        keys: computed<string[]>(() => query.data.value?.keys ?? []),
+        hasKey: (key: string): boolean => (query.data.value?.keys ?? []).includes(key),
     };
 }
-
-const fetchInventory = async (): Promise<SecretInventoryEntry[]> => SecretInventorySchema.parse(await sandboxJson(`/secrets/inventory`)).entries;
 
 // "Missing" means a secret the intent declares that the sandbox lacks; generated and capability/provider entries
 // aren't the user's to set, so they don't count.
@@ -50,9 +35,8 @@ const missingRequired = (entries: readonly SecretInventoryEntry[]): number =>
 
 export function useSecretInventory() {
     const queryClient = useQueryClient();
-    const inventoryKey = SECRETS_INVENTORY.of();
-    const { query } = useSandboxQuery({ queryKey: inventoryKey, queryFn: fetchInventory });
-    const inventory = computed<SecretInventoryEntry[]>(() => query.data.value ?? []);
+    const { query } = useSandboxQuery(rpcQuery(`secrets.inventory`));
+    const inventory = computed<SecretInventoryEntry[]>(() => query.data.value?.entries ?? []);
     return {
         inventory,
         missingRequiredCount: computed(() => missingRequired(inventory.value)),
@@ -60,7 +44,7 @@ export function useSecretInventory() {
         // a
         // fake empty state.
         inventoryPending: computed(() => query.isPending.value),
-        refreshInventory: (): void => void queryClient.invalidateQueries({ queryKey: inventoryKey }),
+        refreshInventory: (): void => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) }),
     };
 }
 
@@ -71,13 +55,12 @@ export function useSecretInventory() {
 const AMBIENT_STALE_MS = 5 * 60 * 1000;
 export function useMissingSecretCount() {
     const { query } = useSandboxQuery({
-        queryKey: SECRETS_INVENTORY.of(),
-        queryFn: fetchInventory,
+        ...rpcQuery(`secrets.inventory`),
         staleTime: AMBIENT_STALE_MS,
         refetchOnWindowFocus: false,
     });
     return {
-        missingRequiredCount: computed(() => missingRequired(query.data.value ?? [])),
+        missingRequiredCount: computed(() => missingRequired(query.data.value?.entries ?? [])),
         countPending: computed(() => query.isPending.value),
     };
 }
@@ -87,33 +70,28 @@ export function useMissingSecretCount() {
 // renders the editor read-only instead of offering controls that would 403.
 export function useCredentialGates() {
     const queryClient = useQueryClient();
-    const gatesKey = SECRET_GATES.of();
-    const { query: gatesQuery } = useSandboxQuery({
-        queryKey: gatesKey,
-        // An unwritten policy answers an empty list; anything else is a real error, surfaced rather than drawing a
-        // sandbox
-        // with no gates.
-        queryFn: async (): Promise<CredentialGate[]> => CredentialGatesSchema.parse(await sandboxJson(`/secrets/gates`)).gates,
-    });
+    // An unwritten policy answers an empty list; anything else is a real error, surfaced rather than drawing a sandbox
+    // with no gates.
+    const { query: gatesQuery } = useSandboxQuery(rpcQuery(`secrets.gates`));
     const { query: rosterQuery } = useSandboxQuery({
         queryKey: SANDBOX_MEMBERS.of(),
         queryFn: async (): Promise<{ members: { email: string }[]; owner?: string }> =>
             (await sandboxJson(`/members`)) as { members: { email: string }[]; owner?: string },
     });
     const { presentedEmail } = useSandboxSession();
-    const invalidate = (): void => void queryClient.invalidateQueries({ queryKey: gatesKey });
+    const invalidate = (): void => void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.gates`) });
     const setGate = useMutation({
-        mutationFn: (gate: CredentialGate) => sandboxJson(`/secrets/gates/${encodeURIComponent(gate.subject)}`, jsonBody(`PUT`, gate)),
+        mutationFn: (gate: CredentialGate) => sandboxRpc.secrets.setGate(gate),
         onSuccess: invalidate,
     });
     const removeGate = useMutation({
-        mutationFn: (subject: string) => sandboxJson(`/secrets/gates/${encodeURIComponent(subject)}`, { method: `DELETE` }),
+        mutationFn: (subject: string) => sandboxRpc.secrets.removeGate({ subject }),
         onSuccess: invalidate,
     });
     const owner = computed<string | undefined>(() => rosterQuery.data.value?.owner);
     return {
-        gates: computed<CredentialGate[]>(() => gatesQuery.data.value ?? []),
-        gateFor: (subject: string): CredentialGate | undefined => (gatesQuery.data.value ?? []).find((gate) => gate.subject === subject),
+        gates: computed<CredentialGate[]>(() => gatesQuery.data.value?.gates ?? []),
+        gateFor: (subject: string): CredentialGate | undefined => (gatesQuery.data.value?.gates ?? []).find((gate) => gate.subject === subject),
         // Owner first (the answer people reach for most), then the roster alphabetically; deduplicated since an owner
         // also
         // on the members file must not appear twice.
@@ -135,12 +113,12 @@ export function useSecrets() {
     const queryClient = useQueryClient();
 
     const invalidate = (): void => {
-        void queryClient.invalidateQueries({ queryKey: SECRETS.of() });
-        void queryClient.invalidateQueries({ queryKey: SECRETS_INVENTORY.of() });
+        void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.list`) });
+        void queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) });
     };
 
     const set = useMutation({
-        mutationFn: (input: { key: string; value: string }) => sandboxJson(`/secrets`, jsonBody(`POST`, input)),
+        mutationFn: (input: { key: string; value: string }) => sandboxRpc.secrets.set(input),
         // Every .env secret write funnels through here, so this one hook feeds the dev autofill for all of them.
         onSuccess: (_data, input) => {
             invalidate();
@@ -149,7 +127,7 @@ export function useSecrets() {
     });
 
     const remove = useMutation({
-        mutationFn: (key: string) => sandboxJson(`/secrets/${encodeURIComponent(key)}`, { method: `DELETE` }),
+        mutationFn: (key: string) => sandboxRpc.secrets.remove({ key }),
         onSuccess: invalidate,
     });
 

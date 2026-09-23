@@ -1,8 +1,9 @@
 import { test, expect, beforeEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
+import { fakeSandboxRpc } from "../testing/sandboxRpcFake";
 
-const sandboxJson = hoisted(() => mock(async () => ({ ok: true })));
-mock.module(`../features/sandbox/client/sandboxClient`, () => ({ sandboxJson }));
+const recordUsage = hoisted(() => mock(async (_input: unknown) => ({ ok: true as const })));
+mock.module(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { recordUsage } }) }));
 
 const { flushSandboxUsage, recordSandboxCall } = await import(`./sandboxUsage`);
 
@@ -13,10 +14,10 @@ const { flushSandboxUsage, recordSandboxCall } = await import(`./sandboxUsage`);
 const PERMISSIONS = [`GET /panels`, `POST /panels/*/start`, `GET /workspace/file`];
 
 beforeEach(async () => {
-    sandboxJson.mockClear();
-    sandboxJson.mockImplementation(async () => ({ ok: true }));
+    recordUsage.mockClear();
+    recordUsage.mockImplementation(async () => ({ ok: true as const }));
     await flushSandboxUsage();
-    sandboxJson.mockClear();
+    recordUsage.mockClear();
 });
 
 test(`counts against the declared entry, not the path that was called`, async () => {
@@ -28,12 +29,12 @@ test(`counts against the declared entry, not the path that was called`, async ()
 
     await flushSandboxUsage();
 
-    expect(sandboxJson).toHaveBeenCalledTimes(1);
-    const [path, init] = sandboxJson.mock.calls[0] as unknown as [string, { body: string }];
-    expect(path).toBe(`/extensions/usage`);
-    expect(JSON.parse(init.body)).toEqual({
-        reports: { "repo-apps": { "POST /panels/*/start": 2, "GET /workspace/file": 1 } },
-    });
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage.mock.calls[0]).toEqual([
+        {
+            reports: { "repo-apps": { "POST /panels/*/start": 2, "GET /workspace/file": 1 } },
+        },
+    ]);
 });
 
 test(`reports every extension in one request`, async () => {
@@ -42,18 +43,19 @@ test(`reports every extension in one request`, async () => {
 
     await flushSandboxUsage();
 
-    expect(sandboxJson).toHaveBeenCalledTimes(1);
-    const [, init] = sandboxJson.mock.calls[0] as unknown as [string, { body: string }];
-    expect(JSON.parse(init.body)).toEqual({
-        reports: {
-            "repo-apps": { "GET /panels": 1 },
-            deployments: { "GET /workspace/file": 1 },
+    expect(recordUsage).toHaveBeenCalledTimes(1);
+    expect(recordUsage.mock.calls[0]).toEqual([
+        {
+            reports: {
+                "repo-apps": { "GET /panels": 1 },
+                deployments: { "GET /workspace/file": 1 },
+            },
         },
-    });
+    ]);
 });
 
 test(`keeps the counts when the daemon is unreachable`, async () => {
-    sandboxJson.mockImplementationOnce(async () => {
+    recordUsage.mockImplementationOnce(async () => {
         throw new Error(`offline`);
     });
     recordSandboxCall(`repo-apps`, PERMISSIONS, `GET`, `/panels`);
@@ -63,18 +65,17 @@ test(`keeps the counts when the daemon is unreachable`, async () => {
     recordSandboxCall(`repo-apps`, PERMISSIONS, `GET`, `/panels`);
     await flushSandboxUsage();
 
-    const [, init] = sandboxJson.mock.calls[1] as unknown as [string, { body: string }];
-    expect(JSON.parse(init.body)).toEqual({ reports: { "repo-apps": { "GET /panels": 2 } } });
+    expect(recordUsage.mock.calls[1]).toEqual([{ reports: { "repo-apps": { "GET /panels": 2 } } }]);
 });
 
 test(`reports nothing at all when nothing was called`, async () => {
     await flushSandboxUsage();
-    expect(sandboxJson).not.toHaveBeenCalled();
+    expect(recordUsage).not.toHaveBeenCalled();
 });
 
 test(`ignores a call no declared entry covers`, async () => {
     // The gate throws first in practice; this guards against ever crediting an uncovered call.
     recordSandboxCall(`repo-apps`, PERMISSIONS, `DELETE`, `/panels`);
     await flushSandboxUsage();
-    expect(sandboxJson).not.toHaveBeenCalled();
+    expect(recordUsage).not.toHaveBeenCalled();
 });

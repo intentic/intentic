@@ -1,4 +1,5 @@
 import {
+    type AgentProvider,
     AgentProviderSchema,
     type RunnerCredential,
     RunnerCredentialRefreshRequestSchema,
@@ -9,8 +10,9 @@ import type { Context } from "hono";
 import { replaceRejectedToken } from "../runtimes/claude/claude-credentials.js";
 import type { Services } from "../composition.js";
 import { bearerFrom } from "../auth/auth.js";
-import { type HarnessCredentialsResult, resolveHarnessCredentials } from "../agent/providers/harness-credentials.js";
-import { type Presented, refusePresented } from "../peers/peer-store.js";
+import type { HarnessCredentialsResult } from "../agent/providers/harness-credentials.js";
+import type { Presented } from "../peers/enrollment.js";
+import { refusePresented } from "../peers/peer-store.js";
 
 // A runner's turns spend this sandbox's model providers through three bearer-authenticated routes:
 // POST /system/runners/credentials: resolves one turn's credential, stripped to what may travel.
@@ -53,8 +55,15 @@ export const toRunnerCredential = (resolved: HarnessCredentialsResult, translato
     };
 };
 
+// How this sandbox resolves one turn's credential, the way its own turns do; the app hands in the engine's.
+export type CredentialResolver = (input: {
+    readonly agent: AgentProvider | undefined;
+    readonly account?: string;
+    readonly model?: string;
+}) => Promise<HarnessCredentialsResult>;
+
 export const createRunnerCredentialsRoute =
-    (services: Services) =>
+    (services: Services, resolve: CredentialResolver) =>
     async (c: Context): Promise<Response> => {
         const caller = await callerRunner(services, c);
         if (caller.kind !== "enrolled") {
@@ -69,7 +78,7 @@ export const createRunnerCredentialsRoute =
         if (agent !== undefined && !agent.success) {
             return c.json({ ok: false, message: `this sandbox does not know the provider "${body.data.agent}" — update it.` } satisfies RunnerCredential);
         }
-        const resolved = await resolveHarnessCredentials(services, {
+        const resolved = await resolve({
             agent: agent?.data,
             ...(body.data.account !== undefined ? { account: body.data.account } : {}),
             ...(body.data.model !== undefined ? { model: body.data.model } : {}),

@@ -2,8 +2,12 @@ import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect, afterEach } from "bun:test";
-import { fakeCodexRunner } from "../../testing.js";
+import { fakeCodexRunner, memoryFleet } from "../../testing.js";
 import { createCodexAgent } from "./codex-agent.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl5sAAAAASUVORK5CYII=", "base64");
 const roots: string[] = [];
@@ -34,8 +38,11 @@ test("an image-generation item becomes a completed tool card with a file-backed 
 
     const events = [];
     for await (const event of createCodexAgent({ codexHome, runner })({
-        prompt: "draw a crocodile",
-        cwd: workspaceRoot,
+        spec: { prompt: "draw a crocodile", cwd: workspaceRoot },
+        policy: {},
+        tools: {},
+        credential: { kind: "container" },
+        hooks: { cards },
         signal: new AbortController().signal,
     })) {
         events.push(event);

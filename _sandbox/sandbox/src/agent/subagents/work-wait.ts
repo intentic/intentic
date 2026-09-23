@@ -2,6 +2,7 @@ import type { SubagentSession } from "@intentic/sandbox-contract";
 import type { PendingChildCard } from "./children.js";
 import { type BackgroundJob, backgroundJobOf, jobFinished, type JobReport, jobReport, runningJobsOf } from "../tools/background-jobs.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "./subagents.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
 // The one park for work a conversation started here: a child agent, or a background command.
 
@@ -17,7 +18,14 @@ export interface WorkWaitOutcome {
 const JOB_POLL_MS = 500;
 
 // The first of these jobs to finish, or the timeout, or the abort.
-const waitForJobs = (jobs: readonly BackgroundJob[], options: Pick<SubagentWaitOptions, "timeoutMs" | "signal">): Promise<WorkWaitOutcome> =>
+// Where a conversation's children and commands are held: each conversation's actor.
+type Actors = Pick<ConversationActors, "holdings">;
+
+const waitForJobs = (
+    actors: Actors,
+    jobs: readonly BackgroundJob[],
+    options: Pick<SubagentWaitOptions, "timeoutMs" | "signal">,
+): Promise<WorkWaitOutcome> =>
     new Promise((resolve) => {
         const deadline = Date.now() + options.timeoutMs;
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -32,12 +40,16 @@ const waitForJobs = (jobs: readonly BackgroundJob[], options: Pick<SubagentWaitO
         const look = (): void => {
             const done = jobs.find(jobFinished);
             if (done !== undefined) {
-                settle(jobReport(done).then((job) => ({ outcome: "finished", job })));
+                settle(jobReport(actors, done).then((job) => ({ outcome: "finished", job })));
                 return;
             }
             if (Date.now() >= deadline) {
                 const only = jobs.length === 1 ? jobs[0] : undefined;
-                settle(only === undefined ? Promise.resolve({ outcome: "timeout" }) : jobReport(only).then((job) => ({ outcome: "timeout", job })));
+                settle(
+                    only === undefined
+                        ? Promise.resolve({ outcome: "timeout" })
+                        : jobReport(actors, only).then((job) => ({ outcome: "timeout", job })),
+                );
                 return;
             }
             timer = setTimeout(look, Math.min(JOB_POLL_MS, Math.max(0, deadline - Date.now())));
@@ -51,8 +63,8 @@ const waitForJobs = (jobs: readonly BackgroundJob[], options: Pick<SubagentWaitO
         look();
     });
 
-const fromSubagent = async (conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
-    const result = await waitForSubagent(conversationId, options);
+const fromSubagent = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
+    const result = await waitForSubagent(actors, conversationId, options);
     return { outcome: result.outcome, ...(result.matched === undefined ? {} : { agent: result.matched }) };
 };
 
@@ -60,25 +72,25 @@ const fromSubagent = async (conversationId: string, options: SubagentWaitOptions
 const NEVER = new Promise<WorkWaitOutcome>(() => {});
 
 /** Parks until the named child or command (by the id its Bash call returned) moves, or for "any" whichever moves first. */
-export const waitForWork = async (conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
+export const waitForWork = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {
     // A command only ever finishes, so it answers a named wait whatever `until` asks for.
-    const named = options.target === undefined ? undefined : backgroundJobOf(conversationId, options.target);
+    const named = options.target === undefined ? undefined : backgroundJobOf(actors, conversationId, options.target);
     if (named !== undefined) {
-        return waitForJobs([named], options);
+        return waitForJobs(actors, [named], options);
     }
-    const jobs = options.target === undefined && options.until.includes("finished") ? runningJobsOf(conversationId) : [];
+    const jobs = options.target === undefined && options.until.includes("finished") ? runningJobsOf(actors, conversationId) : [];
     if (jobs.length === 0) {
-        return fromSubagent(conversationId, options);
+        return fromSubagent(actors, conversationId, options);
     }
     const race = new AbortController();
     const abort = (): void => race.abort();
     options.signal?.addEventListener("abort", abort, { once: true });
     try {
-        const children = fromSubagent(conversationId, { ...options, signal: race.signal }).then((result) =>
+        const children = fromSubagent(actors, conversationId, { ...options, signal: race.signal }).then((result) =>
             // No child to wait on is not a move.
             result.outcome === "unknown-target" ? NEVER : result,
         );
-        return await Promise.race([children, waitForJobs(jobs, { timeoutMs: options.timeoutMs, signal: race.signal })]);
+        return await Promise.race([children, waitForJobs(actors, jobs, { timeoutMs: options.timeoutMs, signal: race.signal })]);
     } finally {
         options.signal?.removeEventListener("abort", abort);
         race.abort();

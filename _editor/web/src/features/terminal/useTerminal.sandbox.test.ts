@@ -1,9 +1,11 @@
 // Pins that the strip never shows a pill with no session behind it across a sandbox switch, even though the remembered
 // arrangement returns instantly and the session list arrives late. Pane mocked wholesale; no real terminal needed.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { stubGlobal, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
+import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 const store = new Map<string, string>();
 stubGlobal(`localStorage`, {
@@ -19,7 +21,7 @@ mock.module("../sandbox/overview/activeSandbox", () => ({
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
 }));
-mock.module("../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 mock.module("../sandbox/client/useSandbox", () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId }),
 }));
@@ -32,8 +34,7 @@ mock.module("./terminalSession", () => ({
     retintTerminalSession: mock(),
 }));
 
-const { createTerminalTabs, disposeAllSessions } = await import("./useTerminal");
-const { clearPendingTerminals } = await import("./terminalsQuery");
+const { createTerminalTabs } = await import("./useTerminal");
 
 type Listed = { name: string; kind: "shell"; running: boolean; activityAt: number };
 const shell = (name: string): Listed => ({ name, kind: `shell`, running: true, activityAt: Date.now() });
@@ -71,21 +72,21 @@ const panel = (initial: Listed[]) => {
     };
 };
 
-// Switches sandboxes as the app does: the active id moves first, then the left sandbox's sockets are torn down.
+// Switches sandboxes as the app does: the active id moves first, then the scope resets, tearing the left sandbox's
+// sockets down with it.
 const switchTo = (id: string): void => {
     activeSandboxId.value = id;
-    disposeAllSessions();
+    resetSandboxScope();
 };
 
 beforeEach(() => {
     for (const tabs of opened.splice(0)) {
         tabs.detach();
     }
-    // Session cache outlives any instance, so a case that never switched away would leak shells into the next one.
-    disposeAllSessions();
     store.clear();
-    clearPendingTerminals();
     activeSandboxId.value = `sbx-a`;
+    // Session cache outlives any instance, so a case that never switched away would leak shells into the next one.
+    resetSandboxScope();
 });
 
 // No pill exists without a session behind it, however confidently storage remembers one.

@@ -1,4 +1,5 @@
-import { computed, type ComputedRef, ref, type Ref } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
+import { computed, type ComputedRef, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 import { type TerminalSession, useTerminalsQuery } from "./terminalsQuery";
 import { importOrReload } from "../../router/staleChunk";
@@ -23,8 +24,8 @@ export const showWorkTerminals: Ref<boolean> = definePreference<boolean>({
 });
 
 // Conversation title per agent terminal, so a row reads the chat's title instead of `agent-<id>`; a session without one
-// just shows its id. Written by the conversation as it surfaces its session.
-const owners = ref<Record<string, string>>({});
+// just shows its id. Written by the conversation as it surfaces its session; one daemon's sessions, so per sandbox.
+const owners = sandboxRef<Record<string, string>>(() => ({}));
 
 export const noteAgentTerminal = (session: string, title: string | null): void => {
     if (title !== null && title !== `` && owners.value[session] !== title) {

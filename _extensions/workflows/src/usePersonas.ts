@@ -1,4 +1,4 @@
-import { type Persona, PersonasListSchema } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
@@ -8,7 +8,7 @@ export function usePersonas() {
     const api = host();
     const query = useQuery({
         queryKey: api.sandbox.key(`personas`),
-        queryFn: async (): Promise<Persona[]> => PersonasListSchema.parse(await api.sandbox.json(`/personas`)).personas,
+        queryFn: async (): Promise<Persona[]> => (await api.sandbox.rpc.personas.list()).personas,
         enabled: computed(() => api.sandbox.reachable()),
     });
     return { personas: computed<Persona[]>(() => query.data.value ?? []) };

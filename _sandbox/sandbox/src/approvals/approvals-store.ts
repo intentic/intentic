@@ -1,8 +1,8 @@
 import { ApprovalSchema, type ApprovalSummary } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { writeLoadedSkill } from "../settings/loaded-skills.js";
+import { writeLoadedSkill } from "../store/loaded-skills.js";
 import { jsonDir } from "../store/json-dir.js";
-import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { stateRelPath } from "../state-paths.js";
 
 // The workspace-relative home the skill text teaches the agent; can't name a dir the store stopped reading.
 const APPROVALS_DIR = stateRelPath(".intentic/config/approvals/");

@@ -2,13 +2,13 @@ import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contrac
 import { computed } from "vue";
 import { blocked, turnInFlight } from "../../agents/fleet/agentStatus";
 import { queryClient } from "../../../lib/queryPersistence";
-import { AGENTS } from "../../../lib/queryKeys";
-import { sandboxJsonQuietly } from "../client/sandboxClient";
+import { rpcKeyAt } from "../../../lib/queryKeys";
+import { sandboxRpc } from "../client/sandboxRpc";
 import { type AcrossRecord, createAcrossStore } from "./acrossSandboxes";
 
 // What every other sandbox's fleet looks like, for the board's All-sandboxes scope and the switcher's counts; polling
-// rules live in acrossSandboxes.ts. Every call goes through `sandboxJsonQuietly`, since reaching a sessionless box
-// would raise a window-wide Google sign-in for a machine nobody's looking at.
+// rules live in acrossSandboxes.ts. Every call is a background one, since reaching a sessionless box would raise a
+// window-wide Google sign-in for a machine nobody's looking at.
 
 // How often each sandbox is re-read; slow on purpose, since this is ambient awareness, not a live feed.
 const POLL_MS = 45_000;
@@ -34,9 +34,9 @@ const store = createAcrossStore<BoxFleet>({
     reading: (previous) => ({ state: previous === undefined || previous.readAt === undefined ? `reading` : previous.state }),
     unreachable: () => ({ state: `unreachable` }),
     read: async (sandbox) => {
-        const body = await sandboxJsonQuietly<{ agents: AgentSummary[]; rev: number; held?: AutomationApproval[] }>(sandbox.id, `/agents`);
+        const body = await sandboxRpc.agents.list(undefined, { context: { at: sandbox.id, background: true } });
         // Also filed under this sandbox's key, so `sandboxQueryPredicate` sweeps it on replacement too.
-        queryClient.setQueryData(AGENTS.ofSandbox(sandbox.id), body.agents);
+        queryClient.setQueryData(rpcKeyAt(sandbox.id, `agents.list`), body);
         return { state: `ready`, agents: body.agents, held: body.held ?? [] };
     },
 });
@@ -69,7 +69,7 @@ export const markSeenAcross = (sandboxId: string, agentId: string): void => {
     }
     const seenAt = Date.now();
     store.patch(sandboxId, { sandbox: box.sandbox, agents: box.agents.map((agent) => (agent.id === agentId ? { ...agent, seenAt } : agent)) });
-    void sandboxJsonQuietly(sandboxId, `/agents/${encodeURIComponent(agentId)}/seen`, { method: `POST` }).catch(() => undefined);
+    void sandboxRpc.agents.seen({ id: agentId }, { context: { at: sandboxId, background: true } }).catch(() => undefined);
 };
 
 // The same count keyed by sandbox id, for the surfaces that hold a row rather than a box (the switcher).

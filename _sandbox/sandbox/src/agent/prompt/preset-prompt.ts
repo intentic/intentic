@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { type ClaudeSdk, claudeCliPath, sdk } from "../../runtimes/claude/claude-sdk.js";
-import { opt } from "../run/opt.js";
+import { type ClaudeSdk, claudeCliPath, sdk } from "../../engines/claude-sdk.js";
+import { opt } from "../../opt.js";
 import type { BuiltinPromptText } from "@intentic/sandbox-contract";
 
 // Claude Code's system prompt, captured from a real CLI request rather than transcribed here, since neither the SDK nor

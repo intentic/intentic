@@ -1,3 +1,4 @@
+import { type MaybeRefOrGetter, toValue } from "vue";
 import { queryClient } from "../../lib/queryPersistence";
 import type { WarmBand, WarmTask } from "./warmPlan";
 
@@ -15,7 +16,8 @@ export const heldInCache = (queryKey: readonly unknown[]): boolean => {
 // One cached read, as the query that defines it. Caching terms (staleTime, gcTime) are optional and
 // belong to the owning surface; a wish carries whatever it already decided.
 export interface WarmSpec {
-    readonly queryKey: readonly unknown[];
+    // A plain key, or the computed one an rpcQuery builds, read when the task runs.
+    readonly queryKey: MaybeRefOrGetter<readonly unknown[]>;
     readonly queryFn: () => Promise<unknown>;
     readonly staleTime?: number;
     readonly gcTime?: number;
@@ -25,7 +27,7 @@ export interface WarmSpec {
 export const warmQuery = (key: string, band: WarmBand, query: WarmSpec): WarmTask => ({
     key,
     band,
-    have: () => heldInCache(query.queryKey),
+    have: () => heldInCache(toValue(query.queryKey)),
     // No retry: a failed warm leaves nothing cached, so the next click retries for real and can surface the error.
-    read: () => queryClient.fetchQuery({ ...query, queryKey: [...query.queryKey], retry: false }),
+    read: () => queryClient.fetchQuery({ ...query, queryKey: [...toValue(query.queryKey)], retry: false }),
 });

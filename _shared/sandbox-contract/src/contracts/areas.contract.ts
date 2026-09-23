@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { OkSchema } from "../schemas/shared.js";
 import { AreaIdParamSchema, AreaSchema, AreasListSchema } from "../schemas/areas.js";
 
@@ -7,7 +7,7 @@ import { AreaIdParamSchema, AreaSchema, AreasListSchema } from "../schemas/areas
 // which is the one decision a revokable grant must not make, so the two writes below are owner-gated in-route the way
 // the roster is.
 export const areasContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/areas",
@@ -15,9 +15,10 @@ export const areasContract = {
             description:
                 "Each area with the folders it admits. Access is granted in these rather than in folder lists per person, so widening what a team sees is one edit here instead of one edit per member.",
         })
+        .meta({ guest: true })
         .output(AreasListSchema),
     // Upsert by id, re-saving the same id edits that area.
-    save: oc
+    save: procedure
         .route({
             method: "POST",
             path: "/areas",
@@ -29,7 +30,7 @@ export const areasContract = {
         .output(OkSchema),
     // Refused while anyone still holds it: a member row pointing at an area that no longer exists would either fail
     // open (everything) or fail shut (nothing), and neither is a decision anybody made.
-    remove: oc
+    remove: procedure
         .route({
             method: "DELETE",
             path: "/areas/{id}",

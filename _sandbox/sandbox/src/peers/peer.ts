@@ -67,8 +67,3 @@ export interface PeerDoor<Hello extends { readonly token: string }, Announced, S
 
 // Doors reachable through the MCP bridge, by capability kind, so the turn planner needn't import a door's code.
 export const PEER_BRIDGES = { device: "hosts", webext: "webext" } as const satisfies Record<"device" | "webext", PeerSlug>;
-
-// The two doors an anonymous caller may reach on every peer: the socket, and the one-time redemption.
-export const peerConnectPath = (slug: PeerSlug): string => `/system/${slug}/connect`;
-export const peerEnrollPath = (slug: PeerSlug): string => `/system/${slug}/enroll`;
-export const peerMcpPath = (slug: PeerSlug): RegExp => new RegExp(`^/mcp/${slug}/[^/]+$`);

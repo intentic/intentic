@@ -1,5 +1,5 @@
 import type { CredentialGateKind, CredentialLane, CredentialOffer } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../agent/run/offer-request.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../agents/actor/card-offers.js";
 import { credentialUse } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import type { CredentialGatesStore } from "./credential-gates.js";

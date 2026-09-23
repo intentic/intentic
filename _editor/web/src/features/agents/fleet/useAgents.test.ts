@@ -1,5 +1,7 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { describe, it, expect, beforeEach, mock, spyOn } from "bun:test";
-import { waitFor, mocked } from "@intentic/testing/bun";
+import { waitFor } from "@intentic/testing/bun";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // canArchive is pure, but the fleet store it lives beside pulls useChat and the app shell at import time. These
 // mocks cut the edges that reach `window.env` (router, analytics, sandbox client) without touching what's tested.
@@ -11,11 +13,45 @@ mock.module("../../sandbox/client/useSandbox", () => {
 // Pins the scoping rule to a fixed id so assertions below can spell out the whole key.
 mock.module("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
 mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
+// The fleet's daemon calls, one mock per procedure a case can reach. resetDaemon handles them as the one seam they used
+// to be: reset together, each answering `answer` until a case queues its own.
+const daemon = {
+    list: mock(),
+    archived: mock(),
+    seen: mock(),
+    rename: mock(),
+    archive: mock(),
+    unarchive: mock(),
+    approve: mock(),
+    reject: mock(),
+};
+const resetDaemon = (answer?: unknown): void => {
+    for (const procedure of Object.values(daemon)) {
+        procedure.mockReset();
+        if (answer !== undefined) {
+            procedure.mockResolvedValue(answer as never);
+        }
+    }
+};
+// Which of them anything reached, by name.
+const reached = (): string[] => Object.entries(daemon).flatMap(([name, procedure]) => (procedure.mock.calls.length > 0 ? [name] : []));
+mock.module("../../sandbox/client/sandboxRpc", () => ({
+    sandboxRpc: fakeSandboxRpc({
+        agents: {
+            list: daemon.list,
+            archived: daemon.archived,
+            seen: daemon.seen,
+            rename: daemon.rename,
+            archive: daemon.archive,
+            unarchive: daemon.unarchive,
+        },
+        automations: { approve: daemon.approve, reject: daemon.reject },
+    }),
+}));
 // And the fourth: auditRoster reports through sandboxTarget, which reads window.env on import.
 mock.module("../../../app/clientDiagnostics", () => ({ reportClient: mock() }));
 
-import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
-import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
+import { AgentsListSchema, type AgentSummary, type AutomationApproval } from "@intentic/sandbox-contract";
 import { nextTick, ref } from "vue";
 import { forgetClosedDraft, keepClosedDraft } from "../../chat/drafts/closedDrafts";
 import { previewOf } from "../../chat/panel/useChat-strip";
@@ -24,9 +60,11 @@ import type { Strip, TabFacts } from "../../chat/tabs/tabFacts";
 import { useChat } from "../../chat/run/useChat";
 import { useNotifications } from "../../../shell/notifications/notifications";
 import { queryClient } from "../../../lib/queryPersistence";
-import { resetAgents, useAgents } from "./useAgents";
+import { desyncAgents, useAgents } from "./useAgents";
 import { canArchive, doneWith, FINISHED_WINDOW, type FleetAgent, windowFinished } from "./useAgents-fleet";
-import { auditRoster, resetArchive, setAgents } from "./useAgents-registry";
+import { auditRoster, setAgents } from "./useAgents-registry";
+import { runningTurn } from "../../../testing/runningTurn";
+import { IDLE } from "../../chat/session/runPhase";
 
 // The Finished lane's cap, and the one card it may never drop: the board's selection ring points at whatever the
 // docked chat shows, so culling that card would leave the ring nowhere.
@@ -225,7 +263,7 @@ describe("roster titles", () => {
     // Each case installs the one tab it's about; the list is never emptied, since useChat guarantees an active
     // conversation at all times.
     beforeEach(() => {
-        resetAgents();
+        resetSandboxScope();
     });
 
     it("repaints an open tab when the daemon promotes its title", async () => {
@@ -270,7 +308,7 @@ describe("roster frames the board can skip", () => {
     const cardsById = (): Map<string, FleetAgent> => new Map(useAgents().fleet.value.map((card) => [card.id, card]));
 
     beforeEach(() => {
-        resetAgents();
+        resetSandboxScope();
     });
 
     it("hands back the identical cards when a frame said nothing new", async () => {
@@ -298,7 +336,7 @@ describe("roster frames the board can skip", () => {
         await nextTick();
 
         // The request never settles, so the board holds only the in-place optimistic write.
-        mocked(sandboxJson).mockImplementation(() => new Promise(() => undefined));
+        daemon.rename.mockImplementation(() => new Promise(() => undefined));
         void useAgents().rename(`a1`, `New name`);
         await nextTick();
         expect(cardsById().get(`a1`)?.title).toBe(`New name`);
@@ -331,12 +369,12 @@ describe("the beat's audit of the roster", () => {
     // What the roster says about one agent right now, the whole of what a stale board gets wrong.
     const parked = (id: string): boolean => useAgents().fleet.value.find((card) => card.id === id)?.attention.question === true;
     const answers = (agents: AgentSummary[], rev: number): void => {
-        mocked(sandboxJson).mockResolvedValue({ agents, rev });
+        daemon.list.mockResolvedValue(AgentsListSchema.parse({ agents, rev }));
     };
 
     beforeEach(() => {
-        resetAgents();
-        mocked(sandboxJson).mockReset();
+        resetSandboxScope();
+        resetDaemon();
     });
 
     it("asks for nothing while the beat agrees with what it holds", async () => {
@@ -346,7 +384,7 @@ describe("the beat's audit of the roster", () => {
         auditRoster(7);
         await nextTick();
 
-        expect(sandboxJson).not.toHaveBeenCalled();
+        expect(reached()).toEqual([]);
     });
 
     it("reads the roster back when the beat is ahead: the frame in between never landed", async () => {
@@ -359,7 +397,7 @@ describe("the beat's audit of the roster", () => {
         auditRoster(8);
         await waitFor(() => expect(parked(`a1`)).toBe(false));
 
-        expect(sandboxJson).toHaveBeenCalledWith(`/agents`);
+        expect(daemon.list).toHaveBeenCalledWith();
     });
 
     // A revision lower than the one held can't be repaired by a plain pull, since the guard would drop the pull's own
@@ -383,7 +421,7 @@ describe("the beat's audit of the roster", () => {
         auditRoster(9);
         await waitFor(() => expect(parked(`a1`)).toBe(false));
 
-        expect(mocked(sandboxJson).mock.calls.filter(([path]) => path === `/agents`)).toHaveLength(1);
+        expect(daemon.list).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -402,7 +440,7 @@ describe("diff invalidation", () => {
     });
 
     beforeEach(() => {
-        resetAgents();
+        resetSandboxScope();
     });
 
     it("invalidates an agent's diff on a status transition: the auto-land flip this browser never performed", () => {
@@ -411,7 +449,10 @@ describe("diff invalidation", () => {
 
         setAgents([summary(`a1`, `landed`)], 2);
 
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents`, `a1`, `diff`, `sbx-1`] });
+        // The whole review, the file diffs and history read beside the change list included.
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.diff`, { id: `a1` }, `sbx-1`] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.fileDiff`, { id: `a1` }, `unpersisted`, `sbx-1`] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.history`, { id: `a1` }, `sbx-1`] });
         invalidate.mockRestore();
     });
 
@@ -441,7 +482,9 @@ describe("diff invalidation", () => {
 
         setAgents([summary(`a1`, `landed`)], 0);
 
-        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents`, `a1`, `diff`, `sbx-1`] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.diff`, { id: `a1` }, `sbx-1`] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.fileDiff`, { id: `a1` }, `unpersisted`, `sbx-1`] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: [`agents.history`, { id: `a1` }, `sbx-1`] });
         invalidate.mockRestore();
     });
 });
@@ -480,15 +523,10 @@ describe("draft cards", () => {
     const strip = (...tabs: TabFacts[]): Strip => ({ active: tabs[0]?.id, panes: tabs.slice(0, 1).map((tab) => tab.id), tabs });
 
     beforeEach(() => {
-        // These cases drive the real open path, firing the daemon's best-effort side calls (read marker, attach probe);
-        // both are stubbed to resolve, since an undefined return isn't something either knows how to survive.
-        mocked(sandboxJson)
-            .mockReset()
-            .mockResolvedValue({} as never);
-        mocked(sandboxRequest)
-            .mockReset()
-            .mockResolvedValue({ ok: false } as never);
-        resetAgents();
+        // These cases drive the real open path, firing the daemon's best-effort side calls (the read marker among them),
+        // stubbed to resolve, since an undefined return isn't something they know how to survive.
+        resetDaemon({});
+        resetSandboxScope();
         useAgents().archived.value = [];
         // One open tab per case, installed by the case itself; this registered placeholder keeps useChat's
         // always-one-active-conversation invariant without acting as another draft under test.
@@ -615,10 +653,10 @@ describe("draft cards", () => {
     it("names the model a prepared draft will run on, and moves only that card when it is picked", () => {
         const first = new Conversation(`prepared`);
         first.draft.value = `fix the login redirect`;
-        first.selectModel({ provider: `cursor`, value: `composer-2.5` });
+        first.selection.apply({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5` } });
         const second = new Conversation(`beside`);
         second.draft.value = `write the release notes`;
-        second.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        second.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
         useChat().conversations.value = [...useChat().conversations.value, first, second];
 
         const shown = (): { id: string; provider: string; model: string | undefined }[] =>
@@ -632,7 +670,7 @@ describe("draft cards", () => {
         ]);
 
         // One draft re-pointed at another provider's model: its card follows at once, the other holds still.
-        first.selectModel({ provider: `claude`, value: `claude-sonnet-4-5-20250929` });
+        first.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-sonnet-4-5-20250929` } });
 
         expect(shown()).toEqual([
             { id: `beside`, provider: `claude`, model: `claude-opus-5` },
@@ -806,9 +844,8 @@ describe("draft cards", () => {
     // instead of the bare wire fields a spinner used to show alone.
     it("cards a sent turn the fleet has not registered as starting, with the settings and elapsed it knows", () => {
         const conversation = new Conversation(`sent`);
-        conversation.model.value = `claude-opus-5`;
-        conversation.streaming.value = true;
-        conversation.turnStartedAt.value = 4_000;
+        conversation.selection.apply({ kind: `set`, picks: { model: `claude-opus-5` } });
+        runningTurn(conversation.turn, 4_000);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
         expect(
@@ -823,8 +860,7 @@ describe("draft cards", () => {
         setAgents([registered(`a1`)], 0);
         const conversation = new Conversation(`a1`);
         conversation.registered.value = true;
-        conversation.streaming.value = true;
-        conversation.turnStartedAt.value = 4_000;
+        runningTurn(conversation.turn, 4_000);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
         expect(useAgents().lanes.value.finished).toEqual([]);
@@ -843,8 +879,7 @@ describe("draft cards", () => {
         setAgents([{ ...refused, status: `conflict`, attention: { ...refused.attention, conflict: true }, conflictCauses: [`diverged`] }], 0);
         const conversation = new Conversation(`a1`);
         conversation.registered.value = true;
-        conversation.streaming.value = true;
-        conversation.turnStartedAt.value = 4_000;
+        runningTurn(conversation.turn, 4_000);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
         expect(useAgents().lanes.value.attention).toEqual([]);
@@ -864,13 +899,11 @@ describe("draft cards", () => {
         setAgents([registered(`a1`)], 0);
         const conversation = new Conversation(`a1`);
         conversation.registered.value = true;
-        conversation.streaming.value = true;
-        conversation.turnStartedAt.value = 4_000;
+        runningTurn(conversation.turn, 4_000);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
         expect(activeIds()).toEqual([`a1`]);
 
-        conversation.streaming.value = false;
-        conversation.turnStartedAt.value = undefined;
+        conversation.turn.phase.value = IDLE;
 
         expect(activeIds()).toEqual([]);
         expect(useAgents().lanes.value.finished.map((card) => ({ id: card.id, status: card.status }))).toEqual([{ id: `a1`, status: `landed` }]);
@@ -882,9 +915,8 @@ describe("draft cards", () => {
         setAgents([registered(`a1`)], 0);
         const conversation = new Conversation(`a1`);
         conversation.registered.value = true;
-        conversation.streaming.value = true;
         // `registered()` stamps updatedAt at 1_000: the daemon has already spoken about this agent since.
-        conversation.turnStartedAt.value = 500;
+        runningTurn(conversation.turn, 500);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
         expect(activeIds()).toEqual([]);
@@ -898,8 +930,7 @@ describe("draft cards", () => {
         setAgents([{ ...parked, status: `awaiting`, attention: { ...parked.attention, question: true } }], 0);
         const conversation = new Conversation(`a1`);
         conversation.registered.value = true;
-        conversation.streaming.value = true;
-        conversation.turnStartedAt.value = 4_000;
+        runningTurn(conversation.turn, 4_000);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
 
         expect(activeIds()).toEqual([]);
@@ -910,7 +941,7 @@ describe("draft cards", () => {
     // registry had no entry yet, vanishing the agent from every lane.
     it("keeps a starting card on the board when it is opened, and leaves its placement alone", () => {
         const conversation = new Conversation(`sent`);
-        conversation.streaming.value = true;
+        runningTurn(conversation.turn);
         useChat().conversations.value = [...useChat().conversations.value, conversation];
         const card = useAgents().lanes.value.active[0]!;
 
@@ -936,7 +967,7 @@ describe("draft cards", () => {
     it("takes the chat tab with the card, leaving nothing behind in either view", async () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
         setAgents([registered(`a1`)], 1);
-        mocked(sandboxJson).mockResolvedValueOnce({ moved: [{ ...registered(`a1`), archivedAt: 2_000 }], failed: [], rev: 2 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [{ ...registered(`a1`), archivedAt: 2_000 }], failed: [], rev: 2 } as never);
 
         await useAgents().archive([`a1`]);
 
@@ -963,7 +994,7 @@ describe("draft cards", () => {
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a1`)];
         setAgents([registered(`a1`)], 1);
 
-        resetAgents();
+        resetSandboxScope();
 
         expect(activeIds()).toEqual([]);
     });
@@ -1027,7 +1058,7 @@ describe("the finished fold", () => {
     const shownIds = (): string[] => windowFinished(useAgents().lanes.value.finished, undefined, (entry) => entry.id).shown.map((entry) => entry.id);
 
     beforeEach(() => {
-        resetAgents();
+        resetSandboxScope();
         useAgents().archived.value = [];
         const other = new Conversation();
         other.registered.value = true;
@@ -1178,7 +1209,7 @@ describe("lane order holds still", () => {
     const activeIds = (): string[] => useAgents().lanes.value.active.map((entry) => entry.id);
 
     beforeEach(() => {
-        resetAgents();
+        resetSandboxScope();
         useAgents().archived.value = [];
         const other = new Conversation();
         other.registered.value = true;
@@ -1236,7 +1267,6 @@ describe("archive", () => {
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
-    const post = mocked(sandboxJson);
     // This suite's own agent tabs; reset also installs a main-tree chat no archive case is about.
     const openTabs = (): string[] =>
         useChat()
@@ -1248,8 +1278,8 @@ describe("archive", () => {
     beforeEach(() => {
         // Stubbed to resolve by default: an archive fires the daemon's best-effort side calls, and undefined isn't
         // something they survive. Per-case mocks still take precedence.
-        post.mockReset().mockResolvedValue({} as never);
-        resetAgents();
+        resetDaemon({});
+        resetSandboxScope();
         // The receipt is the app's shared channel; a desync must not wipe what else is on screen.
         useNotifications().dismissReceipt();
         useAgents().archived.value = [];
@@ -1263,11 +1293,11 @@ describe("archive", () => {
         const { receipt } = useNotifications();
         setAgents([agent(`a`), agent(`b`)], 1);
         const flashes = archivedFlash.value;
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
 
         await archive([`a`]);
 
-        expect(post).toHaveBeenCalledWith(`/agents/archive`, expect.objectContaining({ method: `POST`, body: JSON.stringify({ ids: [`a`] }) }));
+        expect(daemon.archive).toHaveBeenCalledWith({ ids: [`a`] });
         expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`b`]);
         // Archive half fills from the same response, no second round-trip, so a cross-half lookup resolves at once.
         expect(archived.value.map((entry) => entry.id)).toEqual([`a`]);
@@ -1297,7 +1327,7 @@ describe("archive", () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
             const request = held<{ moved: AgentSummary[]; failed: never[]; rev: number }>();
-            post.mockReturnValueOnce(request.answer as never);
+            daemon.archive.mockReturnValueOnce(request.answer as never);
 
             const press = archive([`a`]);
 
@@ -1311,7 +1341,7 @@ describe("archive", () => {
         it("slides the card back when the press fails, under the strip that says why", async () => {
             const { archive, lanes, notice } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockRejectedValueOnce(new Error(`the agent's turn is running`));
+            daemon.archive.mockRejectedValueOnce(new Error(`the agent's turn is running`));
 
             await archive([`a`]);
 
@@ -1325,7 +1355,7 @@ describe("archive", () => {
         it("hands back exactly what the daemon declined", async () => {
             const { archive, lanes, archived, undoable } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
+            daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
 
             await archive([`a`, `b`]);
 
@@ -1339,7 +1369,7 @@ describe("archive", () => {
             const { archive, lanes } = useAgents();
             const { receipt } = useNotifications();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [], failed: [], rev: 2 } as never);
+            daemon.archive.mockResolvedValueOnce({ moved: [], failed: [], rev: 2 } as never);
 
             await archive();
 
@@ -1354,7 +1384,7 @@ describe("archive", () => {
             const { archive, lanes, notice } = useAgents();
             const { receipt } = useNotifications();
             setAgents([agent(`a`)], 1);
-            post.mockResolvedValueOnce({
+            daemon.archive.mockResolvedValueOnce({
                 moved: [],
                 failed: [{ id: `a`, reason: `fatal: not a git repository` }],
                 rev: 2,
@@ -1371,7 +1401,7 @@ describe("archive", () => {
         it("keeps the refusal on screen when the rest of the press succeeded", async () => {
             const { archive, lanes, notice } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({
+            daemon.archive.mockResolvedValueOnce({
                 moved: [archivedAgent(`b`)],
                 failed: [{ id: `a`, reason: `worktree busy` }],
                 rev: 2,
@@ -1390,10 +1420,10 @@ describe("archive", () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
             const first = held<{ moved: AgentSummary[]; failed: never[]; rev: number }>();
-            post.mockReturnValueOnce(first.answer as never);
+            daemon.archive.mockReturnValueOnce(first.answer as never);
             const failing = archive([`a`]);
             // The second press, made while the first is still open, is the one that lands.
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
+            daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
             await archive([`a`]);
 
             first.refuse(new Error(`daemon went away`));
@@ -1409,7 +1439,7 @@ describe("archive", () => {
             setAgents([agent(`b`)], 1);
             archived.value = [{ ...archivedAgent(`a`), open: false, unread: false, unsent: false }];
             const request = held<{ moved: AgentSummary[]; rev: number }>();
-            post.mockReturnValueOnce(request.answer as never);
+            daemon.unarchive.mockReturnValueOnce(request.answer as never);
 
             const press = restore([`a`]);
 
@@ -1425,7 +1455,7 @@ describe("archive", () => {
             const { restore, lanes, archived, notice } = useAgents();
             setAgents([], 1);
             archived.value = [`x`, `a`, `y`].map((id) => ({ ...archivedAgent(id), open: false, unread: false, unsent: false }));
-            post.mockRejectedValueOnce(new Error(`daemon went away`));
+            daemon.unarchive.mockRejectedValueOnce(new Error(`daemon went away`));
 
             await restore([`a`]);
 
@@ -1438,7 +1468,7 @@ describe("archive", () => {
             const { restore, lanes, archived } = useAgents();
             setAgents([], 1);
             archived.value = [`a`, `b`].map((id) => ({ ...archivedAgent(id), open: false, unread: false, unsent: false }));
-            post.mockResolvedValueOnce({ moved: [agent(`a`)], rev: 2 } as never);
+            daemon.unarchive.mockResolvedValueOnce({ moved: [agent(`a`)], rev: 2 } as never);
 
             await restore([`a`, `b`]);
 
@@ -1451,11 +1481,11 @@ describe("archive", () => {
         const { archive } = useAgents();
         const { receipt } = useNotifications();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 3 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 3 } as never);
 
         await archive();
 
-        expect(post).toHaveBeenCalledWith(`/agents/archive`, expect.objectContaining({ body: JSON.stringify({}) }));
+        expect(daemon.archive).toHaveBeenCalledWith({});
         expect(receipt.value?.title).toContain(`2 agents archived`);
         expect(receipt.value?.actions?.[0]?.run).toBeTypeOf(`function`);
     });
@@ -1464,13 +1494,13 @@ describe("archive", () => {
         const { archive, undoable, lanes, archived } = useAgents();
         const { receipt } = useNotifications();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 4 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 4 } as never);
         await archive();
 
-        post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], failed: [], rev: 5 } as never);
+        daemon.unarchive.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], failed: [], rev: 5 } as never);
         await receipt.value?.actions?.[0]?.run();
 
-        expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`a`, `b`] }) }));
+        expect(daemon.unarchive).toHaveBeenLastCalledWith({ ids: [`a`, `b`] });
         expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
         expect(archived.value).toEqual([]);
         expect(receipt.value?.title).toContain(`2`);
@@ -1483,13 +1513,13 @@ describe("archive", () => {
     it("undoes a silent single archive from the keyboard", async () => {
         const { archive, undoArchive, undoable, lanes } = useAgents();
         setAgents([agent(`a`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 6 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 6 } as never);
         await archive([`a`]);
 
-        post.mockResolvedValueOnce({ moved: [agent(`a`)], failed: [], rev: 7 } as never);
+        daemon.unarchive.mockResolvedValueOnce({ moved: [agent(`a`)], failed: [], rev: 7 } as never);
         await undoArchive();
 
-        expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`a`] }) }));
+        expect(daemon.unarchive).toHaveBeenLastCalledWith({ ids: [`a`] });
         expect(lanes.value.finished.map((entry) => entry.id)).toEqual([`a`]);
         expect(undoable.value).toEqual([]);
     });
@@ -1501,7 +1531,7 @@ describe("archive", () => {
 
         await undoArchive();
 
-        expect(post).not.toHaveBeenCalled();
+        expect(reached()).toEqual([]);
     });
 
     // A card restored individually from the archive view leaves the undo set, or undo would try to unarchive an
@@ -1509,10 +1539,10 @@ describe("archive", () => {
     it("drops individually restored agents from the undo set", async () => {
         const { archive, restore, undoable } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 8 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 8 } as never);
         await archive();
 
-        post.mockResolvedValueOnce({ moved: [agent(`a`)], failed: [], rev: 9 } as never);
+        daemon.unarchive.mockResolvedValueOnce({ moved: [agent(`a`)], failed: [], rev: 9 } as never);
         await restore([`a`]);
 
         expect(undoable.value).toEqual([`b`]);
@@ -1523,7 +1553,7 @@ describe("archive", () => {
         const { archive } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a`), new Conversation(`b`)];
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 11 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 11 } as never);
 
         await archive();
 
@@ -1535,7 +1565,7 @@ describe("archive", () => {
         const { archive } = useAgents();
         setAgents([agent(`a`)], 1);
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`a`)];
-        post.mockRejectedValueOnce(new Error(`the agent's turn is running`));
+        daemon.archive.mockRejectedValueOnce(new Error(`the agent's turn is running`));
 
         await archive([`a`]);
 
@@ -1545,7 +1575,7 @@ describe("archive", () => {
     it("says so plainly when there was nothing to archive, with nothing to undo", async () => {
         const { archive } = useAgents();
         const { receipt } = useNotifications();
-        post.mockResolvedValueOnce({ moved: [], failed: [], rev: 10 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [], failed: [], rev: 10 } as never);
 
         await archive();
 
@@ -1558,7 +1588,7 @@ describe("archive", () => {
         const { archive, notice, lanes } = useAgents();
         const { receipt } = useNotifications();
         setAgents([agent(`a`)], 1);
-        post.mockRejectedValueOnce(new Error(`the agent's turn is running`));
+        daemon.archive.mockRejectedValueOnce(new Error(`the agent's turn is running`));
 
         await archive([`a`]);
 
@@ -1582,7 +1612,7 @@ describe("archive", () => {
             setAgents([agent(`a`), agent(`b`)], 1);
             const first = deferred<unknown>();
             const second = deferred<unknown>();
-            post.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
+            daemon.archive.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
 
             const archiveA = archive([`a`]);
             const archiveB = archive([`b`]);
@@ -1603,7 +1633,7 @@ describe("archive", () => {
             setAgents([agent(`__proto__`), agent(`constructor`)], 1);
             const first = deferred<unknown>();
             const second = deferred<unknown>();
-            post.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
+            daemon.archive.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
 
             const both = archive([`__proto__`, `constructor`]);
             const constructorAgain = archive([`constructor`]);
@@ -1623,7 +1653,7 @@ describe("archive", () => {
             setAgents([agent(`a`), agent(`b`)], 1);
             const first = deferred<unknown>();
             const second = deferred<unknown>();
-            post.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
+            daemon.archive.mockReturnValueOnce(first.promise as never).mockReturnValueOnce(second.promise as never);
 
             const archiveA = archive([`a`]);
             const archiveB = archive([`b`]);
@@ -1640,16 +1670,16 @@ describe("archive", () => {
         it("merges consecutive archives into one undo that puts all of them back", async () => {
             const { archive, undoArchive, undoable } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 11 } as never);
+            daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 11 } as never);
             await archive([`a`]);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], failed: [], rev: 12 } as never);
+            daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`b`)], failed: [], rev: 12 } as never);
             await archive([`b`]);
 
             // Clicking down the lane is one intent, so undoing `b` must not drop the way back to `a`.
             expect(undoable.value).toEqual([`b`, `a`]);
-            post.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], failed: [], rev: 13 } as never);
+            daemon.unarchive.mockResolvedValueOnce({ moved: [agent(`a`), agent(`b`)], failed: [], rev: 13 } as never);
             await undoArchive();
-            expect(post).toHaveBeenLastCalledWith(`/agents/unarchive`, expect.objectContaining({ body: JSON.stringify({ ids: [`b`, `a`] }) }));
+            expect(daemon.unarchive).toHaveBeenLastCalledWith({ ids: [`b`, `a`] });
         });
 
         // The roster arrives as full snapshots from three racing sources, so newest is not "whichever landed last";
@@ -1666,7 +1696,7 @@ describe("archive", () => {
         it("keeps an archived card off the board across a NEWER snapshot that predates the archive", async () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 9 } as never);
+            daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 9 } as never);
             await archive([`a`]);
 
             // A newer roster can still predate the archive; the pending move holds the card off until revision 9.
@@ -1677,7 +1707,7 @@ describe("archive", () => {
         it("hands the board back to the daemon once it publishes the archive", async () => {
             const { archive, lanes } = useAgents();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 9 } as never);
+            daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 9 } as never);
             await archive([`a`]);
 
             // The roster reflecting the archive retires the intent, so a since-restored agent reappears, not stuck.
@@ -1688,7 +1718,7 @@ describe("archive", () => {
         it("forgets the revision line when the stream drops, so a restarted daemon is not rejected", () => {
             const { lanes } = useAgents();
             setAgents([agent(`a`)], 42);
-            resetAgents();
+            desyncAgents();
             // A restarted daemon counts from 0 again; holding onto 42 would reject every frame it sends.
             setAgents([agent(`a`), agent(`b`)], 0);
             expect(lanes.value.finished.map((entry) => entry.id).toSorted()).toEqual([`a`, `b`]);
@@ -1701,7 +1731,7 @@ describe("archive", () => {
             const { archive, undoable } = useAgents();
             const { receipt, dismissReceipt } = useNotifications();
             setAgents([agent(`a`), agent(`b`)], 1);
-            post.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 14 } as never);
+            daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`), archivedAgent(`b`)], failed: [], rev: 14 } as never);
             await archive();
 
             dismissReceipt();
@@ -1725,13 +1755,11 @@ describe("the archive list", () => {
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
     });
     const archivedAgent = (id: string): AgentSummary => ({ ...agent(id), archivedAt: 2_000 });
-    const post = mocked(sandboxJson);
-    const archivedReads = (): number => post.mock.calls.filter(([path]) => path === `/agents/archived`).length;
+    const archivedReads = (): number => daemon.archived.mock.calls.length;
 
     beforeEach(() => {
-        post.mockReset().mockResolvedValue({} as never);
-        resetAgents();
-        resetArchive();
+        resetDaemon({});
+        resetSandboxScope();
         const other = new Conversation();
         other.isolated.value = false;
         useChat().conversations.value = [other];
@@ -1740,7 +1768,7 @@ describe("the archive list", () => {
     it("re-reads itself when an id leaves the roster by another hand: the daemon's sweep, another device", async () => {
         const { archived } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ agents: [archivedAgent(`b`)] } as never);
+        daemon.archived.mockResolvedValueOnce(AgentsListSchema.parse({ agents: [archivedAgent(`b`)], rev: 2 }));
 
         // The retention sweep archived `b`: the next roster frame simply arrives without it.
         setAgents([agent(`a`)], 2);
@@ -1752,7 +1780,7 @@ describe("the archive list", () => {
     it("stays quiet when the departure is this browser's own archive: both halves are already written", async () => {
         const { archive } = useAgents();
         setAgents([agent(`a`), agent(`b`)], 1);
-        post.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
+        daemon.archive.mockResolvedValueOnce({ moved: [archivedAgent(`a`)], failed: [], rev: 2 } as never);
         await archive([`a`]);
 
         // The daemon's own archive account, and a later unrelated frame, are neither news to the list.
@@ -1764,23 +1792,23 @@ describe("the archive list", () => {
 
     it("stays quiet across a reconnect's first snapshot: a reset board has no ids to depart", () => {
         setAgents([agent(`a`)], 42);
-        resetAgents();
+        desyncAgents();
 
         setAgents([agent(`a`)], 0);
 
         expect(archivedReads()).toBe(0);
     });
 
-    it("is cleared by resetArchive alone: a stream failure must not blank the archive door", async () => {
+    it("is cleared by a switch alone: a stream failure must not blank the archive door", async () => {
         const { archived } = useAgents();
         archived.value = [Object.assign(archivedAgent(`a`), { open: false, unread: false, unsent: false })];
 
-        // The liveness loop's failure path: the roster resets, the archive list keeps its last reading.
-        resetAgents();
+        // The liveness loop's failure path: the roster desyncs, the archive list keeps its last reading.
+        desyncAgents();
         expect(archived.value.map((entry) => entry.id)).toEqual([`a`]);
 
         // The sandbox switch: another daemon's archive must not be offered on this board.
-        resetArchive();
+        resetSandboxScope();
         expect(archived.value).toEqual([]);
     });
 });
@@ -1806,11 +1834,8 @@ describe("tabs the daemon retired", () => {
     };
 
     beforeEach(() => {
-        mocked(sandboxJson)
-            .mockReset()
-            .mockResolvedValue({} as never);
-        resetAgents();
-        resetArchive();
+        resetDaemon({});
+        resetSandboxScope();
         // The user's own chat; focused, so the strip's one-untouched-draft rule keeps it through the writes below.
         useChat().conversations.value = [new Conversation(`here`)];
         useChat().setActive(`here`);
@@ -1856,7 +1881,7 @@ describe("tabs the daemon retired", () => {
     it("keeps every tab across a reconnect's first snapshot", () => {
         openAgentTab(`a`);
         setAgents([agent(`a`)], 7);
-        resetAgents();
+        desyncAgents();
 
         setAgents([agent(`a`)], 0);
 
@@ -1869,23 +1894,24 @@ describe("tabs the daemon retired", () => {
 // no longer lists it is the daemon's own word that the release took.
 describe("held wakes", () => {
     const wake = (id: string): AutomationApproval => ({ id, automationId: `nightly`, createdAt: 1_000 });
-    const answers = mocked(sandboxJson);
-    // What the next `/agents` read will say is held, and the one release the daemon has not answered yet.
+    // What the next roster read will say is held, and the one release the daemon has not answered yet.
     let listed: AutomationApproval[] = [];
     let release: { give: () => void; refuse: (error: Error) => void } | undefined;
 
     beforeEach(() => {
-        resetAgents();
+        resetSandboxScope();
         listed = [wake(`w1`), wake(`w2`)];
         release = undefined;
-        answers.mockReset().mockImplementation(((path: string) => {
-            if (path === `/agents`) {
-                return Promise.resolve({ agents: [], rev: 1, held: listed });
-            }
-            return new Promise((give, refuse) => {
-                release = { give: () => give({}), refuse };
-            });
-        }) as never);
+        resetDaemon();
+        daemon.list.mockImplementation(async () => ({ agents: [], rev: 1, held: listed }));
+        for (const verb of [daemon.approve, daemon.reject]) {
+            verb.mockImplementation(
+                () =>
+                    new Promise((give, refuse) => {
+                        release = { give: () => give({ ok: true }), refuse };
+                    }),
+            );
+        }
     });
 
     const shown = (): string[] => useAgents().heldWakes.value.map((entry) => entry.id);
@@ -1897,6 +1923,7 @@ describe("held wakes", () => {
         const press = useAgents().releaseHeld(`w1`, `approve`);
 
         expect(shown()).toEqual([`w2`]);
+        expect(daemon.approve).toHaveBeenCalledWith({ id: `w1` });
         release?.give();
         await press;
         expect(shown()).toEqual([`w2`]);
@@ -1905,6 +1932,7 @@ describe("held wakes", () => {
     it("keeps it off through a read that still lists it, and lets go on the read that doesn't", async () => {
         await useAgents().refresh();
         const press = useAgents().releaseHeld(`w1`, `reject`);
+        expect(daemon.reject).toHaveBeenCalledWith({ id: `w1` });
 
         // A read the daemon answered before it heard the release.
         await useAgents().refresh();

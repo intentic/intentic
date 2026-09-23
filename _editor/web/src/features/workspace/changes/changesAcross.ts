@@ -1,10 +1,10 @@
 import type { GitChangesResponse, RepoChanges } from "@intentic/api-contract";
 import { computed, ref } from "vue";
 import { errorMessage } from "@intentic/ui/async";
-import { GIT_CHANGES } from "../../../lib/queryKeys";
+import { rpcKeyAt } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { type AcrossRecord, createAcrossStore } from "../../sandbox/live/acrossSandboxes";
-import { sandboxJsonQuietly } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { ahead, outgoingWork, unpublished } from "../push/outgoingWork";
 import { truncatedTotal } from "./truncation";
 import { usePushRun } from "../push/usePushRun";
@@ -23,9 +23,10 @@ export interface BoxChanges extends AcrossRecord {
     readonly unreachable: boolean;
 }
 
-// One push in flight at a time; a per-row press, not a bulk action.
+// One push in flight at a time; a per-row press, not a bulk action. Both name their row (ledgerKey), since the
+// ledger's rows are other boxes' and a switch changes which of them it lists.
 const pushing = ref<string | undefined>(undefined);
-const pushError = ref<string | undefined>(undefined);
+const pushError = ref<{ readonly key: string; readonly reason: string } | undefined>(undefined);
 
 const store = createAcrossStore<BoxChanges>({
     pollMs: POLL_MS,
@@ -33,9 +34,9 @@ const store = createAcrossStore<BoxChanges>({
     blank: (sandbox) => ({ sandbox, repos: [], readAt: undefined, unreachable: false }),
     unreachable: () => ({ unreachable: true }),
     read: async (sandbox) => {
-        const body = await sandboxJsonQuietly<GitChangesResponse>(sandbox.id, `/git/changes`);
+        const body: GitChangesResponse = await sandboxRpc.git.changes(undefined, { context: { at: sandbox.id, background: true } });
         // Filed under this box's own key, so it's cleaned up the same way and cleared when that box lands work.
-        queryClient.setQueryData(GIT_CHANGES.ofSandbox(sandbox.id), body);
+        queryClient.setQueryData(rpcKeyAt(sandbox.id, `git.changes`), body);
         return { repos: body.repos, unreachable: false };
     },
 });
@@ -58,6 +59,9 @@ export interface LedgerRow {
     // True when the repo couldn't be scanned at all; numbers read as unknown, not clean.
     readonly unreadable: boolean;
 }
+
+// The one address a row, its press and its refusal share: a repo in a box.
+export const ledgerKey = (row: LedgerRow): string => `${row.sandboxId}:${row.repo}`;
 
 // Exported separately from `ledgerRows` so this derivation can be tested without pinning the live poll.
 export const rowsOf = (box: BoxChanges): LedgerRow[] =>
@@ -92,7 +96,7 @@ export const uncommittedAcross = computed(() => ledgerRows.value.reduce((total, 
 // Pushes one row's commits directly, without the sandbox's pre-push check — that check's output has nowhere to
 // appear for a box you aren't standing in. Switching to that sandbox to push there is one press away.
 export const pushRow = async (row: LedgerRow): Promise<void> => {
-    const key = `${row.sandboxId}:${row.repo}`;
+    const key = ledgerKey(row);
     if (pushing.value !== undefined) {
         return;
     }
@@ -102,19 +106,23 @@ export const pushRow = async (row: LedgerRow): Promise<void> => {
         // Started, then followed to its verdict, so a slow hook on that box doesn't hang this request.
         const result = await usePushRun(row.repo, row.sandboxId).start();
         if (result.status !== `passed`) {
-            pushError.value = result.reason ?? `That push was refused.`;
+            pushError.value = { key, reason: result.reason ?? `That push was refused.` };
         }
         // Re-reads only this box; a push here doesn't change any other box's counts.
         await store.readOne(row.sandboxId);
     } catch (caught) {
-        pushError.value = errorMessage(caught, `That push didn't work.`);
+        pushError.value = { key, reason: errorMessage(caught, `That push didn't work.`) };
     } finally {
         pushing.value = undefined;
     }
 };
 
 export const pushingRow = computed(() => pushing.value);
-export const pushRowError = computed(() => pushError.value);
+// Said only while its row is listed: switching into the box it was about takes that row off this ledger.
+export const pushRowError = computed(() => {
+    const refused = pushError.value;
+    return refused !== undefined && ledgerRows.value.some((row) => ledgerKey(row) === refused.key) ? refused.reason : undefined;
+});
 export const dismissPushError = (): void => {
     pushError.value = undefined;
 };

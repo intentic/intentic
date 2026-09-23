@@ -87,14 +87,21 @@ test("a plan that does not cover the model is not transient, however often it is
 });
 
 test("an endpoint is only routed when all three of its parts are there", () => {
-    expect(routedEndpointOf({ baseUrl: "http://127.0.0.1:8789", authToken: "t", model: "kimi-k3" })).toEqual({
+    expect(routedEndpointOf({ kind: "routed", baseUrl: "http://127.0.0.1:8789", authToken: "t" }, "kimi-k3")).toEqual({
         baseUrl: "http://127.0.0.1:8789",
         authToken: "t",
         model: "kimi-k3",
     });
+    // The trial rides the translator too, so its refusals are asked about the same way.
+    expect(routedEndpointOf({ kind: "trial", baseUrl: "http://127.0.0.1:8789", authToken: "t" }, "auto")).toEqual({
+        baseUrl: "http://127.0.0.1:8789",
+        authToken: "t",
+        model: "auto",
+    });
     // A native Claude turn: no endpoint, nothing to ask.
-    expect(routedEndpointOf({ oauthToken: "x" } as { baseUrl?: string })).toBeUndefined();
-    expect(routedEndpointOf({ baseUrl: "http://127.0.0.1:8789", authToken: "t" })).toBeUndefined();
+    expect(routedEndpointOf({ kind: "claude-oauth", token: "x" }, "kimi-k3")).toBeUndefined();
+    expect(routedEndpointOf({ kind: "container" }, "kimi-k3")).toBeUndefined();
+    expect(routedEndpointOf({ kind: "routed", baseUrl: "http://127.0.0.1:8789", authToken: "t" }, undefined)).toBeUndefined();
 });
 
 test("the probe asks the endpoint the smallest question there is, and reports what it refuses", async () => {

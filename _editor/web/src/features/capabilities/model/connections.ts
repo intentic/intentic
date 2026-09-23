@@ -90,6 +90,15 @@ export const machineGrants = (instance: CapabilitySummary | undefined): string =
     return machine === undefined ? `read files` : machine.grants.join(`, `);
 };
 
+// What a browser's switches add up to, read off the same effects the tile renders, so dialog and disclosure agree.
+export const browserGrants = (instance: CapabilitySummary): string => {
+    const browser = capabilityEffects({ kind: instance.kind, id: instance.id, config: instance.config }).find(
+        (effect) => effect.kind === `own-browser`,
+    );
+    const grants = browser === undefined ? [] : browser.grants;
+    return grants.length === 0 ? `nothing until you turn a switch on` : grants.join(`, `);
+};
+
 // The kinds whose sign-in is a window the user drives themselves, rather than a credential they paste.
 const SIGNS_IN_BY_HAND = new Set<CapabilityKind>([`browser`, `identity`]);
 

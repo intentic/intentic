@@ -133,7 +133,7 @@ describe("sealResult: the content fields, not the shape", () => {
     });
 });
 
-// Guards against a new daemon-mounted MCP server shipping unclassified: reads server keys from the two mount files and
+// Guards against a new daemon-mounted MCP server shipping unclassified: reads server keys from the two mount blocks and
 // asserts each is INTERNAL or WRAPPED_ON_PURPOSE.
 describe("conformance: every daemon-mounted MCP server is classified", () => {
     const SRC = join(import.meta.dirname, "..");
@@ -184,10 +184,10 @@ describe("conformance: every daemon-mounted MCP server is classified", () => {
         return keys;
     };
 
-    test("agent.ts and turn-plan.ts mount nothing unclassified", () => {
+    test("agent.ts and the harness arm mount nothing unclassified", () => {
         const mounted = [
             ...mountedIn("agent/run/agent.ts", /mcpServers:\s*\{[\s\S]*?\n\s{8}\}/),
-            ...mountedIn("agent/run/turn/turn-plan.ts", /const sdkServers = \{[\s\S]*?\n {4}\};/),
+            ...mountedIn("agent/run/harness/harness-servers.ts", /return \{\n\s+\.\.\.turn\.browser\.servers,[\s\S]*?\n {4}\};/),
         ];
         // Sanity: the scan found the blocks at all, so a moved block fails loudly here instead of passing vacuously.
         expect(mounted.length, "server-mount scan found nothing — the blocks moved").toBeGreaterThan(5);

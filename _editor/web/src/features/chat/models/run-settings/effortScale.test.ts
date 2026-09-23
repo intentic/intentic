@@ -2,15 +2,11 @@ import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { Conversation } from "../../session/conversation";
 import { clampEffort, effortsFor } from "./effortScale";
 import { providerModels } from "../../accounts/providerCatalog";
+import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 
-// Nothing here sends a turn; stubbed only so importing Conversation doesn't pull in the daemon client.
-// Every name the graph imports from the daemon client, since bun links an ESM import against exactly what this
-// factory returns; nothing here calls any of them.
-mock.module("../../../sandbox/client/sandboxClient", () => ({
-    sandboxRequest: mock(),
-    sandboxRequestVia: mock(),
-    sandboxError: mock(async () => new Error(`unused`)),
-}));
+// Nothing here sends a turn; stubbed only so importing Conversation doesn't pull in the daemon client. Any call it
+// did make would throw naming its procedure.
+mock.module("../../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 // Effort scale is a property of the model, not the provider (Kimi K2.7 stops at 'high', K3 at 'max'), so a pick carried
 // across models is routinely off-scale. Every read goes through the clamp.
@@ -90,39 +86,32 @@ describe(`the effort scale`, () => {
 
     it(`clamps a conversation's effort at every read, and keeps the pick behind it`, () => {
         const conversation = new Conversation(`c-effort`);
-        conversation.provider.value = `kimi`;
-        conversation.model.value = `kimi-k3`;
-        conversation.effortPick.value = `xhigh`;
-        expect(conversation.effort.value).toBe(`high`);
+        conversation.selection.apply({ kind: `set`, picks: { provider: `kimi`, model: `kimi-k3`, effortPick: `xhigh` } });
+        expect(conversation.selection.effort.value).toBe(`high`);
 
         // Back on a model whose scale has it, the pick returns: a smaller model borrows it, doesn't ratchet it down.
-        conversation.provider.value = `claude`;
-        conversation.model.value = `claude-opus-5`;
-        expect(conversation.effort.value).toBe(`xhigh`);
+        conversation.selection.apply({ kind: `set`, picks: { provider: `claude`, model: `claude-opus-5` } });
+        expect(conversation.selection.effort.value).toBe(`xhigh`);
     });
 
     // The catalog arrives after a conversation is seeded, so no setter runs at the moment the scale changes.
     it(`follows a catalog that loads under a seeded conversation`, () => {
         providerModels.value = { ...providerModels.value, kimi: [] };
         const conversation = new Conversation(`c-late-catalog`);
-        conversation.provider.value = `kimi`;
-        conversation.model.value = `kimi-k3`;
-        conversation.effortPick.value = `xhigh`;
+        conversation.selection.apply({ kind: `set`, picks: { provider: `kimi`, model: `kimi-k3`, effortPick: `xhigh` } });
         // Pre-load, the static scale has 'xhigh' and nothing is wrong with the pick.
-        expect(conversation.effort.value).toBe(`xhigh`);
+        expect(conversation.selection.effort.value).toBe(`xhigh`);
 
         providerModels.value = { ...providerModels.value, kimi: [{ label: `Kimi K3`, value: `kimi-k3`, efforts: [`low`, `high`] }] };
-        expect(conversation.effort.value).toBe(`high`);
+        expect(conversation.selection.effort.value).toBe(`high`);
     });
 
     // 'max' leaves Claude's scale the moment extended thinking goes off: the API rejects the pair with a 400.
     it(`drops Max when thinking is switched off`, () => {
         const conversation = new Conversation(`c-thinking`);
-        conversation.model.value = `claude-opus-5`;
-        conversation.effortPick.value = `max`;
-        conversation.thinking.value = true;
-        expect(conversation.effort.value).toBe(`max`);
-        conversation.thinking.value = false;
-        expect(conversation.effort.value).toBe(`xhigh`);
+        conversation.selection.apply({ kind: `set`, picks: { model: `claude-opus-5`, effortPick: `max`, thinking: true } });
+        expect(conversation.selection.effort.value).toBe(`max`);
+        conversation.selection.apply({ kind: `set`, picks: { thinking: false } });
+        expect(conversation.selection.effort.value).toBe(`xhigh`);
     });
 });

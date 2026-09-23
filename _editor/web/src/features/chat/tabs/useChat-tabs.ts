@@ -1,26 +1,29 @@
-import { computed, ref, shallowRef, watch } from "vue";
+import { sandboxRef, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
+import { computed, ref, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { forgetClosedDraft, keepClosedDraft } from "../drafts/closedDrafts";
 import { drawsChat } from "../run/chatEcho";
 import { chatRun } from "../run/chatRun";
 import { traceFocus } from "../run/focusTrace";
 import { Conversation } from "../session/conversation";
+import type { Picks } from "../session/selectionReducer";
 import { rememberedAccountFor } from "../accounts/providerAccounts";
 import { rememberedModelFor, startingMode } from "../run/turnDefaults";
-import { scopeAccountPreference } from "../accounts/accountPreference";
 import { untouchedDraft } from "./tabFacts";
-import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, writeTabSnapshot } from "./tabSnapshot";
+import { forgetTabSnapshot, readTabSnapshot, snapshotTab, type StoredTab, type TabSnapshot, writeTabSnapshot } from "./tabSnapshot";
 import { dropTranscript } from "../transcript/transcriptCache";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { uuid } from "../../../lib/uuid";
 
 const { activeSandboxId } = useSandbox();
 
-// A tab is its conversation, focus is the conversationId itself; no separate tab id (a counter-based one let
-// resets alias two chats). shallowRef keeps each Conversation's own reactive fields intact; reassign the array
-// to update.
-export const conversations = shallowRef<Conversation[]>([]);
-export const activeId = ref<string>(``);
+// Snapshot shape/storage live in tabSnapshot.ts; here is only when it's read/written. The sandbox is recorded
+// at restore, not read live, so a mid-flip write can't land in the incoming sandbox's key as the outgoing one's.
+export const scopedSandboxId = sandboxRef<string | undefined>(() => activeSandboxId.value);
+
+// The snapshot a sandbox's tabs come back from when the scope opens on it: this window's own, the last window's as a
+// seed, or none. Read once per scope, for `conversations`, `activeId` and `panes`.
+const opening = sandboxValue(() => readTabSnapshot(scopedSandboxId.value));
 
 // Tabs that exist only while focused: an untouched draft, or a peeked chat with nothing unsent. An untouched draft
 // only exists while focused (else it's swept): the tab and the board's draft card are one conversation, so an
@@ -41,7 +44,10 @@ const standIn = (): Conversation => {
 
 /** Promotes a peeked tab into an ordinary one, by id, for surfaces (a card's pin, its menu) that hold an id rather than the live chat. */
 export const keepChat = (conversationId: string): void => {
-    conversations.value.find((conversation) => conversation.conversationId === conversationId)?.keep();
+    const conversation = conversations.value.find((entry) => entry.conversationId === conversationId);
+    if (conversation !== undefined) {
+        conversation.peek.value = false;
+    }
 };
 
 // The demotion, by id, with the two reasons this window still has to hold a chat the roster is done with:
@@ -55,7 +61,7 @@ const releaseChat = (conversationId: string): void => {
     if (conversation === undefined || conversation.unsent.value || (panes.value.length > 1 && panes.value.includes(conversationId))) {
         return;
     }
-    conversation.release();
+    conversation.peek.value = true;
 };
 
 // The one writer of the tab list and the focus, holding two invariants in one write:
@@ -64,25 +70,20 @@ const releaseChat = (conversationId: string): void => {
 // Enforced here, not by a watcher after the fact, so an explicit action and an implicit reaper can't race.
 
 // Focus history, most recent last: where focus goes when its tab closes, the one visited just before.
-let recent: readonly string[] = [];
+const recent = sandboxValue<readonly string[]>(() => []);
 
 // The roster's last verdict on which chats are done with (releaseDone). Held rather than acted on and forgotten,
 // because the same fact answers a second question at a different moment: what giving a chat's column back means.
 // Outlives a tab rebuild on purpose, so popping the chat out and docking it back doesn't undo the reader's pins;
-// only a different daemon's roster invalidates it.
-let settled: ReadonlySet<string> = new Set();
-
-/** Drops the verdict with the daemon that gave it: another sandbox's roster says nothing about these chats. */
-export const forgetSettled = (): void => {
-    settled = new Set();
-};
+// only a different daemon's roster invalidates it, which is why it is sandbox-scoped.
+const settled = sandboxValue<ReadonlySet<string>>(() => new Set());
 
 // Detaches a swept tab's turn (soft abort) on the way out, since a peek may be watching one; an untouched
 // draft has none. The cached transcript is kept, unlike a close's, since a look is often repeated.
 const detachSwept = (next: readonly Conversation[], kept: readonly Conversation[]): void => {
     for (const conversation of next) {
         if (!kept.includes(conversation)) {
-            conversation.abort();
+            conversation.turn.abort();
         }
     }
 };
@@ -90,7 +91,7 @@ const detachSwept = (next: readonly Conversation[], kept: readonly Conversation[
 export const setConversations = (next: readonly Conversation[], focus: string, reason: string): void => {
     const open = (id: string): boolean => next.some((conversation) => conversation.conversationId === id);
     // Focus falls first to an open pane, then the most recently focused tab, then the list's last.
-    const focused = open(focus) ? focus : (panes.value.find(open) ?? recent.findLast(open) ?? next.at(-1)!.conversationId);
+    const focused = open(focus) ? focus : (panes.value.find(open) ?? recent.value.findLast(open) ?? next.at(-1)!.conversationId);
     // The focused tab is always kept, so the list can't come out empty; a dropped tab needs no teardown.
     const kept = next.filter((conversation) => conversation.conversationId === focused || !transient(conversation));
     // Traces the focus and its fallback (focusTrace.ts) only when it actually moves, to catch a silent misroute.
@@ -114,12 +115,8 @@ export const setConversations = (next: readonly Conversation[], focus: string, r
     reconcilePanes(kept, focused);
     activeId.value = focused;
     // Closed tabs drop out of the order; the focused one moves to its head.
-    recent = [...recent.filter((id) => id !== focused && kept.some((conversation) => conversation.conversationId === id)), focused];
+    recent.value = [...recent.value.filter((id) => id !== focused && kept.some((conversation) => conversation.conversationId === id)), focused];
 };
-
-// Chats on screen at once, in the order they were opened, not the rail's lane order (which would reshuffle
-// columns mid-read). The focused pane (activeId) is always a member.
-export const panes = ref<string[]>([]);
 
 // Keeps the pane invariants (every pane open, focus always in one) in step with the tab list. A click/card/deep
 // -link lands on setActive and swaps the focus's own column rather than opening a new one; openBeside/setPanes
@@ -147,10 +144,6 @@ export const active = computed<Conversation>(() => {
     return list.find((conversation) => conversation.conversationId === activeId.value) ?? list[0]!;
 });
 
-// Snapshot shape/storage live in tabSnapshot.ts; here is only when it's read/written. The sandbox is recorded
-// at restore, not read live, so a mid-flip write can't land in the incoming sandbox's key as the outgoing one's.
-export const scopedSandboxId = ref<string>();
-
 // Everything waiting to be sent, back in the composer: message, age, staged files, queued turns. Its own
 // function since two arrivals restore a composer (a snapshot restore, a reopened closed draft).
 export const restoreComposer = (conversation: Conversation, tab: StoredTab): void => {
@@ -164,28 +157,37 @@ export const restoreComposer = (conversation: Conversation, tab: StoredTab): voi
         status: `done` as const,
         progress: 1,
     }));
-    conversation.queued.value = tab.queued.map((message) => ({ id: uuid(), text: message.text, attachments: message.attachments }));
+    conversation.turn.queued.value = tab.queued.map((message) => ({ id: uuid(), text: message.text, attachments: message.attachments }));
 };
 
-// One persisted tab, back as a live conversation.
-// How the next turn runs, restored per tab: these describe THIS chat, never picks made in another tab since. Kept
-// apart from the tab's identity above because that is the axis they share — every one is a setting of the next send.
-const restoreTurnPicks = (conversation: Conversation, tab: StoredTab): void => {
-    if (tab.thinking !== undefined) {
-        conversation.thinking.value = tab.thinking;
-    }
-    if (tab.fast !== undefined) {
-        conversation.fast.value = tab.fast;
-    }
+// How the next turn runs, restored per tab: these describe THIS chat, never picks made in another tab since. The
+// stopped-turn offer itself doesn't restore here; only the daemon knows if it's still held (useChat-sessions).
+const restoredPicks = (tab: StoredTab, isolated: boolean): Partial<Picks> => ({
+    // Posture isn't part of the snapshot; a restored tab starts from its tree's mode, like a fresh one.
+    modePick: startingMode(isolated),
+    ...(tab.harness === undefined ? {} : { harness: tab.harness }),
+    ...(tab.provider === undefined
+        ? {}
+        : {
+              provider: tab.provider,
+              // An open chat keeps its own account, not the provider's remembered pick; only an unpinned tab falls back.
+              account: tab.account ?? rememberedAccountFor(tab.provider),
+              model: tab.model ?? rememberedModelFor(tab.provider),
+              // Whether the app parked it on a fallback account (a mid-redirect), so reconciliation can move it back.
+              movedFrom: tab.movedFrom,
+              // Same for a model a thin catalog moved it off: the debt outlives the window that took it on.
+              displacedModel: tab.displacedModel,
+          }),
+    ...(tab.thinking === undefined ? {} : { thinking: tab.thinking }),
+    ...(tab.fast === undefined ? {} : { fast: tab.fast }),
     // Auto is this chat's unanswered question, not re-derivable from a draft.
-    if (tab.auto !== undefined) {
-        conversation.auto.value = tab.auto;
-    }
-    // The stopped-turn offer itself doesn't restore here; only the daemon knows if it's still held (see adoptEnding).
-    if (tab.effort !== undefined) {
-        conversation.effortPick.value = tab.effort;
-    }
-};
+    ...(tab.auto === undefined ? {} : { auto: tab.auto }),
+    ...(tab.effort === undefined ? {} : { effortPick: tab.effort }),
+    // Persona restores per tab; nothing else remembers it, so a drop would silently hand back every account.
+    ...(tab.actsAs === undefined ? {} : { actsAs: tab.actsAs }),
+});
+
+// One persisted tab, back as a live conversation.
 
 export const restoreTab = (tab: StoredTab): Conversation => {
     const conversation = new Conversation(tab.conversationId);
@@ -193,8 +195,7 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     conversation.registered.value = tab.registered;
     // Set before anything that could talk to a daemon: this is the tab's address, asked first.
     conversation.box.value = tab.box;
-    // Posture isn't part of the snapshot; a restored tab starts from its tree's mode, like a fresh one.
-    conversation.modePick.value = startingMode(conversation.isolated.value);
+    conversation.selection.apply({ kind: `set`, picks: restoredPicks(tab, tab.isolated) });
     // A looked-at tab restores as still looking; it's always the focused tab, swept by the next click elsewhere.
     conversation.peek.value = tab.peek === true;
     // A stand-in blank restores as one too; unflagged, it would board a fresh, selected "New agent" card.
@@ -203,25 +204,6 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     conversation.standing.value = tab.standing;
     restoreComposer(conversation, tab);
     conversation.title.value = tab.title ?? null;
-    // Restore harness before model: native and claude-code model lists diverge for codex/grok.
-    if (tab.harness !== undefined) {
-        conversation.harness.value = tab.harness;
-    }
-    if (tab.provider !== undefined) {
-        conversation.provider.value = tab.provider;
-        // An open chat keeps its own account, not the provider's remembered pick; only an unpinned tab falls back.
-        conversation.account.value = tab.account ?? rememberedAccountFor(tab.provider);
-        conversation.model.value = tab.model ?? rememberedModelFor(tab.provider);
-        // Whether the app parked it on a fallback account (a mid-redirect), so reconciliation can move it back later.
-        conversation.movedFrom.value = tab.movedFrom;
-        // Same for a model a thin catalog moved it off: the debt outlives the window that took it on.
-        conversation.displacedModel.value = tab.displacedModel;
-    }
-    restoreTurnPicks(conversation, tab);
-    // Persona restores per tab; nothing else remembers it, so a drop would silently hand back every account.
-    if (tab.actsAs !== undefined) {
-        conversation.actsAs.value = tab.actsAs;
-    }
     if (tab.session !== undefined) {
         // Restored exactly as stored: filling gaps from the tab's own picks could resume or retire the wrong session.
         conversation.session.value = tab.session;
@@ -233,32 +215,45 @@ export const restoreTab = (tab: StoredTab): Conversation => {
     return conversation;
 };
 
-// Rebuilds this window's tabs for the active sandbox: its own snapshot, the last window's as a seed, or one
-// fresh tab if neither exists; focuses the stored active tab.
-export const restoreTabs = (): void => {
-    scopedSandboxId.value = activeSandboxId.value;
-    // Scoped before the tabs are built: a fresh or restored conversation resolves its account from this pick.
-    scopeAccountPreference(scopedSandboxId.value);
+// A stored strip's tabs as live conversations, less the transient ones the focus doesn't hold (setConversations' own
+// sweep); nothing stored opens on the blank, with no board card for a chat never started.
+const openedTabs = (stored: TabSnapshot | undefined): Conversation[] =>
+    stored === undefined
+        ? [standIn()]
+        : stored.tabs.map(restoreTab).filter((conversation) => conversation.conversationId === stored.active || !transient(conversation));
+
+// A tab is its conversation, focus is the conversationId itself; no separate tab id (a counter-based one let
+// resets alias two chats). Shallow, which keeps each Conversation's own reactive fields intact; reassign the array
+// to update. A switch detaches every turn in it (soft abort): they run on daemon-side, reattached on return.
+export const conversations = sandboxShallowRef<Conversation[]>(
+    () => openedTabs(opening.value),
+    (previous) => previous.forEach((conversation) => conversation.turn.abort()),
+);
+// `stored.active` names one of the tabs, the reader guarantees it; the blank is the only tab when nothing was stored.
+export const activeId = sandboxRef<string>(() => opening.value?.active ?? conversations.value[0]!.conversationId);
+
+// Chats on screen at once, in the order they were opened, not the rail's lane order (which would reshuffle
+// columns mid-read). The focused pane (activeId) is always a member; the stored order comes back with the tabs,
+// filtered against what actually restored, since the sweep can take an untouched draft.
+const restoredPanes = (stored: TabSnapshot | undefined, restored: readonly Conversation[], focus: string): string[] => {
+    const held = (stored?.panes ?? []).filter((id) => restored.some((conversation) => conversation.conversationId === id));
+    return held.length > 0 ? held : [focus];
+};
+export const panes = sandboxRef<string[]>(() => restoredPanes(opening.value, conversations.value, activeId.value));
+
+// Rebuilds this window's tabs for the sandbox in scope when it starts drawing the chat, from the strip the window
+// that drew it last left behind: the same restore the scope makes when it opens on a sandbox.
+const restoreTabs = (): void => {
     const stored = readTabSnapshot(scopedSandboxId.value);
     chatRun.value = stored?.run;
     // The list is replaced wholesale, focus included; rare and otherwise invisible, hence the trace.
     traceFocus(`restore-tabs`, { sandbox: scopedSandboxId.value ?? `none`, stored: stored?.tabs.length ?? 0, active: stored?.active ?? `none` });
-    if (stored === undefined) {
-        // Nothing to restore: opens on the blank, with no board card for a chat never started.
-        const conversation = standIn();
-        setConversations([conversation], conversation.conversationId, `first-tab`);
-        return;
-    }
-    // `stored.active` names one of the tabs; the reader guarantees it.
-    setConversations(stored.tabs.map(restoreTab), stored.active, `restore-snapshot`);
-    // Panes restore with the tabs, assigned directly (not through setPanes) to keep their stored order. Filtered
-    // against what actually restored, since the list write above can sweep an untouched draft.
-    const restored = new Set(conversations.value.map((conversation) => conversation.conversationId));
-    const held = stored.panes.filter((id) => restored.has(id));
-    panes.value = held.length > 0 ? held : [activeId.value];
+    const restored = openedTabs(stored);
+    const focus = stored?.active ?? restored[0]!.conversationId;
+    setConversations(restored, focus, stored === undefined ? `first-tab` : `restore-snapshot`);
+    // Panes restore with the tabs, assigned directly (not through setPanes) to keep their stored order.
+    panes.value = restoredPanes(stored, conversations.value, activeId.value);
 };
-
-restoreTabs();
 
 // The window drawing the chat remembers the strip: written on every change while drawing, forgotten (falling
 // back to the seed) the moment it stops. Nothing is handed between windows; the seed is the handoff
@@ -281,14 +276,14 @@ watch(
     { immediate: true },
 );
 
-// Words in a peeked chat keep it (Conversation.keep) — the one promotion this store makes for the user.
+// Words in a peeked chat keep it (Conversation.peek) — the one promotion this store makes for the user.
 // Watches the same unsent flag as the stamp above, so it can't miss the same five arrival routes.
 watch(
     () => conversations.value.map((conversation) => `${conversation.conversationId}:${conversation.unsent.value ? 1 : 0}`).join(`,`),
     () => {
         for (const conversation of conversations.value) {
             if (conversation.unsent.value) {
-                conversation.keep();
+                conversation.peek.value = false;
             }
         }
     },
@@ -373,7 +368,7 @@ export const closePane = (conversationId: string): void => {
     // finished with goes back to the peek slot rather than falling into the rail to be closed by hand later. Only
     // this gesture, not collapsePanes: that one is a plain click asking to see something else, not a verdict on
     // the columns it happens to fold.
-    if (settled.has(conversationId)) {
+    if (settled.value.has(conversationId)) {
         releaseChat(conversationId);
     }
     if (activeId.value === conversationId) {
@@ -421,7 +416,7 @@ const closing = (ids: ReadonlySet<string>, unsent: `keep` | `drop`): void => {
             if (unsent === `keep` && conversation.unsent.value && drawsChat.value) {
                 keepClosedDraft(snapshotTab(conversation));
             }
-            conversation.abort();
+            conversation.turn.abort();
             void dropTranscript(conversation.conversationId);
         }
     }
@@ -477,12 +472,12 @@ export const closeRetired = (ids: ReadonlySet<string>): void => {
  */
 export const releaseDone = (ids: ReadonlySet<string>): void => {
     for (const id of ids) {
-        if (!settled.has(id)) {
+        if (!settled.value.has(id)) {
             releaseChat(id);
         }
     }
     // Replaced, not merged: a chat that goes back to work and finishes again is done a second time.
-    settled = ids;
+    settled.value = ids;
 };
 
 // One store per window: a hot update re-running this module would mint a second one beside it.

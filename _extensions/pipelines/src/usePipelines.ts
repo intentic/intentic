@@ -1,4 +1,4 @@
-import { type CiFixResponse, CiFixResponseSchema, type FixResume, isPipelineInFlight, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
+import { type CiFixResponse, type FixResume, isPipelineInFlight, type PipelineRun, runPickOf } from "@intentic/sandbox-contract";
 import type { AgentRunChoice } from "@intentic/extension-ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -17,12 +17,6 @@ const POLL_IN_FLIGHT_MS = 10_000;
 export const runsPollMs = (runs: readonly PipelineRun[] | undefined): number =>
     runs?.some((run) => isPipelineInFlight(run.status)) === true ? POLL_IN_FLIGHT_MS : POLL_MS;
 
-const body = (run: PipelineRun): RequestInit => ({
-    method: `POST`,
-    headers: { "content-type": `application/json` },
-    body: JSON.stringify({ repo: run.repo, runId: run.runId }),
-});
-
 export function usePipelines() {
     const api = host();
     const queryClient = useQueryClient();
@@ -38,11 +32,11 @@ export function usePipelines() {
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
 
     const rerun = useMutation({
-        mutationFn: (run: PipelineRun) => api.sandbox.json(`/ci/runs/rerun`, body(run)),
+        mutationFn: (run: PipelineRun) => api.sandbox.rpc.ci.rerun({ repo: run.repo, runId: run.runId }),
         onSuccess: invalidate,
     });
     const cancel = useMutation({
-        mutationFn: (run: PipelineRun) => api.sandbox.json(`/ci/runs/cancel`, body(run)),
+        mutationFn: (run: PipelineRun) => api.sandbox.rpc.ci.cancel({ repo: run.repo, runId: run.runId }),
         onSuccess: invalidate,
     });
     // Resolves to the fix conversation id (the fleet's card id) the view focuses. `pick` absent uses the run button's
@@ -50,27 +44,13 @@ export function usePipelines() {
     // `mode` is the verb the picker's bar was ended with over an attempt that already exists; absent is the plain
     // press, which the daemon reads by the same rule the push card does (contract, planFixAttempt).
     const fix = useMutation({
-        mutationFn: async ({
-            run,
-            pick,
-            mode,
-        }: {
-            run: PipelineRun;
-            pick?: AgentRunChoice | undefined;
-            mode?: FixResume | undefined;
-        }): Promise<CiFixResponse> =>
-            CiFixResponseSchema.parse(
-                await api.sandbox.json(`/ci/fix`, {
-                    method: `POST`,
-                    headers: { "content-type": `application/json` },
-                    body: JSON.stringify({
-                        repo: run.repo,
-                        runId: run.runId,
-                        ...(pick === undefined ? {} : { pick: runPickOf(pick) }),
-                        ...(mode === undefined ? {} : { mode }),
-                    }),
-                }),
-            ),
+        mutationFn: ({ run, pick, mode }: { run: PipelineRun; pick?: AgentRunChoice | undefined; mode?: FixResume | undefined }): Promise<CiFixResponse> =>
+            api.sandbox.rpc.ci.fix({
+                repo: run.repo,
+                runId: run.runId,
+                ...(pick === undefined ? {} : { pick: runPickOf(pick) }),
+                ...(mode === undefined ? {} : { mode }),
+            }),
     });
 
     return {

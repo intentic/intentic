@@ -1,17 +1,14 @@
 <script setup lang="ts">
-import type { AddressOffer, HostedOffer, SandboxSummary, SetupCode, SetupReport, HostedStatus } from "@intentic/api-contract";
 import { PLATFORM_WEB_ORIGIN } from "@intentic/constants";
-import { sandboxSubdomain, syncFolder } from "@intentic/sandbox-contract";
+import { sandboxSubdomain } from "@intentic/sandbox-contract";
 import {
     AppBrand,
     Button,
     Code,
-    commandLang,
     ConfirmDialog,
     CopyButton,
     InfoHint,
     Notice,
-    type NoticeModel,
     SegmentedControl,
     StepSection,
     ui,
@@ -19,25 +16,22 @@ import {
     useOsPreference,
     vAction,
 } from "@intentic/ui";
-import { noticeFrom, noticeOf, useNow } from "@intentic/ui/async";
+import { useT } from "@intentic/ui/i18n";
 import Checkbox from "primevue/checkbox";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
-import { revealConversation } from "../agents/fleet/agentActions";
-import { track } from "../../app/analytics";
-import { composingConversation } from "../chat/panel/useChat-reveal";
+import { desktopVersion, openDesktopLink } from "../../app/environments/desktop";
+import { desktopInstaller } from "../../app/environments/desktopDownloads";
+import { environment } from "../../app/environments/environment";
 import { apiClient } from "../../lib/useApi";
+import { revealConversation } from "../agents/fleet/agentActions";
 import { useAuth } from "../auth/useAuth";
 import { useGoogleIdentity } from "../auth/useGoogleIdentity";
 import CloudflareTokenField from "../capabilities/connect/CloudflareTokenField.vue";
+import { composingConversation } from "../chat/panel/useChat-reveal";
 import { useCloudflareZones } from "../extensions/useCloudflareZones";
-import { sandboxIdFromToken } from "../sandbox/session/sandboxIdFromToken";
 import { useSandbox } from "../sandbox/client/useSandbox";
-import { desktopSetupLink, desktopVersion, openDesktopLink } from "../../app/environments/desktop";
-import { desktopInstaller } from "../../app/environments/desktopDownloads";
-import { environment } from "../../app/environments/environment";
-import { bashCommand, psCommand, scriptSource } from "../../app/environments/scriptCommand";
-import { arrivingProfile } from "../../app/useProfile";
+import { sandboxIdFromToken } from "../sandbox/session/sandboxIdFromToken";
 import DesktopSetupProgress from "./DesktopSetupProgress.vue";
 import { useDesktopSetup } from "./desktopSetup";
 import SetupCompose from "./SetupCompose.vue";
@@ -46,1271 +40,206 @@ import SetupNudge from "./SetupNudge.vue";
 import SetupRunDetails from "./SetupRunDetails.vue";
 import SetupRungArt from "./SetupRungArt.vue";
 import SetupSyncOption from "./SetupSyncOption.vue";
-import { arrivalFor, type Arrival } from "./setupArrival";
-import { lanesFor, type OfferRead } from "./setupLanes";
-import type { ComposeArgs } from "./setupCompose";
-import { addressZone, type AttachOutcome, daemonUrlProblem, normalizeDaemonUrl, ownAddressProblem, probeDaemon } from "./setupAttach";
-import { autoSandboxName } from "./setupName";
-import { setupReportView } from "./setupReport";
-import { hostedWaitView, machineIsDown, machineStartable, type WakeRefusal } from "./hostedWait";
-import { useT } from "@intentic/ui/i18n";
+import { probeDaemon } from "./setupAttach";
+import { lockedReasonOf } from "./flow/commandHandoff";
+import { DEV_SANDBOX_IMAGE } from "./flow/installCommand";
+import { ladderOptionsOf } from "./flow/machineLadder";
+import { useAttachLane } from "./flow/useAttachLane";
+import { useCommandLane } from "./flow/useCommandLane";
+import { useCommandWait } from "./flow/useCommandWait";
+import { useHostedLane } from "./flow/useHostedLane";
+import { useRegistryWatch } from "./flow/useRegistryWatch";
+import { useRunStep } from "./flow/useRunStep";
+import { useSetupArrival } from "./flow/useSetupArrival";
+import { useSetupRow } from "./flow/useSetupRow";
 
-// No identity or machine decision here: the surface (setupArrival.ts) decides those; this page is what's left
-// otherwise.
-// Two lanes share the same `created` row: provision mints a tunnel and a setup code the command redeems; attach records
-// an
-// already-reachable domain directly, skipping step 2.
+// Template and wiring over the setup flows in ./flow: the row this visit sets up, the hosted lane and the command lane
+// that both provision onto it (the attach lane records an already-reachable domain instead), the arrival that picks one
+// of them unasked, and the registry watch that opens the workspace. What each decides is stated where it is decided.
 
 const t = useT();
-
 const sandbox = useSandbox();
 const router = useRouter();
 const route = useRoute();
-// Phone gets a different step 2 (handoff, not narrower): the command hides behind `commandVisible`.
 const { mobile } = useDevice();
 const { user } = useAuth();
-
-// Shares `/login`'s visual material (`@intentic/entry-css`) rather than duplicating it.
 const { getIdToken, warmIdToken } = useGoogleIdentity();
-
-// Sandbox this page is setting up; null while auto-create is in flight or after it failed.
-const created = ref<SandboxSummary | null>(null);
-// True when we arrived via ?sandbox=<id> and resumed an existing sandbox (vs. created one here now).
-const resuming = ref(false);
-// Row minted by this visit is a discardable draft; a resumed row is someone's unfinished errand.
-const createdHere = ref(false);
-// Setup ran to the end; set explicitly since `created.lastSeenAt` may still be stale on exit.
-const finished = ref(false);
-const creating = ref(false);
-const error = ref<NoticeModel | null>(null);
-// Whether the arrival read has answered; without it the first frame reads as a failed create.
-const loaded = ref(false);
-
-// Another sandbox to go back to, excluding this one and any that has never reported in.
-const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => entry.id !== created.value?.id && entry.lastSeenAt !== null));
-
-// Reachability mode: `intentic` is zero-config; `own` is bring-your-own-Cloudflare.
-const mode = ref<"intentic" | "own">(`intentic`);
-// Undefined until arrival answers; unknown draws no rung, so nothing has to be retracted once it does.
-const intenticAvailable = ref<boolean | undefined>(undefined);
-// Platform mints addresses: the answer is in and it's yes; lanes needing one gate on this.
-const addressed = computed(() => intenticAvailable.value === true);
-// Answer is in and it's no; distinct from not-yet, which is a wait rather than a fact to state.
-const addressless = computed(() => intenticAvailable.value === false);
-
-// Three-valued: said-no and never-answered differ. Starts `unreachable`, true before calls land.
-const addressRead = ref<OfferRead<boolean>>({ kind: `unreachable` });
-const hostedRead = ref<OfferRead<{ enabled: boolean; remaining: number }>>({ kind: `unreachable` });
-
-// Setup code state (both paths): the minted {code, hostname, expiresAt}; the command carries only the code.
-const setup = ref<SetupCode | null>(null);
-const setupError = ref<NoticeModel | undefined>(undefined);
-// The target key `setup` was minted for, so watcher re-fires don't re-mint and a stale mint is discarded.
-const mintedFor = ref<string | undefined>(undefined);
-let mintTimer: ReturnType<typeof setTimeout> | undefined;
-
-// Own-Cloudflare state: token/zone discovery shared with useCloudflareZones; feeds only the command, never .env.
+// The preferred shell, a persisted singleton shared across screens.
+const { cmdOs } = useOsPreference();
+const { report: desktopReport, heardAt: desktopHeardAt } = useDesktopSetup();
+// Token and zone discovery shared with useCloudflareZones; it feeds only the command, never .env.
 const cf = useCloudflareZones();
 const { cfToken, cfTokenValid, selectedZone, zonesLoading, zonesError } = cf;
-// Editable subdomain prefix, pre-filled with the derived `sandbox-<hash>`; hostname is `<subdomain>.<zone>`.
+
+// Which spine step 1 heads: `provision` (run, wait) or `attach` (a reachable domain); both share the row.
+const lane = ref<`provision` | `attach`>(`provision`);
+// Reachability: `intentic` is zero-config, `own` brings the reader's own Cloudflare zone.
+const mode = ref<`intentic` | `own`>(`intentic`);
+// One disclosure for both ways off the default address: a Cloudflare zone, or an already-answering domain.
+const reaching = ref(false);
+// An editable subdomain prefix, pre-filled with the derived `sandbox-<hash>`; the hostname is `<subdomain>.<zone>`.
 const subdomain = ref(``);
 const derivedPrefix = ref(``);
 const subdomainValid = computed(() => /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(subdomain.value.trim()));
-
-// Desktop sync (on by default): folder rides the command as SYNC_DIR; empty until the mint lands.
-const syncEnabled = ref(true);
-const syncDir = computed(() => (created.value && setup.value ? syncFolder(created.value.name, setup.value.hostname) : ``));
-
-// Which spine step 1 heads: `provision` (run, wait) or `attach` (a reachable domain); both share `created`.
-const lane = ref<"provision" | "attach">(`provision`);
-// One disclosure for both ways off the default address: a Cloudflare zone, or an already-answering domain.
-const reaching = ref(false);
-const domain = ref(``);
-// Connection token, revealed after a `needs-token` probe; used once for first-bind, never persisted.
-const attachToken = ref(``);
-const attaching = ref(false);
-const attachOutcome = ref<AttachOutcome | undefined>(undefined);
-// Unfolds the WEB_ORIGIN line under a failed probe; folded by default, since a reader who never set it reads it as a
-// third thing wrong with their setup rather than as the rarest of the three causes.
-const originHelp = ref(false);
-
-const normalizedDomain = computed(() => normalizeDaemonUrl(domain.value));
-// Our own hostname pasted in here probes as `unreachable`, indistinguishable from a wrong domain, so it is caught
-// before the press instead: the reader's way forward is the command, not a second guess at DNS.
-const ownAddress = computed(() => ownAddressProblem(domain.value, addressZone(setup.value?.hostname)));
-const domainProblem = computed(() => ownAddress.value ?? daemonUrlProblem(domain.value));
-
-// Distinguishes reconnecting a sandbox that has run before from resuming one that never started.
-const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
-
-// Step 2 shows one command at a time; the preferred OS is a persisted singleton shared across screens.
-const { cmdOs } = useOsPreference();
-
-// Third Run tab (compose) is local state; choosing it must not overwrite the unix/windows pick.
-const composeSelected = ref(false);
-const runTab = computed<`unix` | `windows` | `compose`>({
-    get: () => (composeSelected.value ? `compose` : cmdOs.value),
-    set: (value) => {
-        composeSelected.value = value === `compose`;
-        if (value !== `compose`) {
-            cmdOs.value = value;
-        }
-    },
-});
-// Labels shed a qualifier on phone; Compose's own label lives in the panel's first line, not the tab.
-const runTabOptions = computed(() => [
-    { label: t(`setup.setup.linuxMacos`), value: `unix` as const },
-    { label: mobile.value ? `Windows` : `Windows (PowerShell)`, value: `windows` as const },
-    {
-        label: mobile.value ? `Compose` : `Docker Compose`,
-        value: `compose` as const,
-        title: t(`setup.setup.noScriptRunsRead`),
-    },
-]);
-
-// Drops `sudo` when the machine already has Docker; not persisted, since it's a claim about the paste target.
-const hasDocker = ref(false);
-
-// True in the app: same code, same script; step 2 is one button, command controls apply only when visible.
 const desktop = computed(() => desktopVersion() !== undefined);
-
-// Installer replaces the raw pipe by default where we ship a build; undefined with no build, so the pipe stays.
+// The installer replaces the raw pipe where a build ships for this machine; undefined leaves the pipe.
 const installer = computed(() => (desktop.value || mobile.value ? undefined : desktopInstaller()));
-const appFirst = computed(() => installer.value !== undefined);
+const reader = { mobile, inApp: desktop, installer };
 
-// Command folds away wherever it isn't the path: the app's button, the phone's handoff, or an offered installer.
-const showCommand = ref(false);
-const commandVisible = computed(() => (desktop.value || mobile.value || appFirst.value ? showCommand.value : true));
-// Compose declares its own env; only the compose tab being shown (not merely no command) hides the sync option.
-const composeShown = computed(() => commandVisible.value && runTab.value === `compose`);
-// Which machine runs step 2 (`hosted` vs. the user's own); set by arrival, not the reader, save for the picker.
-const machine = ref<"hosted" | "mine">(`mine`);
+// Lands on `/`, which differs by form factor (a phone has no docked chat, so it opens straight into one).
+const enterWorkspace = async (): Promise<void> => {
+    await router.push(`/`);
+    revealConversation(composingConversation());
+};
 
-// What the arrival decided; `choose` until the offers and row land, so nothing folds on an unanswered read.
-const arrival = ref<Arrival>(`choose`);
+const row = useSetupRow({ sandbox, enter: enterWorkspace });
+const { created, resuming, finished, creating, error, claimedAt, report, announced, autoCreate } = row;
+const hosted = useHostedLane({ platform: apiClient.sandbox, sandbox, row });
+const {
+    machine,
+    hostedRow,
+    hostedOffer,
+    hostedOffered,
+    hostedSpent,
+    hostedSuspended,
+    hostedFull,
+    hostedHours,
+    hostedHost,
+    hostedBusy,
+    releasingHosted,
+    hostedError,
+    hostedWait,
+    handBackAsked,
+    provisionHosted,
+    restartHosted,
+    recheckCapacity,
+    chooseMachine,
+    confirmHandBack,
+} = hosted;
+const command = useCommandLane({ platform: apiClient.sandbox, row, hosted, lane });
+const { intenticAvailable, addressed, addressless, setup, setupError, commandReady, copied, launched, remint } = command;
+const step = useRunStep({ command, row, reader, cmdOs, mode, cfToken, openDesktopLink });
+const {
+    runTab,
+    runTabOptions,
+    showCommand,
+    hasDocker,
+    syncEnabled,
+    appFirst,
+    commandVisible,
+    installing,
+    retriedByButton,
+    syncDir,
+    syncOffered,
+    buildsFromCheckout,
+    webOrigin,
+    selectedCommand,
+    selectedCommandLang,
+    cleanupCommand,
+    composeArgs,
+    runHere,
+} = step;
+const wait = useCommandWait({ command, row, step, reader, desktopReport });
+const { emailed, handoff, reportFailures, buildStage, nudging, stalled, nudgeVariant, nudgeCopyable, slowBuild, onCopied, onEmailed, onDownload } = wait;
+const attach = useAttachLane({ sandbox, row, minted: () => setup.value?.hostname, getIdToken, probe: probeDaemon });
+const { domain, attachToken, attaching, attachOutcome, originHelp, normalizedDomain, ownAddress, domainProblem, connectDomain } = attach;
+const { status } = useRegistryWatch({ sandbox, row, hosted, mintedFor: command.mintedFor });
 
-// Rungs the arrival didn't take are folded, not absent; `elsewhere` (query or link) reveals them when needed.
-const elsewhere = ref(route.query[`elsewhere`] === `1`);
-// The picker is on screen when the arrival could answer nothing for itself, or when the reader asked for it.
+// Another sandbox to go back to: not this one, and not one that has never reported in.
+const otherWorkspace = computed(() => sandbox.sandboxes.value.some((entry) => entry.id !== created.value?.id && entry.lastSeenAt !== null));
+// Reconnecting a sandbox that has run before reads differently from resuming one that never started.
+const neverStarted = computed(() => created.value !== null && created.value.lastSeenAt === null);
+// Whether a provision lane exists (a machine or an address); without either, attach is the whole flow, not a detour.
+const provisionOffered = computed(() => addressed.value || hostedOffered.value);
+const ladderOptions = computed(() =>
+    ladderOptionsOf({
+        hostedOffered: hostedOffered.value,
+        hostedFull: hostedFull.value,
+        hostedSuspended: hostedSuspended.value,
+        plan: hostedOffer.value?.plan === true,
+        hours: hostedHours.value,
+        // The command redeems a setup code, so it is offered only where addresses are, even in the app.
+        commandOffered: addressed.value,
+        installer: installer.value,
+    }),
+);
+
+// The hosted lane's one silent attempt at the browser's sandbox credential while the reader watches the machine boot;
+// a full sign-in gate here would ask for a second sign-in before anything even runs.
+const warmSandboxCredential = async (): Promise<void> => {
+    await warmIdToken();
+    if ((await getIdToken({ interactive: false })) === undefined) {
+        await getIdToken({ silent: true });
+    }
+};
+
+const { arrival, elsewhere, loaded, lanes, laneTakeable, readArrival, forget: forgetArrival } = useSetupArrival({
+    sandbox,
+    platform: apiClient.sandbox,
+    row,
+    hosted,
+    command,
+    route,
+    inApp: desktop,
+    ladder: ladderOptions,
+    warmCredential: warmSandboxCredential,
+    runHere,
+});
+
+// The picker is on screen when the arrival could answer nothing for itself, or when the reader asked for it; one rung
+// is not a picker, so it takes a real choice. The untaken rung folds behind a link off the same facts.
 const elsewhereOffered = computed(() => arrival.value === `choose` || elsewhere.value);
-
-// Reveal link sits under the card while the rungs appear above; scrolls there so the click isn't off-screen.
+const ladderShown = computed(() => elsewhereOffered.value && ladderOptions.value.length > 1);
+const otherMachinesFolded = computed(() => !elsewhereOffered.value && ladderOptions.value.length > 1);
+// The reveal link sits under the card while the rungs appear above it, so the page scrolls to them.
 const ladderRow = ref<HTMLElement | null>(null);
 const showOtherMachines = async (): Promise<void> => {
     elsewhere.value = true;
     await nextTick();
     ladderRow.value?.scrollIntoView({ behavior: `smooth`, block: `center` });
 };
-// Command redeems a setup code; gated on the address offer even in the app, where the button is the command.
-const commandOffered = computed(() => addressed.value);
 
-// Hosted lane: a lane moves a machine onto the existing row, never deletes or recreates the sandbox.
-// The platform's offer, read on arrival. Null until answered; a platform without the route reads as disabled.
-const hostedOffer = ref<HostedOffer | null>(null);
-// Whether the platform hosts; independent of whether the picker currently draws the rung.
-const hostedOffered = computed(() => hostedOffer.value?.enabled === true);
-// Whether a provision lane exists (machine or address); without either, attach is the whole flow, not a detour.
-const provisionOffered = computed(() => addressed.value || hostedOffered.value);
-// Provisioning/releasing a machine is a round-trip with a provider; the card says so rather than freezing.
-const hostedBusy = ref(false);
-const releasingHosted = ref(false);
-const releaseRequested = ref(false);
-const hostedRequested = ref(false);
-let hostedAction = 0;
-// Why the hosted lane failed, shown on the step where it was clicked; kept separate from the arrival `error`.
-const hostedError = ref<NoticeModel | undefined>(undefined);
-// Created row is a hosted one; the wait card renders off this, not the picker, so a resumed row narrates right.
-const hostedRow = computed(() => created.value?.hosted ?? null);
-// Account's hosted allowance is already spent on a different sandbox; the card still renders, explaining why.
-const hostedSpent = computed(() => hostedOffered.value && (hostedOffer.value?.remaining ?? 0) === 0 && hostedRow.value === null);
-// The hosted lane is switched off for this account (an acceptable-use verdict); reads as spent, with its own words.
-const hostedSuspended = computed(() => hostedOffer.value?.suspended === true);
-// A refusal for room already met by this browser, harder than a later count; cleared only by `recheckCapacity`.
-const hostedRefusedForRoom = ref(false);
-// Platform out of machines (distinct from `hostedSpent`); gates only starting new, not an existing row.
-const hostedFull = computed(
-    () => hostedOffered.value && (hostedOffer.value?.full === true || hostedRefusedForRoom.value) && hostedRow.value === null,
-);
-// Provision spine offer, from setupLanes.ts; `lane` is written only by `setLane`, never switched automatically.
-const lanes = computed(() => lanesFor({ address: addressRead.value, hosted: hostedRead.value, hasMachine: hostedRow.value !== null }));
-// Whether there's a lane to take, worth drawing the ladder for; otherwise a card just explains itself.
-const laneTakeable = computed(() => lanes.value.kind === `takeable`);
-// Free plan's hour budget, or null where it doesn't apply; null means the cards say nothing about hours at all.
-const hostedHours = computed(() => hostedOffer.value?.hours ?? null);
-// The daemon's announced host, once it exists: step 1's address line for a lane that never mints a code.
-const hostedHost = computed(() => {
-    const url = created.value?.daemonUrl;
-    if (url === null || url === undefined) {
-        return undefined;
-    }
-    try {
-        return new URL(url).host;
-    } catch {
-        return undefined;
-    }
-});
-// When the hosted wait began; only escalates a wait already progressing, never the source of what the card says.
-const hostedSince = ref<number | undefined>(undefined);
-// Machine power state, polled only while somebody waits; undefined or failed degrades to a plain spinner.
-const hostedMachine = ref<HostedStatus[`machine`] | undefined>(undefined);
-// When the provider first reported a machine that won't come up on its own, cleared by any other reading, so
-// only a state that survives several polls can ever be a verdict (hostedWait.ts machineIsDown).
-const machineDownSince = ref<number | undefined>(undefined);
-// Machine state is a rate-limited provider call; polled once every this many (cheap) registry polls instead.
-const MACHINE_EVERY = 4;
-let machineTick = 0;
-
-// The one place a machine reading is recorded, so the down clock can never drift from the state it times.
-const noteMachine = (reading: HostedStatus[`machine`] | undefined): void => {
-    hostedMachine.value = reading;
-    machineDownSince.value = machineIsDown(reading) ? (machineDownSince.value ?? Date.now()) : undefined;
-};
-
-/* THE BUTTON THIS PAGE USED TO HAND PEOPLE INSTEAD OF PRESSING IT ITSELF.
- *
- * A hosted machine stops for ordinary reasons while nobody is in it yet: the daemon's own idle-stop (20 quiet
- * minutes, and a setup that never finished never resets it), a first boot the provider gave up restarting, a
- * machine still stopped since the last visit. Each of them ended this wait at "the machine we started for you
- * isn't running" over a button, held out to the one reader who can do least about it. The workspace has woken a
- * sleeping machine by reflex for as long as it has had one (useSandbox.ts); the setup wait had no reflex at all.
- *
- * So: a machine that is down under a browser waiting for it is started here, on the first reading that says so,
- * and the card keeps narrating a boot, because a boot is what that just started. */
-// Starts spent on one down episode. Bounded: a machine that will not stay up must reach a verdict rather than be
-// restarted forever on hours its owner is charged for.
-const MAX_WAKES = 3;
-// Gap between two of them, so a reading that lands mid-start never buys a second one.
-const WAKE_THROTTLE_MS = 30_000;
-// A start this page asked for, still in flight; the wait card says nothing about a machine while one is running.
-const waking = ref(false);
-// The platform's own refusal of that start, kept because it is the true account of why the machine is down.
-const wakeRefusal = ref<WakeRefusal | undefined>(undefined);
-let wakes = 0;
-let lastWakeAt = 0;
-
-// Platform refusing to start a machine at all, in the two shapes it does (api sandbox.wake): spent free hours,
-// and an account whose hosted lane is switched off. Anything else is a bad minute, not a decision.
-const wakeRefusalOf = (err: unknown): WakeRefusal | undefined => {
-    if (!err || typeof err !== `object`) {
-        return undefined;
-    }
-    const { code, status } = err as { code?: unknown; status?: unknown };
-    if (code === `PAYMENT_REQUIRED` || status === 402) {
-        return `hours`;
-    }
-    return code === `FORBIDDEN` || status === 403 ? `suspended` : undefined;
-};
-
-// One start for a machine the provider says is down. `action` guards it like every other hosted call: an answer
-// that lands after the reader moved on describes a machine this page no longer waits for.
-const wakeMachine = async (sandboxId: string, action: number): Promise<void> => {
-    if (waking.value || wakes >= MAX_WAKES || Date.now() - lastWakeAt < WAKE_THROTTLE_MS) {
-        return;
-    }
-    wakes += 1;
-    lastWakeAt = Date.now();
-    waking.value = true;
-    try {
-        await apiClient.sandbox.wake({ sandboxId });
-        if (action !== hostedAction || releasingHosted.value) {
-            return;
-        }
-        // Starting because this call started it, and a new boot deserves the clock of one: every estimate and
-        // every fuse under the step list measures a boot, not how long this tab has been open.
-        noteMachine(`starting`);
-        hostedSince.value = Date.now();
-    } catch (err) {
-        const refusal = wakeRefusalOf(err);
-        // A bad minute is not a decision, and must not erase the decision an earlier start already met.
-        if (action === hostedAction && refusal !== undefined) {
-            wakeRefusal.value = refusal;
-        }
-    } finally {
-        waking.value = false;
-    }
-};
-
-// What one reading from the provider does to the down episode: ends it, earns a start, or neither.
-const answerMachine = async (sandboxId: string, action: number, reading: HostedStatus[`machine`]): Promise<void> => {
-    if (!machineIsDown(reading)) {
-        // Up, from the provider itself: the episode is over, so the next stop gets its own allowance and no
-        // refusal from the last one clings to it.
-        wakes = 0;
-        wakeRefusal.value = undefined;
-        return;
-    }
-    // Only for the reader actually waiting on this rung: a machine still attached to a row whose owner has
-    // stepped over to their own computer is one nobody is watching, and starting it would bill them for it.
-    if (machineStartable(reading) && machine.value === `hosted` && !hostedBusy.value) {
-        await wakeMachine(sandboxId, action);
-    }
-};
-
-// One throttled machine-state read, riding the registry poll. `action` is the hosted action it was asked
-// under: a reading that lands after a restart was issued describes the machine that restart replaced, and
-// keeping it would restart the down clock the restart just cleared.
-const readMachine = async (sandboxId: string, action: number): Promise<void> => {
-    if (machineTick++ % MACHINE_EVERY !== 0) {
-        return;
-    }
-    const reading = (await apiClient.sandbox.hostedStatus({ sandboxId }).catch(() => undefined))?.machine;
-    if (action !== hostedAction || releasingHosted.value) {
-        return;
-    }
-    noteMachine(reading ?? hostedMachine.value);
-    // A read that failed establishes nothing: it neither ends the episode nor earns a start.
-    if (reading !== undefined) {
-        await answerMachine(sandboxId, action, reading);
-    }
-};
-
-// Boot report and any refused check-in, from the poll; null until either happens, as on any older sandbox.
-const bootReport = ref<SandboxSummary[`bootReport`]>(null);
-const announceRefusal = ref<SandboxSummary[`announceRefusal`]>(null);
-// Whether the daemon has ever checked in. Read off the poll rather than off `created` for the same reason.
-const announced = ref(false);
-// Two-rung picker (hosted vs. own hardware), each with one caption, no nested chrome around it. A third rung (a
-// bespoke cloud VM) existed and was removed as redundant.
-// One card per rung, not a pill with caption: cost and what it asks must be visible before clicking, not skimmed
-// after. `meta` is the badge, `note` the words under it.
-// `value` doubles as the drawing's name (SetupRungArt), so rung and picture can't drift; no separate `icon`.
-interface MachineOption {
-    readonly value: "hosted" | "mine";
-    readonly title: string;
-    readonly meta: string;
-    readonly note: string;
-}
-const ladderOptions = computed<readonly MachineOption[]>(() => [
-    ...(hostedOffered.value
-        ? [
-              {
-                  value: `hosted` as const,
-                  // Title answers 'what do I do', not 'whose machine'; that fact lives in `note` instead.
-                  title: t(`setup.setup.startInstantly`),
-                  // Badge carries the hour ceiling, never bare 'Free', and what happens after: unlimited reads 'always
-                  // on'.
-                  // When the fleet is full, the badge says so instead of a price; the rung stays on screen, not hidden.
-                  meta: hostedFull.value
-                      ? `No machines free right now`
-                      : hostedSuspended.value
-                        ? `Switched off for this account`
-                        : hostedOffer.value?.plan
-                          ? `On your plan · always on`
-                          : hostedHours.value === null
-                            ? `Free · ready in seconds`
-                            : hostedHours.value.rampUntil === undefined
-                              ? `Free to try · ${hostedHours.value.allowance}h a month, always on with the plan`
-                              : `Free to try · ${hostedHours.value.allowance}h to start, more after your first days`,
-                  note: t(`setup.setup.runsOnOurServers`),
-              },
-          ]
-        : []),
-    // Reader's own machine says no more than its three lines; there's nothing more the badge doesn't say.
-    ...(commandOffered.value
-        ? [
-              {
-                  value: `mine` as const,
-                  title: t(`setup.setup.myOwnComputer`),
-                  meta: `Most power · no limits`,
-                  // Note names the actual next step; reads off the same `installer` the step below uses, so they can't
-                  // disagree.
-                  note: installer.value === undefined ? `One pasted command` : `A ${installer.value.label} installer`,
-              },
-          ]
-        : []),
-]);
-// Shown only with a real choice; one rung isn't a picker, and an unread offer has nothing honest to draw.
-const ladderShown = computed(() => elsewhereOffered.value && ladderOptions.value.length > 1);
-// Reverse of `ladderShown`: the untaken rung folds behind a link, off the same facts, never an empty promise.
-const otherMachinesFolded = computed(() => !elsewhereOffered.value && ladderOptions.value.length > 1);
-
-// Rung requested via `?machine=` before this page; validated against `ladderOptions` so an unoffered rung falls
-// back to default. Read once on arrival, never watched.
-const requestedMachine = (): MachineOption[`value`] | undefined => {
-    const asked = route.query[`machine`];
-    return ladderOptions.value.find((option) => option.value === asked)?.value;
-};
-
-// Which address the card reports: hosted's own, none minted, the intentic default, or the reader's own zone.
+// Which address the card reports: the hosted machine's own, none minted, the intentic default, or the reader's zone.
 const addressFact = computed<`hosted` | `none` | `intentic` | `own`>(() =>
     machine.value === `hosted` ? `hosted` : addressless.value ? `none` : mode.value === `intentic` ? `intentic` : `own`,
 );
-
-// Quiet label on the address row; styled as a band opener, not body copy, so it isn't read as a sentence.
+// The address row's quiet label, styled as a band opener rather than body copy; values sit on its baseline, in mono
+// only for a real hostname.
 const factLabel = `fact-label shrink-0`;
-
-// Baseline-aligned, not box-centred, so label/value share a line; mono only for a real hostname, not a sentence.
 const factSlot = `flex min-w-0 items-baseline text-sm text-content`;
 const factHost = `${factSlot} fact-host font-mono`;
 
-// Mint dedupe/stale-response key: sandbox id (so switching sandboxes invalidates a stale mint) plus lane (mint
-// buys the intentic tunnel, which attach doesn't use). Sync choice isn't part of it; it rides the command, not
-// the code.
-const targetKey = computed<string | undefined>(() => {
-    // Hosted lane never mints: its machine already holds the tunnel, so a code would buy a command nothing runs.
-    if (created.value === null || lane.value === `attach` || machine.value === `hosted` || hostedRow.value !== null || releasingHosted.value) {
-        return undefined;
-    }
-    // Nor a platform with no addresses to mint, either mode: the gate is server-side, so asking anyway just spins.
-    if (!addressed.value) {
-        return undefined;
-    }
-    return `${created.value.id}:${created.value.token}`;
-});
-
-// The command can be built only once the chosen target has a code minted for it.
-const commandReady = computed(() => setup.value !== null && mintedFor.value === targetKey.value);
-// Sync exists only where the command does: not pre-mint, not on compose, not for hosted; survives the app fold.
-const syncOffered = computed(() => commandReady.value && !composeShown.value && (commandVisible.value || desktop.value));
-// `.title` rather than the NoticeModel itself: interpolated whole, it renders as its own JSON.
-const lockedReason = computed(() => {
-    // Not a wait: no command is coming, so this states the fact rather than saying 'Preparing…', which read as hung.
-    if (addressless.value) {
-        return `This platform doesn't hand out addresses, so there's no install command to run. Connect a sandbox you're already running instead.`;
-    }
-    if (mode.value === `intentic`) {
-        return setupError.value?.title ?? `Preparing your intentic domain…`;
-    }
-    if (cfToken.value.length === 0) {
-        return `Enter your Cloudflare API token to reveal your install command.`;
-    }
-    if (!cfTokenValid.value) {
-        return `Your install command appears once the token above looks valid.`;
-    }
-    if (zonesLoading.value) {
-        return `Checking which Cloudflare zones this token can use…`;
-    }
-    if (zonesError.value !== undefined) {
-        return `Fix the Cloudflare token issue above to continue.`;
-    }
-    if (selectedZone.value === undefined) {
-        return `Choose which Cloudflare zone to use to reveal your command.`;
-    }
-    if (!subdomainValid.value) {
-        return `Enter a valid subdomain (letters, numbers, hyphens) to reveal your command.`;
-    }
-    return setupError.value?.title ?? `Preparing your install command…`;
-});
-
-// Handoff step 2 goes through, in order:
-//   `locked` : no command yet (lockedReason says what's missing)
-//   `yours` : command shown, nothing in flight yet
-//   `handed` : copied (or app-launched); waiting on the user's machine
-//   `claimed`: a machine redeemed the code at /setup/claim; the wait is earned
-type Handoff = "locked" | "yours" | "handed" | "claimed";
-
-// Command was copied; page-level and persistent, unlike CopyButton's 1.5s flash: the hinge the card turns on.
-const copied = ref(false);
-// App was handed the code (desktop's copy-equivalent); last thing observable before the machine takes over.
-const launched = ref(false);
-/* . */
-const { report: desktopReport, heardAt: desktopHeardAt } = useDesktopSetup();
-// A link back to this screen is in the user's inbox (the phone's handoff: SetupHandoff.vue). Deliberately NOT
-// part of `handoff` below: that state machine tracks the COMMAND's journey to a machine, and posting yourself a
-// bookmark does not advance it by a step. What it does change is what the stuck-wait nudge should say, because
-// for this user the next move is on a laptop that hasn't been opened yet rather than in a terminal.
-const emailed = ref(false);
-// Server-side proof the command ran; cleared each mint, so a value here always describes the command on screen.
-const claimedAt = ref<string | null>(null);
-// Machine's account of the run, staged with fixes on failure; cleared each mint like the claim stamp.
-const report = ref<SetupReport | null>(null);
-// From setupReport.ts: `failures` is the verbatim what-broke list, `stage` the healthy run's live footer line.
-const reportFailures = computed(() => setupReportView(report.value).failures);
-const buildStage = computed(() => setupReportView(report.value).stage);
-
-// Command exists and the registry is watched; gated on `commandReady` so a stale re-mint narrates nothing.
-const waiting = computed(() => commandReady.value);
-const handoff = computed<Handoff>(() => {
-    if (!commandReady.value) {
-        return `locked`;
-    }
-    // Report is proof like the claim stamp, and can arrive first (a preflight failure before redemption).
-    if (claimedAt.value !== null || report.value !== null) {
-        return `claimed`;
-    }
-    return copied.value || launched.value ? `handed` : `yours`;
-});
-
-// When the command became runnable; resets on re-mint, since only elapsed time triggers a silent failure.
-const armedAt = ref<number | undefined>(undefined);
-// Last visible reader action (e.g. a download click); the right clock once armedAt has gone stale.
-const actedAt = ref<number | undefined>(undefined);
-// One wall clock, armed only while a command or hosted wait is on screen, so an unarmed step 2 costs no tick.
-const now = useNow(() => armedAt.value !== undefined || hostedSince.value !== undefined);
-watch(commandReady, (ready) => {
-    armedAt.value = ready ? Date.now() : undefined;
-});
-
-// Hosted wait from three sources (hostedWait.ts); reads the clock only to escalate, never to decide the wording.
-const hostedWait = computed(() =>
-    hostedWaitView({
-        machine: hostedMachine.value,
-        boot: bootReport.value,
-        refusal: announceRefusal.value,
-        announced: announced.value,
-        // Machine origin from the row's hosted stamp; decides which of the two boot-time promises the card makes.
-        warm: hostedRow.value?.warm,
-        waitedMs: hostedSince.value === undefined ? 0 : now.value - hostedSince.value,
-        downForMs: machineDownSince.value === undefined ? 0 : now.value - machineDownSince.value,
-        waking: waking.value,
-        wakeRefusal: wakeRefusal.value,
+const lockedReason = computed(() =>
+    lockedReasonOf({
+        addressless: addressless.value,
+        mode: mode.value,
+        mintError: setupError.value?.title,
+        cfToken: cfToken.value,
+        cfTokenValid: cfTokenValid.value,
+        zonesLoading: zonesLoading.value,
+        zonesError: zonesError.value,
+        zone: selectedZone.value,
+        subdomainValid: subdomainValid.value,
     }),
 );
 
-// Long fuse for compose, phone, and own-computer-via-app; drops to the short fuse once the command is unfolded.
-const installing = computed(() => appFirst.value && !commandVisible.value);
-// A failed run is retried with the app's "Set it up now" button wherever no command is on screen to run again.
-const retriedByButton = computed(() => !commandVisible.value && (desktop.value || installing.value));
-// Installer was fetched (not proof of install, just intent); changes both when the nudge fires and what it says.
-const downloaded = ref(false);
-const onDownload = (): void => {
-    downloaded.value = true;
-    actedAt.value = Date.now();
-    track(`desktop_installer_downloaded`, { platform: installer.value?.platform ?? `unknown` });
-};
-const nudgeAfterMs = computed(() => (composeShown.value || mobile.value || installing.value ? 3 * 60_000 : 40_000));
-// When it stops assuming the command was never run, and starts helping a terminal that errored instead.
-const STALLED_MS = 3 * 60_000;
-// Claimed but no daemon yet: the first image pull is slow, so this waits longer before suggesting a problem.
-const SLOW_BUILD_MS = 6 * 60_000;
-
-const waitedFrom = computed(() =>
-    actedAt.value !== undefined && armedAt.value !== undefined ? Math.max(actedAt.value, armedAt.value) : armedAt.value,
-);
-const waitedMs = computed(() => (waitedFrom.value === undefined ? 0 : now.value - waitedFrom.value));
-// Every fuse below is a GUESS from elapsed time, and a machine report makes guessing obsolete: a failure
-// card names the real problem (nudging beside it would say "you haven't run it" about a command that
-// demonstrably ran and died), and live stage narration IS the answer slowBuild's "check that terminal" was
-// groping for. The fuses stay for machines running an ic too old to report.
-// …and never over a live report from the app: "still nothing" beside a bar that is visibly moving would be the
-// page contradicting the app it handed the work to.
-const nudging = computed(() => handoff.value !== `claimed` && waitedMs.value > nudgeAfterMs.value && desktopReport.value === undefined);
-const stalled = computed(() => handoff.value !== `claimed` && waitedMs.value > STALLED_MS);
-// Which reader the correction addresses (SetupNudge renders it); decided here, where the relevant state lives.
-const nudgeVariant = computed(() => {
-    if (mobile.value && emailed.value) {
-        return `emailed` as const;
-    }
-    if (commandVisible.value) {
-        return `terminal` as const;
-    }
-    // Browser offered an installer: nothing was meant to be pasted, and the app's own button doesn't exist here yet.
-    if (installing.value) {
-        // Once downloaded, the correction must move on too, or it reads as not noticing the reader's own action.
-        return downloaded.value ? (`downloaded` as const) : (`install` as const);
-    }
-    if (mobile.value) {
-        return `phone` as const;
-    }
-    return launched.value ? (`app` as const) : (`button` as const);
-});
-// Copying again helps a reader with a command not yet run, never a phone (clipboard was never the blocker).
-const nudgeCopyable = computed(() => commandVisible.value && runTab.value !== `compose` && !(mobile.value && emailed.value));
-const slowBuild = computed(
-    () =>
-        report.value === null &&
-        claimedAt.value !== null &&
-        handoff.value === `claimed` &&
-        now.value - new Date(claimedAt.value).getTime() > SLOW_BUILD_MS,
-);
-
-// Last observable step before the user leaves for a terminal. `mobile` rides along since a phone's copy means
-// something different (no terminal reads it).
-const onCopied = (): void => {
-    copied.value = true;
-    track(`sandbox_command_copied`, { tab: runTab.value, sync: syncEnabled.value, mobile: mobile.value });
-};
-
-// Phone's handoff landed; its own milestone, not a flavour of `copied`, since it's the first observable phone
-// action that leads anywhere.
-const onEmailed = (): void => {
-    emailed.value = true;
-    track(`sandbox_setup_link_emailed`, { resuming: resuming.value });
-};
-
-// Local dev only: rides the localhost platform origin into the command; unchanged for the hosted platform.
-const platformUrlOverride = computed<string | undefined>(() => {
-    const api = new URL(environment.api.url);
-    if (api.hostname !== `localhost` && api.hostname !== `127.0.0.1`) {
-        return undefined;
-    }
-    return api.origin;
-});
-
-// Hands the setup to the desktop app: same code, same connect script, run by a process already on the machine.
-const runHere = (): void => {
-    const code = setup.value?.code;
-    if (code === undefined || created.value === null) {
-        return;
-    }
-    track(`desktop_setup_started`, { mode: mode.value, inApp: desktop.value, sync: syncEnabled.value });
-    launched.value = true;
-    openDesktopLink(
-        desktopSetupLink({
-            code,
-            sandboxId: created.value.id,
-            name: created.value.name,
-            ...(mode.value === `own` ? { cfToken: cfToken.value.trim() } : {}),
-            ...(syncEnabled.value ? { syncDir: syncDir.value } : {}),
-            ...(platformUrlOverride.value ? { platformUrl: platformUrlOverride.value } : {}),
-        }),
-    );
-};
-
-// Platform has no machine to give (503/SERVICE_UNAVAILABLE only); not broken, so the card offers the other rung
-// instead of a retry.
-const isAtCapacity = (err: unknown): boolean => {
-    if (err && typeof err === `object`) {
-        const e = err as { code?: unknown; status?: unknown };
-        return e.code === `SERVICE_UNAVAILABLE` || e.status === 503;
-    }
-    return false;
-};
-
-// oRPC surfaces a disabled endpoint as NOT_FOUND (404): the signal that the intentic-provided path is off.
-const isNotFound = (err: unknown): boolean => {
-    if (err && typeof err === `object`) {
-        const e = err as { code?: unknown; status?: unknown };
-        return e.code === `NOT_FOUND` || e.status === 404;
-    }
-    return false;
-};
-
-// lastSeenAt marks the daemon's last boot, not a heartbeat; redirects only once it advances past the baseline.
-const baseline = ref<string | null>(null);
-watch(
-    () => created.value?.id,
-    () => {
-        baseline.value = created.value?.lastSeenAt ?? null;
-    },
-    { immediate: true },
-);
-
-// Why we're still waiting, or undefined; shown so a stuck wait names its cause instead of spinning silently.
-const status = ref<string | undefined>(undefined);
-// Poll in flight; a re-entrancy guard so the 3s interval doesn't stack requests. Deliberately not rendered.
-const checking = ref(false);
-
-// Lands on `/`, which differs by form factor (mobile has no docked chat, so it opens straight into a chat via
-// `revealConversation`); navigates first, since selecting the sandbox rescopes the chat store.
-const enterWorkspace = async (): Promise<void> => {
-    await router.push(`/`);
-    revealConversation(composingConversation());
-};
-
-// Polls the registry; opens the workspace once `lastSeenAt` advances past the baseline. Looks up the row by
-// `created.id` in the fresh list, never via `sandbox.active`, which can point elsewhere mid-wait.
-const check = async (): Promise<void> => {
-    const pending = created.value;
-    if (pending === null || checking.value || releaseRequested.value) {
-        return;
-    }
-    // Code this poll asked about; a response after a re-mint must not report the previous command as claimed.
-    const askedFor = mintedFor.value;
-    const action = hostedAction;
-    checking.value = true;
-    try {
-        const live = await sandbox.refresh();
-        if (action !== hostedAction || pending.id !== created.value?.id || releasingHosted.value) {
-            return;
-        }
-        // A reachable platform clears any earlier "can't reach" warning: it must not outlive its cause.
-        status.value = undefined;
-        const row = live.find((entry) => entry.id === pending.id);
-        if (machine.value === `mine` && (row?.token !== pending.token || row?.hosted != null)) {
-            return;
-        }
-        if (askedFor === mintedFor.value) {
-            const claim = row?.setupCodeClaimedAt ?? null;
-            if (claim !== null && claimedAt.value === null) {
-                // Funnel's missing middle: command was pasted. A drop-off after this and before `sandbox_connected` is
-                // Docker's.
-                track(`sandbox_command_claimed`, { resuming: resuming.value });
-            }
-            claimedAt.value = claim;
-            const reported = row?.setupReport ?? null;
-            if (reported !== null && reported.failed.length > 0 && reportFailures.value === null) {
-                // Counterpart to `sandbox_connected`: setup failed with a named cause, not a silent claim-to-connect
-                // drop-off.
-                track(`sandbox_setup_failed`, { stage: reported.stage, checks: reported.failed.map((failure) => failure.check).join(`,`) });
-            }
-            report.value = reported;
-        }
-        // What the sandbox has said about itself since: the wait card's two other sources.
-        bootReport.value = row?.bootReport ?? null;
-        announceRefusal.value = row?.announceRefusal ?? null;
-        announced.value = (row?.lastSeenAt ?? null) !== null;
-        // Machine state, asked only during a hosted wait, less often than the registry; failure keeps the last answer.
-        if (row !== undefined && (row.hosted ?? null) !== null) {
-            await readMachine(pending.id, action);
-        }
-        const seen = row?.lastSeenAt ?? null;
-        if (action !== hostedAction || releasingHosted.value) {
-            return;
-        }
-        // Holds the hosted lane on this card until reachable (a check-in only proves a start); silence passes through.
-        // Or its boot chain is still converging: handing over would land on a second card that just repeats this one.
-        const holding = hostedRow.value !== null && (hostedWait.value.reachable === false || hostedWait.value.booting);
-        if (seen !== null && seen !== baseline.value && !holding) {
-            // Onboarding's make-or-break milestone: the pasted command produced a live daemon.
-            track(`sandbox_connected`, { resuming: resuming.value });
-            finished.value = true;
-            // Explicitly selects the sandbox just set up; `reconcileActive` may have moved the selection away while
-            // waiting.
-            sandbox.select(pending.id);
-            await enterWorkspace();
-        }
-    } catch {
-        status.value = `Can't reach the platform to check. Retrying…`;
-    } finally {
-        checking.value = false;
-    }
-};
-
-// Creates the sandbox (mints its token) and activates it, unasked, on arrival; the mint watcher takes over once
-// `created` holds a row. Name comes from setupName.ts.
-const autoCreate = async (): Promise<void> => {
-    if (creating.value) {
-        return;
-    }
-    creating.value = true;
-    error.value = null;
-    try {
-        const row = await sandbox.create(autoSandboxName(sandbox.sandboxes.value.map((entry) => entry.name)));
-        created.value = row;
-        // Minted here, agreed to by nobody: from this instant it is a draft the discard rule below owns.
-        createdHere.value = true;
-    } catch (err) {
-        error.value = noticeFrom(err, `Could not create your sandbox.`);
-    } finally {
-        creating.value = false;
-    }
-};
-
-// Re-reads what the account has left, since the count can change (e.g. releasing a hosted machine); a failed
-// re-read keeps the last answer.
-const refreshHostedOffer = async (): Promise<void> => {
-    try {
-        hostedOffer.value = await apiClient.sandbox.hostedOffer();
-    } catch {
-        // A platform that cannot be asked keeps the answer it already gave.
-    }
-};
-
-// Retries the capacity read, not a provision attempt: drops the held refusal and asks again; nothing is spent
-// either way.
-const recheckCapacity = async (): Promise<void> => {
-    hostedRefusedForRoom.value = false;
-    hostedError.value = undefined;
-    await refreshHostedOffer();
-};
-
-// Gives this row a platform-run machine, then lets the announce watch take over; a refusal costs only the
-// attempt, leaving the sandbox untouched. Returns false if it didn't happen.
-const provisionHosted = async (): Promise<boolean> => {
-    const row = created.value;
-    if (row === null || row.token === null || hostedBusy.value || releasingHosted.value) {
-        return false;
-    }
-    hostedBusy.value = true;
-    const action = ++hostedAction;
-    hostedRequested.value = true;
-    hostedError.value = undefined;
-    try {
-        const updated = await sandbox.hostedProvision(row.id, row.token);
-        if (action !== hostedAction || machine.value !== `hosted` || created.value?.id !== row.id) {
-            return false;
-        }
-        created.value = updated;
-        hostedSince.value = Date.now();
-        // Zero-command milestone: `sandbox_connected` will complete once this machine exists.
-        track(`sandbox_hosted_created`, {});
-        return true;
-    } catch (err) {
-        if (action !== hostedAction) {
-            return false;
-        }
-        // No machines left isn't a failure notice; the card replaces itself with what to do instead.
-        hostedRefusedForRoom.value = isAtCapacity(err);
-        hostedError.value = noticeFrom(err, `Couldn't start a machine for you right now.`);
-        return false;
-    } finally {
-        if (action === hostedAction) {
-            hostedBusy.value = false;
-            void refreshHostedOffer();
-        }
-    }
-};
-
-// The wait's one recovery: `remake` discards and rebuilds (a bad address), `reboot` restarts what exists (files
-// kept). Clock restarts with the machine.
-const restartHosted = async (): Promise<void> => {
-    const row = created.value;
-    if (row === null || hostedBusy.value || releasingHosted.value) {
-        return;
-    }
-    const remake = hostedWait.value.failure?.action === `remake`;
-    let released = false;
-    const action = ++hostedAction;
-    hostedBusy.value = true;
-    hostedError.value = undefined;
-    /* CLEARED BEFORE THE CALL, NOT AFTER IT. */
-    bootReport.value = null;
-    announceRefusal.value = null;
-    announced.value = false;
-    noteMachine(undefined);
-    // The machine this page gives up on and the one it starts itself are the same machine: a reader who asks for
-    // a restart is starting a new episode, and the reflex above owes that episode its own allowance.
-    wakes = 0;
-    wakeRefusal.value = undefined;
-    hostedSince.value = Date.now();
-    try {
-        if (remake) {
-            const updated = await sandbox.hostedRelease(row.id);
-            if (action !== hostedAction) {
-                return;
-            }
-            created.value = updated;
-            baseline.value = null;
-            released = true;
-        } else {
-            await apiClient.sandbox.hostedRestart({ sandboxId: row.id });
-        }
-    } catch (err) {
-        if (action !== hostedAction) {
-            return;
-        }
-        // A rebuild needs a new machine, so it can hit a full fleet like any provision, worded the same way.
-        hostedRefusedForRoom.value = isAtCapacity(err);
-        hostedError.value = hostedRefusedForRoom.value
-            ? noticeOf(`We're out of machines right now, so we can't build you another one this minute.`, { tone: `warning` })
-            : noticeFrom(err, `Couldn't start it over. Try again in a moment.`);
-    } finally {
-        if (action === hostedAction) {
-            hostedBusy.value = false;
-        }
-    }
-    // Outside the busy window on purpose (provisioning shares the flag); must not leave a machine handed back empty.
-    if (released && action === hostedAction && machine.value === `hosted`) {
-        await provisionHosted();
-    }
-};
-
-// Gives the machine on the row back to the platform, so the row carries none: the one gesture that lets the local
-// lane mint a setup code at all (`targetKey` returns nothing while `hostedRow` holds one). False means the platform
-// refused and the machine is still there, with `hostedError` saying so.
-const handBackMachine = async (): Promise<boolean> => {
-    const row = created.value;
-    if (row === null) {
-        return true;
-    }
-    hostedAction += 1;
-    releaseRequested.value = true;
-    releasingHosted.value = true;
-    hostedBusy.value = false;
-    try {
-        created.value = await sandbox.hostedRelease(row.id);
-        releaseRequested.value = false;
-        hostedRequested.value = false;
-        hostedSince.value = undefined;
-        baseline.value = null;
-        bootReport.value = null;
-        announceRefusal.value = null;
-        announced.value = false;
-        noteMachine(undefined);
-        claimedAt.value = null;
-        report.value = null;
-        return true;
-    } catch (err) {
-        hostedError.value = noticeFrom(err, `Couldn't remove the machine we started. Try again in a moment.`);
-        return false;
-    } finally {
-        releasingHosted.value = false;
-        void refreshHostedOffer();
-    }
-};
-
-// Asked before a hand-back that has something to lose. The row keeps its name, address and sharing, so the workspace
-// looks recoverable afterwards; the disk under it does not come back, and nothing else on this page says so.
-const handBackAsked = ref(false);
-
-// Cancellation must remain available while provisioning is in flight.
-const chooseMachine = async (next: "hosted" | "mine"): Promise<void> => {
-    const prev = machine.value;
-    if (creating.value || releasingHosted.value || (next === `hosted` && hostedBusy.value)) {
-        return;
-    }
-    if (next === prev) {
-        return;
-    }
-    hostedError.value = undefined;
-    const row = created.value;
-    // Choosing hosted starts nothing; the card below carries the button, so a picker click has no side effect.
-    if (next === `hosted`) {
-        machine.value = next;
-        return;
-    }
-    // A machine on the row is a disk with work on it; a provision still in flight is neither, so only the first asks.
-    if ((row?.hosted ?? null) !== null) {
-        handBackAsked.value = true;
-        return;
-    }
-    // A refusal leaves the rung where it was: the machine still exists, so saying otherwise would lie.
-    if (row !== null && (hostedRequested.value || hostedBusy.value || releaseRequested.value) && !(await handBackMachine())) {
-        return;
-    }
-    machine.value = next;
-};
-
-// Past the question the old path runs unchanged, including its refusal: a machine the platform would not take back is
-// still there, and the rung must not move as though it weren't.
-const confirmHandBack = async (): Promise<void> => {
-    handBackAsked.value = false;
-    if (!(await handBackMachine())) {
-        return;
-    }
-    machine.value = `mine`;
-};
-
-// Connect a sandbox that is ALREADY reachable: probe the pasted address from this browser, and only once the
-// The connect token to present to the daemon being attached. The pasted token wins: it is the one the daemon
-// is actually gating first-bind on. Otherwise the row's own (a resumed sandbox whose daemon was started from
-// this account's own setup code); the row is this account's, so it carries one, but the shape allows null.
-const attachConnectToken = (): string | undefined => {
-    const pasted = attachToken.value.trim();
-    return pasted !== `` ? pasted : (created.value?.token ?? undefined);
-};
-
-// daemon has authorized us record it on the platform. Verifying BEFORE creating anything means a typo can't
-// leave an orphan sandbox behind; a retry after a failed attach re-uses
-// the row the previous attempt created. On success there is nothing left to do: straight to the workspace.
-const connectDomain = async (): Promise<void> => {
-    const url = normalizedDomain.value;
-    // `ownAddress` guards here too, not only on the button: the field submits on Enter, and probing our own hostname
-    // can only answer `unreachable`, which reads as a verdict about the reader's DNS.
-    if (url === undefined || attaching.value || ownAddress.value !== undefined) {
-        return;
-    }
-    attaching.value = true;
-    attachOutcome.value = undefined;
-    error.value = null;
-    try {
-        const idToken = await getIdToken();
-        if (idToken === undefined) {
-            error.value = noticeOf(`Sign in with Google to reach your sandbox.`);
-            return;
-        }
-        const connectToken = attachConnectToken();
-        const outcome = await probeDaemon({ daemonUrl: url, idToken, ...(connectToken !== undefined ? { connectToken } : {}) });
-        if (outcome.kind !== `ok`) {
-            attachOutcome.value = outcome;
-            return;
-        }
-        // Row normally exists already; this only covers a lane switch made while the arrival's create was still
-        // failing.
-        if (created.value === null) {
-            await autoCreate();
-        }
-        const row = created.value;
-        if (row === null) {
-            return;
-        }
-        await sandbox.attach(row.id, url);
-        // Same milestone as the provision lane's announce; the workspace must open on this sandbox specifically.
-        track(`sandbox_connected`, { resuming: resuming.value, attached: true });
-        finished.value = true;
-        sandbox.select(row.id);
-        await enterWorkspace();
-    } catch (err) {
-        error.value = noticeFrom(err, `Could not connect your sandbox.`);
-    } finally {
-        attaching.value = false;
-    }
-};
-
-// Flips which lane step 1 heads; nothing is copied across since nothing is duplicated, including a half-finished
-// attach.
-const setLane = (next: "provision" | "attach"): void => {
+// Flips which lane step 1 heads; nothing is carried across, a half-finished attach included, and the chooser that
+// offered the lane has been answered.
+const setLane = (next: `provision` | `attach`): void => {
     lane.value = next;
-    attachOutcome.value = undefined;
-    attachToken.value = ``;
+    attach.resetAttach();
     error.value = null;
-    // The chooser that offered this lane has been answered; coming back must not find it still hanging open.
     reaching.value = false;
 };
 
-// The chooser's other answer: provision under the reader's own Cloudflare zone, a form rather than a lane, so
-// only mode moves.
+// The chooser's other answer: provision under the reader's own Cloudflare zone, a form rather than a lane.
 const chooseOwnZone = (): void => {
     mode.value = `own`;
     reaching.value = false;
 };
 
-// Mints the setup code (intentic path provisions the tunnel+DNS server-side first); NOT_FOUND means the feature
-// is off, falling back to own-Cloudflare. Stale-target responses are dropped.
-const mint = async (key: string): Promise<void> => {
-    if (created.value === null) {
-        return;
-    }
-    setupError.value = undefined;
-    try {
-        // The profile rides the code, not the command: the connect script exports what /setup/claim hands back, and
-        // the machine seeds its own half of the profile from that on first boot.
-        const minted = await apiClient.sandbox.setupCode({ sandboxId: created.value.id, profile: arrivingProfile() });
-        if (key !== targetKey.value) {
-            return;
-        }
-        setup.value = minted;
-        mintedFor.value = key;
-        // Fresh code means the handoff restarts: the old command was copied/handed, and the claim stamp just cleared.
-        copied.value = false;
-        launched.value = false;
-        claimedAt.value = null;
-    } catch (err) {
-        if (isNotFound(err)) {
-            // The platform runs no tunnel fabric: the attach lane is the only honest offer left.
-            intenticAvailable.value = false;
-        } else if (key === targetKey.value) {
-            setupError.value = noticeFrom(err, `Couldn't prepare your install command. Try again.`);
-        }
-    }
-};
-
-// Locally-built dev image; without it connect.sh pulls `:stable`, whose daemon predates unreleased routes.
-const DEV_SANDBOX_IMAGE = `intentic-sandbox:dev`;
-
-// Dev tag only when invoked by path (checkout form), the only form with a repo to build the tag from.
-const buildsFromCheckout = computed(() => platformUrlOverride.value !== undefined && scriptSource.value === `checkout`);
-
-// Env suffix each command carries: local-dev PLATFORM_URL override (plus shared agent-auth volume and the dev
-// image), and SYNC_DIR when sync is opted in.
-const platformEnv = (): string =>
-    platformUrlOverride.value
-        ? ` PLATFORM_URL='${platformUrlOverride.value}' INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'${
-              buildsFromCheckout.value ? ` SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'` : ``
-          }`
-        : ``;
-const platformEnvPs = (): string =>
-    platformUrlOverride.value
-        ? `$env:PLATFORM_URL='${platformUrlOverride.value}'; $env:INTENTIC_AGENT_AUTH_VOLUME='intentic-dev-agent-auth'; ${
-              buildsFromCheckout.value ? `$env:SANDBOX_IMAGE='${DEV_SANDBOX_IMAGE}'; ` : ``
-          }`
-        : ``;
-const syncEnv = (): string => (syncEnabled.value ? ` SYNC_DIR='${syncDir.value}'` : ``);
-const syncEnvPs = (): string => (syncEnabled.value ? `$env:SYNC_DIR='${syncDir.value}'; ` : ``);
-
-// This page's own origin, sent as WEB_ORIGIN unless it matches the default; else the sandbox's CORS blocks it.
-const webOrigin = (): string | undefined => (globalThis.location.origin === PLATFORM_WEB_ORIGIN ? undefined : globalThis.location.origin);
-const webOriginEnv = (): string => {
-    const origin = webOrigin();
-    return origin === undefined ? `` : ` WEB_ORIGIN='${origin}'`;
-};
-const webOriginEnvPs = (): string => {
-    const origin = webOrigin();
-    return origin === undefined ? `` : `$env:WEB_ORIGIN='${origin}'; `;
-};
-
-// Command carries only the setup code, plus the CF token as an env var on the own-Cloudflare path (never
-// stored). Everything between the pipe and `sh`: runner, then env assignments.
-const linuxPrefix = (): string => {
-    const envs = `${mode.value === `own` ? ` CF_TOKEN='${cfToken.value.trim()}'` : ``}${platformEnv()}${webOriginEnv()}${syncEnv()}`;
-    // Root only installs Docker in production (hasDocker drops it); sudo in local dev breaks the pnpm-built image.
-    const runner = environment.production && !hasDocker.value ? `sudo ` : ``;
-    return `${runner}${envs === `` ? `` : `env${envs} `}`;
-};
-
-const windowsEnv = (code: string): string => {
-    const cfEnv = mode.value === `own` ? `$env:CF_TOKEN='${cfToken.value.trim()}'; ` : ``;
-    return `${platformEnvPs()}${webOriginEnvPs()}${cfEnv}${syncEnvPs()}$env:SETUP_CODE='${code}'; `;
-};
-
-const selectedCommand = computed(() => {
-    const code = setup.value?.code;
-    if (code === undefined) {
-        return ``;
-    }
-    return cmdOs.value === `windows` ? psCommand(`ps1`, windowsEnv(code)) : bashCommand(`sh`, linuxPrefix(), code);
-});
-const selectedCommandLang = computed(() => commandLang(cmdOs.value));
-// Uninstaller offered beside the installer; removes every container, volume and network the command creates.
-const cleanupCommand = computed(() => (cmdOs.value === `windows` ? psCommand(`cleanupPs1`, ``) : bashCommand(`cleanup`, ``, ``)));
-
-const composeArgs = computed<ComposeArgs | undefined>(() => {
-    if (setup.value === null) {
-        return undefined;
-    }
-    return {
-        mode: mode.value,
-        code: setup.value.code,
-        hostname: setup.value.hostname,
-        ...(mode.value === `own` ? { cfToken: cfToken.value.trim() } : {}),
-        // Compose always references the published registry image, never the local `:dev` tag a deploy target can't
-        // pull.
-        image: `ghcr.io/intentic/sandbox:stable`,
-        googleClientId: environment.auth.googleClientId,
-        webOrigin: globalThis.location.origin,
-        ...(platformUrlOverride.value ? { platformUrl: platformUrlOverride.value } : {}),
-    };
-});
-
-// Which sandbox this page sets up: an id in the URL, else the account's one unfinished sandbox if it has no
-// working one, else a fresh one created on the spot. Gated on no connected sandbox existing anywhere; owned only.
-// Distinguishes resuming an errand from adopting a blank draft: a row exists from the moment /setup opens, so
-// simply finding one again (reload, tab reopen, the app's first frame) must not be read as a history. Only
-// genuine acts count.
-const touched = (row: SandboxSummary): boolean =>
-    // `?? null` on each: fields are optional as well as nullable, and `undefined !== null` would touch every row.
-    (row.lastSeenAt ?? null) !== null || (row.setupCodeClaimedAt ?? null) !== null || (row.setupReport ?? null) !== null;
-
-// A machine of ours on a row nothing has ever run on: history to resume in a browser, and in the app a machine to
-// hand back (setupArrival.ts), since it holds no work anyone could lose.
-const hostedIdle = (row: SandboxSummary): boolean => (row.hosted ?? null) !== null && (row.lastSeenAt ?? null) === null;
-
-// One offer read: a 404 is a real answer (feature genuinely off), but a timeout/drop/500 says nothing and must
-// not be recorded as one. Resolve-then-call so a missing client method lands in the catch, not on mount.
-const readOffer = <T,>(call: () => Promise<T>, absent: T): Promise<OfferRead<T>> =>
-    Promise.resolve()
-        .then(async (): Promise<OfferRead<T>> => ({ kind: `answered`, value: await call() }))
-        .catch((err: unknown): OfferRead<T> => (isNotFound(err) ? { kind: `answered`, value: absent } : { kind: `unreachable` }));
-
-// Fans the two reads out to three destinations answering different questions; a lost read resets
-// `intenticAvailable` to undefined, not false, so nothing false gets printed and nothing has to be retracted.
-const recordOffers = (hosted: OfferRead<HostedOffer>, address: OfferRead<AddressOffer>): void => {
-    hostedRead.value = hosted;
-    addressRead.value = address.kind === `answered` ? { kind: `answered`, value: address.value.enabled } : { kind: `unreachable` };
-    hostedOffer.value = hosted.kind === `answered` ? hosted.value : { enabled: false, remaining: 0 };
-    intenticAvailable.value = address.kind === `answered` ? address.value.enabled : undefined;
-};
-
-// Settles which row this visit works on: the one named in the query, else the account's single unfinished one, else
-// a fresh draft. Returns whether that row carries a machine nothing has ever run on (`hostedIdle` in setupArrival).
-const openRow = async (rows: readonly SandboxSummary[]): Promise<boolean> => {
-    const requested = route.query[`sandbox`];
-    const named = typeof requested === `string` ? rows.find((entry) => entry.id === requested) : undefined;
-    const unfinished = rows.some((entry) => entry.lastSeenAt !== null)
-        ? undefined
-        : rows.find((entry) => entry.role === `owner` && entry.lastSeenAt === null);
-    const found = named ?? unfinished;
-    if (found?.role !== `owner`) {
-        await autoCreate();
-        return false;
-    }
-    sandbox.select(found.id);
-    created.value = found;
-    resuming.value = touched(found);
-    return hostedIdle(found);
-};
-
-// Does what the decided arrival says, once: hands a machine back, resumes one, or starts one. False means what it
-// wanted was refused, so the caller puts the picker back with the reason already on the card.
-const takeArrival = async (asked: MachineOption[`value`] | undefined): Promise<boolean> => {
-    // This computer is the answer while a machine sits on the row: hand it back, exactly as clicking the rung does,
-    // since the local lane mints no setup code until the row carries none.
-    if (hostedRow.value !== null && (arrival.value === `local` || asked === `mine`) && !(await handBackMachine())) {
-        // Refused, so the machine is still there; the picker says so rather than a card awaiting a code never minted.
-        machine.value = `hosted`;
-        return false;
-    }
-    // Resumed sandbox still hosted continues that story; booting or asleep is handled by the wake reflex.
-    if (hostedRow.value !== null) {
-        machine.value = `hosted`;
-        hostedSince.value = Date.now();
-        void warmSandboxCredential();
-        return true;
-    }
-    // Browser's answer, taken automatically; a refusal puts the picker back with the reason on the card, rung shown.
-    if (arrival.value === `hosted`) {
-        machine.value = `hosted`;
-        if (!(await provisionHosted())) {
-            return false;
-        }
-        void warmSandboxCredential();
-        return true;
-    }
-    // The app's answer is this computer, and the handoff below fires it the moment there is a code to hand.
-    if (arrival.value === `local`) {
-        machine.value = `mine`;
-    }
-    return true;
-};
-
-const arrive = async (): Promise<void> => {
-    // Offers land together with the row list, so the ladder and address line are right on the first frame.
-    const [rows, hosted, address] = await Promise.all([
-        sandbox.list(),
-        readOffer(() => apiClient.sandbox.hostedOffer(), { enabled: false, remaining: 0 }),
-        readOffer(() => apiClient.sandbox.addressOffer(), { enabled: false }),
-    ]);
-    recordOffers(hosted, address);
-    const idleMachine = await openRow(rows);
-    // A rung picked before this page outranks the arrival: preselects the picker and is `arrivalFor`'s own answer.
-    const asked = requestedMachine();
-    if (asked !== undefined) {
-        machine.value = asked;
-    }
-    // What this page does unasked (setupArrival.ts); decided here since every input is one of the two reads above.
-    arrival.value = arrivalFor({
-        inApp: desktop.value,
-        // Read before the auto-create above, so a row minted seconds ago is never counted as company for itself.
-        onlySandbox: rows.every((row) => row.id === created.value?.id),
-        touched: resuming.value,
-        hostedIdle: idleMachine,
-        // Only `autoCreate` sets this, so it's exactly true: the row was minted by this visit and nothing else.
-        fresh: createdHere.value,
-        hostedOffered: hostedOffered.value,
-        hostedSpent: hostedSpent.value,
-        hostedFull: hostedFull.value,
-        commandOffered: commandOffered.value,
-        requestedMachine: asked,
-        elsewhere: elsewhere.value,
-    });
-    // Nothing takeable means nothing to start; the page states which of the four lane facts holds, never switches.
-    // A row carrying a machine is takeable by definition, so nothing below is skipped while one exists.
-    if (!laneTakeable.value) {
-        return;
-    }
-    if (!(await takeArrival(asked))) {
-        arrival.value = `choose`;
-    }
-};
-
-// Retries the arrival read; safe to run twice since it finds the same unfinished row rather than creating a
-// second one. `loaded` drops during the round trip so the spinner replaces the card.
-const retryArrival = async (): Promise<void> => {
-    loaded.value = false;
-    try {
-        await arrive();
-    } finally {
-        loaded.value = true;
-    }
-};
-
-// Fires the app handoff once a code exists for the `local` arrival, one shot only: a re-mint (lane switch,
-// retry) is ordinary here and must not reopen the app's installer window each time.
-const handedOff = ref(false);
-watch([arrival, commandReady], () => {
-    if (arrival.value !== `local` || !commandReady.value || handedOff.value) {
-        return;
-    }
-    handedOff.value = true;
-    runHere();
-});
-
-onMounted(async () => {
-    try {
-        await arrive();
-    } finally {
-        // Read finished or threw either way; a thrown read leaves the retry card instead of a spinner that never stops.
-        loaded.value = true;
-    }
-});
-
-// Draft rule: the row created on arrival is a draft until an act commits it, never a guess from elapsed time:
-//   the command is on a clipboard, in an inbox, or handed to the app
-//   a machine of ours exists
-//   a machine redeemed the code, or reported on its run
-//   the daemon checked in, or an attach bound one
-// Lane, rung, disclosures, and an unverified pasted token or domain don't count.
+// The draft rule: the row made on arrival is a draft until an act commits it, never a guess from elapsed time. The
+// command copied, mailed or handed to the app; a machine of ours on it; a code redeemed or a run reported; a check-in.
 const committed = computed(
     () =>
         finished.value ||
@@ -1323,55 +252,27 @@ const committed = computed(
         hostedRow.value !== null,
 );
 
-// Deletes the draft row and its tunnel so a peek leaves nothing behind; fire-and-forget, since every caller is
-// already navigating away. A failure is swallowed; an outliving row is what the switcher's unfinished section
-// catches.
-const discardDraft = (): void => {
-    const row = created.value;
-    if (row === null || !createdHere.value || committed.value) {
-        return;
-    }
-    createdHere.value = false;
-    created.value = null;
-    void sandbox.remove(row.id).catch(() => undefined);
-};
-
-// Forgets a resumed sandbox and starts a new one; everything derived from the old one (code, hostname,
-// subdomain) resets too.
+// Forgets the row on screen for a new one, and everything derived from it; the old row is discarded as leaving would.
 const startFresh = (): void => {
-    // Walking away from a row this visit minted discards it, same as leaving the page; a resumed row is untouched.
-    discardDraft();
-    resuming.value = false;
-    created.value = null;
-    error.value = null;
-    setup.value = null;
-    mintedFor.value = undefined;
-    setupError.value = undefined;
-    // Abandoned hosted sandbox keeps existing; the fresh one starts classic, since the allowance is likely spent.
-    hostedSince.value = undefined;
+    row.discardDraft(committed.value);
+    row.forget();
+    command.forget();
+    forgetArrival();
+    // An abandoned hosted sandbox keeps existing; the fresh one starts on the own-computer rung.
+    hosted.hostedSince.value = undefined;
     machine.value = `mine`;
-    // Arrival is spent: the replacement lands on the picker, not another auto-started machine; handoff is released.
-    arrival.value = `choose`;
-    handedOff.value = false;
-    // Handoff facts (copied, launched, claimed) belonged to the abandoned command; irrelevant to the next sandbox.
-    copied.value = false;
-    launched.value = false;
-    claimedAt.value = null;
     subdomain.value = ``;
     derivedPrefix.value = ``;
-    // Attach inputs described the abandoned sandbox; otherwise a stale domain sits ready to attach to the next one.
     domain.value = ``;
-    attachToken.value = ``;
-    attachOutcome.value = undefined;
-    void router.replace({ path: `/setup` }); // drop ?sandbox= so a reload doesn't re-resume
-    // There is no blank form to drop to any more: the replacement is created here, exactly as it is on arrival.
+    attach.resetAttach();
+    // Dropping ?sandbox= keeps a reload from resuming the abandoned row.
+    void router.replace({ path: `/setup` });
     void autoCreate();
 };
 
-// Names the row in the URL the moment one is settled, so this page survives being reloaded onto. `openRow` reads
-// `?sandbox=` first and only re-derives a row when it finds none — and its fallback is to CREATE one, which is how a
-// reload mid-install left a reader with a second sandbox while the first was still pulling its image. A replace, not
-// a push: the reader took no navigation step, so the back button must not have to undo one.
+// Names the settled row in the URL, so the page survives a reload onto it: without it the arrival re-derives a row, and
+// its fallback is to create one, leaving a second sandbox while the first still pulls its image. A replace, since the
+// reader took no navigation step.
 watch(
     () => created.value?.id,
     (id) => {
@@ -1383,57 +284,9 @@ watch(
     { immediate: true },
 );
 
-// Watch the registry while we sit on /setup; the moment the daemon reports in, open the workspace.
-const timer = setInterval(() => void check(), 3000);
-
-// Rechecks on refocus, since a hidden tab (the whole install, inside the app) throttles the 3s timer to much
-// longer. `check` is re-entrant, so this costs nothing mid-poll.
-const recheck = (): void => {
-    if (document.visibilityState === `visible`) {
-        void check();
-    }
-};
-document.addEventListener(`visibilitychange`, recheck);
-window.addEventListener(`focus`, recheck);
-
-onUnmounted(() => {
-    hostedAction += 1;
-    clearInterval(timer);
-    clearTimeout(mintTimer);
-    document.removeEventListener(`visibilitychange`, recheck);
-    window.removeEventListener(`focus`, recheck);
-    // Leaving without committing discards the draft; the only exit hook, since beforeunload can't hold a round trip.
-    discardDraft();
-});
-
-// Mints the code once the target completes, debounced against keystrokes; a switch re-fires this on its own.
+// Derives the default `sandbox-<hash>` prefix (as the CLI does), pre-filling a subdomain nobody has typed. The owner's
+// row carries its token; a member's null one never reaches this page.
 watch(
-    targetKey,
-    () => {
-        clearTimeout(mintTimer);
-        const key = targetKey.value;
-        if (key === undefined || created.value === null || mintedFor.value === key) {
-            return;
-        }
-        mintTimer = setTimeout(() => void mint(key), 500);
-    },
-    { immediate: true },
-);
-
-// Retries a failed mint; the watcher above only fires on a changed target, and a failure doesn't change what
-// was asked for.
-const remint = (): void => {
-    const key = targetKey.value;
-    if (key === undefined) {
-        return;
-    }
-    setupError.value = undefined;
-    void mint(key);
-};
-
-// Derives the default sandbox-<hash> prefix (mirrors the CLI); pre-fills subdomain if the user hasn't typed one.
-watch(
-    // The setup wizard is the owner's, so the row it creates carries its token; null (a member's row) never reaches here.
     () => created.value?.token ?? undefined,
     async (token) => {
         if (token === undefined) {
@@ -1447,8 +300,7 @@ watch(
     { immediate: true },
 );
 
-// Warms the browser→sandbox Google credential the moment the command is ready, fired once; silent only; a full
-// sign-in gate here would ask the user to sign in twice before anything is even running.
+// Warms the browser's sandbox credential once, the moment a command is ready, silently only.
 let credentialWarmed = false;
 watch(commandReady, (ready) => {
     if (ready && !credentialWarmed) {
@@ -1457,14 +309,9 @@ watch(commandReady, (ready) => {
     }
 });
 
-// Hosted lane's version of the same warming, since it never renders a command to trigger the watcher above;
-// makes one silent attempt (never the full gate) while the reader watches the machine boot.
-const warmSandboxCredential = async (): Promise<void> => {
-    await warmIdToken();
-    if ((await getIdToken({ interactive: false })) === undefined) {
-        await getIdToken({ silent: true });
-    }
-};
+onMounted(readArrival);
+// Leaving without committing discards the draft: the only exit hook, since beforeunload cannot hold a round trip.
+onUnmounted(() => row.discardDraft(committed.value));
 </script>
 
 <template>
@@ -1584,7 +431,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                             </button>
                             <span v-else class="mt-1 block text-2xs">
                                 {{ t(`setup.setup.daemonsWebOrigin`) }} <code>WEB_ORIGIN</code> {{ t(`setup.setup.alsoToName`) }}
-                                <span>{{ webOrigin() ?? PLATFORM_WEB_ORIGIN }}</span
+                                <span>{{ webOrigin ?? PLATFORM_WEB_ORIGIN }}</span
                                 >. Otherwise your browser blocks the call before it's sent.
                             </span>
                         </Notice>
@@ -1695,7 +542,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                                     detail: `Nothing is wrong with your account — the check itself didn't get through.`,
                                 }"
                             />
-                            <Button :label="t(`ui.action.tryAgain`)" class="w-full justify-center md:w-fit" @click="retryArrival">
+                            <Button :label="t(`ui.action.tryAgain`)" class="w-full justify-center md:w-fit" @click="readArrival">
                                 <template #icon><Icon name="refresh" /></template>
                             </Button>
                         </template>
@@ -2164,7 +1011,7 @@ const warmSandboxCredential = async (): Promise<void> => {
                         </template>
 
                         <!-- Keep the spinner visible while polling and use color to show ownership. -->
-                        <div v-if="waiting" class="flex flex-col gap-2">
+                        <div v-if="commandReady" class="flex flex-col gap-2">
                             <!-- Spinner doesn't survive a failure report; spinning beside 'here is what broke' would contradict itself. -->
                             <p
                                 v-if="reportFailures === null"

@@ -1,7 +1,7 @@
 import type { Logger } from "pino";
 import { isCandidatePath } from "@intentic/fileq/formats";
 import type { DerivedState, SidecarStatus } from "@intentic/sandbox-contract";
-import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { stateRelPath } from "../state-paths.js";
 import { defaultExec, FILEQ_MAX_BUFFER, isMissingBinary, type ExecFn } from "./fileq.js";
 
 // Background half of fileq: converges markdown shadows of binary files so a reasoning-time read finds one ready, gated

@@ -8,7 +8,7 @@ import { pack } from "tar-stream";
 import { fakeFiles } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
-import { testConfig } from "../testing.js";
+import { beginTurn, testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { createArrivals } from "./arrival.js";
 import { packBundle } from "./bundle.js";
@@ -125,5 +125,21 @@ test("abandoning drops the held artifact and answers whether there was one", asy
 test("a document that is TOML but not a definition is refused by what it says, not by its extension", async () => {
     const arrivals = createArrivals(servicesFor(await makeRoots()));
     await expect(arrivals.plan(streamOf('title = "just some toml"\n'), LIMIT)).rejects.toThrow(/not a sandbox definition/);
+    await cleanup();
+});
+
+// The registry takes in what the database adopted, so a moved conversation needs no restart to be on the board.
+test("a bundle's conversations are on the target's board the moment it lands", async () => {
+    const from = servicesFor(await makeRoots());
+    await beginTurn(from.conversations, { conversationId: "moved-1", isolated: false, prompt: "carry me over", profile: {} }, 1_000);
+    await from.conversations.send("moved-1", { kind: "settle" }, 2_000).settled;
+    const to = servicesFor(await makeRoots());
+    const arrivals = createArrivals(to);
+
+    const plan = await arrivals.plan(packBundle(from, { secrets: false, now: 1_700_000_000_000 }), LIMIT);
+    await arrivals.apply({ token: plan.token, items: plan.items.map((item) => item.id), includeSecrets: false });
+
+    expect(to.agents.entry("moved-1")).toEqual(from.agents.entry("moved-1"));
+    expect(to.agents.list().map((summary) => summary.id)).toEqual(["moved-1"]);
     await cleanup();
 });

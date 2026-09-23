@@ -41,27 +41,22 @@ const MODEL = `a-model`;
 // The conversation as this panel reads it: just the refs it binds and the writes it makes, no transcript machinery.
 const conversationOf = (pair: { provider: AgentProvider; harness: AgentHarness }, auto = false, sent = 0): Conversation =>
     ({
-        provider: ref(pair.provider),
-        harness: ref(pair.harness),
-        model: ref(MODEL),
-        thinking: ref(false),
-        fast: ref(false),
-        effort: computed(() => ``),
+        selection: {
+            provider: ref(pair.provider),
+            harness: ref(pair.harness),
+            model: ref(MODEL),
+            thinking: ref(false),
+            fast: ref(false),
+            effort: computed(() => ``),
+            auto: ref(auto),
+            account: ref(undefined),
+            capabilities: computed(() => capabilitiesOf(pair.provider, pair.harness)),
+            apply: mock(),
+        },
         fastMode: ref(undefined),
-        auto: ref(auto),
-        messages: ref(Array.from({ length: sent }, () => ({}))),
         box: ref(undefined),
-        streaming: ref(false),
-        generating: computed(() => false),
-        account: ref(undefined),
-        capabilities: computed(() => capabilitiesOf(pair.provider, pair.harness)),
-        selectModel: mock(),
-        selectAccount: mock(),
-        selectHarness: mock(),
-        setEffort: mock(),
-        setThinking: mock(),
-        setFast: mock(),
-        setAuto: mock(),
+        transcript: { messages: ref(Array.from({ length: sent }, () => ({}))) },
+        turn: { streaming: ref(false), generating: computed(() => false) },
     }) as unknown as Conversation;
 
 let app: App | undefined;
@@ -154,7 +149,7 @@ it(`says nothing at all when the runtime is the ceiling`, () => {
 it(`asks the thinking question with the shared chip`, () => {
     const { element, conversation } = mount(CEILING);
 
-    expect(chips(element)).toEqual({ "Extended thinking": conversation.thinking.value });
+    expect(chips(element)).toEqual({ "Extended thinking": conversation.selection.thinking.value });
 });
 
 // The chip is the whole control: pressing it writes the opposite of what it is showing, and nothing else.
@@ -165,9 +160,9 @@ it(`writes the chip's opposite straight through to the conversation`, async () =
     chip(element, `Extended thinking`).click();
     await nextTick();
 
-    expect(conversation.setThinking).toHaveBeenCalledWith(true);
+    expect(conversation.selection.apply).toHaveBeenCalledWith({ kind: `setThinking`, thinking: true });
     // No third state to land in: the only two calls this chip can make are the two booleans.
-    expect(conversation.setThinking).toHaveBeenCalledTimes(1);
+    expect(conversation.selection.apply).toHaveBeenCalledTimes(1);
 });
 
 // Speed is the second Claude switch and the same chip, offered only where the catalog publishes the badge.
@@ -179,7 +174,7 @@ it(`asks the speed question with the same chip, and writes the press through`, a
 
     chip(element, `Fast speed`).click();
     await nextTick();
-    expect(conversation.setFast).toHaveBeenCalledWith(true);
+    expect(conversation.selection.apply).toHaveBeenCalledWith({ kind: `setFast`, fast: true });
 });
 
 /* THE METER IS THE ONE CONTROL THIS PICKER LEAVES OUT (`effortRow`), and not a preference: ComposerEffort draws it beside the model pill. */
@@ -189,7 +184,7 @@ it(`leaves the reasoning-effort row to the meter beside the model pill`, () => {
     // The shared control IS drawn here; the meter is the one part of it drawn without.
     expect(chips(element)).toEqual({ "Extended thinking": false });
     // And the rungs exist for this model, so the row is withheld rather than empty.
-    expect(effortsFor(CEILING.provider, MODEL, conversation.thinking.value).length).toBeGreaterThan(1);
+    expect(effortsFor(CEILING.provider, MODEL, conversation.selection.thinking.value).length).toBeGreaterThan(1);
     expect(element.textContent).not.toContain(`Reasoning effort`);
 });
 
@@ -199,7 +194,7 @@ it(`draws no footer at all when the withheld meter was the only row left`, () =>
 
     const { element, conversation } = mount(BARE);
 
-    expect(effortsFor(BARE.provider, MODEL, conversation.thinking.value).length).toBeGreaterThan(1);
+    expect(effortsFor(BARE.provider, MODEL, conversation.selection.thinking.value).length).toBeGreaterThan(1);
     expect(element.textContent).toBe(``);
 });
 

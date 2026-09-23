@@ -1,0 +1,607 @@
+import {
+    type AgentEvent,
+    type AgentJob,
+    type AgentOrigin,
+    type AgentSummary,
+    type AgentWatch,
+    type ForkedFrom,
+    RESUME_NOTES,
+    RETRY_LADDER_TRIES,
+    type SessionOwner,
+    type TodoItem,
+    type TurnProfile,
+} from "@intentic/sandbox-contract";
+import type { TurnCheckpoint } from "../../agent/checkpoints/turn-checkpoints.js";
+import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
+import type { AuthFailure, HeldTurn, OutageFailure } from "../../agent/run/turn/turn-resume.js";
+import type { CheckRun, CheckVerdict } from "../../agent/verification/turn-checks.js";
+import { opt } from "../../opt.js";
+import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
+import {
+    type ConversationState,
+    freshRuntime,
+    type HeldRecord,
+    NO_USAGE,
+    type ParkKind,
+    type RunningPhase,
+    runningPhase,
+    type StopEnding,
+    type TurnRuntime,
+    type TurnUsage,
+} from "./conversation-state.js";
+
+// The conversation's one writer: an event and the state it meets become the next state, the effects to perform, and
+// the answer owed to whoever sent it. Pure: the persisted entry arrives as a value, time as `now`, and every write
+// beyond the state (the entry, the roster broadcast, the transcript index) leaves as data for the runner.
+
+// What `begin` records for a turn: its profile whole, and what only a conversation's opening turn decides (title,
+// origin, start folder, starter, owner, fence), each latched on the first turn and ignored on every later one.
+export interface BeginTurn {
+    readonly conversationId: string;
+    readonly prompt: string;
+    readonly profile: TurnProfile;
+    // Placement as the conversation decided it; the profile's own `isolated` is only what the request asked for.
+    readonly isolated: boolean;
+    // Latched like `isolated`; only a conversation never seen before takes the request's runner.
+    readonly runner?: string;
+    readonly title?: string;
+    readonly origin?: AgentOrigin;
+    readonly startIn?: string;
+    // Who asked for this turn, as the daemon verified it.
+    readonly startedBy?: string;
+    // The member the conversation belongs to when this turn opens it.
+    readonly owner?: Pick<SessionOwner, "email" | "name">;
+    // The fence that member holds, as area ids.
+    readonly areas?: readonly string[];
+    readonly forkedFrom?: ForkedFrom;
+}
+
+// How the settling turn ended, read before the settle resets what says so. A turn that ran to its own end speaks for
+// the whole checklist; one cut short learned nothing about what it did not see; `none` is a settle with no turn.
+export type TurnEnding = "clean" | "cut" | "none";
+
+// What the settle folds into the entry, as the turn left it.
+export interface SettleFlush {
+    // Whether a turn was live, so a manual land's settle does not count one.
+    readonly ranTurn: boolean;
+    readonly stopped: StopEnding | undefined;
+    readonly ending: TurnEnding;
+    readonly failure: FailedEnding | undefined;
+    readonly usage: TurnUsage;
+    readonly sessionId: string | undefined;
+    readonly checklist: readonly TodoItem[] | undefined;
+    readonly check: { readonly label: string; readonly failed: boolean } | undefined;
+}
+
+export type ConversationEvent =
+    // Claims the conversation for a turn unless a turn or a rewind already holds it.
+    | { readonly kind: "begin"; readonly turn: BeginTurn }
+    // The in-flight record of the run that holds, or is about to hold, this conversation's turn, whole as of now: held
+    // for the `begin` that writes it with its entry, then written through as it changes.
+    | { readonly kind: "journalled"; readonly entry: JournalledTurn }
+    // That run is over and its transcript is down; its record goes.
+    | { readonly kind: "unjournalled" }
+    // One frame of the live turn, folded into what the card shows.
+    | { readonly kind: "frame"; readonly frame: AgentEvent }
+    // A stop or a dismissal, recorded the instant it lands, ahead of the seconds-long unwind.
+    | { readonly kind: "stop"; readonly ending: StopEnding }
+    // A turn.ending check ran: the card's line on it, and, for a command rule, the verdict the land will take.
+    | { readonly kind: "check-ran"; readonly check: CheckRun }
+    // The land takes the verdict, whatever the turn did, so a verdict never outlives the turn that ran its check.
+    | { readonly kind: "verdict-taken" }
+    // The turn is over, however it ended; a manual land settles a resting card the same way.
+    | { readonly kind: "settle" }
+    // A restored card's answer will re-run the turn; holds the card through the settle that precedes it.
+    | { readonly kind: "resume-promised" }
+    // The recovery is not coming; settles the card into the failure it was holding open.
+    | { readonly kind: "resume-abandoned"; readonly reason: string }
+    | { readonly kind: "land-leased" }
+    | { readonly kind: "land-released" }
+    | { readonly kind: "rewind-leased" }
+    | { readonly kind: "rewind-released" }
+    // A rewind restored files the session no longer describes; the next turn opens a fresh thread.
+    | { readonly kind: "session-cleared" }
+    // A wall stranded the settling turn: a refused credential to re-mint, an outage to wait out, or a turn held whole.
+    | { readonly kind: "auth-refused"; readonly failure: AuthFailure }
+    | { readonly kind: "outage-stranded"; readonly failure: OutageFailure }
+    | { readonly kind: "turn-held"; readonly held: HeldTurn }
+    // A turn settled with nothing held: the run got somewhere, so the stop ladder starts from its first rung again.
+    | { readonly kind: "turn-got-somewhere" }
+    // A new turn supersedes every pending resume; the held turn it replaces is the answer, for its ledgers.
+    | { readonly kind: "resume-superseded" }
+    // A re-mint attempt starting or ending.
+    | { readonly kind: "auth-firing"; readonly firing: boolean }
+    // One stranded record the resume pass is finished with.
+    | { readonly kind: "resume-dropped"; readonly record: "auth" | "outage" | "held" }
+    // The held turn's one dispatch, a limit's appointment or a stop-ladder rung; answers whether it may go.
+    | { readonly kind: "held-fired"; readonly ladder: boolean }
+    // A spent stop ladder stands down: the hold goes, and so does the count it spent.
+    | { readonly kind: "ladder-spent" }
+    // A turn took the conversation's steering seam; it starts unwatched, whatever the last one was.
+    | { readonly kind: "turn-registered" }
+    // A person's words reached the live turn.
+    | { readonly kind: "person-steered" }
+    // A steered message's checkpoint box, reserved before its capture starts; answers the box's id.
+    | { readonly kind: "steer-reserved" }
+    | { readonly kind: "steer-captured"; readonly slot: number; readonly checkpoint: TurnCheckpoint }
+    // The settle files every box under its row; answers them in the order reserved, and leaves none behind.
+    | { readonly kind: "steers-taken" }
+    // A restored card's permission, for the resumed turn's gate to take instead of asking again.
+    | { readonly kind: "grant-restored"; readonly tool: string; readonly always: boolean }
+    // The gate asks for a grant on this tool; answered once, and only while fresh.
+    | { readonly kind: "grant-taken"; readonly tool: string }
+    // A proof follow-up was sent; the turn it starts must not be nudged in turn.
+    | { readonly kind: "nudge-armed" }
+    // The nudge guard is spent, by the next ask or by a follow-up that never started; answers whether it was armed.
+    | { readonly kind: "nudge-disarmed" }
+    // The card's list of the conversation's background jobs, whole, as their registry now reads it.
+    | { readonly kind: "jobs-shown"; readonly jobs: readonly AgentJob[] }
+    // The card's list of its armed watches, whole; empty once the last one fires or is stopped.
+    | { readonly kind: "watches-shown"; readonly watches: readonly AgentWatch[] }
+    // Where its loop stands, at each iteration boundary and once more at the end.
+    | { readonly kind: "loop-shown"; readonly loop: NonNullable<AgentSummary["loop"]> }
+    // The workflow step it runs, as that step starts.
+    | { readonly kind: "workflow-shown"; readonly workflow: NonNullable<AgentSummary["workflow"]> };
+
+export type ConversationEffect =
+    // Publishes the whole roster; readers take the state as it is by then.
+    | { readonly kind: "broadcast" }
+    // Writes the entries to disk; what an awaited send waits on.
+    | { readonly kind: "persist" }
+    // Re-derives every land standing; a settled card must go out with the standing its turn left.
+    | { readonly kind: "reprobe" }
+    // The turn's entry, and its journal row when the run filed one: written together by the `persist` after it.
+    | { readonly kind: "entry-opened"; readonly turn: BeginTurn; readonly inFlight?: JournalledTurn }
+    // The begun run's journal row rewritten, or deleted, on its own.
+    | { readonly kind: "journal-written"; readonly entry: JournalledTurn }
+    | { readonly kind: "journal-cleared" }
+    | { readonly kind: "entry-settled"; readonly flush: SettleFlush }
+    | { readonly kind: "entry-abandoned"; readonly failure: string | undefined }
+    // The session and the account that minted it, written through at once, fire-and-forget.
+    | { readonly kind: "session-bound"; readonly sessionId: string; readonly account: string | undefined }
+    | { readonly kind: "session-dropped" }
+    // A plan's heading offered as the title; the registry's ranking decides whether it lands.
+    | { readonly kind: "title-planned"; readonly text: string }
+    // A compaction filed under the turn it happened in, once per turn.
+    | { readonly kind: "compacted" }
+    // The prompt filed for search under a provider session, and under the conversation itself.
+    | { readonly kind: "session-prompt"; readonly sessionId: string; readonly prompt: string }
+    | { readonly kind: "conversation-prompt"; readonly prompt: string };
+
+// What each event answers; every other event answers nothing.
+interface Replies {
+    readonly begin: boolean;
+    readonly "resume-superseded": HeldRecord | undefined;
+    readonly "held-fired": boolean;
+    readonly "steer-reserved": number | undefined;
+    readonly "steers-taken": readonly (TurnCheckpoint | undefined)[];
+    readonly "grant-taken": { readonly always: boolean } | undefined;
+    readonly "nudge-disarmed": boolean;
+    readonly "verdict-taken": CheckVerdict | undefined;
+    readonly "resume-abandoned": boolean;
+    readonly "rewind-leased": boolean;
+}
+
+export type ReplyOf<E extends ConversationEvent> = E["kind"] extends keyof Replies ? Replies[E["kind"]] : undefined;
+
+export interface Decision<R> {
+    readonly state: ConversationState;
+    readonly effects: readonly ConversationEffect[];
+    readonly reply: R;
+}
+
+// Long enough for a provider's own explanation; short enough that a stack trace or error page can't ride into the
+// roster. One bounded line, no newlines; empty collapses to `undefined`.
+const MAX_FAILURE_LENGTH = 400;
+const sanitizeFailure = (message: string): string | undefined => {
+    const clean = message.replaceAll(/\s+/gu, " ").trim().slice(0, MAX_FAILURE_LENGTH);
+    return clean === "" ? undefined : clean;
+};
+
+// The frame's own verdict decides, not the code, except a rate limit: its reopening can be hours away, so it is
+// recorded as a failure rather than hidden as work in progress.
+const comingBackNow = (event: Extract<AgentEvent, { kind: "error" }>): boolean => event.autoResume === "scheduled" && event.code !== "rate_limit";
+
+// A spent allowance is its own kind: the only failure with a reopening, a hold, a booking and a move to carry.
+const failureOf = (event: Extract<AgentEvent, { kind: "error" }>): FailedEnding => {
+    const failure = sanitizeFailure(event.message);
+    if (event.code !== "rate_limit") {
+        return { kind: "failed", ...opt("failure", failure), ...opt("code", event.code) };
+    }
+    return {
+        kind: "limited",
+        ...opt("failure", failure),
+        ...opt("resetsAt", event.resetsAt),
+        held: event.held !== undefined,
+        // The daemon's own verdict for this failure; the firing pass reads the same value, so card and schedule agree.
+        scheduled: event.autoResume === "scheduled",
+        ...opt("moving", event.held?.moving),
+    };
+};
+
+// Half a pair names no deadline, so the frame is read only whole; a frame carrying neither leaves the last one standing.
+const promptCacheOf = (event: Extract<AgentEvent, { kind: "context_usage" }>, last: TurnRuntime["promptCache"]): TurnRuntime["promptCache"] =>
+    event.cachedAt !== undefined && event.cacheTtlMs !== undefined ? { at: event.cachedAt, ttlMs: event.cacheTtlMs } : last;
+
+const unchanged = <R>(state: ConversationState, reply: R): Decision<R> => ({ state, effects: [], reply });
+
+const BROADCAST: readonly ConversationEffect[] = [{ kind: "broadcast" }];
+
+// A frame that changes only the turn's runtime, and is card-visible.
+const shown = (state: ConversationState, turn: TurnRuntime): Decision<undefined> => ({
+    state: { ...state, turn },
+    effects: BROADCAST,
+    reply: undefined,
+});
+
+const withParked = (running: RunningPhase, parked: RunningPhase["parked"]): RunningPhase => ({ ...running, parked });
+
+type ParkFrame = Extract<AgentEvent, { kind: ParkKind }>;
+
+// A card raised on a live turn parks it; one raised on a turn being torn down, or on no turn, has nowhere to go. A
+// plan's heading is offered as the title first, so a plan raised behind a stop still names the job.
+const onPark = (state: ConversationState, turn: TurnRuntime, event: ParkFrame): Decision<undefined> => {
+    const lead: readonly ConversationEffect[] = event.kind === "plan" ? [{ kind: "title-planned", text: event.text }] : [];
+    const running = runningPhase(state);
+    if (running === undefined || running.stopping !== undefined) {
+        return { state: { ...state, turn }, effects: lead, reply: undefined };
+    }
+    const card = { requestId: event.requestId, kind: event.kind };
+    const at = running.parked.findIndex((held) => held.requestId === card.requestId);
+    const parked = at === -1 ? [...running.parked, card] : running.parked.map((held, index) => (index === at ? card : held));
+    return { state: { ...state, phase: withParked(running, parked), turn }, effects: [...lead, { kind: "broadcast" }], reply: undefined };
+};
+
+// Nothing to release means nothing to publish: a daemon restarted mid-park never saw the card go up.
+const onResolved = (state: ConversationState, turn: TurnRuntime, requestId: string): Decision<undefined> => {
+    const running = runningPhase(state);
+    if (running === undefined || !running.parked.some((card) => card.requestId === requestId)) {
+        return { state: { ...state, turn }, effects: [], reply: undefined };
+    }
+    const parked = running.parked.filter((card) => card.requestId !== requestId);
+    return { state: { ...state, phase: withParked(running, parked), turn }, effects: BROADCAST, reply: undefined };
+};
+
+const onSession = (state: ConversationState, turn: TurnRuntime, event: Extract<AgentEvent, { kind: "session" }>): Decision<undefined> => {
+    const filed: readonly ConversationEffect[] =
+        turn.promptToFile === undefined ? [] : [{ kind: "session-prompt", sessionId: event.sessionId, prompt: turn.promptToFile }];
+    return {
+        state: { ...state, turn: { ...turn, sessionId: event.sessionId, promptToFile: undefined } },
+        effects: [{ kind: "session-bound", sessionId: event.sessionId, account: event.account }, ...filed],
+        reply: undefined,
+    };
+};
+
+type Spent = { readonly [K in keyof TurnUsage]?: number | undefined };
+
+const counted = (turn: TurnRuntime, spent: Spent): TurnRuntime => ({
+    ...turn,
+    usage: {
+        costUsd: turn.usage.costUsd + (spent.costUsd ?? 0),
+        inputTokens: turn.usage.inputTokens + (spent.inputTokens ?? 0),
+        outputTokens: turn.usage.outputTokens + (spent.outputTokens ?? 0),
+        toolUses: turn.usage.toolUses + (spent.toolUses ?? 0),
+        subagents: turn.usage.subagents + (spent.subagents ?? 0),
+    },
+});
+
+const onToolCall = (state: ConversationState, turn: TurnRuntime, frame: Extract<AgentEvent, { kind: "tool_call" }>): Decision<undefined> =>
+    shown(state, {
+        ...counted(turn, { toolUses: 1 }),
+        activity: {
+            tool: frame.name,
+            ...(frame.target !== undefined ? { target: frame.target } : {}),
+            ...(turn.activity?.todo !== undefined ? { todo: turn.activity.todo } : {}),
+        },
+    });
+
+// Every `todos` frame carries the complete list, never a patch, so the last one is the final word.
+const onTodos = (state: ConversationState, turn: TurnRuntime, frame: Extract<AgentEvent, { kind: "todos" }>): Decision<undefined> => {
+    const current = frame.items.find((item) => item.status === "in_progress")?.content;
+    return shown(state, { ...turn, activity: { ...turn.activity, ...(current !== undefined ? { todo: current } : {}) }, checklist: frame.items });
+};
+
+// A scheduled resume is not how the turn ended; it still reads as work in progress, and says so without a broadcast.
+const onError = (state: ConversationState, turn: TurnRuntime, frame: Extract<AgentEvent, { kind: "error" }>): Decision<undefined> =>
+    comingBackNow(frame)
+        ? unchanged({ ...state, turn: { ...turn, resuming: true } }, undefined)
+        : shown(state, { ...turn, failure: failureOf(frame) });
+
+type FrameHandler<K extends AgentEvent["kind"]> = (
+    state: ConversationState,
+    turn: TurnRuntime,
+    frame: Extract<AgentEvent, { kind: K }>,
+) => Decision<undefined>;
+
+// Every frame not named here (deltas, thinking, text) moves only the card's recency, with no broadcast.
+const FRAMES: { readonly [K in AgentEvent["kind"]]?: FrameHandler<K> } = {
+    plan: onPark,
+    question: onPark,
+    permission: onPark,
+    browser_help: onPark,
+    terminal_help: onPark,
+    capability_offer: onPark,
+    credential_offer: onPark,
+    session: onSession,
+    resolved: (state, turn, frame) => onResolved(state, turn, frame.requestId),
+    usage: (state, turn, frame) => shown(state, counted(turn, frame)),
+    context_usage: (state, turn, frame) =>
+        shown(state, {
+            ...turn,
+            contextTokens: frame.tokens,
+            contextWindow: frame.contextWindow,
+            promptCache: promptCacheOf(frame, turn.promptCache),
+        }),
+    tool_call: onToolCall,
+    todos: onTodos,
+    // The lifetime count is taken only at birth; the live registry sweeps a settled child and forgets it.
+    subagent: (state, turn) => shown(state, counted(turn, { subagents: 1 })),
+    subagent_update: (state, turn, frame) => (frame.status === undefined ? unchanged({ ...state, turn }, undefined) : shown(state, turn)),
+    compact: (state, turn) => ({ state: { ...state, turn }, effects: [{ kind: "compacted" }], reply: undefined }),
+    error: onError,
+};
+
+const onFrame = (state: ConversationState, frame: AgentEvent, now: number): Decision<undefined> => {
+    const turn: TurnRuntime = { ...state.turn, lastAt: now };
+    const handler = FRAMES[frame.kind] as FrameHandler<AgentEvent["kind"]> | undefined;
+    return handler === undefined ? unchanged({ ...state, turn }, undefined) : handler(state, turn, frame);
+};
+
+// Both holders of the mutex are read together, and the claim is this one synchronous step. The prompt is filed under
+// the session the conversation resumes at once, else held for the frame that mints one.
+const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: PersistedAgent | undefined): Decision<boolean> => {
+    if (state.phase.kind !== "idle") {
+        return unchanged(state, false);
+    }
+    const session = entry?.sessionId;
+    const staged = state.journal?.written === false ? state.journal.entry : undefined;
+    return {
+        state: {
+            ...state,
+            phase: { kind: "running", startedAt: now, parked: [], stopping: undefined },
+            turn: { ...freshRuntime(), lastAt: now, promptToFile: session === undefined ? turn.prompt : undefined },
+            journal: staged === undefined ? state.journal : { entry: staged, written: true },
+        },
+        effects: [
+            { kind: "entry-opened", turn, ...opt("inFlight", staged) },
+            ...(session === undefined ? [] : [{ kind: "session-prompt", sessionId: session, prompt: turn.prompt } as const]),
+            { kind: "conversation-prompt", prompt: turn.prompt },
+            // Published before the write: this is the frame that moves every board's card into Active.
+            { kind: "broadcast" },
+            { kind: "persist" },
+        ],
+        reply: true,
+    };
+};
+
+// Nothing running means nothing to say; marking a settled conversation would leak `stopping` onto its next turn. Every
+// parked card goes here, since a `resolved` frame may never make it out of a dying stream.
+const onStop = (state: ConversationState, ending: StopEnding): Decision<undefined> => {
+    const running = runningPhase(state);
+    if (running === undefined || running.stopping !== undefined) {
+        return unchanged(state, undefined);
+    }
+    return { state: { ...state, phase: { ...running, stopping: ending, parked: [] } }, effects: BROADCAST, reply: undefined };
+};
+
+// The turn's books go into the entry and are zeroed; the readings a card keeps showing stay. A settle on a rewinding
+// conversation leaves the rewind holding it, and one whose entry is gone writes nothing and keeps the books.
+const onSettle = (state: ConversationState, entry: PersistedAgent | undefined): Decision<undefined> => {
+    const running = runningPhase(state);
+    const phase = running === undefined ? state.phase : { kind: "idle" as const };
+    if (entry === undefined) {
+        return { state: { ...state, phase }, effects: [{ kind: "reprobe" }, { kind: "broadcast" }], reply: undefined };
+    }
+    const { turn } = state;
+    const flush: SettleFlush = {
+        ranTurn: running !== undefined,
+        stopped: running?.stopping,
+        ending: running === undefined ? "none" : turn.failure !== undefined || running.stopping !== undefined ? "cut" : "clean",
+        failure: turn.failure,
+        usage: turn.usage,
+        sessionId: turn.sessionId,
+        checklist: turn.checklist,
+        check: turn.check,
+    };
+    return {
+        state: { ...state, phase, turn: { ...turn, usage: NO_USAGE, sessionId: undefined, failure: undefined, check: undefined } },
+        effects: [{ kind: "entry-settled", flush }, { kind: "persist" }, { kind: "reprobe" }, { kind: "broadcast" }],
+        reply: undefined,
+    };
+};
+
+// Answers whether the wait is over, not whether anything was written: a turn still unwinding is about to overwrite
+// anything written here, and a wait a fresh `begin` already cleared has nothing left to end.
+const onAbandon = (state: ConversationState, reason: string, entry: PersistedAgent | undefined): Decision<boolean> => {
+    if (state.phase.kind === "running") {
+        return unchanged(state, false);
+    }
+    if (entry === undefined || !state.turn.resuming) {
+        return unchanged(state, true);
+    }
+    return {
+        state: { ...state, turn: { ...state.turn, resuming: false } },
+        effects: [{ kind: "entry-abandoned", failure: sanitizeFailure(reason) }, { kind: "persist" }, { kind: "broadcast" }],
+        reply: true,
+    };
+};
+
+// Held until the `begin` that writes it with the turn's entry; once that has happened, every newer version is written.
+const onJournalled = (state: ConversationState, entry: JournalledTurn): Decision<undefined> =>
+    state.journal?.written === true
+        ? { state: { ...state, journal: { entry, written: true } }, effects: [{ kind: "journal-written", entry }], reply: undefined }
+        : unchanged({ ...state, journal: { entry, written: false } }, undefined);
+
+// A record never written has nothing to delete.
+const onUnjournalled = (state: ConversationState): Decision<undefined> =>
+    state.journal?.written === true
+        ? { state: { ...state, journal: undefined }, effects: [{ kind: "journal-cleared" }], reply: undefined }
+        : unchanged({ ...state, journal: undefined }, undefined);
+
+// The card reads `landing` from the first holder's claim; each release counts one off, and the last one hides it.
+const onLandLeased = (state: ConversationState): Decision<undefined> => ({
+    state: { ...state, turn: { ...state.turn, landing: true }, land: { held: state.land.held + 1 } },
+    effects: state.turn.landing ? [] : BROADCAST,
+    reply: undefined,
+});
+
+const onLandReleased = (state: ConversationState): Decision<undefined> => {
+    const held = Math.max(0, state.land.held - 1);
+    if (held > 0) {
+        return unchanged({ ...state, land: { held } }, undefined);
+    }
+    return { state: { ...state, turn: { ...state.turn, landing: false }, land: { held } }, effects: BROADCAST, reply: undefined };
+};
+
+// A rewind shares the turn mutex: refused under a live turn, and holding off every `begin` until released.
+const onRewindLeased = (state: ConversationState): Decision<boolean> =>
+    state.phase.kind === "running" ? unchanged(state, false) : { state: { ...state, phase: { kind: "rewinding" } }, effects: [], reply: true };
+
+const onRewindReleased = (state: ConversationState): Decision<undefined> =>
+    unchanged(state.phase.kind === "rewinding" ? { ...state, phase: { kind: "idle" } } : state, undefined);
+
+// Only a settled failure marks the card: `error` never ran and `cancelled` was cut short, neither measured the work. A
+// rule that is not a command leaves the verdict where it was.
+const onCheckRan = (state: ConversationState, check: CheckRun, now: number): Decision<undefined> =>
+    unchanged(
+        {
+            ...state,
+            turn: { ...state.turn, check: { label: check.label, failed: check.status === "failed" } },
+            verdict:
+                check.command === undefined
+                    ? state.verdict
+                    : { ruleId: check.ruleId, label: check.label, command: check.command, status: check.status, at: now },
+        },
+        undefined,
+    );
+
+// False for a turn that is itself an auth resume: a fresh token refused again means the credential is dead, not a
+// rotation, so its refusal is never recorded. Asked by the failure frame too, before the settle records anything.
+export const authResumable = (prompt: string): boolean => !prompt.startsWith(RESUME_NOTES.auth);
+
+const withResume = (state: ConversationState, resume: Partial<ConversationState["resume"]>): ConversationState => ({
+    ...state,
+    resume: { ...state.resume, ...resume },
+});
+
+// A stopped turn inherits the ladder's count so far; a limit starts none, its appointment being a single one.
+const onHeld = (state: ConversationState, held: HeldTurn, now: number): Decision<undefined> =>
+    unchanged(
+        withResume(state, { held: { ...held, recordedAt: now, fired: false, tries: held.reason === "stopped" ? state.resume.stopTries : 0 } }),
+        undefined,
+    );
+
+// The one dispatch a hold gets, stamped before the fire so it holds even if starting conflicts. A ladder rung also
+// spends one try, and a spent ladder fires no more whatever the pass asks.
+const onHeldFired = (state: ConversationState, ladder: boolean): Decision<boolean> => {
+    const { held } = state.resume;
+    if (held === undefined || held.fired || (ladder && held.tries >= RETRY_LADDER_TRIES)) {
+        return unchanged(state, false);
+    }
+    return unchanged(withResume(state, { held: { ...held, fired: true }, ...(ladder ? { stopTries: held.tries + 1 } : {}) }), true);
+};
+
+// Bounds runaway steering per conversation; a settling turn empties the boxes, this guards one that never does. Only
+// ever bites at the tail, so it can't shift an earlier message's position.
+const MAX_STEER_SLOTS = 200;
+
+const onSteerReserved = (state: ConversationState): Decision<number | undefined> => {
+    const { next, slots } = state.steers;
+    if (slots.length >= MAX_STEER_SLOTS) {
+        return unchanged(state, undefined);
+    }
+    return unchanged({ ...state, steers: { next: next + 1, slots: [...slots, { id: next, checkpoint: undefined }] } }, next);
+};
+
+const onSteerCaptured = (state: ConversationState, slot: number, checkpoint: TurnCheckpoint): Decision<undefined> => {
+    const slots = state.steers.slots.map((box) => (box.id === slot ? { id: slot, checkpoint } : box));
+    return unchanged({ ...state, steers: { ...state.steers, slots } }, undefined);
+};
+
+// How long a restored grant waits for the re-run it was given for; past it, the gate asks again.
+const RESTORED_GRANT_TTL_MS = 10 * 60_000;
+
+// Only the tool it was granted for takes it, and only fresh; a stale one stays until the next grant replaces it.
+const onGrantTaken = (state: ConversationState, tool: string, now: number): Decision<{ readonly always: boolean } | undefined> => {
+    const { grant } = state;
+    if (grant === undefined || grant.tool !== tool || now - grant.grantedAt > RESTORED_GRANT_TTL_MS) {
+        return unchanged(state, undefined);
+    }
+    return unchanged({ ...state, grant: undefined }, { always: grant.always });
+};
+
+// Both halves go, the live turn's pending id and the entry's, or the next turn would resume through whichever survived.
+const onSessionCleared = (state: ConversationState, entry: PersistedAgent | undefined): Decision<undefined> =>
+    entry === undefined
+        ? unchanged(state, undefined)
+        : {
+              state: { ...state, turn: { ...state.turn, sessionId: undefined } },
+              effects: [{ kind: "session-dropped" }, { kind: "persist" }, { kind: "broadcast" }],
+              reply: undefined,
+          };
+
+type Handler<K extends ConversationEvent["kind"]> = (
+    state: ConversationState,
+    event: Extract<ConversationEvent, { kind: K }>,
+    now: number,
+    entry: PersistedAgent | undefined,
+) => Decision<ReplyOf<Extract<ConversationEvent, { kind: K }>>>;
+
+const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
+    begin: (state, event, now, entry) => onBegin(state, event.turn, now, entry),
+    journalled: (state, event) => onJournalled(state, event.entry),
+    unjournalled: onUnjournalled,
+    frame: (state, event, now) => onFrame(state, event.frame, now),
+    stop: (state, event) => onStop(state, event.ending),
+    "check-ran": (state, event, now) => onCheckRan(state, event.check, now),
+    "verdict-taken": (state) => unchanged({ ...state, verdict: undefined }, state.verdict),
+    settle: (state, _event, _now, entry) => onSettle(state, entry),
+    "resume-promised": (state) => unchanged({ ...state, turn: { ...state.turn, resuming: true } }, undefined),
+    "resume-abandoned": (state, event, _now, entry) => onAbandon(state, event.reason, entry),
+    "land-leased": onLandLeased,
+    "land-released": onLandReleased,
+    "rewind-leased": onRewindLeased,
+    "rewind-released": onRewindReleased,
+    "session-cleared": (state, _event, _now, entry) => onSessionCleared(state, entry),
+    "auth-refused": (state, event, now) =>
+        unchanged(authResumable(event.failure.input.prompt) ? withResume(state, { auth: { ...event.failure, recordedAt: now } }) : state, undefined),
+    "outage-stranded": (state, event, now) => unchanged(withResume(state, { outage: { ...event.failure, recordedAt: now } }), undefined),
+    "turn-held": (state, event, now) => onHeld(state, event.held, now),
+    "turn-got-somewhere": (state) => unchanged(withResume(state, { stopTries: 0 }), undefined),
+    "resume-superseded": (state) => unchanged(withResume(state, { auth: undefined, outage: undefined, held: undefined }), state.resume.held),
+    "auth-firing": (state, event) => unchanged(withResume(state, { authFiring: event.firing }), undefined),
+    "resume-dropped": (state, event) => unchanged(withResume(state, { [event.record]: undefined }), undefined),
+    "held-fired": (state, event) => onHeldFired(state, event.ladder),
+    "ladder-spent": (state) => unchanged(withResume(state, { held: undefined, stopTries: 0 }), undefined),
+    "turn-registered": (state) => unchanged({ ...state, steered: false }, undefined),
+    "person-steered": (state) => unchanged({ ...state, steered: true }, undefined),
+    "steer-reserved": onSteerReserved,
+    "steer-captured": (state, event) => onSteerCaptured(state, event.slot, event.checkpoint),
+    "grant-restored": (state, event, now) => unchanged({ ...state, grant: { tool: event.tool, always: event.always, grantedAt: now } }, undefined),
+    "grant-taken": (state, event, now) => onGrantTaken(state, event.tool, now),
+    "nudge-armed": (state) => unchanged({ ...state, nudged: true }, undefined),
+    "nudge-disarmed": (state) => unchanged({ ...state, nudged: false }, state.nudged),
+    "jobs-shown": (state, event) => ({ state: { ...state, jobs: event.jobs }, effects: BROADCAST, reply: undefined }),
+    "watches-shown": (state, event) => ({ state: { ...state, watches: event.watches }, effects: BROADCAST, reply: undefined }),
+    "loop-shown": (state, event) => ({ state: { ...state, loop: event.loop }, effects: BROADCAST, reply: undefined }),
+    "workflow-shown": (state, event) => ({ state: { ...state, workflow: event.workflow }, effects: BROADCAST, reply: undefined }),
+    "steers-taken": (state) =>
+        unchanged(
+            { ...state, steers: { ...state.steers, slots: [] } },
+            state.steers.slots.map((box) => box.checkpoint),
+        ),
+};
+
+/* ONE EVENT, APPLIED WHOLE: the next state, the effects in the order they must run, and the sender's answer. */
+export const decide = <E extends ConversationEvent>(
+    state: ConversationState,
+    event: E,
+    now: number,
+    entry: PersistedAgent | undefined,
+): Decision<ReplyOf<E>> =>
+    (HANDLERS[event.kind] as unknown as (state: ConversationState, event: E, now: number, entry: PersistedAgent | undefined) => Decision<ReplyOf<E>>)(
+        state,
+        event,
+        now,
+        entry,
+    );

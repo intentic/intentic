@@ -1,7 +1,6 @@
 import { open, rename, resumeHeldTurn, setAutoLand, setBreakPolicy, stopWatching } from "./useAgents-actions";
 import { archive, archivedFlash, busyIds, dismissNotice, notice, purgeArchived, restore, undoable, undoArchive } from "./useAgents-archive";
 import { agentById, attention, blocking, fleet, forgetFleet, lanes, unread } from "./useAgents-fleet";
-import { forgetClaims } from "./useAgents-provisional";
 import { archived, archiveLoading, desyncRegistry, heldWakes, loadArchived, markAllSeen, markSeen, refresh, releaseHeld } from "./useAgents-registry";
 
 // Fleet store: the daemon's agent registry mirrored into the browser, merged with open Conversation tabs by
@@ -14,23 +13,17 @@ import { archived, archiveLoading, desyncRegistry, heldWakes, loadArchived, mark
 // - useAgents-archive: archive/restore/purge/undo, busy cards
 // - useAgents-actions: per-agent writes, open
 //
-// This file assembles them and owns the reset that touches all five.
+// This file assembles them and owns the disconnect that touches all five; a sandbox switch drops all five's state with
+// the scope instead.
 
-// Drops everything tied to a particular daemon: registry state, the fleet's cached-card memo, undo offers, and the
-// error strip's ids and revision line. Presses' claims outlive a mere disconnect, since the roster they are measured
-// against does too.
-const desync = (keepRoster: boolean): void => {
-    desyncRegistry(keepRoster);
+// Stale-while-reconnecting: drops the revision line, the fleet's cached-card memo, undo offers and the error strip, and
+// keeps the painted roster and the presses' claims, which outlive a mere disconnect since the roster does too.
+export const desyncAgents = (): void => {
+    desyncRegistry();
     forgetFleet();
-    if (!keepRoster) {
-        forgetClaims();
-    }
     undoable.value = [];
     notice.value = undefined;
 };
-export const resetAgents = (): void => desync(false);
-// The disconnect flavor: stale-while-reconnecting.
-export const desyncAgents = (): void => desync(true);
 
 export function useAgents() {
     return {

@@ -6,15 +6,15 @@ const frame = (event: `message` | `done` | `error`, data?: unknown): string =>
     `event: ${event}\n${data === undefined ? `` : `data: ${JSON.stringify(data)}\n`}\n`;
 
 /** One emitter's control over a live stream: emit values, or end it. */
-export interface StreamSink {
-    emit: (value: unknown) => void;
+export interface StreamSink<T> {
+    emit: (value: T) => void;
     close: () => void;
     readonly closed: boolean;
 }
 
 // Event-iterator response that runs as long as the consumer holds the body open. Teardown runs once, on whichever comes
 // first: producer close, consumer cancel, or request abort (how the app drops a stream).
-export const eventStream = (request: Request, start: (sink: StreamSink) => () => void): Response => {
+export const eventStream = <T>(request: Request, start: (sink: StreamSink<T>) => () => void): Response => {
     let teardown: (() => void) | undefined;
     let closed = false;
     const encoder = new TextEncoder();
@@ -28,7 +28,7 @@ export const eventStream = (request: Request, start: (sink: StreamSink) => () =>
                     // Consumer went away between the check and the enqueue; the abort listener cleans up.
                 }
             };
-            const sink: StreamSink = {
+            const sink: StreamSink<T> = {
                 emit: (value) => {
                     if (!closed) {
                         push(frame(`message`, value));

@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import {
     PersonaIdParamSchema,
     PersonaKitSchema,
@@ -15,7 +15,7 @@ import { OkSchema } from "../schemas/shared.js";
 // nothing, only a decision about existing accounts. The kit routes below edit its files (prompt, skills only its turns
 // reach) per verb, not one whole-kit PUT, so one skill's edit cannot delete another.
 export const personasContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/personas",
@@ -23,9 +23,10 @@ export const personasContract = {
             description:
                 "Each persona with the connected accounts it speaks for, what a conversation wearing it is allowed to do, and where it works.",
         })
+        .meta({ guest: true })
         .output(PersonasListSchema),
     // Upsert by id, re-saving the same id edits that card.
-    save: oc
+    save: procedure
         .route({
             method: "POST",
             path: "/personas",
@@ -37,7 +38,7 @@ export const personasContract = {
         .output(OkSchema),
     // Never removes the account; an automation pinned to this id resolves as no accounts, and goes quiet.
     // Also deletes the persona's kit folder (prompt + skills), rather than leaving it orphaned on disk.
-    remove: oc
+    remove: procedure
         .route({
             method: "DELETE",
             path: "/personas/{id}",
@@ -52,7 +53,7 @@ export const personasContract = {
 
     // The kit: what this card is told, and the skills only it reaches.
 
-    kit: oc
+    kit: procedure
         .route({
             method: "GET",
             path: "/personas/{id}/kit",
@@ -63,7 +64,7 @@ export const personasContract = {
         .input(PersonaIdParamSchema)
         .output(PersonaKitSchema),
     // An empty prompt deletes the file rather than storing a blank; it then falls back to the sandbox's own prompt.
-    savePrompt: oc
+    savePrompt: procedure
         .route({
             method: "POST",
             path: "/personas/{id}/prompt",
@@ -73,7 +74,7 @@ export const personasContract = {
         })
         .input(PersonaPromptSchema)
         .output(OkSchema),
-    readSkill: oc
+    readSkill: procedure
         .route({
             method: "GET",
             path: "/personas/{id}/skills/read",
@@ -83,7 +84,7 @@ export const personasContract = {
         .input(PersonaSkillNameSchema)
         .output(PersonaSkillBodySchema),
     // Upsert by name, no enabled list to write: a kit skill is on exactly when its persona is worn.
-    saveSkill: oc
+    saveSkill: procedure
         .route({
             method: "POST",
             path: "/personas/{id}/skills",
@@ -93,7 +94,7 @@ export const personasContract = {
         })
         .input(PersonaSkillSchema)
         .output(OkSchema),
-    removeSkill: oc
+    removeSkill: procedure
         .route({
             method: "POST",
             path: "/personas/{id}/skills/remove",

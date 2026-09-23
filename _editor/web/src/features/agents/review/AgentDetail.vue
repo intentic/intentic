@@ -202,7 +202,7 @@ const changes = useAgentChanges(
     fleetAgent,
 );
 // A remote agent has no local conversation; `writing` reads its live state from the roster instead.
-const streaming = computed(() => !remote.value && conversation.value?.streaming.value === true);
+const streaming = computed(() => !remote.value && conversation.value?.turn.streaming.value === true);
 
 // Land only reads the checkout, so it's live whenever anything is pending, unlike Discard (worktree-gated,
 // refused mid-turn). `writing` (fleet status, not `streaming`) decides which press it is, since a parked turn

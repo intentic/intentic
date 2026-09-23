@@ -1,15 +1,13 @@
 import { sleep } from "@intentic/base/async";
-import { type AgentTurn, type Rule, type RuleBuiltin, verifyNudgePrompt } from "@intentic/sandbox-contract";
+import { type AgentTurn, type Rule, type RuleBuiltin, type TurnProfile, verifyNudgePrompt } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import type { WakeFn } from "../../automations/scheduler.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";
 import type { IsolationPlan } from "../../agents/worktrees/isolation.js";
 import { conditionHolds } from "../../rules/rules.js";
 import { workspaceRelative } from "../../rules/turn-ending.js";
 import { type VerificationLedger, verifyEditsMessage } from "./agent-verification.js";
 import { type ViewLedger, verifyUiEditsMessage } from "./agent-viewing.js";
-import { startConversationTurn } from "../run/turn/turn-resume.js";
-import { seedFields } from "../run/turn/turn-seed.js";
 
 // Delivers the turn.ending follow-up on the runtimes with no Stop hook: the built-ins read off the frame ledgers, and
 // what the daemon's own run of the command rules found.
@@ -22,14 +20,13 @@ const ATTEMPTS = 12;
 
 export interface VerifyNudgeRuntime {
     readonly logger: Logger;
+    // Where each conversation's nudge guard lives.
+    readonly conversations: Pick<ConversationActors, "send">;
     readonly start: (turn: AgentTurn & { conversationId: string }) => Promise<boolean>;
     readonly sessionIdOf: (conversationId: string) => string | undefined;
 }
 
 let runtime: VerifyNudgeRuntime | undefined;
-
-// Conversations with a nudge in flight; the loop guard, cleared on the next ask, one turn un-nudged at most.
-const pending = new Set<string>();
 
 // The rule the owner stood here, if any, re-checked against `moment` even though the planner filtered it, the same belt
 // the hook path keeps. Only builtins that read a record or the tree; instruct/command rules are the hook path's to
@@ -45,8 +42,8 @@ const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly 
 
 export interface VerifyNudge {
     readonly conversationId: string;
-/* The turn that just ended. */
-    readonly seed: AgentTurn;
+    // The turn that just ended, which the follow-up runs as: same provider, model, reasoning, persona and job.
+    readonly profile: TurnProfile;
     readonly rules: readonly Rule[];
     readonly ledger: VerificationLedger;
     // What the turn drew against whether it looked; optional, so a caller with no such ledger can't fire that rule.
@@ -100,8 +97,8 @@ export const nudgeUnverifiedWork = async (nudge: VerifyNudge): Promise<string | 
     if (live === undefined || nudge.rules.length === 0) {
         return undefined;
     }
-    // A nudge answering a nudge is the loop this guard exists for; cleared here so the next turn is free again.
-    if (pending.delete(nudge.conversationId)) {
+    // A nudge answering a nudge is the loop this guard exists for; spent here so the next turn is free again.
+    if (live.conversations.send(nudge.conversationId, { kind: "nudge-disarmed" }).reply) {
         return undefined;
     }
     const asks = await asksOf(nudge);
@@ -113,7 +110,7 @@ export const nudgeUnverifiedWork = async (nudge: VerifyNudge): Promise<string | 
     // through the contract's opening, since the chat recognises a nudge by it and draws it as the app's errand rather
     // than as words the user typed.
     const message = verifyNudgePrompt([...findings, ...asks.map((ask) => ask.message)]);
-    pending.add(nudge.conversationId);
+    live.conversations.send(nudge.conversationId, { kind: "nudge-armed" });
     for (const ask of asks) {
         nudge.onFired?.(ask.rule);
     }
@@ -124,7 +121,7 @@ export const nudgeUnverifiedWork = async (nudge: VerifyNudge): Promise<string | 
 };
 
 const deliver = async (live: VerifyNudgeRuntime, nudge: VerifyNudge, message: string): Promise<void> => {
-    const { conversationId, seed } = nudge;
+    const { conversationId, profile } = nudge;
     for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) {
         const sessionId = live.sessionIdOf(conversationId);
         try {
@@ -132,8 +129,7 @@ const deliver = async (live: VerifyNudgeRuntime, nudge: VerifyNudge, message: st
                 prompt: message,
                 conversationId,
                 ...(sessionId !== undefined ? { sessionId } : {}),
-/* THE NUDGED TURN, WHOLE (agent/run/turn/turn-seed.ts): same provider, same model, same reasoning, same persona, same job. */
-                ...seedFields(seed),
+                ...profile,
             });
             if (started) {
                 live.logger.info({ conversationId }, "verify nudge: follow-up turn started on unverified work");
@@ -145,7 +141,7 @@ const deliver = async (live: VerifyNudgeRuntime, nudge: VerifyNudge, message: st
         await sleep(RETRY_MS, { unref: true });
     }
     // Never landed, so the conversation is released rather than held against a follow-up that isn't coming.
-    pending.delete(conversationId);
+    live.conversations.send(conversationId, { kind: "nudge-disarmed" });
     live.logger.warn({ conversationId }, "verify nudge: could not start a follow-up, the turn stands unverified");
 };
 
@@ -153,16 +149,16 @@ const deliver = async (live: VerifyNudgeRuntime, nudge: VerifyNudge, message: st
 export const startVerifyNudgeRuntime = (live: VerifyNudgeRuntime): (() => void) => {
     runtime = live;
     return () => {
-        pending.clear();
         runtime = undefined;
     };
 };
 
 // Boot wiring: the same detached-turn door every daemon-started turn uses, which journals the wake so a daemon death
 // between start and first frame re-runs it.
-export const startVerifyNudges = (services: Services, wake: WakeFn): (() => void) =>
+export const startVerifyNudges = (services: Pick<Services, "logger" | "conversations" | "turns">): (() => void) =>
     startVerifyNudgeRuntime({
         logger: services.logger,
-        start: async (turn) => (await startConversationTurn(services, wake, turn)) !== undefined,
-        sessionIdOf: (conversationId) => services.agents.sessionIdOf(conversationId),
+        conversations: services.conversations,
+        start: async (turn) => (await services.turns.start(turn)) !== undefined,
+        sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId),
     });

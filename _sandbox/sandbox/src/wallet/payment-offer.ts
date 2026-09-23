@@ -1,5 +1,5 @@
 import type { PaymentOffer, WalletConfig } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../agent/run/offer-request.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, type SettledCard, whyOf } from "../agents/actor/card-offers.js";
 import type { RelayedAnswer } from "../platform/platform-relay.js";
 import type { SignRequest } from "./wallet-signer.js";
 import { type OpenedPayment, spentTodayAtomic, type WalletLedgerStore } from "./wallet-ledger.js";

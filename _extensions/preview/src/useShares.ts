@@ -1,13 +1,11 @@
-import { type SharedConversation, ShareListSchema } from "@intentic/sandbox-contract";
+import type { SharedConversation } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 
-// Conversations published as pages, via the daemon's /share routes, the outbox's other half. Not part of `usePublic`: a
-// share exists only because someone pressed Share, so this is the daemon's own index, moved by actions here rather than
-// a filesystem read. Share pages are filtered out of the public file list for the same reason.
-
-const post = (body: unknown): RequestInit => ({ method: `POST`, headers: { "content-type": `application/json` }, body: JSON.stringify(body) });
+// Conversations published as pages, via the daemon's `share` procedures, the outbox's other half. Not part of
+// `usePublic`: a share exists only because someone pressed Share, so this is the daemon's own index, moved by actions
+// here rather than a filesystem read. Share pages are filtered out of the public file list for the same reason.
 
 export function useShares() {
     const api = host();
@@ -16,18 +14,18 @@ export function useShares() {
 
     const query = useQuery({
         queryKey,
-        queryFn: async () => ShareListSchema.parse(await api.sandbox.json(`/share`)),
+        queryFn: () => api.sandbox.rpc.share.list(),
         enabled: computed(() => api.sandbox.reachable()),
     });
 
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
     // Re-takes the snapshot behind an already-sent link: same id, same address, later state.
     const update = useMutation({
-        mutationFn: async (id: string) => api.sandbox.json<SharedConversation>(`/share/update`, post({ id })),
+        mutationFn: (id: string) => api.sandbox.rpc.share.update({ id }),
         onSuccess: () => void invalidate(),
     });
     const remove = useMutation({
-        mutationFn: async (id: string) => api.sandbox.json(`/share/remove`, post({ id })),
+        mutationFn: (id: string) => api.sandbox.rpc.share.remove({ id }),
         onSuccess: () => void invalidate(),
     });
 

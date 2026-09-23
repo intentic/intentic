@@ -2,15 +2,15 @@
 // cards in one frame. Asserted through the real board, since what matters is DOM card count, the tail row, and the
 // header count reporting the pile rather than the page.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
-import { resetChat } from "../../chat/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
-import { resetAgents, useAgents } from "../fleet/useAgents";
-import { resetArchive, setAgents } from "../fleet/useAgents-registry";
+import { useAgents } from "../fleet/useAgents";
+import { setAgents } from "../fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -42,9 +42,7 @@ const mountBoard = async (): Promise<HTMLElement> => {
 
 beforeEach(async () => {
     localStorage.clear();
-    resetChat();
-    resetAgents();
-    resetArchive();
+    resetSandboxScope();
     await nextTick();
 });
 

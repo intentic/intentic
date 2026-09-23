@@ -6,8 +6,8 @@ import { enabledExtensions, type InstalledExtension } from "../extensions/instal
 import { accountGroupOf } from "../capabilities/account-skills.js";
 import { pluginDir } from "../capabilities/plugin-dirs.js";
 import { listPersonaSkills, readPersonaSkill } from "../personas/persona-kit.js";
-import { loadedSkillsRoot } from "./loaded-skills.js";
-import { parseSkillFile, skillDocument } from "./skill-file.js";
+import { loadedSkillsRoot } from "../store/loaded-skills.js";
+import { parseSkillFile, skillDocument } from "../skill-file.js";
 import { bakedSkillNames, bakedSkillText, listOwnSkills, ownSkillDir, ownSkillOn } from "./skills.js";
 
 // Reads everything the agent knows from six sources (baked tools, the owner's store, connections, plugins, extensions,

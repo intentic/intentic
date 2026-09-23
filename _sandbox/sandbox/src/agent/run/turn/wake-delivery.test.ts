@@ -1,55 +1,21 @@
-import type { AgentTurn } from "@intentic/sandbox-contract";
 import { pino } from "pino";
 import { describe, expect, it } from "bun:test";
-import type { Steer } from "../../checkpoints/agent-steering.js";
+import { fakeTurns } from "../../../testing.js";
 import { deliverWake, type Wake, type WakeDoors, wakeOnce } from "./wake-delivery.js";
 
 const logger = pino({ level: "silent" });
 
-interface Fake {
-    readonly doors: WakeDoors;
-    readonly steers: Steer[];
-    readonly started: (AgentTurn & { conversationId: string })[];
-}
-
-// `live` answers the steer; `busyFor` is how many starts find a turn already running before one gets through.
-const fake = (over: { live?: boolean; busyFor?: number; throwsFirst?: boolean } = {}): Fake => {
-    const steers: Steer[] = [];
-    const started: (AgentTurn & { conversationId: string })[] = [];
-    let busy = over.busyFor ?? 0;
-    let throws = over.throwsFirst === true;
-    return {
-        steers,
-        started,
-        doors: {
-            steer: (_conversationId, steer) => {
-                if (over.live === true) {
-                    steers.push(steer);
-                }
-                return over.live === true;
-            },
-            start: async (turn) => {
-                if (throws) {
-                    throws = false;
-                    throw new Error("the provider is down");
-                }
-                if (busy > 0) {
-                    busy -= 1;
-                    return false;
-                }
-                started.push(turn);
-                return true;
-            },
-            sessionIdOf: () => "sess-7",
-        },
-    };
+// The port's doors as a wake meets them, on a conversation whose session is `sess-7`.
+const fake = (over: Parameters<typeof fakeTurns>[0] = {}): ReturnType<typeof fakeTurns> & { readonly doors: WakeDoors } => {
+    const turns = fakeTurns(over);
+    return Object.assign(turns, { doors: { turns: turns.turns, sessionIdOf: () => "sess-7" } });
 };
 
 const wake = (over: Partial<Wake> = {}): Wake => ({
     conversationId: "conv-1",
     prompt: "Watch fired: …",
     voice: "sandbox",
-    turn: { agent: "claude", model: "opus" },
+    profile: { agent: "claude", model: "opus" },
     ...over,
 });
 
@@ -78,13 +44,13 @@ describe("wake delivery", () => {
     });
 
     it("retries while a turn is live but takes no words, and through a start that throws", async () => {
-        const doors = fake({ busyFor: 1, throwsFirst: true });
+        const doors = fake({ busy: 1, throwsFirst: true });
         expect(await deliverWake(doors.doors, wake(), pacing)).toBe("started");
         expect(doors.started).toHaveLength(1);
     });
 
     it("answers busy once every attempt found the conversation occupied, for the caller to report", async () => {
-        const doors = fake({ busyFor: 5 });
+        const doors = fake({ busy: 5 });
         expect(await deliverWake(doors.doors, wake(), pacing)).toBe("busy");
         expect(doors.started).toEqual([]);
     });

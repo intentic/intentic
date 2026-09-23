@@ -3,7 +3,7 @@ import type { Services } from "../../composition.js";
 import { handoffHistory } from "../../sessions/turn-transcript.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
-import { opt } from "../run/opt.js";
+import { opt } from "../../opt.js";
 import type { VerificationStanding } from "../verification/agent-verification.js";
 import { bookLimitMove } from "./sibling-account.js";
 

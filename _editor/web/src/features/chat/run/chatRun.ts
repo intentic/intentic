@@ -1,5 +1,7 @@
+import { sandboxRef } from "@intentic/extension-api";
 import type { AgentHarness, WorkflowRun } from "@intentic/sandbox-contract";
-import { ref } from "vue";
+import { activeSandboxId } from "../../sandbox/overview/activeSandbox";
+import { readTabSnapshot } from "../tabs/tabSnapshot";
 
 // A workflow run's view state inside the chat panel: sessions are chats, so a live run's panes move with it instead of
 // sending the reader to a separate page. `graph` is the diagram (back arrow); `pinned` is a chosen band; neither moves.
@@ -12,7 +14,8 @@ export interface ChatRunView {
     readonly mode: ChatRunMode;
 }
 
-export const chatRun = ref<ChatRunView | undefined>();
+// Persisted with the window's tabs, so each sandbox's own comes back with them.
+export const chatRun = sandboxRef<ChatRunView | undefined>(() => readTabSnapshot(activeSandboxId.value)?.run);
 
 export const showRun = (runId: string, mode: ChatRunMode): void => {
     chatRun.value = { runId, mode };

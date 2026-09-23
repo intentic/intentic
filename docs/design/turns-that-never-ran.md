@@ -91,12 +91,13 @@ recognises, before it is folded:
 1. The frame goes out with `held: { ran: false }`, so `retract` leaves the message where it was and the run is
    recorded like any other: the prompt survives a reload and a restart.
 2. `heldRow` says the message above is kept here, marks the row `sandboxHeld`, and offers **Send anyway** (memory)
-   or **Send again** (any other code). The press is `Conversation.resendKept`: `POST /agent/resume` with no
+   or **Send again** (any other code). The press is the turn client's `resendKept`: `POST /agent/resume` with no
    routing, so the turn runs as it was started, pinned model and all. A sandbox that no longer keeps it (a restart)
    gets the message's own words as an ordinary send instead.
-3. The turn is held as a `door` hold (`recordHeldTurn`). The resume pass never fires one: going past the wall is
-   a person's call. The re-run carries `RESUME_NOTES.door`, opens on a notice rather than a second copy of the
-   message, and names every refused run in `unseenRuns`, which a session seeded from the record skips.
+3. The turn is held as a `door` hold (the conversation actor's `turn-held`). The resume pass never fires one:
+   going past the wall is a person's call. The re-run carries `RESUME_NOTES.door`, opens on a notice rather than a
+   second copy of the message, and names every refused run in `unseenRuns`, which a session seeded from the record
+   skips.
 
 A fix attempt turned away this way reads **Didn't start**, and its next press is a `resend` (`planFixAttempt`):
 the kept turn again, or the whole prompt when nothing is kept, never the "carry on" nudge, which points at
@@ -104,15 +105,9 @@ evidence the attempt never received.
 
 ## The records already written
 
-`_tools/scripts/repair-transcripts.mjs` removes them, once, by hand. It is not wired into boot: per the
-repository's no-migration rule, product code assumes fresh state.
-
-It finds a void turn by run id — every row carries the id of the run that folded it — as a maximal adjacent
-span holding a user message, holding nothing the agent said, and ending on a held-for-resend refusal. Rows
-without a run id predate the stamp and are matched by adjacency instead.
-
-It renumbers `turn-checkpoints.json` in the same pass. A rewind point is filed against a row's index, so
-deleting rows without shifting the checkpoints above them puts the rewind button on the wrong message.
+None are read. Records written before `retract` lived in the layout before conversation units (`/history/transcripts`,
+`turn-checkpoints.json`), which the daemon no longer reads: per the repository's no-migration rule it starts from
+fresh state, so a void turn exists only in files nothing opens.
 
 ## Known, not fixed
 

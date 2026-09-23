@@ -1,5 +1,5 @@
+import { sandboxShallowRef } from "@intentic/extension-api";
 import { type AgentHarness, type AgentProvider, type FixResume, sendableEffort } from "@intentic/sandbox-contract";
-import { shallowRef } from "vue";
 import { defaultPinRunSettings, type RunSettingsPatch } from "../run-settings/pickerRunSettings";
 import { modelLabelFor } from "../../accounts/providerCatalog";
 
@@ -60,8 +60,12 @@ interface ModelRequest extends StagedPick {
     readonly settle: (choice: ModelChoice | undefined) => void;
 }
 
-// The open request, or undefined; the body mounts from this, so it is fresh (search, catalogs) on every open.
-export const modelRequest = shallowRef<ModelRequest | undefined>(undefined);
+// The open request, or undefined; the body mounts from this, so it is fresh (search, catalogs) on every open. It picks
+// among one sandbox's accounts, so a switch dismisses it, and whoever asked hears no choice.
+export const modelRequest = sandboxShallowRef<ModelRequest | undefined>(
+    () => undefined,
+    (open) => open?.settle(undefined),
+);
 
 /* EVERY ROW IN THE PANEL WRITES HERE, the model list included. */
 export const stageModelPick = (patch: StagedPatch): void => {

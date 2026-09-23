@@ -71,9 +71,12 @@ export const withIdentityPicker = (entry: CapabilityCatalogEntry, identities: re
     return { ...entry, fields: entry.fields.map((field) => (field.key === `identity` ? { ...field, options } : field)) };
 };
 
-// Tile↔instance join, shared with the daemon's capability ask gate so the two sides can't drift on discriminator
-// rules.
-export { instancesOf } from "@intentic/capability-catalog";
+// Every tile the page offers: the enabled extensions' contributions, then the static core catalog, each browser tile's
+// identity field narrowed to the identities this sandbox actually holds.
+export const catalogEntries = (enabled: readonly ExtensionSummary[], capabilities: readonly CapabilitySummary[]): CapabilityCatalogEntry[] => {
+    const identities = capabilities.filter((instance) => instance.kind === `identity`).map((instance) => instance.id);
+    return [...contributedTiles(enabled), ...CAPABILITY_CATALOG].map((entry) => withIdentityPicker(entry, identities));
+};
 
 // Which tile a live connection came from (instancesOf run backwards): a kind's tiles pin their own id into the
 // instance's config (contributionDiscriminator), so that field is the lookup; a kind with no discriminator has
@@ -138,6 +141,21 @@ export const suggestName = (entry: CapabilityCatalogEntry, instances: readonly C
         n += 1;
     }
     return `${base}-${n}`;
+};
+
+// The name a freshly opened form carries, and whether it counts as chosen: a chosen one is never overwritten by the
+// live suggestion as connections come and go. Editing keeps the connection's own name; adding suggests a free one.
+export const openingName = (
+    entry: CapabilityCatalogEntry,
+    editing: CapabilitySummary | undefined,
+    instances: readonly CapabilitySummary[],
+    device: string,
+): { readonly name: string; readonly chosen: boolean } => {
+    if (editing !== undefined) {
+        return { name: editing.id, chosen: false };
+    }
+    // A machine that already syncs arrives with its own name: both doors named alike fold into one row (mergeDevices).
+    return device === `` ? { name: suggestName(entry, instances), chosen: false } : { name: device, chosen: true };
 };
 
 // Whether a connection still carries the name its tile handed it (`linux`, `linux-2`): the one case where a better

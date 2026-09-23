@@ -1,10 +1,13 @@
-import type { AgentProvider, AgentCapabilities, AgentTurn } from "@intentic/sandbox-contract";
-import type { Services } from "../../composition.js";
-import type { TurnContext, TurnArmPlan } from "../run/turn/turn-plan.js";
+import type { AgentCapabilities, AgentEvent, AgentProvider, AgentTurn, Capability, SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
+import type { TurnPersona } from "../../personas/personas.js";
+import type { SteeringQueue } from "../checkpoints/agent-steering.js";
+import type { TurnTrim } from "../prompt/window/context-trim.js";
+import { opt } from "../../opt.js";
+import type { ChildSupervisor } from "../subagents/children.js";
+import type { AgentRequest, TurnBase, TurnCredential, TurnSpec } from "./agent-request.js";
 
-// The seam every agent runtime sits behind. `preflight` gates the credential, resolves a model, and assembles the
-// request, or refuses. `holdsSession` asks the store whether a resume can happen; `health` probes cheaply, off the turn
-// path. `capabilities` is the contract's record for the pair.
+// The seam every agent runtime sits behind, and everything that crosses it: what the planner hands an arm (TurnContext),
+// what the arm answers (TurnArmPlan), and the adapter itself. The planner imports this file; nothing here imports back.
 
 // Health constructors and the probe wrapper live beside the type they build. One `now` per answer, so `checkedAt` marks
 // the probe's own moment.
@@ -33,26 +36,100 @@ export interface AdapterHealth {
     readonly checkedAt: number;
 }
 
-// One runtime's implementation of the seam. `R` is pinned per adapter so the registry can map runtime to adapter
-// without a cast, and an adapter cannot be filed under a runtime it does not serve.
-export interface AgentAdapter<R extends AgentCapabilities["runtime"] = AgentCapabilities["runtime"]> {
+export type TurnRefusal = {
+    readonly ok: false;
+    // The machine-readable discriminator the UI keys off (AgentEvent's `error`); absent on plain failures.
+    readonly code?: Extract<AgentEvent, { kind: "error" }>["code"];
+    readonly message: string;
+    // `sandbox-memory-low` only: the cgroup reading behind it, so the refusal can offer the raise rather than
+    // describe it. Rides the refusal onto the error frame of the same name.
+    readonly memory?: Extract<AgentEvent, { kind: "error" }>["memory"];
+};
+
+// What one runtime's arm answers when it serves: the request it planned, and its loop bound to everything in that request
+// but the words, which are all the route may still change. Nothing about experiments or the preamble.
+export interface ArmPlan {
+    readonly ok: true;
+    readonly run: (spec: TurnSpec) => AsyncGenerator<AgentEvent>;
+    // The provider account serving this turn, stamped onto usage/rate-limit frames and the activity log;
+    // undefined for a container-env credential or an untracked translator subscription.
+    readonly account?: string;
+    readonly request: AgentRequest;
+}
+
+export type TurnArmPlan = TurnRefusal | ArmPlan;
+
+// Pairs a loop with a request carrying a credential that loop spends, checked here where the arm builds it.
+export const armPlan = <C extends TurnCredential>(
+    loop: (request: AgentRequest<C>) => AsyncGenerator<AgentEvent>,
+    request: AgentRequest<C>,
+    account?: string,
+): ArmPlan => ({ ok: true, run: (spec) => loop({ ...request, spec }), ...opt("account", account), request });
+
+// What the route has already resolved before a provider can be picked: the request every arm builds on, the turn's two
+// cwds (see runTurn), and the seams only some arms use.
+export interface TurnContext {
+    readonly base: TurnBase;
+    // Workspace-relative attachments, already resolved to absolute paths and escape-checked by the route.
+    readonly attachmentPaths: readonly string[];
+    // The tree as the daemon reaches it; anything the daemon itself touches (hashline edits, the dependency probe) must
+    // use this, not effectiveCwd.
+    readonly localCwd: string;
+    // The workspace root as the agent sees it; what a session id is looked up against.
+    readonly effectiveCwd: string;
+    readonly cliEnv: Record<string, string>;
+    // Mid-turn steering, present only where the runtime declares it (capabilitiesOf().steering).
+    readonly steering: SteeringQueue | undefined;
+    // Resolved once above the provider split; optional only for a focused caller that invokes an arm directly.
+    readonly settings?: SandboxSettings;
+    readonly conversationTurns?: number;
+    readonly iqSearchEnabled?: boolean;
+    readonly iqSearchNote?: string;
+    // What the model's declared window will not pay for (context-trim.ts), resolved once above everything that reads
+    // it. Absent means the window is unknown or large enough, which is every model outside a local one's card.
+    readonly contextTrim?: TurnTrim;
+    // The sandbox's own field notes, already narrowed to the owner's budget. Composed in planning rather than at
+    // placement so the SAME reading answers both questions the turn has about it — what to send, and which revision to
+    // stamp — and a control turn can name the revision it was withheld from without composing anything.
+    readonly fieldNotesNote?: string;
+    // Generated skill catalogue for a runtime with no native skill loader; opening turn only, carried after by the
+    // provider session.
+    readonly skillCatalogNote?: string;
+    // Which repos this conversation's tree holds or lacks, for a conversation on a context shelf; opening turn and the
+    // turn after a compaction.
+    readonly contextNote?: TurnNote;
+    // The `agents` CLI teaching for shell-only runtimes, on a conversation's opening turn where the spawn door is open.
+    readonly spawnNote?: string;
+    // This message's own anchors, looked up before the turn (turn-context.ts). Every turn, not once per conversation:
+    // it answers the message rather than describing the workspace.
+    readonly turnContextNote?: string;
+    readonly iqSearchCohort?: string;
+    // Who the turn is and what it may do, resolved once by planTurn; absent on the context the route builds before a
+    // card is read.
+    readonly persona?: TurnPersona;
+    // Re-takes the pre-turn rebase while parked on a card; isolated, harness-only turns, since only the harness's cards
+    // park long enough to need it.
+    readonly resync?: () => Promise<AgentEvent | undefined>;
+    // Child-agent supervision, injected by agent.routes like `resync`; absent for a conversationless turn or a focused
+    // caller with no route.
+    readonly children?: ChildSupervisor;
+}
+
+// One runtime's implementation of the seam. `R` is pinned per adapter so the table can map runtime to adapter without a
+// cast, and `D` is what the adapter reads of the daemon: named per runtime, handed in by whoever holds more.
+export interface AgentAdapter<R extends AgentCapabilities["runtime"], D> {
     readonly runtime: R;
     // Gate the credential, resolve the model, and assemble the request, or refuse. `granted` is the persona's narrowed
     // capability manifest; shared so an arm cannot mount what the persona did not grant.
-    readonly preflight: (
-        services: Services,
-        input: AgentTurn,
-        context: TurnContext,
-        granted: Awaited<ReturnType<Services["capabilities"]["list"]>>,
-    ) => Promise<TurnArmPlan>;
+    readonly preflight: (deps: D, input: AgentTurn, context: TurnContext, granted: readonly Capability[]) => Promise<TurnArmPlan>;
     // Cheap and cached; never on the turn's path.
-    readonly health: (services: Services) => Promise<AdapterHealth>;
+    readonly health: (deps: D) => Promise<AdapterHealth>;
     // Whether this runtime still holds `sessionId` under `cwd`, from the store rather than the id's existence: a
     // runtime can report an id before the session is saved.
-    readonly holdsSession: (services: Services, sessionId: string, cwd: string) => Promise<boolean>;
+    readonly holdsSession: (deps: D, sessionId: string, cwd: string) => Promise<boolean>;
     // One prompt in, one string out: no tools, no session, no transcript, its own deadline, every failure thrown as the
     // provider's own sentence. Absent for a runtime nothing asks a one-liner of.
-    readonly oneShot?: (services: Services, ask: OneShotAsk) => Promise<string>;
+    readonly oneShot?: (deps: D, ask: OneShotAsk) => Promise<string>;
 }
 
 export interface OneShotAsk {

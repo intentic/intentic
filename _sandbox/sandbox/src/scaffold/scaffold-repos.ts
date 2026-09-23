@@ -3,9 +3,9 @@ import { gitCommitAll, gitInit, INTENT_GITIGNORE, scaffoldDeployConfig, TARGET_G
 import type { Services } from "../composition.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { terminalGit } from "../git/git.js";
-import { repoGitDir } from "../history/history.js";
+import { repoGitDir } from "../workspace/layout/git-layout.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { readTemplatesConfig } from "./templates-config.js";
+import { readTemplatesConfig } from "../workspace/layout/templates-config.js";
 
 // Capability-triggered repo scaffolding for devops/monorepo adds; UIs live in the web app's extensions, not an operator
 // panel here. Shell (git bookkeeping, the monorepo CLI) runs in the caller's visible job session.

@@ -11,7 +11,8 @@ import type {
     SandboxUsage,
     SessionMetrics,
 } from "@intentic/sandbox-contract";
-import { DAEMON_OWNER, ONE_SHOT_OWNER, ownerOf } from "../boot/leftovers.js";
+import { DAEMON_OWNER, ONE_SHOT_OWNER } from "../../seams/workload-stamp.js";
+import { ownerOf } from "../boot/leftovers.js";
 import { parsePressure } from "./loop-watchdog.js";
 import { type ParsedProcStat, parseProcStat } from "./proc-stat.js";
 import { classifyProcess } from "./resource-metrics.js";

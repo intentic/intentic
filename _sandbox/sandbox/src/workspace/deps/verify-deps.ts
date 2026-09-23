@@ -8,7 +8,7 @@ import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { QUEUE_SKIPPED_EXIT_CODE } from "../../platform/resources/heavy-commands.js";
 import { markCheckRunning } from "./checks-in-flight.js";
 import type { DependencyOrigin } from "./dependency-origin.js";
-import { statePath } from "../layout/state-paths.js";
+import { statePath } from "../../state-paths.js";
 import type { VerifyStore } from "./verify-store.js";
 import { installPanelKey, workspaceSetup } from "../layout/workspace-setup.js";
 

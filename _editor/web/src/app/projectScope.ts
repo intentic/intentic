@@ -1,4 +1,4 @@
-import { ref, watch } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
 import { activeSandboxId } from "../features/sandbox/overview/activeSandbox";
 import { removeStoredValue, storedValue, storeValue } from "../lib/browserStorage";
 
@@ -15,7 +15,7 @@ const read = (sandboxId: string | undefined): string | undefined => {
     return stored === undefined || stored === `` ? undefined : stored;
 };
 
-export const projectScope = ref<string | undefined>(read(activeSandboxId.value));
+export const projectScope = sandboxRef<string | undefined>(() => read(activeSandboxId.value));
 
 export const setProjectScope = (project: string | undefined): void => {
     projectScope.value = project;
@@ -37,9 +37,3 @@ export const withinScope = (path: string): boolean => projectScope.value === und
 // can be nested (`apps` has to be walked to reach the project `apps/web`). For a file this is `withinScope`.
 export const reachesScope = (dir: string): boolean =>
     projectScope.value === undefined || inProject(dir, projectScope.value) || inProject(projectScope.value, dir);
-
-watch(activeSandboxId, (id, previous) => {
-    if (id !== previous) {
-        projectScope.value = read(id);
-    }
-});

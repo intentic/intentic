@@ -2,6 +2,7 @@
 // reader made it, what it had to cut, and whether the file has moved on since. Asserted in the DOM, since "shown
 // with the text" rather than "carried in the response" is the whole point of this surface.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -44,7 +45,7 @@ mock.module("../changes/live/useWorkspaceLive", () => ({
 const { default: DerivedTextView } = await import("./DerivedTextView.vue");
 // The real cache, not a stand-in: seeding it is how a test says "this tab has read that file before", and its
 // once-per-version rule is what stops a pane that re-reads from deriving the same file again.
-const { forgetDerivedText, rememberDerived } = await import("../files/derivedCache");
+const { rememberDerived } = await import("../files/derivedCache");
 
 const shadow = (over: Partial<Extract<WorkspaceDerived, { present: true }>> = {}): WorkspaceDerived => ({
     present: true,
@@ -96,7 +97,7 @@ beforeEach(() => {
     answers.derive = undefined;
     answers.hold = false;
     release = undefined;
-    forgetDerivedText();
+    resetSandboxScope();
 });
 afterEach(() => {
     app?.unmount();

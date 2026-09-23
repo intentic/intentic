@@ -1,33 +1,25 @@
 // ensureProviderCommands: asks for the given provider (not just Claude), retries while the list is
 // empty, never re-reads once populated, and drops an answer that arrives after a sandbox switch.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { it, expect, beforeEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
+import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
-const reads = hoisted(() => ({ paths: [] as string[], answer: [] as { name: string; description: string }[] }));
+const reads = hoisted(() => ({ answer: [] as { name: string; description: string }[] }));
 
-// The one seam under test; other paths answering empty stand in for a mounted chat's other fetches.
-mock.module(`../../sandbox/client/sandboxClient`, () => ({
-    sandboxJson: mock((path: string) => {
-        reads.paths.push(path);
-        return path.startsWith(`/agent/commands`) ? Promise.resolve({ commands: reads.answer }) : Promise.resolve({});
-    }),
-    sandboxRequest: mock(() => Promise.resolve(new Response(`{}`))),
-    sandboxRequestVia: mock(() => Promise.resolve(new Response(`{}`))),
-    sandboxError: mock(() => new Error(`unused`)),
-    SandboxHttpError: class SandboxHttpError extends Error {},
-}));
+// The one seam under test: a provider's commands as the daemon last recorded them. Any other read throws naming itself.
+const commandReads = mock(async (_input: ProcedureInput<`agent.commands`>) => ({ commands: reads.answer }));
+mock.module(`../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ agent: { commands: commandReads } }) }));
 
 import { providerCommands } from "./providerCatalog";
-import { resetChat } from "../run/useChat";
 import { ensureProviderCommands } from "../models/useChat-catalog";
 
-const commandReads = (): string[] => reads.paths.filter((path) => path.startsWith(`/agent/commands`));
-
 beforeEach(() => {
-    reads.paths.length = 0;
+    commandReads.mockClear();
     reads.answer = [{ name: `compact`, description: `Summarize the conversation` }];
-    resetChat();
+    resetSandboxScope();
 });
 
 // loadAccountStatus only ever asked for `claude`, so any other provider's pane read an empty record
@@ -35,7 +27,7 @@ beforeEach(() => {
 it(`asks for the provider it was given, not only claude`, async () => {
     await ensureProviderCommands(`cursor`);
 
-    expect(commandReads()).toEqual([`/agent/commands?agent=cursor`]);
+    expect(commandReads.mock.calls).toEqual([[{ agent: `cursor` }]]);
     expect(providerCommands.value[`cursor`]).toEqual([{ name: `compact`, description: `Summarize the conversation` }]);
 });
 
@@ -49,7 +41,7 @@ it(`asks again while the list is still empty, so a read that came back too early
     reads.answer = [{ name: `compact`, description: `Summarize the conversation` }];
     await ensureProviderCommands(`claude`);
 
-    expect(commandReads()).toHaveLength(2);
+    expect(commandReads.mock.calls).toEqual([[{ agent: `claude` }], [{ agent: `claude` }]]);
     expect(providerCommands.value[`claude`]).toHaveLength(1);
 });
 
@@ -60,21 +52,21 @@ it(`never re-reads a list it already has`, async () => {
     await ensureProviderCommands(`claude`);
     await ensureProviderCommands(`claude`);
 
-    expect(commandReads()).toHaveLength(1);
+    expect(commandReads.mock.calls).toEqual([[{ agent: `claude` }]]);
 });
 
 // Concurrent askers share one request rather than each opening its own.
 it(`shares one request between concurrent askers`, async () => {
     await Promise.all([ensureProviderCommands(`claude`), ensureProviderCommands(`claude`), ensureProviderCommands(`claude`)]);
 
-    expect(commandReads()).toHaveLength(1);
+    expect(commandReads.mock.calls).toEqual([[{ agent: `claude` }]]);
 });
 
 // A read in flight when the sandbox changes answers for the box the user left; applying it risks an
 // unknown `/name` that discards the rest of the message.
 it(`drops an answer that arrives after a sandbox switch`, async () => {
     const inFlight = ensureProviderCommands(`claude`);
-    resetChat();
+    resetSandboxScope();
     await inFlight;
 
     expect(providerCommands.value[`claude`]).toEqual([]);

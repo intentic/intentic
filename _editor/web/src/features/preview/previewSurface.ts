@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
 import type { Router } from "vue-router";
 import { storedValue, storeValue } from "../../lib/browserStorage";
 import { useSandbox } from "../sandbox/client/useSandbox";
@@ -8,28 +8,16 @@ import { ADDRESS_TARGET_ID } from "./previewModel";
 // above the router. `opened` is the panel's existence: nothing mounts until the user first looks, and once opened it
 // stays mounted so the app's own state survives switching away.
 
-const opened = ref(false);
-const selectedId = ref<string | undefined>(undefined);
-const address = ref<string | undefined>(undefined);
-
 // Last-shown target and typed address, keyed by sandbox so they return on reload; the id is re-validated against the
 // live target list on read (previewModel.pickTarget).
 const targetKey = (sandboxId: string | undefined): string => `intentic-preview-target:${sandboxId ?? ``}`;
 const addressKey = (sandboxId: string | undefined): string => `intentic-preview-address:${sandboxId ?? ``}`;
 
-const restore = (): void => {
-    const sandboxId = useSandbox().activeSandboxId.value;
-    selectedId.value = storedValue(targetKey(sandboxId));
-    address.value = storedValue(addressKey(sandboxId));
-};
-restore();
-
-// Re-scopes to the incoming sandbox: its own last target comes back, and the parked panel closes rather than keep the
-// outgoing sandbox's app loaded. A floating window re-marks itself opened on arrival (pages/FloatingSection.vue).
-export const resetPreviewSurface = (): void => {
-    opened.value = false;
-    restore();
-};
+// A switch closes the parked panel rather than keep the outgoing sandbox's app loaded, and brings back the incoming
+// one's own last target. A floating window re-marks itself opened on arrival (pages/FloatingSection.vue).
+const opened = sandboxRef(() => false);
+const selectedId = sandboxRef<string | undefined>(() => storedValue(targetKey(useSandbox().activeSandboxId.value)));
+const address = sandboxRef<string | undefined>(() => storedValue(addressKey(useSandbox().activeSandboxId.value)));
 
 export const previewOpened = opened;
 export const previewSelectedId = selectedId;
@@ -80,5 +68,5 @@ export const openPreviewOnFirstVisit = (router: Router, targetId: string): boole
     return true;
 };
 
-// Toggle lives in previewFloating.ts, not here: this module is imported by sandboxScope, whose tests run without a DOM,
-// and the floating surface touches `window` at module scope.
+// Toggle lives in previewFloating.ts, not here: the floating surface touches `window` at module scope, and this state
+// module stays importable without one.

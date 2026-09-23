@@ -25,7 +25,7 @@ const {
     ariaLabel?: string;
 }>();
 
-const { provider, harness, model, auto } = conversation;
+const { provider, harness, model, auto } = conversation.selection;
 // The whole face of the control (composerModelLabel.ts): the model, `Auto`, or the press to choose one when this
 // chat has nothing that could answer.
 const reading = computed(() => composerModelReading({ provider: provider.value, harness: harness.value, model: model.value, auto: auto.value }));

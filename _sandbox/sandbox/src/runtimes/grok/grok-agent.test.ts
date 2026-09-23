@@ -2,9 +2,15 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { createGrokAgent, createGrokRunner, type GrokRunner, type GrokTurn } from "./grok-agent.js";
 import type { OpenCodeService } from "./opencode.js";
+import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
+import { DEFAULT_TURN_TIMEOUTS } from "../decorators/turn-watchdog.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Fake runner yielding one canned Event list per invocation (plan turns call it repeatedly), capturing each turn's
 // fields; no session filtering, unlike the production runner.
@@ -17,7 +23,14 @@ const fakeRunner = (...turns: unknown[][]): { runner: GrokRunner; calls: GrokTur
     return { runner, calls };
 };
 
-const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
+const request: AgentRequest<ContainerCredential> = {
+    spec: { prompt: "add a /ping route", cwd: WORKSPACE_ROOT },
+    policy: {},
+    tools: {},
+    credential: { kind: "container" },
+    hooks: { cards },
+    signal: new AbortController().signal,
+};
 
 // Collects all events; `onPlan` resolves via `setTimeout` since the generator's yield suspends before the pending-plan
 // bridge's `wait()` registers.
@@ -31,7 +44,7 @@ const collect = async (
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
             const decision = onPlan(event.requestId);
-            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
+            setTimeout(() => cards.resolve({ kind: "plan", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -116,9 +129,12 @@ test("a build turn resumes the session on the xai provider, passes the model, an
     const { runner, calls } = fakeRunner([]);
     await collect(createGrokAgent(runner), {
         ...request,
-        sessionId: "s9",
-        model: "grok-4.20-0309-non-reasoning",
-        attachments: [`${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/a/report.pdf`],
+        spec: {
+            ...request.spec,
+            sessionId: "s9",
+            model: "grok-4.20-0309-non-reasoning",
+            attachments: [`${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/a/report.pdf`],
+        },
     });
     expect(calls).toHaveLength(1);
     const turn = calls[0]!;
@@ -179,7 +195,9 @@ test("a plan turn proposes read-only on the plan agent, then executes on build a
             { type: "session.idle", properties: { sessionID: "s2" } },
         ],
     );
-    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createGrokAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({
+        approve: true,
+    }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "s2" },
@@ -216,7 +234,7 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
         ],
     );
     let planCount = 0;
-    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => {
+    const events = await collect(createGrokAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => {
         planCount += 1;
         return planCount === 1 ? { approve: false, feedback: "use fastify" } : { approve: true };
     });
@@ -263,7 +281,9 @@ test("a plan turn captures only the assistant's text, never the echoed user prom
         ],
         [{ type: "session.idle", properties: { sessionID: "s5" } }],
     );
-    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createGrokAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({
+        approve: true,
+    }));
     const plan = events.find((event) => event.kind === "plan") as { text: string } | undefined;
     expect(plan?.text).toBe("Plan: add the route.");
 });
@@ -277,7 +297,7 @@ test("a plan turn that errors after partial text emits the error and NO plan fra
         },
         { type: "session.error", properties: { sessionID: "s6", error: { name: "PaymentRequiredError", data: { message: "Payment Required" } } } },
     ]);
-    const events = await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const });
+    const events = await collect(createGrokAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } });
     expect(events).toEqual([{ kind: "session", sessionId: "s6" }, { kind: "error", message: "Payment Required" }, { kind: "done" }]);
     expect(events.some((event) => event.kind === "plan")).toBe(false);
 });
@@ -505,10 +525,10 @@ test("createGrokRunner opens the stream before the session it must not miss the 
 test("a stalled turn is reported against the backend the user actually picked", async () => {
     const stalled = (provider: string | undefined): Promise<void> =>
         (async () => {
-            for await (const event of createGrokRunner(
-                fakeOpenCode([]).openCode,
-                20,
-            )({ ...runnerTurn, ...(provider !== undefined ? { provider } : {}) })) {
+            for await (const event of createGrokRunner(fakeOpenCode([]).openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 20 })({
+                ...runnerTurn,
+                ...(provider !== undefined ? { provider } : {}),
+            })) {
                 void event;
             }
         })();
@@ -591,7 +611,7 @@ test("createGrokRunner ends the turn on session.error even while the stream stay
 test("createGrokRunner aborts and throws when no event arrives within the inactivity window", async () => {
     const { openCode, aborted } = fakeOpenCode([{ type: "session.created", properties: { info: { id: "s1" } } } as unknown as Event]);
     const drain = async (): Promise<void> => {
-        for await (const event of createGrokRunner(openCode, 20)(runnerTurn)) {
+        for await (const event of createGrokRunner(openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 20 })(runnerTurn)) {
             void event;
         }
     };
@@ -630,7 +650,7 @@ test("a retry's announced next attempt pushes the inactivity deadline past it", 
     // promised wait was honoured, not just slow.
     await expect(
         (async () => {
-            for await (const event of createGrokRunner(openCode, 20)(runnerTurn)) {
+            for await (const event of createGrokRunner(openCode, { ...DEFAULT_TURN_TIMEOUTS, inactivityMs: 20 })(runnerTurn)) {
                 seen.push(event.type);
             }
         })(),
@@ -730,7 +750,7 @@ test("a thrown model-not-found with no named alternatives surfaces as a tagged g
     // No named alternatives means no self-heal; tagged for parity with the event path so the client reloads the
     // catalog.
     const { openCode, recorded, prompts } = fakeOpenCode([], { id: "grok-x", message: "Model not found: xai/grok-x." });
-    const events = await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, model: "grok-x" });
+    const events = await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, spec: { ...request.spec, model: "grok-x" } });
     const error = events.find((event) => event.kind === "error") as { code?: string; message: string } | undefined;
     expect(error?.code).toBe("grok-model-invalid");
     expect(error?.message).toContain("grok-x");
@@ -743,7 +763,7 @@ test("a thrown model-not-found with no named alternatives surfaces as a tagged g
 test("the turn's standing instructions ride the prompt body", async () => {
     const { openCode, systems } = fakeOpenCode([{ type: "session.idle", properties: { sessionID: "s1" } } as unknown as Event]);
 
-    await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, systemAppend: "House rules: be brief." });
+    await collect(createGrokAgent(createGrokRunner(openCode)), { ...request, spec: { ...request.spec, systemAppend: "House rules: be brief." } });
 
     expect(systems).toEqual(["House rules: be brief."]);
 });
@@ -772,9 +792,17 @@ test("a planned turn carries the same instructions into its execute phase", asyn
         ],
     );
 
-    await collect(createGrokAgent(runner), { ...request, permissionMode: "plan" as const, systemAppend: "House rules: be brief." }, () => ({
-        approve: true,
-    }));
+    await collect(
+        createGrokAgent(runner),
+        {
+            ...request,
+            spec: { ...request.spec, systemAppend: "House rules: be brief." },
+            policy: { ...request.policy, permissionMode: "plan" as const },
+        },
+        () => ({
+            approve: true,
+        }),
+    );
 
     expect(calls.map((call) => call.system)).toEqual(["House rules: be brief.", "House rules: be brief."]);
 });

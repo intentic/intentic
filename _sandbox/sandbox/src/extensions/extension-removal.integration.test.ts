@@ -12,7 +12,7 @@ import { fakeFiles } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryAutomationsStore, memoryCapabilitiesStore, memorySecretVault } from "../harness/route-stores.testing.js";
 import { removeWorkspacePath } from "../workspace/files/workspace-files.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 import { workspacePaths } from "../workspace/workspace.js";
 
 // Removal, over the daemon's HTTP surface. The claims worth holding: the plan names the connections configured from

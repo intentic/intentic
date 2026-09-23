@@ -18,7 +18,7 @@ import type { Services } from "../composition.js";
 import { baseImageOf, customPath } from "../environment/environment.js";
 import { remoteState } from "../git/remote/remote.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
-import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Derives a sandbox's declarable shape from its live manifests, emits it as sandbox.toml, and parses it back for
 // apply/diff (apply-definition.ts writes it). Never stored: every export reads the same stores the sandbox runs on.

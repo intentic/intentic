@@ -2,6 +2,10 @@
 
 What runs inside the box: the process that owns the files, serves the editor, and drives every agent turn.
 
+How a turn is put together (the facts-then-pure-decision planner, the frame pipeline, one actor per conversation, the
+ports every other subsystem reaches the turn through) and why is
+[docs/design/structural-decomposition.md](../design/structural-decomposition.md).
+
 The daemon ([_sandbox/sandbox](../../_sandbox/sandbox)) is the whole per-user product surface, not just a chat
 endpoint. One Node process serves the oRPC contract on `:8787` and a preview proxy on `:5173`, and a loopback
 listener on `:8788` (published on the machine's own loopback) that serves the same app for a same-machine browser AND
@@ -25,7 +29,7 @@ survive reconnects. Its subsystems:
   ([sandbox-contract/agent-catalog.ts](../../_shared/sandbox-contract/src/models/agent-catalog.ts)) is one row per runtime:
   steering, permissions, questions, MCP, effort, isolation, commands, terminals, recovery: and both sides of
   the wire read it. The daemon gates its seams on it and strips the controls a runtime would silently drop
-  ([agent/turn-plan.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-plan.ts)); the composer offers only the modes and knobs
+  ([agent/run/decide/honoured.ts](../../_sandbox/sandbox/src/agent/run/decide/honoured.ts)); the composer offers only the modes and knobs
   something applies, and names the rest as what this provider can't do. A capability is listed only if
   something reads it, and `agent-catalog.test.ts` walks PROVIDERS × HARNESSES so a new provider cannot arrive
   without a row
@@ -40,8 +44,9 @@ survive reconnects. Its subsystems:
   daemon**: every in-flight turn and automation fire is written to a **turn journal** on the history volume
   ([agent/turn-journal.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-journal.ts)) and cleared when it settles, so whatever
   is still there at boot is exactly what the process died under: and `resumeInterruptedTurns`
-  ([agent/turn-resume.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-resume.ts)) re-runs it on the session holding its
-  partial work. That matters because intentic's own flows cause the deaths: every update, environment approval
+  ([agent/turn-resume.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-resume.ts)) re-runs a turn on the session holding its
+  partial work, while an automation's fire is re-fired by its own scheduler (`resumeInterruptedFires`,
+  [automations/fire-resume.ts](../../_sandbox/sandbox/src/automations/fire-resume.ts)). That matters because intentic's own flows cause the deaths: every update, environment approval
   and `dev-sandbox.sh` swap recreates the container, so approving the Dockerfile change an agent asked for used
   to cost the run that asked for it. Off by default (`autoResumeOnRestart`) because a re-run spends the owner's
   allowance unwatched; once turned on it fires once per turn, and only for turns under six hours old: a turn
@@ -78,8 +83,9 @@ survive reconnects. Its subsystems:
   [\_sandbox/webchat-widget](../../_sandbox/webchat-widget)). It is the inbound-HTTP mirror of the gateway-process pattern:
   no extension holds a connection, because the connection is a `<script>` tag on someone else's page. Five
   routes are exempt from the bearer middleware: `widget.js`, and per-automation `config` / `challenge` /
-  `message` / `messages`: and that set, written as **one predicate** in [app.ts](../../_sandbox/sandbox/src/app.ts), is the whole of
-  what an anonymous internet user can reach on a daemon. The visitor holds no credential in any mode: even
+  `message` / `messages`: and that set, declared doors in the contract's
+  [raw-route table](../../_shared/sandbox-contract/src/protocol/raw-routes.ts), is the whole of what an anonymous
+  internet user can reach of it. The visitor holds no credential in any mode: even
   with Google sign-in on, the ID token is verified daemon-side against the *site's own* client id (intentic's
   cannot list every customer domain) and becomes a claim in the prompt, never a grant. Admission is the
   trigger's `allowedOrigins` plus a per-conversation rate limit and an optional bot check: Cloudflare
@@ -152,7 +158,17 @@ survive reconnects. Its subsystems:
   is capped to `mirror` at pairing-mint. Each enrolled machine gets its own key in `authorized_keys` and its own
   `/ports`-scoped sync token, so machines revoke independently (self-revoke on uninstall; owner clears all).
 - **History**: git snapshots every 60 s + per agent turn, on a `/history` volume mounted *outside*
-  `/work` so an agent `rm -rf` can't reach it ([history/](../../_sandbox/sandbox/src/history/)). The same volume holds
+  `/work` so an agent `rm -rf` can't reach it ([history/](../../_sandbox/sandbox/src/history/)). Each conversation
+  is one storage unit on it: its rows in `/history/conversations.db` (SQLite in WAL mode,
+  [store/conversations-db.ts](../../_sandbox/sandbox/src/store/conversations-db.ts): the registry record, per-repo
+  worktree and landing provenance, turn checkpoints, the turn journal and armed watches, every table keyed to the
+  conversation's row with `ON DELETE CASCADE`), and its files under `/history/conversations/<id>/`
+  ([store/conversation-units.ts](../../_sandbox/sandbox/src/store/conversation-units.ts): the transcript record, the
+  system-prompt disclosure, a fenced conversation's own runtime session store). The facts that must agree are written
+  in one transaction: a turn's begin with its journal entry, a land's outcome, a purge. Archiving keeps the unit;
+  discarding a conversation or emptying the archive purges it (dispose the actor, delete the row, remove the
+  directory). Its checkouts under `/history/worktrees/<id>` are not in the unit: an archive retires them while the
+  conversation stays. `agents show <id> --stored` prints a unit's rows and files. The same volume holds
   the managed ssh dir (`/history/ssh-hosts`, symlinked to `~/.ssh/intentic-hosts` at boot by
   [`linkSshHosts`](../../_sandbox/sandbox/src/capabilities/ssh-hosts.ts)): container recreates, every rebuild, update
   and `dev-sandbox.sh` swap: wipe `/root`, so a git-provider identity or an `ssh` capability's key kept there

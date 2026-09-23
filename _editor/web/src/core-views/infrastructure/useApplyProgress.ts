@@ -2,10 +2,11 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
 import { readIntenticLines } from "../../lib/intenticStream";
-import { sandboxJson, sandboxRequest } from "../../features/sandbox/client/sandboxClient";
+import { SandboxHttpError } from "../../features/sandbox/client/sandboxHttpError";
+import { sandboxRpc } from "../../features/sandbox/client/sandboxRpc";
 import { listTerminals, useTerminalsQuery } from "../../features/terminal/terminalsQuery";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
-import { DEPLOYMENTS, INVENTORY, WORKSPACE_STATE } from "../../lib/queryKeys";
+import { DEPLOYMENTS, rpcKey, WORKSPACE_STATE } from "../../lib/queryKeys";
 import { type ApplyProgressState, initialApplyState, reduceApplyLine } from "./applyProgress";
 import { describeProvisionError } from "./provisionError";
 
@@ -50,7 +51,7 @@ export function useApplyProgress() {
     const refreshWorld = (): void => {
         void queryClient.invalidateQueries({ queryKey: WORKSPACE_STATE.of() });
         void queryClient.invalidateQueries({ queryKey: DEPLOYMENTS.of() });
-        void queryClient.invalidateQueries({ queryKey: INVENTORY.of() });
+        void queryClient.invalidateQueries({ queryKey: rpcKey(`inventory.list`) });
     };
 
     const finishRun = (): void => {
@@ -95,13 +96,12 @@ export function useApplyProgress() {
             stall = setTimeout(() => controller.abort(new DOMException(`events stream stalled`, `TimeoutError`)), STALL_MS);
         };
         try {
-            const response = await sandboxRequest(`/intentic/apply/events`, { method: `GET`, signal: controller.signal });
-            if (!response.ok || !response.body) {
-                throw new Error(`events stream unavailable (${response.status})`);
-            }
+            const lines = await sandboxRpc.intentic.applyEvents(undefined, { signal: controller.signal }).catch((failure: unknown) => {
+                throw failure instanceof SandboxHttpError ? new Error(`events stream unavailable (${failure.status})`) : failure;
+            });
             reattaching.value = false;
             armStall();
-            for await (const line of readIntenticLines(response.body)) {
+            for await (const line of readIntenticLines(lines)) {
                 if (generation !== attachGeneration) {
                     controller.abort();
                     return; // a newer run took over: this loop is stale.
@@ -140,7 +140,7 @@ export function useApplyProgress() {
         applying.value = true;
         attachGeneration += 1;
         try {
-            await sandboxJson(`/intentic/apply`, { method: `POST` });
+            await sandboxRpc.intentic.apply();
         } catch (err) {
             startError.value = describeProvisionError(errorMessage(err, `Apply failed to start.`));
             applying.value = false;

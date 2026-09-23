@@ -10,6 +10,7 @@ import {
 import type { Logger } from "pino";
 import { z } from "zod";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
+import type { Services } from "../../composition.js";
 import { jsonFile } from "../../store/json-file.js";
 import { metaLoginDriver } from "./meta-login.js";
 import { createMintedCatalog, type MintedCatalog } from "./minted-catalog.js";
@@ -135,7 +136,10 @@ export const seedModelsOf = (provider: MintedProvider): readonly Model[] => SEED
 
 // No adapter (see the header), no boot (nothing to start), no pack (these providers add nothing to the image). What's
 // left is what every provider owes: a catalog, a readiness rung, and its secrets-inventory rows.
-export const mintedProviderModule = (provider: MintedProvider): ProviderModule => ({
+// What a minted module reads: its own slice, and the logger its sign-in reports through.
+export type MintedProviderDeps = Pick<Services, "logger" | "minted">;
+
+export const mintedProviderModule = (provider: MintedProvider): ProviderModule<MintedProviderDeps> => ({
     id: provider,
     accounts: mintedAccountDoor(provider),
     adapters: [],
@@ -149,6 +153,6 @@ export const mintedProviderModule = (provider: MintedProvider): ProviderModule =
         ),
 });
 
-// Every minted provider's module, in spec order, so the registry's list of imports stays one line however many of these
+// Every minted provider's module, in spec order, so the runtime table's list stays one line however many of these
 // there are.
-export const MINTED_PROVIDER_MODULES: readonly ProviderModule[] = MINTED_PROVIDERS.map(mintedProviderModule);
+export const MINTED_PROVIDER_MODULES: readonly ProviderModule<MintedProviderDeps>[] = MINTED_PROVIDERS.map(mintedProviderModule);

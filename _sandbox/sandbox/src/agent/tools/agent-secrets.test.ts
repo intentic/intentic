@@ -3,7 +3,8 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import { test, expect } from "bun:test";
 import type { NamedSecret } from "../../secrets/secret-registry.js";
 import { syncHookOutput } from "../../testing.js";
-import { resolveCommandSecrets, type SecretAccess, secretCommandHooks, type SecretUseReport } from "./agent-secrets.js";
+import { resolveCommandSecrets, type SecretAccess, type SecretUseReport } from "../../secrets/secret-access.js";
+import { secretCommandHooks } from "./agent-secrets.js";
 import { bashTmuxHooks } from "./agent-terminals.js";
 
 // A `{{secret:name}}` reference resolves to its value only in the line the pane executes; the ledger/`-c` copy keeps

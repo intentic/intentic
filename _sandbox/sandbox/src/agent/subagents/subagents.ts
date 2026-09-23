@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
@@ -10,13 +11,16 @@ import type {
     SubagentStatus,
     SubagentVerification,
 } from "@intentic/sandbox-contract";
-import { publishRuntimeChange } from "../../system/runtime-watch.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import type { Holding } from "../../agents/actor/conversation-holdings.js";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { childVerification, childVerificationNote, forgetChild, resetChildVerification } from "./child-verification.js";
-import { turnRunOf } from "../run/turn/turn-runs.js";
+import { ROSTER } from "./subagent-roster.js";
+import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
 
 // The registry of subagents the daemon can name, read by the Subagents area and the rail; the third registry of its
 // kind after terminal and browser sessions, with its own short retention window. An SDK child is keyed by the spawning
-// tool call's id, a spawned one by its own conversation id.
+// tool call's id, a spawned one by its own conversation id; each record is held by its conversation's actor (ROSTER).
 
 // Short on purpose: a turn can spawn a dozen children at once, far faster than browsers age (two hours).
 const RETAIN_FINISHED_MS = 5 * 60_000;
@@ -24,7 +28,7 @@ const RETAIN_FINISHED_MS = 5 * 60_000;
 // Report text kept in the summary and list row; the rest is the transcript's job.
 const REPORT_TAIL = 500;
 
-interface SubagentRecord {
+export interface SubagentRecord {
     readonly id: string;
     readonly kind: SubagentKind;
     readonly conversationId: string;
@@ -57,15 +61,17 @@ interface SubagentRecord {
     reported: SubagentStatus | undefined;
 }
 
-const records = new Map<string, SubagentRecord>();
+// Where the roster and everything kept beside it is held: each conversation's actor.
+type Actors = Pick<ConversationActors, "holdings">;
 
 // Drop records aged past RETAIN_FINISHED_MS; called on every list and every write.
-const sweep = (now: number): void => {
-    for (const [id, record] of records) {
+const sweep = (actors: Actors, now: number): void => {
+    const roster = actors.holdings(ROSTER);
+    for (const [id, record] of roster.entries()) {
         if (record.endedAt !== undefined && now - record.endedAt > RETAIN_FINISHED_MS) {
-            records.delete(id);
+            roster.drop(id);
             // The verification ledger's life matches the record's; its verdict was already copied onto the record.
-            forgetChild(id);
+            forgetChild(actors, id);
         }
     }
 };
@@ -74,10 +80,11 @@ const LIVE: ReadonlySet<SubagentStatus> = new Set<SubagentStatus>(["pending", "r
 export const subagentRunning = (record: Pick<SubagentSession, "status">): boolean => LIVE.has(record.status);
 
 // Notified synchronously on every open() and patch(), which makes waitForSubagent race-free: a listener added before
-// the read cannot miss a transition. Not the runtime-watch bus, which rate-limits per domain.
-const waiters = new Set<() => void>();
-const notifyChanged = (): void => {
-    for (const listener of waiters) {
+// the read cannot miss a transition. Not the runtime-watch bus, which rate-limits per domain. Held by the conversation
+// waited on, under an id of the wait's own.
+const WAITERS: Holding<() => void> = { name: "subagent waits" };
+const notifyChanged = (actors: Actors): void => {
+    for (const [, listener] of actors.holdings(WAITERS).entries()) {
         listener();
     }
 };
@@ -88,7 +95,8 @@ interface SubagentSpawn {
     readonly background?: true;
     readonly model?: string;
 }
-const spawns = new Map<string, SubagentSpawn>();
+// Keyed by the spawning call's id and held by no conversation, since the stream notes it naming none; taken at birth.
+const SPAWNS: Holding<SubagentSpawn> = { name: "subagent spawn notes" };
 
 // `inherit` and `default` are directives, not models; filing them would print them as one.
 const NAMES_NO_MODEL: ReadonlySet<string> = new Set(["", "inherit", "default"]);
@@ -96,12 +104,14 @@ const namedModel = (model: string | undefined): string | undefined =>
     model === undefined || NAMES_NO_MODEL.has(model.trim().toLowerCase()) ? undefined : model;
 
 /** Marks a spawning call's background/model ahead of task_started; a call with neither stays unmarked. */
-export const noteSubagentSpawn = (id: string, spawn: { readonly background?: boolean; readonly model?: string } = {}): void => {
+export const noteSubagentSpawn = (actors: Actors, id: string, spawn: { readonly background?: boolean; readonly model?: string } = {}): void => {
     const model = namedModel(spawn.model);
     if (spawn.background !== true && model === undefined) {
         return;
     }
-    spawns.set(id, { ...(spawn.background === true ? { background: true } : {}), ...(model !== undefined ? { model } : {}) });
+    actors
+        .holdings(SPAWNS)
+        .hold(undefined, id, { ...(spawn.background === true ? { background: true } : {}), ...(model !== undefined ? { model } : {}) });
 };
 
 const wire = (record: SubagentRecord): SubagentSession => ({
@@ -127,15 +137,18 @@ const wire = (record: SubagentRecord): SubagentSession => ({
 });
 
 /** Every known subagent, live first then most recently active, the same order browsersQuery uses for browsers. */
-export const listSubagentSessions = (): SubagentSession[] => {
-    sweep(Date.now());
-    return [...records.values()]
-        .map(wire)
+export const listSubagentSessions = (actors: Actors): SubagentSession[] => {
+    sweep(actors, Date.now());
+    return actors
+        .holdings(ROSTER)
+        .entries()
+        .map(([, record]) => wire(record))
         .toSorted((left, right) => Number(subagentRunning(right)) - Number(subagentRunning(left)) || right.activityAt - left.activityAt);
 };
 
 /** Everything subagent-transcript.ts needs to read one child's transcript, nothing the wire carries. */
 export const subagentSource = (
+    actors: Actors,
     id: string,
 ):
     | {
@@ -152,7 +165,7 @@ export const subagentSource = (
           readonly harness: AgentHarness | undefined;
       }
     | undefined => {
-    const record = records.get(id);
+    const record = actors.holdings(ROSTER).get(id);
     if (record === undefined) {
         return undefined;
     }
@@ -170,29 +183,24 @@ export const subagentSource = (
 };
 
 /** Whether a live child is working in the parent's own checkout, the rebase gate's question: an SDK subagent edits it directly. */
-export const subagentInParentTree = (conversationId: string): boolean =>
-    [...records.values()].some((record) => record.conversationId === conversationId && record.kind !== "spawned" && subagentRunning(record));
+export const subagentInParentTree = (actors: Actors, conversationId: string): boolean =>
+    actors
+        .holdings(ROSTER)
+        .of(conversationId)
+        .some((record) => record.kind !== "spawned" && subagentRunning(record));
 
-/** Live and total child counts for a conversation, the fleet card's count chip. */
-export const subagentCountsOf = (conversationId: string): { readonly running: number; readonly total: number } => {
-    let running = 0;
-    let total = 0;
-    for (const record of records.values()) {
-        if (record.conversationId !== conversationId) {
-            continue;
-        }
-        total += 1;
-        if (subagentRunning(record)) {
-            running += 1;
-        }
-    }
-    return { running, total };
+/** Live and total child counts for a conversation, the fleet card's count chip, read off the actors the card is. */
+export const subagentCountsOf = (actors: Actors, conversationId: string): { readonly running: number; readonly total: number } => {
+    const own = actors.holdings(ROSTER).of(conversationId);
+    return { running: own.filter(subagentRunning).length, total: own.length };
 };
 
 // One handle per turn, held for its life and shared by every child it opens, so a late-learned fact reaches children
 // born earlier. `sessionId` fills from the stream's first frame; `subagentsDir` from the first child's start hook.
 export interface SubagentTurn {
     readonly conversationId: string;
+    // The actors its conversation lives in, which hold every child this turn opens.
+    readonly conversations: Actors;
     readonly cwd: string;
     sessionId: string | undefined;
     subagentsDir: string | undefined;
@@ -200,10 +208,12 @@ export interface SubagentTurn {
 
 const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partial<SubagentRecord>): SubagentRecord => {
     const now = Date.now();
-    sweep(now);
+    const actors = turn.conversations;
+    sweep(actors, now);
     // model and background are set only here, at birth; nothing updates them on the record later.
+    const spawns = actors.holdings(SPAWNS);
     const spawn = spawns.get(id);
-    spawns.delete(id);
+    spawns.drop(id);
     const record: SubagentRecord = {
         id,
         kind,
@@ -231,10 +241,11 @@ const open = (turn: SubagentTurn, id: string, kind: SubagentKind, fields: Partia
         reported: undefined,
         ...fields,
     };
-    records.set(id, record);
+    // A spawned child's record is about the child as well, whose own dispose takes it from its parent's roster.
+    actors.holdings(ROSTER).hold(turn.conversationId, id, record, kind === "spawned" ? id : undefined);
     // Tells surfaces not watching this conversation, the rail, the Subagents area, that a child was born.
     publishRuntimeChange("subagents");
-    notifyChanged();
+    notifyChanged(actors);
     return record;
 };
 
@@ -251,8 +262,8 @@ const bornFrame = (record: SubagentRecord): AgentEvent => ({
 
 // Applies a patch and reports it; reports nothing if the record is gone or nothing actually changed, so a repeated
 // no-op update produces no frame.
-const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefined => {
-    const record = records.get(id);
+const patch = (actors: Actors, id: string, fields: Partial<SubagentRecord>): AgentEvent | undefined => {
+    const record = actors.holdings(ROSTER).get(id);
     if (record === undefined) {
         return undefined;
     }
@@ -267,11 +278,11 @@ const patch = (id: string, fields: Partial<SubagentRecord>): AgentEvent | undefi
     // The one place a child's end is recorded, whichever arrival got here first; read once, never re-stamped.
     if (record.endedAt === undefined && !subagentRunning(record)) {
         record.endedAt = record.activityAt;
-        record.verification = childVerification(record.id);
+        record.verification = childVerification(actors, record.id);
     }
     // Fires only on real change; a no-op patch already returned above.
     publishRuntimeChange("subagents");
-    notifyChanged();
+    notifyChanged(actors);
     const update: Extract<AgentEvent, { kind: "subagent_update" }> = { kind: "subagent_update", id };
     return {
         ...update,
@@ -306,7 +317,7 @@ const ending = (
     };
 };
 
-// task_started is the only message with a tool_use id, so only it opens a record; task_updated pairs back via `tasks`.
+// task_started is the only message with a tool_use id, so only it opens a record; task_updated pairs back via TASKS.
 // Not every task is an agent: the stream also carries shell/monitor/workflow work, filtered by `isSubagentTask`.
 
 // The fields the daemon reads off the SDK's four task_* message shapes.
@@ -327,7 +338,8 @@ export interface SubagentTaskMessage {
     readonly patch?: { readonly status?: string; readonly end_time?: number; readonly error?: string; readonly is_backgrounded?: boolean };
 }
 
-const tasks = new Map<string, string>();
+// A task id to the record it opened, held by the turn's conversation; only task_started carries both.
+const TASKS: Holding<string> = { name: "subagent tasks" };
 
 // True only when `subagent_type` is set or `task_type` is `local_agent`, deliberately a whitelist so an unknown future
 // type is left off. Adopted later anyway via SubagentStop's meta file if unlabelled.
@@ -343,13 +355,16 @@ const NOTIFIED: Record<string, SubagentStatus> = { completed: "completed", faile
 
 /** Folds one SDK task message into the registry; returns the frame it produced, if any. */
 export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessage): AgentEvent | undefined => {
+    const actors = turn.conversations;
+    const records = actors.holdings(ROSTER);
+    const tasks = actors.holdings(TASKS);
     if (message.subtype === "task_started") {
         const id = message.tool_use_id;
         if (id === undefined || message.skip_transcript === true || !isSubagentTask(message) || records.has(id)) {
             return undefined;
         }
         if (message.task_id !== undefined) {
-            tasks.set(message.task_id, id);
+            tasks.hold(turn.conversationId, message.task_id, id);
         }
         return bornFrame(
             open(turn, id, "subagent", {
@@ -362,7 +377,7 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
         const id = message.tool_use_id ?? (message.task_id !== undefined ? tasks.get(message.task_id) : undefined);
         return id === undefined
             ? undefined
-            : patch(id, {
+            : patch(actors, id, {
                   ...(message.usage?.total_tokens !== undefined ? { tokens: message.usage.total_tokens } : {}),
                   ...(message.usage?.tool_uses !== undefined ? { toolUses: message.usage.tool_uses } : {}),
                   ...(message.last_tool_name !== undefined ? { lastTool: message.last_tool_name } : {}),
@@ -374,7 +389,7 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
         const status = statusOf(message.patch?.status);
         return id === undefined
             ? undefined
-            : patch(id, {
+            : patch(actors, id, {
                   ...(status !== undefined ? { status } : {}),
                   ...(message.patch?.error !== undefined ? { error: message.patch.error } : {}),
                   ...(message.patch?.is_backgrounded !== undefined ? { background: message.patch.is_backgrounded } : {}),
@@ -386,7 +401,7 @@ export const noteSubagentTask = (turn: SubagentTurn, message: SubagentTaskMessag
         // Weakest of the three endings; routed through `ending` so a report already delivered wins over it.
         return record === undefined
             ? undefined
-            : patch(record.id, {
+            : patch(actors, record.id, {
                   ...ending(record, {
                       source: "notification",
                       ...(message.status !== undefined && NOTIFIED[message.status] !== undefined ? { status: NOTIFIED[message.status] } : {}),
@@ -438,18 +453,20 @@ const adopt = (turn: SubagentTurn, meta: SubagentMeta, agentId: string): void =>
     if (id === undefined) {
         return;
     }
-    fill(records.get(id) ?? open(turn, id, "subagent", {}), meta, agentId);
+    fill(turn.conversations.holdings(ROSTER).get(id) ?? open(turn, id, "subagent", {}), meta, agentId);
 };
 
-// A backgrounded child often outlives SubagentStop, so that hook alone cannot pair every child.
-const metaFiles = new Map<string, Map<string, SubagentMeta>>();
+// A backgrounded child often outlives SubagentStop, so that hook alone cannot pair every child. By directory, held by
+// the conversation whose records point at it.
+const META_FILES: Holding<Map<string, SubagentMeta>> = { name: "subagent meta files" };
 // One pass per directory at a time, so readers arriving together share the one read.
-const passes = new Map<string, Promise<void>>();
+const PASSES: Holding<Promise<void>> = { name: "subagent meta passes" };
 
 // A meta file is written once at child start and never touched again, so it is read at most once.
-const metaOf = async (dir: string): Promise<Map<string, SubagentMeta>> => {
-    const seen = metaFiles.get(dir) ?? new Map<string, SubagentMeta>();
-    metaFiles.set(dir, seen);
+const metaOf = async (actors: Actors, dir: string, holder: string): Promise<Map<string, SubagentMeta>> => {
+    const cache = actors.holdings(META_FILES);
+    const seen = cache.get(dir) ?? new Map<string, SubagentMeta>();
+    cache.hold(holder, dir, seen);
     for (const entry of await readdir(dir).catch(() => [])) {
         const agentId = /^agent-(.+)\.meta\.json$/u.exec(entry)?.[1];
         if (agentId === undefined || seen.has(agentId)) {
@@ -464,10 +481,10 @@ const metaOf = async (dir: string): Promise<Map<string, SubagentMeta>> => {
 };
 
 // Fills existing records only; opening one here could resurrect a child already aged out of the roster.
-const scan = async (dir: string): Promise<void> => {
+const scan = async (actors: Actors, dir: string, holder: string): Promise<void> => {
     let changed = false;
-    for (const [agentId, meta] of await metaOf(dir)) {
-        const record = meta.toolUseId === undefined ? undefined : records.get(meta.toolUseId);
+    for (const [agentId, meta] of await metaOf(actors, dir, holder)) {
+        const record = meta.toolUseId === undefined ? undefined : actors.holdings(ROSTER).get(meta.toolUseId);
         if (record !== undefined && record.agentId === undefined) {
             fill(record, meta, agentId);
             changed = true;
@@ -476,53 +493,57 @@ const scan = async (dir: string): Promise<void> => {
     // Publishes but emits no frame: no update frame has a slot for fields the born frame already carried.
     if (changed) {
         publishRuntimeChange("subagents");
-        notifyChanged();
+        notifyChanged(actors);
     }
 };
 
-const pair = async (dir: string): Promise<void> => {
-    const running = passes.get(dir) ?? scan(dir).finally(() => passes.delete(dir));
-    passes.set(dir, running);
+const pair = async (actors: Actors, dir: string, holder: string): Promise<void> => {
+    const passes = actors.holdings(PASSES);
+    const running = passes.get(dir) ?? scan(actors, dir, holder).finally(() => passes.drop(dir));
+    passes.hold(holder, dir, running);
     await running;
 };
 
 // Cached on the record once resolved: the SDK agent id a child was assigned never changes.
-export const subagentAgentId = async (id: string): Promise<string | undefined> => {
-    const record = records.get(id);
+export const subagentAgentId = async (actors: Actors, id: string): Promise<string | undefined> => {
+    const record = actors.holdings(ROSTER).get(id);
     if (record === undefined || record.agentId !== undefined) {
         return record?.agentId;
     }
     if (record.turn.subagentsDir === undefined) {
         return undefined;
     }
-    await pair(record.turn.subagentsDir);
+    await pair(actors, record.turn.subagentsDir, record.conversationId);
     return record.agentId;
 };
 
 /** Pairs only children still running; costs one directory read per session with an unpaired child. */
-export const pairLiveSubagents = async (): Promise<void> => {
+export const pairLiveSubagents = async (actors: Actors): Promise<void> => {
     const known = new Set<string>();
-    const unpaired = new Set<string>();
-    for (const record of records.values()) {
+    // Each directory still to read, with the conversation whose records point at it.
+    const unpaired = new Map<string, string>();
+    for (const [, record] of actors.holdings(ROSTER).entries()) {
         const dir = record.turn.subagentsDir;
         if (dir !== undefined) {
             known.add(dir);
             if (record.agentId === undefined && subagentRunning(record)) {
-                unpaired.add(dir);
+                unpaired.set(dir, record.conversationId);
             }
         }
     }
     // A directory's cache is dropped once no record in the roster points at it anymore.
-    for (const dir of metaFiles.keys()) {
+    const cache = actors.holdings(META_FILES);
+    for (const [dir] of cache.entries()) {
         if (!known.has(dir)) {
-            metaFiles.delete(dir);
+            cache.drop(dir);
         }
     }
-    await Promise.all([...unpaired].map(pair));
+    await Promise.all([...unpaired].map(([dir, holder]) => pair(actors, dir, holder)));
 };
 
 /** Whether anything checked a child's work: the stamped verdict once it has ended. */
-export const subagentVerification = (id: string): SubagentVerification | undefined => records.get(id)?.verification ?? childVerification(id);
+export const subagentVerification = (actors: Actors, id: string): SubagentVerification | undefined =>
+    actors.holdings(ROSTER).get(id)?.verification ?? childVerification(actors, id);
 
 export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, HookCallbackMatcher[]>> => ({
     // Appends the verification verdict to the Task tool's result as the parent reads it, via `additionalContext` rather
@@ -535,7 +556,7 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
                     if (input.hook_event_name !== "PostToolUse") {
                         return { continue: true };
                     }
-                    const verification = subagentVerification(input.tool_use_id);
+                    const verification = subagentVerification(turn.conversations, input.tool_use_id);
                     const note = verification === undefined ? undefined : childVerificationNote(verification);
                     return note === undefined
                         ? { continue: true }
@@ -571,9 +592,9 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
                     adopt(turn, meta, input.agent_id);
                     // Child's own last words go in as `report`, the strongest source; status is not set here since only
                     // the task stream distinguishes finishing, failing, or being cut short.
-                    const child = meta.toolUseId !== undefined ? records.get(meta.toolUseId) : undefined;
+                    const child = meta.toolUseId !== undefined ? turn.conversations.holdings(ROSTER).get(meta.toolUseId) : undefined;
                     if (child !== undefined && input.last_assistant_message !== undefined) {
-                        patch(child.id, ending(child, { summary: input.last_assistant_message, source: "report" }));
+                        patch(turn.conversations, child.id, ending(child, { summary: input.last_assistant_message, source: "report" }));
                     }
                     return { continue: true };
                 },
@@ -586,11 +607,11 @@ export const subagentHooks = (turn: SubagentTurn): Partial<Record<HookEvent, Hoo
 // the child's own conversation id, so spawn, wait, and the roster all name it the same way.
 
 // Feeds the parent's live frame log; a service call has no stream of its own to draw from.
-const pushToParentRun = (conversationId: string, frame: AgentEvent | undefined): void => {
+const pushToParentRun = (actors: Actors, conversationId: string, frame: AgentEvent | undefined): void => {
     if (frame === undefined) {
         return;
     }
-    turnRunOf(conversationId)?.push(frame);
+    turnRunOf(actors, conversationId)?.push(frame);
 };
 
 export interface SpawnedChildBirth {
@@ -610,11 +631,12 @@ export interface SpawnedChildBirth {
  * record under the same id is replaced whole, a follow-up `send`; a live one is left alone.
  */
 export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth): void => {
-    const existing = records.get(birth.id);
+    const roster = turn.conversations.holdings(ROSTER);
+    const existing = roster.get(birth.id);
     if (existing !== undefined && subagentRunning(existing)) {
         return;
     }
-    records.delete(birth.id);
+    roster.drop(birth.id);
     const record = open(turn, birth.id, "spawned", {
         background: true,
         ...(birth.description !== undefined ? { description: birth.description } : {}),
@@ -624,7 +646,7 @@ export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth): 
         ...(birth.harness !== undefined ? { harness: birth.harness } : {}),
         ...(birth.spawnDepth !== undefined ? { spawnDepth: birth.spawnDepth } : {}),
     });
-    pushToParentRun(turn.conversationId, bornFrame(record));
+    pushToParentRun(turn.conversations, turn.conversationId, bornFrame(record));
 };
 
 /**
@@ -632,6 +654,7 @@ export const openSpawnedChild = (turn: SubagentTurn, birth: SpawnedChildBirth): 
  * settled.
  */
 export const noteSpawnedChild = (
+    actors: Actors,
     id: string,
     move: {
         readonly status?: "running" | "blocked";
@@ -642,23 +665,29 @@ export const noteSpawnedChild = (
         readonly tokens?: number;
     },
 ): void => {
-    const record = records.get(id);
+    const record = actors.holdings(ROSTER).get(id);
     if (record === undefined || !subagentRunning(record)) {
         return;
     }
-    pushToParentRun(record.conversationId, patch(id, move));
+    pushToParentRun(actors, record.conversationId, patch(actors, id, move));
 };
 
 /** The child's turn ended; its closing text becomes the report, cut at the head where the answer is. */
-export const settleSpawnedChild = (id: string, outcome: { readonly failed: boolean; readonly report: string; readonly error?: string }): void => {
-    const record = records.get(id);
+export const settleSpawnedChild = (
+    actors: Actors,
+    id: string,
+    outcome: { readonly failed: boolean; readonly report: string; readonly error?: string },
+): void => {
+    const record = actors.holdings(ROSTER).get(id);
     if (record === undefined) {
         return;
     }
     const summary = outcome.report.trim().slice(0, REPORT_TAIL).trim();
     pushToParentRun(
+        actors,
         record.conversationId,
         patch(
+            actors,
             id,
             ending(record, {
                 status: outcome.failed ? "failed" : "completed",
@@ -703,16 +732,17 @@ const waitMatch = (record: SubagentRecord, until: readonly SubagentWaitUntil[], 
     return undefined;
 };
 
-export const waitForSubagent = (conversationId: string, options: SubagentWaitOptions): Promise<SubagentWaitOutcome> =>
+export const waitForSubagent = (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<SubagentWaitOutcome> =>
     new Promise((resolve) => {
+        const records = actors.holdings(ROSTER);
+        const waiters = actors.holdings(WAITERS);
+        const waiter = randomUUID();
         const candidates = (): SubagentRecord[] =>
-            [...records.values()].filter(
-                (record) => record.conversationId === conversationId && (options.target === undefined || record.id === options.target),
-            );
+            records.of(conversationId).filter((record) => options.target === undefined || record.id === options.target);
         // oxlint-disable-next-line prefer-const -- A later branch assigns and clears this binding.
         let timer: ReturnType<typeof setTimeout> | undefined;
         const settle = (result: SubagentWaitOutcome): void => {
-            waiters.delete(evaluate);
+            waiters.drop(waiter);
             options.signal?.removeEventListener("abort", onAbort);
             if (timer !== undefined) {
                 clearTimeout(timer);
@@ -747,13 +777,13 @@ export const waitForSubagent = (conversationId: string, options: SubagentWaitOpt
         }, options.timeoutMs);
         timer.unref();
         // Listener added before the first look, the ordering that makes this race-free.
-        waiters.add(evaluate);
+        waiters.hold(conversationId, waiter, evaluate);
         evaluate();
     });
 
 /** Whether a wait already handed this child's ending to its parent. */
-export const subagentEndingReported = (id: string): boolean => {
-    const reported = records.get(id)?.reported;
+export const subagentEndingReported = (actors: Actors, id: string): boolean => {
+    const reported = actors.holdings(ROSTER).get(id)?.reported;
     return reported !== undefined && !LIVE.has(reported);
 };
 
@@ -761,12 +791,12 @@ export const subagentEndingReported = (id: string): boolean => {
  * Settles every still-live child of this turn as it ends, so one the SDK never reported a terminal status for does not
  * sit 'running' forever.
  */
-export const closeSubagents = (conversationId: string): AgentEvent[] => {
+export const closeSubagents = (actors: Actors, conversationId: string): AgentEvent[] => {
     const frames: AgentEvent[] = [];
-    for (const record of records.values()) {
+    for (const record of actors.holdings(ROSTER).of(conversationId)) {
         // Not spawned children: their turn outlives the parent's, and the service settles them from their own ending.
-        if (record.conversationId === conversationId && record.kind !== "spawned" && subagentRunning(record)) {
-            const frame = patch(record.id, { status: "killed" });
+        if (record.kind !== "spawned" && subagentRunning(record)) {
+            const frame = patch(actors, record.id, { status: "killed" });
             if (frame !== undefined) {
                 frames.push(frame);
             }
@@ -775,12 +805,14 @@ export const closeSubagents = (conversationId: string): AgentEvent[] => {
     return frames;
 };
 
-// Resets all module state; tests drive the registry through its real entry points and need to start empty.
-export const resetSubagents = (): void => {
-    records.clear();
-    tasks.clear();
-    spawns.clear();
-    metaFiles.clear();
-    waiters.clear();
-    resetChildVerification();
+// Empties the roster and everything kept beside it; tests drive the registry through its real entry points and need to
+// start empty.
+export const resetSubagents = (actors: Actors): void => {
+    actors.holdings(ROSTER).clear();
+    actors.holdings(TASKS).clear();
+    actors.holdings(SPAWNS).clear();
+    actors.holdings(META_FILES).clear();
+    actors.holdings(PASSES).clear();
+    actors.holdings(WAITERS).clear();
+    resetChildVerification(actors);
 };

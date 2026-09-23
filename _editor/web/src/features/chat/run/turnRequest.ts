@@ -1,4 +1,5 @@
 import type { AgentHarness, AgentProvider, EditorContext, PermissionMode } from "@intentic/sandbox-contract";
+import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
 
 // The turn body the daemon receives: what a send carries, which session it may resume, and the shape that
 // states both on the wire. Provider and harness are switchable mid-conversation; a session id only resumes on
@@ -63,10 +64,7 @@ const setFlags = (settings: TurnSettings): { fast?: true; autoPicked?: true } =>
 
 // Two fields, not one: a chip is a file the user chose, so an unresolvable one refuses the send, while a mention is
 // this tokenizer's reading of their words, so an unresolvable one is the daemon's to drop. Each omitted when empty.
-const filePaths = (
-    attachments: readonly string[],
-    mentions: readonly string[],
-): { attachments?: readonly string[]; mentions?: readonly string[] } => ({
+const filePaths = (attachments: string[], mentions: string[]): Pick<ProcedureInput<`agent.run`>, "attachments" | "mentions"> => ({
     ...(attachments.length > 0 ? { attachments } : {}),
     ...(mentions.length > 0 ? { mentions } : {}),
 });
@@ -94,12 +92,12 @@ export const turnRequestBody = (input: {
     // Fork point: the daemon copies rows from the source's record before running; `files` picks then or now.
     readonly forkOf: { readonly conversationId: string; readonly keep: number; readonly files: "then" | "now" } | undefined;
     // Files the user staged as chips. A path the daemon can't resolve refuses the send, since the user chose it.
-    readonly attachmentPaths: readonly string[];
+    readonly attachmentPaths: string[];
     // Workspace paths read out of the text's own `@` tokens. Ride apart from the chips: nobody chose them, so the
     // daemon drops one that doesn't resolve rather than refusing the turn over a word in a paste.
-    readonly mentionedPaths: readonly string[];
+    readonly mentionedPaths: string[];
     readonly editorContext: EditorContext | undefined;
-}) => {
+}): ProcedureInput<`agent.run`> => {
     // Whether this body targets this sandbox; fields scoped to another box's store are dropped otherwise.
     const here = input.box === undefined;
     return {

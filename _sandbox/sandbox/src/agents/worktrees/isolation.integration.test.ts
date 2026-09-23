@@ -23,7 +23,8 @@ import {
     nsenterArgv,
     nsenterPrefix,
 } from "./isolation.js";
-import { sessionsDir, sessionsRoot } from "../../sessions/session-store.js";
+import { sessionsDir } from "../../sessions/session-store.js";
+import { conversationsRoot } from "../../store/conversation-units.js";
 
 // Pins the mount plan and path translation, not the real namespace (CAP_SYS_ADMIN is not guaranteed here); a wrong
 // order fails silently at runtime, which is what this catches instead.
@@ -93,9 +94,10 @@ test("a fenced conversation's placement names its own session store and every di
     const placed = await isolation.planFor(plan.worktree, true);
     expect(placed.fence).toEqual({
         sessions: sessionsDir(HISTORY_ROOT, "abc"),
-        // The checkouts, the daemon's transcripts, and the stores fenced conversations write to: each one is the
-        // whole workspace or the whole fleet's words, reachable from inside the namespace by an absolute path.
-        hidden: [`${HISTORY_ROOT}/worktrees`, `${HISTORY_ROOT}/transcripts`, sessionsRoot(HISTORY_ROOT)],
+        // The checkouts, and every conversation's unit (its transcript, its prompt record, a fenced one's own store):
+        // each is the whole workspace or the whole fleet's words, reachable from inside the namespace by an absolute path.
+        // The last two are where the layout before units kept the same words, still on disk on an older volume.
+        hidden: [`${HISTORY_ROOT}/worktrees`, conversationsRoot(HISTORY_ROOT), `${HISTORY_ROOT}/transcripts`, `${HISTORY_ROOT}/sessions`],
     });
     expect((await isolation.planFor(plan.worktree, false)).fence).toBeUndefined();
 });
@@ -105,7 +107,7 @@ test("a fenced turn is left no path to the whole tree: the main mount is gone an
     // Unmounted rather than masked: it is a bind of the workspace root, and what a fenced checkout cut out is
     // otherwise one `cat /mnt/intentic-main/...` away, for a shell and for a file tool alike.
     expect(lines).toContain(`umount ${shellQuote(MAIN_MOUNT)}`);
-    for (const hidden of [`${HISTORY_ROOT}/worktrees`, `${HISTORY_ROOT}/transcripts`, sessionsRoot(HISTORY_ROOT)]) {
+    for (const hidden of [`${HISTORY_ROOT}/worktrees`, conversationsRoot(HISTORY_ROOT), `${HISTORY_ROOT}/transcripts`, `${HISTORY_ROOT}/sessions`]) {
         expect(lines).toContain(`if [ -d ${shellQuote(hidden)} ]; then mount -t tmpfs intentic-fenced ${shellQuote(hidden)}; fi`);
     }
     // An unfenced turn keeps the main mount and every directory: nothing above it is conditional on anything else.
@@ -131,7 +133,7 @@ test("the fence's own mounts come last, after everything that reads from the mai
         expect(script.indexOf(line)).toBeLessThan(gone);
     }
     // And the store it binds comes from a directory it is about to mask: masked first, the bind would be of nothing.
-    const masked = `if [ -d ${shellQuote(sessionsRoot(HISTORY_ROOT))} ]; then mount -t tmpfs intentic-fenced ${shellQuote(sessionsRoot(HISTORY_ROOT))}; fi`;
+    const masked = `if [ -d ${shellQuote(conversationsRoot(HISTORY_ROOT))} ]; then mount -t tmpfs intentic-fenced ${shellQuote(conversationsRoot(HISTORY_ROOT))}; fi`;
     expect(script.indexOf(`mount --bind ${shellQuote(sessionsDir(HISTORY_ROOT, "abc"))}`)).toBeLessThan(script.indexOf(masked));
 });
 

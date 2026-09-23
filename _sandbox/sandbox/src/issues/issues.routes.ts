@@ -1,10 +1,9 @@
 import { issuesContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { startWake } from "./intake.routes.js";
-import { ISSUES_PROVIDER } from "./provider.js";
+import { ISSUES_PROVIDER } from "../automations/catalog.js";
 
 // The owner's side of the bug inbox: read it, file a row away, or put an agent on it now. Nothing here creates an
 // issue, reports arrive at the public /intake/ routes; this is triage, which is what lets the ingest be reachable by
@@ -34,7 +33,7 @@ export const createIssuesRoutes = (services: Services) => {
             }
             // Detached: the click is itself the approval, asking them to also approve their own press would say
             // nothing.
-            void startWake(services, streamAgent, services.issues, automation, issue, "asked").catch((error: unknown) =>
+            void startWake(services, services.issues, automation, issue, "asked").catch((error: unknown) =>
                 services.logger.error({ err: error, issue: input.id }, "investigating an issue failed"),
             );
             return { ok: true } as const;

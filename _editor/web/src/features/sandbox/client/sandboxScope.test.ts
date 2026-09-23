@@ -1,24 +1,16 @@
+import { resetSandboxScope, sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { test, expect, beforeEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 
-// Pins sandboxScope's reset list by name, since the failure mode is a new singleton added elsewhere that this
-// file never learns to reset. Asserts each reset fires on a real switch and not when the id is merely re-set to
-// itself.
+// The switch point: a switch resets every value declared through the sandbox scope, wherever it was declared (an
+// editor store or an extension), and a new scope re-reads what lives on the daemon once it is reachable. Only the
+// daemon reads are stood in for; the scope itself is the real one.
 
 const calls: string[] = [];
 const record = (name: string) => (): void => void calls.push(name);
 
-mock.module(`../../agents/fleet/useAgents`, () => ({ resetAgents: record(`resetAgents`) }));
-mock.module(`../../agents/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`), resetArchive: record(`resetArchive`) }));
-mock.module(`../../chat/run/useChat`, () => ({ resetChat: record(`resetChat`) }));
+mock.module(`../../agents/fleet/useAgents-registry`, () => ({ loadArchived: record(`loadArchived`) }));
 mock.module(`../../chat/accounts/useChat-accounts`, () => ({ loadAccountStatus: record(`loadAccountStatus`) }));
-mock.module(`../../workspace/files/useEditBuffers`, () => ({ resetEditBuffers: record(`resetEditBuffers`) }));
-mock.module(`../../../shell/presence/usePresence`, () => ({ resetPresence: record(`resetPresence`) }));
-mock.module(`../../workspace/push/usePushFlow`, () => ({ resetPushFlow: record(`resetPushFlow`) }));
-mock.module(`../../../shell/window/useLayout`, () => ({ resetTerminalOpen: record(`resetTerminalOpen`) }));
-mock.module(`../../workspace/changes/live/useWorkspaceLive`, () => ({ resetWorkspaceLive: record(`resetWorkspaceLive`) }));
-mock.module(`../../workspace/tabs/useWorkspaceTabs`, () => ({ resetWorkspaceTabs: record(`resetWorkspaceTabs`) }));
-mock.module(`../../workspace/explorer/useWorkspaceTree`, () => ({ resetWorkspaceTreeState: record(`resetWorkspaceTreeState`) }));
 
 // Stands in for useSandbox so the switch can be exercised without the platform client, sandbox list or a connection.
 const { activeSandboxId, reachable } = await hoisted(async () => {
@@ -30,65 +22,75 @@ mock.module(`./useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId, reach
 await import("./sandboxScope");
 const { nextTick } = await import("vue");
 
-beforeEach(() => {
-    calls.length = 0;
-});
+// One store's state, declared the way the editor declares it, holding what a sandbox filled in and what a switch ends.
+const disposed: string[] = [];
+const roster = sandboxRef<readonly string[]>(() => []);
+const stream = sandboxValue(
+    () => `idle`,
+    (previous) => void disposed.push(previous),
+);
 
-// Every reset the switch owns, named rather than counted, so a failure says which one stopped firing.
-const ON_SWITCH = [
-    `resetChat`,
-    `resetEditBuffers`,
-    `resetWorkspaceTreeState`,
-    `resetWorkspaceTabs`,
-    `resetTerminalOpen`,
-    `resetWorkspaceLive`,
-    `resetPushFlow`,
-    `resetPresence`,
-    `resetAgents`,
-    `resetArchive`,
-];
-
-test(`a switch re-scopes every client-side singleton`, async () => {
-    activeSandboxId.value = `alpha`;
-    await nextTick();
-
-    expect(calls.filter((name) => ON_SWITCH.includes(name)).toSorted()).toEqual([...ON_SWITCH].toSorted());
-});
-
-test(`the workspace half fires again on the next switch: this is per sandbox, not once per page`, async () => {
-    activeSandboxId.value = `alpha`;
+beforeEach(async () => {
+    activeSandboxId.value = undefined;
+    reachable.value = false;
     await nextTick();
     calls.length = 0;
+    disposed.length = 0;
+});
+
+test(`a switch returns every scoped value to its initial and disposes what the last sandbox held`, async () => {
+    activeSandboxId.value = `alpha`;
+    await nextTick();
+    disposed.length = 0;
+    roster.value = [`agent-1`];
+    stream.value = `attached to agent-1`;
 
     activeSandboxId.value = `beta`;
     await nextTick();
 
-    expect(calls).toContain(`resetPushFlow`);
-    expect(calls).toContain(`resetWorkspaceLive`);
-    expect(calls).toContain(`resetAgents`);
+    expect(roster.value).toEqual([]);
+    expect(stream.value).toBe(`idle`);
+    expect(disposed).toEqual([`attached to agent-1`]);
+});
+
+// The same primitive the extensions declare their state with: one registry, one switch.
+test(`an extension's scoped state goes with the editor's on the same switch`, async () => {
+    const badge = sandboxRef(() => 0);
+    activeSandboxId.value = `alpha`;
+    await nextTick();
+    badge.value = 21;
+
+    activeSandboxId.value = `beta`;
+    await nextTick();
+
+    expect(badge.value).toBe(0);
 });
 
 test(`re-setting the same id resets nothing: a restore from storage is not a switch`, async () => {
     activeSandboxId.value = `alpha`;
     await nextTick();
-    calls.length = 0;
+    disposed.length = 0;
+    roster.value = [`agent-1`];
 
     activeSandboxId.value = `alpha`;
     await nextTick();
 
-    expect(calls).toEqual([]);
+    expect(roster.value).toEqual([`agent-1`]);
+    expect(disposed).toEqual([]);
 });
 
 // Held wakes are pull-only too, but are read after the hello in systemEvents, not from this seam.
 test(`becoming reachable reloads what lives on the daemon, without resetting anything`, async () => {
     activeSandboxId.value = `alpha`;
     await nextTick();
+    roster.value = [`agent-1`];
     calls.length = 0;
 
     reachable.value = true;
     await nextTick();
 
     expect(calls.toSorted()).toEqual([`loadAccountStatus`, `loadArchived`]);
+    expect(roster.value).toEqual([`agent-1`]);
 });
 
 test(`switching between two reachable sandboxes still re-reads it`, async () => {
@@ -97,10 +99,22 @@ test(`switching between two reachable sandboxes still re-reads it`, async () => 
     await nextTick();
     calls.length = 0;
 
-    // `reachable` never flips here; the seam must notice the id instead, or two healthy boxes would share state.
+    // `reachable` never flips here; the seam must notice the new scope instead, or two healthy boxes would share state.
     activeSandboxId.value = `beta`;
     await nextTick();
 
-    expect(calls).toContain(`loadArchived`);
-    expect(calls).toContain(`loadAccountStatus`);
+    expect(calls.toSorted()).toEqual([`loadAccountStatus`, `loadArchived`]);
+});
+
+// A workspace replaced under the same sandbox id (systemEvents' hello) is a new scope with no id change to watch.
+test(`a new scope under the same id re-reads it too`, async () => {
+    activeSandboxId.value = `alpha`;
+    reachable.value = true;
+    await nextTick();
+    calls.length = 0;
+
+    resetSandboxScope();
+    await nextTick();
+
+    expect(calls.toSorted()).toEqual([`loadAccountStatus`, `loadArchived`]);
 });

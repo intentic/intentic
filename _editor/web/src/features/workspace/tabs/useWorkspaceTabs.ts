@@ -1,3 +1,4 @@
+import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, ref, watch } from "vue";
 import { documentTabId } from "../../../core-views/documentRegistry";
 import type { DiffPayload } from "@intentic/extension-api";
@@ -7,7 +8,6 @@ import {
     type EditorPane,
     type EditorStrip,
     emptyPane,
-    emptyStrip,
     type LineJump,
     moveTab,
     type OpenMode,
@@ -25,14 +25,29 @@ import { readTabStrip, type StoredWorkspaceTab, writeTabStrip } from "./workspac
 // areas. The editor is two panes; `tabs`, `activeId`, `activeTab` and `previewId` are the focused pane's, so most
 // readers get one answer to what's on screen. Only EditorPane and the desktop layout read the strip itself.
 
+// --- Tab persistence ---------------------------------------------------------------------------
+// Strip restores per sandbox, on reload and on a switch: a path names a file in one sandbox's /work. Sandbox id is
+// captured at restore, not read live at write, since activeSandboxId flips before the scope re-reads this state.
+const { activeSandboxId } = useSandbox();
+const scopedSandboxId = sandboxValue(() => activeSandboxId.value);
+
+const restoredStrip = (): EditorStrip => {
+    const stored = readTabStrip(scopedSandboxId.value);
+    return {
+        main: stored === undefined ? emptyPane() : { tabs: stored.tabs, active: stored.active, preview: stored.preview },
+        side:
+            stored?.side === undefined ? emptyPane() : { tabs: stored.side.tabs, active: stored.side.active, preview: stored.side.preview },
+    };
+};
+
 // Open items in tab order (file, diff, or generated surface); a pane's `active` is its focused tab's id.
-const strip = ref<EditorStrip>(emptyStrip());
+const strip = sandboxRef<EditorStrip>(restoredStrip);
 // Which pane the keyboard and untargeted opens act on; not persisted, a reload always comes back on main.
-const focused = ref<EditorPane>(`main`);
+const focused = sandboxRef<EditorPane>(() => `main`);
 // Whether a split may open at all; false on a phone or a pane too narrow, set by the layout surface.
 const splitAllowed = ref(false);
 // Line to scroll to from a search match, cleared on a plain open; seq++ makes a repeat click re-trigger too.
-const openLine = ref<LineJump | undefined>(undefined);
+const openLine = sandboxRef<LineJump | undefined>(() => undefined);
 let jumpSeq = 0;
 
 const pane = (which: EditorPane): PaneState => strip.value[which];
@@ -54,31 +69,6 @@ const previewId = computed<string | null>(() => pane(focused.value).preview);
 // Split is open exactly while the side pane holds tabs; no separate flag to drift out of sync.
 const splitOpen = computed(() => strip.value.side.tabs.length > 0);
 
-// --- Tab persistence ---------------------------------------------------------------------------
-// Strip restores per sandbox on reload. Sandbox id is captured at restore, not read live at write, since
-// activeSandboxId can flip before sandboxScope re-scopes this state and misfile a write.
-let scopedSandboxId: string | undefined;
-const { activeSandboxId } = useSandbox();
-
-const restoreTabs = (): void => {
-    scopedSandboxId = activeSandboxId.value;
-    const stored = readTabStrip(scopedSandboxId);
-    strip.value = {
-        main: stored === undefined ? emptyPane() : { tabs: stored.tabs, active: stored.active, preview: stored.preview },
-        side:
-            stored?.side === undefined ? emptyPane() : { tabs: stored.side.tabs, active: stored.side.active, preview: stored.side.preview },
-    };
-    focused.value = `main`;
-    openLine.value = undefined;
-};
-restoreTabs();
-
-// Re-scopes to the incoming sandbox: a path names a file in one sandbox's /work, so the outgoing tabs would
-// open nothing here.
-export const resetWorkspaceTabs = (): void => {
-    restoreTabs();
-};
-
 // Persists every tab but a diff. Focus on a diff falls to its last surviving neighbour (closeTabs' own rule);
 // focus on nothing stays nothing. The preview slot survives only if the tab it names does.
 const persistedPane = (state: PaneState): { active: string | null; preview: string | null; tabs: readonly StoredWorkspaceTab[] } => {
@@ -99,8 +89,8 @@ const persistedStrip = (): string => {
     return JSON.stringify(side.tabs.length === 0 ? main : { ...main, side });
 };
 watch(persistedStrip, (json) => {
-    if (scopedSandboxId !== undefined) {
-        writeTabStrip(scopedSandboxId, json);
+    if (scopedSandboxId.value !== undefined) {
+        writeTabStrip(scopedSandboxId.value, json);
     }
 });
 
@@ -339,7 +329,8 @@ interface TabClose {
     readonly focus: string;
 }
 
-const closedTabs = ref<readonly TabClose[]>([]);
+// Paths into one sandbox's /work like the strip itself, so the history of closes goes with it on a switch.
+const closedTabs = sandboxRef<readonly TabClose[]>(() => []);
 
 // Closes tabs, remembering them for reopenClosedTab; returns paths whose edit buffers the caller should forget.
 const closeTabIds = (ids: ReadonlySet<string>): readonly string[] => {

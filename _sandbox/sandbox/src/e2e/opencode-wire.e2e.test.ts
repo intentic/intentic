@@ -6,10 +6,15 @@ import { type ResponsesRequest, userMessages } from "@intentic/fake-model/respon
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import type { AgentRequest } from "../agent/run/agent.js";
+import type { TurnSpec } from "../agent/providers/agent-request.js";
 import { onPath } from "../platform/boot/on-path.js";
 import { createGrokAgent, createGrokRunner } from "../runtimes/grok/grok-agent.js";
 import { createOpenCodeService, OPENCODE_GEMINI_PROVIDER, type OpenCodeService } from "../runtimes/grok/opencode.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
+import { memoryFleet } from "../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Real `opencode serve` and the real adapter against a scripted model, closing a gap two other suites leave (spawn
 // untested, or events canned). Uses Gemini since it looks like an ordinary OpenAI-compatible provider to fake-model.
@@ -44,17 +49,18 @@ interface TurnResult {
     readonly requests: readonly ResponsesRequest[];
 }
 
-const runTurn = async (scenario: { marker: string }, overrides: Partial<AgentRequest> = {}): Promise<TurnResult> => {
+const runTurn = async (scenario: { marker: string }, overrides: Pick<TurnSpec, "systemAppend"> = {}): Promise<TurnResult> => {
     const controller = new AbortController();
     const events: AgentEvent[] = [];
     const agent = createGrokAgent(createGrokRunner(service!), OPENCODE_GEMINI_PROVIDER);
     try {
         for await (const event of agent({
-            prompt: `${scenario.marker}: do the thing`,
-            cwd: workspace,
+            spec: { prompt: `${scenario.marker}: do the thing`, cwd: workspace, model: MODEL_ID, ...overrides },
+            policy: {},
+            tools: {},
+            credential: { kind: "container" },
+            hooks: { cards },
             signal: controller.signal,
-            model: MODEL_ID,
-            ...overrides,
         })) {
             events.push(event);
         }

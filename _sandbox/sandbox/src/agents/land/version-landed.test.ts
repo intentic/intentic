@@ -4,6 +4,7 @@ import { unstubbed } from "@intentic/testing";
 import { describe, test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { settleLanding, versionRuleOf } from "./version-landed.js";
+import { isolatedAgent } from "../../testing.js";
 
 const describeLanding = mock<() => Promise<void>>();
 mock.module("./landed-subject.js", () => ({ describeLanding: () => describeLanding() }));
@@ -23,12 +24,10 @@ const servicesWith = (rules: readonly Rule[], landedSubject?: string): Services 
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => ({ rules }) as never }),
         agents: unstubbed<Services["agents"]>("agents", {
             entry: () =>
-                ({
-                    id: "c1",
-                    title: "Recent commits",
-                    repos: [{ repo: "root", base: "a".repeat(40) }],
-                    ...(landedSubject === undefined ? {} : { landedSubject }),
-                }) as ReturnType<Services["agents"]["entry"]>,
+                isolatedAgent([{ repo: "root", base: "a".repeat(40) }], {
+                    social: { title: { text: "Recent commits", source: "derived" }, reactions: [] },
+                    landing: landedSubject === undefined ? {} : { message: { subject: landedSubject } },
+                }),
         }),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", {
             mainDir: () => WORKSPACE_ROOT,

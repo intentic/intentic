@@ -14,13 +14,16 @@ import { test, expect, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
-import { runHeldWake, type WakeFn } from "../automations/scheduler.js";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { runHeldWake } from "../automations/scheduler.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { fileWebchatOutbox, outboxStreamFor } from "./webchat-outbox.js";
 import { createWebchatRoutes } from "./webchat.routes.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { drivenBy } from "../testing.js";
 
 const ORIGIN = "https://site.example";
 
@@ -30,7 +33,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services => {
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         webchatOutbox: fileWebchatOutbox(join(root, "webchat-outbox.json")),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -51,8 +54,8 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services => {
     return services;
 };
 
-const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
-    async function* (_services, input) {
+const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
+    async function* (input) {
         turns.push(input);
         yield* events;
     };
@@ -66,8 +69,8 @@ const webchat = (id: string, extra: Partial<Automation> = {}): Automation => ({
     ...extra,
 });
 
-const appFor = (services: Services, wake: WakeFn): Hono => {
-    const routes = createWebchatRoutes(services, wake);
+const appFor = (services: Services, wake: TurnStarter["stream"]): Hono => {
+    const routes = createWebchatRoutes(drivenBy(services, wake));
     return new Hono()
         .get("/webchat/:id/config", routes.config)
         .get("/webchat/:id/challenge", routes.challenge)
@@ -158,10 +161,9 @@ test("an approved wake's reply reaches the visitor's next poll, not just the fle
     const [held] = await services.heldWakes.list();
     const automation = await services.automations.get("wc-approved");
     await runHeldWake(
-        services,
+        drivenBy(services, fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }])),
         automation as NonNullable<typeof automation>,
         held as NonNullable<typeof held>,
-        fakeWake([], [{ kind: "delta", text: "we had a look: " }, { kind: "delta", text: "it is fixed" }, { kind: "done" }]),
     );
 
     const collected = (await (await collect(app, "wc-approved", "visitor-9")).json()) as { replies: { seq: number; text: string }[]; cursor: number };

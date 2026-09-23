@@ -34,11 +34,9 @@ export const agentsBadge = computed<ViewBadge | undefined>(() => {
     return { count: total, tooltip: elsewhere > 0 ? `${owed}, ${elsewhere} in other sandboxes` : owed };
 });
 
-// Keeps other sandboxes live in fleetAcross while the scope is wide, releasing the moment it narrows. Called once from
-// the shared shell so desktop and mobile share one subscription.
-export const watchAgentsScope = (): void => {
-    // Marks a remote chat read while it's open in front of the user, or it would count toward this number forever.
-    watchRemoteSeen();
+// Keeps other sandboxes live in fleetAcross while the scope is wide, releasing the moment it narrows or the caller
+// unmounts. The shell's tile holds one such read and the board its own.
+export const followOtherBoxes = (): void => {
     let release: (() => void) | undefined;
     const stop = watch(
         readingAcross,
@@ -57,4 +55,11 @@ export const watchAgentsScope = (): void => {
         release?.();
         release = undefined;
     });
+};
+
+// The tile's own watch, called once from the shared shell so desktop and mobile share one subscription.
+export const watchAgentsScope = (): void => {
+    // Marks a remote chat read while it's open in front of the user, or it would count toward this number forever.
+    watchRemoteSeen();
+    followOtherBoxes();
 };

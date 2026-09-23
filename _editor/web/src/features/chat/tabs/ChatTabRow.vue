@@ -69,7 +69,7 @@ const act = (event: Event, verb: "close" | "keep"): void => {
         :title-action="props.agent?.titleAction"
         :needle="props.needle"
         :match-case="props.matchCase"
-        :provider="props.agent?.provider ?? props.conversation.provider.value"
+        :provider="props.agent?.provider ?? props.conversation.selection.provider.value"
         :status="props.view.status"
         :chip="props.view.chip"
         :rim="props.view.rim"

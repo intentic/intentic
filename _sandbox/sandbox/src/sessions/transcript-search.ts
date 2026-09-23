@@ -1,4 +1,4 @@
-import { sdk } from "../runtimes/claude/claude-sdk.js";
+import { sdk } from "../engines/claude-sdk.js";
 import type { MatchSnippet, TranscriptRow, Speaker } from "@intentic/sandbox-contract";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";

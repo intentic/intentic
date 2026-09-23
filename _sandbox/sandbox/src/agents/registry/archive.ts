@@ -3,8 +3,9 @@ import type { AgentSummary } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { cancelWatchersFor } from "../../agent/verification/watchers.js";
 import type { ResourceReaper } from "../../platform/boot/reaper.js";
+import type { ConversationActors } from "../actor/conversation-actors.js";
 import type { AgentsRegistry } from "./agents-registry.js";
-import type { PersistedAgent } from "./agents-store.js";
+import { isIsolated, type PersistedAgent } from "./agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // The board's only non-destructive exit: the Finished lane never transitions out on its own, and each finished card
@@ -28,6 +29,8 @@ export const archivableByAge = (agent: AgentSummary, now: number, retentionMs: n
 
 export interface AgentArchiveDeps {
     readonly agents: AgentsRegistry;
+    // What a purge disposes through, the one way a conversation's in-memory state and entry leave together.
+    readonly conversations: Pick<ConversationActors, "running" | "dispose">;
     readonly agentWorktrees: AgentWorktrees;
     readonly logger: Logger;
     // Hard stop for everything the conversation still runs (terminals, viewers); archiving already committed its work,
@@ -87,12 +90,12 @@ export const archiveAgents = async (deps: AgentArchiveDeps, ids: readonly string
             return;
         }
         // A workspace conversation has no checkout to retire; archiving it is only the registry's presentation change.
-        if (entry.branch === undefined) {
+        if (!isIsolated(entry)) {
             done[index] = id;
             return;
         }
         try {
-            await deps.agentWorktrees.retire(id, entry.repos, entry.title);
+            await deps.agentWorktrees.retire(id, entry.placement.repos, entry.social.title?.text);
             done[index] = id;
         } catch (error) {
             deps.logger.warn({ err: error, id }, "agents: archive skipped, worktree retire failed");
@@ -120,19 +123,19 @@ export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> =
         .ids()
         .map((id) => deps.agents.entry(id))
         .filter((entry) => entry !== undefined)
-        .filter((entry) => entry.archivedAt !== undefined && !deps.agents.running(entry.id));
+        .filter((entry) => entry.archivedAt !== undefined && !deps.conversations.running(entry.id));
     const done: (string | undefined)[] = Array.from({ length: targets.length });
     await pooled(targets.length, async (index) => {
         const entry = targets[index];
         if (entry === undefined) {
             return;
         }
-        if (entry.branch === undefined) {
+        if (!isIsolated(entry)) {
             done[index] = entry.id;
             return;
         }
         try {
-            await deps.agentWorktrees.remove(entry.id, entry.repos);
+            await deps.agentWorktrees.remove(entry.id, entry.placement.repos);
             done[index] = entry.id;
         } catch (error) {
             deps.logger.warn({ err: error, id: entry.id }, "agents: purge skipped, worktree removal failed");
@@ -141,19 +144,29 @@ export const purgeArchived = async (deps: AgentArchiveDeps): Promise<string[]> =
     const removed = done.filter((id) => id !== undefined);
     if (removed.length > 0) {
         const removedSet = new Set(removed);
-        const removedEntries = targets.filter((entry) => removedSet.has(entry.id));
-        const retainedEntries = deps.agents
-            .ids()
-            .filter((id) => !removedSet.has(id))
-            .map((id) => deps.agents.entry(id))
-            .filter((entry) => entry !== undefined);
-        await deps
-            .purgeConversationState?.(removedEntries, retainedEntries)
-            .catch((error: unknown) => deps.logger.warn({ err: error, count: removed.length }, "agents: purge left some conversation state behind"));
-        await deps.agents.remove(removed);
+        await forgetConversations(
+            deps,
+            targets.filter((entry) => removedSet.has(entry.id)),
+        );
         deps.logger.info({ count: removed.length }, "agents: purged archived agents");
     }
     return removed;
+};
+
+// What leaves with conversations whose checkouts are already gone: what they left in layouts other owners dictate
+// (session files in the shared store, uploads only they referenced), then, together, each one's actor, its rows in every
+// table and its directory on the history volume (dispose).
+export const forgetConversations = async (deps: AgentArchiveDeps, removed: readonly PersistedAgent[]): Promise<void> => {
+    const gone = new Set(removed.map((entry) => entry.id));
+    const retained = deps.agents
+        .ids()
+        .filter((id) => !gone.has(id))
+        .map((id) => deps.agents.entry(id))
+        .filter((entry) => entry !== undefined);
+    await deps
+        .purgeConversationState?.(removed, retained)
+        .catch((error: unknown) => deps.logger.warn({ err: error, count: removed.length }, "agents: purge left some conversation state behind"));
+    await deps.conversations.dispose([...gone]);
 };
 
 // The unattended pass: archives everything finished longer than the retention window; `updatedAt` is the clock, so

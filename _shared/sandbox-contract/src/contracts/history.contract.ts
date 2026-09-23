@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { FileDiffSchema, SnapshotDiffSchema, SnapshotFileDiffQuerySchema, SnapshotIdSchema, SnapshotsListSchema } from "../schemas/history.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -6,7 +6,7 @@ import { OkSchema } from "../schemas/shared.js";
 // the previous visible checkpoint (everything that happened since it, hidden interval captures included); an
 // unknown id is a handler-thrown NOT_FOUND.
 export const historyContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/history/snapshots",
@@ -15,7 +15,7 @@ export const historyContract = {
                 "The saved states of the whole workspace, taken automatically as work happens. This is the timeline behind undoing a change that was never committed.",
         })
         .output(SnapshotsListSchema),
-    diff: oc
+    diff: procedure
         .route({
             method: "GET",
             path: "/history/diff",
@@ -24,7 +24,7 @@ export const historyContract = {
         })
         .input(SnapshotIdSchema)
         .output(SnapshotDiffSchema),
-    fileDiff: oc
+    fileDiff: procedure
         .route({
             method: "GET",
             path: "/history/file-diff",
@@ -33,7 +33,7 @@ export const historyContract = {
         })
         .input(SnapshotFileDiffQuerySchema)
         .output(FileDiffSchema),
-    restore: oc
+    restore: procedure
         .route({
             method: "POST",
             path: "/history/restore",

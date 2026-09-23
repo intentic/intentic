@@ -1,6 +1,7 @@
 // The composer row ends in one primary button, asserted through the mounted pane. Stop takes that slot while
 // there is nothing to send; the first keystroke hands it back to Send, and the two never swap order.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
@@ -8,6 +9,7 @@ import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import * as useSandboxOriginal from "../../sandbox/client/useSandbox";
 import * as useWorkflowRunsOriginal from "../../agents/fleet/useWorkflowRuns";
+import { runningTurn } from "../../../testing/runningTurn";
 
 // The import-time globals a mounted chat surface needs.
 hoisted(() => {
@@ -72,7 +74,7 @@ mock.module(`../../sandbox/client/useSandbox`, () => {
 // Imported after the mocks, not above them: a static import links the panel's whole graph to the real modules
 // before a single mock.module has run.
 const { providerAccounts } = await import("../accounts/providerAccounts");
-const { resetChat, useChat } = await import("../run/useChat");
+const { useChat } = await import("../run/useChat");
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useLayout } = await import("../../../shell/window/useLayout");
 const { router } = await import("../../../router");
@@ -110,7 +112,7 @@ beforeEach(async () => {
     // Clears both stores: a window's tabs live in sessionStorage, seeded from localStorage.
     localStorage.clear();
     sessionStorage.clear();
-    resetChat();
+    resetSandboxScope();
     // `connected` gates the composer: with no provider account the box is inert.
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
     useLayout().setChatWidth(2000);
@@ -136,7 +138,7 @@ it(`gives the end of the row to Stop when a turn is running and there is nothing
     const conversation = useChat().active.value;
     await mountPanel();
 
-    conversation.streaming.value = true;
+    runningTurn(conversation.turn);
     await settle();
 
     expect(roundButtons()).toEqual([`Stop generating`]);
@@ -150,7 +152,7 @@ it(`brings Send back, last in the row, as soon as there is something to send`, a
     const conversation = useChat().active.value;
     await mountPanel();
 
-    conversation.streaming.value = true;
+    runningTurn(conversation.turn);
     conversation.draft.value = `use the other branch`;
     await settle();
 
@@ -162,13 +164,13 @@ it(`brings Send back, last in the row, as soon as there is something to send`, a
 // greyed button's tooltip can say why it can't go yet.
 it(`keeps a greyed Send on screen when it is refusing words the user has already typed`, async () => {
     const conversation = useChat().active.value;
-    conversation.restoreMessages([
+    conversation.transcript.restoreMessages([
         { role: `user`, text: `clean the sandbox` },
         { role: `assistant`, text: `done` },
     ]);
     await mountPanel();
 
-    conversation.streaming.value = true;
+    runningTurn(conversation.turn);
     conversation.draft.value = `hold on`;
     conversation.attachments.value = [{ id: `a-1`, name: `shot.png`, path: `shot.png`, status: `uploading`, progress: 0.4 }];
     await settle();

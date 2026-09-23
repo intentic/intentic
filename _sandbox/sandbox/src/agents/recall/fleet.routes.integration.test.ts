@@ -7,7 +7,9 @@ import { clientFor, collect, proven } from "../../harness/route-client.testing.j
 import { services } from "../../harness/route-services.testing.js";
 import { runAgentTurn } from "../../harness/route-turns.testing.js";
 import { testConfig } from "../../testing.js";
-import { recordPathOf, type FleetMessage, type FleetRecall, type FleetRow } from "./fleet-recall.js";
+import { transcriptFile } from "../../sessions/transcript-record.js";
+import { conversationUnit } from "../../store/conversation-units.js";
+import type { FleetMessage, FleetRecall, FleetRow } from "./fleet-recall.js";
 
 // Pins the fleet routes over HTTP with the agent token: two GETs that cannot change anything, any handle spelling
 // resolving in one call, ambiguous ones named not picked — and the one write, `message`, which puts an attributed
@@ -19,6 +21,10 @@ interface FleetAnswer {
     readonly indexing?: boolean;
     readonly agent?: FleetRecall;
     readonly transcript?: { readonly total: number; readonly messages: readonly FleetMessage[] };
+    readonly stored?: {
+        readonly rows: Readonly<Record<string, readonly Readonly<Record<string, unknown>>[]>>;
+        readonly unit: { readonly dir: string; readonly files: readonly { readonly path: string; readonly bytes: number }[]; readonly total: number };
+    };
     readonly ok?: boolean;
     readonly message?: string;
     readonly candidates?: readonly { readonly id: string }[];
@@ -36,7 +42,7 @@ const fleetApp = (): Hono<AppEnv> =>
             // Left unstubbed on purpose; inert here, since nothing in this file reads an anchor back.
             turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
             async *agent(request) {
-                yield { kind: "session", sessionId: request.prompt.includes("pipeline") ? "sess-pipeline" : "sess-publish" };
+                yield { kind: "session", sessionId: request.spec.prompt.includes("pipeline") ? "sess-pipeline" : "sess-publish" };
                 yield { kind: "usage", costUsd: 0.25, inputTokens: 4000, outputTokens: 120 };
                 yield { kind: "done" };
             },
@@ -66,7 +72,7 @@ const recordingApp = (): { readonly app: Hono<AppEnv>; readonly prompts: string[
             auth: { authorize: async () => proven("owner@example.com", "owner") },
             turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
             async *agent(request) {
-                prompts.push(request.prompt);
+                prompts.push(request.spec.prompt);
                 yield { kind: "session", sessionId: "sess-any" };
                 yield { kind: "done" };
             },
@@ -157,7 +163,7 @@ test("one conversation answers whole: its settings, its branch, its record and w
         branch: "agent/fair-sage-ey2r",
         worktree: "/history/worktrees/fair-sage-ey2r",
         // Built from `testConfig.historyRoot`, since this suite's sandbox uses a temporary one, not a literal path.
-        record: recordPathOf(testConfig.historyRoot, "fair-sage-ey2r"),
+        record: transcriptFile(testConfig.historyRoot, "fair-sage-ey2r"),
         sessionId: "sess-pipeline",
         costUsd: 0.25,
         inputTokens: 4000,
@@ -185,6 +191,24 @@ test("the record itself is one flag away, bounded by last and narrowed by grep",
     const grepped = await fleet(app, "/fleet/fair-sage-ey2r?diff=0&transcript=1&grep=ciStreaks");
     expect(grepped.body.transcript?.total).toBe(1);
     expect(grepped.body.transcript?.messages[0]).toMatchObject({ role: "assistant", at: 1 });
+});
+
+// What a person diagnosing one conversation reads in place of a file to cat: its rows as the database holds them.
+test("what the daemon keeps is one flag away: every row naming the conversation by table, and its directory", async () => {
+    const app = fleetApp();
+    await twoConversations(app);
+    const { status, body } = await fleet(app, "/fleet/fair-sage-ey2r?diff=0&stored=1");
+    expect(status).toBe(200);
+    const rows = body.stored?.rows ?? {};
+    expect(Object.keys(rows).toSorted()).toEqual(["conversation", "conversation_repo"]);
+    expect(rows["conversation"]?.map((row) => row["id"])).toEqual(["fair-sage-ey2r"]);
+    // The record as stored: its repos are rows of their own, not a copy inside it.
+    expect(rows["conversation"]?.[0]?.["record"]).toMatchObject({ sessionId: "sess-pipeline", placement: { kind: "worktree", branch: "agent/fair-sage-ey2r" } });
+    expect(rows["conversation_repo"]).toEqual([
+        { conversation_id: "fair-sage-ey2r", position: 0, repo: "root", base: "a".repeat(40), landed_tip: null, landed_head: null, landed_at: null, absorbed: null },
+    ]);
+    expect(body.stored?.unit).toEqual({ dir: conversationUnit(testConfig.historyRoot, "fair-sage-ey2r"), files: [], total: 0 });
+    expect(JSON.stringify(body.stored)).not.toContain("clear-marsh-8c46");
 });
 
 test("a search answers which conversations said a phrase, with the line that proves it", async () => {

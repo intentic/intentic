@@ -1,9 +1,7 @@
 import { startRuntimeHealth } from "../agent/providers/adapter-health.js";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import { adoptBackgroundJobs } from "../agent/tools/background-adoption.js";
 import { type ChildReportDeps, reportChildTurn } from "../agent/subagents/child-report.js";
-import { conversationDoors, conversationRouting } from "../agent/run/turn/wake-doors.js";
-import { onTurnSettled } from "../agent/run/turn/turn-runs.js";
+import { conversationProfile } from "../agents/registry/agents-store.js";
 import { startVerifyNudges } from "../agent/verification/verify-nudge.js";
 import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
@@ -14,42 +12,35 @@ import type { BootPhase } from "./boot-phase.js";
 
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
 export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPhase): void => {
-    const scheduler = createAutomationsScheduler(services, streamAgent);
+    const scheduler = createAutomationsScheduler(services);
     shutdown.push(() => scheduler.stop());
     if (role.container) {
         scheduler.start();
     }
 
     // Stop clears timers only; the watch journal survives for the next boot to restore.
-    shutdown.push(startWatchers(services, streamAgent));
+    shutdown.push(startWatchers(services));
 
     // A turn ending is the moment its background jobs become nobody's: each still running is handed to a watch of its
     // own, so the conversation is woken when it exits. Beside the watchers because it arms one, and after them because
     // it needs their runtime bound.
-    shutdown.push(
-        onTurnSettled((settled) => {
-            void adoptBackgroundJobs(settled.conversationId, logger);
-        }),
-    );
+    shutdown.push(services.events.subscribe("run.settled", (settled) => adoptBackgroundJobs(services.conversations, settled.conversationId, logger)));
 
     // A spawned child's settled turn is its parent's news, delivered like a wake unless a parked `wait` took it.
     const childReports: ChildReportDeps = {
-        doors: conversationDoors(services, streamAgent),
+        doors: { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
         logger,
+        conversations: services.conversations,
         entryOf: (conversationId) => services.agents.entry(conversationId),
-        routingOf: (conversationId) => {
+        profileOf: (conversationId) => {
             const entry = services.agents.entry(conversationId);
-            return entry === undefined ? undefined : conversationRouting(entry);
+            return entry === undefined ? undefined : conversationProfile(entry);
         },
     };
-    shutdown.push(
-        onTurnSettled((settled) => {
-            void reportChildTurn(childReports, settled);
-        }),
-    );
+    shutdown.push(services.events.subscribe("run.settled", (settled) => reportChildTurn(childReports, settled)));
 
-    // For runtimes with no SDK Stop hook; wired here because the turn generator can't be imported from under the caller.
-    shutdown.push(startVerifyNudges(services, streamAgent));
+    // For runtimes with no SDK Stop hook: the follow-up turn it starts goes through the TurnStarter port.
+    shutdown.push(startVerifyNudges(services));
 
     // Armed, not polled: the deadline is the item's own scheduledAt on disk, so dropping the timer loses nothing.
     const approvalsExecutor = approvalsExecutorFor(services);
@@ -65,7 +56,7 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     }
 
     // Covers repos whose CI hook could not be registered; its first pass is a silent seed.
-    const ciPoller = createCiPoller(services, streamAgent);
+    const ciPoller = createCiPoller(services);
     shutdown.push(() => ciPoller.stop());
     if (role.container) {
         ciPoller.start();

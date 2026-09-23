@@ -2,7 +2,7 @@ import { basename, extname, join, relative, resolve, sep } from "node:path";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { ToolCallContent } from "@intentic/sandbox-contract";
 import { pathExists } from "../../path-exists.js";
-import { stateRelPath } from "../../workspace/layout/state-paths.js";
+import { stateRelPath } from "../../state-paths.js";
 
 // Directory every artifact belongs in, outside every repo, so it never reaches the Changes panel or a commit.
 const BROWSER_OUTPUT_REL = stateRelPath(".intentic/records/artifacts/browser/");

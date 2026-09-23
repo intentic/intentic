@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
 import type { Persona } from "@intentic/sandbox-contract";
 
 // "Viewing as" lens: shows what a persona's folder fence actually resolves to, not just the raw text on its card.
@@ -6,8 +6,8 @@ import type { Persona } from "@intentic/sandbox-contract";
 // (no three-state dimming); mirrors persona-scope.ts, comparing by path segment so `apps/web2` isn't inside `apps/web`.
 
 // Which persona the explorer reads as, or nobody; module-level since the toolbar, tree and banner aren't in one
-// subtree.
-export const lensPersonaId = ref<string | undefined>(undefined);
+// subtree. A persona card is one sandbox's, so a switch reads as nobody again.
+export const lensPersonaId = sandboxRef<string | undefined>(() => undefined);
 
 // Is `path` at or below `folder`? Both workspace-relative, forward-slashed, no trailing slash.
 const within = (path: string, folder: string): boolean => path === folder || path.startsWith(`${folder}/`);

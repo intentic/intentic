@@ -1,20 +1,20 @@
 import type { WorkspaceHealth } from "@intentic/api-contract";
 import { computed, type Ref } from "vue";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { WORKSPACE_HEALTH } from "../../../lib/queryKeys";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import type { ChurnWindow } from "./codebaseHealth";
 
 /* Codebase health reads churn and complexity from the resident iq index. */
 
 export function useCodebaseHealth(repo: Ref<string>, window: Ref<ChurnWindow>) {
+    // `all` sends no window: the whole history is the daemon's default.
+    const input = computed(() => ({ repo: repo.value, since: window.value === `all` ? undefined : window.value }));
+    // Built by hand rather than with rpcQuery, which drops the query's signal: a repo or window switched mid-read
+    // aborts the read it replaced.
     const { query, error } = useSandboxQuery({
-        queryKey: computed(() => WORKSPACE_HEALTH.of(repo.value, window.value)),
-        queryFn: ({ signal }) =>
-            sandboxJson<WorkspaceHealth>(
-                `/workspace/health?repo=${encodeURIComponent(repo.value)}${window.value === `all` ? `` : `&since=${window.value}`}`,
-                { signal },
-            ),
+        queryKey: computed(() => rpcKey(`workspace.health`, input.value)),
+        queryFn: ({ signal }): Promise<WorkspaceHealth> => sandboxRpc.workspace.health(input.value, { signal }),
     });
     return {
         health: computed(() => query.data.value),

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contract";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
 // The activity audit log (historyRoot/activity.jsonl): append-only JSONL, written by the daemon only, kept outside the
 // agent's /work mount so the agent can't read or rewrite its own trail.

@@ -5,8 +5,13 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { Event } from "@opencode-ai/sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { createGrokAgent, type GrokRunner, type GrokTurn } from "./grok-agent.js";
+import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Exercises the real filesystem read behind attached images: needs actual files on disk, unlike the mocked runner in
 // grok-agent.test.ts.
@@ -21,7 +26,14 @@ const fakeRunner = (...turns: unknown[][]): { runner: GrokRunner; calls: GrokTur
     return { runner, calls };
 };
 
-const request = { prompt: "what is wrong with this screen?", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
+const request: AgentRequest<ContainerCredential> = {
+    spec: { prompt: "what is wrong with this screen?", cwd: WORKSPACE_ROOT },
+    policy: {},
+    tools: {},
+    credential: { kind: "container" },
+    hooks: { cards },
+    signal: new AbortController().signal,
+};
 
 // `onPlan` fires via `setTimeout` because the generator's yield suspends before `wait()` registers the pending-plan
 // bridge.
@@ -35,7 +47,7 @@ const collect = async (
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
             const decision = onPlan(event.requestId);
-            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
+            setTimeout(() => cards.resolve({ kind: "plan", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -53,7 +65,7 @@ test("attached images ride as native picture parts while other files stay refere
     const missing = join(dir, "deleted.png");
 
     const { runner, calls } = fakeRunner([]);
-    await collect(createGrokAgent(runner), { ...request, attachments: [shot, missing, report] });
+    await collect(createGrokAgent(runner), { ...request, spec: { ...request.spec, attachments: [shot, missing, report] } });
 
     const turn = calls[0]!;
     expect(turn.images).toEqual([
@@ -80,7 +92,11 @@ test("a plan turn sends attached images on the first planning message only: the 
         ],
         [{ type: "session.idle", properties: { sessionID: "s1" } }],
     );
-    await collect(createGrokAgent(runner), { ...request, permissionMode: "plan", attachments: [shot] }, () => ({ approve: true }));
+    await collect(
+        createGrokAgent(runner),
+        { ...request, spec: { ...request.spec, attachments: [shot] }, policy: { ...request.policy, permissionMode: "plan" } },
+        () => ({ approve: true }),
+    );
 
     expect(calls).toHaveLength(2);
     expect(calls[0]!.images).toHaveLength(1);

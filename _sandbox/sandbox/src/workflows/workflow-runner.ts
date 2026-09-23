@@ -13,12 +13,10 @@ import type {
     WorkflowStepRun,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { stopTurn } from "../agent/checkpoints/agent-steering.js";
-import { resumeLoops, runLoop, stopLoop, type TurnFn } from "../loops/loop-runner.js";
+import { resumeLoops, runLoop, stopLoop } from "../loops/loop-runner.js";
 import { resolvedBranches } from "./handover-branches.js";
 import { briefForStep, type Handover, stepConversations } from "./workflow-brief.js";
-import { workflowProjection } from "./workflow-state.js";
-import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Scheduler: runs a graph of steps, each a loop, in dependency order; daemon-side since a workflow can run for hours
 // past a closed browser. No topological sort: each step is a memoized promise awaiting its dependencies. A step's
@@ -185,7 +183,7 @@ const loopForStep = (step: WorkflowStep, repos: readonly RepoBase[], conversatio
 
 // Drives one run to completion; resolves however the run ends and never rejects, since every caller is fire-and-forget.
 // Finished steps from a resume replay off the record instead of re-running.
-export const runWorkflow = async (services: Services, run: WorkflowRun, fn: TurnFn): Promise<void> => {
+export const runWorkflow = async (services: Services, run: WorkflowRun): Promise<void> => {
     const { runId, workflow } = run;
     if (running.has(runId)) {
         return;
@@ -214,20 +212,23 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
         // Falls back to the run's request, same fallback the prompt uses; a run leaving both empty is refused earlier.
         const goal = step.goal ?? run.request ?? "";
         // Set before the loop starts, so the fleet card is never blank; a `continue` step overwrites its predecessor.
-        workflowProjection.set(conversationId, { runId, name: workflow.name, step: step.title, index, total: workflow.steps.length });
+        services.conversations.send(conversationId, {
+            kind: "workflow-shown",
+            workflow: { runId, name: workflow.name, step: step.title, index, total: workflow.steps.length },
+        });
         await services.workflowRuns.patchStep(runId, step.id, { state: "running", startedAt: Date.now() });
         // Fresh loop record per step: the manifest keeps only the latest per conversation.
         const record = await services.loops.start(loopForStep(step, run.repos, conversationId, prompt, goal), Date.now());
-        // Two doors: `stopLoop` ends the loop, `stopTurn` aborts the turn in flight, since an iteration here is a whole
+        // Two doors: `stopLoop` ends the loop, the actor's `abort` the turn in flight, since an iteration here is a whole
         // turn. The check right after catches a stop landing in the gap before this point.
         const relay = (): void => {
-            void stopLoop(conversationId);
-            if (stopTurn(conversationId)) {
-                services.agents.stopping(conversationId, "stopped");
+            void stopLoop(services.conversations, conversationId);
+            if (services.conversations.abort(conversationId)) {
+                services.conversations.send(conversationId, { kind: "stop", ending: "stopped" });
             }
         };
         abort.signal.addEventListener("abort", relay, { once: true });
-        const settling = runLoop(services, record, fn);
+        const settling = runLoop(services, record);
         if (abort.signal.aborted) {
             relay();
         }
@@ -343,7 +344,7 @@ export const runWorkflow = async (services: Services, run: WorkflowRun, fn: Turn
 // RESUME_MAX tries, the run settles as `error` instead of coming back forever.
 const RESUME_MAX = 2;
 
-const resumeWorkflowRuns = async (services: Services, fn: TurnFn, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
+const resumeWorkflowRuns = async (services: Services, candidates?: readonly WorkflowRun[]): Promise<string[]> => {
     const resumed: string[] = [];
     for (const run of candidates ?? (await services.workflowRuns.list())) {
         if (run.state !== "running" || running.has(run.runId)) {
@@ -378,15 +379,15 @@ const resumeWorkflowRuns = async (services: Services, fn: TurnFn, candidates?: r
             continue;
         }
         resumed.push(run.runId);
-        void runWorkflow(services, counted, fn);
+        void runWorkflow(services, counted);
     }
     return resumed;
 };
 
 // One boot coordinator for both journals: workflow steps are loops, so launching the two recovery passes separately
 // would give one loop two drivers. Conversations owned by a running workflow are claimed first.
-export const resumeWorkflowExecution = async (services: Services, fn: TurnFn): Promise<void> => {
+export const resumeWorkflowExecution = async (services: Services): Promise<void> => {
     const runs = (await services.workflowRuns.list()).filter((run) => run.state === "running");
     const owned = new Set(runs.flatMap((run) => run.steps.map((step) => step.conversationId)));
-    await Promise.all([resumeWorkflowRuns(services, fn, runs), resumeLoops(services, fn, owned)]);
+    await Promise.all([resumeWorkflowRuns(services, runs), resumeLoops(services, owned)]);
 };

@@ -1,4 +1,4 @@
-import type { AgentRequest } from "../../agent/run/agent.js";
+import type { TurnTools } from "../../agent/providers/agent-request.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import type { BrowserTurnTools } from "./browser-tools.js";
 
@@ -8,7 +8,7 @@ import type { BrowserTurnTools } from "./browser-tools.js";
 export const browserFields = (
     root: string,
     browser: BrowserTurnTools,
-): Partial<Pick<AgentRequest, "sdkServers" | "browserOutputDir" | "browserPorts" | "browserPasskeys" | "browserAccounts">> =>
+): Pick<TurnTools, "sdkServers" | "browserOutputDir" | "browserPorts" | "browserPasskeys" | "browserAccounts"> =>
     Object.keys(browser.servers).length === 0
         ? {}
         : {

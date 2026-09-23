@@ -1,10 +1,10 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { DerivedDiffSchema, DiffSourceQuerySchema } from "../schemas/diff.js";
 
 // What a diff's two sides are besides text: the byte route (/diff/raw) is plain Hono since it streams a body; the
 // derived-text route is here, answering both sides in one call so they render together.
 export const diffContract = {
-    derived: oc
+    derived: procedure
         .route({
             method: "GET",
             path: "/diff/derived",

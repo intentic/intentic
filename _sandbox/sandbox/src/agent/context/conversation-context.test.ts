@@ -2,7 +2,8 @@ import type { AgentTurn, Persona } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
-import type { Composition } from "../../agents/registry/agents-store.js";
+import type { PersistedAgent } from "../../agents/registry/agents-store.js";
+import { conversationEntry, isolatedAgent } from "../../testing.js";
 import { contextNoteFor, decideComposition } from "./conversation-context.js";
 
 /* THE COMPOSITION IS READ OFF THE CARD, AND OFF NOTHING ELSE. */
@@ -13,10 +14,10 @@ const CARDS: readonly Persona[] = [
     { id: "open", capabilities: [] },
 ];
 
-const services = (entry: { readonly composition?: Composition } | undefined, root = "/nowhere"): Services =>
+const services = (entry: PersistedAgent | undefined, root = "/nowhere"): Services =>
     unstubbed<Services>("services", {
         personas: unstubbed<Services["personas"]>("personas", { get: async (id) => CARDS.find((card) => card.id === id) }),
-        agents: unstubbed<Services["agents"]>("agents", { entry: () => entry as ReturnType<Services["agents"]["entry"]> }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => entry }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
     });
 
@@ -40,10 +41,11 @@ test("the note names the card, what is carried, and what the workspace has that 
     // empty), so everything the composition names is "missing" and nothing is absent: the note still says
     // what the card asked for. The walk over a real tree is worktrees.integration.test.ts's business.
     const root = "/nowhere/intentic-context";
-    const note = await contextNoteFor(services({ composition: { persona: "backend", repos: ["api"] } }, root), "c1");
+    const backend = isolatedAgent([], { placement: { kind: "worktree", branch: "agent/c1", repos: [], composition: { persona: "backend", repos: ["api"] } } });
+    const note = await contextNoteFor(services(backend, root), "c1");
     expect(note?.title).toBe("Context of this session");
     expect(note?.text).toContain("(wearing the `Backend` persona)");
     expect(note?.text).toContain("Named by the persona but not in this workspace: `api`.");
     // A conversation with no composition has nothing to be told.
-    expect(await contextNoteFor(services({}, root), "c2")).toBeUndefined();
+    expect(await contextNoteFor(services(conversationEntry({ id: "c2" }), root), "c2")).toBeUndefined();
 });

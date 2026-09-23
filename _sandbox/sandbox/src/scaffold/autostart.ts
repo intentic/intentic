@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { Services } from "../composition.js";
 import { jsonFile } from "../store/json-file.js";
 import { appPanelKey, buildAppSpec } from "../workspace/layout/app-previews.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 
 // What this workspace runs on boot: one entry per `<repo>/_apps/<app>` with its dev command, so every boot restarts it,
 // not only the seed's first one. `autostart` (bootstrap/workspace-apps.ts) starts what the file names and is idempotent; a missing folder

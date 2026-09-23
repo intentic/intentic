@@ -1,4 +1,4 @@
-import { CI_POLL_INTERVAL_MS, type CiRepo, CiRunsResponseSchema } from "@intentic/sandbox-contract";
+import { CI_POLL_INTERVAL_MS, type CiRepo } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
@@ -55,7 +55,7 @@ export function useCiDelivery(active: Ref<boolean>, repo: Ref<string>) {
     const api = host();
     const query = useQuery({
         queryKey: api.sandbox.key(`ci-delivery`),
-        queryFn: async (): Promise<CiRepo[]> => CiRunsResponseSchema.parse(await api.sandbox.json(`/ci/runs`)).repos,
+        queryFn: async (): Promise<CiRepo[]> => (await api.sandbox.rpc.ci.runs()).repos,
         enabled: computed(() => active.value && api.sandbox.reachable()),
     });
     return {

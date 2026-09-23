@@ -1,3 +1,5 @@
+import type { SandboxSummary } from "@intentic/api-contract";
+
 // Decides, in one place, what arriving on /setup does by itself: the desktop app hands the setup code to itself;
 // a browser starts a hosted machine. The picker survives only when a surface's own answer is unavailable or
 // refused. `Arrival` is the action taken on arrival, not what the page renders.
@@ -65,4 +67,24 @@ export const arrivalFor = (input: ArrivalInput): Arrival => {
     }
     // In a browser, hosted only when takeable and this arrival made the row, so a stale reload spends nothing.
     return input.fresh && startable ? `hosted` : `choose`;
+};
+
+// A row with history: redeemed, reported on, or checked in. Finding a row again (a reload, a reopened tab, the app's
+// first frame) is not history, since a row exists from the moment /setup opens; only genuine acts count.
+export const touched = (row: SandboxSummary): boolean =>
+    // `?? null` on each: fields are optional as well as nullable on older rows, and `undefined !== null` touches every row.
+    (row.lastSeenAt ?? null) !== null || (row.setupCodeClaimedAt ?? null) !== null || (row.setupReport ?? null) !== null;
+
+// A machine of ours on a row nothing has ever run on (`ArrivalInput.hostedIdle`).
+export const hostedIdle = (row: SandboxSummary): boolean => (row.hosted ?? null) !== null && (row.lastSeenAt ?? null) === null;
+
+// The row this visit works on: the one the URL names, else the account's single unfinished one while it has no working
+// one; undefined, meaning a fresh draft, for anything that is not the owner's.
+export const rowToOpen = (rows: readonly SandboxSummary[], named: string | undefined): SandboxSummary | undefined => {
+    const requested = named === undefined ? undefined : rows.find((entry) => entry.id === named);
+    const unfinished = rows.some((entry) => entry.lastSeenAt !== null)
+        ? undefined
+        : rows.find((entry) => entry.role === `owner` && entry.lastSeenAt === null);
+    const found = requested ?? unfinished;
+    return found?.role === `owner` ? found : undefined;
 };

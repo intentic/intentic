@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { z } from "zod";
 import { SessionTranscriptSchema } from "../events/transcript.js";
 import { SessionIdParamSchema, SessionsListSchema } from "../schemas/sessions.js";
@@ -12,7 +12,7 @@ import { SessionIdParamSchema, SessionsListSchema } from "../schemas/sessions.js
 // not matter, and the two routes answer one query together (the board lists these rows under its own cards), so
 // a switch either of them ignored would show as one field returning two different match sets.
 export const sessionsContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/sessions",
@@ -20,15 +20,18 @@ export const sessionsContract = {
             description:
                 "Summaries for a history menu, filtered when you pass a search. Covers conversations that worked in their own private copies too, so nothing is hidden just because it happened on a branch.",
         })
+        // The editor bridge's slice: the transcripts of the conversation it drives.
+        .meta({ control: "editor" })
         .input(z.object({ query: z.string().optional(), caseSensitive: z.stringbool().optional() }))
         .output(SessionsListSchema),
-    get: oc
+    get: procedure
         .route({
             method: "GET",
             path: "/sessions/{id}",
             summary: "Read one past conversation",
             description: "The full record of a single conversation, restored for display.",
         })
+        .meta({ control: "editor" })
         .input(SessionIdParamSchema)
         .output(SessionTranscriptSchema),
 };

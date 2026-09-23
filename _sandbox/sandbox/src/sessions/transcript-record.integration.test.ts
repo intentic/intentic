@@ -5,7 +5,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, type AgentHarness, type AgentProvider, PROVIDERS, HARNESSES, type TranscriptRow } from "@intentic/sandbox-contract";
 import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
 import { describe, it, expect } from "bun:test";
-import { fileTranscriptRecord } from "./transcript-record.js";
+import { fileTranscriptRecord, transcriptFile } from "./transcript-record.js";
 import { openingRows } from "./turn-transcript.js";
 
 const dir = (): Promise<string> => mkdtemp(join(tmpdir(), "transcript-record-"));
@@ -53,7 +53,7 @@ describe("fileTranscriptRecord", () => {
         const record = fileTranscriptRecord(root);
         await record.append("c1", [said("whole")]);
         // A write the daemon was killed in the middle of.
-        await writeFile(join(root, "c1.jsonl"), `${await readFile(join(root, "c1.jsonl"), "utf8")}{"role":"assistant","te`);
+        await writeFile(transcriptFile(root, "c1"), `${await readFile(transcriptFile(root, "c1"), "utf8")}{"role":"assistant","te`);
         expect((await record.read("c1")).map((message) => message.text)).toEqual(["whole"]);
     });
 

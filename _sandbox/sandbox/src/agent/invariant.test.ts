@@ -1,6 +1,8 @@
 import { test, expect } from "bun:test";
 import { checks } from "./invariant.js";
 import type { JournalEntry, TurnJournal } from "./run/turn/turn-journal.js";
+import { unstubbed } from "@intentic/testing";
+import type { ConversationActors } from "../agents/actor/conversation-actors.js";
 
 /* A running turn must persist its journal before recreation can proceed. */
 
@@ -26,7 +28,12 @@ const entryFor = (conversationId: string): JournalEntry => ({
 });
 
 const run = async (entries: readonly JournalEntry[], live: readonly { conversationId: string; startedAt: number }[]): Promise<void> => {
-    const [check] = checks({ turnJournal: journalOf(entries), live: () => live, now: () => NOW });
+    const [check] = checks({
+        turnJournal: journalOf(entries),
+        conversations: unstubbed<ConversationActors>("conversations", {}),
+        live: () => live,
+        now: () => NOW,
+    });
     await check?.run({ moment: "sweep", fail });
 };
 

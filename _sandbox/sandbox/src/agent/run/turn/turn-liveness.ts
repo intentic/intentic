@@ -1,7 +1,8 @@
-import { turnActive } from "../../checkpoints/agent-steering.js";
-import { watchProjection } from "../../verification/watch-state.js";
-import { turnRunOf } from "./turn-runs.js";
+import type { ConversationActors } from "../../../agents/actor/conversation-actors.js";
+import { turnRunOf } from "../../../agents/actor/conversation-holdings.js";
 
 /** Whether a conversation has work in flight: a live turn, or an armed watch it is waiting on. */
-export const conversationBusy = (conversationId: string): boolean =>
-    turnActive(conversationId) || turnRunOf(conversationId)?.done === false || (watchProjection.of(conversationId) ?? []).length > 0;
+export const conversationBusy = (conversations: Pick<ConversationActors, "turnActive" | "state" | "holdings">, conversationId: string): boolean =>
+    conversations.turnActive(conversationId) ||
+    turnRunOf(conversations, conversationId)?.done === false ||
+    (conversations.state(conversationId)?.watches.length ?? 0) > 0;

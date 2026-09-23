@@ -1,21 +1,20 @@
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { test, expect, beforeEach, mock } from "bun:test";
-import type { AgentRequest } from "../../agent/run/agent.js";
-import type { TurnContext } from "../../agent/run/turn/turn-plan.js";
+import type { AgentRequest } from "../../agent/providers/agent-request.js";
+import type { TurnContext } from "../../agent/providers/adapter.js";
 import type { Services } from "../../composition.js";
-import { testConfig } from "../../testing.js";
+import { memoryFleet, testConfig } from "../../testing.js";
 import * as browserToolsOriginal from "../../browser/tools/browser-tools.js";
 import * as cursorSdkOriginal from "./cursor-sdk.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 /* What a Cursor turn is handed to reach out of itself: the daemon's http MCP tools, which cursorMcpServers mounts. */
 
 mock.module("./cursor-sdk.js", () => ({ ...cursorSdkOriginal, CURSOR_SDK_MISSING: "missing sdk", cursorSdk: async () => ({ Agent: {} }) }));
-
-// The login door reaches the environment builder, which reaches the provider registry, which imports this module back:
-// benign when the daemon boots through the registry, a half-built module when a suite enters here. Nothing below signs
-// anyone in, so the door stays out of the graph.
-mock.module("./cursor-accounts.js", () => ({ cursorAccountDoor: {} }));
 
 const browserServers = mock();
 mock.module("../../browser/tools/browser-tools.js", () => ({
@@ -47,7 +46,7 @@ const services = (overrides: Partial<Services> = {}): Services =>
     });
 
 const context: TurnContext = {
-    base: { prompt: "look at my browser", cwd: ROOT, signal: new AbortController().signal },
+    base: { spec: { prompt: "look at my browser", cwd: ROOT }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
     attachmentPaths: [],
     localCwd: ROOT,
     effectiveCwd: ROOT,
@@ -73,7 +72,9 @@ beforeEach(() => {
 test("a connected browser extension reaches the turn as an http MCP server named for its card", async () => {
     const request = await planned([{ kind: "webext", id: "chrome", config: {} } as Capability]);
 
-    expect(request.tools).toEqual([{ name: "chrome", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/webext/chrome`, token: "webext-bridge" }]);
+    expect(request.tools.remote).toEqual([
+        { name: "chrome", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/webext/chrome`, token: "webext-bridge" },
+    ]);
     expect(cursorMcpServers(request)).toEqual({
         chrome: {
             type: "http",
@@ -88,7 +89,7 @@ test("a connected browser extension reaches the turn as an http MCP server named
 test("a connected machine reaches the turn with the conversation the command gate judges it in", async () => {
     const request = await planned([{ kind: "device", id: "radarsu-rog", config: {} } as Capability]);
 
-    expect(request.tools).toEqual([
+    expect(request.tools.remote).toEqual([
         { name: "radarsu-rog", url: `http://127.0.0.1:${testConfig.sandbox.port}/mcp/hosts/radarsu-rog?conversation=conv-1`, token: "host-bridge" },
     ]);
 });
@@ -100,12 +101,12 @@ test("the daemon's own tools and the workspace's mcp capabilities arrive togethe
         tools: [{ name: "platform", url: "https://platform.example/mcp", token: "internal" }],
     });
 
-    expect(request.tools?.map((tool) => tool.name)).toEqual(["platform", "saldeo"]);
+    expect(request.tools.remote?.map((tool) => tool.name)).toEqual(["platform", "saldeo"]);
 });
 
 // Absent, not empty: an empty list would still read as "this turn has tools" to anything checking the field.
 test("a sandbox with nothing connected carries no tools field at all", async () => {
-    expect((await planned([])).tools).toBeUndefined();
+    expect((await planned([])).tools.remote).toBeUndefined();
 });
 
 // Cursor publishes no allowance, so which connection serves follows the refusals this sandbox has collected.
@@ -142,7 +143,7 @@ test("an unnamed turn is placed on the account that still has the model it asked
     const plan = await placed(fleet({ one: ["composer-2.5"] }), { model: "composer-2.5" });
 
     expect(plan.account).toBe("two");
-    expect(plan.request.cursorApiKey).toBe("key-two");
+    expect(plan.request.credential).toEqual({ kind: "cursor-key", apiKey: "key-two" });
 });
 
 // The picker's whole point: a chosen account is spent on, spent allowance and all, so the refusal is the user's to see.

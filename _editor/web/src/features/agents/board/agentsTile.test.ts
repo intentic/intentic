@@ -26,7 +26,7 @@ mock.module("../fleet/fleetScope", () => ({
     listNames: (names: readonly string[]) => names.join(`, `),
 }));
 
-const { agentsAttention, agentsBadge, agentsScopeNote, watchAgentsScope } = await import("./agentsTile");
+const { agentsAttention, agentsBadge, agentsScopeNote, followOtherBoxes, watchAgentsScope } = await import("./agentsTile");
 
 // The composable inside a real component: its whole contract is "for as long as this is mounted".
 const mount = (): { unmount: () => void } => {
@@ -163,5 +163,30 @@ describe("keeping the other boxes live", () => {
         await Promise.resolve();
         app.unmount();
         expect(release).toHaveBeenCalledTimes(1);
+    });
+
+    // The board holds a read of its own beside the shell's: each lets go when its own holder does, and only the tile marks
+    // a remote chat read.
+    it("lets the board hold its own read beside the tile's, each released by its own holder", async () => {
+        watchRemoteSeen.mockClear();
+        const shell = mount();
+        const board = createApp(
+            defineComponent({
+                setup() {
+                    followOtherBoxes();
+                    return () => h(`div`);
+                },
+            }),
+        );
+        board.mount(document.createElement(`div`));
+        readingAcross.value = true;
+        await Promise.resolve();
+        expect(subscribe).toHaveBeenCalledTimes(2);
+
+        board.unmount();
+        expect(release).toHaveBeenCalledTimes(1);
+        shell.unmount();
+        expect(release).toHaveBeenCalledTimes(2);
+        expect(watchRemoteSeen).toHaveBeenCalledTimes(1);
     });
 });

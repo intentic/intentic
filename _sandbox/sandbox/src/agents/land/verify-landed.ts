@@ -1,4 +1,3 @@
-import type { WorkspaceEvent } from "@intentic/sandbox-contract";
 import { queueWhole } from "../../agent/tools/agent-terminals.js";
 import type { Services } from "../../composition.js";
 import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origin.js";
@@ -10,20 +9,20 @@ import { announceUnwatchedWrite } from "../../workspace/watch/workspace-watch.js
 // that ends a turn or the Land button. When the land left node_modules behind, the reconciler's install listener
 // queues the check after the install; otherwise it is queued here, at once.
 
-export type LandVerifier = Pick<Services, "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "heavyCommands" | "dependencies">;
+export type LandVerifier = Pick<
+    Services,
+    "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "heavyCommands" | "dependencies" | "events"
+>;
 
-export const verifyLandedTree = async (
-    services: LandVerifier,
-    emit: (event: WorkspaceEvent) => void,
-    origin: DependencyLandOrigin,
-): Promise<ReconcileOutcome | undefined> => {
+// The check's verdict is announced as a workspace event (deps.broken, deps.fixed) for whatever reacts to it.
+export const verifyLandedTree = async (services: LandVerifier, origin: DependencyLandOrigin): Promise<ReconcileOutcome | undefined> => {
     const verifier: VerifyDeps = {
         workspace: services.workspace,
         processes: services.processes,
         logger: services.logger,
         verifyStore: services.verifyStore,
         activity: services.activity,
-        emit,
+        emit: (event) => services.events.publish("workspace", event),
         announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
     };

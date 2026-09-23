@@ -1,14 +1,15 @@
-import type { Capability } from "@intentic/sandbox-contract";
+import { type Capability, rawRoutePath } from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
-import { BROWSER_PREPARE_PATH, browserPrepareBridge, createBrowserPrepareRoute } from "./browser-prepare.js";
+import { browserPrepareBridge, createBrowserPrepareRoute } from "./browser-prepare.js";
 
 // The door a turn's browser router knocks on to have one profile built. What is pinned here is who may knock and for
 // what; what a knock actually builds is browser-tools.integration.test.ts's business.
 
 const TOKEN = "bridge-secret";
+const PREPARE = rawRoutePath("POST /system/browser/prepare");
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };
 
 const routeFor = (capabilities: readonly Capability[] = [reddit]) => {
@@ -17,11 +18,11 @@ const routeFor = (capabilities: readonly Capability[] = [reddit]) => {
         workspace: unstubbed<Services["workspace"]>("workspace", { root: "/nonexistent-workspace" }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [...capabilities] }),
     });
-    return new Hono().post(BROWSER_PREPARE_PATH, createBrowserPrepareRoute(services));
+    return new Hono().post(PREPARE, createBrowserPrepareRoute(services));
 };
 
 const knock = async (app: Hono, body: unknown, token: string = TOKEN): Promise<Response> =>
-    app.request(BROWSER_PREPARE_PATH, {
+    app.request(PREPARE, {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify(body),

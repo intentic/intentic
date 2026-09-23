@@ -2,12 +2,13 @@ import type { ExtensionModule } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
 import { registerCatalog, t } from "@intentic/ui/i18n";
 import type { ExtensionManifest } from "@intentic/extension-manifest";
-import { extensionApiVersion, satisfiesEngines, resetSandboxScope } from "@intentic/extension-api";
+import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api";
 import { extensionIdOf } from "@intentic/extension-manifest";
-import { type ExtensionSummary, ExtensionsListSchema } from "@intentic/sandbox-contract";
+import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { shallowRef } from "vue";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
-import { sandboxError, sandboxJson, sandboxRequest } from "../features/sandbox/client/sandboxClient";
+import { sandboxError, sandboxRequest } from "../features/sandbox/client/sandboxClient";
+import { sandboxRpc } from "../features/sandbox/client/sandboxRpc";
 import { readFailure } from "../features/sandbox/overview/useDaemonRoutes";
 import { createExtensionApi, deactivateAllExtensions, deactivateExtension, type HostBindings } from "./apiImpl";
 import { builtinModules } from "./builtins";
@@ -144,12 +145,11 @@ const loadUnlisted = async (listed: ReadonlySet<string>, host: HostBindings, det
 
 // Drops everything this host holds for the current sandbox synchronously, before the new one is asked anything; a later
 // re-run would leave stale tiles and a superseded extension running meanwhile.
-// Drops the activations, the extensions' own module state, and this module's load record; extensionsLoaded going false
-// tells the rail its composition is provisional again.
+// Drops the activations and this module's load record; extensionsLoaded going false tells the rail its composition is
+// provisional again. The extensions' own module state goes with the switch itself (sandboxScope.ts), never a relocale.
 export const retireExtensions = (): void => {
     scope += 1;
     deactivateAllExtensions();
-    resetSandboxScope();
     extensionStatuses.value = [];
     loadedCommits.value = new Map();
     extensionsLoaded.value = false;
@@ -161,7 +161,7 @@ export const loadExtensions = async (host: HostBindings): Promise<void> => {
     let summaries: readonly ExtensionSummary[] = [];
     let listFailure: string | undefined;
     try {
-        summaries = ExtensionsListSchema.parse(await sandboxJson(`/extensions`)).extensions;
+        summaries = (await sandboxRpc.extensions.list()).extensions;
     } catch (error) {
         listFailure = readFailure(error);
     }

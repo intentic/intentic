@@ -1,10 +1,7 @@
 import type { ActionApprovalSummary, AgentTurn, ApprovalSummary, PostApprovalSummary } from "@intentic/sandbox-contract";
 import { actionTurnPrompt, DIRECT_PUBLISH_PLATFORMS, publishTurnPrompt } from "@intentic/sandbox-contract";
-import { streamAgent } from "../agent/routes/agent.routes.js";
-import { startConversationTurn } from "../agent/run/turn/turn-resume.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { canPublishDirectly, postToDiscord } from "./discord-post.js";
 
 // Sleeps until the exact due moment, one timer at a time, armed from disk (never memory) since both this daemon and the
@@ -51,7 +48,7 @@ const isAction = (item: ApprovalSummary): item is ActionApprovalSummary => item.
 const actionTitle = (actions: readonly ActionApprovalSummary[]): string =>
     actions.length === 1 ? (actions[0]?.summary ?? `Carry out 1 action`) : `Carry out ${actions.length} actions`;
 
-export const createApprovalsExecutor = (services: Services, wake: WakeFn = streamAgent): ApprovalsExecutor => {
+export const createApprovalsExecutor = (services: Services): ApprovalsExecutor => {
     let timer: NodeJS.Timeout | undefined;
     // One pass at a time: two overlapping passes could read `approved` before either writes `running`, twice.
     let running = false;
@@ -86,9 +83,7 @@ export const createApprovalsExecutor = (services: Services, wake: WakeFn = strea
     // `approved` would be redone by the next pass.
     const startTurn = async (items: readonly ApprovalSummary[], turn: AgentTurn & { conversationId: string }): Promise<void> => {
         await Promise.all(items.map((item) => mark(item, { status: `running`, startedAt: Date.now() })));
-        void startConversationTurn(services, wake, turn).catch((error: unknown) =>
-            services.logger.error({ err: error }, `approval turn failed to start`),
-        );
+        void services.turns.start(turn).catch((error: unknown) => services.logger.error({ err: error }, `approval turn failed to start`));
     };
 
     // A name that resolves to nobody fails every kind: turnPersona denies an unknown card entirely, same as an unpinned

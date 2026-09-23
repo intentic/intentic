@@ -1,4 +1,5 @@
-import { computed, reactive } from "vue";
+import { sandboxRef, sandboxValue } from "@intentic/extension-api";
+import { computed } from "vue";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { basename, parentDir } from "@intentic/ui/path";
 
@@ -42,19 +43,24 @@ const MAX_TRACKED = 500;
 const SETTLED_TTL_MS = 60_000;
 
 // Root-relative path → what is happening to it. Arrivals synthesize the directories above them; departures never do.
-const entries = reactive(new Map<string, Provisional>());
-const timers = new Map<string, ReturnType<typeof setTimeout>>();
+// A path names one sandbox's /work, so a switch drops every entry with the tree it belonged to.
+const entries = sandboxRef(() => new Map<string, Provisional>());
+// Each settled entry's failsafe, cleared with it.
+const timers = sandboxValue(
+    () => new Map<string, ReturnType<typeof setTimeout>>(),
+    (previous) => previous.forEach((timer) => clearTimeout(timer)),
+);
 
 const forget = (path: string): void => {
-    entries.delete(path);
-    const timer = timers.get(path);
+    entries.value.delete(path);
+    const timer = timers.value.get(path);
     if (timer !== undefined) {
         clearTimeout(timer);
-        timers.delete(path);
+        timers.value.delete(path);
     }
 };
 
-const bounded = (path: string): boolean => entries.size < MAX_TRACKED || entries.has(path);
+const bounded = (path: string): boolean => entries.value.size < MAX_TRACKED || entries.value.has(path);
 
 /** Records something on its way in, so its row exists before the daemon's walk agrees it does. */
 export const noteArriving = (path: string, spec: ArrivalSpec): void => {
@@ -62,7 +68,7 @@ export const noteArriving = (path: string, spec: ArrivalSpec): void => {
         return;
     }
     forget(path);
-    entries.set(path, {
+    entries.value.set(path, {
         kind: spec.kind,
         type: spec.type ?? `file`,
         ...(spec.size === undefined ? {} : { size: spec.size }),
@@ -76,7 +82,7 @@ export const noteLeaving = (path: string): void => {
         return;
     }
     forget(path);
-    entries.set(path, { kind: `write`, type: `file`, state: `leaving` });
+    entries.value.set(path, { kind: `write`, type: `file`, state: `leaving` });
 };
 
 /**
@@ -84,15 +90,15 @@ export const noteLeaving = (path: string): void => {
  * will ever reconcile.
  */
 export const markSettled = (path: string): void => {
-    const entry = entries.get(path);
+    const entry = entries.value.get(path);
     if (entry === undefined) {
         return;
     }
     if (entry.state === `arriving`) {
         entry.state = `landing`;
     }
-    clearTimeout(timers.get(path));
-    timers.set(
+    clearTimeout(timers.value.get(path));
+    timers.value.set(
         path,
         setTimeout(() => forget(path), SETTLED_TTL_MS),
     );
@@ -100,7 +106,7 @@ export const markSettled = (path: string): void => {
 
 /** Nothing landed under this path; the row stays failed until the upload card is dismissed. */
 export const markFailed = (path: string): void => {
-    const entry = entries.get(path);
+    const entry = entries.value.get(path);
     if (entry !== undefined) {
         entry.state = `failed`;
     }
@@ -115,7 +121,7 @@ export const dropProvisional = (path: string): void => forget(path);
  */
 export const reconcileProvisional = (isListed: (path: string) => boolean): void => {
     // Deleting the key the iterator is sitting on is defined behaviour for a Map; no copy needed.
-    for (const [path, entry] of entries) {
+    for (const [path, entry] of entries.value) {
         const listed = isListed(path);
         if (entry.state !== `leaving`) {
             if (listed) {
@@ -139,17 +145,10 @@ export const reconcileProvisional = (isListed: (path: string) => boolean): void 
  * to gestures the card knows nothing about.
  */
 export const clearUnsettledUploads = (): void => {
-    for (const [path, entry] of entries) {
+    for (const [path, entry] of entries.value) {
         if (entry.kind === `upload` && entry.state !== `landing`) {
             forget(path);
         }
-    }
-};
-
-/** Drops everything: the tree these belonged to is gone (a sandbox switch). */
-export const resetProvisional = (): void => {
-    for (const path of entries.keys()) {
-        forget(path);
     }
 };
 
@@ -175,7 +174,7 @@ const arrivals = computed<ReadonlyMap<string, ReadonlyMap<string, Placeholder>>>
         }
         byDir.set(dir, level);
     };
-    for (const [path, provisional] of entries) {
+    for (const [path, provisional] of entries.value) {
         if (provisional.state === `leaving`) {
             continue;
         }
@@ -200,7 +199,7 @@ const arrivals = computed<ReadonlyMap<string, ReadonlyMap<string, Placeholder>>>
 // Exact paths on their way out; the set the explorer filters its rows against.
 const departures = computed<ReadonlySet<string>>(() => {
     const out = new Set<string>();
-    for (const [path, entry] of entries) {
+    for (const [path, entry] of entries.value) {
         if (entry.state === `leaving`) {
             out.add(path);
         }
@@ -210,7 +209,7 @@ const departures = computed<ReadonlySet<string>>(() => {
 
 /** What is happening to this path, or undefined when the listing is the whole truth about it. */
 export const provisionalAt = (path: string): Provisional | undefined => {
-    const entry = entries.get(path);
+    const entry = entries.value.get(path);
     if (entry?.state === `leaving`) {
         return entry;
     }

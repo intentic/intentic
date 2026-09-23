@@ -1,4 +1,3 @@
-import { ExtensionsListSchema } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, type ComputedRef } from "vue";
 import { host } from "./host";
@@ -15,7 +14,7 @@ export function usePlatformCatalog(): ComputedRef<Map<string, PlatformCatalogEnt
     const api = host();
     const query = useQuery({
         queryKey: api.sandbox.key(`extensions`),
-        queryFn: async () => ExtensionsListSchema.parse(await api.sandbox.json(`/extensions`)),
+        queryFn: () => api.sandbox.rpc.extensions.list(),
         enabled: computed(() => api.sandbox.reachable()),
     });
     return computed(

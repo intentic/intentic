@@ -3,12 +3,13 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync,
 import { open } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentJob, AgentHarnessSchema, AgentProviderSchema, ModelRoleSchema } from "@intentic/sandbox-contract";
+import { type AgentJob, profileOf, type TurnProfile, TurnProfileSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import type { TurnSeed } from "../run/turn/turn-seed.js";
-import { jobProjection } from "./job-state.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import type { Holding } from "../../agents/actor/conversation-holdings.js";
 
-// Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, filed under its conversation.
+// Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, held by its conversation's
+// actor, whose card lists it (`jobs-shown`).
 
 // Published by atomic rename by bin/tmux-run once the command has exited; its existence is completion.
 const STATUS_FILE = "status";
@@ -33,7 +34,7 @@ export const OUTPUT_TAIL_BYTES = 4_000;
 const END_POLL_MS = 3_000;
 
 // Ended jobs a conversation's card keeps, newest last.
-const ENDINGS_KEPT = 8;
+export const ENDINGS_KEPT = 8;
 
 const oneLine = (text: string): string => {
     const line = text.replaceAll(/\s+/gu, " ").trim();
@@ -49,28 +50,16 @@ export const jobLabel = (description: string | undefined, command: string): stri
     return said === "" ? jobCommandLine(command) : said;
 };
 
-// The conversation a job's completion wakes, and the routing it wakes it on.
+// The conversation a job's completion wakes, and the turn it wakes it as.
 export interface BackgroundJobSeed {
     readonly conversationId: string;
     // Snapshotted at open: the turn is gone by the time the job ends.
-    readonly turn: TurnSeed;
+    readonly profile: TurnProfile;
+    // The actors its conversation lives in, which hold the job and show it on the card.
+    readonly conversations: Actors;
 }
 
-// A job file is read back by a later daemon, so it is validated, never trusted.
-const TurnSeedSchema = z.object({
-    agent: AgentProviderSchema.optional(),
-    harness: AgentHarnessSchema.optional(),
-    account: z.string().optional(),
-    model: z.string().optional(),
-    effort: z.string().optional(),
-    thinking: z.boolean().optional(),
-    fast: z.boolean().optional(),
-    actsAs: z.string().optional(),
-    isolated: z.boolean().optional(),
-    unattended: z.boolean().optional(),
-    runRole: ModelRoleSchema.optional(),
-});
-
+// A job file is read back by a later daemon, so it is validated, never trusted. `turn` holds the opening turn's profile.
 const JobFileSchema = z.object({
     id: z.string(),
     conversationId: z.string(),
@@ -78,7 +67,7 @@ const JobFileSchema = z.object({
     label: z.string(),
     session: z.string(),
     startedAt: z.number(),
-    turn: TurnSeedSchema,
+    turn: TurnProfileSchema,
     // The SDK's background task id, the one the model knows the job by.
     shellId: z.string().optional(),
     // Whether its completion was handed to a watch; a restored unadopted job is adopted at boot.
@@ -96,7 +85,7 @@ export interface BackgroundJob {
     // tmux session holding the pane, which the reaper must spare.
     readonly session: string;
     readonly startedAt: number;
-    readonly turn: TurnSeed;
+    readonly profile: TurnProfile;
 }
 
 // The CLI queues a completion notice when the command exits; only a later model request reads it.
@@ -110,10 +99,18 @@ interface JobRecord {
     notice: Notice;
 }
 
-const jobs = new Map<string, JobRecord>();
+// A conversation's jobs, by job id, until nothing depends on one any more.
+const JOBS: Holding<JobRecord> = { name: "background jobs" };
+// How its recent jobs ended, by job id, newest last: apart from JOBS, which forgets a job the moment nothing depends on
+// it.
+const ENDINGS: Holding<AgentJob> = { name: "job endings" };
+// The one poll that notices every conversation's exits; the fleet's, so held by none of them.
+const END_POLL: Holding<NodeJS.Timeout> = { name: "job end poll" };
+const END_POLL_ID = "end-poll";
 
-// How each conversation's recent jobs ended, apart from `jobs`, which forgets a job the moment nothing depends on it.
-const endings = new Map<string, AgentJob[]>();
+type Actors = Pick<ConversationActors, "holdings" | "send">;
+// What a reader of the jobs needs of them, which writes nothing to a card.
+type Holders = Pick<ConversationActors, "holdings">;
 
 export const jobStatusPath = (job: BackgroundJob): string => join(job.dir, STATUS_FILE);
 export const jobOutputPath = (job: BackgroundJob): string => join(job.dir, OUTPUT_FILE);
@@ -135,66 +132,85 @@ const endOf = (job: BackgroundJob): AgentJob => {
     }
 };
 
-const ended = (job: BackgroundJob): boolean => endings.get(job.conversationId)?.some((entry) => entry.id === job.id) === true;
+const ended = (actors: Actors, job: BackgroundJob): boolean => actors.holdings(ENDINGS).has(job.id);
 
 // Once per job; answers whether this call was the one that wrote it down.
-const noteEnded = (job: BackgroundJob): boolean => {
-    if (ended(job)) {
+const noteEnded = (actors: Actors, job: BackgroundJob): boolean => {
+    if (ended(actors, job)) {
         return false;
     }
-    endings.set(job.conversationId, [...(endings.get(job.conversationId) ?? []), endOf(job)].slice(-ENDINGS_KEPT));
+    const endings = actors.holdings(ENDINGS);
+    endings.hold(job.conversationId, job.id, endOf(job));
+    for (const stale of endings.of(job.conversationId).slice(0, -ENDINGS_KEPT)) {
+        endings.drop(stale.id);
+    }
     return true;
 };
 
-const publish = (conversationId: string): void => {
-    const running = [...jobs.values()].filter((record) => record.job.conversationId === conversationId && !ended(record.job)).map((record) => cardOf(record.job));
-    jobProjection.set(conversationId, [...running, ...(endings.get(conversationId) ?? [])]);
+const publish = (actors: Actors, conversationId: string): void => {
+    const running = actors
+        .holdings(JOBS)
+        .of(conversationId)
+        .filter((record) => !ended(actors, record.job))
+        .map((record) => cardOf(record.job));
+    actors.send(conversationId, { kind: "jobs-shown", jobs: [...running, ...actors.holdings(ENDINGS).of(conversationId)] });
 };
 
-let endPoll: NodeJS.Timeout | undefined;
-
-/** Writes down every job that exited since the last look, and publishes the conversations it moved. */
-export const sweepJobEnds = (): void => {
+const sweepEnds = (actors: Actors): void => {
+    const jobs = actors.holdings(JOBS).entries();
     const moved = new Set<string>();
-    for (const record of jobs.values()) {
-        if (!ended(record.job) && jobFinished(record.job) && noteEnded(record.job)) {
+    for (const [, record] of jobs) {
+        if (!ended(actors, record.job) && jobFinished(record.job) && noteEnded(actors, record.job)) {
             moved.add(record.job.conversationId);
         }
     }
     for (const conversationId of moved) {
-        publish(conversationId);
+        publish(actors, conversationId);
     }
-    if (endPoll !== undefined && ![...jobs.values()].some((record) => !ended(record.job))) {
-        clearInterval(endPoll);
-        endPoll = undefined;
-    }
-};
-
-// One timer for every running job, stopped once none is left; unref'd, since a job never holds the daemon up.
-const followEnds = (): void => {
-    if (endPoll === undefined) {
-        endPoll = setInterval(sweepJobEnds, END_POLL_MS);
-        endPoll.unref();
+    const poll = actors.holdings(END_POLL);
+    const timer = poll.get(END_POLL_ID);
+    if (timer !== undefined && !jobs.some(([, record]) => !ended(actors, record.job))) {
+        clearInterval(timer);
+        poll.drop(END_POLL_ID);
     }
 };
 
-// Every path out of `jobs` comes through here, so a job that exited is written down before it is forgotten.
-const forgetJob = (id: string, record: JobRecord): void => {
-    jobs.delete(id);
+/** Writes down every job that exited since the last look, and publishes the conversations it moved. */
+export const sweepJobEnds = (actors: Actors): void => sweepEnds(actors);
+
+// One timer for every running job, stopped once none is left; unref'd, since a job never holds the daemon up. It
+// sweeps the fleet that armed it.
+const followEnds = (actors: Actors): void => {
+    const poll = actors.holdings(END_POLL);
+    if (!poll.has(END_POLL_ID)) {
+        const timer = setInterval(() => sweepEnds(actors), END_POLL_MS);
+        timer.unref();
+        poll.hold(undefined, END_POLL_ID, timer);
+    }
+};
+
+// Every path out of JOBS comes through here, so a job that exited is written down before it is forgotten.
+const forgetJob = (actors: Actors, record: JobRecord): void => {
+    actors.holdings(JOBS).drop(record.job.id);
     if (jobFinished(record.job)) {
-        noteEnded(record.job);
+        noteEnded(actors, record.job);
     }
-    publish(record.job.conversationId);
+    publish(actors, record.job.conversationId);
 };
 
 // Sibling temp plus rename, so a reader after a crash finds one whole version or the other.
 const persist = (record: JobRecord): void => {
-    const { dir: _dir, ...job } = record.job;
+    const { dir: _dir, profile, ...job } = record.job;
     const file = join(record.job.dir, JOB_FILE);
     try {
         writeFileSync(
             `${file}.tmp`,
-            JSON.stringify({ ...job, ...(record.shellId === undefined ? {} : { shellId: record.shellId }), ...(record.adopted ? { adopted: true } : {}) }),
+            JSON.stringify({
+                ...job,
+                turn: profile,
+                ...(record.shellId === undefined ? {} : { shellId: record.shellId }),
+                ...(record.adopted ? { adopted: true } : {}),
+            }),
             { mode: 0o600 },
         );
         renameSync(`${file}.tmp`, file);
@@ -224,13 +240,14 @@ export const openBackgroundJob = (
         dir,
         session: spec.session,
         startedAt: Date.now(),
-        turn: seed.turn,
+        profile: seed.profile,
     };
     const record: JobRecord = { job, adopted: false, shellId: undefined, toolUseId: spec.toolUseId, notice: "none" };
-    jobs.set(id, record);
+    const actors = seed.conversations;
+    actors.holdings(JOBS).hold(job.conversationId, id, record);
     persist(record);
-    publish(job.conversationId);
-    followEnds();
+    publish(actors, job.conversationId);
+    followEnds(actors);
     return job;
 };
 
@@ -242,29 +259,29 @@ const recordOf = (dir: string): JobRecord | undefined => {
             return undefined;
         }
         const { shellId, adopted, turn, ...rest } = parsed.data;
-        const seed = Object.fromEntries(Object.entries(turn).filter(([, value]) => value !== undefined)) as TurnSeed;
-        return { job: { ...rest, dir, turn: seed }, adopted: adopted === true, shellId, toolUseId: undefined, notice: "none" };
+        return { job: { ...rest, dir, profile: profileOf(turn) }, adopted: adopted === true, shellId, toolUseId: undefined, notice: "none" };
     } catch {
         return undefined;
     }
 };
 
 /** Once at boot: re-files the still-running jobs a dead daemon left, each as adopted as its own file says. */
-export const restoreBackgroundJobs = (now: number = Date.now()): readonly BackgroundJob[] => {
+export const restoreBackgroundJobs = (actors: Actors, now: number = Date.now()): readonly BackgroundJob[] => {
+    const jobs = actors.holdings(JOBS);
     const restored: BackgroundJob[] = [];
     for (const entry of readdirSync(tmpdir(), { withFileTypes: true }).filter((candidate) => candidate.isDirectory() && candidate.name.startsWith(JOB_DIR_PREFIX))) {
         const record = recordOf(join(tmpdir(), entry.name));
         if (record === undefined || jobs.has(record.job.id) || jobFinished(record.job) || now - record.job.startedAt > JOB_MAX_MS) {
             continue;
         }
-        jobs.set(record.job.id, record);
+        jobs.hold(record.job.conversationId, record.job.id, record);
         restored.push(record.job);
     }
     for (const conversationId of new Set(restored.map((job) => job.conversationId))) {
-        publish(conversationId);
+        publish(actors, conversationId);
     }
     if (restored.length > 0) {
-        followEnds();
+        followEnds(actors);
     }
     return restored;
 };
@@ -272,8 +289,8 @@ export const restoreBackgroundJobs = (now: number = Date.now()): readonly Backgr
 // The stream's facts about a job, in arrival order: named, its completion notice queued, that notice read.
 
 /** From the CLI's `task_started` for the Bash call that opened the job. */
-export const noteJobShell = (toolUseId: string, shellId: string): void => {
-    for (const record of jobs.values()) {
+export const noteJobShell = (actors: Holders, toolUseId: string, shellId: string): void => {
+    for (const [, record] of actors.holdings(JOBS).entries()) {
         if (record.toolUseId === toolUseId) {
             record.shellId = shellId;
             persist(record);
@@ -283,8 +300,8 @@ export const noteJobShell = (toolUseId: string, shellId: string): void => {
 };
 
 /** From the CLI's `task_notification`. */
-export const noteJobNotice = (shellId: string): void => {
-    for (const record of jobs.values()) {
+export const noteJobNotice = (actors: Holders, shellId: string): void => {
+    for (const [, record] of actors.holdings(JOBS).entries()) {
         if (record.shellId === shellId && record.notice === "none") {
             record.notice = "queued";
         }
@@ -292,9 +309,9 @@ export const noteJobNotice = (shellId: string): void => {
 };
 
 /** A main-thread model request reads every completion notice queued before it. */
-export const noteModelRequest = (conversationId: string): void => {
-    for (const record of jobs.values()) {
-        if (record.job.conversationId === conversationId && record.notice === "queued") {
+export const noteModelRequest = (actors: Holders, conversationId: string): void => {
+    for (const record of actors.holdings(JOBS).of(conversationId)) {
+        if (record.notice === "queued") {
             record.notice = "read";
         }
     }
@@ -308,15 +325,12 @@ export interface SettledJobs {
 }
 
 /** A settled turn's jobs, each handed out once; a job whose completion the model read retires here. */
-export const settledBackgroundJobs = (conversationId: string): SettledJobs => {
+export const settledBackgroundJobs = (actors: Actors, conversationId: string): SettledJobs => {
     const running: BackgroundJob[] = [];
     const unseen: BackgroundJob[] = [];
-    for (const [id, record] of jobs) {
-        if (record.job.conversationId !== conversationId) {
-            continue;
-        }
+    for (const record of actors.holdings(JOBS).of(conversationId)) {
         if (jobFinished(record.job)) {
-            forgetJob(id, record);
+            forgetJob(actors, record);
             if (record.notice !== "read" && !record.adopted) {
                 unseen.push(record.job);
             }
@@ -333,11 +347,11 @@ export const settledBackgroundJobs = (conversationId: string): SettledJobs => {
 };
 
 /** tmux sessions holding a still-running job, for the reaper to spare; prunes finished and expired records. */
-export const backgroundJobSessions = (now: number = Date.now()): ReadonlySet<string> => {
+export const backgroundJobSessions = (actors: Actors, now: number = Date.now()): ReadonlySet<string> => {
     const live = new Set<string>();
-    for (const [id, record] of jobs) {
+    for (const [, record] of actors.holdings(JOBS).entries()) {
         if (jobFinished(record.job) || now - record.job.startedAt > JOB_MAX_MS) {
-            forgetJob(id, record);
+            forgetJob(actors, record);
             continue;
         }
         live.add(record.job.session);
@@ -346,15 +360,22 @@ export const backgroundJobSessions = (now: number = Date.now()): ReadonlySet<str
 };
 
 /** The conversation's jobs still running, for `wait` on "any". */
-export const runningJobsOf = (conversationId: string): readonly BackgroundJob[] =>
-    [...jobs.values()].filter((record) => record.job.conversationId === conversationId && !jobFinished(record.job)).map((record) => record.job);
+export const runningJobsOf = (actors: Holders, conversationId: string): readonly BackgroundJob[] =>
+    actors
+        .holdings(JOBS)
+        .of(conversationId)
+        .filter((record) => !jobFinished(record.job))
+        .map((record) => record.job);
 
 /** One of the conversation's jobs, by its shell id or its own id. */
-export const backgroundJobOf = (conversationId: string, id: string): BackgroundJob | undefined =>
-    [...jobs.values()].find((record) => record.job.conversationId === conversationId && (record.shellId === id || record.job.id === id))?.job;
+export const backgroundJobOf = (actors: Holders, conversationId: string, id: string): BackgroundJob | undefined =>
+    actors
+        .holdings(JOBS)
+        .of(conversationId)
+        .find((record) => record.shellId === id || record.job.id === id)?.job;
 
 /** The id the model was given for the job, else the daemon's own. */
-export const jobHandle = (job: BackgroundJob): string => jobs.get(job.id)?.shellId ?? job.id;
+export const jobHandle = (actors: Holders, job: BackgroundJob): string => actors.holdings(JOBS).get(job.id)?.shellId ?? job.id;
 
 // Empty when the file cannot be read.
 const tailOf = async (path: string, bytes: number): Promise<string> => {
@@ -385,12 +406,12 @@ export interface JobReport {
 }
 
 
-export const jobReport = async (job: BackgroundJob): Promise<JobReport> => {
+export const jobReport = async (actors: Holders, job: BackgroundJob): Promise<JobReport> => {
     const finished = jobFinished(job);
     const status = finished ? (await tailOf(jobStatusPath(job), 64)).trim() : "";
     const code = status === "" ? Number.NaN : Number(status);
     return {
-        id: jobHandle(job),
+        id: jobHandle(actors, job),
         command: jobCommandLine(job.command),
         exitCode: Number.isInteger(code) ? code : undefined,
         running: !finished,

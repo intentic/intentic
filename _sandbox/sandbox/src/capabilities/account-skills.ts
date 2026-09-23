@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
 import { accountSkillLine, browserToolsNote, identitiesSkill, rosterSummary } from "../browser/tools/browser-skill.js";
-import { loadedSkillFile, loadedSkillsRoot, removeLoadedSkill, writeLoadedSkill } from "../settings/loaded-skills.js";
+import { loadedSkillFile, loadedSkillsRoot, removeLoadedSkill, writeLoadedSkill } from "../store/loaded-skills.js";
 import type { CapabilityCtx } from "./capability.js";
 import { contributionKey, contributionRegistry, hostOf } from "./contributions.js";
 import { extensionRead } from "./extension-dirs.js";

@@ -34,7 +34,7 @@ test("an isolated turn runs in the conversation worktree, leads with the worktre
         createApp(
             services({
                 async *agent(request) {
-                    seen = request;
+                    seen = request.spec;
                     yield { kind: "session", sessionId: "sess-iso" };
                     yield { kind: "usage", costUsd: 0.5, inputTokens: 10, outputTokens: 5 };
                     yield { kind: "done" };
@@ -68,7 +68,7 @@ test("a workspace turn follows the same registry lifecycle without inventing a b
         createApp(
             services({
                 async *agent(request) {
-                    cwd = request.cwd;
+                    cwd = request.spec.cwd;
                     yield { kind: "session", sessionId: "sess-workspace" };
                     yield { kind: "usage", costUsd: 0.25, inputTokens: 8, outputTokens: 3 };
                     yield { kind: "done" };
@@ -159,7 +159,7 @@ test("an existing conversation keeps its registered placement when a later clien
         createApp(
             services({
                 async *agent(request) {
-                    cwds.push(request.cwd);
+                    cwds.push(request.spec.cwd);
                     yield { kind: "done" };
                 },
             }),
@@ -218,7 +218,7 @@ test("agents.search matches titles and later lines, across the archive", async (
     const app = createApp(
         services({
             async *agent(request) {
-                yield { kind: "session", sessionId: request.prompt.includes("login") ? "sess-1" : "sess-2" };
+                yield { kind: "session", sessionId: request.spec.prompt.includes("login") ? "sess-1" : "sess-2" };
                 yield { kind: "done" };
             },
             sessions: {
@@ -524,7 +524,10 @@ test("agents.place appends the user's words as the agent's, retires the session,
         createApp(
             services({
                 async *agent(request) {
-                    requests.push({ prompt: request.prompt, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) });
+                    requests.push({
+                        prompt: request.spec.prompt,
+                        ...(request.spec.sessionId === undefined ? {} : { sessionId: request.spec.sessionId }),
+                    });
                     yield { kind: "session", sessionId: "sess-live" };
                     yield { kind: "done" };
                 },

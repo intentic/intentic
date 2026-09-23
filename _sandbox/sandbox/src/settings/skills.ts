@@ -1,9 +1,9 @@
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 import type { Services } from "../composition.js";
-import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "./loaded-skills.js";
-import { parseSkillFile, skillDocument } from "./skill-file.js";
+import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../store/loaded-skills.js";
+import { parseSkillFile, skillDocument } from "../skill-file.js";
 
 // Baked-tool skills gate a tool already on PATH; writing its SKILL.md surfaces it, so adding one is a registry entry
 // here plus its name in the settings `skills` array. That array names baked tools only: an own skill is the owner's

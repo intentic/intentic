@@ -4,12 +4,23 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookJSONOutput, SyncHookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { repoRoot } from "@intentic/constants/node";
 import type { ListenerContribution } from "@intentic/extension-manifest";
-import type { IsolatedAgent, PersistedAgent } from "./agents/registry/agents-store.js";
+import { unstubbed } from "@intentic/testing";
+import { turnDoors } from "./agent/run/turn/turn-doors.js";
+import type { ConversationActors } from "./agents/actor/conversation-actors.js";
+import { turnJournalRows } from "./agent/run/turn/turn-journal.js";
+import { createFleet, type Fleet, type FleetStore } from "./agents/registry/agents-registry.js";
+import type { BeginTurn, ConversationEvent } from "./agents/actor/conversation-decide.js";
+import { type IsolatedAgent, type PersistedAgent, type RepoRecord, sqliteAgentsStore } from "./agents/registry/agents-store.js";
+import { type ConversationsDb, openConversationsDb } from "./store/conversations-db.js";
+import type { ConversationUnits } from "./store/conversation-units.js";
+import { IN_MEMORY } from "./store/sqlite.js";
 import type { IsolationPlan, TurnIsolation } from "./agents/worktrees/isolation.js";
 import { overlaysDir } from "./agents/worktrees/isolation.js";
 import { sessionsDir } from "./sessions/session-store.js";
 import type { CodexEvent, CodexRunner, CodexTurn } from "./runtimes/codex/codex-app-server.js";
 import type { Config } from "./env.config.js";
+import type { Services } from "./composition.js";
+import type { Steer, TurnInput, TurnStarter } from "./seams/turn-starter.js";
 
 // Test-support seams specific to this daemon; the generic stand-in for a wide interface is `unstubbed` in
 // @intentic/testing. Excluded from the build but type-checked via tsconfig.test.json, alongside every *.test.ts.
@@ -130,23 +141,119 @@ export const fakeCodexRunner = (...turns: readonly (readonly CodexEvent[])[]): {
     return { runner, calls, steered };
 };
 
+// A conversation's record as its first settle leaves it, in the shared tree; each suite states the records it reads.
+export const conversationEntry = (overrides: Partial<PersistedAgent> = {}): PersistedAgent => ({
+    id: "c1",
+    placement: { kind: "main" },
+    identity: {},
+    profile: { provider: "claude", harness: "native" },
+    ending: { kind: "idle" },
+    postures: {},
+    landing: {},
+    social: { title: { text: "fix the thing", source: "derived" }, reactions: [] },
+    totals: { costUsd: 0, inputTokens: 0, outputTokens: 0, turns: 0, toolUses: 0, subagents: 0 },
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+});
+
+// A conversation `turns` turns in: what a turn's planner reads to decide what the opening turn alone is owed.
+export const conversationAfter = (turns: number, overrides: Partial<PersistedAgent> = {}): PersistedAgent =>
+    conversationEntry({ totals: { costUsd: 0, inputTokens: 0, outputTokens: 0, turns, toolUses: 0, subagents: 0 }, ...overrides });
+
 // One agent card mid-life, nothing landed yet; IsolatedAgent (not PersistedAgent) since placement-reading code needs
-// the branch-carrying subtype. `repos` is readonly, matching what ConversationWorktree hands back.
-export const isolatedAgent = (repos: readonly PersistedAgent["repos"][number][], overrides: Partial<IsolatedAgent> = {}): IsolatedAgent => {
+// the worktree-carrying subtype. `repos` is readonly, matching what ConversationWorktree hands back.
+export const isolatedAgent = (repos: readonly RepoRecord[], overrides: Partial<IsolatedAgent> = {}): IsolatedAgent => {
     const id = overrides.id ?? "c1";
     return {
-        id,
-        branch: `agent/${id}`,
-        title: "fix the thing",
-        provider: "claude",
-        harness: "native",
-        repos: [...repos],
-        status: "idle",
-        costUsd: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        createdAt: 0,
-        updatedAt: 0,
+        ...conversationEntry({ id }),
+        placement: { kind: "worktree", branch: `agent/${id}`, repos: [...repos] },
         ...overrides,
     };
+};
+
+// What the fleet writes through, over one conversations database; a directory a leaving conversation takes with it is
+// the caller's to give, and nothing on disk when it gives none.
+export const fleetStoreOver = (db: ConversationsDb, units: Pick<ConversationUnits, "remove"> = { remove: async () => {} }): FleetStore => ({
+    agents: sqliteAgentsStore(db),
+    journal: turnJournalRows(db),
+    transaction: db.transaction,
+    units,
+});
+
+// Opens a turn on a conversation the way the daemon does: the `begin` event, answered once the entry's write has landed.
+export const beginTurn = (conversations: Pick<ConversationActors, "send">, turn: BeginTurn, now: number): Promise<boolean> =>
+    conversations.send(turn.conversationId, { kind: "begin", turn }, now).settled;
+
+// A fleet over nothing: entries kept in an in-memory database (the real store, the real SQL), and land probes that
+// never find a standing or a presence to report. Pass the store over the database a suite's other stores share.
+export const memoryFleet = (store: FleetStore = fleetStoreOver(openConversationsDb(IN_MEMORY))): Fleet =>
+    createFleet(
+        store,
+        { of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} },
+        { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) },
+    );
+
+// A memory fleet that also hands every conversation event to `note` as it is sent, for suites pinning what a flow tells
+// a conversation, and in which order.
+export const notedFleet = (note: (conversationId: string, event: ConversationEvent) => void, store?: FleetStore): Fleet => {
+    const { agents, conversations } = memoryFleet(store);
+    return {
+        agents,
+        conversations: {
+            ...conversations,
+            send: (conversationId, event, now) => {
+                note(conversationId, event);
+                return conversations.send(conversationId, event, now);
+            },
+        },
+    };
+};
+
+// These services with every TurnStarter door running `body` over them, the way composition binds streamAgent: the
+// engine's own start, resume, run and stop, around a turn the suite scripts.
+export const drivenBy = (services: Services, body: TurnStarter["stream"]): Services => {
+    const driven: Services = unstubbed<Services>("services", { ...services, turns: turnDoors(() => driven, body) });
+    return driven;
+};
+
+// The TurnStarter port's two wake doors, recording what they were handed: a steer lands while `live`, and a start finds a
+// turn already running while `busy` counts down (Infinity: every start until reset). `throwsFirst` fails the first start.
+export interface FakeTurns {
+    readonly turns: Pick<TurnStarter, "steer" | "start">;
+    readonly steers: Steer[];
+    readonly started: (TurnInput & { readonly conversationId: string })[];
+    live: boolean;
+    busy: number;
+}
+
+export const fakeTurns = (over: { readonly live?: boolean; readonly busy?: number; readonly throwsFirst?: boolean } = {}): FakeTurns => {
+    let throws = over.throwsFirst === true;
+    const fake: FakeTurns = {
+        steers: [],
+        started: [],
+        live: over.live === true,
+        busy: over.busy ?? 0,
+        turns: {
+            steer: async (_conversationId, steer) => {
+                if (fake.live) {
+                    fake.steers.push(steer);
+                }
+                return fake.live;
+            },
+            start: async (turn) => {
+                if (throws) {
+                    throws = false;
+                    throw new Error("the provider is down");
+                }
+                if (fake.busy > 0) {
+                    fake.busy -= 1;
+                    return undefined;
+                }
+                fake.started.push(turn);
+                return { id: `run-${fake.started.length}`, async *frames() {} };
+            },
+        },
+    };
+    return fake;
 };

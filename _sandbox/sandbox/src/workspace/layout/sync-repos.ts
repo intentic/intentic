@@ -19,7 +19,7 @@ const inFlight = new Set<string>();
 
 // Fetches and fast-forwards every discovered repo with a remote, in parallel; each failure isolates to its outcome.
 // throttleMs === 0 forces a fetch (explicit Sync route); the turn hook passes 60s.
-export const syncWorkspaceRepos = async (services: Services, throttleMs: number): Promise<RepoSync[]> => {
+export const syncWorkspaceRepos = async (services: Pick<Services, "git" | "workspace">, throttleMs: number): Promise<RepoSync[]> => {
     const repos = await discoverRepos(services.workspace.root);
     const now = Date.now();
     return Promise.all(

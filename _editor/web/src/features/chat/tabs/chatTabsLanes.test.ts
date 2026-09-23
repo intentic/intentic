@@ -1,14 +1,14 @@
 // Pins lane visibility as on-screen state (display, not just rendered), for a rail mounted once and never
 // remounted. Regression: `v-show` on a `v-for` over a constant list applies once at mount and freezes.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
-import { resetAgents } from "../../agents/fleet/useAgents";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { openAgentConversation } from "../panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
@@ -39,8 +39,7 @@ const mountList = async (): Promise<HTMLElement> => {
 
 beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
-    resetChat();
-    resetAgents();
+    resetSandboxScope();
     await nextTick();
 });
 

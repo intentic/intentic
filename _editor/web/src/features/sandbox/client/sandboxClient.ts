@@ -1,133 +1,61 @@
+import { sandboxRouteName } from "@intentic/sandbox-contract";
 import { driftedRouteReason, staleDaemonReason } from "../overview/useDaemonRoutes";
 import { trackPerf } from "../../../app/perf";
 import { CHUNK_BYTES } from "../../workspace/files/upload/uploadChunking";
 import { sandboxAuthenticatedFetch, uploadsBody } from "./sandboxAuthFetch";
+import { refusalText, SandboxHttpError, wordsOf } from "./sandboxHttpError";
 import { useSandboxSession } from "../session/sandboxSession";
 import { currentSandboxTarget, type SandboxTarget, targetFor } from "./sandboxTarget";
 
-// Calls the active sandbox's daemon directly (or its loopback shortcut), authenticated by a daemon-session
-// bearer; no cookies, no platform in this path. Base comes from the resolved endpoint, connect token from the
-// active sandbox. Returns the raw Response; callers read `.json()` or stream `.body` themselves.
+// The raw client, for what the contract does not carry: bytes (a file, a thumbnail, a bundle), chunked uploads, the
+// daemon's hand-written routes, and extensions' api.sandbox.request/json. Every contract procedure goes through
+// sandboxRpc. Authenticated by a daemon-session bearer, no cookies, no platform in this path.
 
 const { getSessionToken, rejectSessionToken } = useSandboxSession();
 
-// Beside the RequestInit: `deadline: false` lifts the headers deadline for a call whose answer takes as long as the
-// work it asks for (a land); every other call keeps the bound.
-export interface RequestOptions {
-    readonly deadline?: boolean;
-}
-
 // Includes any session renewal in its timing, so browser and daemon timings can be compared to locate slowness.
 // `path` drops its query so per-file reads aggregate into one row.
-const requestTo = async (
-    target: SandboxTarget | undefined,
-    path: string,
-    init?: RequestInit,
-    background = false,
-    options?: RequestOptions,
-): Promise<Response> =>
+const requestTo = async (target: SandboxTarget | undefined, path: string, init?: RequestInit): Promise<Response> =>
     trackPerf(`rpc.request`, { path: path.split(`?`)[0] ?? path, method: init?.method ?? `GET` }, async () => {
         if (target === undefined) {
             throw new Error(`Your sandbox isn't reachable yet: finish setup so it registers its address.`);
         }
-        // Exempt from the headers deadline when the body streams up (its headers arrive only once the upload finishes),
-        // or when the caller said the answer takes as long as the work.
-        return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, {
-            deadline: options?.deadline !== false && !uploadsBody(init?.body),
-            background,
-        });
+        // Exempt from the headers deadline when the body streams up: its headers arrive only once the upload finishes.
+        return sandboxAuthenticatedFetch(new Request(`${target.base}${path}`, init), target, { deadline: !uploadsBody(init?.body) });
     });
 
-export async function sandboxRequest(path: string, init?: RequestInit, options?: RequestOptions): Promise<Response> {
-    return requestTo(currentSandboxTarget(), path, init, false, options);
-}
-
-// The same call aimed at a named sandbox instead of the active one; same auth, same bearer store, same perf row.
-// Its own entry point, not an optional argument, so crossing sandboxes stays a visible, greppable decision.
-export async function sandboxRequestAt(sandboxId: string, path: string, init?: RequestInit, options?: RequestOptions): Promise<Response> {
-    return requestTo(targetFor(sandboxId), path, init, false, options);
-}
-
-// Aims the same call by a reach value (a sandbox id, or undefined for the active box), for callers holding the
-// decision as data instead of writing the ternary themselves.
-export async function sandboxRequestVia(at: string | undefined, path: string, init?: RequestInit): Promise<Response> {
-    return at === undefined ? sandboxRequest(path, init) : sandboxRequestAt(at, path, init);
-}
-
-// A non-2xx daemon response, carrying the HTTP status so callers can branch on it without matching message text.
-export class SandboxHttpError extends Error {
-    constructor(
-        readonly status: number,
-        message: string,
-    ) {
-        super(message);
-    }
+export async function sandboxRequest(path: string, init?: RequestInit): Promise<Response> {
+    return requestTo(currentSandboxTarget(), path, init);
 }
 
 // Reads the daemon's message (`message`/`error`, or the status as fallback) unless drift evidence says
-// otherwise: a 404 on an unadvertised route, or a 400 with a disagreed shape, get a drift message instead.
+// otherwise: a 404 on an unadvertised contract route, or a 400 on one with a disagreed shape, gets a drift message.
+// Still read here because an extension reaches contract routes through api.sandbox.json.
 export async function sandboxError(response: Response, request?: { method: string; path: string }): Promise<SandboxHttpError> {
-    if (request !== undefined) {
-        const reason =
-            response.status === 404
-                ? staleDaemonReason(request.method, request.path)
-                : response.status === 400
-                  ? driftedRouteReason(request.method, request.path)
-                  : undefined;
+    const route = request === undefined ? undefined : sandboxRouteName(request.method, request.path);
+    if (route !== undefined) {
+        const reason = response.status === 404 ? staleDaemonReason(route) : response.status === 400 ? driftedRouteReason(route) : undefined;
         if (reason !== undefined) {
             return new SandboxHttpError(response.status, reason);
         }
     }
-    const detail = (await response.json().catch(() => null)) as { message?: string; error?: string } | null;
-    return new SandboxHttpError(response.status, detail?.message ?? detail?.error ?? `Request failed (${response.status}).`);
+    const said = wordsOf(await response.json().catch(() => undefined));
+    return new SandboxHttpError(response.status, refusalText(response.status, said), said);
 }
 
 // A GET/POST to the daemon that parses the JSON body and throws the daemon's message on any non-2xx status.
-export async function sandboxJson<T>(path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
-    const response = await sandboxRequest(path, init, options);
+export async function sandboxJson<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await sandboxRequest(path, init);
     if (!response.ok) {
         throw await sandboxError(response, { method: init?.method ?? `GET`, path });
     }
     return (await response.json()) as T;
 }
 
-// What sandboxJsonAt and sandboxJsonQuietly share; only whether anyone is waiting on the answer differs.
-const jsonAt = async <T>(
-    sandboxId: string,
-    path: string,
-    init: RequestInit | undefined,
-    background: boolean,
-    options?: RequestOptions,
-): Promise<T> => {
-    const response = await requestTo(targetFor(sandboxId), path, init, background, options);
-    if (!response.ok) {
-        throw await sandboxError(response);
-    }
-    return (await response.json()) as T;
-};
-
-// The same read aimed at a named sandbox. Route-drift checks are skipped: this browser's own daemon fingerprint
-// says nothing about another box's build.
-export async function sandboxJsonAt<T>(sandboxId: string, path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
-    return jsonAt<T>(sandboxId, path, init, false, options);
-}
-
-// For polls where nobody is waiting (fleet-wide stores), so no sign-in prompt is ever triggered. Uses whatever
-// credential is already in hand, and fails, read the same as an unreachable box, when there is none.
-export async function sandboxJsonQuietly<T>(sandboxId: string, path: string, init?: RequestInit): Promise<T> {
-    return jsonAt<T>(sandboxId, path, init, true);
-}
-
-// The reach-aimed read; undefined means the active box. For callers holding a reach as a value instead of
-// writing the ternary.
-export async function sandboxJsonVia<T>(at: string | undefined, path: string, init?: RequestInit, options?: RequestOptions): Promise<T> {
-    return at === undefined ? sandboxJson<T>(path, init, options) : sandboxJsonAt<T>(at, path, init, options);
-}
-
-// Raw bytes for binary preview (images/PDF), where a utf8 decode would corrupt the file. `at` names the sandbox
-// when the bytes live elsewhere.
+// Raw bytes for binary preview (images/PDF), where a utf8 decode would corrupt the file. `at` names the sandbox when
+// the bytes live elsewhere; a route-drift reading speaks only for the active one.
 export async function sandboxBlob(path: string, init?: RequestInit, at?: string): Promise<Blob> {
-    const response = at === undefined ? await sandboxRequest(path, init) : await sandboxRequestAt(at, path, init);
+    const response = await requestTo(at === undefined ? currentSandboxTarget() : targetFor(at), path, init);
     if (!response.ok) {
         throw await sandboxError(response, at === undefined ? { method: init?.method ?? `GET`, path } : undefined);
     }

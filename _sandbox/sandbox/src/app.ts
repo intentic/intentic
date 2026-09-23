@@ -1,11 +1,8 @@
-import {
-    REQUEST_ID_HEADER,
-    runnerTranslatorPath,
-} from "@intentic/sandbox-contract";
+import { REQUEST_ID_HEADER, type RouteMeta, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { OpenAPIHandler } from "@orpc/openapi/fetch";
 import { ORPCError } from "@orpc/server";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { bearerFrom, ForbiddenError, PasskeyRequiredError } from "./auth/auth.js";
@@ -31,6 +28,7 @@ import { createSandboxesRoutes } from "./fleet/sandboxes.routes.js";
 import { createWalletRoutes } from "./wallet/wallet.routes.js";
 import { createFleetRoutes } from "./agents/recall/fleet.routes.js";
 import { createChildrenRoutes } from "./agent/subagents/children.routes.js";
+import { resolveHarnessCredentials } from "./agent/providers/harness-credentials.js";
 import { createEnvironmentRoutes } from "./environment/environment.routes.js";
 import { createEnginesRoutes } from "./engines/engines.routes.js";
 import { createBundleRoutes } from "./portability/bundle.routes.js";
@@ -41,9 +39,8 @@ import { createBackendProxyRoute } from "./extensions/backend/backend-proxy.rout
 import { createExtensionBundleRoute } from "./extensions/extension-bundle.routes.js";
 import { createListenerRoutes } from "./extensions/listener.routes.js";
 import { createBrowserProfileRoute } from "./browser/sessions/browser-profile.js";
-import { BROWSER_PREPARE_PATH, createBrowserPrepareRoute } from "./browser/tools/browser-prepare.js";
+import { createBrowserPrepareRoute } from "./browser/tools/browser-prepare.js";
 import { HOST_PEER, hostPeerRoutes } from "./hosts/host-peer.js";
-import { peerConnectPath, peerEnrollPath, peerMcpPath } from "./peers/peer.js";
 import { mountPeerRoutes } from "./peers/peer-routes.js";
 import { RUNNER_PEER, runnerPeerRoutes } from "./runners/runner-peer.js";
 import { WEBEXT_PEER, webextPeerRoutes } from "./webext/webext-peer.js";
@@ -65,6 +62,7 @@ import { createGateRoute } from "./workflows/gate.routes.js";
 import { createWorkspaceBytesRoutes } from "./workspace/files/workspace-bytes.routes.js";
 import { reachPosture } from "./platform/listeners/ingress-tunnel.js";
 import { profileTraits } from "./platform/boot/profile.js";
+import { rawRouteServer } from "./raw-route-server.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors are the routes' normal control flow.
 const logUnexpectedError = (services: Services, error: unknown): void => {
@@ -74,117 +72,16 @@ const logUnexpectedError = (services: Services, error: unknown): void => {
     services.logger.error({ err: error instanceof Error ? error : new Error(String(error)) }, "unhandled error");
 };
 
-// Webhook fire for event automations; external callers, so exempt from bearer auth, gated by its own token.
-const eventFirePath = /^\/automations\/[^/]+\/fire$/;
+// What a request is held to: the meta of the route it resolves to (sandbox-contract routes.ts), all defaults when no
+// route serves it.
+const policyOf = (c: Context<AppEnv>): RouteMeta => sandboxRouteFor(c.req.method, c.req.path)?.meta ?? {};
 
-// The Visitor chat's public surface for anonymous visitors; exempt from bearer auth, gated by the automation's origin
-// allowlist, rate limit and bot check instead.
-// One predicate for the whole set, not a constant per route, so the boundary can't be widened by touching just one
-// name.
-const webchatPublicPath = (path: string): boolean => path === "/webchat/widget.js" || /^\/webchat\/[^/]+\/(message|messages|config|challenge)$/.test(path);
-
-// The bug intake's public surface, the daemon's other anonymous door; gated by the automation's origin allowlist or
-// ingest key, rate window and daily ceiling.
-// Kept separate from `/issues` (the owner's inbox, behind bearer auth): the two are keyed differently, an automation id
-// here, an issue fingerprint there.
-const intakePublicPath = (path: string): boolean => path === "/intake/sdk.js" || /^\/intake\/[^/]+\/(report|config|challenge)$/.test(path);
-
-// The path the router will actually match: oRPC normalizes a trailing slash before dispatch, so a `$`-anchored rule
-// must check the same normalized path.
-// Normalized once here rather than per predicate; a root path stays `/`, repeated slashes collapse.
+// The path the router will actually match: oRPC normalizes a trailing slash before dispatch, so a grant that matches a
+// path itself must check the same normalized path. A root path stays `/`, repeated slashes collapse.
 const routedPath = (path: string): string => path.replace(/\/+$/u, "") || "/";
 
-// CI webhook receiver; no Google token, so gated by the per-sandbox webhook secret instead of bearer auth.
-const ciWebhookPath = /^\/ci\/webhook\/[^/]+$/;
-
-// Release gate; pipeline runners carry no Google token or Origin, gated by the workflow's own gate token.
-const gatePath = /^\/workflows\/[^/]+\/gate$/;
-
-// The peer doors: a device, browser or runner dials in with its enrollment token at `connect`/`enroll`; MCP bridges
-// carry the per-boot bridge token.
-// Anchored per segment so none admits a route that merely starts the same way.
-const PEER_DOORS = [HOST_PEER, WEBEXT_PEER, RUNNER_PEER];
-const peerPublicPath = (path: string): boolean => PEER_DOORS.some((door) => path === peerConnectPath(door.slug) || path === peerEnrollPath(door.slug));
-const peerMcpPaths = PEER_DOORS.flatMap((door) => (door.mcp === undefined ? [] : [peerMcpPath(door.slug)]));
-
-// A connected browser's two credential doors: `session`/`lend` carry a durable token, self-verified.
-// `session` moves a site sign-in into a sandbox profile; `lend` moves one back out.
-const webextCredentialPath = (path: string): boolean => path === "/system/webext/session" || path === "/system/webext/lend";
-
-// A passkey's sign-in doors: the assertion has no bearer yet (it is how one is minted), and the recovery door checks
-// its own bearer since the policy would otherwise hold the owner it exists for out.
-const PASSKEY_SIGNIN_PATHS = new Set(["/system/passkeys/assert/options", "/system/passkeys/assert", "/system/session/recover"]);
-// The two registration routes, where a proof with no passkey may pass the policy for an identity holding none yet.
-const passkeyEnrolmentPath = (path: string): boolean => path === "/system/passkeys/register/options" || path === "/system/passkeys/register";
-
-// A runner's other doors: its own bearer token for the git routes, plus its credential doors (runners/).
-const runnerGitPath = /^\/system\/runners\/git\/[^/]+\/(?:info\/refs|git-upload-pack|git-receive-pack)$/;
-const runnerPublicPath = (path: string): boolean =>
-    path === "/system/runners/credentials" ||
-    path === "/system/runners/credentials/refresh" ||
-    path.startsWith("/system/runners/translator/") ||
-    runnerGitPath.test(path);
-
-// The paths the bearer middleware does not gate, each checking its own credential or none. Exact-path only: the
-// owner's per-machine revoke (/system/authorized-key/:machine) is not exempt and goes through the middleware.
-const BEARER_EXEMPT_PATHS = new Set([
-    "/health",
-    // A WebSocket upgrade carries no Authorization header; the terminal and the two browser wires authorize via the
-    // query string.
-    "/system/terminal",
-    "/system/browser-profile",
-    "/system/browser-view",
-    // Fetched by a <video>/<audio> tag or navigated to, so no header either; each checks its own scoped ticket.
-    "/workspace/media",
-    "/bundles/download",
-    "/enroll",
-    // The desktop-sync agent's door: POST redeems a one-time pairing, DELETE is the agent revoking with its own token.
-    "/system/authorized-key",
-    // Account deletion must stay repeatable after a partial attempt; the handler does its own owner check.
-    "/system/access/disable",
-    // A turn's own browser router, carrying the per-boot browser bridge token the handler checks itself.
-    BROWSER_PREPARE_PATH,
-    ...PASSKEY_SIGNIN_PATHS,
-]);
-const bearerExemptPath = (path: string): boolean =>
-    BEARER_EXEMPT_PATHS.has(path) ||
-    eventFirePath.test(path) ||
-    webchatPublicPath(path) ||
-    intakePublicPath(path) ||
-    ciWebhookPath.test(path) ||
-    gatePath.test(path) ||
-    peerPublicPath(path) ||
-    peerMcpPaths.some((pattern) => pattern.test(path)) ||
-    webextCredentialPath(path) ||
-    runnerPublicPath(path);
-
-// Routes that answer before the boot chain converges: /health and /events show boot progress, WebSocket upgrades live
-// outside boot state.
-// /system/session and /system/presence are boot-independent too (session secret on /history, roster in memory);
-// everything else waits.
-// /system/terminals lists tmux and the process supervisor, neither of which the chain builds, and it is the one read
-// behind a surface that is already on screen while the chain runs: held, the panel spent three 45s deadlines telling
-// the owner it was looking for terminals.
-// Long-lived streams exempt from the request timer: meant to stay open, so timing would bury real slow work.
-const STREAM_PATHS = new Set(["/events", "/agent/attach", "/intentic/apply/events"]);
-
-const READY_EXEMPT = new Set([
-    "/health",
-    "/events",
-    "/system/session",
-    ...PASSKEY_SIGNIN_PATHS,
-    "/system/presence",
-    "/system/ws-ticket",
-    "/system/terminal",
-    "/system/terminals",
-    "/system/browser-profile",
-    "/system/browser-view",
-    // Peer door sockets reconnect on their own backoff; a browser's MV3 worker dies after ~30s of silence.
-    ...PEER_DOORS.map((door) => peerConnectPath(door.slug)),
-]);
-
-// The HTTP API the browser drives directly; when services.auth is set every route but /health verifies the owner's
-// Google ID token.
+// The HTTP API the browser drives directly; when services.auth is set, every route but a declared door verifies the
+// caller's session.
 // services.boot gates data routes behind the boot chain instead of racing it, while listeners come up as soon as the
 // process can serve.
 export const createApp = (services: Services): Hono<AppEnv> => {
@@ -220,7 +117,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Streams are exempt since they're long-lived by design; timing them would log every healthy connection as the
     // slowest request.
     app.use("*", async (c, next) => {
-        if (STREAM_PATHS.has(c.req.path)) {
+        if (policyOf(c).stream === true) {
             return next();
         }
         const from = process.hrtime.bigint();
@@ -240,7 +137,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // Read per request, never captured: a boot tracker main() declares after the app is built still gates requests that
     // arrive next.
     app.use("*", async (c, next) => {
-        if (!READY_EXEMPT.has(c.req.path)) {
+        if (policyOf(c).beforeBoot !== true) {
             await services.boot.converged;
         }
         return next();
@@ -259,7 +156,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             // Everywhere else this is an allowlist, never a wildcard, since /health answers a stranger with the sandbox
             // id the loopback port derives from.
             origin: (origin, c) => {
-                if (webchatPublicPath(c.req.path) || intakePublicPath(c.req.path)) {
+                if (policyOf(c).embedded === true) {
                     return origin ?? "*";
                 }
                 // Reflect only a match; the first entry for a foreign origin would hide a misconfig. null means no
@@ -284,7 +181,8 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             verifyExtension: (presented) => services.extensionBackend.verifyExtensionToken(presented),
         });
         app.use("*", async (c, next) => {
-            if (bearerExemptPath(c.req.path)) {
+            const policy = policyOf(c);
+            if (policy.auth === "door") {
                 return next();
             }
             // The non-bearer credentials (a panel, the vpn CLI, a control token, the desktop-sync agent) are admitted
@@ -303,7 +201,7 @@ export const createApp = (services: Services): Hono<AppEnv> => {
             }
             try {
                 const caller = await authorize(bearerFrom(c.req.header("authorization")), c.req.header("x-intentic-connect") ?? undefined, {
-                    enrolment: passkeyEnrolmentPath(c.req.path),
+                    enrolment: policy.enrolment === true,
                 });
                 c.set("identity", caller);
                 // The role floor (auth/role-floor.ts) applies here, after authentication, in one place: a member below
@@ -330,12 +228,14 @@ export const createApp = (services: Services): Hono<AppEnv> => {
         });
     }
 
-    // Unauthenticated by design: the "is a daemon there" probe every flow uses (launch scripts, /setup, the browser's
-    // loopback probe).
+    // Every raw route below is registered under its declaration, so none exists without a policy (raw-routes.ts).
+    const serve = rawRouteServer(app);
+
+    // The "is a daemon there" probe every flow uses (launch scripts, /setup, the browser's loopback probe).
     // The sandbox id lets a loopback probe confirm it reached this daemon, not an unrelated process; `boot` tells "not
     // answering" from "still converging".
     // `announce` is the one signal for whether this daemon reached the platform; ic reads it via docker exec.
-    app.get("/health", (c) =>
+    serve("GET /health", (c) =>
         c.json({
             ok: true,
             sandboxId: sandboxIdFromToken(services.config.connectToken),
@@ -364,219 +264,218 @@ export const createApp = (services: Services): Hono<AppEnv> => {
     // The workspace's byte routes: raw file read, the ranged media read a <video> talks to, and the three upload doors.
     // Off oRPC since their bodies are streamed bytes; registered before the catch-all, like /health.
     const workspaceBytes = createWorkspaceBytesRoutes(services);
-    app.get("/workspace/raw", workspaceBytes.raw);
-    // Not bearer-exempt like /workspace/media: the guest fetches this one itself, so it can carry the header.
-    app.get("/workspace/thumb", workspaceBytes.thumb);
-    app.get("/workspace/media", workspaceBytes.media);
-    app.post("/workspace/upload", workspaceBytes.upload);
-    app.post("/workspace/upload-diff", workspaceBytes.uploadDiff);
-    app.post("/workspace/upload-archive", workspaceBytes.uploadArchive);
+    serve("GET /workspace/raw", workspaceBytes.raw);
+    serve("GET /workspace/thumb", workspaceBytes.thumb);
+    serve("GET /workspace/media", workspaceBytes.media);
+    serve("POST /workspace/upload", workspaceBytes.upload);
+    serve("POST /workspace/upload-diff", workspaceBytes.uploadDiff);
+    serve("POST /workspace/upload-archive", workspaceBytes.uploadArchive);
 
     // Browser credentials: the one-shot ticket the WebSocket upgrades redeem, minted over HTTP so auth can bind it.
     const access = createAccessRoutes(services);
-    app.post("/system/ws-ticket", access.wsTicket);
+    serve("POST /system/ws-ticket", access.wsTicket);
 
     // Interactive PTY over a WebSocket, paired with the `ws` server in bootstrap/daemon-listeners.ts; matched before the oRPC catch-all.
-    app.get("/system/terminal", createTerminalRoute(services));
+    serve("GET /system/terminal", createTerminalRoute(services));
 
     // Desktop sync's transport: this container's sshd as a byte stream, authorized via the ordinary grant table.
-    app.get("/system/sync/ssh", createSyncSshRoute(services));
+    serve("GET /system/sync/ssh", createSyncSshRoute(services));
 
     // A browser-kind capability's own Chromium: a WebSocket on the platform profile, same auth as the terminal.
-    app.get("/system/browser-profile", createBrowserProfileRoute(services));
+    serve("GET /system/browser-profile", createBrowserProfileRoute(services));
 
     // Watch the browser the agent drives: the same screencast wire, attached to a live browser-* session.
-    app.get("/system/browser-view", createBrowserViewRoute(services));
+    serve("GET /system/browser-view", createBrowserViewRoute(services));
 
-    // Deploy-target enrollment (connect token) and the automation fire (own token); both exempt from bearer auth.
-    app.post("/enroll", createEnrollRoute(services));
-    app.post("/automations/:id/fire", createAutomationFireRoute(services));
+    // Deploy-target enrollment (connect token) and the automation fire (own token).
+    serve("POST /enroll", createEnrollRoute(services));
+    serve("POST /automations/{id}/fire", createAutomationFireRoute(services));
 
     // The release gate: a pipeline runner POSTs here and waits for the verdict, authenticated by the workflow's own
     // minted gate token.
     // The only route in the daemon that holds a request open for the work it started.
-    app.post("/workflows/:id/gate", createGateRoute(services));
+    serve("POST /workflows/{id}/gate", createGateRoute(services));
 
     // The Visitor chat: widget bundle, per-automation config, bot challenge, the message ingest streaming its reply as
     // SSE, and the poll that collects a reply written after that stream closed.
-    // All exempt from bearer auth, gated by origin allowlist, rate limit and bot check instead; `widget.js` is declared
-    // first so the :id routes can't shadow it.
     const webchat = createWebchatRoutes(services);
-    app.get("/webchat/widget.js", createWidgetRoute());
-    app.get("/webchat/:id/config", webchat.config);
-    app.get("/webchat/:id/challenge", webchat.challenge);
-    app.post("/webchat/:id/message", webchat.message);
+    serve("GET /webchat/widget.js", createWidgetRoute());
+    serve("GET /webchat/{id}/config", webchat.config);
+    serve("GET /webchat/{id}/challenge", webchat.challenge);
+    serve("POST /webchat/{id}/message", webchat.message);
     // Replies written after the visitor's stream closed: an approved wake's, or a human's, written as the agent.
-    app.get("/webchat/:id/messages", webchat.messages);
-    // Not public: which sites loaded this widget is the owner's diagnostic, so it takes ordinary bearer auth.
-    app.get("/webchat/:id/installs", webchat.installs);
+    serve("GET /webchat/{id}/messages", webchat.messages);
+    // Which sites loaded this widget, the owner's diagnostic.
+    serve("GET /webchat/{id}/installs", webchat.installs);
 
-    // The bug intake: reporter bundle, per-automation config, puzzle challenge, and the report ingest itself; exempt
-    // from bearer auth, gated by origin allowlist or ingest key plus rate limit and daily ceiling.
+    // The bug intake: reporter bundle, per-automation config, puzzle challenge, and the report ingest itself.
     // The ingest answers immediately, since a crashing page is often seconds from unloading; the owner's inbox is the
     // non-public oRPC /issues surface.
     const intake = createIntakeRoutes(services);
-    app.get("/intake/sdk.js", createSdkRoute());
-    app.get("/intake/:id/config", intake.config);
-    app.get("/intake/:id/challenge", intake.challenge);
-    app.post("/intake/:id/report", intake.report);
+    serve("GET /intake/sdk.js", createSdkRoute());
+    serve("GET /intake/{id}/config", intake.config);
+    serve("GET /intake/{id}/challenge", intake.challenge);
+    serve("POST /intake/{id}/report", intake.report);
 
     // Shared-access roster, gated by ownership rather than the operating gate other privileged routes use.
     const members = createMembersRoutes(services);
-    app.get("/members", members.list);
-    app.post("/members", members.add);
-    app.delete("/members", members.remove);
-    app.delete("/members/self", members.removeSelf);
+    serve("GET /members", members.list);
+    serve("POST /members", members.add);
+    serve("DELETE /members", members.remove);
+    serve("DELETE /members/self", members.removeSelf);
 
     // The agent-proposed overlay Dockerfile: members read, the owner approves, rejects, or runtime-installs a line.
     const environment = createEnvironmentRoutes(services);
-    app.get("/environment", environment.read);
-    app.get("/environment/contents", environment.contents);
-    app.post("/environment/approve", environment.approve);
-    app.post("/environment/reject", environment.reject);
-    app.post("/environment/runtime-install", environment.runtimeInstall);
+    serve("GET /environment", environment.read);
+    serve("GET /environment/contents", environment.contents);
+    serve("POST /environment/approve", environment.approve);
+    serve("POST /environment/reject", environment.reject);
+    serve("POST /environment/runtime-install", environment.runtimeInstall);
 
     // Agent engines, beside /environment since both answer the same owner question: what is installed here.
     const engines = createEnginesRoutes(services);
-    app.get("/engines", engines.view);
-    app.post("/engines/channel", engines.channel);
-    app.post("/engines/update", engines.update);
-    app.post("/engines/revert", engines.revert);
+    serve("GET /engines", engines.view);
+    serve("POST /engines/channel", engines.channel);
+    serve("POST /engines/update", engines.update);
+    serve("POST /engines/revert", engines.revert);
 
     // The environment bundle: owner-only exports, plus the ticketed download the browser navigates to.
     const bundles = createBundleRoutes(services);
-    app.get("/bundles", bundles.list);
-    app.post("/bundles", bundles.start);
-    app.delete("/bundles", bundles.remove);
-    app.post("/bundles/ticket", bundles.ticket);
-    app.get("/bundles/download", bundles.download);
+    serve("GET /bundles", bundles.list);
+    serve("POST /bundles", bundles.start);
+    serve("DELETE /bundles", bundles.remove);
+    serve("POST /bundles/ticket", bundles.ticket);
+    serve("GET /bundles/download", bundles.download);
 
     // The definition, outbound: `sandbox.toml` derived and diffed, and the workspace repo it names.
     const definition = createDefinitionRoutes(services);
-    app.get("/definition", definition.derive);
-    app.post("/definition/diff", definition.diff);
-    app.get("/definition/workspace", definition.workspace);
-    app.post("/definition/workspace/publish", definition.publish);
+    serve("GET /definition", definition.derive);
+    serve("POST /definition/diff", definition.diff);
+    serve("GET /definition/workspace", definition.workspace);
+    serve("POST /definition/workspace/publish", definition.publish);
 
     // Arrivals: everything coming into this sandbox, through one preview-first pipeline.
     const arrivals = createArrivalRoutes(services);
-    app.post("/arrivals/plan", arrivals.plan);
-    app.get("/arrivals/hosts", arrivals.hosts);
-    app.post("/arrivals/scan", arrivals.scan);
-    app.post("/arrivals/apply", arrivals.apply);
-    app.delete("/arrivals", arrivals.abandon);
+    serve("POST /arrivals/plan", arrivals.plan);
+    serve("GET /arrivals/hosts", arrivals.hosts);
+    serve("POST /arrivals/scan", arrivals.scan);
+    serve("POST /arrivals/apply", arrivals.apply);
+    serve("DELETE /arrivals", arrivals.abandon);
 
     // An extension's prebuilt ESM bundle, and the backend namespace /x/<id>/* proxied verbatim to the backend host.
-    app.get("/extensions/:id/bundle", createExtensionBundleRoute(services));
-    app.all("/x/*", createBackendProxyRoute(services));
+    serve("GET /extensions/{id}/bundle", createExtensionBundleRoute(services));
+    serve("ALL /x/*", createBackendProxyRoute(services));
 
     // The capability setup gate, the `capabilities` CLI's two routes: `connectable` is discovery only, `ask` parks the
     // call on an owner-decided chat card.
     // Registered before the oRPC catch-all so the exact paths win over the /capabilities REST surface.
     const askRoutes = createCapabilityAskRoutes(services);
-    app.get("/capabilities/connectable", askRoutes.connectable);
-    app.post("/capabilities/ask", askRoutes.ask);
+    serve("GET /capabilities/connectable", askRoutes.connectable);
+    serve("POST /capabilities/ask", askRoutes.ask);
 
     // The `sandboxes` CLI: the owner's other sandboxes, and the one door a new one is created through. `/sandboxes`
     // rather than `/fleet`, which the conversation-fleet reads already own.
     const sandboxRoutes = createSandboxesRoutes(services);
-    app.get("/sandboxes", sandboxRoutes.list);
-    app.post("/sandboxes", sandboxRoutes.create);
+    serve("GET /sandboxes", sandboxRoutes.list);
+    serve("POST /sandboxes", sandboxRoutes.create);
 
     // The wallet surface: `status`/`history` are reads, `fetch` is the one door money leaves through.
     // It parses the endpoint's x402 challenge, checks the owner's policy, parks non-standing spend on an approval card,
     // and has the platform sign; the key never enters this container.
     const walletRoutes = createWalletRoutes(services);
-    app.get("/wallet/status", walletRoutes.status);
-    app.post("/wallet/fetch", walletRoutes.fetch);
-    app.get("/wallet/history", walletRoutes.history);
+    serve("GET /wallet/status", walletRoutes.status);
+    serve("POST /wallet/fetch", walletRoutes.fetch);
+    serve("GET /wallet/history", walletRoutes.history);
 
     // The child-agent surface: start a full agent on any connected provider, park for input, list this conversation's
     // children.
     // The gate is the arming recorded at plan time, since the agent token names the sandbox, never a persona; scoped
     // like `services`/`capabilities`.
     const childrenRoutes = createChildrenRoutes(services);
-    app.post("/children/spawn", childrenRoutes.spawn);
+    serve("POST /children/spawn", childrenRoutes.spawn);
     // What a child could be started on now, with each model's remaining allowance.
-    app.get("/children/providers", childrenRoutes.providers);
-    app.post("/children/wait", childrenRoutes.wait);
-    app.post("/children/send", childrenRoutes.send);
-    app.post("/children/answer", childrenRoutes.answer);
-    app.get("/children", childrenRoutes.list);
+    serve("GET /children/providers", childrenRoutes.providers);
+    serve("POST /children/wait", childrenRoutes.wait);
+    serve("POST /children/send", childrenRoutes.send);
+    serve("POST /children/answer", childrenRoutes.answer);
+    serve("GET /children", childrenRoutes.list);
 
     // The fleet surface: which conversations exist, what one is, which said a phrase — joined from the registry, the
     // record, the worktree composition and the phrase index — and saying something to one of them.
     // Scoped to the agent token like `services`/`capabilities`, unlike `/agents`: the reads cannot change anything,
     // and the one write only puts words in front of another conversation, which a person can do by typing.
     const fleetRoutes = createFleetRoutes(services);
-    app.get("/fleet", fleetRoutes.list);
-    app.post("/fleet/message", fleetRoutes.message);
-    app.get("/fleet/:handle", fleetRoutes.show);
+    serve("GET /fleet", fleetRoutes.list);
+    serve("POST /fleet/message", fleetRoutes.message);
+    serve("GET /fleet/{handle}", fleetRoutes.show);
 
     // Realtime-listener control for an extension's gateway process: reconciles via /state, POSTs inbound events to
     // /dispatch, reports failures/status.
     // Reached with the per-boot panel token, like every other panel-process call.
     const listenerRoutes = createListenerRoutes(services);
-    app.get("/listeners/:provider/state", listenerRoutes.state);
-    app.post("/listeners/:provider/dispatch", listenerRoutes.dispatch);
-    app.post("/listeners/:provider/failure", listenerRoutes.failure);
-    app.post("/listeners/:provider/status", listenerRoutes.status);
+    serve("GET /listeners/{provider}/state", listenerRoutes.state);
+    serve("POST /listeners/{provider}/dispatch", listenerRoutes.dispatch);
+    serve("POST /listeners/{provider}/failure", listenerRoutes.failure);
+    serve("POST /listeners/{provider}/status", listenerRoutes.status);
 
-    // CI webhook receiver, public, secret-gated in the handler; completed pipelines wake `ci` listener automations.
-    app.post("/ci/webhook/:host", createCiWebhookRoute(services));
+    // CI webhook receiver, secret-gated in the handler; completed pipelines wake `ci` listener automations.
+    serve("POST /ci/webhook/{host}", createCiWebhookRoute(services));
 
     // Desktop sync enrollment: the browser mints a pairing here, the agent redeems it at /system/authorized-key.
     const sync = createSyncRoutes(services);
-    app.post("/system/sync/pair", sync.pair);
+    serve("POST /system/sync/pair", sync.pair);
 
     // The peer doors: each device, browser and runner gets pairing, enrollment, roster, revoke, socket, MCP bridge.
-    mountPeerRoutes(app, HOST_PEER, hostPeerRoutes(services));
-    mountPeerRoutes(app, WEBEXT_PEER, webextPeerRoutes(services));
-    mountPeerRoutes(app, RUNNER_PEER, runnerPeerRoutes(services));
+    mountPeerRoutes(serve, HOST_PEER, hostPeerRoutes(services));
+    mountPeerRoutes(serve, WEBEXT_PEER, webextPeerRoutes(services));
+    mountPeerRoutes(serve, RUNNER_PEER, runnerPeerRoutes(services));
     // A turn's browser router asking for one profile's spawn spec, on the first call that names it.
-    app.post(BROWSER_PREPARE_PATH, createBrowserPrepareRoute(services));
+    serve("POST /system/browser/prepare", createBrowserPrepareRoute(services));
     // A browser's two credential doors: `session` moves a site sign-in in, `lend` moves one back out.
-    app.post("/system/webext/session", createWebExtSessionRoute(services));
-    app.post("/system/webext/lend", createWebExtLendRoute(services));
+    serve("POST /system/webext/session", createWebExtSessionRoute(services));
+    serve("POST /system/webext/lend", createWebExtLendRoute(services));
     // A runner's settings push, then its git door and its credential doors.
-    app.post("/system/runners/:id/definition/sync", createRunnerDefinitionSyncRoute(services));
+    serve("POST /system/runners/{id}/definition/sync", createRunnerDefinitionSyncRoute(services));
     // The git door runners fetch and push through: stock smart HTTP off the real git dirs, per-request, own token.
-    app.get("/system/runners/git/:repo/info/refs", createRunnerGitRefsRoute(services));
-    app.post("/system/runners/git/:repo/git-upload-pack", createRunnerGitRpcRoute(services, "git-upload-pack"));
-    app.post("/system/runners/git/:repo/git-receive-pack", createRunnerGitRpcRoute(services, "git-receive-pack"));
+    serve("GET /system/runners/git/{repo}/info/refs", createRunnerGitRefsRoute(services));
+    serve("POST /system/runners/git/{repo}/git-upload-pack", createRunnerGitRpcRoute(services, "git-upload-pack"));
+    serve("POST /system/runners/git/{repo}/git-receive-pack", createRunnerGitRpcRoute(services, "git-receive-pack"));
     // The credential doors: per-turn access tokens, mid-turn re-mints, translator behind the runner's own bearer.
-    app.post("/system/runners/credentials", createRunnerCredentialsRoute(services));
-    app.post("/system/runners/credentials/refresh", createRunnerCredentialRefreshRoute(services));
-    app.all(`${runnerTranslatorPath}/*`, createRunnerTranslatorProxyRoute(services));
+    serve(
+        "POST /system/runners/credentials",
+        createRunnerCredentialsRoute(services, (input) => resolveHarnessCredentials(services, input)),
+    );
+    serve("POST /system/runners/credentials/refresh", createRunnerCredentialRefreshRoute(services));
+    serve("ALL /system/runners/translator/*", createRunnerTranslatorProxyRoute(services));
     // Control tokens: owner-minted, durable, revocable machine credentials.
     const controlTokens = createControlTokenRoutes(services);
-    app.post("/system/control/tokens", controlTokens.mint);
-    app.get("/system/control/tokens", controlTokens.list);
-    app.delete("/system/control/tokens/:id", controlTokens.revoke);
+    serve("POST /system/control/tokens", controlTokens.mint);
+    serve("GET /system/control/tokens", controlTokens.list);
+    serve("DELETE /system/control/tokens/{id}", controlTokens.revoke);
 
     // Passkeys: each member's own, the anonymous sign-in doors, the owner's require switch and its recovery codes.
     const passkeys = createPasskeyRoutes(services);
-    app.get("/system/passkeys", passkeys.list);
-    app.post("/system/passkeys/register/options", passkeys.registerOptions);
-    app.post("/system/passkeys/register", passkeys.register);
-    app.post("/system/passkeys/assert/options", passkeys.assertOptions);
-    app.post("/system/passkeys/assert", passkeys.assert);
-    app.post("/system/passkeys/policy", passkeys.setPolicy);
-    app.post("/system/passkeys/recovery", passkeys.regenerateRecovery);
-    app.delete("/system/passkeys/:id", passkeys.remove);
-    app.post("/system/session/recover", passkeys.recover);
+    serve("GET /system/passkeys", passkeys.list);
+    serve("POST /system/passkeys/register/options", passkeys.registerOptions);
+    serve("POST /system/passkeys/register", passkeys.register);
+    serve("POST /system/passkeys/assert/options", passkeys.assertOptions);
+    serve("POST /system/passkeys/assert", passkeys.assert);
+    serve("POST /system/passkeys/policy", passkeys.setPolicy);
+    serve("POST /system/passkeys/recovery", passkeys.regenerateRecovery);
+    serve("DELETE /system/passkeys/{id}", passkeys.remove);
+    serve("POST /system/session/recover", passkeys.recover);
 
     // Sign out every browser, and retire access for good; the latter stays repeatable after a partial attempt.
-    app.post("/system/sessions/revoke", access.revokeSessions);
-    app.post("/system/access/disable", access.disable);
+    serve("POST /system/sessions/revoke", access.revokeSessions);
+    serve("POST /system/access/disable", access.disable);
 
     // Desktop sync's enrollment surface; exact-path doors are the agent's. The merged devices view is a contract
     // route (system.devices), so it arrives through the oRPC handler below.
-    app.post("/system/authorized-key", sync.enrollKey);
-    app.get("/system/sync", sync.state);
-    app.post("/system/sync/report", sync.report);
-    app.delete("/system/authorized-key", sync.revokeOwn);
-    app.delete("/system/authorized-key/:machine", sync.revokeMachine);
+    serve("POST /system/authorized-key", sync.enrollKey);
+    serve("GET /system/sync", sync.state);
+    serve("POST /system/sync/report", sync.report);
+    serve("DELETE /system/authorized-key", sync.revokeOwn);
+    serve("DELETE /system/authorized-key/{machine}", sync.revokeMachine);
 
     // Everything else flows through the oRPC handler at the root; registered last so /health matches first.
     app.all("/*", async (c) => {

@@ -1,5 +1,7 @@
+import type { SandboxSummary } from "@intentic/api-contract";
 import { describe, it, expect } from "bun:test";
-import { arrivalFor, type ArrivalInput } from "./setupArrival";
+import { sandboxSummary } from "../../testing/sandboxSummary";
+import { arrivalFor, type ArrivalInput, hostedIdle, rowToOpen, touched } from "./setupArrival";
 
 // A blank first arrival on a platform offering everything; each test overrides the one field it is about.
 const arrival = (over: Partial<ArrivalInput> = {}): ArrivalInput => ({
@@ -112,4 +114,33 @@ describe(`an explicit ask`, () => {
 
 it(`shows the options rather than installing when the app says this computer cannot`, () => {
     expect(arrivalFor(arrival({ inApp: true, elsewhere: true }))).toBe(`choose`);
+});
+
+describe(`the row an arrival settles on`, () => {
+    const draft = sandboxSummary({ id: `draft` });
+    const live = sandboxSummary({ id: `live`, lastSeenAt: `2026-09-23T10:00:00Z` });
+    const shared = sandboxSummary({ id: `shared`, role: `writer`, token: null });
+
+    it(`is the one the URL names, if it is the owner's`, () => {
+        expect(rowToOpen([live, draft], `live`)?.id).toBe(`live`);
+        expect(rowToOpen([shared, draft], `shared`)).toBe(undefined);
+    });
+
+    it(`is the account's one unfinished row while nothing it owns has ever run`, () => {
+        expect(rowToOpen([draft], undefined)?.id).toBe(`draft`);
+        expect(rowToOpen([live, draft], undefined)).toBe(undefined);
+        expect(rowToOpen([draft], `gone`)?.id).toBe(`draft`);
+    });
+
+    it(`counts only genuine acts as history, and a machine nothing ran on as idle`, () => {
+        const acted: SandboxSummary[] = [
+            draft,
+            live,
+            { ...draft, setupCodeClaimedAt: `2026-09-23T10:00:00Z` },
+            { ...draft, setupReport: { stage: `preflight`, failed: [], at: `2026-09-23T10:00:00Z` } },
+        ];
+        expect(acted.map(touched)).toEqual([false, true, true, true]);
+        const machine = { region: `iad`, warm: true };
+        expect([draft, { ...draft, hosted: machine }, { ...live, hosted: machine }].map(hostedIdle)).toEqual([false, true, false]);
+    });
 });

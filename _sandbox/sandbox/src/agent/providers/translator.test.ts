@@ -68,6 +68,27 @@ test("starts Kimi Code's headless device login through CLIProxyAPI", async () =>
     });
 });
 
+// The whole list goes each time, since the daemon owns every entry; a rejection is answered, not thrown.
+test("replaces the running proxy's endpoint list with the entries it is handed", async () => {
+    const fetchMock = mock(async () => new Response("", { status: 422 }));
+    stubGlobal("fetch", fetchMock);
+    const client = createCliProxyClient({
+        managementUrl: "http://127.0.0.1:8789/v0/management",
+        token: "local",
+        configPath: "/tmp/config.yaml",
+        authDir: "/tmp/does-not-exist-authdir",
+        usageStore: memoryStore().store,
+    });
+    const entries = [{ name: "ollama", prefix: "ollama", "base-url": "http://127.0.0.1:11434/v1", headers: {}, "api-key-entries": [], models: [] }];
+
+    await expect(client.putCompat(entries)).resolves.toEqual({ ok: false, status: 422 });
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8789/v0/management/openai-compatibility", {
+        method: "PUT",
+        headers: { authorization: "Bearer local", "content-type": "application/json" },
+        body: JSON.stringify(entries),
+    });
+});
+
 test("reads a managed device login's own status instead of inferring it from account count", async () => {
     const fetchMock = mock(async () => Response.json({ status: "wait" }));
     stubGlobal("fetch", fetchMock);

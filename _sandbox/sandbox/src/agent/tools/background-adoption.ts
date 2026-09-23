@@ -3,6 +3,7 @@ import { shellQuote } from "@intentic/sandbox-run/quote";
 import type { Logger } from "pino";
 import { armWatcher, type WatcherSpec } from "../verification/watchers.js";
 import { type BackgroundJob, JOB_MAX_MS, jobOutputPath, jobStatusPath, OUTPUT_TAIL_BYTES, settledBackgroundJobs } from "./background-jobs.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
 // Kept apart from background-jobs.ts, whose importing the watch engine would close a cycle through agent.ts.
 
@@ -34,12 +35,16 @@ const specOf = (job: BackgroundJob): WatcherSpec => ({
     // The check reads two files and needs no credential.
     env: {},
     ...outsideOf(job),
-    turn: job.turn,
+    profile: job.profile,
 });
 
 /** Answers how many jobs it handed to a watch; never throws, since it runs off a turn's ending. */
-export const adoptBackgroundJobs = async (conversationId: string, logger: Logger): Promise<number> => {
-    const { running, unseen } = settledBackgroundJobs(conversationId);
+export const adoptBackgroundJobs = async (
+    conversations: Pick<ConversationActors, "holdings" | "send">,
+    conversationId: string,
+    logger: Logger,
+): Promise<number> => {
+    const { running, unseen } = settledBackgroundJobs(conversations, conversationId);
     let handed = 0;
     for (const job of [...running, ...unseen]) {
         try {

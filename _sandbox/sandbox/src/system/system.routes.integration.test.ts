@@ -13,7 +13,7 @@ import { createLogger } from "../logger.js";
 
 import { createBootTracker } from "../platform/boot/boot.js";
 
-import { testConfig } from "../testing.js";
+import { beginTurn, testConfig } from "../testing.js";
 
 import { clientFor, proven, rejectAuth, rejectForbidden } from "../harness/route-client.testing.js";
 import { fakeFiles, fakeProcesses } from "../harness/route-fakes.testing.js";
@@ -22,7 +22,7 @@ import { HOST_PEER } from "../hosts/host-peer.js";
 import { filePeerStore } from "../peers/peer-store.js";
 import { MAX_BACKLOG_FRAMES } from "./frame-backlog.js";
 import { connectedCount } from "./presence.js";
-import { publishRuntimeChange } from "./runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
 // System routes, driven over the daemon's HTTP surface as the browser does. Fakes and the client are shared
 // (route-services.testing.ts and siblings); what lives here is what these routes do.
@@ -601,7 +601,11 @@ test("system.metrics answers the reading, told only of conversations this daemon
         liveMetrics: { read: async () => reading },
         auth: { authorize: async () => proven("o@x.com", "owner"), authorizeOwner: async () => {} },
     });
-    await composed.agents.begin({ conversationId: "c1", isolated: false, prompt: "work", provider: "claude", harness: "native" }, 1_000);
+    await beginTurn(
+        composed.conversations,
+        { conversationId: "c1", isolated: false, prompt: "work", profile: { agent: "claude", harness: "native" } },
+        1_000,
+    );
     expect(await clientFor(createApp(composed)).system.metrics()).toEqual({
         ...reading,
         sessions: { c1: { processes: 2, rssBytes: 10, cpuPercent: 50 } },

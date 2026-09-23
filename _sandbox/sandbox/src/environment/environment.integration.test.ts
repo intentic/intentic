@@ -25,6 +25,7 @@ import {
     rejectEnvironment,
     withoutRuntimeDirectives,
 } from "./environment.js";
+import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
 
 // Pins PACK_STAMPS_DIR to an empty directory so every compose here means "no base image bakes this pack," regardless of
 // whether the machine running the suite has /opt/packs (CI does not, a sandbox does).
@@ -41,6 +42,8 @@ const EXTENSIONS_DIR = join(repoRoot(import.meta.url), "_extensions");
 
 const stubServices = (environmentHashApplied = "", capabilities: Capability[] = [], image = "", baseImage = ""): Services =>
     unstubbed<Services>("services", {
+        // The real module list: which packs a connected provider wants is each module's own answer.
+        providerModules: PROVIDER_MODULES,
         config: unstubbed<Services["config"]>("config", {
             // `sandbox` is spelled out whole, not stubbed: a throw-on-read stand-in would make an unread field look
             // set.

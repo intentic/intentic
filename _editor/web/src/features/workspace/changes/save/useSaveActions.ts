@@ -1,6 +1,7 @@
+import { sandboxRef } from "@intentic/extension-api";
 import type { RepoTarget } from "@intentic/api-contract";
 import { useT } from "@intentic/ui/i18n";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useVocabulary } from "../../../../core-views/vocabulary";
 import { ahead, behind, syncable, unpublished } from "../../push/outgoingWork";
 import { usePushFlow } from "../../push/usePushFlow";
@@ -14,7 +15,7 @@ import { useChanges } from "../useChanges";
 // disagreeing about what was pressed.
 
 /** The file a press is asking about, or `all` for the whole tree; undefined when nothing is being asked. */
-const asked = ref<ChangedFile | "all" | undefined>(undefined);
+const asked = sandboxRef<ChangedFile | "all" | undefined>(() => undefined);
 
 export function useSaveActions() {
     const t = useT();

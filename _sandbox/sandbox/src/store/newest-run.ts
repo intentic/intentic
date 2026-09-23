@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { isNewer } from "@intentic/sandbox-contract";
 import { version } from "../version.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 
 // Stamp of the newest intentic that ran this workspace, recorded at boot and moved only forward, so
 // manifest-problems.ts can explain a post-rollback schema rejection as a newer file rather than a broken one. Plain

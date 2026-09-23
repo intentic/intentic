@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import type { FileDiff } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { EMPTY_TREE } from "../../history/history.js";
+import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
 import { readWorkspaceFile, readWorkspaceFileWindow, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";
 import { additionPatch, MAX_FILE_DIFF_BYTES, MAX_PATCH_BYTES, partialDiff } from "./diff-partial.js";
 

@@ -1,7 +1,7 @@
 import type { IdentityConfig } from "@intentic/sandbox-contract";
 import { clearSession, hasSession, moveSession } from "../../browser/sessions/session-store.js";
 import { packFragment } from "../../environment/packs.js";
-import { loadedSkillFile } from "../../settings/loaded-skills.js";
+import { loadedSkillFile } from "../../store/loaded-skills.js";
 import { accountSkillNames, convergeAccountSkills } from "../account-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserPackInstalled } from "./browser.handler.js";

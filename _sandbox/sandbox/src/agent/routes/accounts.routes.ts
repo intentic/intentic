@@ -4,7 +4,6 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../../composition.js";
 import type { OrpcContext } from "../../app-env.js";
 import type { AccountDoor } from "../providers/provider-module.js";
-import { PROVIDER_MODULES } from "../providers/provider-registry.js";
 
 // One route family for every account this sandbox holds itself, provider in the path. `start` answers once there's a
 // page to open; anything after surfaces only as a later account-list change.
@@ -12,7 +11,7 @@ export type AccountDoors = Partial<Record<NativeProvider, AccountDoor>>;
 
 // Built once per module: a door holds attempts still open, so a second one would split handshakes.
 export const accountDoors = (services: Services): AccountDoors =>
-    Object.fromEntries(PROVIDER_MODULES.flatMap((module) => (module.accounts === undefined ? [] : [[module.id, module.accounts(services)]])));
+    Object.fromEntries(services.providerModules.flatMap((module) => (module.accounts === undefined ? [] : [[module.id, module.accounts(services)]])));
 
 // A door's own refusal becomes the wire's precondition failure; an ORPCError passes through untouched.
 const attempted = async <T>(run: () => Promise<T>): Promise<T> => {

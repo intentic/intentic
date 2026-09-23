@@ -26,10 +26,10 @@ const chooseModel = async (): Promise<void> => {
     }
     view.selectModel({ provider: choice.provider, value: choice.model });
     if (choice.harness !== undefined) {
-        view.selectHarness(choice.harness);
+        view.conversation.value.selection.apply({ kind: `selectHarness`, harness: choice.harness });
     }
     if (choice.account !== undefined) {
-        view.selectAccount(choice.account);
+        view.conversation.value.selection.apply({ kind: `selectAccount`, account: choice.account });
     }
 };
 </script>

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { type EngineId, type EngineQuarantine, EngineQuarantineSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { opt } from "../agent/run/opt.js";
+import { opt } from "../opt.js";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
 
 // Versions of the upstream engines, held on the daemon's volume (/history) outside the image so they survive container

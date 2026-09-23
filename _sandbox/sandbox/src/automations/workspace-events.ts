@@ -1,10 +1,11 @@
 import type { Trigger, WorkspaceEvent } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { fireAutomation, firedBy, type WakeFn } from "./scheduler.js";
+import { fireAutomation, firedBy } from "./scheduler.js";
 
 // Chores: automations triggered by a WorkspaceEvent the daemon both emits and consumes, no webhook or token involved.
 // Serial on two levels: a per-chore FIFO queue coalesces by agent (oldest dropped past QUEUE_MAX), and one shared chain
-// keeps every chore's turn from overlapping another's. Never fires on the `turn.settled` its own turn raises.
+// keeps every chore's turn from overlapping another's. Never fires on the `turn.settled` its own turn raises. Subscribed
+// to the daemon's domain events in composition.ts, never called by whatever announced one.
 
 // Distinct agents that may wait on one chore; a deeper backlog means narrowing the trigger, not queuing harder.
 const QUEUE_MAX = 4;
@@ -32,7 +33,7 @@ const matches = (id: string, trigger: Extract<Trigger, { kind: "workspace" }>, e
 
 // Drains one automation's queue, re-reading the manifest per event so an edit, disable or delete while the backlog
 // waits is honored.
-const pump = async (services: Services, id: string, wake: WakeFn): Promise<void> => {
+const pump = async (services: Services, id: string): Promise<void> => {
     const queue = queues.get(id);
     if (queue === undefined || queue.running) {
         return;
@@ -48,7 +49,7 @@ const pump = async (services: Services, id: string, wake: WakeFn): Promise<void>
             if (fresh === undefined || !fresh.enabled || fresh.trigger.kind !== "workspace") {
                 return;
             }
-            await serially(() => fireAutomation(services, fresh, wake, { payload: JSON.stringify(next) })).catch((error: unknown) =>
+            await serially(() => fireAutomation(services, fresh, { payload: JSON.stringify(next) })).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: id, agent: next.agentId }, "chore run failed"),
             );
         }
@@ -61,7 +62,7 @@ const pump = async (services: Services, id: string, wake: WakeFn): Promise<void>
     }
 };
 
-const enqueue = (services: Services, id: string, event: WorkspaceEvent, wake: WakeFn): void => {
+const enqueue = (services: Services, id: string, event: WorkspaceEvent): void => {
     const queue = queues.get(id) ?? { waiting: [], running: false };
     queues.set(id, queue);
     const at = queue.waiting.findIndex((waiting) => waiting.agentId === event.agentId);
@@ -74,19 +75,18 @@ const enqueue = (services: Services, id: string, event: WorkspaceEvent, wake: Wa
             services.logger.warn({ automation: id, agent: dropped?.agentId }, "chore backlog full, dropped the oldest waiting event");
         }
     }
-    void pump(services, id, wake);
+    void pump(services, id);
 };
 
-// Routes one workspace event to every matching enabled chore, returning the matched ids. `wake` is injected rather than
-// imported, since importing streamAgent here would close a cycle through agent.routes.
-export const dispatchWorkspaceEvent = async (services: Services, event: WorkspaceEvent, wake: WakeFn): Promise<string[]> => {
+// Routes one workspace event to every matching enabled chore, returning the matched ids.
+export const dispatchWorkspaceEvent = async (services: Services, event: WorkspaceEvent): Promise<string[]> => {
     const matched: string[] = [];
     for (const automation of await services.automations.list()) {
         if (!automation.enabled || automation.trigger.kind !== "workspace" || !matches(automation.id, automation.trigger, event)) {
             continue;
         }
         matched.push(automation.id);
-        enqueue(services, automation.id, event, wake);
+        enqueue(services, automation.id, event);
     }
     // Only for deps.broken: turn-borne events are routinely unclaimed; logging each trains the eye to skip.
     if (event.event === "deps.broken" && matched.length === 0) {
@@ -101,12 +101,4 @@ export const dispatchWorkspaceEvent = async (services: Services, event: Workspac
             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
     }
     return matched;
-};
-
-// Fire-and-forget wrapper for emit sites inside a turn's or route's own lifecycle: a dispatch failure is logged, never
-// propagated, since the turn must settle regardless.
-export const emitWorkspaceEvent = (services: Services, event: WorkspaceEvent, wake: WakeFn): void => {
-    void dispatchWorkspaceEvent(services, event, wake).catch((error: unknown) =>
-        services.logger.warn({ err: error, event: event.event }, "workspace event dispatch failed"),
-    );
 };

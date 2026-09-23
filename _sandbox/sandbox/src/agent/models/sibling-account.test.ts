@@ -2,7 +2,7 @@ import type { AccountUsage, OauthAccount } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../composition.js";
-import type { PersistedAgent } from "../../agents/registry/agents-store.js";
+import { conversationEntry } from "../../testing.js";
 import { bookLimitMove, siblingWithRoom } from "./sibling-account.js";
 
 const account = (id: string, extra: Partial<OauthAccount> = {}): OauthAccount => ({ id, label: id, ...extra }) as OauthAccount;
@@ -19,7 +19,7 @@ const fakeServices = (params: {
     claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", { list: async () => [...params.accounts] }),
     accountUsage: unstubbed<Services["accountUsage"]>("accountUsage", { read: async () => params.usage }),
     agents: unstubbed<Services["agents"]>("agents", {
-        entry: () => (params.override === undefined ? undefined : ({ id: "c", limitPolicy: params.override ? "move" : "wait" } as PersistedAgent)),
+        entry: () => (params.override === undefined ? undefined : conversationEntry({ id: "c", postures: { limit: params.override ? "move" : "wait" } })),
     }),
     sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
         get: async () =>

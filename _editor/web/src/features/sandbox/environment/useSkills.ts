@@ -1,9 +1,9 @@
-import { type SkillBody, SkillBodySchema, type SkillDraft, type SkillSummary, type SkillSwitch, SkillsListSchema } from "@intentic/api-contract";
+import type { SkillBody, SkillDraft, SkillSummary, SkillSwitch } from "@intentic/api-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { jsonBody } from "../client/jsonBody";
-import { sandboxJson } from "../client/sandboxClient";
-import { SKILLS } from "../../../lib/queryKeys";
+import { rpcQuery } from "../client/rpcQuery";
+import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 
@@ -12,33 +12,28 @@ import { useSandboxSettings } from "../overview/useSandboxSettings";
 // own is its own call, since the settings list has no say over the owner's files. Only the list needs refetching after
 // either, since enabled state comes from the daemon's own join.
 
-const QUERY_KEY = SKILLS.of();
-
 export function useSkills() {
     const queryClient = useQueryClient();
     const { settings, patch } = useSandboxSettings();
 
-    const { query, error } = useSandboxQuery({
-        queryKey: QUERY_KEY,
-        queryFn: async (): Promise<SkillSummary[]> => SkillsListSchema.parse(await sandboxJson(`/skills`)),
-    });
+    const { query, error } = useSandboxQuery(rpcQuery(`skills.list`));
 
-    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: rpcKey(`skills.list`) });
 
     // Upserts by name; refetches rather than patching a row in place, since the daemon (not the form) decides whether a
     // new skill starts enabled.
     const save = useMutation({
-        mutationFn: (draft: SkillDraft) => sandboxJson(`/skills`, jsonBody(`POST`, draft)),
+        mutationFn: (draft: SkillDraft) => sandboxRpc.skills.save(draft),
         onSuccess: invalidate,
     });
 
     const remove = useMutation({
-        mutationFn: (name: string) => sandboxJson(`/skills/remove`, jsonBody(`POST`, { name })),
+        mutationFn: (name: string) => sandboxRpc.skills.remove({ name }),
         onSuccess: invalidate,
     });
 
     const switchOwn = useMutation({
-        mutationFn: (input: SkillSwitch) => sandboxJson(`/skills/switch`, jsonBody(`POST`, input)),
+        mutationFn: (input: SkillSwitch) => sandboxRpc.skills.switch(input),
         onSuccess: invalidate,
     });
 
@@ -61,15 +56,11 @@ export function useSkills() {
 
     // Fetched on demand, since a skill's body can run to thousands of words; keyed per id so re-opening an already-read
     // row is free.
-    const readBody = (id: string): Promise<SkillBody> =>
-        queryClient.fetchQuery({
-            queryKey: [...QUERY_KEY, `body`, id],
-            queryFn: async (): Promise<SkillBody> => SkillBodySchema.parse(await sandboxJson(`/skills/read?id=${encodeURIComponent(id)}`)),
-        });
+    const readBody = (id: string): Promise<SkillBody> => queryClient.fetchQuery(rpcQuery(`skills.read`, { id }));
 
     // Dropped after a save, so re-opening shows what was just written, not the old cached body.
     const forgetBody = (id: string): void => {
-        queryClient.removeQueries({ queryKey: [...QUERY_KEY, `body`, id] });
+        queryClient.removeQueries({ queryKey: rpcKey(`skills.read`, { id }) });
     };
 
     return {

@@ -1,25 +1,22 @@
 import type { WorkspaceState } from "@intentic/api-contract";
 import { computed } from "vue";
-import { sandboxRequest } from "../sandbox/client/sandboxClient";
+import { orRefusal, SandboxHttpError } from "../sandbox/client/sandboxHttpError";
+import { sandboxRpc } from "../sandbox/client/sandboxRpc";
 import { WORKSPACE_STATE } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 import { projectWorkspaceState } from "./workspaceStateProjection";
 
 /* The infrastructure read-model: the sandbox's desired-state graph joined with the last reconcile result. */
 
-// Read + parse one JSON file from the desired-state repo via the daemon; undefined when absent (the daemon
-// answers a missing/denylisted file with a non-200 or an { error } body, both mean "not resolved yet").
+// Read + parse one JSON file from the desired-state repo via the daemon; undefined when absent (the daemon refuses a
+// missing or denylisted file, which means "not resolved yet").
 const readJson = async (path: string): Promise<unknown> => {
-    const response = await sandboxRequest(`/git/desired-state/file?path=${encodeURIComponent(path)}`);
-    if (!response.ok) {
-        return undefined;
-    }
-    const body = (await response.json().catch(() => undefined)) as { content?: unknown } | undefined;
-    if (body === undefined || typeof body.content !== `string`) {
+    const file = await orRefusal(sandboxRpc.git.readFile({ repo: `desired-state`, path }));
+    if (file instanceof SandboxHttpError) {
         return undefined;
     }
     try {
-        return JSON.parse(body.content);
+        return JSON.parse(file.content);
     } catch {
         return undefined;
     }

@@ -1,14 +1,14 @@
 import { randomInt } from "node:crypto";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
-import { sdk } from "../../runtimes/claude/claude-sdk.js";
+import { sdk } from "../../engines/claude-sdk.js";
 import type { AgentEvent, BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { createRequest, resolveRequest } from "../../agent/tools/agent-requests.js";
 import type { OpenAccountInput } from "../../capabilities/open-account.js";
 import { browserAccountPage, clearBrowserHelp, raiseBrowserHelp } from "../sessions/browser-sessions.js";
 import { type fetchEmailCode, type Mailbox, mailboxOf, siteToken } from "./email-codes.js";
 import { hasSession, markConnected, profileOwner } from "../sessions/session-store.js";
+import type { ParkedCards } from "../../agents/actor/parked-cards.js";
 
 // Lets the agent connect, sign in to, sign up for, and open new browser accounts, and call the owner in when a step
 // needs a person, instead of every login going through the owner's guided window.
@@ -47,6 +47,8 @@ export interface AccountsDeps {
     // Browser-shaped ids this turn speaks for (accounts and identities); same filter the browser servers got.
     readonly accounts: readonly string[];
     readonly conversationId?: string | undefined;
+    // Where request_help parks its card, and settles it when nobody can be asked.
+    readonly cards: Pick<ParkedCards, "create" | "resolve">;
     // False on an unattended turn: request_help is hidden (would park on nobody there); other tools stay available.
     readonly attended: boolean;
     // Files a new browser account under an identity; the switch gate lives in capabilities/open-account.ts.
@@ -375,15 +377,19 @@ export const accountsServer =
                                   if (capability === undefined) {
                                       return fail(NO_ACCOUNT(account));
                                   }
-                                  const { id, wait } = createRequest(
+                                  const { id, wait } = deps.cards.create(
                                       "browser_help",
                                       { kind: "browser_help", requestId: "", helped: false, note: "the turn ended before anyone could help" },
                                       deps.conversationId,
                                   );
-                                  const session = raiseBrowserHelp(profileOwner(capability), { requestId: id, message, requestedAt: Date.now() });
+                                  const session = raiseBrowserHelp(
+                                      profileOwner(capability),
+                                      { requestId: id, message, requestedAt: Date.now() },
+                                      (note) => deps.cards.resolve({ kind: "browser_help", requestId: id, helped: false, note }),
+                                  );
                                   if (session === undefined) {
                                       // Settles the just-parked waiter so nothing holds its id, before reporting why.
-                                      resolveRequest({ kind: "browser_help", requestId: id, helped: false });
+                                      deps.cards.resolve({ kind: "browser_help", requestId: id, helped: false });
                                       return fail(`"${account}" has no live browser to take control of: open the page you are stuck on first`);
                                   }
                                   push({ kind: "browser_help", requestId: id, session, account, message });

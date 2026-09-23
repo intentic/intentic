@@ -1,18 +1,17 @@
-import { readFile } from "node:fs/promises";
-import { basename, extname } from "node:path";
-import { IMAGE_MIME } from "../../image-mime.js";
+import { basename } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import type { Event, FilePartInput, ToolPart } from "@opencode-ai/sdk";
-import type { AgentEvent, ToolCallLocation } from "@intentic/sandbox-contract";
+import { type AgentEvent, OPENCODE, type ToolCallLocation } from "@intentic/sandbox-contract";
 import { whenAborted } from "../../abort.js";
-import type { AgentRequest } from "../../agent/run/agent.js";
-import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
-import { unsentParameterFrame } from "../../agent/run/error-frames.js";
-import { isUnsentParameterRefusalText, mentionsSpentAllowance } from "../../agent/providers/failure-sentences.js";
-import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
+import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
+import { withFileNote } from "../../agent/prompt/attachment-note.js";
+import { loadAttachments } from "../decorators/attachment-images.js";
+import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
+import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, turnWatchdog } from "../decorators/turn-watchdog.js";
+import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
 import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../../agent/tools/tool-calls.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
-import { createTurnGate } from "../../guard/turn-gate.js";
+import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import { isChatModel, parseModelSuggestions } from "./grok-models.js";
 import { openCodeBackendLabel, type OpenCodeService, registerSessionGate, releaseSessionGate } from "./opencode.js";
 
@@ -48,23 +47,6 @@ export interface GrokTurn {
 }
 export type GrokRunner = (turn: GrokTurn) => AsyncIterable<Event>;
 
-// Builds native image parts as base64 data URLs (the server is reached over HTTP, not a shared filesystem); unreadable
-// files come back as `unread`.
-const imageParts = async (paths: readonly string[]): Promise<{ parts: FilePartInput[]; unread: string[] }> => {
-    const parts: FilePartInput[] = [];
-    const unread: string[] = [];
-    for (const path of paths) {
-        try {
-            const data = await readFile(path);
-            const mime = IMAGE_MIME[extname(path).toLowerCase()] ?? "image/png";
-            parts.push({ type: "file", mime, filename: basename(path), url: `data:${mime};base64,${data.toString("base64")}` });
-        } catch {
-            unread.push(path);
-        }
-    }
-    return { parts, unread };
-};
-
 // The session an event belongs to, for filtering the global stream down to this turn's session.
 const eventSessionId = (event: Event): string | undefined => {
     switch (event.type) {
@@ -87,12 +69,6 @@ const eventSessionId = (event: Event): string | undefined => {
     }
 };
 
-// No OpenCode event for this session within this window means the turn is stuck and gets aborted.
-const GROK_INACTIVITY_MS = 120_000;
-
-// Hard overall backstop: even if the session keeps dribbling events, one turn must not run forever.
-const GROK_MAX_TURN_MS = 30 * 60_000;
-
 // How long the stream gets to say hello before the turn proceeds without proof it's listening; short compared to the
 // inactivity watchdog.
 const CONNECT_MS = 5_000;
@@ -107,8 +83,9 @@ const refuseEarlyClose = (turn: GrokTurn): void => {
 };
 
 // Production runner: creates/resumes the session on the shared OpenCode client, fires the prompt, and yields the
-// session's events off the global SSE stream. `inactivityMs` is injectable for tests.
-export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number = GROK_INACTIVITY_MS): GrokRunner =>
+// session's events off the global SSE stream. No event for this session within the inactivity window is a stuck turn,
+// aborted; `timeouts` is injectable for tests.
+export const createGrokRunner = (openCode: OpenCodeService, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS): GrokRunner =>
     async function* (turn) {
         const c = await openCode.client();
         // Subscribes before creating/prompting so session.created and early events aren't missed; scoped to this turn's
@@ -181,11 +158,9 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
             await openCode.recordModels(suggestions);
             await sendPrompt(suggestions[0]);
         }
-        // Drives the iterator manually so each read can race an inactivity timeout (`for await` can't); closed on exit
-        // since it's per-turn. Two wall-clock deadlines: inactivity advances only on this session's events, turn
-        // deadline is a hard backstop.
-        const turnDeadline = Date.now() + GROK_MAX_TURN_MS;
-        let inactivityDeadline = Date.now() + inactivityMs;
+        // Drives the iterator manually so each read can race the watchdog (`for await` can't); closed on exit since it's
+        // per-turn. Inactivity advances only on this session's events; the turn deadline is a hard backstop.
+        const clock = turnWatchdog(timeouts);
         // The event the connect handshake already pulled off the stream, replayed as this loop's first read.
         let held = buffered;
         try {
@@ -196,13 +171,8 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                     event = held;
                     held = undefined;
                 } else {
-                    let timer: ReturnType<typeof setTimeout>;
-                    const idle = new Promise<"timeout">((resolve) => {
-                        timer = setTimeout(() => resolve("timeout"), Math.max(0, Math.min(inactivityDeadline, turnDeadline) - Date.now()));
-                    });
-                    const result = await Promise.race([next, idle]);
-                    clearTimeout(timer!);
-                    if (result === "timeout") {
+                    const result = await beforeDeadline(next, clock);
+                    if (result === EXPIRED) {
                         next.catch(() => {}); // swallow the abandoned read
                         await c.session.abort({ path: { id: sessionId } }).catch(() => {});
                         throw new Error(`${openCodeBackendLabel(turn.provider ?? XAI)} turn timed out waiting for OpenCode.`);
@@ -219,12 +189,12 @@ export const createGrokRunner = (openCode: OpenCodeService, inactivityMs: number
                 if (eventSessionId(event) !== sessionId) {
                     continue;
                 }
-                inactivityDeadline = Date.now() + inactivityMs;
+                clock.touch();
                 // OpenCode announces an in-turn retry wait once, with the instant of the next attempt; the inactivity
                 // deadline moves past that instant so a long backoff isn't read as a hang, still bounded by the hard
                 // turn cap.
                 if (event.type === "session.status" && event.properties.status.type === "retry") {
-                    inactivityDeadline = Math.max(inactivityDeadline, event.properties.status.next + inactivityMs);
+                    clock.extendPast(event.properties.status.next);
                 }
                 // Self-heals a stale/renamed model by recording xAI's named alternatives and re-prompting the same
                 // session once; nothing streams before a model-not-found rejection, so nothing is duplicated. A second
@@ -270,11 +240,12 @@ const errorText = (error: unknown): string => {
 // reloads the catalog and drops the bad pinned model.
 const MODEL_INVALID = /model not found|does not exist|no such model|did you mean/i;
 
-// A refusal driven by quota/allowance, not a real error; coded so the chat offers a retry-later notice instead of a
-// Continue that would just re-fail.
-const RATE_LIMITED = /rate.?limit|resource.?exhausted|too many requests|\b429\b/i;
-
-const isRateLimited = (message: string): boolean => mentionsSpentAllowance(message) || RATE_LIMITED.test(message);
+// How OpenCode's failure sentences are coded, in this order: a model xAI rejected, then a spent allowance, which gets a
+// retry-later notice instead of a Continue that would just re-fail.
+const GROK_FAILURES: readonly VendorRule[] = [
+    [(message) => MODEL_INVALID.test(message), "grok-model-invalid"],
+    [isRateLimited, "rate_limit"],
+];
 
 // Plan phase holds back the assistant text (it becomes the plan) instead of streaming it; `sessionId` is captured from
 // session.created (or the resumed id) for the execute phase to resume.
@@ -441,19 +412,7 @@ async function* streamTurn(
                 ...(isRateLimited(status.message) ? { status: 429 } : {}),
             };
         } else if (event.type === "session.error") {
-            const message = errorText(event.properties.error);
-            // Let the shared proxy handle provider-specific refusal text.
-            yield isUnsentParameterRefusalText(message)
-                ? unsentParameterFrame(message)
-                : {
-                      kind: "error",
-                      message,
-                      ...(MODEL_INVALID.test(message)
-                          ? { code: "grok-model-invalid" as const }
-                          : isRateLimited(message)
-                            ? { code: "rate_limit" as const }
-                            : {}),
-                  };
+            yield vendorFailureFrame({ kind: "error", message: errorText(event.properties.error) }, GROK_FAILURES);
             capture.errored = true;
             // Terminal: OpenCode doesn't reliably emit session.idle after an error, so ending here is what lets the
             // caller reach `done`.
@@ -476,93 +435,81 @@ async function* streamTurn(
     return capture;
 }
 
-// Plan flow over the shared skeleton: a read-only turn on the `plan` agent whose text becomes the plan, then execution
-// on `build` resumed on the same session. No `question` frames: OpenCode's permission channel maps to per-tool
-// approvals only, declared as `questions: false` in this runtime's capability row.
-async function* runGrokPlanTurn(
+// The turn one OpenCode message runs as. Every message carries the same standing instructions, since a plan's two phases
+// are two messages of one turn and the execute phase must not drop them.
+const grokTurnOf =
+    (request: AgentRequest, provider: string, gate: CommandGuard) =>
+    (message: {
+        readonly prompt: string;
+        readonly images: readonly FilePartInput[];
+        readonly sessionId: string | undefined;
+        readonly agent: GrokTurn["agent"];
+    }): GrokTurn => ({
+        prompt: message.prompt,
+        ...(message.images.length > 0 ? { images: message.images } : {}),
+        ...(message.sessionId !== undefined ? { sessionId: message.sessionId } : {}),
+        cwd: request.spec.cwd,
+        ...(request.spec.model !== undefined ? { model: request.spec.model } : {}),
+        provider,
+        agent: message.agent,
+        gate,
+        ...(request.spec.systemAppend !== undefined ? { system: request.spec.systemAppend } : {}),
+        signal: request.signal,
+    });
+
+// Plan flow over the shared skeleton: a read-only turn on the `plan` agent whose text becomes the plan, then execution on
+// `build` resumed on the same session. Pictures ride the first planning message only; every later message resumes the
+// session whose history already holds them. No `question` frames: the capability row says `questions: false`.
+const grokPlan = (
     request: AgentRequest,
     runner: GrokRunner,
-    provider: string,
-    gate: CommandGuard,
-    firstTurnImages: readonly FilePartInput[],
-): AsyncGenerator<AgentEvent> {
-    // Both phases carry the same standing instructions; they're two messages of one turn, so the execute phase must not
-    // drop them.
-    const system = request.systemAppend;
-    // Images ride the first planning message only; every later message resumes the same session, whose history already
-    // holds them.
-    let images = firstTurnImages;
-    const planPhase: PlanPhase = async function* (prompt, sessionId) {
-        const capture = yield* streamTurn(
-            runner({
-                prompt,
-                ...(images.length > 0 ? { images } : {}),
-                ...(sessionId !== undefined ? { sessionId } : {}),
-                cwd: request.cwd,
-                ...(request.model !== undefined ? { model: request.model } : {}),
-                provider,
-                agent: "plan",
-                gate,
-                ...(system !== undefined ? { system } : {}),
-                signal: request.signal,
-            }),
-            request.cwd,
-            true,
-            sessionId,
-        );
-        images = [];
-        return { sessionId: capture.sessionId, planText: capture.planText, errored: capture.errored === true };
+    turnOf: ReturnType<typeof grokTurnOf>,
+    prompt: string,
+    firstImages: readonly FilePartInput[],
+): EmulatedPlan => {
+    let images = firstImages;
+    return {
+        prompt: PLAN_PREAMBLE + prompt,
+        async *plan(phasePrompt, sessionId) {
+            const capture = yield* streamTurn(
+                runner(turnOf({ prompt: phasePrompt, images, sessionId, agent: "plan" })),
+                request.spec.cwd,
+                true,
+                sessionId,
+            );
+            images = [];
+            return { sessionId: capture.sessionId, planText: capture.planText, errored: capture.errored === true };
+        },
+        execute: (sessionId) => streamTurn(runner(turnOf({ prompt: EXECUTE_PROMPT, images: [], sessionId, agent: "build" })), request.spec.cwd),
     };
-    const executePhase: ExecutePhase = (sessionId) =>
-        streamTurn(
-            runner({
-                prompt: EXECUTE_PROMPT,
-                ...(sessionId !== undefined ? { sessionId } : {}),
-                cwd: request.cwd,
-                ...(request.model !== undefined ? { model: request.model } : {}),
-                provider,
-                agent: "build",
-                gate,
-                ...(system !== undefined ? { system } : {}),
-                signal: request.signal,
-            }),
-            request.cwd,
-        );
-    yield* runPlanEmulation(request.signal, PLAN_PREAMBLE + request.prompt, request.sessionId, planPhase, executePhase);
-}
+};
 
 // Builds the Grok provider for the Services seam. The agent route has already gated that xAI is connected; capability
 // limits (no permission mode but `plan`, no effort) are declared in the contract's agent-catalog.ts, not enforced here.
 export const createGrokAgent = (runner: GrokRunner, provider: string = XAI) =>
-    async function* runGrokAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
-        // Pictures go to the model as pictures; everything else, including an unreadable picture, is named in the
-        // prompt for the read tool.
-        const { images: attachedImages, others } = splitAttachments(request.attachments);
-        const { parts: images, unread } = await imageParts(attachedImages);
-        const prompt = withFileNote(request.prompt, [...others, ...unread]);
+    async function* runGrokAgent(request: AgentRequest<ContainerCredential>): AsyncGenerator<AgentEvent> {
+        // Pictures go to the model as pictures, base64 data URLs since the server is reached over HTTP; everything else,
+        // including an unreadable picture, is named in the prompt for the read tool.
+        const attached = await loadAttachments(request.spec, true);
+        const images: FilePartInput[] = attached.images.map((image) => ({
+            type: "file",
+            mime: image.mimeType,
+            filename: basename(image.path),
+            url: `data:${image.mimeType};base64,${image.data}`,
+        }));
+        const prompt = withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]);
         // Turn's safety wiring (guard/turn-gate.ts): rulebook answered over OpenCode's permission channel. `canPark:
         // false`: the watchdog aborts a turn with no session event in two minutes, so a paused permission would be read
         // as a hang; a hold is delivered as a refusal instead, and the capability record says `rulebook:
         // "refuse-only"`.
-        const { gate, release } = createTurnGate(request);
-        const turn =
-            request.permissionMode === "plan"
-                ? runGrokPlanTurn({ ...request, prompt }, runner, provider, gate, images)
-                : streamTurn(
-                      runner({
-                          prompt,
-                          ...(images.length > 0 ? { images } : {}),
-                          ...(request.sessionId !== undefined ? { sessionId: request.sessionId } : {}),
-                          cwd: request.cwd,
-                          ...(request.model !== undefined ? { model: request.model } : {}),
-                          provider,
-                          agent: "build",
-                          gate,
-                          ...(request.systemAppend !== undefined ? { system: request.systemAppend } : {}),
-                          signal: request.signal,
-                      }),
-                      request.cwd,
-                  );
+        const { gate, release } = vendorTurnGate(request);
+        const turnOf = grokTurnOf(request, provider, gate);
+        const turn = planMode(
+            OPENCODE,
+            request,
+            () => grokPlan(request, runner, turnOf, prompt, images),
+            () => streamTurn(runner(turnOf({ prompt, images, sessionId: request.spec.sessionId, agent: "build" })), request.spec.cwd),
+        );
         let surfacedError = false;
         try {
             for await (const event of turn) {

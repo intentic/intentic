@@ -1,28 +1,28 @@
 // jsdom mounts a component so vue-query's injection is in place; the import graph reads browser globals at load.
 import "@intentic/testing/dom";
 import { WORKSPACE_ROOT } from "@intentic/constants";
+import type { GitRemoteRepo } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { test, expect, beforeEach, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
+import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
+import type { SandboxRpc } from "../../client/sandboxRpc";
 
 // Every window's header holds this condition, so what it costs is a read per window: the tree is the whole workspace,
 // refetched on every write burst, and it can only change the answer once no repository has a remote.
 
-const jsonMock = mock(async (_path: string): Promise<unknown> => ({}));
-// Every name the import graph takes from the daemon client, since bun links an ESM import against exactly what this
-// factory returns; only sandboxJson is called.
+const remoteRepos = mock<SandboxRpc[`git`][`remoteRepos`]>();
+const tree = mock<SandboxRpc[`workspace`][`tree`]>();
+mock.module("../../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ git: { remoteRepos }, workspace: { tree } }) }));
+// Every name the import graph takes from the raw client, since bun links an ESM import against exactly what this
+// factory returns; nothing here calls it.
 mock.module("../../client/sandboxClient", () => ({
-    sandboxJson: (path: string) => jsonMock(path),
+    sandboxJson: mock(),
     sandboxRequest: mock(),
-    sandboxRequestVia: mock(),
-    sandboxJsonAt: mock(),
-    sandboxJsonQuietly: mock(),
-    sandboxJsonVia: mock(),
     sandboxBlob: mock(),
     sandboxUpload: mock(),
     sandboxError: mock(async () => new Error(`unused`)),
-    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 mock.module("../../client/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
@@ -34,12 +34,16 @@ const { useUnbackedWork } = await import("./useUnbackedWork");
 
 const REMOTE = { repo: `app`, host: `github.com`, project: `acme/app` };
 
-// The daemon's two answers, and which paths were asked.
-const daemon = (repos: readonly unknown[]): string[] => {
+// The daemon's two answers, and which reads were asked for, in order.
+const daemon = (repos: GitRemoteRepo[]): string[] => {
     const asked: string[] = [];
-    jsonMock.mockImplementation(async (path: string) => {
-        asked.push(path.split(`?`)[0] ?? path);
-        return path.startsWith(`/git/remote-repos`) ? { repos } : { root: WORKSPACE_ROOT, tree: [{ path: `notes.md`, name: `notes.md`, type: `file` }], hidden: 0 };
+    remoteRepos.mockImplementation(async () => {
+        asked.push(`git.remoteRepos`);
+        return { repos };
+    });
+    tree.mockImplementation(async () => {
+        asked.push(`workspace.tree`);
+        return { root: WORKSPACE_ROOT, tree: [{ path: `notes.md`, name: `notes.md`, type: `file` }], hidden: 0, barren: [] };
     });
     return asked;
 };
@@ -61,7 +65,8 @@ const mounted = <T>(composable: () => T): T => {
 
 beforeEach(() => {
     queryClient.clear();
-    jsonMock.mockReset();
+    remoteRepos.mockReset();
+    tree.mockReset();
 });
 
 test(`never walks the tree while a repository has a remote`, async () => {
@@ -70,7 +75,7 @@ test(`never walks the tree while a repository has a remote`, async () => {
 
     await waitFor(() => expect(remotes.value).toEqual([REMOTE]));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(asked).toEqual([`/git/remote-repos`]);
+    expect(asked).toEqual([`git.remoteRepos`]);
     expect(unbacked.value).toBe(false);
 });
 
@@ -79,5 +84,5 @@ test(`reads the tree once no repository has a remote, and warns because files ar
     const { unbacked } = mounted(() => useUnbackedWork());
 
     await waitFor(() => expect(unbacked.value).toBe(true));
-    expect(asked).toEqual([`/git/remote-repos`, `/workspace/tree`]);
+    expect(asked).toEqual([`git.remoteRepos`, `workspace.tree`]);
 });

@@ -1,33 +1,29 @@
-import { type Persona, PersonasListSchema } from "@intentic/sandbox-contract";
+import type { Persona } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { jsonBody } from "../client/jsonBody";
-import { sandboxJson } from "../client/sandboxClient";
-import { PERSONAS } from "../../../lib/queryKeys";
+import { rpcQuery } from "../client/rpcQuery";
+import { sandboxRpc } from "../client/sandboxRpc";
+import { rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-// Named personas (`.intentic/config/personas.json`) via the daemon's `/personas` routes; saving or removing is a
+// Named personas (`.intentic/config/personas.json`) via the daemon's personas routes; saving or removing is a
 // plain mutation plus refetch, no apply or stream. `connected` lists which named accounts this sandbox is actually
 // signed into, separate from the personas.
 
-const QUERY_KEY = PERSONAS.of();
-
-const fetchPersonas = async (): Promise<{ personas: Persona[]; connected: string[] }> => PersonasListSchema.parse(await sandboxJson(`/personas`));
-
 export function usePersonas() {
     const queryClient = useQueryClient();
-    const { query, error } = useSandboxQuery({ queryKey: QUERY_KEY, queryFn: fetchPersonas });
+    const { query, error } = useSandboxQuery(rpcQuery(`personas.list`));
 
     // Invalidates only this list; capabilities, environment and panels are unaffected.
-    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: rpcKey(`personas.list`) });
 
     // Upsert by id: saving an existing id edits that persona.
     const save = useMutation({
-        mutationFn: (persona: Persona) => sandboxJson(`/personas`, jsonBody(`POST`, persona)),
+        mutationFn: (persona: Persona) => sandboxRpc.personas.save(persona),
         onSuccess: invalidate,
     });
     const remove = useMutation({
-        mutationFn: (id: string) => sandboxJson(`/personas/${encodeURIComponent(id)}`, { method: `DELETE` }),
+        mutationFn: (id: string) => sandboxRpc.personas.remove({ id }),
         onSuccess: invalidate,
     });
 

@@ -4,13 +4,14 @@ import { PEER_TRY_AGAIN, PEER_UNAUTHORIZED } from "@intentic/sandbox-contract/pe
 import { converterReadable, MCP_PROTOCOL_VERSION } from "@intentic/sandbox-contract/peer-mcp-server";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/websocket";
-import type { Context, Hono } from "hono";
+import type { Context } from "hono";
 import type { z } from "zod";
 import { bearerFrom, tokenEquals } from "../auth/auth.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import { type PeerDoor, peerConnectPath, peerEnrollPath } from "./peer.js";
+import type { rawRouteServer } from "../raw-route-server.js";
+import type { PeerDoor } from "./peer.js";
 import type { PeerClient, PeerHub } from "./peer-hub.js";
 import type { PeerStore } from "./peer-store.js";
 
@@ -329,17 +330,21 @@ export const createPeerRoutes = <
 
 export type PeerRoutes = ReturnType<typeof createPeerRoutes>;
 
-// Mounted before the oRPC catch-all, like the terminal's; one mount ensures a door's socket and enroll route share the
-// same slug.
-export const mountPeerRoutes = (app: Hono<AppEnv>, door: Pick<PeerDoor<{ token: string }, unknown, z.ZodRawShape>, "slug">, routes: PeerRoutes): void => {
-    app.post(`/system/${door.slug}/pair`, routes.pair);
-    app.post(peerEnrollPath(door.slug), routes.enroll);
-    app.get(`/system/${door.slug}`, routes.list);
-    app.delete(`/system/${door.slug}/:id`, routes.revoke);
-    app.get(peerConnectPath(door.slug), routes.connect);
-    if (routes.mcp !== undefined) {
-        app.post(`/mcp/${door.slug}/:id`, routes.mcp);
-        app.get(`/mcp/${door.slug}/:id`, routes.mcp);
-        app.delete(`/mcp/${door.slug}/:id`, routes.mcp);
+// Mounted before the oRPC catch-all, like the terminal's, each under its declaration; one mount ensures a door's socket
+// and enroll route share the same slug. A runner has no MCP bridge, so its door declares none.
+export const mountPeerRoutes = (
+    serve: ReturnType<typeof rawRouteServer>,
+    door: Pick<PeerDoor<{ token: string }, unknown, z.ZodRawShape>, "slug">,
+    routes: PeerRoutes,
+): void => {
+    serve(`POST /system/${door.slug}/pair`, routes.pair);
+    serve(`POST /system/${door.slug}/enroll`, routes.enroll);
+    serve(`GET /system/${door.slug}`, routes.list);
+    serve(`DELETE /system/${door.slug}/{id}`, routes.revoke);
+    serve(`GET /system/${door.slug}/connect`, routes.connect);
+    if (routes.mcp !== undefined && door.slug !== "runners") {
+        serve(`POST /mcp/${door.slug}/{id}`, routes.mcp);
+        serve(`GET /mcp/${door.slug}/{id}`, routes.mcp);
+        serve(`DELETE /mcp/${door.slug}/{id}`, routes.mcp);
     }
 };

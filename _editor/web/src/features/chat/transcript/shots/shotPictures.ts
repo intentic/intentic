@@ -1,6 +1,7 @@
 import { STATE_DIR } from "@intentic/constants";
 import { lazyByPath } from "../../../sandbox/client/lazyByPath";
-import { SandboxHttpError, sandboxBlob } from "../../../sandbox/client/sandboxClient";
+import { sandboxBlob } from "../../../sandbox/client/sandboxClient";
+import { SandboxHttpError } from "../../../sandbox/client/sandboxHttpError";
 
 // A conversation's pictures as something an <img> can show, each at the size it is drawn: the daemon's strip tile, its
 // full-size view (AVIF where this engine decodes it), and the original file for actual size and download. Read in the

@@ -1,10 +1,11 @@
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
 import { markConversationTaint } from "../../guard/turn-taint.js";
-import { turnRunOf } from "../run/turn/turn-runs.js";
+import type { Steer } from "../../seams/turn-starter.js";
 
 // Mid-turn steering: a running turn consumes its prompt as streaming input, so `/agent/steer` messages inject between
-// tool calls, not abort-and-resend. The registry also holds each turn's hard-cancel: `/agent/stop` aborts daemon-side,
-// since closing the fetch alone sends no cancel frame. Keyed by conversationId; no per-user scoping (daemon is
-// single-tenant behind its tunnel).
+// tool calls, not abort-and-resend. Each live turn lends its conversation's actor its steering queue and its hard-cancel
+// (`/agent/stop` aborts daemon-side, since closing the fetch alone sends no cancel frame).
 
 // Unbounded push/pull text queue: the steer route pushes, the turn's input generator pulls; close() ends iteration and
 // lets the turn settle.
@@ -112,71 +113,24 @@ export interface ActiveTurn {
     readonly steering?: SteeringQueue;
 }
 
-const activeTurns = new Map<string, ActiveTurn>();
-
-// Conversations whose turn a person has steered since it started. A turn that began unattended (a schedule, a chore, a
-// CI failure) is one nobody could answer, so its asks refuse rather than park — but a steering message is proof that
-// somebody is at the composer RIGHT NOW, and refusing them is refusing the person who just typed. Read live by the
-// command gate and the permission gate, the way turn-taint is, since the fact arrives mid-turn or not at all.
-//
-// Per turn, not per conversation: cleared when the next turn registers, so a wake hours later is unattended again
-// rather than inheriting an attendance that has long since walked away.
-const steeredTurns = new Set<string>();
-
-// Whether a person has steered the turn running in this conversation.
-export const turnSteered = (conversationId: string): boolean => steeredTurns.has(conversationId);
-
-// Registers the conversation's in-flight turn; last-wins on a duplicate id (a stale entry, since the client serializes
-// turns). Returns an unregister bound to this entry, so a stale one can't clobber a successor's registration.
-export function registerTurn(conversationId: string, turn: ActiveTurn): () => void {
-    steeredTurns.delete(conversationId);
-    activeTurns.set(conversationId, turn);
-    return () => {
-        if (activeTurns.get(conversationId) === turn) {
-            activeTurns.delete(conversationId);
-        }
-    };
-}
-
-// Turns in flight right now; the idle-stop verdict reads it, since a machine mid-turn is never idle.
-export const activeTurnCount = (): number => activeTurns.size;
-
-// A stamped workload is live while its conversation still owns the registered turn.
-export const turnActive = (conversationId: string): boolean => activeTurns.has(conversationId);
-
-// Who is speaking into a live turn; only a person proves somebody is at the composer.
-export type SteerVoice = "person" | "sandbox" | "agent";
-
-export interface Steer {
-    readonly text: string;
-    readonly voice: SteerVoice;
-    // The source of outside content in these words; the live turn is tainted by it as they land.
-    readonly outside?: string;
-}
-
-// False when no steerable turn is live; a person's steer is framed by the route that took it, every other voice here.
-export function steerTurn(conversationId: string, steer: Steer): boolean {
-    const delivered = activeTurns.get(conversationId)?.steering?.push(steer.text) ?? false;
-    if (!delivered) {
+// False when no steerable turn is live. A person's steer marks the turn watched, since a turn that began unattended (a
+// schedule, a chore, a CI failure) has somebody at the composer once they type; every other voice is framed here as
+// the turn's own notice row, a person's by the route that took it.
+export function steerTurn(
+    conversations: Pick<ConversationActors, "steer" | "send" | "holdings">,
+    conversationId: string,
+    steer: Pick<Steer, "text" | "voice" | "outside">,
+): boolean {
+    if (!conversations.steer(conversationId, steer.text)) {
         return false;
     }
     if (steer.outside !== undefined) {
         markConversationTaint(conversationId, steer.outside);
     }
     if (steer.voice === "person") {
-        steeredTurns.add(conversationId);
+        conversations.send(conversationId, { kind: "person-steered" });
     } else {
-        turnRunOf(conversationId)?.push({ kind: "steer", text: steer.text, sentAt: Date.now(), voice: steer.voice });
+        turnRunOf(conversations, conversationId)?.push({ kind: "steer", text: steer.text, sentAt: Date.now(), voice: steer.voice });
     }
-    return true;
-}
-
-// Hard-cancel the conversation's running turn; false when nothing is running.
-export function stopTurn(conversationId: string): boolean {
-    const turn = activeTurns.get(conversationId);
-    if (turn === undefined) {
-        return false;
-    }
-    turn.abort();
     return true;
 }

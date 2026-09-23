@@ -1,13 +1,14 @@
 // The signal that a file's text landed. Shadows are written under the state directory the watcher ignores on purpose,
 // so a workspace change can never stand in for this — which is why it is its own epoch rather than a reuse of the
 // file's own, and why a viewer that watched only the file sat on an empty pane forever.
+import { resetSandboxScope } from "@intentic/extension-api";
 import { it, expect, beforeEach } from "bun:test";
-import { changeEpochOf, derivedEpochOf, markDerivedChanged, resetWorkspaceLive, sidecarQueue } from "./useWorkspaceLive";
+import { changeEpochOf, derivedEpochOf, markDerivedChanged, sidecarQueue } from "./useWorkspaceLive";
 
 const IDLE = { enabled: true, queued: 0, deriving: [], sweeping: false, broken: false };
 
 beforeEach(() => {
-    resetWorkspaceLive();
+    resetSandboxScope();
 });
 
 it(`moves only the paths a run names, so an unrelated file re-reads nothing`, () => {
@@ -35,7 +36,7 @@ it(`carries the queue's own state, since a wait has no file to be read off`, () 
 
 it(`drops it all on switching sandboxes, where the same path is a different file`, () => {
     markDerivedChanged([`docs/spec.docx`], IDLE);
-    resetWorkspaceLive();
+    resetSandboxScope();
     expect(derivedEpochOf(`docs/spec.docx`)).toBe(0);
     expect(sidecarQueue.value).toBeUndefined();
 });

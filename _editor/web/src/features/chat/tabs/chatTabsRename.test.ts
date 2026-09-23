@@ -2,14 +2,14 @@
 // Regression: a row that left mid-rename took its input with it and left nothing to blur the edit shut, so
 // reopening that chat from the board drew an empty "New agent" field in the lane instead of its card.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
-import { resetAgents } from "../../agents/fleet/useAgents";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { openAgentConversation } from "../panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
@@ -46,8 +46,7 @@ const mountList = async (): Promise<HTMLElement> => {
 
 beforeEach(async () => {
     localStorage.clear();
-    resetChat();
-    resetAgents();
+    resetSandboxScope();
     await nextTick();
 });
 

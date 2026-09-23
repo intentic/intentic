@@ -50,8 +50,8 @@ export const readContractFreshness = async (): Promise<void> => {
     return asked;
 };
 
-// Test seam, and the reset a sandbox switch needs: the answer is about this checkout's contract, not about a sandbox,
-// but a test that pins one message must not leak it into the next.
+// Test seam: the answer is about this checkout's contract, not about a sandbox, so nothing resets it on a switch, but a
+// test that pins one message must not leak it into the next.
 export const resetContractFreshness = (routes?: readonly string[]): void => {
     uncompiled.value = routes;
     asked = routes === undefined ? undefined : Promise.resolve();

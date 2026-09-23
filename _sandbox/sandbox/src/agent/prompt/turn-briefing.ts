@@ -4,7 +4,7 @@ import { SPAWN_NOTE_TITLE } from "../subagents/spawn-note.js";
 import { PERSONA_NOTE_TITLE, UNATTENDED_ACCOUNTS_TITLE } from "../../personas/personas.js";
 import { TURN_ENDING_NOTE_TITLE } from "../../rules/turn-ending-note.js";
 import { GATED_CREDENTIALS_TITLE } from "../../secrets/credential-gating.js";
-import { SKILL_CATALOG_NOTE_TITLE } from "../../settings/loaded-skills.js";
+import { SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { REPO_SYNC_NOTE_TITLE } from "../../workspace/layout/sync-repos.js";
 import { SETUP_NOTICE_TITLE, STALE_NOTICE_TITLE } from "../../workspace/layout/workspace-setup.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "./handoff-state.js";

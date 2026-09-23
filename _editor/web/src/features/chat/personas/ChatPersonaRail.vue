@@ -35,20 +35,20 @@ const { personas } = usePersonas();
 const { activeId, conversations } = useChat();
 const { agentById } = useAgents();
 
-// Chats this window holds for a persona: the pick lives on the conversation (Conversation.actsAs), so this can only
+// Chats this window holds for a persona: the pick lives on the conversation (ComposerSelection.actsAs), so this can only
 // report what's in this window's own tabs, not the whole fleet.
 const chatsOf = (id: string) =>
     conversations.value
-        .filter((conversation) => conversation.actsAs.value === id)
+        .filter((conversation) => conversation.selection.actsAs.value === id)
         .map((conversation) => ({ conversation, agent: agentById(conversation.conversationId) }))
         .toSorted((a, b) => (b.agent?.updatedAt ?? 0) - (a.agent?.updatedAt ?? 0));
 
 // The chat this rail rings on arrival, seeded once at mount from the focused chat if it names a persona; a plain ref,
 // not a live mirror, so switching focus elsewhere while this list is up doesn't drag the ring with it.
 const arrivedIn = conversations.value.find(
-    (conversation) => conversation.conversationId === activeId.value && conversation.actsAs.value !== undefined,
+    (conversation) => conversation.conversationId === activeId.value && conversation.selection.actsAs.value !== undefined,
 );
-const arrivedAs = arrivedIn?.actsAs.value;
+const arrivedAs = arrivedIn?.selection.actsAs.value;
 const picked = ref<string | undefined>(arrivedIn?.conversationId);
 
 // A chat of this persona's, as the row's two halves (conversation + agent) read it.
@@ -74,7 +74,7 @@ const chipOf = (entry: PersonaChat): StandingChip | undefined => (entry.agent ==
 // is a distinct state, not a gap, for a persona with no chats here yet.
 const leadOf = (mine: readonly PersonaChat[]): PersonaChat | undefined =>
     mine.find((entry) => entry.agent !== undefined && turnInFlight(entry.agent)) ??
-    mine.find((entry) => entry.conversation.streaming.value) ??
+    mine.find((entry) => entry.conversation.turn.streaming.value) ??
     mine[0];
 
 // What it runs on: the agent's recorded model, else the last turn's, else what the composer would send next, else the
@@ -83,8 +83,8 @@ const modelOf = (entry: PersonaChat | undefined): string | undefined => {
     if (entry === undefined) {
         return undefined;
     }
-    const provider = entry.agent?.provider ?? entry.conversation.provider.value;
-    const model = entry.agent?.model ?? entry.conversation.activeModel.value ?? entry.conversation.model.value;
+    const provider = entry.agent?.provider ?? entry.conversation.selection.provider.value;
+    const model = entry.agent?.model ?? entry.conversation.activeModel.value ?? entry.conversation.selection.model.value;
     return model !== null && model !== `` ? modelLabelFor(provider, model) : providerLabel(provider);
 };
 
@@ -102,7 +102,7 @@ const liveOf = (entry: PersonaChat | undefined): { icon: IconName; text: string;
             since: agent.startedAt,
         };
     }
-    return conversation.streaming.value ? { icon: activityIcon(undefined), text: t(`chat.chatPersonaRail.working`), since: conversation.turnStartedAt.value } : undefined;
+    return conversation.turn.streaming.value ? { icon: activityIcon(undefined), text: t(`chat.chatPersonaRail.working`), since: conversation.turn.turnStartedAt.value } : undefined;
 };
 
 interface PersonaRow {
@@ -255,7 +255,7 @@ const sessionsOf = (row: PersonaRow) =>
                             :key="entry.conversation.conversationId"
                             :title="tabLabel(entry.conversation)"
                             :title-action="entry.agent?.titleAction"
-                            :provider="entry.agent?.provider ?? entry.conversation.provider.value"
+                            :provider="entry.agent?.provider ?? entry.conversation.selection.provider.value"
                             :status="statusOf(entry)"
                             :chip="chipOf(entry)"
                             :live="liveOf(entry)"

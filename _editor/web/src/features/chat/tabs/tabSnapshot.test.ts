@@ -204,7 +204,7 @@ describe(`reading a tab snapshot`, () => {
         expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ model: `claude-sonnet-4-5-20250929`, effort: `medium`, thinking: false });
     });
 
-    // The debt a thin catalog left (Conversation.displacedModel): losing it on reload settles the app's substitution as
+    // The debt a thin catalog left (ComposerSelection.displacedModel): losing it on reload settles the app's substitution as
     // though the user had picked it, and the pinned model never comes back.
     it(`restores the model a catalog moved the tab off, and drops one that names nothing`, () => {
         const stored = (displacedModel: unknown): string =>

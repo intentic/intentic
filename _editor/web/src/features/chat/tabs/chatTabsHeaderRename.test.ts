@@ -2,6 +2,7 @@
 // window switches the active chat without blurring the field, so a commit landed on whichever chat had since
 // become active.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { it, expect, beforeAll, beforeEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
@@ -9,7 +10,7 @@ import { createApp, h, nextTick } from "vue";
 import ChatTabs from "./ChatTabs.vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
@@ -34,7 +35,7 @@ beforeAll(() => {
 
 beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
-    resetChat();
+    resetSandboxScope();
     await settle();
 });
 

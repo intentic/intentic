@@ -165,9 +165,6 @@ export const installWebSocket = (session: (url: URL) => DemoSession | undefined)
     });
 };
 
-// JSON in the shape oRPC and sandboxJson expect; contract types on each handler keep this honest.
+// An answer as either fake serves it: JSON, which is what oRPC's OpenAPI handler and the platform's routes both send.
 export const json = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": `application/json` } });
-
-// Daemon's own refusal shape (`{ error }`); sandboxError surfaces it as the user-facing message.
-export const refuse = (message: string, status = 403): Response => json({ error: message }, status);

@@ -16,6 +16,7 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { errandOf } from "../run/errands";
 import { chatRouteWait } from "../routing/chatRoute";
 import { changedNothing, type ChatMessage, type ChecklistView, foldsIntoTurn } from "./transcript";
+import { type CardAnswer, requestIdOf } from "../session/cardReplies";
 import { navigateInApp } from "../../../shell/window/mainWindow";
 import { useMarkdown } from "../../../lib/markdown/useMarkdown";
 import { openFileRefFromEvent } from "../../workspace/files/openFileRef";
@@ -43,8 +44,8 @@ import ChatTurnStatus from "./ChatTurnStatus.vue";
 import { present } from "../tools/toolPresentation";
 import { useT } from "@intentic/ui/i18n";
 
-// Renders one transcript entry (user bubble, notice line, or assistant turn stack). Card decisions go through the
-// useChat singleton; per-message UI state lives here.
+// Renders one transcript entry (user bubble, notice line, or assistant turn stack). Card answers go through the pane's
+// conversation (CardReplies); per-message UI state lives here.
 
 const t = useT();
 
@@ -66,27 +67,23 @@ const showsTodos = computed(
 
 const {
     conversation,
-    decidePlan,
-    answerQuestion,
-    cancelQuestion,
-    decidePermission,
-    decideCapabilityOffer,
-    decidePaymentOffer,
-    decideCredentialOffer,
-    declineBrowserHelp,
-    declineTerminalHelp,
     awaitingDecision,
-    isDeciding,
     editing,
-    beginEdit,
     streaming: conversationStreaming,
     messages: paneMessages,
     queued,
 } = usePaneView();
 
+// The card this row holds, if any: every button on it answers through the chat's one reply (CardReplies).
+const requestId = computed(() => requestIdOf(props.message));
 // Browser-help's primary action links to /browsers (ChatDecisionButton's `to`) rather than deciding in place.
 // Gates a card's other buttons while one answer is in flight; the pressed button already holds itself (kit's Button).
-const settling = computed(() => isDeciding(props.message));
+const settling = computed(() => requestId.value !== undefined && conversation.value.requests.isReplying(requestId.value));
+const reply = async (answer: CardAnswer): Promise<void> => {
+    if (requestId.value !== undefined) {
+        await conversation.value.requests.reply(requestId.value, answer);
+    }
+};
 
 // Whether the viewer is a release card's named approver; a courtesy only — the daemon verifies identity server-side.
 // Case-insensitive; no presented email leaves the buttons enabled.
@@ -109,7 +106,7 @@ const capabilitySetupAt = (card: string): string => `/capabilities/${card}`;
 const connectCapability = async (message: ChatMessage): Promise<void> => {
     // Awaits the decision so the button holds; the navigation is fire-and-forget.
     navigateInApp(router, capabilitySetupAt(message.capabilityOffer?.offer.entry ?? ``));
-    await decideCapabilityOffer(message, true);
+    await reply({ kind: `capability_offer`, connect: true });
 };
 
 // Catalog description, when the static catalog knows the entry; absent for a contributed one.
@@ -177,11 +174,11 @@ const keptMessage = computed(() => paneMessages.value.findLast((row) => row.run 
 // a kept one is the sandbox's to run again, as it was started.
 const sendAnyway = (): void => {
     if (props.message.sandboxHeld !== true) {
-        void conversation.value.resume();
+        void conversation.value.turn.resume();
         return;
     }
     const kept = keptMessage.value;
-    void conversation.value.resendKept({
+    void conversation.value.turn.resendKept({
         text: kept?.text ?? ``,
         attachments: (kept?.attachments ?? []).map((path) => ({ name: basename(path), path })),
     });
@@ -332,7 +329,7 @@ const editable = computed(
 );
 
 const startEdit = (): void => {
-    beginEdit(props.message);
+    conversation.value.transcript.beginEdit(props.message);
 };
 
 // Clamp overflow (.chat-prompt-text) depends on wrap width, so it's measured via ResizeObserver, not guessed from text.
@@ -767,10 +764,10 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 />
                 <template v-if="message.plan.status === 'pending'" #actions>
                     <!-- Single approval, not a posture menu: approving a plan approves the work inside the isolation boundary. -->
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePlan(message, true)">{{
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="reply({ kind: 'plan', approve: true })">{{
                         t(`ui.action.approve`)
                     }}</ChatDecisionButton>
-                    <ChatDecisionButton tone="secondary" icon="pencil" :disabled="settling" @click="decidePlan(message, false)">{{
+                    <ChatDecisionButton tone="secondary" icon="pencil" :disabled="settling" @click="reply({ kind: 'plan', approve: false })">{{
                         t(`chat.chatMessageView.noKeepPlanning`)
                     }}</ChatDecisionButton>
                 </template>
@@ -782,8 +779,8 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 :card="message.question"
                 :document-open="!documentDrawn(message.question.document)"
                 :settling="settling"
-                @answer="(answers) => answerQuestion(message, answers)"
-                @dismiss="cancelQuestion(message)"
+                @answer="(answers) => reply({ kind: 'question', answers })"
+                @dismiss="reply({ kind: 'question', cancelled: true })"
             />
 
             <!-- The safety judge's own verdict sentence on this program, never from the gated agent's own words; wraps in full. -->
@@ -814,7 +811,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <template v-if="message.permission.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePermission(message, 'once')">{{
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="reply({ kind: 'permission', decision: 'once' })">{{
                         t(`chat.chatMessageView.allowOnce`)
                     }}</ChatDecisionButton>
                     <!-- Secondary tone, since a second filled button beside Allow once would read as a coin flip. -->
@@ -823,7 +820,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         tone="secondary"
                         icon="lock"
                         :disabled="settling"
-                        @click="decidePermission(message, 'always')"
+                        @click="reply({ kind: 'permission', decision: 'always' })"
                         >{{ message.permission.alwaysLabel }}</ChatDecisionButton
                     >
                     <!-- Like the question card's Dismiss: a refusal with no redirect ends the turn. -->
@@ -832,7 +829,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         icon="times"
                         :disabled="settling"
                         v-tooltip.bottom="t(`chat.chatMessageView.alsoStopsTurn`)"
-                        @click="decidePermission(message, 'deny')"
+                        @click="reply({ kind: 'permission', decision: 'deny' })"
                         >{{ t(`chat.chatMessageView.no`) }}</ChatDecisionButton
                     >
                 </template>
@@ -852,7 +849,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton tone="primary" icon="desktop" :to="helpBrowserAt(message.browserHelp.session)">{{
                         t(`chat.chatMessageView.openBrowser`)
                     }}</ChatDecisionButton>
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineBrowserHelp(message)">{{
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'browser_help', helped: false })">{{
                         t(`chat.chatMessageView.cantHelpNow`)
                     }}</ChatDecisionButton>
                 </template>
@@ -872,7 +869,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                     <ChatDecisionButton tone="primary" icon="terminal" @click="openHelpTerminal(message.terminalHelp)">{{
                         t(`chat.chatMessageView.openTerminal`)
                     }}</ChatDecisionButton>
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="declineTerminalHelp(message)">{{
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'terminal_help', helped: false })">{{
                         t(`chat.chatMessageView.cantHelpNow`)
                     }}</ChatDecisionButton>
                 </template>
@@ -925,11 +922,11 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                 </div>
 
                 <template v-if="message.paymentOffer.status === 'pending'" #actions>
-                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="decidePaymentOffer(message, true)">{{
+                    <ChatDecisionButton tone="primary" icon="check" :disabled="settling" @click="reply({ kind: 'payment_offer', approve: true })">{{
                         t(`chat.chatMessageView.pay2`, { amountUsd: message.paymentOffer.offer.amountUsd })
                     }}</ChatDecisionButton>
                     <!-- Free and final: the agent is told to continue without it; nothing stops the turn. -->
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decidePaymentOffer(message, false)">{{
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'payment_offer', approve: false })">{{
                         t(`chat.chatMessageView.skipFree`)
                     }}</ChatDecisionButton>
                 </template>
@@ -990,7 +987,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                                 ? undefined
                                 : t(`chat.chatMessageView.onlyCanRelease`, { approvers: message.credentialOffer.offer.approvers.join(`, `) })
                         "
-                        @click="decideCredentialOffer(message, true)"
+                        @click="reply({ kind: 'credential_offer', approve: true })"
                         >{{ t(`chat.chatMessageView.release`) }}</ChatDecisionButton
                     >
                     <!-- Declining is approver-only too, or anyone with a session could stop someone else's turn. -->
@@ -1003,7 +1000,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                                 ? undefined
                                 : t(`chat.chatMessageView.onlyCanAnswer`, { approvers: message.credentialOffer.offer.approvers.join(`, `) })
                         "
-                        @click="decideCredentialOffer(message, false)"
+                        @click="reply({ kind: 'credential_offer', approve: false })"
                         >{{ t(`chat.chatMessageView.skip`) }}</ChatDecisionButton
                     >
                 </template>
@@ -1052,7 +1049,7 @@ const sentExact = computed(() => (props.message.sentAt === undefined ? undefined
                         t(`chat.chatMessageView.connect`, { name: message.capabilityOffer.offer.name })
                     }}</ChatDecisionButton>
                     <!-- Final for this conversation: the agent continues without it and won't ask again. -->
-                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="decideCapabilityOffer(message, false)">{{
+                    <ChatDecisionButton tone="secondary" icon="times" :disabled="settling" @click="reply({ kind: 'capability_offer', connect: false })">{{
                         t(`chat.chatMessageView.notNow`)
                     }}</ChatDecisionButton>
                 </template>

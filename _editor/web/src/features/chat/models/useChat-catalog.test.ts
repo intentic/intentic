@@ -1,35 +1,23 @@
 import "@intentic/testing/dom";
 import { test, expect, beforeEach, mock } from "bun:test";
-import { mocked } from "@intentic/testing/bun";
+import { RunnableProvidersSchema, TrialStatusSchema } from "@intentic/sandbox-contract";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // What a catalog read does to the chats already open on that provider. A routed channel de-lists a model for as long as
 // it is out of capacity or quota for it, so "not in this list" is a state that ends, and the pick it moves a chat off
 // is the user's.
 
-// The catalog read is the whole subject; every other daemon call belongs to a different one. Every export the modules
-// under test import is named here, not just the two this suite drives, or their own imports link to nothing.
-// Declared outside the factory with a path-only signature: the real `sandboxJson<T>` is generic, and an
-// implementation answering one concrete shape cannot satisfy a generic one.
-const sandboxJsonMock = mock(async (_path: string): Promise<unknown> => ({}));
-mock.module("../../sandbox/client/sandboxClient", () => ({
-    sandboxRequest: mock(),
-    sandboxJson: (path: string) => sandboxJsonMock(path),
-    sandboxRequestVia: mock(),
-    sandboxError: mock(),
-    // Carries the status, like the real one: the provider read branches on it, and `instanceof` is only true for the
-    // class the module under test imported, which is this one.
-    SandboxHttpError: class extends Error {
-        constructor(
-            readonly status: number,
-            message: string,
-        ) {
-            super(message);
-        }
-    },
+// The catalog reads are the whole subject: the providers this box adds, each provider's and endpoint's catalog, and the
+// trial allowance that rides the same load. Any other daemon call throws naming its procedure.
+const providersList = mock();
+const providerModels = mock();
+const endpointModels = mock();
+const trial = mock();
+mock.module("../../sandbox/client/sandboxRpc", () => ({
+    sandboxRpc: fakeSandboxRpc({ providers: { list: providersList, models: providerModels }, endpoints: { models: endpointModels, trial } }),
 }));
 
-const { sandboxRequest, SandboxHttpError } = await import("../../sandbox/client/sandboxClient");
-const sandboxRequestMock = mocked(sandboxRequest);
 const { loadActiveProviderModels, loadRunnableProviders, loadProviderModels } = await import("./useChat-catalog");
 const { NATIVE_PROVIDERS } = await import("@intentic/sandbox-contract");
 const { acpProviders, endpointProviders, endpointsLoaded, nativeReady } = await import("../accounts/providerCatalog");
@@ -39,43 +27,47 @@ const { Conversation } = await import("../session/conversation");
 const OPUS = `claude-opus-4-6-thinking`;
 const PRO_LOW = `gemini-3.1-pro-low`;
 
-// The daemon's `/providers/{id}/models` answer: rows plus the id an unpinned turn opens on.
+// A catalog answer, a provider's or an endpoint's alike: rows plus the id an unpinned turn opens on.
 const serves = (ids: readonly string[]): void => {
-    sandboxRequestMock.mockResolvedValue({
-        ok: true,
-        json: async () => ({ models: ids.map((id) => ({ id, label: id })), default: ids[0] }),
-    } as Response);
+    const catalog = { models: ids.map((id) => ({ id, label: id })), default: ids[0] };
+    providerModels.mockResolvedValue(catalog);
+    endpointModels.mockResolvedValue(catalog);
 };
 
 const chatOn = (provider: "gemini" | "claude", model: string): InstanceType<typeof Conversation> => {
     const chat = new Conversation(`c-${provider}`);
-    chat.selectModel({ provider, value: model });
+    chat.selection.apply({ kind: `selectModel`, pick: { provider, value: model } });
     return chat;
 };
 
 beforeEach(() => {
-    sandboxRequestMock.mockReset();
-    sandboxJsonMock.mockReset();
+    for (const read of [providersList, providerModels, endpointModels, trial]) {
+        read.mockReset();
+    }
     endpointsLoaded.value = false;
     acpProviders.value = [];
     endpointProviders.value = [];
     nativeReady.value = [];
 });
 
-// The daemon's `/providers` answer, and the trial allowance read that rides on the same load.
+// No trial here, which is what most sandboxes answer.
+const NO_TRIAL = TrialStatusSchema.parse({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` });
+
+// The daemon's `providers.list` answer, and the trial allowance read that rides on the same load.
 const answers = (providers: unknown): void => {
-    sandboxJsonMock.mockImplementation(async (path: string) =>
-        path === `/providers` ? providers : { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` },
-    );
+    providersList.mockResolvedValue(providers);
+    trial.mockResolvedValue(NO_TRIAL);
 };
 
 const refuses = (status: number): void => {
-    sandboxJsonMock.mockImplementation(async (path: string) => {
-        if (path === `/providers`) {
-            throw new SandboxHttpError(status, `refused`);
-        }
-        return { available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` };
-    });
+    providersList.mockRejectedValue(new SandboxHttpError(status, `refused`));
+    trial.mockResolvedValue(NO_TRIAL);
+};
+
+// A body this build can't read, as the typed client throws it: its own parse of the answer, refused.
+const unreadable = (body: unknown): void => {
+    providersList.mockRejectedValue(RunnableProvidersSchema.safeParse(body).error);
+    trial.mockResolvedValue(NO_TRIAL);
 };
 
 test(`takes the providers this box adds from the daemon's own answer`, async () => {
@@ -92,6 +84,8 @@ test(`takes the providers this box adds from the daemon's own answer`, async () 
     expect(endpointProviders.value).toEqual([{ id: `endpoint/trial`, label: `Free trial`, kind: `endpoint` }]);
     // The half a reader who cannot open /accounts has instead: which of the fixed native list can actually run.
     expect(nativeReady.value).toEqual([`claude`]);
+    // An endpoint's catalog is its own route, addressed by the capability behind the `endpoint/` prefix.
+    expect(endpointModels).toHaveBeenCalledWith({ id: `trial` });
     expect(endpointsLoaded.value).toBe(true);
 });
 
@@ -114,7 +108,7 @@ test(`a daemon that may yet answer leaves the half unknown for the next reachabl
     await loadRunnableProviders().settled;
     expect(endpointsLoaded.value).toBe(false);
 
-    sandboxJsonMock.mockRejectedValue(new Error(`Failed to fetch`));
+    providersList.mockRejectedValue(new Error(`Failed to fetch`));
     await loadRunnableProviders().settled;
     expect(endpointsLoaded.value).toBe(false);
 });
@@ -122,7 +116,7 @@ test(`a daemon that may yet answer leaves the half unknown for the next reachabl
 // A build whose daemon answers a shape it cannot read is in the same position as one that was refused: retrying reads
 // the same body again, and the composer would wait on it forever.
 test(`an unreadable answer leaves the lists alone and still resolves the gate`, async () => {
-    answers({ capabilities: [{ id: `goose`, kind: `agent`, config: {} }] });
+    unreadable({ capabilities: [{ id: `goose`, kind: `agent`, config: {} }] });
 
     await loadRunnableProviders().settled;
 
@@ -136,14 +130,14 @@ test(`moves an open chat off a model the catalog stopped offering, and puts it b
 
     serves([PRO_LOW]);
     await loadProviderModels(`gemini`);
-    expect(chat.model.value).toBe(PRO_LOW);
-    expect(chat.displacedModel.value).toBe(OPUS);
+    expect(chat.selection.model.value).toBe(PRO_LOW);
+    expect(chat.selection.displacedModel.value).toBe(OPUS);
 
     // The channel is serving it again: the user picked this model once, and nothing since has said otherwise.
     serves([OPUS, PRO_LOW]);
     await loadProviderModels(`gemini`);
-    expect(chat.model.value).toBe(OPUS);
-    expect(chat.displacedModel.value).toBeUndefined();
+    expect(chat.selection.model.value).toBe(OPUS);
+    expect(chat.selection.displacedModel.value).toBeUndefined();
 });
 
 test(`leaves a chat pinned to a model the catalog still offers exactly where it is`, async () => {
@@ -153,8 +147,8 @@ test(`leaves a chat pinned to a model the catalog still offers exactly where it 
     serves([OPUS, PRO_LOW]);
     await loadProviderModels(`gemini`);
 
-    expect(chat.model.value).toBe(PRO_LOW);
-    expect(chat.displacedModel.value).toBeUndefined();
+    expect(chat.selection.model.value).toBe(PRO_LOW);
+    expect(chat.selection.displacedModel.value).toBeUndefined();
 });
 
 // The seam a reachable daemon runs (loadAccountStatus) used to warm the whole native list here, so a first paint asked
@@ -166,10 +160,10 @@ test(`the reachable seam reads the open chat's catalog, and no other provider's`
 
     await loadActiveProviderModels();
 
-    const asked = sandboxRequestMock.mock.calls.map(([path]) => String(path));
     expect(NATIVE_PROVIDERS.length, `with one native provider this pins nothing`).toBeGreaterThan(1);
-    expect(asked).toHaveLength(1);
-    expect(asked[0]).toContain(open.provider.value);
+    expect(providerModels).toHaveBeenCalledTimes(1);
+    expect(providerModels).toHaveBeenCalledWith({ provider: open.selection.provider.value });
+    expect(endpointModels).not.toHaveBeenCalled();
 });
 
 test(`reads one provider's catalog against that provider's chats only`, async () => {
@@ -180,6 +174,6 @@ test(`reads one provider's catalog against that provider's chats only`, async ()
     serves([PRO_LOW]);
     await loadProviderModels(`gemini`);
 
-    expect(elsewhere.model.value).toBe(`claude-opus-5`);
-    expect(elsewhere.displacedModel.value).toBeUndefined();
+    expect(elsewhere.selection.model.value).toBe(`claude-opus-5`);
+    expect(elsewhere.selection.displacedModel.value).toBeUndefined();
 });

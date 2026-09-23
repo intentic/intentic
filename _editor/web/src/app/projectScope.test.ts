@@ -1,6 +1,8 @@
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { describe, it, expect, beforeEach } from "bun:test";
 import { freshImport } from "@intentic/testing/bun";
+import { activeSandboxId } from "../features/sandbox/overview/activeSandbox";
 
 // The scope's two halves: the predicate every narrowed source applies, and the selection surviving a reload for
 // the sandbox it was made in. jsdom: the selection lives in localStorage.
@@ -53,5 +55,21 @@ describe(`the selection`, () => {
         setProjectScope(undefined);
         expect(projectScope.value).toBeUndefined();
         expect(Object.keys(localStorage).some((key) => key.startsWith(`intentic.project.`))).toBe(false);
+    });
+
+    // A project id is a folder in one sandbox's workspace: a switch opens on whatever the incoming sandbox had open.
+    it(`is read again for each sandbox the scope moves to`, async () => {
+        const { projectScope, setProjectScope } = await load();
+        activeSandboxId.value = `sb-a`;
+        setProjectScope(`shop`);
+
+        activeSandboxId.value = `sb-b`;
+        resetSandboxScope();
+        expect(projectScope.value).toBeUndefined();
+        setProjectScope(`api`);
+
+        activeSandboxId.value = `sb-a`;
+        resetSandboxScope();
+        expect(projectScope.value).toBe(`shop`);
     });
 });

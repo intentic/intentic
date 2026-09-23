@@ -1,9 +1,10 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { classifyCommand, matchCommand } from "@intentic/sandbox-contract";
+import { classifyCommand, matchCommand, type TurnProfile } from "@intentic/sandbox-contract";
 import { briefDuration } from "@intentic/base/format";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { sdk } from "../../runtimes/claude/claude-sdk.js";
-import { turnRunOf } from "../run/turn/turn-runs.js";
+import { sdk } from "../../engines/claude-sdk.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
+import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
 import { z } from "zod";
 import { commandRun } from "../../guard/actions.js";
 import { createCredentialOracle } from "../../guard/credential-files.js";
@@ -16,7 +17,6 @@ import {
     DEFAULT_INTERVAL_S,
     DEFAULT_TIMEOUT_S,
     listWatchers,
-    type WatcherTurnSeed,
     type WatchPlacement,
 } from "./watchers.js";
 
@@ -26,6 +26,8 @@ import {
 // to answer a card; a held or denied class is refused outright, worded to send the agent through Bash instead.
 
 export interface WatchServerDeps {
+    // Where the arming turn's run is held, for the row it leaves there.
+    readonly conversations: Pick<ConversationActors, "holdings">;
     // Absent for a conversationless turn (the bench): a watch with no conversation has nowhere to deliver its wake.
     readonly conversationId: string | undefined;
     // The tree and credentials the check runs with, snapshotted since the turn will be long gone at check time.
@@ -33,8 +35,8 @@ export interface WatchServerDeps {
     readonly env: Readonly<Record<string, string>>;
     // The isolated world the turn's shell ran in, rebuilt for every check; absent on the workspace root.
     readonly placement?: WatchPlacement;
-    // The turn identity the wake must reproduce, see WatcherTurnSeed.
-    readonly turn: WatcherTurnSeed;
+    // The arming turn's profile, which its wake runs as.
+    readonly profile: TurnProfile;
 }
 
 const answer = (payload: Record<string, unknown>): { content: [{ type: "text"; text: string }] } => ({
@@ -128,7 +130,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                         env: deps.env,
                         ...(deps.placement === undefined ? {} : { placement: deps.placement }),
                         ...(outside === undefined ? {} : { outside }),
-                        turn: deps.turn,
+                        profile: deps.profile,
                     });
                     if (outcome.kind === "refused") {
                         return answer({ outcome: "refused", reason: outcome.reason });
@@ -144,7 +146,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                     // The wait made visible: without this row the turn ends, the chat looks finished, and the wake
                     // hours later arrives as a non-sequitur. Only an arm inside a turn writes one — a watch restored
                     // after a restart is already on the record.
-                    turnRunOf(deps.conversationId)?.note({
+                    turnRunOf(deps.conversations, deps.conversationId)?.note({
                         role: "notice",
                         text: `Watching for ${args.note}, checked every ${briefDuration(outcome.intervalSeconds)}.`,
                         noticeWait: "watch",

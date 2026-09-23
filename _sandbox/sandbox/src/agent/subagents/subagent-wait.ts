@@ -1,10 +1,11 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../../runtimes/claude/claude-sdk.js";
+import { sdk } from "../../engines/claude-sdk.js";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { ChildSupervisor } from "./children.js";
 import type { SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
 // A tool, not a CLI: a blocking shell command would hit the soft-timeout and become the polling it replaces.
 
@@ -15,6 +16,8 @@ const MAX_TIMEOUT_S = 1800;
 export interface SubagentWaitDeps {
     // The conversation whose children this turn may wait on; a parent supervises only its own.
     readonly conversationId: string | undefined;
+    // Where its children and background commands are held.
+    readonly conversations: Pick<ConversationActors, "holdings">;
     // The turn's own abort; a parked wait settles when the turn is stopped.
     readonly signal: AbortSignal;
     // The child-agent engine (spawn, steer, answer); absent means the spawn/send/answer tools are not offered.
@@ -171,7 +174,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                     if (deps.conversationId === undefined) {
                         return answer({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
                     }
-                    const result = await waitForWork(deps.conversationId, {
+                    const result = await waitForWork(deps.conversations, deps.conversationId, {
                         ...(args.target !== "any" ? { target: args.target } : {}),
                         until,
                         timeoutMs,

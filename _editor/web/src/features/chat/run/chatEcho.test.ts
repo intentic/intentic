@@ -1,4 +1,5 @@
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { effectScope, nextTick, ref } from "vue";
 import { describe, it, expect, beforeEach, afterAll, afterEach, mock, jest } from "bun:test";
 import { stubGlobal, advanceTimersByTimeAsync } from "@intentic/testing/bun";
@@ -177,12 +178,15 @@ describe(`elsewhereStrip`, () => {
         hear(strip(draftTab(`c1`, `on the first box`)));
         posted.length = 0;
 
+        // The switch as the app makes it: the id moves, then the scope resets (sandboxScope.ts).
         useSandbox().activeSandboxId.value = `sb2`;
+        resetSandboxScope();
         await nextTick();
 
         expect(elsewhereStrip.value.tabs).toEqual([]);
         expect(posted).toEqual([{ sandbox: `sb2`, note: { kind: `roll` } }]);
         useSandbox().activeSandboxId.value = `sb1`;
+        resetSandboxScope();
         await nextTick();
     });
 });

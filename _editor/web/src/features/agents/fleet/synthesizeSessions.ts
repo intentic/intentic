@@ -1,10 +1,12 @@
+import { sandboxScopeGuard } from "@intentic/extension-api";
 import type { TranscriptRow, TranscriptQuestion, TranscriptTool, ToolCallContent } from "@intentic/sandbox-contract";
 import { ref } from "vue";
 import { track } from "../../../app/analytics";
 import type { TabFacts } from "../../chat/tabs/tabFacts";
 import { summonChat } from "../../chat/run/summon";
 import { chatStrip } from "../../chat/panel/useChat-strip";
-import { sandboxRequest, sandboxUpload } from "../../sandbox/client/sandboxClient";
+import { sandboxUpload } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { revealConversation } from "./agentActions";
 import { composeSession } from "./sessionSuggestion";
 import { uuid } from "../../../lib/uuid";
@@ -148,14 +150,10 @@ const slugOf = (title: string): string => {
 
 const transcriptOf = async (conversation: TabFacts): Promise<TranscriptRow[] | undefined> => {
     try {
-        const response = await sandboxRequest(`/agents/${encodeURIComponent(conversation.id)}/transcript`);
-        if (!response.ok) {
-            return undefined;
-        }
-        const body = (await response.json()) as { messages?: TranscriptRow[] };
+        const { messages } = await sandboxRpc.agents.transcript({ id: conversation.id });
         // Empty means the daemon holds no record of a conversation whose bubbles are on screen; a snapshot taken anyway
         // would synthesize over a silently incomplete source.
-        return body.messages !== undefined && body.messages.length > 0 ? body.messages : undefined;
+        return messages.length > 0 ? messages : undefined;
     } catch {
         return undefined;
     }
@@ -180,8 +178,15 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
         return refused(`Wait for every selected agent to finish, or stop it: before synthesizing.`);
     }
     synthesizing.value = true;
+    // The panes are one sandbox's conversations: a switch while they are read or written stops the synthesis before
+    // they land in the box switched to.
+    const here = sandboxScopeGuard();
+    const moved = `The sandbox changed while the conversations were being captured, so nothing was synthesized.`;
     try {
         const transcripts = await Promise.all(settled.map(transcriptOf));
+        if (!here()) {
+            return refused(moved);
+        }
         if (transcripts.some((transcript) => transcript === undefined)) {
             return refused(`Couldn't capture every conversation in full, so nothing was synthesized.`);
         }
@@ -206,10 +211,13 @@ export const synthesizeSessions = async (): Promise<SynthesisAsk> => {
         } catch {
             return refused(`Couldn't capture every conversation in full, so nothing was synthesized.`);
         }
+        if (!here()) {
+            return refused(moved);
+        }
         const conversation = composeSession({ prompt: synthesisPrompt(refs), isolated: false });
         // An analysis chat, not an implementation one: the main-tree default of plan mode would drive toward a plan
         // approval instead of an answer.
-        conversation.modePick.value = `default`;
+        conversation.selection.apply({ kind: `set`, picks: { modePick: `default` } });
         // Already uploaded, so the chips arrive `done`, the same shape a restored draft's attachments carry.
         conversation.attachments.value = attachments.map((attachment) => ({
             id: uuid(),

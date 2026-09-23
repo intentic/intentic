@@ -8,7 +8,7 @@ import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
 import { gitCommitAll, gitInit } from "@intentic/scaffold";
 import type { Services } from "../composition.js";
-import { repoGitDir, syncRootExcludes } from "../history/history.js";
+import { repoGitDir, syncRootExcludes } from "../workspace/layout/git-layout.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { recordAutostart } from "./autostart.js";
 
@@ -46,7 +46,10 @@ export type StarterOutcome = { readonly repo: string } | { readonly skipped: Sta
 // Copies the baked starter into the workspace and records it for autostart; returns the repo name or which of the three
 // skip reasons applied. Failures are the caller's to log, never fatal to the boot; `bakedDir` is overridable only for
 // tests.
-export const seedStarterSite = async (services: Services, bakedDir: string = STARTER_BAKED_DIR): Promise<StarterOutcome> => {
+export const seedStarterSite = async (
+    services: Pick<Services, "config" | "workspace" | "workspaceArrivedEmpty">,
+    bakedDir: string = STARTER_BAKED_DIR,
+): Promise<StarterOutcome> => {
     const target = join(services.workspace.root, STARTER_REPO);
     if (!existsSync(bakedDir)) {
         return { skipped: "no baked starter in this image" };

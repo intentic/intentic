@@ -55,11 +55,10 @@ mock.module("../panel/useChat-view", () => {
     return {
         usePaneView: () => ({
             // Whether the chat works in a copy of its own decides how many forks the menu offers.
-            conversation: shallowRef({ conversationId: `c1`, rewindTo, isolated: computed(() => state.isolated) }),
+            conversation: shallowRef({ conversationId: `c1`, transcript: { rewindTo, beginEdit }, isolated: computed(() => state.isolated) }),
             messages: computed(() => state.messages),
             streaming: computed(() => state.streaming),
             forkAt,
-            beginEdit,
             editing: computed(() => state.editing),
         }),
     };

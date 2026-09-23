@@ -1,6 +1,8 @@
+import { sandboxRef } from "@intentic/extension-api";
 import type { AgentProvider } from "@intentic/sandbox-contract";
 import { definePreference } from "@intentic/ui/preference";
-import { ref, type Ref } from "vue";
+import type { Ref } from "vue";
+import { activeSandboxId } from "../../sandbox/overview/activeSandbox";
 import { perProvider } from "./providerCatalog";
 
 // Last-picked account per provider, per sandbox, seeding new conversations and surviving reloads.
@@ -29,9 +31,8 @@ const readPicks = (raw: string | null): AccountPicks => {
     return { ...blank(), ...Object.fromEntries(picks) };
 };
 
-// Picks held before any sandbox is scoped; kept in one ref so they persist in memory until the scope
-// changes.
-const unbound = ref<AccountPicks>(blank());
+// Picks held while no sandbox is active; kept in memory for as long as that lasts.
+const unbound = sandboxRef<AccountPicks>(blank);
 
 // One preference per sandbox id, reused rather than redeclared, since each key needs exactly one holder.
 const held = new Map<string, Ref<AccountPicks>>();
@@ -51,14 +52,7 @@ const preferenceFor = (sandboxId: string): Ref<AccountPicks> => {
     return preference;
 };
 
-// The sandbox id currently scoped; switching sandboxes swaps in its own picks rather than clearing them.
-const scoped = ref<string | undefined>();
-
-export const scopeAccountPreference = (sandboxId: string | undefined): void => {
-    if (sandboxId === undefined) {
-        unbound.value = blank();
-    }
-    scoped.value = sandboxId;
-};
+// The sandbox whose picks are in force; a switch swaps in its own picks rather than clearing them.
+const scoped = sandboxRef(() => activeSandboxId.value);
 
 export const accountPicks = (): Ref<AccountPicks> => (scoped.value === undefined ? unbound : preferenceFor(scoped.value));

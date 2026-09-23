@@ -1,11 +1,8 @@
-import type { PushConfig } from "@intentic/api-contract";
-import type { PushTest } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
 import { nativePushDriver } from "./nativePush";
 import { webPushDriver } from "./webPush";
 import { inNativeShell } from "../shell/window/capacitor";
-import { jsonBody } from "../features/sandbox/client/jsonBody";
-import { sandboxJson } from "../features/sandbox/client/sandboxClient";
+import { sandboxRpc } from "../features/sandbox/client/sandboxRpc";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
 
 // Push, from the device's side: HOW it is received is the driver's business; this composable owns the enabling chain
@@ -53,8 +50,7 @@ export function usePushNotifications() {
         const started = revision;
         try {
             const id = await driver.localId();
-            const query = id === null ? `` : `?id=${encodeURIComponent(id)}`;
-            const config = await sandboxJson<PushConfig>(`/push/config${query}`);
+            const config = await sandboxRpc.push.config(id === null ? {} : { id });
             if (revision !== started) {
                 return;
             }
@@ -72,16 +68,12 @@ export function usePushNotifications() {
         revision += 1;
         busy.value = true;
         try {
-            const minted = await driver.mint(async () => (await sandboxJson<PushConfig>(`/push/config`)).publicKey);
+            const minted = await driver.mint(async () => (await sandboxRpc.push.config({})).publicKey);
             if (minted.outcome !== `granted`) {
                 state.value = minted.outcome === `denied` ? `denied` : `off`;
                 return;
             }
-            await sandboxJson(`/push/subscribe`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify(minted.channel),
-            });
+            await sandboxRpc.push.subscribe(minted.channel);
             state.value = `on`;
         } catch (cause) {
             error.value = cause instanceof Error ? cause.message : `Could not enable notifications.`;
@@ -100,7 +92,7 @@ export function usePushNotifications() {
             const id = await driver.localId();
             if (id !== null) {
                 // Daemon first: reversed, a failed daemon call after a successful local drop would still report on.
-                await sandboxJson(`/push/unsubscribe`, jsonBody(`POST`, { id }));
+                await sandboxRpc.push.unsubscribe({ id });
                 await driver.drop();
             }
             state.value = `off`;
@@ -119,7 +111,7 @@ export function usePushNotifications() {
         delivered.value = undefined;
         busy.value = true;
         try {
-            delivered.value = (await sandboxJson<PushTest>(`/push/test`, { method: `POST` })).delivered;
+            delivered.value = (await sandboxRpc.push.test()).delivered;
         } catch (cause) {
             error.value = cause instanceof Error ? cause.message : `Could not send a test notification.`;
             // A refused send makes the daemon drop the registration; re-read rather than leave the toggle on.

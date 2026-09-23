@@ -1,6 +1,6 @@
 import type { FleetConfig } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { liveRequestRun } from "../agent/run/offer-request.js";
+import { actorObserver, liveRequestRun } from "../agents/actor/card-offers.js";
 import type { AppEnv } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { manageDeviceSandbox } from "../hosts/device-reports.js";
@@ -35,8 +35,9 @@ export const createSandboxesRoutes = (services: Services) => {
         provision: (token: string, ask: { name: string; definition?: string }) => fleetProvision(services.config, token, ask),
         devices: () => reachableDevices(services),
         runFlow: (id: string, flow: Parameters<typeof manageDeviceSandbox>[2]) => manageDeviceSandbox(services, id, flow),
-        liveRun: liveRequestRun,
-        observe: services.agents.observe,
+        liveRun: liveRequestRun(services.conversations),
+        observe: actorObserver(services.conversations),
+        cards: services.cards,
     };
     return {
         list: async (c: Context<AppEnv>): Promise<Response> => {

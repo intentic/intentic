@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { type ExtensionManifest, ExtensionManifestSchema } from "@intentic/extension-manifest";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 
 // Git-installed extension checkouts live at .intentic/local/extensions/<id>; baked extensions live at EXTENSIONS_DIR.
 // Both use the raw extensionRead, never the workspace-scoped read that refuses paths outside /work.

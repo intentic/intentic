@@ -1,4 +1,3 @@
-import { WorkspaceTreeSchema } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { host } from "./host";
@@ -12,7 +11,7 @@ export interface TreeEntry {
     readonly children?: readonly TreeEntry[];
 }
 
-// One repo's test projects, derived from the shared /workspace/tree cache. A project is the nearest package.json dir
+// One repo's test projects, derived from the shared workspace tree cache. A project is the nearest package.json dir
 // with test evidence (a vitest.config.*, a bunfig.toml or a *.test.* file; config-less is real). Shares the editor file
 // tree's cache key, so both dedupe to one fetch.
 
@@ -50,18 +49,14 @@ export function useTests(repo: Ref<string>) {
     const api = host();
     const treeQuery = useQuery({
         queryKey: api.sandbox.key(`workspace`, `tree`),
-        queryFn: async () => WorkspaceTreeSchema.parse(await api.sandbox.json(`/workspace/tree`)),
+        queryFn: () => api.sandbox.rpc.workspace.tree({}),
         enabled: computed(() => api.sandbox.reachable()),
     });
     const projects = computed(() => testProjects((treeQuery.data.value?.tree ?? []) as readonly TreeEntry[], repo.value));
     // Kicks off each dir's test run in a one-shot tmux session (panel-<repo>--<session>); pair with
     // terminal.open to attach, since the terminal is the result surface.
     const runTests = async (session: string, dirs: readonly string[]): Promise<void> => {
-        await api.sandbox.json(`/workspace/repos/${encodeURIComponent(repo.value)}/tests`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ session, dirs }),
-        });
+        await api.sandbox.rpc.workspace.runTests({ repo: repo.value, session, dirs: [...dirs] });
     };
     return {
         projects,

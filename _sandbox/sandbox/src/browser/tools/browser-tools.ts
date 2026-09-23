@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
 import type { Capability } from "@intentic/sandbox-contract";
-import { workloadStamp } from "../../platform/boot/leftovers.js";
+import { workloadStamp } from "../../seams/workload-stamp.js";
 import { freePort as bindEphemeral } from "../../processes/free-port.js";
 import { browserOutputDir } from "../cast/browser-artifacts.js";
 import { type ProfileExit, resolveProfileExit } from "../sessions/browser-exit.js";

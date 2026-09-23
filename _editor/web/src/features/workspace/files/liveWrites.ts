@@ -1,5 +1,5 @@
+import { sandboxRef } from "@intentic/extension-api";
 import type { ToolCallLocation, ToolKind } from "@intentic/sandbox-contract";
-import { ref } from "vue";
 
 // Live counterpart of changeOrigins: what a main-tree turn is writing right now (an isolated turn's worktree is
 // irrelevant here). Read from the live tool_call stream, not persisted; best-effort, since the daemon's per-repo lock
@@ -15,7 +15,8 @@ interface TurnWrites {
     readonly paths: ReadonlySet<string>;
 }
 
-const byConversation = ref<Record<string, TurnWrites>>({});
+// Paths in one sandbox's /work, so the record goes with it on a switch.
+const byConversation = sandboxRef<Record<string, TurnWrites>>(() => ({}));
 
 const NONE: ReadonlySet<string> = new Set();
 
@@ -42,7 +43,7 @@ export const recordTurnWrite = (
     byConversation.value = { ...byConversation.value, [conversationId]: { startedAt, paths } };
 };
 
-// Paths the conversation's current turn has written. `startedAt` is the turn identity (Conversation.turnStartedAt);
+// Paths the conversation's current turn has written. `startedAt` is the turn identity (TurnClient.turnStartedAt);
 // undefined means no turn running.
 export const turnWrites = (conversationId: string, startedAt: number | undefined): ReadonlySet<string> => {
     if (startedAt === undefined) {

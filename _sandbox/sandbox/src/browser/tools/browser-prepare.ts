@@ -1,3 +1,4 @@
+import { rawRoutePath } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { z } from "zod";
 import { bearerFrom, tokenEquals } from "../../auth/auth.js";
@@ -8,18 +9,17 @@ import { ANONYMOUS_BROWSER_SERVER, type PrepareBridge, prepareBrowserOwner } fro
 // The router's door back into this daemon: it holds a manifest of owners it may reach, but none of the machinery to
 // bring one up (display allocation is serialized here, and fingerprints, exits and profile locks are this process's
 // state). It asks, the daemon does the work, the router spawns what comes back.
-export const BROWSER_PREPARE_PATH = "/system/browser/prepare";
 
 // Points a router at this daemon, carrying the per-boot bridge token; loopback, like every other bridge the agent's
 // own processes dial.
 export const browserPrepareBridge = (services: Pick<Services, "config" | "browserBridgeToken">): PrepareBridge => ({
-    url: `http://127.0.0.1:${services.config.sandbox.port}${BROWSER_PREPARE_PATH}`,
+    url: `http://127.0.0.1:${services.config.sandbox.port}${rawRoutePath("POST /system/browser/prepare")}`,
     token: services.browserBridgeToken,
 });
 
 const askSchema = z.object({ owner: z.string().min(1), port: z.number().int().positive().max(65_535) });
 
-// Bearer-exempt in app.ts and checks the bridge token itself, like the peer MCP bridges.
+// A door (sandbox-contract raw-routes.ts), checking the bridge token itself like the peer MCP bridges.
 export const createBrowserPrepareRoute =
     (services: Pick<Services, "browserBridgeToken" | "capabilities" | "workspace">) =>
     async (c: Context): Promise<Response> => {

@@ -1,3 +1,4 @@
+import { sandboxRef } from "@intentic/extension-api";
 import {
     type AccountUsage,
     type AgentProvider,
@@ -6,7 +7,7 @@ import {
     type ProviderRefusal,
     type TranslatorAccounts,
 } from "@intentic/sandbox-contract";
-import { computed, ref, watch, type WritableComputedRef } from "vue";
+import { computed, watch, type WritableComputedRef } from "vue";
 import { type AccountPicks, accountPicks } from "./accountPreference";
 import { perProvider } from "./providerCatalog";
 
@@ -15,7 +16,7 @@ import { perProvider } from "./providerCatalog";
 // In-memory only (account ids are sandbox-scoped); lives outside useChat so any reader can import it
 // without a cycle. The user's last pick is a separate, persisted preference in accountPreference.ts.
 
-export const providerAccounts = ref<Record<AgentProvider, readonly OauthAccount[]>>(perProvider<readonly OauthAccount[]>(() => []));
+export const providerAccounts = sandboxRef<Record<AgentProvider, readonly OauthAccount[]>>(() => perProvider<readonly OauthAccount[]>(() => []));
 
 // Not a ref of its own: reads and writes go straight through to the scoped sandbox's stored preference.
 export const selectedAccountId: WritableComputedRef<AccountPicks> = computed({
@@ -35,14 +36,14 @@ export const noTranslatorAccounts = (): TranslatorAccounts => {
     }
     return seeded as TranslatorAccounts;
 };
-export const translatorAccounts = ref<TranslatorAccounts>(noTranslatorAccounts());
+export const translatorAccounts = sandboxRef<TranslatorAccounts>(() => noTranslatorAccounts());
 
 // When a provider last refused a turn; the observed half of "can I run", read beside the polled rings.
-export const providerRefusals = ref<Record<string, ProviderRefusal>>({});
+export const providerRefusals = sandboxRef<Record<string, ProviderRefusal>>(() => ({}));
 
 // Every account's headroom, keyed `${provider}:${account}`; three writers, newest `measuredAt`
 // always wins.
-export const usageByAccount = ref<Record<string, AccountUsage>>({});
+export const usageByAccount = sandboxRef<Record<string, AccountUsage>>(() => ({}));
 
 // Writes or clears (`undefined`) a reading, keeping whichever is newest so a late frame can't
 // overwrite a fresher one.
@@ -85,7 +86,7 @@ watch(
 );
 
 // Whether the lists have been read yet: distinguishes "no account" from "haven't asked".
-export const accountsLoaded = ref(false);
+export const accountsLoaded = sandboxRef(() => false);
 
 // A guess at which account an unnamed turn probably runs on, for readers of account-keyed state (the
 // usage map). Not authoritative: the daemon decides, and reports back on the session frame.

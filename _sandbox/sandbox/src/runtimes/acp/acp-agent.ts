@@ -1,17 +1,26 @@
-import { readFile } from "node:fs/promises";
-import { extname } from "node:path";
-import { IMAGE_MIME } from "../../image-mime.js";
 import { type ContentBlock, type McpServer, methods, type PromptResponse, type SessionNotification } from "@agentclientprotocol/sdk";
-import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
+import { ACP, type AcpAgentConfig, type AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { whenAborted } from "../../abort.js";
-import type { AgentRequest } from "../../agent/run/agent.js";
-import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
-import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
+import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
+import { withFileNote } from "../../agent/prompt/attachment-note.js";
+import type { CommandGuard } from "../../guard/command-guard.js";
+import { loadAttachments } from "../decorators/attachment-images.js";
+import { EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
+import {
+    DEFAULT_TURN_TIMEOUTS,
+    EXPIRED,
+    idleWait,
+    type IdleWait,
+    SETTLED,
+    type TurnTimeouts,
+    turnWatchdog,
+    watchedPull,
+} from "../decorators/turn-watchdog.js";
+import { withStderrTail } from "../decorators/vendor-errors.js";
+import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
 import { sessionUpdateEvent } from "./acp-events.js";
-import type { CommandGuard } from "../../guard/command-guard.js";
-import { createTurnGate } from "../../guard/turn-gate.js";
 import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 
 // The ACP provider adapter, the seam runAgent/createCodexAgent/createGrokAgent share: AgentRequest in, AgentEvent out,
@@ -19,35 +28,13 @@ import { decidePermission, type PermissionPhase } from "./acp-permissions.js";
 // documented floor, not the native ceiling: the agent owns its model settings, MCP tools pass through only when
 // advertised.
 
-// Generalised from the Grok watchdogs: no update for a session means cancel and kill. Injectable for tests.
-export interface AcpTimeouts {
-    readonly inactivityMs: number;
-    readonly maxTurnMs: number;
-}
-const DEFAULT_TIMEOUTS: AcpTimeouts = { inactivityMs: 120_000, maxTurnMs: 30 * 60_000 };
-
-// Native image blocks when the agent advertises image prompts; unreadable files degrade to a path note.
-const imageBlocks = async (paths: readonly string[]): Promise<{ blocks: ContentBlock[]; unread: string[] }> => {
-    const blocks: ContentBlock[] = [];
-    const unread: string[] = [];
-    for (const path of paths) {
-        try {
-            const data = await readFile(path);
-            blocks.push({ type: "image", data: data.toString("base64"), mimeType: IMAGE_MIME[extname(path).toLowerCase()] ?? "image/png" });
-        } catch {
-            unread.push(path);
-        }
-    }
-    return { blocks, unread };
-};
-
 // The agent's MCP servers: the daemon's http tools pass through when the agent advertises http MCP support;
 // in-process SDK servers have no ACP projection (accepted loss for ACP turns).
 const mcpServersOf = (request: AgentRequest, connection: AcpConnection): McpServer[] => {
     if (connection.capabilities.mcpCapabilities?.http !== true) {
         return [];
     }
-    return (request.tools ?? []).map((tool) => ({
+    return (request.tools.remote ?? []).map((tool) => ({
         type: "http",
         name: tool.name,
         url: tool.url,
@@ -55,12 +42,10 @@ const mcpServersOf = (request: AgentRequest, connection: AcpConnection): McpServ
     }));
 };
 
-const errorText = (error: unknown, stderrTail: string): string => {
-    // The SDK wraps a throwing handler as "Internal error"; the real reason lives in data.details, unwrapped here.
+// The SDK wraps a throwing handler as "Internal error"; the real reason lives in data.details, unwrapped here.
+const failureOf = (error: unknown): string => {
     const details = (error as { data?: { details?: unknown } }).data?.details;
-    const base = typeof details === "string" && details !== "" ? details : error instanceof Error ? error.message : "ACP agent failed";
-    const detail = stderrTail.trim();
-    return detail === "" ? base : `${base}: ${detail}`;
+    return typeof details === "string" && details !== "" ? details : error instanceof Error ? error.message : "ACP agent failed";
 };
 
 interface TurnOutcome {
@@ -70,107 +55,143 @@ interface TurnOutcome {
     readonly errored: boolean;
 }
 
-// The turn loop's idle wake latch, swapped for the wait race's resolver while a wait is in flight.
-const noopWake = (): void => {};
-
-// One prompt turn on one session: resolves/creates/loads it, binds routing, and streams mapped updates until the
-// response settles or a watchdog fires. Never emits the terminal `done`; callers do once the whole turn settles.
-async function* runAcpTurn(
+// The session a phase runs on: the one asked for when this process holds it or can load it, else a new one, announced. A
+// session the agent can't bring back is the coded self-heal every runtime shares: the next send starts fresh.
+async function* sessionFor(
     connection: AcpConnection,
     request: AgentRequest,
-    prompt: ContentBlock[],
     sessionId: string | undefined,
-    phase: PermissionPhase,
-    captureText: boolean,
-    timeouts: AcpTimeouts,
-    // This turn's rulebook gate; one gate for the whole turn, its sink repointed per phase rather than rebuilt.
-    gate: CommandGuard,
-    sink: { push: (event: AgentEvent) => void },
-): AsyncGenerator<AgentEvent, TurnOutcome> {
-    let sid = sessionId;
-    if (sid !== undefined && !connection.sessions.has(sid)) {
+): AsyncGenerator<AgentEvent, string | undefined> {
+    if (sessionId !== undefined && connection.sessions.has(sessionId)) {
+        return sessionId;
+    }
+    if (sessionId !== undefined) {
         // A fresh process doesn't know this session; session/load's replay arrives unbound, so it's dropped.
-        if (connection.capabilities.loadSession === true) {
-            try {
-                await connection.agent.request(methods.agent.session.load, {
-                    sessionId: sid,
-                    cwd: request.cwd,
-                    mcpServers: mcpServersOf(request, connection),
-                });
-                connection.sessions.add(sid);
-            } catch {
-                yield {
-                    kind: "error",
-                    code: "session-not-found",
-                    message: "The agent no longer has this chat's session. Send again to start fresh.",
-                };
-                return { sessionId: undefined, text: "", errored: true };
-            }
-        } else {
+        if (connection.capabilities.loadSession !== true) {
             yield {
                 kind: "error",
                 code: "session-not-found",
                 message: "The agent restarted and cannot resume this chat's session. Send again to start fresh.",
             };
-            return { sessionId: undefined, text: "", errored: true };
+            return undefined;
         }
+        try {
+            await connection.agent.request(methods.agent.session.load, {
+                sessionId,
+                cwd: request.spec.cwd,
+                mcpServers: mcpServersOf(request, connection),
+            });
+        } catch {
+            yield { kind: "error", code: "session-not-found", message: "The agent no longer has this chat's session. Send again to start fresh." };
+            return undefined;
+        }
+        connection.sessions.add(sessionId);
+        return sessionId;
     }
-    if (sid === undefined) {
-        const created = await connection.agent.request(methods.agent.session.new, {
-            cwd: request.cwd,
-            mcpServers: mcpServersOf(request, connection),
-        });
-        sid = created.sessionId;
-        connection.sessions.add(sid);
-        yield { kind: "session", sessionId: sid };
-    }
+    const created = await connection.agent.request(methods.agent.session.new, {
+        cwd: request.spec.cwd,
+        mcpServers: mcpServersOf(request, connection),
+    });
+    connection.sessions.add(created.sessionId);
+    yield { kind: "session", sessionId: created.sessionId };
+    return created.sessionId;
+}
 
+// A phase's live half: what the agent sends lands in `queue` (or, while planning, in `text`), and every landing wakes
+// the loop. The gate's sink is repointed here, since the gate outlives a phase and the queue does not.
+const bindPhase = (
+    connection: AcpConnection,
+    request: AgentRequest,
+    session: string,
+    turn: {
+        readonly phase: PermissionPhase;
+        readonly captureText: boolean;
+        readonly gate: CommandGuard;
+        readonly sink: { push: (event: AgentEvent) => void };
+    },
+    wait: IdleWait,
+) => {
     const queue: AgentEvent[] = [];
-    let text = "";
-    let wake: () => void = noopWake;
-    // Repoints the turn-level gate's sink at this phase's queue; the gate outlives a phase, the queue does not.
-    sink.push = (event) => {
+    const held = { text: "" };
+    turn.sink.push = (event) => {
         queue.push(event);
-        wake();
+        wait.wake();
     };
     const onUpdate = (notification: SessionNotification): void => {
         const update = notification.update;
-        if (captureText && update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
+        if (turn.captureText && update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
             // Plan phase: the agent's answer is the plan, held back rather than streamed as deltas.
-            text += update.content.text;
-            wake();
+            held.text += update.content.text;
+            wait.wake();
             return;
         }
-        const event = sessionUpdateEvent(update, request.cwd);
+        const event = sessionUpdateEvent(update, request.spec.cwd);
         if (event !== undefined) {
             queue.push(event);
         }
-        wake();
+        wait.wake();
     };
     // terminal/create runs in the conversation's own tmux session; the first one surfaces it in the panel.
-    const tmuxSession = agentSessionName(sid);
+    const tmuxSession = agentSessionName(session);
     let terminalSurfaced = false;
-    const unbind = connection.bindTurn(sid, {
+    const unbind = connection.bindTurn(session, {
         onUpdate,
-        permission: (permissionRequest) => decidePermission(permissionRequest, phase, request.signal.aborted, gate, (event) => sink.push(event)),
+        permission: (permissionRequest) =>
+            decidePermission(permissionRequest, turn.phase, request.signal.aborted, turn.gate, (event) => turn.sink.push(event)),
         ...(tmuxSession !== undefined
             ? {
                   terminal: {
                       session: tmuxSession,
-                      cwd: request.cwd,
+                      cwd: request.spec.cwd,
                       onCreate: () => {
                           if (!terminalSurfaced) {
                               terminalSurfaced = true;
                               queue.push({ kind: "terminal", session: tmuxSession });
-                              wake();
+                              wait.wake();
                           }
                       },
                   },
               }
             : {}),
     });
+    return { queue, held, unbind };
+};
 
-    const session = sid;
+// What the prompt's own answer says once it settles: a thrown failure, or a stop reason the agent gave up on. End_turn
+// or a cancel is a normal finish; a cancel surfaces nothing extra, the user stopped it.
+const settledFailure = (response: PromptResponse | undefined, failure: unknown, stderrTail: () => string): string | undefined => {
+    if (failure !== undefined) {
+        return withStderrTail(failureOf(failure), stderrTail());
+    }
+    const stopReason = response?.stopReason;
+    if (stopReason === "refusal") {
+        return "The agent refused this request.";
+    }
+    return stopReason === "max_tokens" || stopReason === "max_turn_requests" ? `The agent stopped early (${stopReason}).` : undefined;
+};
+
+// One prompt turn on one session: resolves/creates/loads it, binds routing, and streams mapped updates until the
+// response settles or the watchdog fires. Never emits the terminal `done`; callers do once the whole turn settles.
+async function* runAcpTurn(
+    connection: AcpConnection,
+    request: AgentRequest,
+    prompt: ContentBlock[],
+    sessionId: string | undefined,
+    turn: {
+        readonly phase: PermissionPhase;
+        readonly captureText: boolean;
+        readonly timeouts: TurnTimeouts;
+        // This turn's rulebook gate; one gate for the whole turn, its sink repointed per phase rather than rebuilt.
+        readonly gate: CommandGuard;
+        readonly sink: { push: (event: AgentEvent) => void };
+    },
+): AsyncGenerator<AgentEvent, TurnOutcome> {
+    const session = yield* sessionFor(connection, request, sessionId);
+    if (session === undefined) {
+        return { sessionId: undefined, text: "", errored: true };
+    }
+    const wait = idleWait();
+    const { queue, held, unbind } = bindPhase(connection, request, session, turn, wait);
     const cancel = (): void => void connection.agent.notify(methods.agent.session.cancel, { sessionId: session }).catch(() => {});
     // A Stop before the session exists reaches an already-aborted signal a bare listener would miss.
     const unwatchAbort = whenAborted(request.signal, cancel);
@@ -188,57 +209,27 @@ async function* runAcpTurn(
         })
         .finally(() => {
             settled = true;
-            wake();
+            wait.wake();
         });
 
-    const turnDeadline = Date.now() + timeouts.maxTurnMs;
-    let inactivityDeadline = Date.now() + timeouts.inactivityMs;
+    const pull = watchedPull({ take: () => queue.shift(), settled: () => settled, clock: turnWatchdog(turn.timeouts), wait });
     try {
-        for (;;) {
-            if (queue.length > 0) {
-                inactivityDeadline = Date.now() + timeouts.inactivityMs;
-                yield queue.shift() as AgentEvent;
-                continue;
-            }
-            if (settled) {
-                break;
-            }
-            const waitMs = Math.min(inactivityDeadline, turnDeadline) - Date.now();
-            if (waitMs <= 0) {
+        for (let next = await pull(); next !== SETTLED; next = await pull()) {
+            if (next === EXPIRED) {
                 // Cancel is best-effort; the kill is not. Sessions die with the process; the next send self-heals.
                 cancel();
                 connection.kill();
                 yield { kind: "error", message: "ACP agent timed out, no activity from the agent. It was stopped; send again to retry." };
-                return { sessionId: session, text, errored: true };
+                return { sessionId: session, text: held.text, errored: true };
             }
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            await Promise.race([
-                new Promise<void>((resolve) => {
-                    wake = resolve;
-                }),
-                new Promise<void>((resolve) => {
-                    timer = setTimeout(resolve, waitMs);
-                }),
-            ]);
-            clearTimeout(timer);
-            wake = noopWake;
+            yield next;
         }
         await promptPromise;
-        if (failure !== undefined) {
-            yield { kind: "error", message: errorText(failure, connection.stderrTail()) };
-            return { sessionId: session, text, errored: true };
+        const failed = settledFailure(response, failure, connection.stderrTail);
+        if (failed !== undefined) {
+            yield { kind: "error", message: failed };
         }
-        const stopReason = response?.stopReason;
-        if (stopReason === "refusal") {
-            yield { kind: "error", message: "The agent refused this request." };
-            return { sessionId: session, text, errored: true };
-        }
-        if (stopReason === "max_tokens" || stopReason === "max_turn_requests") {
-            yield { kind: "error", message: `The agent stopped early (${stopReason}).` };
-            return { sessionId: session, text, errored: true };
-        }
-        // end_turn or cancelled: the turn settled normally; a cancel surfaces nothing extra, the user stopped it.
-        return { sessionId: session, text, errored: false };
+        return { sessionId: session, text: held.text, errored: failed !== undefined };
     } finally {
         unbind();
         unwatchAbort();
@@ -247,81 +238,48 @@ async function* runAcpTurn(
 
 // id/config come from the turn's resolved agent-kind capability (streamAgent's dispatch); a connection failure surfaces
 // as an error frame, then done.
-export const createAcpAgent = (connections: AcpConnections, timeouts: AcpTimeouts = DEFAULT_TIMEOUTS) =>
-    async function* runAcpAgent(id: string, config: AcpAgentConfig, request: AgentRequest): AsyncGenerator<AgentEvent> {
+export const createAcpAgent = (connections: AcpConnections, timeouts: TurnTimeouts = DEFAULT_TURN_TIMEOUTS) =>
+    async function* runAcpAgent(id: string, config: AcpAgentConfig, request: AgentRequest<ContainerCredential>): AsyncGenerator<AgentEvent> {
         let connection: AcpConnection;
         try {
-            connection = await connections.acquire(id, config, request.cwd);
+            connection = await connections.acquire(id, config, request.spec.cwd);
         } catch (error) {
             yield { kind: "error", message: error instanceof Error ? error.message : "ACP agent failed to start" };
             yield { kind: "done" };
             return;
         }
 
-        const { images, others } = splitAttachments(request.attachments);
-        const nativeImages = connection.capabilities.promptCapabilities?.image === true;
-        const { blocks, unread } = nativeImages ? await imageBlocks(images) : { blocks: [], unread: [...images] };
-        const prompt = withFileNote(request.prompt, [...others, ...unread]);
+        // Native image blocks when the agent advertises image prompts; everything else rides the file note.
+        const attached = await loadAttachments(request.spec, connection.capabilities.promptCapabilities?.image === true);
+        const blocks: ContentBlock[] = attached.images.map((image) => ({ type: "image", data: image.data, mimeType: image.mimeType }));
+        const prompt = withFileNote(request.spec.prompt, [...attached.files, ...attached.unread]);
 
         // Minted once per turn: the command rulebook, plus an outside-content bit the wallet's gate reads from outside
         // the generator. The sink starts as a no-op; each phase repoints it at its own queue, while the gate outlives
         // the phase.
         const sink = { push: (_event: AgentEvent) => {} };
-        const { gate, release } = createTurnGate(request);
+        const { gate, release } = vendorTurnGate(request);
+        const phase = (content: ContentBlock[], sessionId: string | undefined, permission: PermissionPhase, captureText: boolean) =>
+            runAcpTurn(connection, request, content, sessionId, { phase: permission, captureText, timeouts, gate, sink });
 
         try {
-            if (request.permissionMode === "plan") {
-                // Plan flow is text-only: attachments (images included) ride the note instead, keeping phases uniform.
-                const planPhase: PlanPhase = async function* (phasePrompt, sessionId) {
-                    const outcome = yield* runAcpTurn(
-                        connection,
-                        request,
-                        [{ type: "text", text: phasePrompt }],
-                        sessionId,
-                        "plan",
-                        true,
-                        timeouts,
-                        gate,
-                        sink,
-                    );
-                    return { sessionId: outcome.sessionId, planText: outcome.text, errored: outcome.errored };
-                };
-                const executePhase: ExecutePhase = async function* (sessionId) {
-                    yield* runAcpTurn(
-                        connection,
-                        request,
-                        [{ type: "text", text: EXECUTE_PROMPT }],
-                        sessionId,
-                        "execute",
-                        false,
-                        timeouts,
-                        gate,
-                        sink,
-                    );
-                };
-                yield* runPlanEmulation(
-                    request.signal,
-                    PLAN_PREAMBLE + withFileNote(request.prompt, [...others, ...images]),
-                    request.sessionId,
-                    planPhase,
-                    executePhase,
-                );
-            } else {
-                yield* runAcpTurn(
-                    connection,
-                    request,
-                    [{ type: "text", text: prompt }, ...blocks],
-                    request.sessionId,
-                    "execute",
-                    false,
-                    timeouts,
-                    gate,
-                    sink,
-                );
-            }
+            yield* planMode(
+                ACP,
+                request,
+                () => ({
+                    // Plan flow is text-only: attachments (images included) ride the note instead, keeping phases uniform.
+                    prompt: PLAN_PREAMBLE + withFileNote(request.spec.prompt, [...attached.files, ...attached.pictures]),
+                    async *plan(phasePrompt, sessionId) {
+                        const outcome = yield* phase([{ type: "text", text: phasePrompt }], sessionId, "plan", true);
+                        return { sessionId: outcome.sessionId, planText: outcome.text, errored: outcome.errored };
+                    },
+                    execute: (sessionId) => phase([{ type: "text", text: EXECUTE_PROMPT }], sessionId, "execute", false),
+                }),
+                () => phase([{ type: "text", text: prompt }, ...blocks], request.spec.sessionId, "execute", false),
+            );
         } catch (error) {
             // A throwing turn (session/new failure, connection torn down mid-turn) surfaces, never swallows.
-            yield { kind: "error", message: errorText(error, connection.stderrTail()) };
+            yield { kind: "error", message: withStderrTail(failureOf(error), connection.stderrTail()) };
         } finally {
             release();
         }

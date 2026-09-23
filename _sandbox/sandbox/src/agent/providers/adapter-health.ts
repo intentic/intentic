@@ -1,7 +1,7 @@
 import type { AgentCapabilities } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
+import type { RuntimeDeps } from "../../runtimes/runtime-table.js";
 import type { AdapterHealth } from "./adapter.js";
-import { allAdapters } from "./adapter-registry.js";
 
 // Whether each runtime can serve a turn, probed on a timer and answered from cache (platform/version-check.ts's shape),
 // so a slow probe never blocks a hot route. A cold cache reads as "unknown", treated as available-but-unverified
@@ -19,9 +19,12 @@ export const runtimeHealth = (): RuntimeHealth | undefined => cached;
 
 // Sweeps every adapter concurrently, since they touch different stores and a slow one must not delay the rest. Never
 // throws: guards against a probe that throws outright, not just one that already answers "unknown".
-const refreshRuntimeHealth = async (services: Services): Promise<void> => {
+// What the sweep hands each adapter's probe, and the table it walks.
+type HealthDeps = RuntimeDeps & Pick<Services, "adapters">;
+
+const refreshRuntimeHealth = async (services: HealthDeps): Promise<void> => {
     const entries = await Promise.all(
-        allAdapters().map(async (adapter) => {
+        services.adapters.all.map(async (adapter) => {
             // try/catch, not `.catch()`: a synchronous throw before the promise exists would have nothing to attach to
             // and would escape into this timer.
             let health: AdapterHealth;
@@ -38,7 +41,7 @@ const refreshRuntimeHealth = async (services: Services): Promise<void> => {
 
 // Boot-time sweep (bootstrap/boot-schedulers.ts): warms the cache immediately, then on an interval. Unref'd so it never holds the event loop
 // open; tests that build the app directly never call this.
-export const startRuntimeHealth = (services: Services): void => {
+export const startRuntimeHealth = (services: HealthDeps): void => {
     const tick = (): void => {
         void refreshRuntimeHealth(services);
     };

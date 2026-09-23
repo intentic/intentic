@@ -82,8 +82,9 @@ Style inline, or inject a sheet from `activate()`.
   no package to install for the types. Until there is, an outside author builds views from plain markup, as this
   one does.
 - **`@intentic/sandbox-contract` cannot be installed** as of this writing: its published tarball depends on
-  `@intentic/registry@0.0.0`, which was never published. It carries the daemon's wire schemas, so once it
-  installs, `WorkspaceFileSchema.parse(...)` replaces the hand-rolled type guard in `src/notes.ts`.
+  `@intentic/registry@0.0.0`, which was never published. Reading the daemon does not wait on it:
+  `api.sandbox.rpc` comes typed with the SDK and answers already parsed by the contract's own schema, so
+  `src/notes.ts` checks only the shape of the notes file itself.
 
 ## Getting listed
 

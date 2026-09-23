@@ -1,6 +1,5 @@
 import { sandboxRouteAllowed } from "@intentic/extension-manifest";
-import { jsonBody } from "../features/sandbox/client/jsonBody";
-import { sandboxJson } from "../features/sandbox/client/sandboxClient";
+import { sandboxRpc } from "../features/sandbox/client/sandboxRpc";
 
 // Counts which declared permissions.sandbox entry a call used, batched and reported to the daemon; lives in the browser
 // because the daemon can't attribute an authenticated request to an extension or entry.
@@ -33,10 +32,7 @@ export const flushSandboxUsage = async (): Promise<void> => {
         return;
     }
     try {
-        await sandboxJson(
-            `/extensions/usage`,
-            jsonBody(`POST`, { reports: Object.fromEntries(batches.map(([id, batch]) => [id, Object.fromEntries(batch)])) }),
-        );
+        await sandboxRpc.extensions.recordUsage({ reports: Object.fromEntries(batches.map(([id, batch]) => [id, Object.fromEntries(batch)])) });
     } catch {
         // Re-queues on failure: a briefly unreachable daemon must not cost the evidence, and counts are bounded by the
         // manifests' own lists so this can't grow without limit.

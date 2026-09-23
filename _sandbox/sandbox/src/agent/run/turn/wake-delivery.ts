@@ -1,7 +1,7 @@
 import { sleep } from "@intentic/base/async";
+import type { TurnProfile } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import type { Steer, SteerVoice } from "../../checkpoints/agent-steering.js";
-import type { TurnInput } from "./turn-actor.js";
+import type { SteerVoice, TurnStarter } from "../../../seams/turn-starter.js";
 
 // The one door for words nobody at a conversation's composer typed: steered into its live turn, or opening one.
 
@@ -11,14 +11,13 @@ export interface Wake {
     readonly voice: Exclude<SteerVoice, "person">;
     // The source of outside content in the prompt; whatever turn it reaches is tainted by it.
     readonly outside?: string;
-    // The woken turn's routing and attribution; conversation, prompt, session and taint are the wake's own.
-    readonly turn: Omit<TurnInput, "conversationId" | "prompt" | "sessionId" | "outsideWake">;
+    // The turn the wake continues, whole; conversation, prompt, session and taint are the wake's own.
+    readonly profile: TurnProfile;
 }
 
+// The port's two doors a wake knocks on, and where it reads the session a fresh turn continues.
 export interface WakeDoors {
-    readonly steer: (conversationId: string, steer: Steer) => boolean;
-    // False when a turn is already live on the conversation and took no steer.
-    readonly start: (turn: TurnInput & { readonly conversationId: string }) => Promise<boolean>;
+    readonly turns: Pick<TurnStarter, "steer" | "start">;
     readonly sessionIdOf: (conversationId: string) => string | undefined;
 }
 
@@ -26,20 +25,23 @@ export type WakeLanding = "steered" | "started" | "busy";
 
 /** One attempt: the live turn if it takes words, else a fresh turn on the conversation's current session. */
 export const wakeOnce = async (doors: WakeDoors, wake: Wake): Promise<WakeLanding> => {
-    if (
-        doors.steer(wake.conversationId, { text: wake.prompt, voice: wake.voice, ...(wake.outside === undefined ? {} : { outside: wake.outside }) })
-    ) {
+    const steered = await doors.turns.steer(wake.conversationId, {
+        text: wake.prompt,
+        voice: wake.voice,
+        ...(wake.outside === undefined ? {} : { outside: wake.outside }),
+    });
+    if (steered === true) {
         return "steered";
     }
     const sessionId = doors.sessionIdOf(wake.conversationId);
-    const started = await doors.start({
-        ...wake.turn,
+    const started = await doors.turns.start({
+        ...wake.profile,
         conversationId: wake.conversationId,
         prompt: wake.prompt,
         ...(sessionId === undefined ? {} : { sessionId }),
         ...(wake.outside === undefined ? {} : { outsideWake: wake.outside }),
     });
-    return started ? "started" : "busy";
+    return started === undefined ? "busy" : "started";
 };
 
 export interface WakePacing {

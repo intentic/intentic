@@ -1,5 +1,5 @@
 import { converterReadable } from "@intentic/sandbox-contract/peer-mcp-server";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import type { PeerHubSpec } from "./peer.js";
 import { memoryPeerTools, type PeerToolMemory } from "./peer-tool-memory.js";
 

@@ -1,19 +1,31 @@
 import { access } from "node:fs/promises";
 import { type AgentTurn, type Capability, PI_PROVIDER } from "@intentic/sandbox-contract";
-import { type AgentAdapter, attemptProbe, healthUnavailable, healthUnknown, healthReady } from "../../agent/providers/adapter.js";
+import {
+    type AgentAdapter,
+    armPlan,
+    attemptProbe,
+    healthReady,
+    healthUnavailable,
+    healthUnknown,
+    type TurnArmPlan,
+    type TurnContext,
+} from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
+import { opt } from "../../opt.js";
 import { onPath } from "../../platform/boot/on-path.js";
 
 // The Pi row: the reserved `pi` agent-kind capability, served over Pi's own RPC protocol. A plain adapter rather than a
 // provider module (the ACP reason): Pi is an installed capability, so everything past serving a turn is the capability
 // system's business.
 
+// What the Pi adapter reads: the installed manifest its capability lives in, and the loop that spawns it.
+export type PiAdapterDeps = Pick<Services, "capabilities" | "piAgent">;
+
 // Spawned and driven over Pi's own RPC; harness doesn't apply (Pi is its own loop). Unlike the ACP floor it takes
 // steering (real mid-turn injection) and effort (set_thinking_level); no MCP seam, so no tools.
 export const planPiTurn = async (
-    services: Services,
+    services: PiAdapterDeps,
     _input: AgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
@@ -22,17 +34,16 @@ export const planPiTurn = async (
     if (capability === undefined || capability.kind !== "agent") {
         return { ok: false, message: "Pi is not installed, add the Pi Agent capability first." };
     }
-    return {
-        ok: true,
-        run: (turnRequest) => services.piAgent(capability.config, turnRequest),
-        request: withAttachments(
-            context.steering !== undefined ? { ...context.base, steering: context.steering } : context.base,
+    return armPlan(
+        (request) => services.piAgent(capability.config, request),
+        withAttachments(
+            { ...context.base, spec: { ...context.base.spec, ...opt("steering", context.steering) }, credential: { kind: "container" } },
             context.attachmentPaths,
         ),
-    };
+    );
 };
 
-export const PI_ADAPTER: AgentAdapter<"pi"> = {
+export const PI_ADAPTER: AgentAdapter<"pi", PiAdapterDeps> = {
     runtime: "pi",
     preflight: (services, input, context, installed) => planPiTurn(services, input, context, installed),
     // Two things must hold, each a different fix: the `pi` capability installed (Setup ▸ Extend), and its command on

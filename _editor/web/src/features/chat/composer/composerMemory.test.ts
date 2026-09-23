@@ -1,26 +1,42 @@
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 import { freshImport } from "@intentic/testing/bun";
+import { TrialStatusSchema } from "@intentic/sandbox-contract";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import type { ProcedureInput, ProcedureOutput } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
+import { activeSandboxId } from "../../sandbox/overview/activeSandbox";
 
 // The composer's picks are one answer per account, not per browser window; this suite proves it by making the
 // picks here and opening a second window's copy of the modules that hold them over the same storage. Shares a
 // rule with rememberedAccountFor: a thin catalog read costs one substitution, never the pick itself.
 
-// Declared outside the factory with a plain path-only signature: the daemon's generic `sandboxJson<T>` cannot
-// take an implementation that returns one concrete shape.
-const sandboxJsonMock = mock(async (_path: string): Promise<unknown> => ({}));
-const sandboxRequestMock = mock(async (_path: string): Promise<Response> => new Response());
-mock.module("../../sandbox/client/sandboxClient", () => ({
-    sandboxRequest: (path: string) => sandboxRequestMock(path),
-    sandboxJson: (path: string) => sandboxJsonMock(path),
-    sandboxError: mock(async () => new Error(`failed`)),
-    // Named by the graph but never called here; bun links an ESM import against exactly what this factory returns.
-    sandboxRequestVia: mock(),
-    SandboxHttpError: class SandboxHttpError extends Error {},
+const TWO = [
+    { id: `first`, label: `Claude one`, connectedAt: 1 },
+    { id: `second`, label: `Claude two`, connectedAt: 2 },
+];
+
+// Two Claude accounts, a Cursor one so a second-provider pick is actually runnable (an unrunnable pick would resolve
+// elsewhere and hide whether it was remembered), and every other connection read answering empty.
+const providerModels = mock<(input: ProcedureInput<`providers.models`>) => Promise<ProcedureOutput<`providers.models`>>>();
+mock.module("../../sandbox/client/sandboxRpc", () => ({
+    sandboxRpc: fakeSandboxRpc({
+        accounts: {
+            accounts: async ({ provider }) => ({
+                accounts: provider === `claude` ? TWO : provider === `cursor` ? [{ id: `cur`, label: `Cursor`, connectedAt: 1 }] : [],
+            }),
+        },
+        translator: { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) },
+        usage: { refreshPlanLimits: async () => ({ ok: true, held: [] }) },
+        agent: { refusals: async () => ({ refusals: {} }), commands: async () => ({ commands: [] }) },
+        providers: { list: async () => ({ native: [], agents: [], endpoints: [] }), models: providerModels },
+        endpoints: { trial: async () => TrialStatusSchema.parse({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` }) },
+    }),
 }));
 mock.module("../../../app/analytics", () => ({ track: mock() }));
+// The app's one active-sandbox ref, as every store reads it.
+activeSandboxId.value = `sb1`;
 mock.module("../../sandbox/client/useSandbox", () => {
-    const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
 });
@@ -41,42 +57,14 @@ const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => 
 const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
-const TWO = [
-    { id: `first`, label: `Claude one`, connectedAt: 1 },
-    { id: `second`, label: `Claude two`, connectedAt: 2 },
-];
-
-// Two Claude accounts, a Cursor one so a second-provider pick is actually runnable (an unrunnable
-// pick would resolve elsewhere and hide whether it was remembered), and a Claude catalog.
+// The Claude catalog, as the daemon serves it; every other provider's catalog is refused.
 const mockDaemon = (claudeModels = [`claude-fable-5`, `claude-opus-4-6`]): void => {
-    sandboxJsonMock.mockImplementation((path: string) =>
-        Promise.resolve(
-            path === `/translator/accounts`
-                ? { codex: [], grok: [], kimi: [], gemini: [] }
-                : {
-                      accounts: path.startsWith(`/accounts/claude`)
-                          ? TWO
-                          : path.startsWith(`/accounts/cursor`)
-                            ? [{ id: `cur`, label: `Cursor`, connectedAt: 1 }]
-                            : [],
-                  },
-        ),
-    );
-    sandboxRequestMock.mockImplementation((path: string) =>
-        Promise.resolve(
-            path === `/providers/claude/models`
-                ? ({
-                      ok: true,
-                      status: 200,
-                      json: () =>
-                          Promise.resolve({
-                              models: claudeModels.map((id) => ({ id, label: id })),
-                              default: `claude-fable-5`,
-                          }),
-                  } as Response)
-                : ({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response),
-        ),
-    );
+    providerModels.mockImplementation(async ({ provider }) => {
+        if (provider !== `claude`) {
+            throw new SandboxHttpError(404, `Request failed (404).`);
+        }
+        return { models: claudeModels.map((id) => ({ id, label: id })), default: `claude-fable-5` };
+    });
 };
 
 mockDaemon();
@@ -90,7 +78,6 @@ const { loadProviderModels } = await import("../models/useChat-catalog");
 const openWindow = async () => {
     const turn = await freshImport<typeof import("../run/turnDefaults")>("../run/turnDefaults", import.meta.url);
     const accounts = await freshImport<typeof import("../accounts/accountPreference")>("../accounts/accountPreference", import.meta.url);
-    accounts.scopeAccountPreference(`sb1`);
     return { turn, accounts };
 };
 
@@ -106,7 +93,7 @@ describe(`the composer's remembered picks`, () => {
         // The chat, popped out into a window of its own, where the user makes their picks.
         useChat().selectModel({ provider: `claude`, value: `claude-opus-4-6` });
         useChat().effort.value = `high`;
-        useChat().selectAccount(`second`);
+        useChat().active.value.selection.apply({ kind: `selectAccount`, account: `second` });
 
         // The fleet board's window, opening on the same account: "New agent" there starts on those picks.
         const board = await openWindow();

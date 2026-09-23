@@ -1,9 +1,8 @@
-import { ref, watch } from "vue";
-import { sandboxJson } from "../sandbox/client/sandboxClient";
+import { sandboxRef } from "@intentic/extension-api";
+import { sandboxRpc } from "../sandbox/client/sandboxRpc";
 import { useLayout } from "../../shell/window/useLayout";
-import { useSandbox } from "../sandbox/client/useSandbox";
-import { clearPendingTerminals, listTerminals, refreshTerminals, removeTerminal } from "./terminalsQuery";
-import { disposeAllSessions, type TerminalTabsSource } from "./useTerminal";
+import { listTerminals, refreshTerminals, removeTerminal } from "./terminalsQuery";
+import type { TerminalTabsSource } from "./useTerminal";
 import { uuid } from "../../lib/uuid";
 
 // Global terminal panel: sandbox-wide tmux sessions, backed by terminalsQuery's shared list so the strip and badge
@@ -18,7 +17,7 @@ export const globalTerminalSource: TerminalTabsSource = {
     kill: async (name) => {
         removeTerminal(name);
         try {
-            await sandboxJson(`/system/terminals/${encodeURIComponent(name)}`, { method: `DELETE` });
+            await sandboxRpc.system.killTerminal({ name });
         } catch (error) {
             console.error(`terminal ${name}: kill failed`, error);
         } finally {
@@ -37,11 +36,12 @@ export interface TerminalRequest {
     readonly detail?: string;
 }
 
-// Focus channel: a fresh object per request, so re-focusing the same session still triggers the panel's watch.
-const requested = ref<TerminalRequest | undefined>(undefined);
+// Focus channel: a fresh object per request, so re-focusing the same session still triggers the panel's watch. Both
+// channels name a session on one daemon, so a switch drops what they hold.
+const requested = sandboxRef<TerminalRequest | undefined>(() => undefined);
 
 // Relists the tab without opening the panel or stealing the active tab.
-const surfaced = ref<{ readonly name: string } | undefined>(undefined);
+const surfaced = sandboxRef<{ readonly name: string } | undefined>(() => undefined);
 
 // Mounted panel's newTab, plus a pending flag for when none is mounted; set via registerTerminalSpawn.
 let liveNewTab: (() => void) | undefined;
@@ -60,14 +60,6 @@ export const consumeSpawnRequest = (): boolean => {
     pendingSpawn = false;
     return pending;
 };
-
-// Sandbox switch drops cached sockets and pending claims; reattaching on return replays the pane from tmux.
-watch(useSandbox().activeSandboxId, () => {
-    disposeAllSessions();
-    clearPendingTerminals();
-    requested.value = undefined;
-    surfaced.value = undefined;
-});
 
 // A request is spent once the panel consumes it, so a later mount doesn't replay a stale one. Called by the panel as it
 // reads the request.

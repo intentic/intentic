@@ -1,10 +1,14 @@
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
 import { test, expect } from "bun:test";
-import { resolveRequest } from "../../agent/tools/agent-requests.js";
 import { DEFAULT_SAFETY_POLICY } from "@intentic/sandbox-contract";
 import { createCommandGuard } from "../../guard/command-guard.js";
 import { createTurnTaint, NO_TAINT } from "../../guard/turn-taint.js";
 import { decidePermission } from "./acp-permissions.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 const request = (
     kind: string | undefined,
@@ -68,6 +72,7 @@ const gateWith = (
     extras: Partial<Parameters<typeof createCommandGuard>[0]> = {},
 ): ReturnType<typeof createCommandGuard> =>
     createCommandGuard({
+        cards,
         policy: DEFAULT_SAFETY_POLICY,
         judging: "on",
         judge: judging(decision),
@@ -105,6 +110,7 @@ test("with no rejection option offered, the call is allowed rather than cancelli
 test("the outside-content source is handed to the judge on this transport too", async () => {
     const seen: (string | undefined)[] = [];
     const gate = createCommandGuard({
+        cards,
         policy: DEFAULT_SAFETY_POLICY,
         judging: "on",
         judge: async (_program, facts) => {
@@ -137,6 +143,7 @@ test("a hostile rawInput shape is survived rather than thrown on", async () => {
 test("an asked command raises a permission card and the call runs when the user allows it", async () => {
     const events: { kind: string; requestId?: string }[] = [];
     const gate = createCommandGuard({
+        cards,
         policy: DEFAULT_SAFETY_POLICY,
         judging: "on",
         judge: judging("ask"),
@@ -148,7 +155,7 @@ test("an asked command raises a permission card and the call runs when the user 
     const pending = decidePermission(call, "execute", false, gate, (event) => events.push(event as { kind: string; requestId?: string }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     const card = events.find((event) => event.kind === "permission");
-    expect(resolveRequest({ kind: "permission", requestId: card?.requestId ?? "", decision: "once" })).toBe("settled");
+    expect(cards.resolve({ kind: "permission", requestId: card?.requestId ?? "", decision: "once" })).toBe("settled");
     expect(await pending).toEqual({ outcome: { outcome: "selected", optionId: "yes" } });
     expect(events.some((event) => event.kind === "resolved")).toBe(true);
 });

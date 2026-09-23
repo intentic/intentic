@@ -1,8 +1,11 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import { OkSchema } from "../schemas/shared.js";
 import { ForticlientImportInputSchema, ForticlientImportSchema, VpnConnectInputSchema, VpnIdParamSchema, VpnListSchema } from "../schemas/vpn.js";
+
+// The agent's `vpn` CLI dials and drops these on the agent token; a control token never reaches them.
+const vpnRoute = procedure.meta({ agent: true, control: "never" });
 
 // A VPN is added as a `vpn` capability; connecting and dropping it happen through the routes here, called by both the
 // operator UI and the agent's `vpn` CLI.
@@ -10,7 +13,7 @@ import { ForticlientImportInputSchema, ForticlientImportSchema, VpnConnectInputS
 // same event across a restart.
 export const vpnContract = {
     // Every configured VPN with its live link state; feeds the VPN card, rail indicator, and `vpn list`.
-    list: oc
+    list: vpnRoute
         .route({
             method: "GET",
             path: "/vpn",
@@ -20,7 +23,7 @@ export const vpnContract = {
         })
         .output(VpnListSchema),
     // Dials a stored VPN, streaming auth and routing progress; idempotent, an already-up tunnel is just reported.
-    connect: oc
+    connect: vpnRoute
         .route({
             method: "POST",
             path: "/vpn/{id}/connect",
@@ -31,7 +34,7 @@ export const vpnContract = {
         .input(VpnConnectInputSchema)
         .output(streamOf(IntenticLineSchema)),
     // Drops a tunnel; tolerates one already down, since the contract is "not up," not "it was up."
-    disconnect: oc
+    disconnect: vpnRoute
         .route({
             method: "POST",
             path: "/vpn/{id}/disconnect",
@@ -41,7 +44,7 @@ export const vpnContract = {
         .input(VpnIdParamSchema)
         .output(OkSchema),
     // Parses an exported FortiClient config into addable connections a user can pick instead of retyping.
-    importForticlient: oc
+    importForticlient: vpnRoute
         .route({
             method: "POST",
             path: "/vpn/import-forticlient",

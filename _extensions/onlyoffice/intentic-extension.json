@@ -6,7 +6,7 @@
     "category": "workspace",
     "logo": "onlyoffice",
     "icon": "file-edit",
-    "engines": { "intentic": "^2.15.0" },
+    "engines": { "intentic": "^2.17.0" },
     "server": "dist/server.js",
     "permissions": {
         "daemon": ["GET /ports", "POST /ports/forward", "GET /workspace/raw", "GET /extensions/*/settings"]

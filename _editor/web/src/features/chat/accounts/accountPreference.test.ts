@@ -1,22 +1,39 @@
 import { it, expect, mock } from "bun:test";
 import { ref } from "vue";
-import { mocked } from "@intentic/testing/bun";
+import { TrialStatusSchema } from "@intentic/sandbox-contract";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
-// Simulates a real page refresh, which resetChat() can't: a fresh module graph means useChat's
+// Simulates a real page refresh, which resetSandboxScope() can't: a fresh module graph means useChat's
 // restore runs at module scope before any daemon has answered. The only way to test that window is
 // to seed the stores, then import the singleton fresh.
 
-// Declared outside the factory with a path-only signature: the real `sandboxJson<T>` is generic, and an
-// implementation answering one concrete shape cannot satisfy a generic one.
-const sandboxJsonMock = mock(async (_path: string): Promise<unknown> => ({}));
-// Every name the graph imports from the daemon client, since bun links an ESM import against exactly what this
-// factory returns; only the two driven below are ever called.
-mock.module("../../sandbox/client/sandboxClient", () => ({
-    sandboxRequest: mock(),
-    sandboxJson: (path: string) => sandboxJsonMock(path),
-    sandboxRequestVia: mock(),
-    sandboxError: mock(async () => new Error(`unused`)),
-    SandboxHttpError: class SandboxHttpError extends Error {},
+// The reads a reachable daemon answers: the two accounts behind the seeded tabs, and every other connection empty. A
+// catalog is refused, as for a provider the daemon cannot list.
+mock.module("../../sandbox/client/sandboxRpc", () => ({
+    sandboxRpc: fakeSandboxRpc({
+        accounts: {
+            accounts: async ({ provider }) => ({
+                accounts:
+                    provider === `claude`
+                        ? [
+                              { id: `first`, label: `Claude`, connectedAt: 1 },
+                              { id: `second`, label: `Claude`, connectedAt: 2 },
+                          ]
+                        : [],
+            }),
+        },
+        translator: { accounts: async () => ({ codex: [], grok: [], kimi: [], gemini: [] }) },
+        usage: { refreshPlanLimits: async () => ({ ok: true, held: [] }) },
+        agent: { refusals: async () => ({ refusals: {} }), commands: async () => ({ commands: [] }) },
+        providers: {
+            list: async () => ({ native: [], agents: [], endpoints: [] }),
+            models: async () => {
+                throw new SandboxHttpError(404, `Not found.`);
+            },
+        },
+        endpoints: { trial: async () => TrialStatusSchema.parse({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` }) },
+    }),
 }));
 mock.module("../../../router", () => ({ router: { push: mock() } }));
 mock.module("../../../app/analytics", () => ({ track: mock() }));
@@ -79,23 +96,8 @@ session.set(
     }),
 );
 local.set(`ui-chat-accounts-sb1`, JSON.stringify({ claude: `second` }));
-
-const { sandboxRequest } = await import("../../sandbox/client/sandboxClient");
-mocked(sandboxRequest).mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
-sandboxJsonMock.mockImplementation((path: string) =>
-    Promise.resolve(
-        path === `/translator/accounts`
-            ? { codex: [], grok: [], kimi: [], gemini: [] }
-            : {
-                  accounts: path.startsWith(`/accounts/claude`)
-                      ? [
-                            { id: `first`, label: `Claude`, connectedAt: 1 },
-                            { id: `second`, label: `Claude`, connectedAt: 2 },
-                        ]
-                      : [],
-              },
-    ),
-);
+// The sandbox the window was pointed at, persisted the way activeSandbox.ts reads it back at module scope.
+local.set(`intentic.activeSandboxId`, `sb1`);
 
 // Imported last, so the seeded stores are what its module-scope restore reads.
 const { useChat } = await import("../run/useChat");
@@ -111,7 +113,7 @@ const newChat = () => {
 it(`comes back from a refresh on the accounts the tabs were using, and opens a new chat on the last pick`, async () => {
     const chat = useChat();
     const accountOf = (id: string): string | undefined =>
-        chat.conversations.value.find((conversation) => conversation.conversationId === id)?.account.value;
+        chat.conversations.value.find((conversation) => conversation.conversationId === id)?.selection.account.value;
 
     // Before the daemon has answered: the frame the user looks at first.
     expect(accountOf(`tab-a`)).toBe(`first`);

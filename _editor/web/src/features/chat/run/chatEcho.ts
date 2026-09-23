@@ -1,4 +1,5 @@
-import { computed, type ComputedRef, shallowRef, watch } from "vue";
+import { sandboxShallowRef } from "@intentic/extension-api";
+import { computed, type ComputedRef, watch } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { floatingOwner, floatingWindowPanel, showsPanel } from "../../../shell/window/floating";
 import { useSandbox } from "../../sandbox/client/useSandbox";
@@ -10,7 +11,8 @@ import { EMPTY_STRIP, type Strip } from "../tabs/tabFacts";
 const { activeSandboxId } = useSandbox();
 const owner = floatingOwner(`chat`);
 export const drawsChat: ComputedRef<boolean> = showsPanel(`chat`);
-const heard = shallowRef<Extract<ChatNote, { kind: `strip` }>>();
+// The last strip the window drawing the chat broadcast; one sandbox's chats, so a switch drops it with the scope.
+const heard = sandboxShallowRef<Extract<ChatNote, { kind: `strip` }> | undefined>(() => undefined);
 
 // A snapshot belongs to one owner incarnation; a replacement cannot inherit its predecessor's projection.
 export const elsewhereStrip: ComputedRef<Strip> = computed(() =>
@@ -20,7 +22,7 @@ export const elsewhereStrip: ComputedRef<Strip> = computed(() =>
 // Composer words for the same tabs, held apart from the strip because they move per character: a window that is
 // only listening rebuilds nothing when they land. Unowned and unrevisioned — the strip decides which cards have
 // unsent words at all, so a preview no card asks about is never drawn.
-const heardPreviews = shallowRef<DraftPreviews>(NO_PREVIEWS);
+const heardPreviews = sandboxShallowRef<DraftPreviews>(() => NO_PREVIEWS);
 
 export const elsewherePreviews: ComputedRef<DraftPreviews> = computed(() => (drawsChat.value ? NO_PREVIEWS : heardPreviews.value));
 
@@ -84,12 +86,13 @@ onChatNote(`strip`, (note) => {
     heard.value = note;
 });
 
+// A new holder's strip is its own to publish; a sandbox switch drops both with the scope instead.
 watch(
-    [activeSandboxId, owner],
-    ([sandbox, holder]) => {
+    owner,
+    (holder) => {
         heard.value = undefined;
         heardPreviews.value = NO_PREVIEWS;
-        traceFocus(`chat-owner`, { sandbox, owner: holder, draws: drawsChat.value });
+        traceFocus(`chat-owner`, { sandbox: activeSandboxId.value, owner: holder, draws: drawsChat.value });
     },
     { flush: `sync` },
 );

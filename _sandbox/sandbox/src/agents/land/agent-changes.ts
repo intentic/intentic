@@ -5,7 +5,7 @@ import { materializedPaths } from "../../git/changes/changes-porcelain.js";
 import { scratchOf, scratchScopeOf } from "../../git/changes/scratch.js";
 import { refAgainstRef, withCodeCounts, worktreeAgainstRef } from "../../git/changes/code-counts.js";
 import { readModules } from "../../workspace/deps/modules.js";
-import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
+import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { isAncestor } from "./agent-refs.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
@@ -62,12 +62,12 @@ export const carriesContent = async (dir: string, from: string, tip: string, git
 export const agentRepoChanges = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
-    composed: PersistedAgent["repos"][number],
+    composed: RepoRecord,
     span: AgentSpan,
     git: GitRunner = defaultGit,
 ): Promise<GitChange[]> => {
     const { dir, attached, from, scratch } = await agentRepoScope(worktrees, entry, composed, span, git);
-    return attached ? changesAgainstBase(dir, from, scratch, git) : changesBetweenRefs(worktrees.mainDir(composed.repo), from, entry.branch, git);
+    return attached ? changesAgainstBase(dir, from, scratch, git) : changesBetweenRefs(worktrees.mainDir(composed.repo), from, entry.placement.branch, git);
 };
 
 // Resolves the checkout/main repo, delta anchor and scratch together, so the answers cannot diverge. Only a live copy
@@ -75,7 +75,7 @@ export const agentRepoChanges = async (
 const agentRepoScope = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
-    composed: PersistedAgent["repos"][number],
+    composed: RepoRecord,
     span: AgentSpan,
     git: GitRunner,
 ): Promise<{ dir: string; attached: boolean; from: string; scratch: ScratchPath[] }> => {
@@ -85,7 +85,7 @@ const agentRepoScope = async (
     return {
         dir,
         attached,
-        from: await checkpointOf(dir, main, entry.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git),
+        from: await checkpointOf(dir, main, entry.placement.branch, span === "outstanding" ? composed.landedTip : undefined, composed.base, git),
         scratch: attached ? await scratchOf(dir, await scratchScopeOf(composed.repo, worktrees.mainDir("root")), git) : [],
     };
 };
@@ -101,13 +101,13 @@ export interface AgentRepoReview {
 export const agentRepoReview = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
-    composed: PersistedAgent["repos"][number],
+    composed: RepoRecord,
     git: GitRunner = defaultGit,
 ): Promise<AgentRepoReview> => {
     const { dir, attached, from, scratch } = await agentRepoScope(worktrees, entry, composed, "cumulative", git);
     const main = worktrees.mainDir(composed.repo);
     if (!attached) {
-        return { changes: await withCodeCounts(main, await changesBetweenRefs(main, from, entry.branch, git), refAgainstRef(from, entry.branch)), scratch };
+        return { changes: await withCodeCounts(main, await changesBetweenRefs(main, from, entry.placement.branch, git), refAgainstRef(from, entry.placement.branch)), scratch };
     }
     return { changes: await withCodeCounts(dir, await changesAgainstBase(dir, from, scratch, git), worktreeAgainstRef(dir, from)), scratch };
 };
@@ -174,7 +174,7 @@ const NOTHING: MainPresence = { absorbed: NO_PATHS, inWorkspace: NO_PATHS };
 export const presentInMain = async (
     worktrees: AgentWorktrees,
     entry: IsolatedAgent,
-    composed: PersistedAgent["repos"][number],
+    composed: RepoRecord,
     paths: readonly string[],
     git: GitRunner = defaultGit,
 ): Promise<MainPresence> => {
@@ -184,7 +184,7 @@ export const presentInMain = async (
     try {
         const attached = await worktrees.attached(entry.id, composed.repo);
         const dir = attached ? worktrees.worktreeDir(entry.id, composed.repo) : undefined;
-        return await presenceOf(worktrees.mainDir(composed.repo), dir, entry.branch, paths, git);
+        return await presenceOf(worktrees.mainDir(composed.repo), dir, entry.placement.branch, paths, git);
     } catch {
         return NOTHING;
     }

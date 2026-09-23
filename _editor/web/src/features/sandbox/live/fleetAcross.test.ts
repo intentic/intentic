@@ -2,16 +2,18 @@ import { describe, it, expect, mock } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { ref } from "vue";
 import type { AgentSummary } from "@intentic/sandbox-contract";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Exercises the pure derivation only, not the store's polling: a failed read must never become a zero, since this
 // number ends up on both the switcher row and the rail badge, and disagreeing between them is the failure to avoid.
 
-// Mocks the query client and sandbox client, neither of which the derivation under test touches.
+// Mocks the query client and the daemon client, neither of which the derivation under test touches.
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 mock.module("../client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-const sandboxJsonQuietly = mock();
-mock.module("../client/sandboxClient", () => ({ sandboxJsonQuietly }));
+const list = mock();
+const seen = mock();
+mock.module("../client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { list, seen } }) }));
 mock.module("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: mock() } }));
 
 const { boxAttention, markSeenAcross, otherBoxes, subscribe } = await import("./fleetAcross");
@@ -79,23 +81,26 @@ describe("marking an agent in another box as read", () => {
             { id: `sbx-here`, name: `Guest`, lastSeenAt: `2026-01-01T00:00:00Z` },
             { id: `sbx-other`, name: `Laptop`, lastSeenAt: `2026-01-01T00:00:00Z` },
         ];
-        sandboxJsonQuietly.mockResolvedValue(roster());
+        list.mockResolvedValue(roster());
+        seen.mockResolvedValue(roster().agents[0]);
         const release = subscribe();
         await waitFor(() => expect(otherBoxes.value[0]?.state).toBe(`ready`));
         expect(boxAttention(otherBoxes.value[0]!)).toBe(1);
+        // Read from that box itself, and quietly: nobody is waiting on this poll, so it must never raise a sign-in.
+        expect(list).toHaveBeenCalledWith(undefined, { context: { at: `sbx-other`, background: true } });
 
         markSeenAcross(`sbx-other`, `a1`);
 
         // The next poll is up to 45 seconds out; a count still lit that long looks indistinguishable from stuck.
         expect(boxAttention(otherBoxes.value[0]!)).toBe(0);
-        expect(sandboxJsonQuietly).toHaveBeenCalledWith(`sbx-other`, `/agents/a1/seen`, { method: `POST` });
+        expect(seen).toHaveBeenCalledWith({ id: `a1` }, { context: { at: `sbx-other`, background: true } });
         release();
     });
 
     // A box never read has no copy to stamp; writing to it would claim a roster nothing here has seen.
     it("says nothing to a box it has never read", () => {
-        sandboxJsonQuietly.mockClear();
+        seen.mockClear();
         markSeenAcross(`sbx-unknown`, `a1`);
-        expect(sandboxJsonQuietly).not.toHaveBeenCalled();
+        expect(seen).not.toHaveBeenCalled();
     });
 });

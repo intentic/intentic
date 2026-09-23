@@ -19,7 +19,7 @@ const loadTrialStatus = mock(async () => {});
 mock.module(`../models/useChat-catalog`, () => ({ loadTrialStatus }));
 mock.module(`./useChat-view`, () => ({
     usePaneView: () => ({
-        conversation: ref({ conversationId: `agent-1`, resume }),
+        conversation: ref({ conversationId: `agent-1`, turn: { resume } }),
         provider,
         account: ref(undefined),
         accounts: ref([]),

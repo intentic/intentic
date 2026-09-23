@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import type { WorkspaceChildrenResponse, WorkspaceTreeEntry, WorkspaceTreeResponse } from "@intentic/api-contract";
+import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { ui, ResponsiveOverlay, SkeletonRows, vAction } from "@intentic/ui";
 import { computed, ref, shallowRef } from "vue";
 import { sharedWorkspaceTreeKey } from "../../workspace/health/workspaceTreeKey";
-import { sandboxJson } from "../client/sandboxClient";
+import { sandboxRpc } from "../client/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
@@ -35,9 +35,9 @@ const picked = defineModel<string[]>({ required: true });
 
 // Shared workspace tree, under the explorer's own entry so opening this picker after the tree has drawn costs nothing.
 // Not scoped via scopeQuery: folders are workspace-relative regardless of which checkout is active.
-const { query } = useSandboxQuery<WorkspaceTreeResponse>({
+const { query } = useSandboxQuery({
     queryKey: sharedWorkspaceTreeKey(),
-    queryFn: () => sandboxJson<WorkspaceTreeResponse>(`/workspace/tree`),
+    queryFn: () => sandboxRpc.workspace.tree({}),
 });
 
 // Sandbox-scoped like other reads behind these panels, so switching sandboxes drops the outline.
@@ -66,8 +66,8 @@ const load = async (path: string): Promise<void> => {
     }
     loading.value = new Set(loading.value).add(path);
     try {
-        const body = await sandboxJson<WorkspaceChildrenResponse>(`/workspace/children?${new URLSearchParams({ path }).toString()}`);
-        lazy.value = new Map(lazy.value).set(path, body.entries);
+        const { entries } = await sandboxRpc.workspace.children({ path });
+        lazy.value = new Map(lazy.value).set(path, entries);
     } catch {
         // A folder that won't list isn't worth a banner here: it simply stops offering to expand.
         lazy.value = new Map(lazy.value).set(path, []);

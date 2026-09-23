@@ -1,10 +1,12 @@
-import { liveTurnConversations } from "../agent/run/turn/turn-runs.js";
 import type { InvariantCheck } from "../invariants/invariants.js";
+import type { ConversationActors } from "./actor/conversation-actors.js";
+import { liveTurnConversations } from "./actor/conversation-holdings.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
+import { isIsolated } from "./registry/agents-store.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
 
-// Two independent records of whether a conversation is running (turn-runs.ts's live-run map, the registry's own
-// `running` map) that must agree. Checks only registry-idle-while-turn-live, the direction a live run's own start time
+// Two independent records of whether a conversation is running (the run each actor holds, the conversation actors'
+// own phase) that must agree. Checks only registry-idle-while-turn-live, the direction a live run's own start time
 // can verify.
 
 // Long enough that no ordinary begin is still in flight; short enough to catch a stuck card within one sweep.
@@ -12,6 +14,7 @@ const REGISTRY_GRACE_MS = 10_000;
 
 export interface FleetRegistryDeps {
     readonly agents: AgentsRegistry;
+    readonly conversations: Pick<ConversationActors, "running" | "holdings">;
     readonly agentWorktrees: AgentWorktrees;
     readonly live?: () => readonly { readonly conversationId: string; readonly startedAt: number }[];
     readonly now?: () => number;
@@ -21,8 +24,9 @@ export const owner = "agents";
 
 export const checks = ({
     agents,
+    conversations,
     agentWorktrees,
-    live = liveTurnConversations,
+    live = () => liveTurnConversations(conversations),
     now = Date.now,
 }: FleetRegistryDeps): readonly InvariantCheck[] => [
     // A conversation's checkout standing on a branch of its own is invisible from every surface: the turn still writes
@@ -39,10 +43,10 @@ export const checks = ({
             for (const id of agents.ids()) {
                 const entry = agents.entry(id);
                 // Non-isolated conversations run in the owner's own tree and have no branch of their own to stand on.
-                if (entry?.branch === undefined) {
+                if (entry === undefined || !isIsolated(entry)) {
                     continue;
                 }
-                for (const { repo, branch } of await agentWorktrees.elsewhere(id, entry.repos ?? [])) {
+                for (const { repo, branch } of await agentWorktrees.elsewhere(id, entry.placement.repos)) {
                     strayed.push(`${id}/${repo} on ${branch ?? "a detached HEAD"}`);
                 }
             }
@@ -63,7 +67,7 @@ export const checks = ({
             if (unknown.length > 0) {
                 return fail(`${unknown.length} live turn(s) belong to conversations the fleet registry has no entry for: ${unknown.join(", ")}`);
             }
-            const idle = due.filter((run) => !agents.running(run.conversationId)).map((run) => run.conversationId);
+            const idle = due.filter((run) => !conversations.running(run.conversationId)).map((run) => run.conversationId);
             if (idle.length > 0) {
                 fail(
                     `${idle.length} live turn(s) read as not running on the fleet board, the card shows idle while the turn spends: ${idle.join(", ")}`,

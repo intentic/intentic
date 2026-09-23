@@ -1,4 +1,5 @@
 import { localModelMemory } from "@intentic/capability-catalog";
+import type { CapabilityKind } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 
 // Computes a live summary sentence for form values whose consequences aren't obvious: wallet numbers
@@ -90,4 +91,15 @@ export const localModelMemorySummary = (values: Readonly<Record<string, string>>
         return undefined;
     }
     return `≈ ${weightsGb} GB weights + ${windowGb} GB window: needs ${totalGb} GB of free RAM.`;
+};
+
+/** The sentence a tile's answers compose into under the form, for the kinds that have one. */
+export const answersSummary = (kind: CapabilityKind | undefined, values: Readonly<Record<string, string>>): string | undefined => {
+    if (kind === `wallet`) {
+        return walletPolicySummary(values);
+    }
+    if (kind === `localmodel`) {
+        return localModelMemorySummary(values);
+    }
+    return undefined;
 };

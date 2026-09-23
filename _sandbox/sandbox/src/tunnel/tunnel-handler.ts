@@ -1,6 +1,6 @@
 import type { CapabilityStatus, IntenticLine } from "@intentic/sandbox-contract";
 import type { CapabilityHandler } from "../capabilities/capability.js";
-import { removeLoadedSkill, writeLoadedSkill } from "../settings/loaded-skills.js";
+import { removeLoadedSkill, writeLoadedSkill } from "../store/loaded-skills.js";
 import type { TunnelEntry, TunnelKindName } from "./tunnel-links.js";
 
 // Capability handler stores a tunnel kind's manifest data (credentials, pool, boot flag); the kind's own links layer

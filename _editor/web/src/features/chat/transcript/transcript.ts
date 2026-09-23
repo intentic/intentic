@@ -233,7 +233,7 @@ const ACKNOWLEDGMENTS = new Set([
 ]);
 
 // Text-only check, separate from the message-level one: the send queue asks this before a message exists, to catch a
-// duplicate nudge before delivery (Conversation.enqueue).
+// duplicate nudge before delivery (TurnClient.enqueue).
 export const isNudgeText = (text: string): boolean => ACKNOWLEDGMENTS.has(bareText(text));
 
 // An attachment makes any text substantive, "continue" plus a screenshot is new material, not a nudge.

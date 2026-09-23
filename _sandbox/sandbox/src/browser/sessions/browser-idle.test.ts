@@ -45,7 +45,7 @@ test("a browser parked on a help request is never idle", async () => {
     const name = open("id1e3333-4444", "reddit-parked");
     try {
         const openedAt = Date.now();
-        expect(raiseBrowserHelp("reddit-parked", { requestId: "idle-r1", message: "solve the captcha", requestedAt: openedAt })).toBe(name);
+        expect(raiseBrowserHelp("reddit-parked", { requestId: "idle-r1", message: "solve the captcha", requestedAt: openedAt }, () => {})).toBe(name);
         expect(idleBrowserSessionNames(openedAt + 10 * WINDOW_MS, WINDOW_MS)).not.toContain(name);
         // Once the person has answered, the ordinary clock applies again.
         clearBrowserHelp("idle-r1");

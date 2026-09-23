@@ -1,11 +1,16 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AcpAgentConfig, AgentEvent } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { resolveRequest } from "../../agent/tools/agent-requests.js";
-import type { AgentRequest } from "../../agent/run/agent.js";
+import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "../../agent/providers/agent-request.js";
 import { fakeAcpAgentApp, fakeAcpConnection } from "./__fixtures__/fake-acp-agent.js";
-import { type AcpTimeouts, createAcpAgent } from "./acp-agent.js";
+import { createAcpAgent } from "./acp-agent.js";
+import type { TurnTimeouts } from "../decorators/turn-watchdog.js";
 import type { AcpConnection, AcpConnections } from "./acp-connection.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // The adapter under test is the real one; only the connection is the in-process fixture (no spawn).
 const connectionsOf = (connection: AcpConnection): AcpConnections => ({
@@ -14,18 +19,23 @@ const connectionsOf = (connection: AcpConnection): AcpConnections => ({
 });
 
 const CONFIG: AcpAgentConfig = { command: "fake acp" };
-const TIMEOUTS: AcpTimeouts = { inactivityMs: 60_000, maxTurnMs: 60_000 };
+const TIMEOUTS: TurnTimeouts = { inactivityMs: 60_000, maxTurnMs: 60_000 };
 
-const request = (prompt: string, overrides: Partial<AgentRequest> = {}): AgentRequest => ({
-    prompt,
-    cwd: WORKSPACE_ROOT,
+const request = (
+    prompt: string,
+    overrides: { readonly spec?: Pick<TurnSpec, "sessionId">; readonly policy?: Pick<TurnPolicy, "permissionMode"> } = {},
+): AgentRequest<ContainerCredential> => ({
+    spec: { prompt, cwd: WORKSPACE_ROOT, ...overrides.spec },
+    policy: { ...overrides.policy },
+    tools: {},
+    credential: { kind: "container" },
+    hooks: { cards },
     signal: new AbortController().signal,
-    ...overrides,
 });
 
 const collect = async (
     agent: ReturnType<typeof createAcpAgent>,
-    turnRequest: AgentRequest,
+    turnRequest: AgentRequest<ContainerCredential>,
     onPlan?: (requestId: string) => { approve: boolean; feedback?: string },
 ): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
@@ -33,7 +43,7 @@ const collect = async (
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
             const decision = onPlan(event.requestId);
-            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
+            setTimeout(() => cards.resolve({ kind: "plan", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -101,14 +111,14 @@ test("a stalled agent trips the inactivity watchdog: cancel, kill, error, done",
 
 test("resuming a session the process doesn't know without loadSession self-heals via session-not-found", async () => {
     const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
-    const events = await collect(agent, request("hello", { sessionId: "stale-id" }));
+    const events = await collect(agent, request("hello", { spec: { sessionId: "stale-id" } }));
     expect(events).toContainEqual(expect.objectContaining({ kind: "error", code: "session-not-found" }));
     expect(events.at(-1)).toEqual({ kind: "done" });
 });
 
 test("plan mode runs the two-phase emulation: captured plan → approval → execute on the same session", async () => {
     const agent = createAcpAgent(connectionsOf(fakeAcpConnection(fakeAcpAgentApp())), TIMEOUTS);
-    const events = await collect(agent, request("plan the work", { permissionMode: "plan" as const }), () => ({ approve: true }));
+    const events = await collect(agent, request("plan the work", { policy: { permissionMode: "plan" } }), () => ({ approve: true }));
     const plan = events.find((event) => event.kind === "plan");
     expect(plan?.kind === "plan" && plan.text).toBe("1. do the thing");
     expect(events).toContainEqual({ kind: "delta", text: "executed" });

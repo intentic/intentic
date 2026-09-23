@@ -10,7 +10,6 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { type FleetReading, fleetLimit, type TurnLimit } from "../../usage/fleet-limit.js";
-import { harnessReadyProviders } from "../providers/harness-credentials.js";
 
 // What a parent may spend on a child right now: connected providers, their models' headroom, and how much. Reads happen
 // once per provider, not per model. Three states: measured with room, measured full (left out), or unmeasured (marked
@@ -131,7 +130,7 @@ const spendable = (provider: NativeProvider, catalog: { models: Model[] }, readi
 // What a child could be started on right now, connected providers only. Failure is per provider: a slow or dead
 // model-catalog read reports that provider with no models rather than dropping the whole listing.
 export const spawnableProviders = async (services: Services): Promise<readonly SpawnableProvider[]> => {
-    const [ready, readings] = await Promise.all([harnessReadyProviders(services), fleetReadings(services)]);
+    const [ready, readings] = await Promise.all([services.providerReadiness(), fleetReadings(services)]);
     const rows = await Promise.all(
         NATIVE_PROVIDERS.filter((provider) => ready[provider]).map(async (provider) => {
             const catalog = await services.providerCatalogs[provider].models().catch(() => ({ models: [] }));

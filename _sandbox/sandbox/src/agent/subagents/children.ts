@@ -1,19 +1,20 @@
 import { errorMessage } from "@intentic/base/errors";
-import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentHarness, AgentProvider, AskQuestion, TurnProfile } from "@intentic/sandbox-contract";
 import { capabilitiesOf, newConversationId, PROVIDERS } from "@intentic/sandbox-contract";
+import type { Holding } from "../../agents/actor/conversation-holdings.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";
-import { createRequest, resolveRequest } from "../tools/agent-requests.js";
 import { steerTurn } from "../checkpoints/agent-steering.js";
 import { childSpawn } from "../../guard/actions.js";
 import { guard } from "../../guard/guard.js";
 import { conversationTaintSource, markConversationTaint } from "../../guard/turn-taint.js";
 import { noteChildWork } from "./child-verification.js";
 import { type SpawnableProvider, spawnableProviders } from "./spawn-catalog.js";
-import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn } from "./subagents.js";
-import { childActor, type TurnInput } from "../run/turn/turn-actor.js";
-import { startTurnRun, turnRunOf } from "../run/turn/turn-runs.js";
-import { openingRows, openTurnTranscript, recordTurnTranscript } from "../../sessions/turn-transcript.js";
-import type { TurnFn } from "../../loops/loop-runner.js";
+import { openSpawnedChild, noteSpawnedChild, settleSpawnedChild, type SubagentTurn, type SubagentWaitOptions } from "./subagents.js";
+import { waitForWork, type WorkWaitOutcome } from "./work-wait.js";
+import { childActor } from "../../auth/principal.js";
+import type { TurnInput } from "../../seams/turn-starter.js";
+import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
 import { credentialsTravel, placeFanOut } from "../../runners/runner-scheduler.js";
 import { runnerSummaries } from "../../runners/runner-peer.js";
 
@@ -62,6 +63,8 @@ export interface PendingChildCard {
 interface ChildRecord {
     readonly parent: string;
     readonly spec: ChildSpawnSpec;
+    // What every turn of this child runs as, resolved once at spawn, so a follow-up never drifts to another model.
+    readonly profile: TurnProfile;
     readonly depth: number;
     readonly cwd: string;
     sessionId: string | undefined;
@@ -71,42 +74,52 @@ interface ChildRecord {
     pending: PendingChildCard | undefined;
 }
 
-const kids = new Map<string, ChildRecord>();
+// A spawned child's record, held by its parent and filed about the child, so either one's dispose takes it.
+const CHILDREN: Holding<ChildRecord> = { name: "children" };
+// A parent's child turns, live and lifetime, held by the parent under its own id.
+const SEATS: Holding<{ readonly live: number; readonly total: number }> = { name: "child seats" };
+// The supervisor a turn armed for the `/children` routes, which have no tool mount to gate; held under its own id.
+const SUPERVISORS: Holding<ChildSupervisor> = { name: "child supervisors" };
 
-// `depths` keyed by child id (absent = 0); `spent` keyed by parent id: live and lifetime child turn counts.
-const depths = new Map<string, number>();
-const spent = new Map<string, { live: number; total: number }>();
-
-// Conversations armed to use `/children` routes, which have no tool mount to gate; in-memory, per conversation.
-const armed = new Map<string, ChildSupervisor>();
+// Where a conversation's children, seats and supervisor are held: each conversation's actor.
+type Actors = Pick<ConversationActors, "holdings">;
 
 /** Records that this conversation's shell may supervise children; `supervisor` is the exact object a tool call uses. */
-export const armSupervisor = (conversationId: string, supervisor: ChildSupervisor): void => {
-    armed.set(conversationId, supervisor);
+export const armSupervisor = (actors: Actors, conversationId: string, supervisor: ChildSupervisor): void => {
+    actors.holdings(SUPERVISORS).hold(conversationId, conversationId, supervisor);
 };
 
 /** The armed supervisor for a conversation, or undefined if none was armed. */
-export const supervisorFor = (conversationId: string): ChildSupervisor | undefined => armed.get(conversationId);
+export const supervisorFor = (actors: Actors, conversationId: string): ChildSupervisor | undefined =>
+    actors.holdings(SUPERVISORS).get(conversationId);
 
-// Whether this conversation is a spawned child, per the depth ledger (the `sub-` prefix is cosmetic, not
+// Whether this conversation is a spawned child, per its parent's record (the `sub-` prefix is cosmetic, not
 // authoritative). Used to stop anything starting a turn on a child whose report already reached its parent.
-export const isSpawnedChild = (conversationId: string): boolean => depths.has(conversationId);
+export const isSpawnedChild = (actors: Actors, conversationId: string): boolean => actors.holdings(CHILDREN).has(conversationId);
+
+// How deep a conversation sits under the spawns above it; 0 for one nobody spawned.
+const depthOf = (actors: Actors, conversationId: string): number => actors.holdings(CHILDREN).get(conversationId)?.depth ?? 0;
 
 // Every child this daemon knows of, for invariant.ts to cross-check against live turns. Settled children stay listed
 // since a follow-up `send` resumes them.
-export const childLedger = (): readonly {
+export const childLedger = (
+    actors: Actors,
+): readonly {
     readonly conversationId: string;
     readonly parent: string;
     readonly running: boolean;
     readonly startedAt: number;
-}[] => [...kids].map(([conversationId, kid]) => ({ conversationId, parent: kid.parent, running: kid.running, startedAt: kid.startedAt }));
+}[] =>
+    actors
+        .holdings(CHILDREN)
+        .entries()
+        .map(([conversationId, kid]) => ({ conversationId, parent: kid.parent, running: kid.running, startedAt: kid.startedAt }));
 
-// Clears the child, depth, spend and armed ledgers for a fresh test.
-export const resetChildrenForTest = (): void => {
-    kids.clear();
-    depths.clear();
-    spent.clear();
-    armed.clear();
+// Clears the child, seat and supervisor holdings for a fresh test.
+export const resetChildrenForTest = (actors: Actors): void => {
+    actors.holdings(CHILDREN).clear();
+    actors.holdings(SEATS).clear();
+    actors.holdings(SUPERVISORS).clear();
 };
 
 // Display label for the roster row; a provider absent from PROVIDERS shows as its raw id.
@@ -137,8 +150,8 @@ const pendingOf = (event: AgentEvent): { readonly card: PendingChildCard; readon
  * Full question a blocked child is parked on. Undefined if it is parked on a consent hold (the owner's, never the
  * parent's) or not parked at all.
  */
-export const pendingQuestionOf = (childId: string): PendingChildCard | undefined => {
-    const pending = kids.get(childId)?.pending;
+export const pendingQuestionOf = (actors: Actors, childId: string): PendingChildCard | undefined => {
+    const pending = actors.holdings(CHILDREN).get(childId)?.pending;
     return pending?.kind === "question" ? pending : undefined;
 };
 
@@ -149,19 +162,13 @@ const runChildTurn = (
     childId: string,
     parent: string,
     turn: TurnInput & { conversationId: string },
-    turnFn: TurnFn,
 ): { readonly ok: true } | { readonly ok: false; readonly message: string } => {
-    const opened = openTurnTranscript(services, turn);
-    const run = startTurnRun((input, signal) => turnFn(services, input, signal), turn, {
-        before: opened,
-        opening: (startedAt) => openingRows(turn, services.workspace.root, startedAt),
-        transcript: (rows, steerRows) => recordTurnTranscript(services, turn, rows, steerRows),
-    });
+    const run = services.turns.run(turn);
     if (run === undefined) {
         return { ok: false, message: "A turn is already running on that conversation." };
     }
     void (async () => {
-        const kid = kids.get(childId);
+        const kid = services.conversations.holdings(CHILDREN).get(childId);
         let bubble = "";
         let report = "";
         let toolUses = 0;
@@ -171,7 +178,7 @@ const runChildTurn = (
             for await (const event of run.frames()) {
                 // Normalized frames make this work across providers; a child's own sub-delegations still count as its
                 // proof.
-                noteChildWork(event, childId);
+                noteChildWork(services.conversations, event, childId);
                 if (event.kind === "session") {
                     if (kid !== undefined) {
                         kid.sessionId = event.sessionId;
@@ -190,12 +197,12 @@ const runChildTurn = (
                 }
                 if (event.kind === "tool_call" && event.parentToolUseId === undefined) {
                     toolUses += 1;
-                    noteSpawnedChild(childId, { toolUses, lastTool: event.name });
+                    noteSpawnedChild(services.conversations, childId, { toolUses, lastTool: event.name });
                     continue;
                 }
                 if (event.kind === "usage") {
                     tokens += (event.inputTokens ?? 0) + (event.outputTokens ?? 0);
-                    noteSpawnedChild(childId, { tokens });
+                    noteSpawnedChild(services.conversations, childId, { tokens });
                     continue;
                 }
                 const parked = pendingOf(event);
@@ -203,14 +210,14 @@ const runChildTurn = (
                     if (kid !== undefined) {
                         kid.pending = parked.card;
                     }
-                    noteSpawnedChild(childId, { status: "blocked", summary: parked.summary });
+                    noteSpawnedChild(services.conversations, childId, { status: "blocked", summary: parked.summary });
                     continue;
                 }
                 if (event.kind === "resolved") {
                     if (kid !== undefined) {
                         kid.pending = undefined;
                     }
-                    noteSpawnedChild(childId, { status: "running" });
+                    noteSpawnedChild(services.conversations, childId, { status: "running" });
                     continue;
                 }
                 if (event.kind === "error") {
@@ -225,14 +232,15 @@ const runChildTurn = (
                 kid.running = false;
                 kid.pending = undefined;
             }
-            settleSpawnedChild(childId, {
+            settleSpawnedChild(services.conversations, childId, {
                 failed: failure !== undefined,
                 report: closing,
                 ...(failure !== undefined ? { error: failure } : {}),
             });
-            const now = spent.get(parent);
+            const seats = services.conversations.holdings(SEATS);
+            const now = seats.get(parent);
             if (now !== undefined) {
-                spent.set(parent, { live: Math.max(0, now.live - 1), total: now.total });
+                seats.hold(parent, parent, { live: Math.max(0, now.live - 1), total: now.total });
             }
         }
     })();
@@ -284,7 +292,7 @@ const askOwner = async (
     move: SupervisionMove,
     reason: string,
 ): Promise<{ readonly ok: true } | { readonly ok: false; readonly message: string }> => {
-    const run = turnRunOf(parent);
+    const run = turnRunOf(services.conversations, parent);
     if (run === undefined || run.done) {
         // No live turn to raise a card in: a detached `agents` shell, or one that already ended.
         return {
@@ -294,7 +302,7 @@ const askOwner = async (
                 `Ask in chat; they can also set the agents.spawn action rule.`,
         };
     }
-    const { id, wait } = createRequest(
+    const { id, wait } = services.cards.create(
         "permission",
         { kind: "permission", requestId: "", decision: "deny", feedback: "The turn ended before you answered." },
         parent,
@@ -309,11 +317,11 @@ const askOwner = async (
         reason,
     };
     run.push(raised);
-    services.agents.observe(parent, raised);
+    services.conversations.send(parent, { kind: "frame", frame: raised });
     const { reply, resolved } = await wait(AbortSignal.timeout(SUPERVISION_DEADLINE_MS));
     // Every parked card must get a resolution frame, or the client keeps rendering it as live.
     run.push(resolved);
-    services.agents.observe(parent, resolved);
+    services.conversations.send(parent, { kind: "frame", frame: resolved });
     if (reply.decision === "deny") {
         // A resolved frame with no reply is a timeout or dead client, not a decline; don't treat it as one.
         return resolved.reply === undefined
@@ -344,20 +352,21 @@ const admitChildTurn = async (
     parent: string,
 ): Promise<{ readonly ok: true; readonly release: () => void } | { readonly ok: false; readonly message: string }> => {
     const settings = await services.sandboxSettings.get();
-    const ledger = spent.get(parent) ?? { live: 0, total: 0 };
+    const seats = services.conversations.holdings(SEATS);
+    const ledger = seats.get(parent) ?? { live: 0, total: 0 };
     if (ledger.live >= settings.subagentsAtOnce) {
         return { ok: false, message: `${ledger.live} children are already running: wait for one before starting another.` };
     }
     if (ledger.total >= settings.subagentsPerTurn) {
         return { ok: false, message: `This conversation has started ${ledger.total} child turns, its lifetime budget.` };
     }
-    spent.set(parent, { live: ledger.live + 1, total: ledger.total + 1 });
+    seats.hold(parent, parent, { live: ledger.live + 1, total: ledger.total + 1 });
     return {
         ok: true,
         release: (): void => {
-            const now = spent.get(parent);
+            const now = seats.get(parent);
             if (now !== undefined) {
-                spent.set(parent, { live: Math.max(0, now.live - 1), total: Math.max(0, now.total - 1) });
+                seats.hold(parent, parent, { live: Math.max(0, now.live - 1), total: Math.max(0, now.total - 1) });
             }
         },
     };
@@ -371,13 +380,49 @@ const childRouting = (spec: ChildSpawnSpec): { readonly provider: AgentProvider;
     model: spec.model,
 });
 
+// Every child turn's profile: its own worktree, so parallel children and the parent never edit the same files, and
+// nobody at a composer, which also floors the persona so it speaks for no outside account. No `runRole`: the parent's
+// own provider and model pick decides, not a settings-row default.
+const childProfile = (spec: ChildSpawnSpec): TurnProfile => {
+    const { provider, harness, model } = childRouting(spec);
+    return {
+        agent: provider,
+        harness,
+        model,
+        ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
+        ...(spec.account !== undefined ? { account: spec.account } : {}),
+        isolated: true,
+        unattended: true,
+    };
+};
+
+// The runner a child goes to, undefined for here. No preference: the scheduler places it. A named machine gets it, or
+// here if that machine is unusable.
+const childPlacement = async (
+    services: Services,
+    spec: ChildSpawnSpec,
+    provider: AgentProvider,
+    harness: AgentHarness,
+): Promise<string | undefined> =>
+    spec.on === "here"
+        ? undefined
+        : placeFanOut(
+              await runnerSummaries(services),
+              { inFlight: services.conversations.inFlightByRunner() },
+              {
+                  ...(spec.on !== undefined ? { asked: spec.on } : {}),
+                  // A credential that cannot travel keeps the child here unless a machine is named explicitly.
+                  travels: credentialsTravel(provider, harness),
+              },
+          ).runner;
+
 /**
  * Starts a child agent and returns once it is running. Budget/depth refusals come back immediately; a provider refusal
  * (nothing connected) surfaces later as the child's own failure.
  */
-export const spawnChild = async (services: Services, parent: ChildParent, spec: ChildSpawnSpec, turnFn: TurnFn): Promise<ChildSpawnResult> => {
+export const spawnChild = async (services: Services, parent: ChildParent, spec: ChildSpawnSpec): Promise<ChildSpawnResult> => {
     const settings = await services.sandboxSettings.get();
-    const depth = (depths.get(parent.conversationId) ?? 0) + 1;
+    const depth = depthOf(services.conversations, parent.conversationId) + 1;
     if (depth > settings.subagentDepth) {
         return { ok: false, message: `Spawn depth ${settings.subagentDepth} reached: this agent is itself a spawned child and may not go deeper.` };
     }
@@ -394,55 +439,47 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
     let handedOff = false;
     try {
         composeRuntimeFloor(parent.conversationId, provider, harness);
-        // No preference: the scheduler places it. A named machine gets it, or here if that machine is unusable.
-        const placement =
-            spec.on === "here"
-                ? undefined
-                : placeFanOut(
-                      await runnerSummaries(services),
-                      { inFlight: services.agents.inFlightByRunner() },
-                      {
-                          ...(spec.on !== undefined ? { asked: spec.on } : {}),
-                          // A credential that cannot travel keeps the child here unless a machine is named explicitly.
-                          travels: credentialsTravel(provider, harness),
-                      },
-                  ).runner;
+        const placement = await childPlacement(services, spec, provider, harness);
         const id = `sub-${newConversationId()}`;
         const description = (spec.description ?? spec.prompt).replaceAll(/\s+/gu, " ").trim().slice(0, 200);
+        const profile = childProfile(spec);
         const turn: TurnInput & { conversationId: string } = {
             prompt: spec.prompt,
             conversationId: id,
             title: description.slice(0, 80),
             // Its starter is the parent, which is also how it inherits the parent's owner (agents-registry.ts).
             actor: childActor(parent.conversationId),
-            // Own worktree, so parallel children and the parent never edit the same files; it lands like any turn's
-            // work.
-            isolated: true,
             ...(placement !== undefined ? { placement: { kind: "runner" as const, id: placement } } : {}),
-            // Nobody is at a composer; this also floors the persona so it speaks for no outside account.
-            unattended: true,
-            // No `runRole`: the parent's own provider and model pick decides, not a settings-row default.
-            agent: provider,
-            harness,
-            model,
-            ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
-            ...(spec.account !== undefined ? { account: spec.account } : {}),
+            ...profile,
         };
-        kids.set(id, {
-            // Stores resolved routing, not the raw spec, so a follow-up reaches the same provider and model without
-            // drift.
-            parent: parent.conversationId,
-            spec: { ...spec, provider, harness, model },
-            depth,
-            cwd: parent.cwd,
-            sessionId: undefined,
-            running: true,
-            startedAt: Date.now(),
-            pending: undefined,
-        });
+        const children = services.conversations.holdings(CHILDREN);
+        children.hold(
+            parent.conversationId,
+            id,
+            {
+                // Stores resolved routing, not the raw spec, so a follow-up reaches the same provider and model without
+                // drift.
+                parent: parent.conversationId,
+                spec: { ...spec, provider, harness, model },
+                profile,
+                depth,
+                cwd: parent.cwd,
+                sessionId: undefined,
+                running: true,
+                startedAt: Date.now(),
+                pending: undefined,
+            },
+            id,
+        );
         // Files under the parent's conversation, what `wait` matches; session/subagentsDir stay empty (SDK children
         // only).
-        const handle: SubagentTurn = { conversationId: parent.conversationId, cwd: parent.cwd, sessionId: undefined, subagentsDir: undefined };
+        const handle: SubagentTurn = {
+            conversationId: parent.conversationId,
+            conversations: services.conversations,
+            cwd: parent.cwd,
+            sessionId: undefined,
+            subagentsDir: undefined,
+        };
         openSpawnedChild(handle, {
             id,
             description,
@@ -452,15 +489,14 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
             spawnDepth: depth,
             ...(spec.model !== undefined ? { model: spec.model } : {}),
         });
-        const started = runChildTurn(services, id, parent.conversationId, turn, turnFn);
+        const started = runChildTurn(services, id, parent.conversationId, turn);
         if (!started.ok) {
-            kids.delete(id);
-            settleSpawnedChild(id, { failed: true, report: "", error: started.message });
+            children.drop(id);
+            settleSpawnedChild(services.conversations, id, { failed: true, report: "", error: started.message });
             // A fresh id colliding with a live run should be impossible; report that rather than pretend the child
             // exists.
             return { ok: false, message: "The child's conversation could not be started." };
         }
-        depths.set(id, depth);
         handedOff = true;
         return { ok: true, id };
     } finally {
@@ -474,14 +510,8 @@ export const spawnChild = async (services: Services, parent: ChildParent, spec: 
  * Steers a working child, or sends a settled one a follow-up turn resuming its last reported session. Only the parent
  * that started it may reach it.
  */
-export const sendToChild = async (
-    services: Services,
-    parent: ChildParent,
-    childId: string,
-    message: string,
-    turnFn: TurnFn,
-): Promise<ChildActionResult> => {
-    const kid = kids.get(childId);
+export const sendToChild = async (services: Services, parent: ChildParent, childId: string, message: string): Promise<ChildActionResult> => {
+    const kid = services.conversations.holdings(CHILDREN).get(childId);
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
@@ -492,7 +522,7 @@ export const sendToChild = async (
     composeRuntimeFloor(parent.conversationId, kid.spec.provider, kid.spec.harness ?? "native");
     if (kid.running) {
         // Mid-turn, the only door is the runtime's own steering seam; a runtime without one cannot take words yet.
-        return steerTurn(childId, { text: message, voice: "agent" })
+        return steerTurn(services.conversations, childId, { text: message, voice: "agent" })
             ? { ok: true, note: "Steered: the message lands between its tool calls." }
             : { ok: false, message: "It is mid-turn on a runtime that takes no mid-turn input: wait for it to finish, then send again." };
     }
@@ -509,19 +539,18 @@ export const sendToChild = async (
             conversationId: childId,
             // Its parent asked, as for the spawn: the settled turn reports back to that parent (child-report.ts).
             actor: childActor(parent.conversationId),
-            isolated: true,
-            unattended: true,
-            // Reuses the spec's routing verbatim, so a live child never moves onto a different model between turns.
-            agent: spec.provider,
-            model: spec.model,
-            ...(spec.harness !== undefined ? { harness: spec.harness } : {}),
-            ...(spec.effort !== undefined ? { effort: spec.effort } : {}),
-            ...(spec.account !== undefined ? { account: spec.account } : {}),
+            ...kid.profile,
             // Session from the last turn's report; absent falls back to the ordinary reopened-conversation seed.
             ...(kid.sessionId !== undefined ? { sessionId: kid.sessionId } : {}),
         };
         // Reopens the roster record under the same id with fresh state, so `wait` sees it running again.
-        const handle: SubagentTurn = { conversationId: parent.conversationId, cwd: kid.cwd, sessionId: undefined, subagentsDir: undefined };
+        const handle: SubagentTurn = {
+            conversationId: parent.conversationId,
+            conversations: services.conversations,
+            cwd: kid.cwd,
+            sessionId: undefined,
+            subagentsDir: undefined,
+        };
         openSpawnedChild(handle, {
             id: childId,
             description: message.replaceAll(/\s+/gu, " ").trim().slice(0, 200),
@@ -533,10 +562,10 @@ export const sendToChild = async (
         });
         kid.running = true;
         kid.startedAt = Date.now();
-        const started = runChildTurn(services, childId, parent.conversationId, turn, turnFn);
+        const started = runChildTurn(services, childId, parent.conversationId, turn);
         if (!started.ok) {
             kid.running = false;
-            settleSpawnedChild(childId, { failed: true, report: "", error: started.message });
+            settleSpawnedChild(services.conversations, childId, { failed: true, report: "", error: started.message });
             return started;
         }
         handedOff = true;
@@ -558,7 +587,7 @@ export const answerChild = async (
     childId: string,
     answers: Record<string, string[]>,
 ): Promise<ChildActionResult> => {
-    const kid = kids.get(childId);
+    const kid = services.conversations.holdings(CHILDREN).get(childId);
     if (kid === undefined || kid.parent !== parent.conversationId) {
         return { ok: false, message: "No such child of this conversation. `list` shows yours." };
     }
@@ -580,14 +609,13 @@ export const answerChild = async (
         };
     }
     // Any answer the parent gives is valid; only whether the question still existed comes back.
-    if (resolveRequest({ kind: "question", requestId: pending.requestId, answers }) !== "settled") {
+    if (services.cards.resolve({ kind: "question", requestId: pending.requestId, answers }) !== "settled") {
         return { ok: false, message: "That question already settled." };
     }
     return { ok: true, note: "Answered: the child carries on with your picks." };
 };
 
-// Everything a parent may do about its children, as one object shared by every door (tool mounts, CLI arm). Built by
-// the route that owns the turn generator, to avoid a dependency cycle.
+// Everything a parent may do about its children, as one object shared by every door (tool mounts, CLI arm).
 export interface ChildSupervisor {
     readonly spawn: (spec: ChildSpawnSpec) => Promise<ChildSpawnResult>;
     // Read at call time, never snapshotted: an allowance can empty while a turn runs.
@@ -595,12 +623,18 @@ export interface ChildSupervisor {
     readonly send: (childId: string, message: string) => Promise<ChildActionResult>;
     readonly answer: (childId: string, answers: Record<string, string[]>) => Promise<ChildActionResult>;
     readonly pendingQuestion: (childId: string) => PendingChildCard | undefined;
+    // Parks until one of the parent's children or background commands moves, or the named one does.
+    readonly wait: (options: SubagentWaitOptions) => Promise<WorkWaitOutcome>;
 }
 
-export const childSupervisor = (services: Services, parent: ChildParent, turnFn: TurnFn): ChildSupervisor => ({
-    spawn: (spec) => spawnChild(services, parent, spec, turnFn),
+export const childSupervisor = (services: Services, parent: ChildParent): ChildSupervisor => ({
+    spawn: (spec) => spawnChild(services, parent, spec),
     providers: () => spawnableProviders(services),
-    send: (childId, message) => sendToChild(services, parent, childId, message, turnFn),
+    send: (childId, message) => sendToChild(services, parent, childId, message),
     answer: (childId, answers) => answerChild(services, parent, childId, answers),
-    pendingQuestion: (childId) => (kids.get(childId)?.parent === parent.conversationId ? pendingQuestionOf(childId) : undefined),
+    pendingQuestion: (childId) =>
+        services.conversations.holdings(CHILDREN).get(childId)?.parent === parent.conversationId
+            ? pendingQuestionOf(services.conversations, childId)
+            : undefined,
+    wait: (options) => waitForWork(services.conversations, parent.conversationId, options),
 });

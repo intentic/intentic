@@ -241,6 +241,10 @@ export const createArrivals = (services: Services): Arrivals => {
                     { workspaceRoot: services.workspace.root, historyRoot: services.config.historyRoot },
                     { items: input.items, includeSecrets: input.includeSecrets },
                     MAX_UPLOAD_BYTES,
+                    // The registry takes in what landed, so the arrived conversations are on the board at once.
+                    async (snapshot) => {
+                        services.agents.adopted(services.conversationsDb.adopt(snapshot));
+                    },
                 );
                 // A bundle writes manifests this daemon derives state from (capabilities, the approved overlay), so
                 // this recomposes here, against this sandbox's own image. The other two sources converge inside their

@@ -1,20 +1,23 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type AgentEvent, type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentEvent, type AgentOrigin, type AgentTurn, type Automation, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { unstubbed } from "@intentic/testing";
 import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import type { z } from "zod";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import type { Services } from "../composition.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { outboxStreamFor } from "../webchat/webchat-outbox.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { type AutomationRecord, fileAutomationsStore } from "./automations-store.js";
-import { automationIdle, createAutomationsScheduler, fireAutomation, nextOneTimeWakeAt, type WakeFn } from "./scheduler.js";
+import { automationIdle, createAutomationsScheduler, fireAutomation, nextOneTimeWakeAt } from "./scheduler.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { conversationEntry, drivenBy } from "../testing.js";
 
 // Touches automations/heldWakes/activity/turnJournal/workspace/logger/sandboxSettings, plus liveSessionIds and registry
 // entries (mutated in place); the journal is real, since its in-flight entry is asserted on.
@@ -26,17 +29,17 @@ const fakeServices = (
 ): Services => {
     const services: Services = unstubbed<Services>("services", {
         agents: unstubbed<Services["agents"]>("agents", {
-            liveSessionIds: () => live,
             ids: () => registry.map((entry) => entry.id),
             entry: (id) => registry.find((entry) => entry.id === id),
         }),
+        conversations: unstubbed<Services["conversations"]>("conversations", { liveSessionIds: () => live }),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         // Guard defaults off from `{}`, the production default, unless a test opts in.
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
             get: async () => SandboxSettingsSchema.parse(settings),
         }),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         activity: { append: async () => {}, list: async () => [] },
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         // No device subscribed, which is what a workspace that has never granted push reports.
@@ -51,8 +54,8 @@ const fakeServices = (
 };
 
 // A fake wake that records complete turn identities; `events` lets a test surface an agent error.
-const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }], turns: AgentTurn[] = []): WakeFn =>
-    async function* (_services, input) {
+const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }], turns: AgentTurn[] = []): TurnStarter["stream"] =>
+    async function* (input) {
         prompts.push(input.prompt);
         turns.push(input);
         yield* events;
@@ -60,21 +63,15 @@ const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }], 
 
 // One conversation as the registry holds it, with only what the sessions gate reads chosen: when it was
 // opened, by whom (an origin, or a fire's `a-` name), and whether a turn ever ran in it.
-const conversation = (id: string, createdAt: number, extra: Partial<PersistedAgent> = {}): PersistedAgent => ({
-    id,
-    title: id,
-    provider: "claude",
-    harness: "native",
-    status: "idle",
-    repos: [],
-    costUsd: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    turns: 1,
-    createdAt,
-    updatedAt: createdAt,
-    ...extra,
-});
+const conversation = (id: string, createdAt: number, opened: { readonly origin?: AgentOrigin; readonly turns?: number } = {}): PersistedAgent =>
+    conversationEntry({
+        id,
+        identity: opened.origin === undefined ? {} : { origin: opened.origin },
+        social: { title: { text: id, source: "derived" }, reactions: [] },
+        totals: { costUsd: 0, inputTokens: 0, outputTokens: 0, turns: opened.turns ?? 1, toolUses: 0, subagents: 0 },
+        createdAt,
+        updatedAt: createdAt,
+    });
 
 const gatedNightly = (id: string): Automation => automationConfig(id, { trigger: { kind: "schedule", cron: "* * * * *", afterSessions: 30 } });
 
@@ -87,7 +84,7 @@ test("a due cron wakes the agent once and records a completed run", async () => 
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automationConfig("inbox"));
     const prompts: string[] = [];
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(pastDue());
     await waitFor(async () => expect((await services.automations.get("inbox"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts).toEqual(["wake:inbox"]);
@@ -98,7 +95,7 @@ test("a failing guard skips the wake and records why; a passing guard wakes", as
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automationConfig("guarded", { guard: "echo nothing new; exit 1" }));
     const prompts: string[] = [];
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(pastDue());
     await waitFor(async () => expect((await services.automations.get("guarded"))?.runs).toHaveLength(1), SETTLES);
     const skipped = (await services.automations.get("guarded"))?.runs[0];
@@ -119,7 +116,7 @@ test("guards receive the reserved workspace-root directory to prune", async () =
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automationConfig("scoped", { guard: `test "$${WORKSPACE_ROOT_EXCLUDE_ENV}" = "refs"` }));
     const prompts: string[] = [];
-    await fireAutomation(services, (await services.automations.get("scoped")) as AutomationRecord, fakeWake(prompts));
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), (await services.automations.get("scoped")) as AutomationRecord);
     expect((await services.automations.get("scoped"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts).toEqual(["wake:scoped"]);
 });
@@ -135,7 +132,7 @@ test("a one-time wake fires when its moment arrives and switches itself off, so 
     const at = inMinutes(1);
     await services.automations.upsert(automationConfig("dentist", { trigger: { kind: "once", at } }));
     const prompts: string[] = [];
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
 
     // Before the moment: nothing happens, and it stays armed.
     await scheduler.tick(at - 1_000);
@@ -162,7 +159,7 @@ test("a moment that passed while the sandbox was down still fires, and the wake 
     await services.automations.upsert(automationConfig("dentist", { trigger: { kind: "once", at } }));
     const prompts: string[] = [];
     // Constructed now, so its first window opens long after the moment: the daemon has just come back up.
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick();
     await waitFor(async () => expect((await services.automations.get("dentist"))?.runs).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("wake:dentist\n\n--- About this wake ---\n");
@@ -175,7 +172,7 @@ test("a retired one-time wake still releases from the countdown queue: it was sw
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automationConfig("dentist", { trigger: { kind: "once", at: inMinutes(-1) }, holdForSeconds: 1 }));
     const prompts: string[] = [];
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick();
     await waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
     // Switched off as it fired, with the hold as the only thing left of that fire: reading the switch as the owner's
@@ -223,7 +220,7 @@ test("a schedule gated on sessions skips short of the bar and says how far off i
     await services.automations.upsert(gatedNightly("dream"));
     const prompts: string[] = [];
     const fire = async (): Promise<void> => {
-        await fireAutomation(services, (await services.automations.get("dream")) as AutomationRecord, fakeWake(prompts));
+        await fireAutomation(drivenBy(services, fakeWake(prompts)), (await services.automations.get("dream")) as AutomationRecord);
     };
 
     await fire();
@@ -262,11 +259,11 @@ test("last time is the conversation the last fire opened, and the fleet's own wa
     await services.automations.upsert(gatedNightly("dream-2"));
     const prompts: string[] = [];
 
-    await fireAutomation(services, (await services.automations.get("dream")) as AutomationRecord, fakeWake(prompts));
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), (await services.automations.get("dream")) as AutomationRecord);
     expect((await services.automations.get("dream"))?.runs[0]).toMatchObject({ outcome: "skipped", detail: "5 of 30 sessions since the last wake" });
 
     // dream-2 measures from its own last wake, two days earlier, so both the old and new sessions count.
-    await fireAutomation(services, (await services.automations.get("dream-2")) as AutomationRecord, fakeWake(prompts));
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), (await services.automations.get("dream-2")) as AutomationRecord);
     expect((await services.automations.get("dream-2"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain(
@@ -279,7 +276,7 @@ test("a re-fire on the conversation a fire already minted is not measured agains
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), {}, [], [conversation("a-dream-mabc", DAY)]);
     await services.automations.upsert(gatedNightly("dream"));
     const prompts: string[] = [];
-    await fireAutomation(services, (await services.automations.get("dream")) as AutomationRecord, fakeWake(prompts), {
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), (await services.automations.get("dream")) as AutomationRecord, {
         conversationId: "a-dream-mabc",
         cleared: "approval",
         attempts: 1,
@@ -293,7 +290,7 @@ test("event automations never tick; fireAutomation hands the payload to the guar
     await services.automations.upsert(automationConfig("hook", { trigger: { kind: "event" }, guard: `test "$AUTOMATION_PAYLOAD" = "ping"` }));
     await services.automations.upsert(automationConfig("sched"));
     const prompts: string[] = [];
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(pastDue());
     await waitFor(async () => expect((await services.automations.get("sched"))?.runs).toHaveLength(1), SETTLES);
     expect((await services.automations.get("hook"))?.runs).toEqual([]);
@@ -301,11 +298,11 @@ test("event automations never tick; fireAutomation hands the payload to the guar
 
     // Guard passes only because the payload reached it; the prompt carries it too.
     const hook = (await services.automations.get("hook")) as AutomationRecord;
-    await fireAutomation(services, hook, fakeWake(prompts), { payload: "ping" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), hook, { payload: "ping" });
     expect((await services.automations.get("hook"))?.runs[0]?.outcome).toBe("completed");
     expect(prompts[1]).toBe("wake:hook\n\n--- Event payload ---\nping");
 
-    await fireAutomation(services, hook, fakeWake(prompts), { payload: "pong" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), hook, { payload: "pong" });
     expect((await services.automations.get("hook"))?.runs[0]?.outcome).toBe("skipped");
     expect(prompts).toHaveLength(2);
 });
@@ -318,11 +315,11 @@ test("the automation's own ladder resolves onto the wake, tier and all, with no 
         automationConfig("pinned", { models: [{ provider: "codex", model: "gpt-5-codex", harness: "claude-code", effort: "high", thinking: true }] }),
     );
     const inputs: AgentTurn[] = [];
-    const capture: WakeFn = async function* (_services, input) {
+    const capture: TurnStarter["stream"] = async function* (input) {
         inputs.push(input);
         yield { kind: "done" };
     };
-    await fireAutomation(services, (await services.automations.get("pinned")) as AutomationRecord, capture);
+    await fireAutomation(drivenBy(services, capture), (await services.automations.get("pinned")) as AutomationRecord);
     expect(inputs[0]).toMatchObject({
         prompt: "wake:pinned",
         agent: "codex",
@@ -340,15 +337,15 @@ test("outside and scheduled fires both open isolated conversations, and only pro
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automationConfig("support"));
     const inputs: AgentTurn[] = [];
-    const capture: WakeFn = async function* (_services, input) {
+    const capture: TurnStarter["stream"] = async function* (input) {
         inputs.push(input);
         yield { kind: "done" };
     };
     const record = (await services.automations.get("support")) as AutomationRecord;
     const origin = { automationId: "support", provider: "discord", channelId: "c1", author: "ada" };
-    await fireAutomation(services, record, capture, { payload: "hi", origin, title: "ada: hi" });
+    await fireAutomation(drivenBy(services, capture), record, { payload: "hi", origin, title: "ada: hi" });
     // A schedule fire of the same automation carries no origin, but still runs in its own worktree.
-    await fireAutomation(services, record, capture);
+    await fireAutomation(drivenBy(services, capture), record);
 
     const surfaced = inputs[0] as AgentTurn;
     expect(surfaced.origin).toEqual(origin);
@@ -363,7 +360,7 @@ test("outside and scheduled fires both open isolated conversations, and only pro
     expect(scheduled.title).toBeUndefined();
 
     // One conversation per fire: a repeated message opens a new agent, never a resumed one.
-    await fireAutomation(services, record, capture, { payload: "again", origin, title: "ada: again" });
+    await fireAutomation(drivenBy(services, capture), record, { payload: "again", origin, title: "ada: again" });
     expect((inputs[2] as AgentTurn).conversationId).not.toBe(surfaced.conversationId);
 });
 
@@ -372,7 +369,7 @@ test("a held external wake snapshots its provenance, so approving it opens the s
     await services.automations.upsert(automationConfig("gated-chat", { requireApproval: true }));
     const record = (await services.automations.get("gated-chat")) as AutomationRecord;
     const origin = { automationId: "gated-chat", provider: "webchat", channelId: "v-7", author: "visitor" };
-    await fireAutomation(services, record, fakeWake([]), { payload: "help", origin, title: "visitor: help" });
+    await fireAutomation(drivenBy(services, fakeWake([])), record, { payload: "help", origin, title: "visitor: help" });
     const held = (await services.heldWakes.list())[0];
     expect(held).toMatchObject({ payload: "help", origin, title: "visitor: help" });
 });
@@ -381,7 +378,7 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")));
     await services.automations.upsert(automationConfig("gated", { requireApproval: true }));
     const prompts: string[] = [];
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(pastDue());
     await waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
     expect(prompts).toEqual([]);
@@ -390,7 +387,7 @@ test(`a requireApproval automation holds the wake instead of running it; cleared
 
     await automationIdle("gated");
     const record = (await services.automations.get("gated")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record, { cleared: "both" });
     expect(prompts).toEqual(["wake:gated"]);
     expect((await services.automations.get("gated"))?.runs[0]?.outcome).toBe("completed");
 });
@@ -401,14 +398,14 @@ test("a holdForSeconds fire is held with a deadline, and the tick releases it on
     await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
     const prompts: string[] = [];
     const record = (await services.automations.get("fixer")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record, { payload: "checks broke" });
     const held = (await services.heldWakes.list())[0];
     expect(held?.automationId).toBe("fixer");
     expect(held?.payload).toBe("checks broke");
     expect(held?.autoRunAt).toBeGreaterThan(Date.now());
     expect(prompts).toEqual([]);
 
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     // Before the deadline, the hold stays regardless of what the fleet is doing.
     await scheduler.tick(Date.now());
     expect(await services.heldWakes.list()).toHaveLength(1);
@@ -429,9 +426,9 @@ test("cancelling is just removing the hold, and disabling the automation mid-cou
     await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1 }));
     const prompts: string[] = [];
     const record = (await services.automations.get("fixer")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts), { payload: "checks broke" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record, { payload: "checks broke" });
     await services.automations.upsert(automationConfig("fixer", { trigger: { kind: "event" }, holdForSeconds: 1, enabled: false }));
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(Date.now() + 2_000);
     await waitFor(async () => expect(await services.heldWakes.list()).toEqual([]), SETTLES);
     expect(prompts).toEqual([]);
@@ -442,10 +439,10 @@ test(`requireApproval wins over holdForSeconds: "ask me" never becomes "unless I
     await services.automations.upsert(automationConfig("gated-fixer", { trigger: { kind: "event" }, requireApproval: true, holdForSeconds: 1 }));
     const prompts: string[] = [];
     const record = (await services.automations.get("gated-fixer")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts));
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record);
     expect((await services.heldWakes.list())[0]?.autoRunAt).toBeUndefined();
     // No deadline: the scan never touches it, only the owner's click can run it.
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(Date.now() + 60_000);
     expect(await services.heldWakes.list()).toHaveLength(1);
     expect(prompts).toEqual([]);
@@ -467,7 +464,7 @@ test("a streamed wake pipes text deltas to the sink, ends it, and tells the agen
         },
     };
     const record = (await services.automations.get("chat")) as AutomationRecord;
-    await fireAutomation(services, record, wake, { stream });
+    await fireAutomation(drivenBy(services, wake), record, { stream });
     expect(chunks).toEqual(["Hel", "lo"]);
     expect(ended).toBe(true);
     // A turn that answered sends nothing on the failure frame.
@@ -483,7 +480,7 @@ test("a wake that dies tells the sink why before closing it: an empty close read
     const wake = fakeWake([], [{ kind: "error", message: "no credits" }, { kind: "done" }]);
     const frames: string[] = [];
     const record = (await services.automations.get("dead-air")) as AutomationRecord;
-    await fireAutomation(services, record, wake, {
+    await fireAutomation(drivenBy(services, wake), record, {
         stream: {
             delta: (text) => frames.push(`delta:${text}`),
             failed: (reason) => frames.push(`failed:${reason}`),
@@ -499,7 +496,7 @@ test("disabled automations and not-yet-due crons never fire; agent errors land a
     await services.automations.upsert(automationConfig("later", { trigger: { kind: "schedule", cron: "0 0 1 1 *" } }));
     await services.automations.upsert(automationConfig("broken"));
     const prompts: string[] = [];
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts, [{ kind: "error", message: "no credits" }, { kind: "done" }]));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts, [{ kind: "error", message: "no credits" }, { kind: "done" }])));
     await scheduler.tick(pastDue());
     await waitFor(async () => expect((await services.automations.get("broken"))?.runs).toHaveLength(1), SETTLES);
     expect((await services.automations.get("broken"))?.runs[0]).toMatchObject({ outcome: "error", detail: "no credits" });
@@ -514,12 +511,12 @@ test("a wake journals itself while in flight and clears the entry when it settle
     const record = (await services.automations.get("nightly")) as AutomationRecord;
     // Observed from inside the wake, since the entry exists only for the window where the daemon could die.
     let inFlightEntry: unknown;
-    const peeking: WakeFn = async function* () {
+    const peeking: TurnStarter["stream"] = async function* () {
         inFlightEntry = (await services.turnJournal.list())[0];
         yield { kind: "done" };
     };
     const origin = { automationId: "nightly", provider: "webhook" };
-    await fireAutomation(services, record, peeking, { payload: "ping", origin, title: "Webhook: nightly" });
+    await fireAutomation(drivenBy(services, peeking), record, { payload: "ping", origin, title: "Webhook: nightly" });
 
     // Journal holds the trigger inputs, not the resolved turn, since a re-fire re-reads the automation's prompt.
     expect(inFlightEntry).toEqual({
@@ -540,16 +537,16 @@ test("a guard that skips never journals, and an error run still clears its entry
     await services.automations.upsert(automationConfig("skipper", { guard: "exit 1" }));
     await services.automations.upsert(automationConfig("failer"));
     const journalled: number[] = [];
-    const peeking: WakeFn = async function* () {
+    const peeking: TurnStarter["stream"] = async function* () {
         journalled.push((await services.turnJournal.list()).length);
         yield { kind: "error", message: "no credits" };
         yield { kind: "done" };
     };
-    await fireAutomation(services, (await services.automations.get("skipper")) as AutomationRecord, peeking);
+    await fireAutomation(drivenBy(services, peeking), (await services.automations.get("skipper")) as AutomationRecord);
     expect(journalled).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
 
-    await fireAutomation(services, (await services.automations.get("failer")) as AutomationRecord, peeking);
+    await fireAutomation(drivenBy(services, peeking), (await services.automations.get("failer")) as AutomationRecord);
     expect(journalled).toEqual([1]);
     expect(await services.turnJournal.list()).toEqual([]);
     expect((await services.automations.get("failer"))?.runs[0]?.outcome).toBe("error");
@@ -560,12 +557,12 @@ test("the journal entry carries no stream note, so a re-fire sends its own reply
     await services.automations.upsert(automationConfig("chat-note"));
     const record = (await services.automations.get("chat-note")) as AutomationRecord;
     let entryPayload: string | undefined = "unset";
-    const peeking: WakeFn = async function* () {
+    const peeking: TurnStarter["stream"] = async function* () {
         const entry = (await services.turnJournal.list())[0];
         entryPayload = entry?.kind === "automation" ? entry.payload : undefined;
         yield { kind: "done" };
     };
-    await fireAutomation(services, record, peeking, { stream: { delta: () => {}, failed: () => {}, end: () => {} } });
+    await fireAutomation(drivenBy(services, peeking), record, { stream: { delta: () => {}, failed: () => {}, end: () => {} } });
     expect(entryPayload).toBeUndefined();
 });
 
@@ -574,14 +571,14 @@ test(`cleared: "approval" skips the approval gate but still runs the guard: the 
     await services.automations.upsert(automationConfig("gated-hand", { requireApproval: true }));
     const prompts: string[] = [];
     const record = (await services.automations.get("gated-hand")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts), { cleared: "approval" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record, { cleared: "approval" });
     expect(prompts).toEqual(["wake:gated-hand"]);
     expect(await services.heldWakes.list()).toEqual([]);
 
     // The guard is NOT skipped: "skipped by guard" is the most useful thing a by-hand fire can report.
     await services.automations.upsert(automationConfig("gated-guard", { requireApproval: true, guard: "echo not today; exit 1" }));
     const guarded = (await services.automations.get("gated-guard")) as AutomationRecord;
-    await fireAutomation(services, guarded, fakeWake(prompts), { cleared: "approval" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), guarded, { cleared: "approval" });
     expect(prompts).toEqual(["wake:gated-hand"]);
     expect((await services.automations.get("gated-guard"))?.runs[0]).toMatchObject({ outcome: "skipped", detail: "not today" });
 });
@@ -591,18 +588,18 @@ test("a run record carries the stable conversation even when the provider mints 
     await services.automations.upsert(automationConfig("traced"));
     await services.automations.upsert(automationConfig("sessionless"));
     const withSession = fakeWake([], [{ kind: "session", sessionId: "sess-42" }, { kind: "done" }]);
-    await fireAutomation(services, (await services.automations.get("traced")) as AutomationRecord, withSession);
+    await fireAutomation(drivenBy(services, withSession), (await services.automations.get("traced")) as AutomationRecord);
     const traced = (await services.automations.get("traced"))?.runs[0];
     expect(traced).toMatchObject({ outcome: "completed", conversationId: expect.stringContaining("a-traced-") });
     expect(traced?.conversationId).not.toBe("sess-42");
 
-    await fireAutomation(services, (await services.automations.get("sessionless")) as AutomationRecord, fakeWake([]));
+    await fireAutomation(drivenBy(services, fakeWake([])), (await services.automations.get("sessionless")) as AutomationRecord);
     expect((await services.automations.get("sessionless"))?.runs[0]?.conversationId).toContain("a-sessionless-");
 });
 
 // Spin-loop guard: a job failing every time is disabled at the configured streak, rather than spending a turn every
 // tick forever. Its run history, including what earned the quarantine, stays on the row.
-const failing: WakeFn = async function* () {
+const failing: TurnStarter["stream"] = async function* () {
     yield { kind: "error", message: "no credits" };
     yield { kind: "done" };
 };
@@ -611,7 +608,7 @@ const fireUntil = async (services: Services, id: string, times: number): Promise
     for (let i = 0; i < times; i += 1) {
         const record = await services.automations.get(id);
         if (record !== undefined) {
-            await fireAutomation(services, record, failing);
+            await fireAutomation(drivenBy(services, failing), record);
         }
     }
 };
@@ -638,7 +635,7 @@ test("a successful run resets the streak", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { automationFailureLimit: 2 });
     await services.automations.upsert(automationConfig("flaky"));
     await fireUntil(services, "flaky", 1);
-    await fireAutomation(services, (await services.automations.get("flaky")) as AutomationRecord, fakeWake([]));
+    await fireAutomation(drivenBy(services, fakeWake([])), (await services.automations.get("flaky")) as AutomationRecord);
     await fireUntil(services, "flaky", 1);
     expect((await services.automations.get("flaky"))?.enabled).toBe(true);
 });
@@ -647,7 +644,7 @@ test("an admission-floor hold parks a wake whose automation asked for nothing, a
     const services = fakeServices(mkdtempSync(join(tmpdir(), "sched-")), { admission: { schedule: "hold" } });
     await services.automations.upsert(automationConfig("plain"));
     const prompts: string[] = [];
-    const scheduler = createAutomationsScheduler(services, fakeWake(prompts));
+    const scheduler = createAutomationsScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(pastDue());
     await waitFor(async () => expect(await services.heldWakes.list()).toHaveLength(1), SETTLES);
     expect((await services.heldWakes.list())[0]?.autoRunAt).toBeUndefined();
@@ -655,7 +652,7 @@ test("an admission-floor hold parks a wake whose automation asked for nothing, a
 
     await automationIdle("plain");
     const record = (await services.automations.get("plain")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record, { cleared: "both" });
     expect(prompts).toEqual(["wake:plain"]);
 });
 
@@ -664,7 +661,7 @@ test("an admission-floor deny refuses the wake and says so on the run record", a
     await services.automations.upsert(automationConfig("refused"));
     const prompts: string[] = [];
     const record = (await services.automations.get("refused")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts));
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record);
     expect(prompts).toEqual([]);
     expect(await services.heldWakes.list()).toEqual([]);
     const run = (await services.automations.get("refused"))?.runs[0];
@@ -677,7 +674,7 @@ test("a deny refuses even an approved replay: approve-then-tighten does not exec
     await services.automations.upsert(automationConfig("revoked"));
     const prompts: string[] = [];
     const record = (await services.automations.get("revoked")) as AutomationRecord;
-    await fireAutomation(services, record, fakeWake(prompts), { cleared: "both" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record, { cleared: "both" });
     expect(prompts).toEqual([]);
     expect((await services.automations.get("revoked"))?.runs[0]?.outcome).toBe("skipped");
 });
@@ -690,7 +687,7 @@ test("the webchat floor keys off its own source: a listener rule does not reach 
     const prompts: string[] = [];
     const record = (await services.automations.get("door")) as AutomationRecord;
     // Visitor payload rides sealed in the outside-content envelope, same id on both ends.
-    await fireAutomation(services, record, fakeWake(prompts), { payload: "hi" });
+    await fireAutomation(drivenBy(services, fakeWake(prompts)), record, { payload: "hi" });
     expect(prompts[0]).toMatch(
         /^wake:door\n\n--- Event payload ---\n<untrusted-content source="webchat" id="([0-9a-f]{16})">\nhi\n<\/untrusted-content id="\1">$/,
     );
@@ -701,20 +698,20 @@ test("the webchat floor keys off its own source: a listener rule does not reach 
     );
     const heldPrompts: string[] = [];
     const heldRecord = (await heldServices.automations.get("door")) as AutomationRecord;
-    await fireAutomation(heldServices, heldRecord, fakeWake(heldPrompts), { payload: "hi" });
+    await fireAutomation(drivenBy(heldServices, fakeWake(heldPrompts)), heldRecord, { payload: "hi" });
     expect(heldPrompts).toEqual([]);
     expect((await heldServices.heldWakes.list())[0]?.automationId).toBe("door");
 });
 
 // Wake that blocks until released, so a second fire can arrive mid-run; `started` resolves once the wake is actually
 // running, which a test must await before firing again.
-const gatedWake = (prompts: string[]): { wake: WakeFn; started: Promise<void>; release: () => void } => {
+const gatedWake = (prompts: string[]): { wake: TurnStarter["stream"]; started: Promise<void>; release: () => void } => {
     const started = Promise.withResolvers<void>();
     const held = Promise.withResolvers<void>();
     return {
         started: started.promise,
         release: held.resolve,
-        async *wake(_services, input) {
+        async *wake(input) {
             prompts.push(input.prompt);
             started.resolve();
             await held.promise;
@@ -729,13 +726,13 @@ test("a fire meeting a running one is dropped by default, and the sink is told w
     const prompts: string[] = [];
     const { wake, started, release } = gatedWake(prompts);
     const record = (await services.automations.get("busy")) as AutomationRecord;
-    const first = fireAutomation(services, record, wake, { payload: "one" });
+    const first = fireAutomation(drivenBy(services, wake), record, { payload: "one" });
     await started;
 
     const failures: string[] = [];
     const ends: number[] = [];
     const stream = { delta: () => {}, failed: (reason: string) => void failures.push(reason), end: () => void ends.push(1) };
-    expect(await fireAutomation(services, record, wake, { payload: "two", stream })).toEqual({});
+    expect(await fireAutomation(drivenBy(services, wake), record, { payload: "two", stream })).toEqual({});
     expect(failures).toEqual(["this automation is already running, so the message was not picked up"]);
     expect(ends).toHaveLength(1);
     release();
@@ -749,11 +746,11 @@ test(`overlap: "queue" makes an inbound message wait its turn instead of being l
     const prompts: string[] = [];
     const { wake, started, release } = gatedWake(prompts);
     const record = (await services.automations.get("busy")) as AutomationRecord;
-    const first = fireAutomation(services, record, wake, { payload: "one" });
+    const first = fireAutomation(drivenBy(services, wake), record, { payload: "one" });
     await started;
 
     const failures: string[] = [];
-    const queued = fireAutomation(services, record, fakeWake(prompts), {
+    const queued = fireAutomation(drivenBy(services, fakeWake(prompts)), record, {
         payload: "two",
         overlap: "queue",
         stream: { delta: () => {}, failed: (reason: string) => void failures.push(reason), end: () => {} },
@@ -777,16 +774,16 @@ test("the queue survives a run that fails: the next fire still gets its turn", a
     const record = (await services.automations.get("busy")) as AutomationRecord;
     const started = Promise.withResolvers<void>();
     const held = Promise.withResolvers<void>();
-    // oxlint-disable-next-line require-yield -- WakeFn is a generator contract; this fixture exists to throw before it ever yields.
-    const throwingWake: WakeFn = async function* (_services, input) {
+    // oxlint-disable-next-line require-yield -- TurnStarter["stream"] is a generator contract; this fixture exists to throw before it ever yields.
+    const throwingWake: TurnStarter["stream"] = async function* (input) {
         prompts.push(input.prompt);
         started.resolve();
         await held.promise;
         throw new Error("wake exploded");
     };
-    const first = fireAutomation(services, record, throwingWake, { payload: "one" });
+    const first = fireAutomation(drivenBy(services, throwingWake), record, { payload: "one" });
     await started.promise;
-    const queued = fireAutomation(services, record, fakeWake(prompts), { payload: "two", overlap: "queue" });
+    const queued = fireAutomation(drivenBy(services, fakeWake(prompts)), record, { payload: "two", overlap: "queue" });
     held.resolve();
     await first;
     await queued;

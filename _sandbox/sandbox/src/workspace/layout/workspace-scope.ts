@@ -1,7 +1,7 @@
 import { access } from "node:fs/promises";
 import { type ArchivePath, archivePrefixOf, archiveRootOf, ConversationIdSchema, type WorkspaceChildren } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
-import { isIsolated, type PersistedAgent } from "../../agents/registry/agents-store.js";
+import type { PersistedAgent } from "../../agents/registry/agents-store.js";
 import { archiveChildrenOf, archiveMemberPath, isBrowsableArchiveFile } from "../files/workspace-archive-browse.js";
 import { isControlPlanePath, realWithin, resolveWithin } from "../files/workspace-files-paths.js";
 
@@ -58,7 +58,8 @@ export const workspaceRootFor = async (deps: WorkspaceScopeDeps, agent: string |
     if (entry === undefined) {
         throw new ORPCError("NOT_FOUND", { message: "unknown agent" });
     }
-    if (!isIsolated(entry)) {
+    // No branch, no worktree of its own.
+    if (entry.placement.kind === "main") {
         return deps.main;
     }
     const dir = deps.worktreeDir(agent);

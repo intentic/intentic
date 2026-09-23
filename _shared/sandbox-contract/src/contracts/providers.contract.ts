@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { z } from "zod";
 import { NativeProviderParamSchema } from "../schemas/agent.js";
 import { ModelsSchema } from "../schemas/providers/provider-oauth.js";
@@ -33,7 +33,7 @@ export type RunnableProviders = z.infer<typeof RunnableProvidersSchema>;
 // their own route (endpoints.contract.ts): they are user-created and unbounded, and a missing one is NOT_FOUND, not an
 // empty catalog.
 export const providersContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/providers",
@@ -41,9 +41,10 @@ export const providersContract = {
             description:
                 "The installed ACP agents and model endpoints, which are the providers this sandbox adds to the fixed native list. A read for anyone who may watch or drive a turn: it names what a message can be addressed to, not what credential stands behind it.",
         })
+        .meta({ guest: true })
         .output(RunnableProvidersSchema),
     // Never empty: live discovery with a persisted/seed floor; order is the provider's own, not re-ranked.
-    models: oc
+    models: procedure
         .route({
             method: "GET",
             path: "/providers/{provider}/models",
@@ -51,6 +52,7 @@ export const providersContract = {
             description:
                 "Every model this provider serves and which one it defaults to. Never empty: it is discovered live with a stored list behind it. The order is the provider's own preference and is not rearranged here.",
         })
+        .meta({ guest: true })
         .input(NativeProviderParamSchema)
         .output(ModelsSchema),
 };

@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import {
     ClientDiagnosticsAcceptedSchema,
     ClientDiagnosticsReportSchema,
@@ -7,10 +7,13 @@ import {
     LogsListSchema,
 } from "../schemas/logs.js";
 
+// Daemon logs are the operator's diagnostic, not a stakeholder's feed, and no token's.
+const logRoute = procedure.meta({ floor: "maintainer", control: "never" });
+
 // Daemon-owned debug logs (historyRoot/logs): terminal captures, CLI run logs, daemon.log; read-only, since only the
 // daemon/tmux write them. `report` is the one write, since the browser is the only witness to its own crashes.
 export const logsContract = {
-    list: oc
+    list: logRoute
         .route({
             method: "GET",
             path: "/logs",
@@ -19,7 +22,7 @@ export const logsContract = {
                 "Every log file the daemon owns: captured terminal output, command runs, and the daemon's own log. Read-only, because only the sandbox writes them.",
         })
         .output(LogsListSchema),
-    read: oc
+    read: logRoute
         .route({
             method: "GET",
             path: "/logs/file",
@@ -29,7 +32,8 @@ export const logsContract = {
         .input(LogReadQuerySchema)
         .output(LogReadSchema),
     // The one write route; lands in its own file, never daemon.log, floored at viewer role for a crashed page.
-    report: oc
+    report: procedure
+        .meta({ floor: "viewer", control: "never" })
         .route({
             method: "POST",
             path: "/logs/client",

@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
-import { leftoverProcesses, ownerOf, type ScannedProcess, WORKLOAD_ENV, workloadStamp } from "./leftovers.js";
+import { WORKLOAD_ENV, workloadStamp } from "../../seams/workload-stamp.js";
+import { leftoverProcesses, ownerOf, type ScannedProcess } from "./leftovers.js";
 import { parseProcStat } from "../resources/proc-stat.js";
 
 const environ = (...pairs: string[]): string => `${pairs.join("\0")}\0`;

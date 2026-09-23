@@ -1,12 +1,10 @@
 import { createHmac } from "node:crypto";
 import { isPipelineInFlight, type PipelineRun } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { streamAgent } from "../agent/routes/agent.routes.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import { tokenEquals } from "../auth/auth.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { dispatchCiRun } from "./events.js";
 import { ciClientFor, type FetchFn, type GithubRun, githubRun, type GitlabPipelineHook, gitlabHookRun, gitlabStatus } from "./providers.js";
 import { ciProjects } from "./projects.js";
@@ -22,7 +20,7 @@ interface GithubDelivery {
 }
 
 export const createCiWebhookRoute =
-    (services: Services, wake: WakeFn = streamAgent, fetchFn: FetchFn = fetch) =>
+    (services: Services, fetchFn: FetchFn = fetch) =>
     async (c: Context<AppEnv, "/ci/webhook/:host">): Promise<Response> => {
         const host = c.req.param("host");
         if (host !== "github" && host !== "gitlab") {
@@ -98,6 +96,6 @@ export const createCiWebhookRoute =
         services.ciRuns.upsert(run);
         // The delivery is the only moment the daemon knows a run ended; without this an open board waits out its poll.
         publishRuntimeChange("ci");
-        await dispatchCiRun(services, run, author, wake);
+        await dispatchCiRun(services, run, author);
         return c.json({ ok: true });
     };

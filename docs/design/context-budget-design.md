@@ -99,7 +99,7 @@ upgraded. So measure it and cache it against exactly that key:
    that move it, and all three are already events the daemon sees.
 
 Then one module owns the arithmetic, called at the existing `preflight` seam
-(`agent/turn-plan.ts` → `adapterFor(provider, harness).preflight`), which is where the provider, harness,
+(`agent/run/turn/turn-plan.ts` → `services.adapters.for(provider, harness).preflight`), which is where the provider, harness,
 model and note plan are already all in scope:
 
 ```

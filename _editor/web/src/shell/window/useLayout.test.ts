@@ -1,4 +1,5 @@
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { nextTick, ref } from "vue";
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 
@@ -22,13 +23,13 @@ const activeSandboxId = ref<string | undefined>(`sb1`);
 
 mock.module("../../features/sandbox/overview/activeSandbox", () => ({ activeSandboxId }));
 
-const { resetTerminalOpen, useLayout } = await import("./useLayout");
+const { useLayout } = await import("./useLayout");
 
 beforeEach(() => {
     local.clear();
     session.clear();
     activeSandboxId.value = `sb1`;
-    resetTerminalOpen();
+    resetSandboxScope();
 });
 
 describe(`sandbox-scoped terminal open state`, () => {
@@ -53,7 +54,7 @@ describe(`sandbox-scoped terminal open state`, () => {
         // Switch to sb2
         activeSandboxId.value = `sb2`;
         await nextTick();
-        resetTerminalOpen();
+        resetSandboxScope();
 
         // sb2 should have terminal closed
         expect(layout.terminalOpen.value).toBe(false);
@@ -61,7 +62,7 @@ describe(`sandbox-scoped terminal open state`, () => {
         // Switch back to sb1
         activeSandboxId.value = `sb1`;
         await nextTick();
-        resetTerminalOpen();
+        resetSandboxScope();
 
         // sb1 should have terminal open restored
         expect(layout.terminalOpen.value).toBe(true);
@@ -81,7 +82,7 @@ describe(`sandbox-scoped terminal open state`, () => {
 
     it(`restores terminal open state when seeded in localStorage`, () => {
         local.set(`intentic.terminalOpen.sb1`, `1`);
-        resetTerminalOpen();
+        resetSandboxScope();
         const layout = useLayout();
         expect(layout.terminalOpen.value).toBe(true);
     });

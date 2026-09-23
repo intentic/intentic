@@ -1,4 +1,4 @@
-import { sdk } from "../../runtimes/claude/claude-sdk.js";
+import { sdk } from "../../engines/claude-sdk.js";
 
 // Two conditions the CLI reports only as prose, never a thrown error: a spent subscription allowance and a credential
 // it has stopped trying. Matched on the CLI's own prefixes, not text-sniffed. They differ for recovery (wait vs

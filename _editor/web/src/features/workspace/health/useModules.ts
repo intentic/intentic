@@ -1,7 +1,7 @@
 import type { WorkspaceModule, WorkspaceModules } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { WORKSPACE_MODULES } from "../../../lib/queryKeys";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 
 // Every repo's modules as /work has them (main tree only); the fleet's agent review reads its own worktree
@@ -11,8 +11,8 @@ const MODULES_STALE_MS = 5 * 60_000;
 
 // Named for the background loader (composables/prefetch); having this key early means the Changes panel
 // groups on arrival, not a beat later.
-export const modulesKey = (): unknown[] => WORKSPACE_MODULES.of();
-export const fetchModules = (): Promise<WorkspaceModules> => sandboxJson<WorkspaceModules>(`/workspace/modules`);
+export const modulesKey = (): unknown[] => rpcKey(`workspace.modules`);
+export const fetchModules = (): Promise<WorkspaceModules> => sandboxRpc.workspace.modules();
 
 export function useModules() {
     const { query } = useSandboxQuery({

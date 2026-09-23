@@ -4,12 +4,15 @@ import { join } from "node:path";
 import { type AgentEvent, type Automation, SandboxSettingsSchema, type WorkspaceEvent } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 import { freshImport, SETTLES, waitFor } from "@intentic/testing/bun";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
 import { unstubbed } from "@intentic/testing";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { fileAutomationsStore } from "./automations-store.js";
-import { mintConversationId, type WakeFn } from "./scheduler.js";
+import { mintConversationId } from "./scheduler.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { drivenBy } from "../testing.js";
 
 // Chore queues and the turn chain are process-wide singletons; each test gets a fresh module so one test's unfinished
 // pump can't swallow the next test's event.
@@ -22,28 +25,28 @@ const fakeServices = (root: string): Services =>
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
 
-const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
-    async function* (_services, input) {
+const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
+    async function* (input) {
         prompts.push(input.prompt);
         yield* events;
     };
 
 // A wake that parks until the test releases it: how overlap is observed without racing on timers.
-const blockingWake = (prompts: string[]): { wake: WakeFn; release: () => void } => {
+const blockingWake = (prompts: string[]): { wake: TurnStarter["stream"]; release: () => void } => {
     let unblock = (): void => {};
     const gate = new Promise<void>((resolve) => {
         unblock = resolve;
     });
     return {
         release: () => unblock(),
-        async *wake(_services, input) {
+        async *wake(input) {
             prompts.push(input.prompt);
             await gate;
             yield { kind: "done" };
@@ -75,7 +78,7 @@ test("a matching enabled chore wakes with the event as its payload", async () =>
     await services.automations.upsert(chore("review"));
     const prompts: string[] = [];
 
-    expect(await dispatchWorkspaceEvent(services, event("a1"), fakeWake(prompts))).toEqual(["review"]);
+    expect(await dispatchWorkspaceEvent(drivenBy(services, fakeWake(prompts)), event("a1"))).toEqual(["review"]);
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain("review:review");
     expect(prompts[0]).toContain(`"agentId":"a1"`);
@@ -91,12 +94,12 @@ test("disabled chores, other events and other repos never fire", async () => {
     await services.automations.upsert({ ...chore("cron"), trigger: { kind: "schedule", cron: "* * * * *" } });
     const prompts: string[] = [];
 
-    expect(await dispatchWorkspaceEvent(services, event("a1"), fakeWake(prompts))).toEqual([]);
+    expect(await dispatchWorkspaceEvent(drivenBy(services, fakeWake(prompts)), event("a1"))).toEqual([]);
     expect(prompts).toEqual([]);
 
     // The repo filter matches on the event's own span, so the same chore fires once that repo is in it.
     const inApi = event("a2", { repos: [{ repo: "api", from: "def456", dir: "/history/worktrees/a2/api" }] });
-    expect(await dispatchWorkspaceEvent(services, inApi, fakeWake(prompts))).toEqual(["api-only"]);
+    expect(await dispatchWorkspaceEvent(drivenBy(services, fakeWake(prompts)), inApi)).toEqual(["api-only"]);
 });
 
 test("a chore never fires on the workspace event its own turn raised", async () => {
@@ -107,11 +110,11 @@ test("a chore never fires on the workspace event its own turn raised", async () 
 
     // Uses the minter itself, since recognizing its own fires is exactly what the id encodes.
     const own = mintConversationId("review", Date.now());
-    expect(await dispatchWorkspaceEvent(services, event(own), fakeWake(prompts))).toEqual([]);
+    expect(await dispatchWorkspaceEvent(drivenBy(services, fakeWake(prompts)), event(own))).toEqual([]);
 
     // Another automation's minted id is not this chore's echo, so it still fires.
     const anotherRow = mintConversationId("docs", Date.now());
-    expect(await dispatchWorkspaceEvent(services, event(anotherRow), fakeWake(prompts))).toEqual(["review"]);
+    expect(await dispatchWorkspaceEvent(drivenBy(services, fakeWake(prompts)), event(anotherRow))).toEqual(["review"]);
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(`"agentId":"${anotherRow}"`);
 });
@@ -123,9 +126,9 @@ test("a burst QUEUES instead of dropping: every distinct agent gets reviewed, on
     const prompts: string[] = [];
     const { wake, release } = blockingWake(prompts);
 
-    await dispatchWorkspaceEvent(services, event("a1"), wake);
-    await dispatchWorkspaceEvent(services, event("a2"), wake);
-    await dispatchWorkspaceEvent(services, event("a3"), wake);
+    await dispatchWorkspaceEvent(drivenBy(services, wake), event("a1"));
+    await dispatchWorkspaceEvent(drivenBy(services, wake), event("a2"));
+    await dispatchWorkspaceEvent(drivenBy(services, wake), event("a3"));
     // First turn holds the queue; nothing else has woken yet.
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(`"agentId":"a1"`);
@@ -143,11 +146,11 @@ test("a second event for a waiting agent REPLACES it rather than queueing a dupl
     const prompts: string[] = [];
     const { wake, release } = blockingWake(prompts);
 
-    await dispatchWorkspaceEvent(services, event("a1"), wake);
+    await dispatchWorkspaceEvent(drivenBy(services, wake), event("a1"));
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // Both land behind the running turn; the second supersedes the first, so a2 is reviewed once, as "error".
-    await dispatchWorkspaceEvent(services, event("a2", { outcome: "conflict" }), wake);
-    await dispatchWorkspaceEvent(services, event("a2", { outcome: "error" }), wake);
+    await dispatchWorkspaceEvent(drivenBy(services, wake), event("a2", { outcome: "conflict" }));
+    await dispatchWorkspaceEvent(drivenBy(services, wake), event("a2", { outcome: "error" }));
 
     release();
     await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
@@ -162,7 +165,7 @@ test("two different chores on one event do not run their turns at the same time"
     const prompts: string[] = [];
     const { wake, release } = blockingWake(prompts);
 
-    expect(await dispatchWorkspaceEvent(services, event("a1"), wake)).toEqual(["review", "docs"]);
+    expect(await dispatchWorkspaceEvent(drivenBy(services, wake), event("a1"))).toEqual(["review", "docs"]);
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
 
     release();
@@ -176,9 +179,9 @@ test("a chore disabled while its backlog waits does not run", async () => {
     const prompts: string[] = [];
     const { wake, release } = blockingWake(prompts);
 
-    await dispatchWorkspaceEvent(services, event("a1"), wake);
+    await dispatchWorkspaceEvent(drivenBy(services, wake), event("a1"));
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
-    await dispatchWorkspaceEvent(services, event("a2"), wake);
+    await dispatchWorkspaceEvent(drivenBy(services, wake), event("a2"));
     await services.automations.upsert(chore("review", { enabled: false }));
 
     release();

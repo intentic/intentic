@@ -2,11 +2,12 @@
 // pill grows into is the chat's own composer rather than a second one. The hover rules are here because both
 // directions were wrong at first — an opening that stole the caret could never close again.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { focusComposer } from "../tabs/useChat-tabs";
 import { chatBarPeek } from "./chatPanelLayout";
 import { draftConversation, reveal } from "./useChat-reveal";
@@ -85,7 +86,7 @@ beforeEach(async () => {
     localStorage.clear();
     chatFullDock.value = null;
     chatBarPeek.value = false;
-    resetChat();
+    resetSandboxScope();
     // The home this whole surface exists for; `side` keeps its column, and then there is nothing to park.
     useLayout().setChatHome(`rail`);
     await nextTick();
@@ -240,7 +241,7 @@ it(`rests as one control and nothing else, so its only press is the composer`, a
 // here would read as the way to answer, and the answer is not a message.
 it(`turns into a door while a card waits for an answer, rather than a box that cannot send one`, async () => {
     const chat = useChat();
-    chat.active.value.restoreMessages([{ role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } }]);
+    chat.active.value.transcript.restoreMessages([{ role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, status: `pending` } }]);
     await mount(ChatQuickBar);
 
     expect(line()).toContain(`waiting for you`);
@@ -293,7 +294,7 @@ it(`offers the transcript only on the open box, and only once something has been
     await settle();
     expect(handle()).toBeNull();
 
-    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     await settle();
     expect(handle()).not.toBeNull();
 
@@ -307,7 +308,7 @@ it(`offers the transcript only on the open box, and only once something has been
 // goes the moment the pointer does, while the box keeps the grace that lets an overshot edge be crossed back.
 it(`folds the transcript away with the pointer, before the box itself goes`, async () => {
     const chat = useChat();
-    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     await mount(ChatQuickBar);
     press().click();
     await settle();
@@ -332,7 +333,7 @@ it(`folds the transcript away with the pointer, before the box itself goes`, asy
 // hover — and then one Escape undoes one thing, in the order they were opened.
 it(`keeps the transcript on a press, and gives it back one Escape before the box`, async () => {
     const chat = useChat();
-    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     await mount(ChatQuickBar);
     press().click();
     await settle();
@@ -354,7 +355,7 @@ it(`keeps the transcript on a press, and gives it back one Escape before the box
 // The other half of the contract: what the pill grows into is the panel, wearing one presentation.
 it(`the panel's floating presentation is the composer alone: no list, no transcript, one chat`, async () => {
     const chat = useChat();
-    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     const beside = draftConversation();
     reveal({ verb: `beside`, entries: [beside], focus: beside.conversationId, caret: false });
     // Room for two columns docked, so a split is what the panel would draw if this presentation let it.
@@ -381,7 +382,7 @@ it(`the strip paints no surface of its own: the composer is the whole of it`, as
 // is what stops it jumping 13px up and 38px narrower as the transcript lands above it.
 it(`a peek lifts the withheld turns without moving the composer they arrive over`, async () => {
     const chat = useChat();
-    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     chatBarPeek.value = true;
     await mount(ChatPanel, { bar: true });
 
@@ -394,7 +395,7 @@ it(`a peek lifts the withheld turns without moving the composer they arrive over
 
 it(`the same panel drawn anywhere else still has its transcript, on its own surface`, async () => {
     const chat = useChat();
-    chat.active.value.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
     await mount(ChatPanel);
 
     expect(document.querySelectorAll(`.chat-turns`)).toHaveLength(1);

@@ -90,21 +90,6 @@ export const dropAgentRef = async (main: string, branch: string, git: GitRunner)
     await git(main, ["update-ref", "-d", parkedRef(branch)]).catch(() => undefined);
 };
 
-// Sweeps parked refs whose registry entry is gone; such a ref holds unreachable commits.
-// Returns how many it dropped.
-export const dropOrphanParkedRefs = async (main: string, known: ReadonlySet<string>, git: GitRunner): Promise<number> => {
-    const { stdout } = await git(main, ["for-each-ref", "--format=%(refname)", parkedRef(AGENT)]);
-    let dropped = 0;
-    for (const ref of stdout.split("\n")) {
-        if (ref === "" || known.has(ref.slice(parkedRef(AGENT).length))) {
-            continue;
-        }
-        await git(main, ["update-ref", "-d", ref]).catch(() => undefined);
-        dropped += 1;
-    }
-    return dropped;
-};
-
 // Whether `ancestor` is reachable from `descendant`, via `git merge-base --is-ancestor`'s exit code; shared by both
 // land-side readers so they cannot disagree about what "reachable" means.
 export const isAncestor = async (dir: string, ancestor: string, descendant: string, git: GitRunner): Promise<boolean> => {

@@ -6,6 +6,7 @@ import { test, expect } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { PersistedAgent } from "../../agents/registry/agents-store.js";
 import type { Services } from "../../composition.js";
+import { isolatedAgent } from "../../testing.js";
 import { taskStoreDir } from "../run/task-store.js";
 import { HANDOFF_STATE_NOTE_TITLE, type HandoffStateDeps, handoffStateNote } from "./handoff-state.js";
 
@@ -40,7 +41,7 @@ const fakeDeps = (root: string, entry: PersistedAgent | undefined, worktree: str
     logger: unstubbed<Services["logger"]>("logger", { warn: () => {} }),
 });
 
-const isolated = (id: string): PersistedAgent => ({ id, branch: "agent/x", repos: [{ repo: "root", base: "0000" }] }) as PersistedAgent;
+const isolated = (id: string): PersistedAgent => isolatedAgent([{ repo: "root", base: "0000" }], { id });
 
 test("measures the branch, the proof and the checklist, and points rather than pastes", async () => {
     const root = mkdtempSync(join(tmpdir(), "handoff-"));

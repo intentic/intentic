@@ -11,7 +11,7 @@ import { type App, createApp, defineComponent, h, nextTick, ref, watch } from "v
 
 const { useAgentRunPick } = await import("@intentic/ui");
 const { queryClient } = await import("../../../lib/queryPersistence");
-const { SANDBOX_SETTINGS } = await import("../../../lib/queryKeys");
+const { rpcKey } = await import("../../../lib/queryKeys");
 const { providerAccounts } = await import("../accounts/providerAccounts");
 const { providerModels } = await import("../accounts/providerCatalog");
 const { agentRunChoice, shellModelPicking } = await import("./shellModelPicking");
@@ -25,7 +25,7 @@ const mounted = (setup: () => () => unknown): App => {
 
 // Live reader count for the settings entry; one is the app's own, more means a read built a second observer (a
 // leak).
-const settingsObservers = (): number => queryClient.getQueryCache().find({ queryKey: SANDBOX_SETTINGS.of() })?.observers.length ?? 0;
+const settingsObservers = (): number => queryClient.getQueryCache().find({ queryKey: rpcKey(`settings.get`) })?.observers.length ?? 0;
 
 beforeEach(() => {
     jest.restoreAllMocks();
@@ -68,7 +68,7 @@ test(`re-reading it never adds a second reader of the settings`, async () => {
     const afterFirst = settingsObservers();
     // Mimics the daemon's write, invalidating the computed: five real re-evaluations, not cached renders.
     for (let round = 0; round < 5; round += 1) {
-        queryClient.setQueryData(SANDBOX_SETTINGS.of(), { modelRoles: {}, round });
+        queryClient.setQueryData(rpcKey(`settings.get`), { modelRoles: {}, round });
         tick.value += 1;
         await nextTick();
     }
@@ -87,7 +87,7 @@ const pinned = (pin: Record<string, unknown>): void => {
         ...providerModels.value,
         claude: [{ label: `Claude Sonnet 4.6`, value: `claude-sonnet-4-6`, efforts: [`low`, `medium`, `high`, `xhigh`, `max`] }],
     };
-    queryClient.setQueryData(SANDBOX_SETTINGS.of(), { modelRoles: { [ROLE]: [pin] } });
+    queryClient.setQueryData(rpcKey(`settings.get`), { modelRoles: { [ROLE]: [pin] } });
 };
 
 test(`the standing choice keeps the pinned top tier, and names it`, () => {

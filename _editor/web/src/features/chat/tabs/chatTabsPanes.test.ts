@@ -1,12 +1,12 @@
 // Pins which click-handler branch resets the split to a plain click, through the real mounted list; `chat
 // panes` in useChat.test.ts already covers the store verb itself.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
-import { resetAgents } from "../../agents/fleet/useAgents";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
 // Store half of "New agent" (agentActions.startAgent); this suite's fixture for extra tabs.
 const newChat = () => {
@@ -70,8 +70,7 @@ const row = (el: HTMLElement, id: string): HTMLElement => el.querySelector<HTMLE
 
 beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
-    resetChat();
-    resetAgents();
+    resetSandboxScope();
     // A published full-window slot is the wide surface (chatSurface.chatWide); panes are offered only there.
     chatFullDock.value = document.createElement(`div`);
     await nextTick();

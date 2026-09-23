@@ -14,7 +14,7 @@ import { AUTO_MARKER, autoDraftedTools, draftContent, draftFileName, named, step
 import { containerBornAtMs, installLive } from "./drift.js";
 import { capabilityFragments, workspaceExtensionFragments } from "./fragment-sources.js";
 import { providerPackFragments } from "./provider-packs.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 
 // Overlay Dockerfile composed from the pinned FROM, each capability's fragment, and the owner-approved custom section.
 // Agents propose custom-section content only; the owner-gated approve route stores it as custom and recomposes. An

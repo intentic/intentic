@@ -1,5 +1,5 @@
 import { type AgentSummary, type AgentTurn, type FixAttemptPlan, type FixResume, planFixAttempt } from "@intentic/sandbox-contract";
-import type { TurnInput } from "../agent/run/turn/turn-actor.js";
+import type { TurnInput } from "../seams/turn-starter.js";
 
 /* ONE FAILURE, MANY ATTEMPTS, ONE LIVE ANSWER — the daemon's side of it, for a fix the daemon itself starts (POST /ci/fix). */
 

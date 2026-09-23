@@ -16,6 +16,9 @@ export interface BackendHostExtension {
     readonly server: string;
     // Minted token api.daemon presents; scoped by the daemon to permissions.daemon.
     readonly daemonToken: string;
+    // The manifest's permissions.daemon, the same list the token is scoped to: api.daemon.rpc refuses outside it before
+    // sending, while the daemon's grant stays what enforces it.
+    readonly daemonPermissions: readonly string[];
 }
 
 export interface BackendDeviceConfig {

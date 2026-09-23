@@ -49,6 +49,8 @@ LOOK UP — reach for these instead of searching /history by hand
                                        add the record itself: the last <n> messages (default 20), or only
                                        the ones carrying a phrase
           [--no-diff] [--json]         skip the per-repo git counts, or answer as JSON
+          [--stored]                   what the daemon keeps for it instead, raw JSON: its row in every table of
+                                       the conversations database, and the files in its directory
   agents ls [--all] [--limit <n>] [--repo <name>] [--owner <who>] [--json]
                                        the fleet, most recently active first. --all includes the archive;
                                        --repo narrows to conversations spanning one repo; --owner to the
@@ -369,7 +371,7 @@ const writeTranscript = (agent, transcript) => {
 };
 
 const show = async (argv) => {
-    const { flags, positional } = parseFlags(argv, ["transcript", "last", "grep", "no-diff", "json"], ["transcript", "no-diff", "json"]);
+    const { flags, positional } = parseFlags(argv, ["transcript", "last", "grep", "no-diff", "json", "stored"], ["transcript", "no-diff", "json", "stored"]);
     const handle = positional.join(" ").trim();
     if (handle === "") {
         return die(`agents: show needs a conversation to look up\n\n${USAGE}`);
@@ -383,8 +385,15 @@ const show = async (argv) => {
             transcript: wantsTranscript,
             last: flags.last,
             grep: flags.grep,
+            stored: flags.stored === true,
         })}`,
     );
+    // What the daemon keeps, raw: a diagnosis reads the rows themselves, so they are never summarized.
+    if (flags.stored === true) {
+        process.stdout.write(`${JSON.stringify(answer.stored, undefined, 2)}
+`);
+        return;
+    }
     if (flags.json === true) {
         process.stdout.write(`${JSON.stringify(answer, undefined, 2)}\n`);
         return;

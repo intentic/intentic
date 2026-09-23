@@ -1,6 +1,7 @@
 // Pins the chat bar's close surfaces (card ×, right-click menus) through the real mounted component: which
 // chat a menu acts on, where right-click is heard, which rows disable, and that a mass close never confirms.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { it, expect, beforeAll, beforeEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { createApp, h, nextTick } from "vue";
@@ -9,7 +10,7 @@ import { createApp, h, nextTick } from "vue";
 import ChatTabs from "./ChatTabs.vue";
 import { installUi } from "@intentic/ui";
 import { VueQueryPlugin } from "@tanstack/vue-query";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
 // The store half of "New agent" (agentActions.startAgent), used as this suite's fixture for extra tabs.
 const newChat = () => {
@@ -20,6 +21,7 @@ const newChat = () => {
 
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
+import { runningTurn } from "../../../testing/runningTurn";
 
 // Globals a mounted chat needs that jsdom lacks: matchMedia (kept desktop via matches:false), window.env,
 // ResizeObserver. window.open is stubbed to null; assertions only check that the pop-out row calls it.
@@ -49,7 +51,7 @@ beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
     // `open` is hoisted once for the module, so its calls accumulate across tests unless cleared here.
     open.mockClear();
-    resetChat();
+    resetSandboxScope();
     await nextTick();
     await openSheet();
 });
@@ -265,12 +267,12 @@ it(`closes every finished tab and leaves the working ones, disabled when nothing
     for (const at of [0, 2]) {
         chat.conversations.value[at]!.isolated.value = false;
         chat.conversations.value[at]!.registered.value = true;
-        chat.conversations.value[at]!.restoreMessages([
+        chat.conversations.value[at]!.transcript.restoreMessages([
             { role: `user`, text: `do the thing` },
             { role: `assistant`, text: `done` },
         ]);
     }
-    chat.conversations.value[3]!.streaming.value = true;
+    runningTurn(chat.conversations.value[3]!.turn);
     await nextTick();
 
     await openBarMenu();
@@ -285,7 +287,7 @@ it(`mass closes past a running agent with no confirm: closing detaches from the 
     const chat = useChat();
     const ids = openTabs(2);
     // The second tab is mid-turn.
-    chat.conversations.value[1]!.streaming.value = true;
+    runningTurn(chat.conversations.value[1]!.turn);
     await nextTick();
 
     await openMenuOn(0);

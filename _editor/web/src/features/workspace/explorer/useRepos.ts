@@ -1,17 +1,12 @@
-import type { GitReposResponse } from "@intentic/api-contract";
 import { computed } from "vue";
 import { projectScope, withinScope } from "../../../app/projectScope";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { GIT_REPOS } from "../../../lib/queryKeys";
+import { rpcQuery } from "../../sandbox/client/rpcQuery";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 
 /* Every real git repo under /work, "root" (the /work repo itself, implicit) plus each discovered nested repo, as root-relative dir ids. */
 
 export function useRepos() {
-    const { query } = useSandboxQuery({
-        queryKey: GIT_REPOS.of(),
-        queryFn: () => sandboxJson<GitReposResponse>(`/git/repos`),
-    });
+    const { query } = useSandboxQuery(rpcQuery(`git.repos`));
     const all = computed<readonly string[]>(() => query.data.value?.repos ?? []);
     // The open project's repositories only (app/projectScope.ts), like every other repository-keyed source.
     const nested = computed<readonly string[]>(() => all.value.filter(withinScope));

@@ -1,25 +1,27 @@
 // jsdom: reaching the rail's badge means mounting a component, since useQuery injects there. The rest of the suite runs
 // on node.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { test, expect, beforeEach, mock, jest } from "bun:test";
-import { waitFor, stubGlobal, mocked } from "@intentic/testing/bun";
+import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
+import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 // Pins that the rail's badge and the tab strip read the same shared list: a pending web-* session (socket not yet
 // connected) and a kill issued but not yet confirmed both used to make the two drift.
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
-mock.module("../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
+// The daemon's session list, scripted per case below.
+const terminals = mock();
+mock.module("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { terminals } }) }));
 mock.module("../sandbox/client/useSandbox", () => ({
     sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     useSandbox: () => ({ reachable: ref(true) }),
 }));
 
-const { sandboxJson } = await import("../sandbox/client/sandboxClient");
-const jsonMock = mocked(sandboxJson);
 const { queryClient } = await import("../../lib/queryPersistence");
-const { addPendingTerminal, clearPendingTerminals, dropPendingTerminal, listTerminals, refreshTerminals, removeTerminal, useTerminalsQuery } =
+const { addPendingTerminal, dropPendingTerminal, listTerminals, refreshTerminals, removeTerminal, useTerminalsQuery } =
     await import("./terminalsQuery");
 const { useTerminalActivity } = await import("./useTerminalActivity");
 
@@ -30,10 +32,10 @@ const shell = (name: string, running = true) => ({ name, kind: `shell` as const,
 let reads = 0;
 const daemonLists = (...frames: ReturnType<typeof shell>[][]): void => {
     reads = 0;
-    jsonMock.mockImplementation(() => {
+    terminals.mockImplementation(async () => {
         const sessions = frames[Math.min(reads, frames.length - 1)] ?? [];
         reads += 1;
-        return Promise.resolve({ sessions }) as Promise<never>;
+        return { sessions };
     });
 };
 
@@ -55,7 +57,7 @@ const mounted = <T>(composable: () => T): T => {
 
 beforeEach(() => {
     queryClient.clear();
-    clearPendingTerminals();
+    resetSandboxScope();
     jest.resetAllMocks();
 });
 

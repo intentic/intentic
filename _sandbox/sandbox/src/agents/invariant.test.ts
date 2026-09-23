@@ -1,7 +1,11 @@
 import { test, expect } from "bun:test";
+import type { ConversationActors } from "./actor/conversation-actors.js";
 import type { AgentsRegistry } from "./registry/agents-registry.js";
 import type { AgentWorktrees } from "./worktrees/worktrees.js";
 import { checks } from "./invariant.js";
+import { unstubbed } from "@intentic/testing";
+import { conversationEntry, isolatedAgent } from "../testing.js";
+import type { PersistedAgent } from "./registry/agents-store.js";
 
 /* The failure the user sees: a card at rest on the fleet board while the turn behind it spends the owner's allowance. */
 
@@ -14,8 +18,13 @@ const NOW = 1_800_000_000_000;
 const registryOf = (running: Readonly<Record<string, boolean>>): AgentsRegistry =>
     ({
         ids: () => Object.keys(running),
-        running: (id: string) => running[id] === true,
     }) as unknown as AgentsRegistry;
+
+// Runs the actors hold are read only where `live` is not handed in, which every check here hands in.
+const actorsOf = (running: Readonly<Record<string, boolean>>): Pick<ConversationActors, "running" | "holdings"> => ({
+    holdings: unstubbed<ConversationActors>("conversations", {}).holdings,
+    running: (id: string) => running[id] === true,
+});
 
 // Nothing strayed, for the checks that are not about checkouts.
 const SETTLED = { elsewhere: async () => [] } as unknown as AgentWorktrees;
@@ -35,6 +44,7 @@ const checkNamed = (name: string, deps: Parameters<typeof checks>[0]) => {
 const run = async (running: Readonly<Record<string, boolean>>, live: readonly { conversationId: string; startedAt: number }[]): Promise<void> => {
     const check = checkNamed("live-turns-are-running-on-the-board", {
         agents: registryOf(running),
+        conversations: actorsOf(running),
         agentWorktrees: SETTLED,
         live: () => live,
         now: () => NOW,
@@ -70,7 +80,7 @@ test("a registry entry running with no live turn is deliberately not a finding h
 /* The second failure: a checkout standing on a branch of its own, where the turn keeps writing and nothing reads. */
 
 // Only `ids`, `entry` and the strayed list matter here; the composition is whatever the entry says it spans.
-const fleetOf = (entries: Readonly<Record<string, { branch?: string; repos: readonly { repo: string }[] }>>): AgentsRegistry =>
+const fleetOf = (entries: Readonly<Record<string, PersistedAgent>>): AgentsRegistry =>
     ({
         ids: () => Object.keys(entries),
         entry: (id: string) => entries[id],
@@ -80,11 +90,12 @@ const standingOff = (strayed: Readonly<Record<string, readonly { repo: string; b
     ({ elsewhere: async (id: string) => strayed[id] ?? [] }) as unknown as AgentWorktrees;
 
 const runCheckouts = async (
-    entries: Readonly<Record<string, { branch?: string; repos: readonly { repo: string }[] }>>,
+    entries: Readonly<Record<string, PersistedAgent>>,
     strayed: Readonly<Record<string, readonly { repo: string; branch?: string }[]>>,
 ): Promise<void> => {
     const check = checkNamed("checkouts-stand-on-their-own-branch", {
         agents: fleetOf(entries),
+        conversations: actorsOf({}),
         agentWorktrees: standingOff(strayed),
         live: () => [],
         now: () => NOW,
@@ -92,7 +103,7 @@ const runCheckouts = async (
     await check.run({ moment: "turn-settled", fail });
 };
 
-const ONE_REPO = { branch: "agent/c1", repos: [{ repo: "registry" }] };
+const ONE_REPO = isolatedAgent([{ repo: "registry", base: "a".repeat(40) }]);
 
 test("every checkout on its own branch reports nothing", async () => {
     await expect(runCheckouts({ c1: ONE_REPO }, {})).resolves.toBeUndefined();
@@ -111,10 +122,10 @@ test("a detached HEAD is named as one: it is not a branch, so there is no name t
 // A non-isolated conversation runs in the owner's own tree, which is on whatever branch the owner put it on. It has no
 // branch of its own, so there is nothing for it to have strayed from.
 test("a conversation with no branch of its own is not held to one", async () => {
-    await expect(runCheckouts({ auto: { repos: [{ repo: "root" }] } }, { auto: [{ repo: "root", branch: "main" }] })).resolves.toBeUndefined();
+    await expect(runCheckouts({ auto: conversationEntry({ id: "auto" }) }, { auto: [{ repo: "root", branch: "main" }] })).resolves.toBeUndefined();
 });
 
 test("the check runs at turn-settled, when a switch stops being transient, and on the sweep", () => {
-    const check = checkNamed("checkouts-stand-on-their-own-branch", { agents: fleetOf({}), agentWorktrees: SETTLED });
+    const check = checkNamed("checkouts-stand-on-their-own-branch", { agents: fleetOf({}), conversations: actorsOf({}), agentWorktrees: SETTLED });
     expect([...check.on].sort()).toEqual(["sweep", "turn-settled"]);
 });

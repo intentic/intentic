@@ -9,8 +9,7 @@ import { useAgents } from "../../agents/fleet/useAgents";
 import { relativeTime } from "../models/catalog";
 import { modelLabelFor } from "../accounts/providerCatalog";
 import { sessionCategory } from "../../../app/sessionCategory";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { SUBAGENT_TRANSCRIPT } from "../../../lib/queryKeys";
+import { rpcQuery } from "../../sandbox/client/rpcQuery";
 import { subagentLive, useSubagentsQuery } from "./subagentsQuery";
 import { CHAT_SURFACE } from "../tools/chatToolSurface";
 import { workspaceSurface } from "../panel/workspaceSurface";
@@ -173,19 +172,11 @@ const hasFacts = (session: SubagentSession): boolean => modelOf(session) !== und
 // Polled while the child runs, read once when it's finished; the daemon serves a live one from the
 // parent's frame log, a settled one from storage.
 const transcript = useQuery({
-    queryKey: computed(() => SUBAGENT_TRANSCRIPT.of(selected.value ?? ``)),
+    ...rpcQuery(`system.subagentTranscript`, () => ({ id: selected.value ?? `` })),
     enabled: computed(() => selected.value !== undefined),
     refetchInterval: computed(() => (current.value !== undefined && subagentLive(current.value) ? TRANSCRIPT_POLL_MS : false)),
-    queryFn: async (): Promise<TranscriptRow[]> => {
-        const id = selected.value;
-        if (id === undefined) {
-            return [];
-        }
-        const body = (await sandboxJson(`/system/subagents/${encodeURIComponent(id)}/transcript`)) as { messages?: TranscriptRow[] };
-        return body.messages ?? [];
-    },
 });
-const messages = computed<TranscriptRow[]>(() => transcript.data.value ?? []);
+const messages = computed<TranscriptRow[]>(() => transcript.data.value?.messages ?? []);
 
 // Built once, not per render, so a new decorator doesn't re-parse every message on each frame.
 const decorate = fileLinkDecorator();

@@ -4,10 +4,12 @@ import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { claudeStoreOf } from "../../../sessions/session-store.js";
 import type { Services } from "../../../composition.js";
 import { createMemoryWarnings, type MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
-import { testConfig } from "../../../testing.js";
-import type { AgentRequest } from "../agent.js";
+import { RUNTIME_ADAPTERS } from "../../../runtimes/runtime-table.js";
+import { testConfig, memoryFleet } from "../../../testing.js";
+import type { AgentRequest, TurnBase } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
-import type { TurnContext } from "./turn-plan.js";
+import type { TurnContext } from "../../providers/adapter.js";
+import { parkedCards } from "../../../agents/actor/parked-cards.js";
 
 // Shared fixture both turn-plan suites build on, as a `*.testing.ts` module (not copied) so the integration-budget
 // checker can follow the import and judge each suite by what it uses. Mocks nothing here: `mock.module` is global to
@@ -29,7 +31,14 @@ export const ROOMY_MEMORY = async (): Promise<MemoryHeadroom> => ({
     stalledPercent: 0,
 });
 
-export const base: AgentRequest = { prompt: "do the thing", cwd: ROOT, signal: new AbortController().signal };
+export const base: TurnBase = {
+    spec: { prompt: "do the thing", cwd: ROOT },
+    policy: {},
+    tools: {},
+    // Parked with one fleet's actors, which nothing here answers.
+    hooks: { cards: parkedCards(memoryFleet().conversations) },
+    signal: new AbortController().signal,
+};
 export const context: TurnContext = {
     base,
     attachmentPaths: [],
@@ -44,6 +53,8 @@ export const context: TurnContext = {
 export const servicesWith = (overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
+        // The real table: which arm a (provider, harness) pair reaches is what these suites are about.
+        adapters: RUNTIME_ADAPTERS,
         memoryHeadroom: ROOMY_MEMORY,
         memoryWarnings: createMemoryWarnings(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root: ROOT }),
@@ -103,7 +114,7 @@ export const turn = (overrides?: Partial<AgentTurn>): AgentTurn => ({ prompt: "d
 // about "what the turn is told" stay meaningful.
 export const wire = (plan: unknown): string => {
     const request = (plan as { request: AgentRequest }).request;
-    return composeWirePrompt(request.notes ?? [], request.prompt);
+    return composeWirePrompt(request.spec.notes ?? [], request.spec.prompt);
 };
 
 // The harness arm is the deep one, reaching settings, plugins, browser profiles and the workspace probe, so it needs

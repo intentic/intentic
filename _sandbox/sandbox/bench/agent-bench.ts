@@ -3,8 +3,10 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AgentEvent } from "@intentic/sandbox-contract";
-import { type AgentRequest, runAgent } from "../src/agent/run/agent.js";
+import { type HarnessRequest, runAgent } from "../src/agent/run/agent.js";
 import { sumUsage, type UsageFrame } from "../src/agent/run/turn/turn-usage.js";
+import { parkedCards } from "../src/agents/actor/parked-cards.js";
+import { memoryFleet } from "../src/testing.js";
 import { type BenchTask, taskFor } from "./agent-tasks.js";
 
 // A/B benchmark: does delegating tedious work to a subagent beat one agent doing it all? Same
@@ -21,20 +23,29 @@ const SUBAGENT_NUDGE = [
 // Every name the subagent-spawning built-in goes by.
 const SUBAGENT_TOOLS = ["Agent", "Task"];
 
+// One in-memory fleet for the whole sweep, as the daemon keeps one: its actors hold what each turn's subagents did, and
+// its cards are where a turn would park, never reached with nobody attending.
+const conversations = memoryFleet().conversations;
+const cards = parkedCards(conversations);
+
 interface Arm {
     readonly name: "solo" | "subagent";
     // One line for the run header, so a table read later says what was actually compared.
     readonly what: string;
-    readonly run: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
+    readonly run: (request: HarnessRequest) => AsyncGenerator<AgentEvent>;
 }
 
 const ARMS: readonly Arm[] = [
     // Withheld from solo so it stays solo; `Agent` and `Task` both named, since older harnesses used the other one.
-    { name: "solo", what: "one agent, every tool, no delegation", run: (request) => runAgent({ ...request, disallowedTools: SUBAGENT_TOOLS }) },
+    {
+        name: "solo",
+        what: "one agent, every tool, no delegation",
+        run: (request) => runAgent(conversations, { ...request, policy: { ...request.policy, disallowedTools: SUBAGENT_TOOLS } }),
+    },
     {
         name: "subagent",
         what: "one agent that spawns subagents for the tedious work (the mainstream approach)",
-        run: (request) => runAgent({ ...request, systemAppend: SUBAGENT_NUDGE }),
+        run: (request) => runAgent(conversations, { ...request, spec: { ...request.spec, systemAppend: SUBAGENT_NUDGE } }),
     },
 ];
 
@@ -120,15 +131,20 @@ const runOnce = async (task: BenchTask, arm: Arm, index: number, options: Option
     const frames: AgentEvent[] = [];
     try {
         const prepared = await task.prepare(dir);
-        const request: AgentRequest = {
-            prompt: prepared.prompt,
-            cwd: dir,
-            signal: controller.signal,
+        const request: HarnessRequest = {
+            spec: {
+                prompt: prepared.prompt,
+                cwd: dir,
+                ...(options.model !== undefined ? { model: options.model } : {}),
+                ...(options.effort !== undefined ? { effort: options.effort } : {}),
+            },
             // Nothing here can answer a card; an agent that asks for a plan or permission just parks until the timeout.
-            permissionMode: "bypassPermissions",
-            unattended: true,
-            ...(options.model !== undefined ? { model: options.model } : {}),
-            ...(options.effort !== undefined ? { effort: options.effort } : {}),
+            policy: { permissionMode: "bypassPermissions", unattended: true },
+            tools: {},
+            // The token main() left in this process's env, which the harness inherits.
+            credential: { kind: "container" },
+            hooks: { cards },
+            signal: controller.signal,
         };
         for await (const event of arm.run(request)) {
             if (options.transcripts !== undefined) {

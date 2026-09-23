@@ -18,13 +18,15 @@ const HELD = `high`;
 // Only what this component binds: the refs it reads and the one write it makes.
 const conversationOf = (auto: boolean): Conversation =>
     ({
-        provider: ref(PROVIDER),
-        model: ref(MODEL),
-        thinking: ref(false),
-        effort: computed(() => HELD),
-        auto: ref(auto),
-        capabilities: computed(() => capabilitiesOf(PROVIDER, `claude-code`)),
-        setEffort: mock(),
+        selection: {
+            provider: ref(PROVIDER),
+            model: ref(MODEL),
+            thinking: ref(false),
+            effort: computed(() => HELD),
+            auto: ref(auto),
+            capabilities: computed(() => capabilitiesOf(PROVIDER, `claude-code`)),
+            apply: mock(),
+        },
     }) as unknown as Conversation;
 
 let app: App | undefined;
@@ -68,5 +70,5 @@ it(`is the chat's own control again the moment Auto is off`, () => {
     expect(rungs(element)[offered.findIndex((option) => option.value === HELD)]?.getAttribute(`aria-pressed`)).toBe(`true`);
 
     rungs(element)[0]!.click();
-    expect(conversation.setEffort).toHaveBeenCalledWith(offered[0]!.value);
+    expect(conversation.selection.apply).toHaveBeenCalledWith({ kind: `setEffort`, effort: offered[0]!.value });
 });

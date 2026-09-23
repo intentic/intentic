@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { z } from "zod";
 import { SessionTranscriptSchema } from "../events/transcript.js";
@@ -27,11 +27,14 @@ import {
 } from "../schemas/terminal.js";
 import { UsageSummarySchema } from "../schemas/providers/usage.js";
 
+// The box itself (terminals, devices, sessions, spend), which no control token reaches whatever the floor.
+const systemRoute = procedure.meta({ control: "never" });
+
 // Sandbox status/identity, the long-lived liveness stream, and the connect-token-relayed host tunnel. `events`
 // interleaves heartbeats, workspaceChanged batches and presence snapshots until the request aborts. `clientId` is this
 // tab's presence key; omitting it means never joining the roster.
 export const systemContract = {
-    info: oc
+    info: procedure
         .route({
             method: "GET",
             path: "/info",
@@ -39,9 +42,10 @@ export const systemContract = {
             description:
                 "The sandbox's own identity and state: which workspace it holds, which image it runs, what it is called, and the list of calls it actually implements. Start here, because a browser is routinely newer than the sandbox it is talking to and this is how it finds out what is there.",
         })
+        .meta({ guest: true })
         .output(InfoSchema),
     // Own route, not a field on /info: it goes stale on a manifest changing on disk, not on identity changing.
-    manifestProblems: oc
+    manifestProblems: systemRoute
         .route({
             method: "GET",
             path: "/system/manifest-problems",
@@ -51,7 +55,7 @@ export const systemContract = {
         })
         .output(ManifestProblemsSchema),
     // Removes or renames only a key, never a value; writes queue through the owning store, not racing a live save.
-    repairManifest: oc
+    repairManifest: systemRoute
         .route({
             method: "POST",
             path: "/system/manifest-problems/repair",
@@ -62,7 +66,7 @@ export const systemContract = {
         .input(ManifestRepairSchema)
         .output(OkSchema),
     // Trades a verified bearer or unexpired session for a fresh daemon session; calling it again renews it.
-    session: oc
+    session: systemRoute
         .route({
             method: "POST",
             path: "/system/session",
@@ -70,8 +74,10 @@ export const systemContract = {
             description:
                 "Exchanges a verified sign-in, or a session that has not expired yet, for a fresh session the daemon minted. That session is the credential every other call carries, and calling this again with a live one renews it.",
         })
+        // Staying signed in and on the roster is identity, not power, and needs nothing the boot chain builds.
+        .meta({ beforeBoot: true, floor: "viewer", guest: true })
         .output(DaemonSessionSchema),
-    events: oc
+    events: procedure
         .route({
             method: "GET",
             path: "/events",
@@ -79,10 +85,11 @@ export const systemContract = {
             description:
                 "A stream held open for as long as you want it, carrying heartbeats so a caller notices the sandbox dying at once, batches of file changes so a tree or an editor can refresh itself, and the roster of who else is looking. Give it an id for this connection to appear in that roster; leave it out and you watch without being seen.",
         })
+        .meta({ beforeBoot: true, stream: true, guest: true })
         .input(z.object({ clientId: z.string().optional() }))
         .output(streamOf(SystemEventSchema)),
     // A tab's activity self-report (view/session/file/idle), fanned back out to every member on /events.
-    presence: oc
+    presence: systemRoute
         .route({
             method: "POST",
             path: "/system/presence",
@@ -90,19 +97,22 @@ export const systemContract = {
             description:
                 "Reports which view, conversation or file this connection is on, or that it has gone idle. The daemon fans it back out on the event stream so everyone else's roster updates.",
         })
+        .meta({ beforeBoot: true, floor: "viewer", guest: true })
         .input(PresenceReportSchema)
         .output(OkSchema),
     // Per-account token/cost totals, aggregated from the activity log's turn.completed events.
-    usage: oc
+    usage: systemRoute
         .route({
             method: "GET",
             path: "/system/usage",
             summary: "What has been spent",
             description: "Token and cost totals per account, added up from the record of every finished turn.",
         })
+        // Spend is the operator's reading, not the audience's.
+        .meta({ floor: "maintainer" })
         .output(UsageSummarySchema),
     // Measured per request and never in the background: a sandbox nobody is asking pays nothing for this route.
-    metrics: oc
+    metrics: systemRoute
         .route({
             method: "GET",
             path: "/system/metrics",
@@ -112,7 +122,7 @@ export const systemContract = {
         })
         .output(SandboxMetricsSchema),
     // Control plane only; live I/O is /system/terminal WebSocket, exempt from the Bearer auth these routes take.
-    terminals: oc
+    terminals: systemRoute
         .route({
             method: "GET",
             path: "/system/terminals",
@@ -120,8 +130,10 @@ export const systemContract = {
             description:
                 "The terminal sessions this sandbox is holding, which is what a terminal panel rebuilds its tabs from after a reload. The live typing and output run over a separate socket; this is the list.",
         })
+        // Lists tmux and the supervisor, neither built by the boot chain, for a surface on screen meanwhile.
+        .meta({ beforeBoot: true })
         .output(TerminalsListSchema),
-    killTerminal: oc
+    killTerminal: systemRoute
         .route({
             method: "DELETE",
             path: "/system/terminals/{name}",
@@ -131,7 +143,7 @@ export const systemContract = {
         .input(TerminalNameParamSchema)
         .output(OkSchema),
     // Scrollback as selectable text; the live view is a tmux alternate screen, with nothing in the page to select.
-    terminalScrollback: oc
+    terminalScrollback: systemRoute
         .route({
             method: "GET",
             path: "/system/terminals/{name}/scrollback",
@@ -142,7 +154,7 @@ export const systemContract = {
         .input(TerminalScrollbackQuerySchema)
         .output(TerminalScrollbackSchema),
     // Control plane like `terminals`; frames stream separately. `closeBrowser` fails the next call as crashed.
-    browsers: oc
+    browsers: systemRoute
         .route({
             method: "GET",
             path: "/system/browsers",
@@ -151,7 +163,7 @@ export const systemContract = {
                 "Every browser a conversation currently has running and the pages inside each one. The picture of what they are showing comes over a separate socket; this is the roster.",
         })
         .output(BrowsersListSchema),
-    closeBrowser: oc
+    closeBrowser: systemRoute
         .route({
             method: "DELETE",
             path: "/system/browsers/{name}",
@@ -162,7 +174,7 @@ export const systemContract = {
         .input(BrowserNameParamSchema)
         .output(OkSchema),
     // SDK subagents and delegated runs alike; watched via transcript, not a socket, live then from stored history.
-    subagents: oc
+    subagents: systemRoute
         .route({
             method: "GET",
             path: "/system/subagents",
@@ -171,7 +183,7 @@ export const systemContract = {
                 "Every subagent and child agent this sandbox's conversations have delegated work to, whichever tool started it, with what each one is doing.",
         })
         .output(SubagentsListSchema),
-    subagentTranscript: oc
+    subagentTranscript: systemRoute
         .route({
             method: "GET",
             path: "/system/subagents/{id}/transcript",
@@ -184,7 +196,7 @@ export const systemContract = {
     // On the contract, not a hand-written route beside it: this payload is what every "do it out there" button is
     // gated on, so its shape has to be fingerprinted like any other, or a daemon older than the app disagrees about
     // it silently and the buttons just stop being drawn.
-    devices: oc
+    devices: systemRoute
         .route({
             method: "GET",
             path: "/system/devices",
@@ -194,7 +206,7 @@ export const systemContract = {
         })
         .output(DevicesListSchema),
     // One stream for every op; the daemon adds no judgment, a refusal is the machine's own `error` line.
-    manageDeviceSandbox: oc
+    manageDeviceSandbox: systemRoute
         .route({
             method: "POST",
             path: "/system/devices/{id}/sandboxes/{slug}",
@@ -205,7 +217,7 @@ export const systemContract = {
         .input(DeviceSandboxFlowInputSchema)
         .output(streamOf(DeviceFlowLineSchema)),
     // Closed set of actions; the daemon builds the command line, not the caller. One sentence is the whole answer.
-    runDeviceCommand: oc
+    runDeviceCommand: systemRoute
         .route({
             method: "POST",
             path: "/system/devices/{id}/commands/{command}",
@@ -216,7 +228,7 @@ export const systemContract = {
         .input(DeviceCommandInputSchema)
         .output(DeviceCommandResultSchema),
     // The stream usually ends without a frame; a bare stop means success, the device's version confirms it later.
-    runDeviceAgentFlow: oc
+    runDeviceAgentFlow: systemRoute
         .route({
             method: "POST",
             path: "/system/devices/{id}/agent/{op}",

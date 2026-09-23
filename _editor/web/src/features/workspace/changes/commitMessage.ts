@@ -1,4 +1,5 @@
-import { computed, ref, watch, type Ref } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
+import { computed, watch, type Ref } from "vue";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 
 // The commit box's draft: one value, empty until a From-chip click fills it as a subject line; typing is
@@ -29,13 +30,12 @@ const read = (sandboxId: string | undefined): StoredDraft => {
 
 const { activeSandboxId } = useSandbox();
 
-const stored = read(activeSandboxId.value);
-
-// Current draft text; empty is also what a successful commit leaves behind.
-const draft = ref(stored.message);
+// Current draft text; empty is also what a successful commit leaves behind. Each sandbox's draft and claim come back
+// together from its own record, so neither leaks across a switch.
+const draft = sandboxRef(() => read(activeSandboxId.value).message);
 
 // Exact text of the last fill, while still verbatim in the box; undefined means the box is the user's.
-const filled = ref<string | undefined>(stored.filled);
+const filled = sandboxRef<string | undefined>(() => read(activeSandboxId.value).filled);
 
 export const commitMessage = computed<string>({
     get: () => draft.value,
@@ -81,7 +81,7 @@ export const followFilledMessage = (source: Ref<string | undefined>): void => {
 };
 
 // Session the commit is named after, kept at module scope so the ask outlives the Changes panel being unmounted.
-export const namedAfter = ref<string | undefined>(undefined);
+export const namedAfter = sandboxRef<string | undefined>(() => undefined);
 
 // Sets who the commit is named after; withdrawing (undefined) also clears whatever chip last filed.
 export const nameCommitAfter = (id: string | undefined): void => {
@@ -90,13 +90,6 @@ export const nameCommitAfter = (id: string | undefined): void => {
         clearFilledMessage();
     }
 };
-
-// Switching sandboxes reloads that sandbox's own draft and claim together, so neither leaks across sandboxes.
-watch(activeSandboxId, (sandboxId) => {
-    const held = read(sandboxId);
-    filled.value = held.filled;
-    draft.value = held.message;
-});
 
 // Watches both draft and filled — a claim can end without the text changing, and that alone must repersist.
 watch([draft, filled], ([message, claim]) => {

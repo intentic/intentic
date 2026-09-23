@@ -1,7 +1,7 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../runtimes/claude/claude-sdk.js";
+import { sdk } from "../engines/claude-sdk.js";
 import { z } from "zod";
-import { resolveCommandSecrets, type SecretAccess } from "../agent/tools/agent-secrets.js";
+import { resolveCommandSecrets, type SecretAccess } from "../secrets/secret-access.js";
 import type { TurnPlacement } from "../agents/worktrees/isolation.js";
 import { JS_TIMEOUT_DEFAULT_S, JS_TIMEOUT_MAX_S, type JsExecutionPlan, type JsRunResult, runJs } from "./js-runtime.js";
 

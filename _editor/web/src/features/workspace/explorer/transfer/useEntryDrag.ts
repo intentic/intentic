@@ -1,3 +1,4 @@
+import { sandboxRef } from "@intentic/extension-api";
 import { basename } from "@intentic/ui/path";
 import { computed, ref } from "vue";
 import { movableInto } from "./explorerPaste";
@@ -20,7 +21,12 @@ export interface EntryDragSpec {
 }
 
 const dragging = ref(false);
-const paths = ref<readonly string[]>([]);
+// One sandbox's paths: a switch mid-drag (the keyboard's, the pointer still down) ends it, or the release would move
+// the same paths in the sandbox switched to.
+const paths = sandboxRef<readonly string[]>(
+    () => [],
+    () => endDrag(),
+);
 const pointer = ref({ x: 0, y: 0 });
 // The folder under the pointer, when it can take the paths; undefined over nothing, or over one that can't.
 const over = ref<string | undefined>(undefined);

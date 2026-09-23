@@ -1,5 +1,5 @@
 import { onMounted, ref } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
+import { sandboxRpc } from "../client/sandboxRpc";
 
 // Counts every machine door into the sandbox besides a person or control token (webhooks, workflow gates, CI hooks),
 // for the Access tab's "what still has a way in" question. Reads and counts only; each list is best-effort, unknown
@@ -14,9 +14,10 @@ export interface AccessInventory {
     readonly ciRepos?: { readonly total: number; readonly hooked: number };
 }
 
-const count = async <T>(path: string, pick: (body: T) => number | undefined): Promise<number | undefined> => {
+// What one read counts, or undefined when it could not be read at all.
+const countOf = async <T, C>(read: () => Promise<T>, pick: (answer: T) => C): Promise<C | undefined> => {
     try {
-        return pick(await sandboxJson<T>(path));
+        return pick(await read());
     } catch {
         return undefined;
     }
@@ -28,20 +29,18 @@ export function useAccessInventory() {
 
     const load = async (): Promise<void> => {
         const [webhooks, gates, ciRepos] = await Promise.all([
-            count<{ automations?: { trigger?: { kind?: string } }[] }>(`/automations`, (body) =>
-                body.automations === undefined ? undefined : body.automations.filter((automation) => automation.trigger?.kind === `event`).length,
+            countOf(
+                () => sandboxRpc.automations.list(),
+                ({ automations }) => automations.filter((automation) => automation.trigger.kind === `event`).length,
             ),
-            count<{ workflows?: { gate?: unknown }[] }>(`/workflows`, (body) =>
-                body.workflows === undefined ? undefined : body.workflows.filter((workflow) => workflow.gate !== undefined).length,
+            countOf(
+                () => sandboxRpc.workflows.list(),
+                ({ workflows }) => workflows.filter((workflow) => workflow.gate !== undefined).length,
             ),
-            (async () => {
-                try {
-                    const { repos } = await sandboxJson<{ repos?: { hookWarning?: string }[] }>(`/ci/runs`);
-                    return repos === undefined ? undefined : { total: repos.length, hooked: repos.filter((repo) => repo.hookWarning === undefined).length };
-                } catch {
-                    return undefined;
-                }
-            })(),
+            countOf(
+                () => sandboxRpc.ci.runs(),
+                ({ repos }) => ({ total: repos.length, hooked: repos.filter((repo) => repo.hookWarning === undefined).length }),
+            ),
         ]);
         inventory.value = {
             ...(webhooks === undefined ? {} : { webhooks }),

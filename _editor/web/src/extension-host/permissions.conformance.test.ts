@@ -1,15 +1,17 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "@intentic/constants/node";
-import { ExtensionManifestSchema, sandboxRouteAllowed } from "@intentic/extension-manifest";
-import { SANDBOX_ROUTES } from "@intentic/sandbox-contract";
-import { describe, test, expect } from "bun:test";
+import type { IntenticApi } from "@intentic/extension-api";
+import { type ExtensionManifest, ExtensionManifestSchema, extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
+import { type ContractRoute, requestPathFor, SANDBOX_ROUTES } from "@intentic/sandbox-contract";
+import { describe, test, expect, mock } from "bun:test";
+import { hoisted } from "@intentic/testing/bun";
 
 // Conformance: every daemon route a first-party extension calls must be declared in its manifest's permissions.sandbox,
 // or apiImpl.ts throws at runtime.
-// Typed calls (api.sandbox.rpc.git.stashApply) resolve exactly via the contract's route table; string calls
-// (api.sandbox.json(`/git/...`)) are only approximated by scanning source.
-// The string scanner stays until every extension is converted to typed calls.
+// Typed calls (api.sandbox.rpc.git.stashApply) resolve exactly via the contract's route table; string calls, which only
+// the routes the contract does not carry still take (api.sandbox.request(`/workspace/raw?…`)), are approximated by
+// scanning source.
 
 const extensionsRoot = join(repoRoot(import.meta.url), "_extensions");
 
@@ -210,4 +212,100 @@ describe.each(declaringCallers)("%s declares every sandbox route it calls", (nam
     test.each(declarableCallsOf(name).map((call) => [`${call.method} ${call.path}`, call] as const))("declares %s", (_label, call) => {
         expect(sandboxRouteAllowed(permissions, call.method, call.path)).toBe(true);
     });
+});
+
+/* The typed door's gate, by behaviour: under every first-party manifest, each procedure the contract declares is let
+   through or refused exactly as the same method and path through `json` are, and judged on that same method and path. */
+
+// What a gate that let a call through judged, in the evidence it records: the only trace a permission leaves.
+const judged = hoisted(() => ({ calls: [] as string[] }));
+
+// The extensions' typed client, reduced to its gate: a call runs the host's gate, and one let through is sent nowhere.
+const gatedClient = (gate: (procedure: readonly string[], input: unknown) => void): unknown =>
+    new Proxy(
+        {},
+        {
+            get: (_client, group: string) =>
+                new Proxy(
+                    {},
+                    {
+                        get: (_group, name: string) => async (input: unknown) => {
+                            gate([group, name], input);
+                        },
+                    },
+                ),
+        },
+    );
+
+const sandboxRpcModule = await import("../features/sandbox/client/sandboxRpc");
+const sandboxClientModule = await import("../features/sandbox/client/sandboxClient");
+const sandboxUsageModule = await import("./sandboxUsage");
+mock.module(`../features/sandbox/client/sandboxRpc`, () => ({ ...sandboxRpcModule, gatedSandboxRpc: gatedClient }));
+mock.module(`../features/sandbox/client/sandboxClient`, () => ({
+    ...sandboxClientModule,
+    sandboxJson: async () => undefined,
+    sandboxRequest: async () => new Response(),
+}));
+mock.module(`./sandboxUsage`, () => ({
+    ...sandboxUsageModule,
+    recordSandboxCall: (_id: string, _permissions: readonly string[], method: string, path: string) => void judged.calls.push(`${method} ${path}`),
+}));
+const { createExtensionApi, deactivateAllExtensions } = await import("./apiImpl");
+
+const manifestOf = (name: string): ExtensionManifest =>
+    ExtensionManifestSchema.parse(JSON.parse(readFileSync(join(extensionsRoot, name, "intentic-extension.json"), "utf8")));
+
+const hostApiOf = (manifest: ExtensionManifest): IntenticApi =>
+    createExtensionApi({ id: extensionIdOf(manifest), manifest, commit: `conformance`, source: `builtin`, enabled: true }, { repos: () => [], capabilities: () => [] })
+        .api;
+
+// A value for every `{param}`, so the gate judges a concrete path, as it does for a real call.
+const inputOf = (route: ContractRoute): Record<string, string> =>
+    Object.fromEntries([...route.path.matchAll(/\{([^}]+)\}/g)].map(([, param = ``]) => [param, `${param}-value`]));
+
+// What one door did with one call: the method and path its gate let through, or `refused`.
+const doorOutcome = async (call: () => Promise<unknown>): Promise<string> => {
+    judged.calls.length = 0;
+    try {
+        await call();
+    } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes(`undeclared sandbox route`)) {
+            throw error;
+        }
+    }
+    return judged.calls.join(`, `) || `refused`;
+};
+
+type Procedures = Readonly<Record<string, Readonly<Record<string, (input: unknown) => Promise<unknown>>>>>;
+
+describe.each(everyExtension)("%s's typed calls are gated exactly as its string calls", (name) => {
+    test(`every contract procedure: the manifest's decision, judged on the route's own method and path`, async () => {
+        const manifest = manifestOf(name);
+        const api = hostApiOf(manifest);
+        const permissions = manifest.permissions?.sandbox ?? [];
+        const outcomes: { route: string; typed: string; json: string }[] = [];
+        for (const route of SANDBOX_ROUTES) {
+            const input = inputOf(route);
+            const path = requestPathFor(route, input);
+            const [group = ``, procedure = ``] = route.name.split(`.`);
+            // oxlint-disable-next-line eslint/no-await-in-loop -- one call at a time: both doors write the one evidence log
+            const typed = await doorOutcome(() => (api.sandbox.rpc as unknown as Procedures)[group]![procedure]!(input));
+            // oxlint-disable-next-line eslint/no-await-in-loop -- as above
+            const json = await doorOutcome(() => api.sandbox.json(path, { method: route.method }));
+            outcomes.push({ route: route.name, typed, json });
+        }
+        deactivateAllExtensions();
+        const granted = (route: ContractRoute): string => {
+            const path = requestPathFor(route, inputOf(route));
+            return sandboxRouteAllowed(permissions, route.method, path) ? `${route.method} ${path}` : `refused`;
+        };
+        expect(outcomes).toEqual(SANDBOX_ROUTES.map((route) => ({ route: route.name, typed: granted(route), json: granted(route) })));
+    });
+});
+
+test(`a typed call to a procedure this build's contract does not declare is refused by name, never assumed harmless`, async () => {
+    const api = hostApiOf(manifestOf(everyExtension[0] ?? ``));
+    const call = (api.sandbox.rpc as unknown as Procedures)[`nosuch`]![`procedure`]!({});
+    await expect(call).rejects.toThrow(`called sandbox procedure nosuch.procedure, which this build's contract does not declare`);
+    deactivateAllExtensions();
 });

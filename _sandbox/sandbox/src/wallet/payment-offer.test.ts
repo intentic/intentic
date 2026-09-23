@@ -1,8 +1,12 @@
 import type { AgentEvent, WalletConfig } from "@intentic/sandbox-contract";
 import { it, expect } from "bun:test";
-import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { gatedPaidFetch, type PaidFetchRequest, type PaymentGateDeps } from "./payment-offer.js";
 import type { PaymentRow, WalletLedgerStore } from "./wallet-ledger.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
+import { memoryFleet } from "../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Drives the payment gate end to end: a signature is requested only when policy allows it and, outside the auto-approve
 // band, a click approves it; every other path spends nothing.
@@ -83,6 +87,7 @@ const fake = (
     const paidHeaders: (string | null)[] = [];
     const ledger = memoryLedger();
     const deps: PaymentGateDeps = {
+        cards,
         wallet: async () => wallet(),
         ledger,
         sign: async (request) => {
@@ -131,7 +136,7 @@ const answerCard = async (frames: AgentEvent[], approve: boolean): Promise<void>
     if (raised.kind !== "payment_offer") {
         throw new Error(`expected a payment_offer frame, got ${raised.kind}`);
     }
-    resolveRequest({ kind: "payment_offer", requestId: raised.requestId, approve });
+    cards.resolve({ kind: "payment_offer", requestId: raised.requestId, approve });
 };
 
 it("pays only after the click, and receipts the endpoint's own settlement", async () => {

@@ -40,7 +40,7 @@ const baseOf = (capabilities: AgentCapabilities, request: PromptRequest, mode: S
         return { kind: "runtime" };
     }
     // Text is filled in on read (withBaseText), from a probe of the installed CLI for the model the turn ran on.
-    return { kind: mode === "claude" ? "claude" : "intentic", ...(request.model === undefined ? {} : { model: request.model }) };
+    return { kind: mode === "claude" ? "claude" : "intentic", ...(request.spec.model === undefined ? {} : { model: request.spec.model }) };
 };
 
 export interface DisclosureInput {
@@ -51,7 +51,7 @@ export interface DisclosureInput {
 }
 
 // The owner's text under `custom`, or the small-window paragraph (context-trim.ts), stands in the base's place.
-const baseReplaced = (request: PromptRequest, mode: SystemPromptMode): boolean => mode === "custom" || request.contextTrim?.base === true;
+const baseReplaced = (request: PromptRequest, mode: SystemPromptMode): boolean => mode === "custom" || request.spec.contextTrim?.base === true;
 
 // The harness composes its guidance itself (harnessGuidance) rather than in the append; a replaced base has none.
 const guidanceOf = ({ capabilities, request }: DisclosureInput, leading: string, replaced: boolean): string =>
@@ -66,10 +66,10 @@ const guidanceOf = ({ capabilities, request }: DisclosureInput, leading: string,
 
 export const promptDisclosure = (input: DisclosureInput): SystemPromptDisclosure => {
     const { capabilities, request, at } = input;
-    const mode = request.systemPromptMode ?? "intentic";
+    const mode = request.spec.systemPromptMode ?? "intentic";
     const replaced = baseReplaced(request, mode);
     // A replaced base on a replacing runtime carries the composition in the prompt itself, not the append.
-    const append = (replaced ? request.systemPrompt : undefined) ?? request.systemAppend ?? "";
+    const append = (replaced ? request.spec.systemPrompt : undefined) ?? request.spec.systemAppend ?? "";
     const marks = marksIn(append);
     // Ahead of the first titled piece: the guidance, or the replacing prompt where there is one.
     const leading = append.slice(0, marks[0]?.at).trim();

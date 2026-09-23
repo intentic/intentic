@@ -5,10 +5,10 @@ import { type ActivityEvent, type AgentEvent, type Automation, SandboxSettingsSc
 import { Hono } from "hono";
 import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import { fileSendersStore } from "../automations/senders-store.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
@@ -17,6 +17,8 @@ import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { listenerStatus } from "./listener-status.js";
 import { createListenerRoutes } from "./listener.routes.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { drivenBy } from "../testing.js";
 
 // The listener routes touch automations/heldWakes/capabilities/activity/workspace/logger; `unstubbed` keeps the
 // fake that small. The dispatch route drives fireAutomation, so heldWakes + a payload-guard-free automation are enough.
@@ -28,15 +30,15 @@ const fakeServices = (root: string, appends: ActivityEvent[] = []): Services =>
         capabilities: fileCapabilitiesStore(join(root, "capabilities.json")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
         senders: fileSendersStore(join(root, "senders.json")),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (e) => void appends.push(e as ActivityEvent), list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
 
-const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
-    async function* (_services, input) {
+const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
+    async function* (input) {
         prompts.push(input.prompt);
         yield* events;
     };
@@ -55,8 +57,8 @@ const message = (over: Record<string, unknown> = {}): Record<string, unknown> =>
     ...over,
 });
 
-const appFor = (services: Services, wake: WakeFn): Hono => {
-    const routes = createListenerRoutes(services, wake);
+const appFor = (services: Services, wake: TurnStarter["stream"]): Hono => {
+    const routes = createListenerRoutes(drivenBy(services, wake));
     return new Hono()
         .get("/listeners/:provider/state", routes.state)
         .post("/listeners/:provider/dispatch", routes.dispatch)

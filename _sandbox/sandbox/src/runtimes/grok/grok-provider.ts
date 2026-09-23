@@ -1,20 +1,28 @@
-import type { AgentTurn } from "@intentic/sandbox-contract";
-import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
+import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import {
+    attemptProbe,
+    armPlan,
+    type AgentAdapter,
+    healthReady,
+    healthUnavailable,
+    healthUnknown,
+    type TurnArmPlan,
+    type TurnContext,
+} from "../../agent/providers/adapter.js";
+import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { createGrokAgent, createGrokRunner } from "./grok-agent.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import { openCodeBinaryMissing, type OpenCodeService } from "./opencode.js";
-import { grokAccountDoor } from "./grok-accounts.js";
+import { type GrokAccountDeps, grokAccountDoor } from "./grok-accounts.js";
 
-// Everything Grok contributes to the daemon, aggregated by the provider registry (agent/provider-module.ts). The slice
-// is one member: OpenCode is core rather than Grok's own, since one warm `opencode serve` also serves Gemini and the
-// delegation watchers.
+// Everything Grok contributes to the daemon, listed in runtimes/runtime-table.ts. The slice is one member: OpenCode is
+// core rather than Grok's own, since one warm `opencode serve` also serves Gemini and the delegation watchers.
 
 export interface GrokSlice {
-    readonly grokAgent: Services["agent"];
+    readonly grokAgent: (request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
 }
 
 export const createGrokSlice = (openCode: OpenCodeService): GrokSlice => ({
@@ -23,7 +31,10 @@ export const createGrokSlice = (openCode: OpenCodeService): GrokSlice => ({
 
 // Grok rides OpenCode with xAI subscription OAuth; gated on OpenCode's own connection view. Claude-only fields
 // (plugins, MCP tools, thinking) don't apply.
-export const planGrokTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnArmPlan> => {
+// What a Grok turn is planned from, and all its adapter reads: OpenCode holds the credential, the catalog and sessions.
+export type GrokAdapterDeps = Pick<Services, "grokAgent" | "openCode">;
+
+export const planGrokTurn = async (services: GrokAdapterDeps, input: AgentTurn, context: TurnContext): Promise<TurnArmPlan> => {
     if (!(await services.openCode.connected("xai"))) {
         return {
             ok: false,
@@ -36,17 +47,16 @@ export const planGrokTurn = async (services: Services, input: AgentTurn, context
     const catalog = await services.openCode.xaiModels();
     const valid = new Set(catalog.models.map((entry) => entry.id));
     const model = input.model !== undefined && valid.has(input.model) ? input.model : catalog.default;
-    return {
-        ok: true,
-        run: services.grokAgent,
-        // OpenCode holds one xAI auth, so the single Grok account is "xai" (see grok-accounts.ts).
-        account: "xai",
-        // Overrides base's input.model with the validated id; the adapter folds attachment paths into the prompt.
-        request: withAttachments({ ...context.base, model }, context.attachmentPaths),
-    };
+    // Overrides base's input.model with the validated id; the adapter folds attachment paths into the prompt. OpenCode
+    // holds one xAI auth, so the single Grok account is "xai" (see grok-accounts.ts).
+    return armPlan(
+        services.grokAgent,
+        withAttachments({ ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "container" } }, context.attachmentPaths),
+        "xai",
+    );
 };
 
-const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
+const OPENCODE_ADAPTER: AgentAdapter<"opencode", GrokAdapterDeps> = {
     runtime: "opencode",
     preflight: (services, input, context) => planGrokTurn(services, input, context),
     health: async (services) => {
@@ -64,7 +74,10 @@ const OPENCODE_ADAPTER: AgentAdapter<"opencode"> = {
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
 
-export const grokProvider: ProviderModule = {
+// What the Grok module reads beyond its adapter: the translator's answer for the routed pickers.
+export type GrokProviderDeps = GrokAdapterDeps & GrokAccountDeps & Pick<Services, "config">;
+
+export const grokProvider: ProviderModule<GrokProviderDeps> = {
     id: "grok",
     accounts: grokAccountDoor,
     adapters: [OPENCODE_ADAPTER],

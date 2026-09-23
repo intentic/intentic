@@ -1,7 +1,7 @@
 import type { CapabilitySummary, CapabilityStatus } from "@intentic/api-contract";
 import type { VpnLink } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { awaitingLogin, connectionFacts, connectionState, rebuildStep, vpnFacts } from "./connections";
+import { awaitingLogin, browserGrants, connectionFacts, connectionState, rebuildStep, vpnFacts } from "./connections";
 
 // Reader's question is whether they still have something to do, not the daemon's state word, and for two kinds
 // status alone isn't the truest answer. Both listing surfaces read through here, so an account can't be "needs
@@ -75,4 +75,19 @@ test(`reports a tunnel's live address only while it is up`, () => {
     expect(vpnFacts(`hq`, [link({ address: `10.8.0.4`, routes: [`0.0.0.0/0`] })])).toBe(`10.8.0.4 · all traffic`);
     expect(vpnFacts(`hq`, [link({ state: `disconnected`, address: `10.8.0.4` })])).toBeUndefined();
     expect(vpnFacts(`hq`, [])).toBeUndefined();
+});
+
+// The pairing dialog promises what the browser tile's switches say, and says so when every switch is off.
+test(`states a browser's grant in its tile's words`, () => {
+    const own = (config: Record<string, string>): CapabilitySummary => ({
+        id: `chrome`,
+        kind: `webext`,
+        status: { state: `pending` },
+        config,
+        secrets: [],
+    });
+
+    expect(browserGrants(own({ platform: `chrome` }))).toBe(`read the pages you allow, click and type on them`);
+    expect(browserGrants(own({ platform: `chrome`, act: `off`, screenshot: `on` }))).toBe(`read the pages you allow, take screenshots`);
+    expect(browserGrants(own({ platform: `chrome`, read: `off`, act: `off` }))).toBe(`nothing until you turn a switch on`);
 });

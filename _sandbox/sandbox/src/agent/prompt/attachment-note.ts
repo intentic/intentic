@@ -1,4 +1,5 @@
 import { extname } from "node:path";
+import type { TurnSpec } from "../providers/agent-request.js";
 
 // Claude SDK reads attachments via its Read tool, so paths ride the prompt as a note; other providers split images out
 // as native inputs and reference the rest by path. Builder and stripper live together so a reopened transcript can
@@ -44,5 +45,5 @@ export const stripAttachmentNote = (text: string): { text: string; attachments: 
 
 // Attachments ride as absolute paths; each adapter decides whether they become native image inputs or a file list.
 // Lives here, not in turn-plan, since providers now own their own request-building.
-export const withAttachments = <R extends { readonly attachments?: readonly string[] }>(request: R, paths: readonly string[]): R =>
-    paths.length > 0 ? { ...request, attachments: [...paths] } : request;
+export const withAttachments = <R extends { readonly spec: TurnSpec }>(request: R, paths: readonly string[]): R =>
+    paths.length > 0 ? { ...request, spec: { ...request.spec, attachments: [...paths] } } : request;

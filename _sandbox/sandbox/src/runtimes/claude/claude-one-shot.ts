@@ -2,10 +2,15 @@ import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { sendableEffort, sendableThinking } from "@intentic/sandbox-contract";
 import type { OneShotAsk } from "../../agent/providers/adapter.js";
 import { isFailureSentence } from "../../agent/providers/failure-sentences.js";
-import { type HarnessCredentials, harnessEnv, resolveHarnessCredentials } from "../../agent/providers/harness-credentials.js";
-import type { Services } from "../../composition.js";
-import { ONE_SHOT_OWNER, workloadStamp } from "../../platform/boot/leftovers.js";
-import { sdk } from "./claude-sdk.js";
+import {
+    type HarnessCredentialDeps,
+    type HarnessCredentials,
+    harnessCredentialOf,
+    harnessEnv,
+    resolveHarnessCredentials,
+} from "../../agent/providers/harness-credentials.js";
+import { ONE_SHOT_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
+import { sdk } from "../../engines/claude-sdk.js";
 
 // Claude's one-shot helper (agent/adapter.ts oneShot): no tools, session, transcript or events, so its output doesn't
 // drift with workspace state. Settings match SDK defaults except persistSession:false and thinking disabled unless
@@ -39,7 +44,7 @@ const reasoningOf = (run: OneShotRun): { readonly thinking: boolean | undefined;
 // SDK options for one call, split out so the stream loop below (several exits) doesn't drown in a long settings
 // literal.
 const oneShotOptions = (run: OneShotRun, abort: AbortController): Options => {
-    const { endpoint, oauthToken } = run.credentials;
+    const { endpoint } = run.credentials;
     const { thinking, effort } = reasoningOf(run);
     return {
         cwd: run.cwd,
@@ -58,13 +63,8 @@ const oneShotOptions = (run: OneShotRun, abort: AbortController): Options => {
         model: endpoint?.model ?? run.model,
         env: {
             ...process.env,
-            ...harnessEnv({
-                // A helper's retry policy: a rung that won't answer costs seconds and gets stepped over, not waited
-                // out.
-                helper: true,
-                ...(endpoint !== undefined ? { baseUrl: endpoint.baseUrl, authToken: endpoint.authToken, model: endpoint.model } : {}),
-                ...(oauthToken !== undefined ? { oauthToken } : {}),
-            }),
+            // A helper's retry policy: a rung that won't answer costs seconds and gets stepped over, not waited out.
+            ...harnessEnv(harnessCredentialOf(run.credentials), { helper: true, model: endpoint?.model }),
             // Stamp one-shot processes so abandoned children remain identifiable.
             ...workloadStamp(ONE_SHOT_OWNER),
         },
@@ -128,7 +128,7 @@ const runOnHarness = async (run: OneShotRun): Promise<string> => {
 
 // Runs on the same credentials as chat, including the rule that keeps a subscription token off a foreign endpoint. An
 // unresolved credential throws its own sentence, naming the reconnect.
-export const claudeOneShot = async (services: Services, ask: OneShotAsk): Promise<string> => {
+export const claudeOneShot = async (services: HarnessCredentialDeps, ask: OneShotAsk): Promise<string> => {
     const resolved = await resolveHarnessCredentials(services, { agent: ask.provider, model: ask.model });
     if (!resolved.ok) {
         throw new Error(resolved.message);

@@ -17,7 +17,8 @@ import {
 } from "@intentic/sandbox-contract";
 import type { AgentRunAttempt, AgentRunChoice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
-import { computed, ref, shallowRef, watch } from "vue";
+import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
+import { computed, watch } from "vue";
 import { stopAgent } from "../../agents/fleet/agentActions";
 import { composeSession, startSession } from "../../agents/fleet/sessionSuggestion";
 import { open as openAgent } from "../../agents/fleet/useAgents-actions";
@@ -34,7 +35,7 @@ import { checkFixPrompt, checkNudgePrompt, checkOutcome, fixSignature, outcomeSu
 import { type SyncTarget, useChanges } from "../changes/useChanges";
 import { workspaceChangedSince } from "../changes/live/useWorkspaceLive";
 import { usePrepush } from "./usePrepush";
-import { resetPushRuns, usePushRun } from "./usePushRun";
+import { usePushRun } from "./usePushRun";
 import { t } from "@intentic/ui/i18n";
 
 // The push flow, from click to answer, kept at module level (not in the panel) so it outlives the surface
@@ -94,11 +95,13 @@ const declaredPushCommand = (summaries: readonly RepoChecksSummary[], repos: rea
         .flatMap((entry) => entry.checks)
         .find((check) => check.when === `push`)?.run ?? ``;
 
-const pending = shallowRef<PendingPush | undefined>(undefined);
-const stage = ref<PushStage | undefined>(undefined);
+// Everything below names commits and runs in one sandbox's /work; offering to send them from another is the most
+// consequential thing a switch could carry over, so all of it is sandbox-scoped.
+const pending = sandboxShallowRef<PendingPush | undefined>(() => undefined);
+const stage = sandboxRef<PushStage | undefined>(() => undefined);
 // When the stage began; taken from the client, not the run, so check and push halves share one clock.
-const since = ref(0);
-const question = shallowRef<PushQuestion | undefined>(undefined);
+const since = sandboxRef(() => 0);
+const question = sandboxShallowRef<PushQuestion | undefined>(() => undefined);
 /* THE FIX A RED VERDICT PROPOSES: the failure it answers (its derived id, which attempt 1 wears), the opening prompt a fresh attempt gets. */
 export interface FixProposal {
     readonly base: string;
@@ -126,47 +129,50 @@ export interface StandingVerdict {
     readonly at: number;
 }
 
-const proposedFix = shallowRef<FixProposal | undefined>(undefined);
-const standing = shallowRef<StandingVerdict | undefined>(undefined);
+const proposedFix = sandboxShallowRef<FixProposal | undefined>(() => undefined);
+const standing = sandboxShallowRef<StandingVerdict | undefined>(() => undefined);
 // Whether the card on screen is a verdict being reprinted rather than one that just landed; the card says so, since
 // "Checks failed" reads as news and this is not news.
-const fromMemory = ref(false);
+const fromMemory = sandboxRef(() => false);
 // A press in flight: stopping and filing away the attempt before it, then opening the next. The button waits on it.
-const fixBusy = ref(false);
+const fixBusy = sandboxRef(() => false);
 // Why the last press could not start anything, in the daemon's words; cleared by the next press.
-const fixError = ref<string | undefined>(undefined);
+const fixError = sandboxRef<string | undefined>(() => undefined);
 // Push runs that settled red behind a `push` question: the terminal each ran in and the tail the fix quotes.
-const refusedRuns = shallowRef<readonly PushRun[]>([]);
-const pushed = shallowRef<PendingPush | undefined>(undefined);
-let pushedTimer: ReturnType<typeof setTimeout> | undefined;
+const refusedRuns = sandboxShallowRef<readonly PushRun[]>(() => []);
+const pushed = sandboxShallowRef<PendingPush | undefined>(() => undefined);
+// Expires the "Pushed" note; a switch takes the note down with its timer.
+const pushedTimer = sandboxValue<ReturnType<typeof setTimeout> | undefined>(
+    () => undefined,
+    (timer) => clearTimeout(timer),
+);
 
 // Agent settings when the button was pressed, carried since the proposal may compose minutes later, unmounted.
-let fixWith: { model?: string; effort?: string } = {};
+const fixWith = sandboxValue<{ model?: string; effort?: string }>(() => ({}));
 
-// Git actions and sandbox id, captured once from a mounted surface. Only useChanges's module-level halves
-// (syncAll, actionBusy, failures) are read here; the query-backed halves are the panel's own.
+// Git actions, captured once from a mounted surface. Only useChanges's module-level halves (syncAll, actionBusy,
+// failures) are read here; the query-backed halves are the panel's own.
 let git: ReturnType<typeof useChanges> | undefined;
-let sandboxId: ReturnType<typeof useSandbox>["activeSandboxId"] | undefined;
 
-const prepush = usePrepush();
+const { activeSandboxId } = useSandbox();
 
 // How long this suite usually takes, remembered per sandbox in localStorage, not the daemon, which keeps
 // nothing about a check at rest.
 const storageKey = (id: string): string => `intentic.prepushDuration.${id}`;
-const typicalMs = ref<number | undefined>(undefined);
 
-const readTypical = (id: string | undefined): void => {
-    typicalMs.value = undefined;
+const readTypical = (id: string | undefined): number | undefined => {
     if (id === undefined) {
-        return;
+        return undefined;
     }
     try {
         const stored = Number(localStorage.getItem(storageKey(id)));
-        typicalMs.value = Number.isFinite(stored) && stored > 0 ? stored : undefined;
+        return Number.isFinite(stored) && stored > 0 ? stored : undefined;
     } catch {
         // Storage may be unavailable (private mode); the readout degrades to elapsed-only.
+        return undefined;
     }
 };
+const typicalMs = sandboxRef<number | undefined>(() => readTypical(activeSandboxId.value));
 
 // Only a run that reached a verdict measures anything; a cancel or timeout is the clock cut short, and
 // remembering it would teach the readout a duration no suite takes.
@@ -176,7 +182,7 @@ const rememberTypical = (run: CommandRun): void => {
         return;
     }
     typicalMs.value = finishedAt - startedAt;
-    const id = sandboxId?.value;
+    const id = activeSandboxId.value;
     if (id === undefined) {
         return;
     }
@@ -244,10 +250,10 @@ const done = (push: PendingPush): void => {
     // about a push that has already gone.
     standing.value = undefined;
     fromMemory.value = false;
-    prepush.forget();
+    usePrepush().forget();
     pushed.value = push;
-    clearTimeout(pushedTimer);
-    pushedTimer = setTimeout(() => (pushed.value = undefined), PUSHED_NOTE_MS);
+    clearTimeout(pushedTimer.value);
+    pushedTimer.value = setTimeout(() => (pushed.value = undefined), PUSHED_NOTE_MS);
 };
 
 // Waits for the busy git-action span useChanges holds during a commit/fetch/discard, since a push fired into
@@ -270,7 +276,7 @@ const untilIdle = async (): Promise<void> => {
 // raises the same question a red check does, and proposes nothing when nothing is known to be wrong with the code.
 const send = async (push: PendingPush): Promise<void> => {
     enter(push, `pushing`);
-    prepush.forget();
+    usePrepush().forget();
     await untilIdle();
     // Another ask superseded this one while it waited; whatever the flow is about now, it isn't this.
     if (pending.value !== push) {
@@ -340,32 +346,9 @@ const currentTerminal = (): { readonly session: string; readonly show: () => voi
     if (watcher !== undefined) {
         return { session: watcher.terminal.value!, show: watcher.showTerminal };
     }
+    const prepush = usePrepush();
     const session = prepush.terminal.value;
     return session === undefined ? undefined : { session, show: prepush.showTerminal };
-};
-
-// Drops what this flow holds about one workspace's outgoing work on a sandbox switch: a staged push is about
-// a /work the reader has left. `git`/`sandboxId`/`typicalMs` stay: module-level captures, re-read by their own watches.
-export const resetPushFlow = (): void => {
-    clearTimeout(pushedTimer);
-    pushedTimer = undefined;
-    pending.value = undefined;
-    stage.value = undefined;
-    since.value = 0;
-    question.value = undefined;
-    proposedFix.value = undefined;
-    refusedRuns.value = [];
-    standing.value = undefined;
-    fromMemory.value = false;
-    pushed.value = undefined;
-    fixBusy.value = false;
-    fixError.value = undefined;
-    fixWith = {};
-    // Runs being followed are dropped with the flow that started them, not left for a second caller to remember.
-    // The check's own goes too, now that a settled one survives its card: its terminal is a window in the /work
-    // the reader has left, and a button pointing there would open somebody else's.
-    prepush.forget();
-    resetPushRuns();
 };
 
 export function usePushFlow() {
@@ -375,10 +358,6 @@ export function usePushFlow() {
     const { repos: declaringRepos } = useRepoChecks();
     // This job's own model list: a pre-push fix reads a failing check on work about to leave the machine.
     const prePushFix = useRoleModel(`pre-push-fix`);
-    if (sandboxId === undefined) {
-        sandboxId = useSandbox().activeSandboxId;
-        watch(sandboxId, (id) => readTypical(id), { immediate: true });
-    }
 
     // Which repositories a press is sending, the question every check below is asked about.
     const pushedRepos = (push: PendingPush): string[] => [...new Set(push.targets.filter((target) => target.push).map((target) => target.repo))];
@@ -409,7 +388,7 @@ export function usePushFlow() {
         const push: PendingPush = { verb, what, targets };
         // The head of the pre-push-fix list, read early: a no-check push can still be hook-refused and reuse this.
         const head = prePushFix.choice.value;
-        fixWith = head === undefined ? {} : { model: modelPinKey(head), effort: head.effort };
+        fixWith.value = head === undefined ? {} : { model: modelPinKey(head), effort: head.effort };
         // Asked of the repositories this press is actually sending: a rule aimed at one, and a repository's own
         // declared checks, stand only for their own. So a docs-only push is no longer gated by the app's suite.
         if (!checksStandFor(push) || !targets.some((target) => target.push)) {
@@ -427,38 +406,45 @@ export function usePushFlow() {
     /* Checks start only when no standing verdict is being reused. */
     function runChecks(push: PendingPush): void {
         enter(push, `checking`);
-        void prepush.start(pushedRepos(push)).then((settled) => {
-            rememberTypical(settled);
-            if (pending.value !== push || stage.value !== `checking`) {
-                return;
-            }
-            if (settled.status === `passed`) {
-                void send(push);
-                return;
-            }
-            stage.value = undefined;
-            raise(
-                push,
-                { kind: `checks`, title: checkOutcome(settled), command: settled.command, detail: outcomeSummary(settled) },
-                {
-                    runs: [],
-                    check: settled,
-                    at: settled.finishedAt ?? Date.now(),
-                    // `error` and `cancelled` propose no fix: either way nothing is known to be wrong with the code.
-                    ...(settled.status === `failed`
-                        ? {
-                              fix: {
-                                  // Named after what failed, not this press: the check reruns each attempt, so a name
-                                  // minted per press would hide from the card that an agent is already on this failure.
-                                  base: pushFixConversationId(scopeOf(push), fixSignature(settled.output)),
-                                  prompt: checkFixPrompt(settled),
-                                  nudge: checkNudgePrompt(settled),
-                              },
-                          }
-                        : {}),
-                },
-            );
-        });
+        // A check settling after a switch measured the sandbox left behind: its duration is not this one's to learn.
+        const current = sandboxScopeGuard();
+        void usePrepush()
+            .start(pushedRepos(push))
+            .then((settled) => {
+                if (!current()) {
+                    return;
+                }
+                rememberTypical(settled);
+                if (pending.value !== push || stage.value !== `checking`) {
+                    return;
+                }
+                if (settled.status === `passed`) {
+                    void send(push);
+                    return;
+                }
+                stage.value = undefined;
+                raise(
+                    push,
+                    { kind: `checks`, title: checkOutcome(settled), command: settled.command, detail: outcomeSummary(settled) },
+                    {
+                        runs: [],
+                        check: settled,
+                        at: settled.finishedAt ?? Date.now(),
+                        // `error` and `cancelled` propose no fix: either way nothing is known to be wrong with the code.
+                        ...(settled.status === `failed`
+                            ? {
+                                  fix: {
+                                      // Named after what failed, not this press: the check reruns each attempt, so a name
+                                      // minted per press would hide from the card that an agent is already on this failure.
+                                      base: pushFixConversationId(scopeOf(push), fixSignature(settled.output)),
+                                      prompt: checkFixPrompt(settled),
+                                      nudge: checkNudgePrompt(settled),
+                                  },
+                              }
+                            : {}),
+                    },
+                );
+            });
     }
 
     // The answer to a verdict the reader does not accept: run the suite over again, on the push that raised it or
@@ -533,21 +519,21 @@ export function usePushFlow() {
 
     /* Only explicitly selected fields overwrite the fix draft. */
     const applyPick = (fix: Conversation, pick: AgentRunChoice): void => {
-        fix.selectModel({ provider: pick.provider as AgentProvider, value: pick.model });
+        fix.selection.apply({ kind: `selectModel`, pick: { provider: pick.provider as AgentProvider, value: pick.model } });
         if (pick.account !== undefined) {
-            fix.account.value = pick.account;
+            fix.selection.apply({ kind: `set`, picks: { account: pick.account } });
         }
         if (pick.harness !== undefined) {
-            fix.harness.value = pick.harness as AgentHarness;
+            fix.selection.apply({ kind: `set`, picks: { harness: pick.harness as AgentHarness } });
         }
         if (pick.effort !== undefined) {
-            fix.setEffort(pick.effort);
+            fix.selection.apply({ kind: `setEffort`, effort: pick.effort });
         }
         if (pick.thinking !== undefined) {
-            fix.setThinking(pick.thinking);
+            fix.selection.apply({ kind: `setThinking`, thinking: pick.thinking });
         }
         if (pick.fast !== undefined) {
-            fix.setFast(pick.fast);
+            fix.selection.apply({ kind: `setFast`, fast: pick.fast });
         }
     };
 
@@ -583,22 +569,30 @@ export function usePushFlow() {
         }
         fixBusy.value = true;
         fixError.value = undefined;
+        // A press whose plan is still being read when the sandbox switches opens nothing: its failure was the old tree's.
+        const current = sandboxScopeGuard();
         try {
             const plan = await planPress(fix.base, resume);
+            if (!current()) {
+                return;
+            }
             if (plan.kind === `busy`) {
                 openAttempt();
                 return;
             }
             await retireBefore(plan);
+            if (!current()) {
+                return;
+            }
             const conversation = composeSession({
                 // Only an attempt that ran is nudged; one the door turned away (`resend`) never saw the task at all.
                 prompt: plan.kind === `continue` ? fix.nudge : fix.prompt,
-                ...fixWith,
+                ...fixWith.value,
                 // Isolated, like any fleet agent: the fix belongs in its own worktree, arriving as a diff to review.
                 isolated: true,
                 conversationId: plan.conversationId,
             });
-            if (pick !== undefined && `selectModel` in conversation) {
+            if (pick !== undefined) {
                 applyPick(conversation, pick);
             }
             dismiss();
@@ -612,7 +606,7 @@ export function usePushFlow() {
 
     // Stops the suite, keeps the push: it settles as `cancelled`, so the wording matches any other outcome's, and
     // the question raised is the same: still waiting on you.
-    const stopChecks = (): void => void prepush.cancel();
+    const stopChecks = (): void => void usePrepush().cancel();
 
     return {
         pending: computed(() => pending.value),
@@ -643,7 +637,7 @@ export function usePushFlow() {
         // the first poll answers.
         // The command the line names before the first poll answers: whichever stands first for the repositories this
         // press is sending, the owner's own ahead of a repository's, since that is the order they run in.
-        command: computed(() => (prepush.run.value.command === `` ? firstCheckCommand() : prepush.run.value.command)),
+        command: computed(() => (usePrepush().run.value.command === `` ? firstCheckCommand() : usePrepush().run.value.command)),
         // The terminal of whichever run the moment is about; absent on a sandbox with no tmux wrapper, where a button
         // would only open an empty panel.
         terminal: computed(() => currentTerminal()?.session),

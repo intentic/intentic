@@ -8,9 +8,9 @@ import { unstubbed } from "@intentic/testing";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { test, expect, mock } from "bun:test";
 import { SETTLES, hoisted, waitFor } from "@intentic/testing/bun";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { Services } from "../composition.js";
 import { fileSendersStore } from "../automations/senders-store.js";
@@ -19,13 +19,15 @@ import { fileCiStore } from "./ci-store.js";
 import { createCiPoller } from "./poller.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { drivenBy } from "../testing.js";
 
 /* The fallback path: a repo whose webhook could NOT be registered still wakes its `ci` automations. */
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.
 const { published } = hoisted(() => ({ published: [] as string[] }));
-mock.module("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+mock.module("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
 const run = (id: number, conclusion: string, branch = "main") => ({
     id,
@@ -71,13 +73,13 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         }),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
     const prompts: string[] = [];
-    const wake: WakeFn = async function* (_services, input) {
+    const wake: TurnStarter["stream"] = async function* (input) {
         prompts.push(input.prompt);
         yield { kind: "done" } as never;
     };
@@ -87,7 +89,7 @@ const harness = async (warned: boolean, narrow: { branch?: string } = {}) => {
         String(url).includes("/jobs")
             ? new Response(JSON.stringify({ jobs: [{ id: 1, name: "lint", conclusion: "failure" }] }))
             : new Response(JSON.stringify({ workflow_runs: listed }))) as unknown as FetchFn;
-    return { services, prompts, poller: createCiPoller(services, wake, fetchFn), publish: (runs: typeof listed) => (listed = runs) };
+    return { services, prompts, poller: createCiPoller(drivenBy(services, wake), fetchFn), publish: (runs: typeof listed) => (listed = runs) };
 };
 
 test("the first pass adopts what is already there without waking anything", async () => {

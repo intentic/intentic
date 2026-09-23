@@ -14,16 +14,18 @@ import { router } from "../../../router";
 import { signalConnection } from "../../sandbox/client/useSandbox";
 import { registry } from "../../agents/fleet/useAgents-registry";
 import { changesKey } from "./useChanges";
-import * as actualSandboxClient from "../../sandbox/client/sandboxClient";
+import * as actualSandboxRpc from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
-// Every daemon read in the panel's graph goes through this one function. `/git/changes` is handed out a request at a
-// time, so a read can be held open while the assertions run; everything else answers empty, since no other query
-// decides anything here.
+// Every daemon read in the panel's graph goes through the typed client. `git.changes` is handed out a request at a
+// time, so a read can be held open while the assertions run; every other procedure throws naming itself, since no
+// other read decides anything here.
 const held: ((response: GitChangesResponse) => void)[] = [];
-mock.module("../../sandbox/client/sandboxClient", () => ({
-    ...actualSandboxClient,
-    sandboxJson: (path: string) => (path === `/git/changes` ? new Promise((resolve) => held.push(resolve)) : Promise.resolve({})),
-}));
+const changes = mock(() => new Promise<GitChangesResponse>((resolve) => held.push(resolve)));
+// Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
+// spread the stand-in.
+const realSandboxRpc = { ...actualSandboxRpc };
+mock.module("../../sandbox/client/sandboxRpc", () => ({ ...realSandboxRpc, sandboxRpc: fakeSandboxRpc({ git: { changes } }) }));
 
 const { default: ReviewPanel } = await import("./ReviewPanel.vue");
 

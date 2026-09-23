@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { ChoreLedgerWriteSchema, ChoreProbeRequestSchema, ChoresReportSchema } from "../schemas/maintenance.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -6,7 +6,7 @@ import { OkSchema } from "../schemas/shared.js";
 // agent (`POST /agent`), reusing its worktree, status, cost and transcript rather than duplicating a launcher here.
 export const choresContract = {
     // Polled by both the rail badge and the panel.
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/chores",
@@ -15,7 +15,7 @@ export const choresContract = {
                 "Every repo's standing evidence in one read: what the last measurement found and how old it is, the cheap signals that are always current, and what has already been decided about each.",
         })
         .output(ChoresReportSchema),
-    probe: oc
+    probe: procedure
         .route({
             method: "POST",
             path: "/chores/probe",
@@ -26,7 +26,7 @@ export const choresContract = {
         .input(ChoreProbeRequestSchema)
         .output(OkSchema),
     // Also how a snooze is recorded, upserted the same way as a verdict.
-    record: oc
+    record: procedure
         .route({
             method: "POST",
             path: "/chores/ledger",

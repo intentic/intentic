@@ -1,14 +1,31 @@
-import { REQUEST_ID_EVIDENCE_ROUTE, REQUEST_ID_HEADER, type SystemEvent } from "@intentic/sandbox-contract";
-import { it, expect, afterEach, mock } from "bun:test";
+import { resetSandboxScope } from "@intentic/extension-api";
+import {
+    REQUEST_ID_EVIDENCE_ROUTE,
+    REQUEST_ID_HEADER,
+    SANDBOX_ROUTE_NAMES,
+    SANDBOX_ROUTE_SHAPES,
+    SandboxSettingsSchema,
+    type SystemEvent,
+} from "@intentic/sandbox-contract";
+import { it, expect, afterEach, mock, spyOn } from "bun:test";
 import { stubGlobal, unstubAllGlobals, hoisted } from "@intentic/testing/bun";
-import { resetDaemonRoutes, setDaemonRoutes } from "../overview/useDaemonRoutes";
+import { readFailure, setDaemonRoutes } from "../overview/useDaemonRoutes";
+import { SandboxHttpError } from "./sandboxHttpError";
 import { ref } from "vue";
 
-const authState = hoisted(() => ({ token: `session-token`, rejected: [] as string[] }));
+const authState = hoisted(() => ({
+    token: `session-token` as string | undefined,
+    rejected: [] as string[],
+    // What each ask for a credential said about who is waiting, and which box it was for.
+    asked: [] as { base: string; background: boolean | undefined }[],
+}));
 mock.module("../session/sandboxSession", () => ({
     useSandboxSession: () => ({
         // A bearer names which credential it is, so a 401 can be attributed without re-reading storage.
-        getSessionToken: async () => ({ token: authState.token, kind: `session` }),
+        getSessionToken: async (target: { base: string }, options?: { background?: boolean }) => {
+            authState.asked.push({ base: target.base, background: options?.background });
+            return authState.token === undefined ? undefined : { token: authState.token, kind: `session` };
+        },
         rejectSessionToken: (_target: unknown, bearer: { token: string }) => {
             authState.rejected.push(bearer.token);
             authState.token = `replacement-token`;
@@ -17,15 +34,18 @@ mock.module("../session/sandboxSession", () => ({
 }));
 // The real useEndpoint runs on this mock: with no loopback resolved, daemonBase falls through to daemonUrl.
 // Refs, not plain holders, because `daemonBase` is a computed built once at useEndpoint's load: the last case
-// unaddresses the sandbox in place, a mock.module being file-wide and permanent.
+// unaddresses the sandbox in place, a mock.module being file-wide and permanent. `s2` is another box this browser
+// knows, reached through its own address and connect token.
 const sandbox = hoisted(() => ({
     active: ref<{ token: string } | undefined>({ token: `connect` }),
     activeSandboxId: ref<string | undefined>(`s1`),
     daemonUrl: ref<string | undefined>(`https://daemon.test`),
+    sandboxes: ref([{ id: `s2`, daemonUrl: `https://other.test`, token: `other-connect`, role: `member`, hosted: null }]),
 }));
 mock.module("./useSandbox", () => ({ useSandbox: () => sandbox }));
 
-const { sandboxRpc, SandboxUnaddressedError, daemonErrorMessage, daemonErrorStatus } = await import("./sandboxRpc");
+const { sandboxRpc, gatedSandboxRpc, daemonErrorMessage, daemonErrorStatus } = await import("./sandboxRpc");
+const { SandboxUnaddressedError } = await import("./sandboxAuthFetch");
 
 // The daemon serves /events as an oRPC event iterator over text/event-stream; this reproduces that exact wire
 // shape so the typed client's own decoding is what's under test.
@@ -104,7 +124,7 @@ it(`surfaces the daemon's status so a refusal can be told from a failure to conn
 // A custom header forces a CORS preflight; a daemon that hasn't advertised REQUEST_ID_HEADER in allowHeaders
 // fails the whole request, not just the header, so it's only sent once advertised.
 it(`withholds the correlation header from a daemon that has not advertised it`, async () => {
-    resetDaemonRoutes();
+    resetSandboxScope();
     const fetchMock = mock(async (_request: Request) => eventStream([{ kind: `heartbeat` }]));
     stubGlobal(`fetch`, fetchMock);
     await (await sandboxRpc.system.events({ clientId: `c1` }))[Symbol.asyncIterator]().next();
@@ -114,7 +134,7 @@ it(`withholds the correlation header from a daemon that has not advertised it`, 
     setDaemonRoutes([`system.info`, `system.events`]);
     await (await sandboxRpc.system.events({ clientId: `c2` }))[Symbol.asyncIterator]().next();
     expect(fetchMock.mock.calls[1]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
-    resetDaemonRoutes();
+    resetSandboxScope();
 });
 
 it(`sends the correlation header once the daemon advertises the route that ships with it`, async () => {
@@ -127,7 +147,182 @@ it(`sends the correlation header once the daemon advertises the route that ships
     expect(sent).toEqual(expect.stringMatching(/\S/));
     await (await sandboxRpc.system.events({ clientId: `c2` }))[Symbol.asyncIterator]().next();
     expect(fetchMock.mock.calls[1]![0].headers.get(REQUEST_ID_HEADER)).not.toBe(sent);
-    resetDaemonRoutes();
+    resetSandboxScope();
+});
+
+const json = (status: number, body: unknown): Response =>
+    new Response(JSON.stringify(body), { status, headers: { "content-type": `application/json` } });
+
+it(`hands an answer back as its output schema reads it, defaults filled in`, async () => {
+    stubGlobal(
+        `fetch`,
+        mock(async () => json(200, {})),
+    );
+    expect(await sandboxRpc.settings.get()).toEqual(SandboxSettingsSchema.parse({}));
+});
+
+it(`refuses an answer its output schema cannot read, as the version drift it is`, async () => {
+    stubGlobal(
+        `fetch`,
+        mock(async () => json(200, { skills: `not a list` })),
+    );
+    const failure = await sandboxRpc.settings.get().catch((error: unknown) => error);
+    expect(readFailure(failure)).toStartWith(`This sandbox answered in a shape this app doesn't expect.`);
+});
+
+it(`reads a refusal in the daemon's own words, carrying its status`, async () => {
+    stubGlobal(
+        `fetch`,
+        mock(async () => json(409, { message: `This agent is running a turn.` })),
+    );
+    const failure = await sandboxRpc.settings.get().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(SandboxHttpError);
+    expect(failure).toMatchObject({ status: 409, message: `This agent is running a turn.` });
+});
+
+// An extension calls through its own gated client (extension-host/apiImpl.ts), and reads what comes back as the app does.
+it(`gives an extension's gated client the app's reading of an answer and a refusal`, async () => {
+    stubGlobal(
+        `fetch`,
+        mock<(request: Request) => Promise<Response>>()
+            .mockResolvedValueOnce(json(200, {}))
+            .mockResolvedValueOnce(json(409, { message: `This agent is running a turn.` })),
+    );
+    const gated = gatedSandboxRpc(() => undefined);
+    expect(await gated.settings.get()).toEqual(SandboxSettingsSchema.parse({}));
+    const failure = await gated.settings.get().catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(SandboxHttpError);
+    expect(failure).toMatchObject({ status: 409, message: `This agent is running a turn.` });
+});
+
+it(`refuses an extension's undeclared call at its gate, before anything is sent`, async () => {
+    const fetchMock = mock(async () => json(200, {}));
+    stubGlobal(`fetch`, fetchMock);
+    const gated = gatedSandboxRpc((procedure) => {
+        throw new Error(`${procedure.join(`.`)} is not declared`);
+    });
+    expect(await gated.settings.get().catch((error: unknown) => (error as Error).message)).toBe(`settings.get is not declared`);
+    expect(fetchMock.mock.calls).toEqual([]);
+});
+
+it(`reads a hand-written route's { error } the same way, and a wordless refusal by its status`, async () => {
+    stubGlobal(
+        `fetch`,
+        mock<(request: Request) => Promise<Response>>()
+            .mockResolvedValueOnce(json(403, { error: `not a member` }))
+            .mockResolvedValueOnce(new Response(`<html>bad gateway</html>`, { status: 502, headers: { "content-type": `text/html` } })),
+    );
+    expect(await sandboxRpc.settings.get().catch((error: unknown) => error)).toMatchObject({ status: 403, message: `not a member` });
+    expect(await sandboxRpc.settings.get().catch((error: unknown) => error)).toMatchObject({ status: 502, message: `Request failed (502).` });
+});
+
+it(`blames the sandbox's image for a 404 on a route its daemon never advertised`, async () => {
+    setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `vpn.list`));
+    stubGlobal(
+        `fetch`,
+        mock(async () => json(404, { message: `Not Found` })),
+    );
+    const failure = await sandboxRpc.vpn.list().catch((error: unknown) => error);
+    expect(failure).toMatchObject({ status: 404 });
+    expect((failure as Error).message).toStartWith(`This sandbox's daemon doesn't provide 'vpn.list'.`);
+    resetSandboxScope();
+});
+
+it(`blames the drift for a 400 on a route whose shape the daemon disagrees about`, async () => {
+    setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...SANDBOX_ROUTE_SHAPES, "settings.set": `different` });
+    stubGlobal(
+        `fetch`,
+        mock(async () => json(400, { message: `Input validation failed` })),
+    );
+    const failure = await sandboxRpc.settings.set({}).catch((error: unknown) => error);
+    expect(failure).toMatchObject({ status: 400 });
+    expect((failure as Error).message).toStartWith(`This sandbox's daemon has 'settings.set' but exchanges different fields for it than this app expects.`);
+    resetSandboxScope();
+});
+
+it(`aims a call at another sandbox by id, through that box's address and connect token`, async () => {
+    const fetchMock = mock(async (_request: Request) => json(200, {}));
+    stubGlobal(`fetch`, fetchMock);
+    await sandboxRpc.settings.get(undefined, { context: { at: `s2` } });
+    const request = fetchMock.mock.calls[0]![0];
+    expect(request.url).toBe(`https://other.test/settings`);
+    expect(request.headers.get(`x-intentic-connect`)).toBe(`other-connect`);
+});
+
+it(`keeps another box's refusal in its own words, since this daemon's routes say nothing about it`, async () => {
+    setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => name !== `vpn.list`));
+    stubGlobal(
+        `fetch`,
+        mock(async () => json(404, { message: `Not Found` })),
+    );
+    expect(await sandboxRpc.vpn.list(undefined, { context: { at: `s2` } }).catch((error: unknown) => error)).toMatchObject({
+        status: 404,
+        message: `Not Found`,
+    });
+    resetSandboxScope();
+});
+
+it(`never sends the correlation header to another box, whose support this daemon cannot vouch for`, async () => {
+    setDaemonRoutes([`settings.get`, REQUEST_ID_EVIDENCE_ROUTE]);
+    const fetchMock = mock(async (_request: Request) => json(200, {}));
+    stubGlobal(`fetch`, fetchMock);
+    await sandboxRpc.settings.get(undefined, { context: { at: `s2` } });
+    expect(fetchMock.mock.calls[0]![0].headers.get(REQUEST_ID_HEADER)).toBeNull();
+    resetSandboxScope();
+});
+
+it(`asks for a credential quietly on a background call, and fails like an unreachable box without one`, async () => {
+    authState.token = `session-token`;
+    authState.asked = [];
+    stubGlobal(
+        `fetch`,
+        mock(async () => json(200, {})),
+    );
+    await sandboxRpc.settings.get(undefined, { context: { at: `s2`, background: true } });
+    await sandboxRpc.settings.get();
+    expect(authState.asked).toEqual([
+        { base: `https://other.test`, background: true },
+        { base: `https://daemon.test`, background: false },
+    ]);
+    authState.token = undefined;
+    await expect(sandboxRpc.settings.get(undefined, { context: { at: `s2`, background: true } })).rejects.toThrow(
+        `This browser holds no session for that sandbox yet.`,
+    );
+    authState.token = `session-token`;
+});
+
+it(`lifts the headers deadline only for a call that says its answer takes as long as its work`, async () => {
+    stubGlobal(
+        `fetch`,
+        mock(async () => json(200, {})),
+    );
+    const timeout = spyOn(AbortSignal, `timeout`);
+    await sandboxRpc.settings.get(undefined, { context: { deadline: false } });
+    expect(timeout).not.toHaveBeenCalled();
+    await sandboxRpc.settings.get();
+    expect(timeout).toHaveBeenCalledWith(45_000);
+    timeout.mockRestore();
+});
+
+// A path parameter is one segment whatever it holds, so a crafted id cannot reach another route.
+it(`encodes a path parameter into its own segment`, async () => {
+    const fetchMock = mock(async (_request: Request) => json(200, { ok: true }));
+    stubGlobal(`fetch`, fetchMock);
+    await sandboxRpc.panels.start({ repo: `../../etc` });
+    expect(new URL(fetchMock.mock.calls[0]![0].url).pathname).toBe(`/panels/..%2F..%2Fetc/start`);
+});
+
+// A newer daemon than this page is ordinary; a frame of a kind this build has no name for must not end the stream.
+it(`hands a streamed frame on unparsed, including a kind this build does not know`, async () => {
+    stubGlobal(
+        `fetch`,
+        mock(async () => eventStream([{ kind: `somethingLater`, detail: 1 }, { kind: `heartbeat` }])),
+    );
+    const received: unknown[] = [];
+    for await (const frame of await sandboxRpc.system.events({ clientId: `c1` })) {
+        received.push(frame);
+    }
+    expect(received).toEqual([{ kind: `somethingLater`, detail: 1 }, { kind: `heartbeat` }]);
 });
 
 // Last, since it leaves the sandbox unaddressed for good.

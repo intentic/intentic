@@ -6,11 +6,15 @@ import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { formatDate } from "@intentic/ui/format";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Import chain touches the API client and a media query (UI barrel's useDevice) at module eval; hence jsdom.
 
 const sandboxJson = mock(async (..._args: unknown[]): Promise<unknown> => ({ members: [] }));
 mock.module(`../client/sandboxClient`, () => ({ sandboxJson: (...args: unknown[]) => sandboxJson(...(args as [])) }));
+// The door inventory's reads (automations, workflows, CI) go unstubbed: each names itself and counts as unknown, which
+// is all this suite asks of them.
+mock.module(`../client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 const create = mock();
 const list = mock(async (): Promise<{ members: unknown[] }> => ({ members: [] }));

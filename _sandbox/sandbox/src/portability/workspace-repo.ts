@@ -21,7 +21,7 @@ import { defaultBranchOf } from "../git/ops/publish-file.js";
 import { pushBranch, remoteState } from "../git/remote/remote.js";
 import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
-import { rootPathIsExcluded } from "../history/history.js";
+import { rootPathIsExcluded } from "../workspace/layout/git-layout.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { DEFINITION_SOURCES } from "./definition.js";
 

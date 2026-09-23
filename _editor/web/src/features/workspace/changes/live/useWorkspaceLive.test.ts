@@ -1,13 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from "bun:test";
-import { queryClient } from "../../../../lib/queryPersistence";
+import { rpcKeyAt } from "../../../../lib/queryKeys";
+import { queryClient, UNPERSISTED } from "../../../../lib/queryPersistence";
 import { changeEpochOf, isRecentlyChanged, markWorkspaceChanged } from "./useWorkspaceLive";
 
 // Regression guard: the live-refresh invalidation must work with NO component mounted. It used to ride a
 // component-scoped watch behind an install-once flag: the /setup round-trip unmounted the installing shell,
 // Vue disposed the watch, and live refresh silently died for the rest of the session.
 describe(`markWorkspaceChanged`, () => {
-    const key = [`workspace`, `tree`, `filtered`, `sb`];
-    const modulesKey = [`workspace`, `modules`, `sb`];
+    // A conversation's own tree in some box, not the one on screen: the refresh has to reach every scope's copy.
+    const key = rpcKeyAt(`sb`, `workspace.tree`, { agent: `c-1` }, UNPERSISTED);
+    const modulesKey = rpcKeyAt(`sb`, `workspace.modules`);
 
     beforeEach(() => {
         jest.useFakeTimers();

@@ -3,7 +3,7 @@ import type { BuiltinPromptText, SystemPromptMode } from "@intentic/sandbox-cont
 import { Button, CopyButton, MarkdownDocument, Modal, Notice, Row, RowGroup, SegmentedControl } from "@intentic/ui";
 import { useAsyncAction } from "@intentic/ui/async";
 import { computed, ref } from "vue";
-import { sandboxJson } from "../../client/sandboxClient";
+import { sandboxRpc } from "../../client/sandboxRpc";
 import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useDraft } from "../../../../lib/useDraft";
 import { promptReach, spokenList } from "./promptReach";
@@ -34,7 +34,7 @@ const { busy: builtinBusy, notice: builtinError, run: runBuiltin } = useAsyncAct
 const loadBuiltin = async (base: `intentic` | `claude`): Promise<BuiltinPromptText | undefined> => {
     if (builtinPrompts.value[base] === undefined) {
         await runBuiltin(async () => {
-            builtinPrompts.value = { ...builtinPrompts.value, [base]: await sandboxJson<BuiltinPromptText>(`/settings/system-prompt/${base}`) };
+            builtinPrompts.value = { ...builtinPrompts.value, [base]: await sandboxRpc.settings.builtinPrompt({ base }) };
         }, `Couldn't read that system prompt from your sandbox.`);
     }
     return builtinPrompts.value[base];

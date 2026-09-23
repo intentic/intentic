@@ -1,12 +1,20 @@
-import type { LoginStart, Model, NativeProvider, OauthAccount, SecretInventoryEntry, TranslatorAccounts } from "@intentic/sandbox-contract";
+import type {
+    AgentCapabilities,
+    LoginStart,
+    Model,
+    NativeProvider,
+    OauthAccount,
+    SecretInventoryEntry,
+    TranslatorAccounts,
+} from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { stateRelPath } from "../../workspace/layout/state-paths.js";
-import type { Services } from "../../composition.js";
+import { stateRelPath } from "../../state-paths.js";
+import type { TurnLimit } from "../../usage/fleet-limit.js";
 import type { AgentAdapter } from "./adapter.js";
 
 // What a native provider owes the daemon, so shared surfaces (adapters, catalogs, readiness, boot, packs, secrets)
 // iterate providers instead of each keeping its own list; each provider directory exports one module,
-// provider-registry.ts aggregates them. Stays enumerated only where deriving would defeat the point:
+// runtimes/runtime-table.ts lists them. Stays enumerated only where deriving would defeat the point:
 // - the router's per-provider mounts (type-checked against the contract)
 // - the route harness's test doubles (a claim about behaviour, not derivable)
 // - the web app's surfaces (a different program; the contract is its registry)
@@ -48,22 +56,26 @@ export interface AccountDoor {
     readonly disconnect: (id: string) => Promise<void>;
 }
 
-export interface ProviderModule {
+// `D` is what the module and its adapters read of the daemon, named by the provider; the caller hands in more.
+export interface ProviderModule<D> {
     readonly id: NativeProvider;
     // Adapter rows this provider contributes; empty when another module's runtime serves it instead.
-    readonly adapters: readonly AgentAdapter[];
+    readonly adapters: readonly AgentAdapter<AgentCapabilities["runtime"], D>[];
     // This provider's catalog read; the registry projects it into the record every consumer reads.
-    readonly catalog: (services: Services) => Promise<{ models: Model[]; default: string }>;
+    readonly catalog: (deps: D) => Promise<{ models: Model[]; default: string }>;
     // Whether a turn could be served now, from cheap facts only; never a probe that costs a turn.
-    readonly ready: (services: Services, shared: SharedProviderReads) => Promise<boolean>;
+    readonly ready: (deps: D, shared: SharedProviderReads) => Promise<boolean>;
     // Fire-and-forget and best-effort: a throw is logged, not a failed daemon. Absent means nothing to start.
-    readonly boot?: (services: Services, role: BootRole, logger: Logger) => void;
+    readonly boot?: (deps: D, role: BootRole, logger: Logger) => void;
     // Feature packs a connected account wants in the next rebuild, read from disk, not a live helper.
-    readonly packs?: (services: Services) => Promise<readonly string[]>;
+    readonly packs?: (deps: D) => Promise<readonly string[]>;
     // This provider's rows in the secrets inventory, one per connected account; absent means none stored.
-    readonly secretEntries?: (services: Services, shared: SharedProviderReads) => Promise<SecretInventoryEntry[]>;
+    readonly secretEntries?: (deps: D, shared: SharedProviderReads) => Promise<SecretInventoryEntry[]>;
     // This provider's account door, built once per daemon; absent means /accounts/{provider} 404s for it.
-    readonly accounts?: (services: Services) => AccountDoor;
+    readonly accounts?: (deps: D) => AccountDoor;
+    // What this provider's own records say of one model's allowance across its accounts, for a provider that keeps its
+    // own reading; absent means the role walk reads the pool the provider shares (agent/models/role-model-quota.ts).
+    readonly turnLimit?: (deps: D, model: string) => Promise<TurnLimit | undefined>;
 }
 
 // One connected account's row in the secrets inventory, in the shape that page renders.

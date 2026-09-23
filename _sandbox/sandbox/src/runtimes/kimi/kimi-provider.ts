@@ -1,5 +1,6 @@
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
 import type { CliProxyClient } from "../../agent/providers/translator.js";
+import type { Services } from "../../composition.js";
 import { createKimiCatalog, type KimiCatalog } from "./kimi-catalog.js";
 
 /* Kimi has no native adapter; this module exposes only its provider catalog. */
@@ -13,7 +14,10 @@ export const createKimiSlice = (cliProxy: CliProxyClient): KimiSlice => ({
     kimiModels: createKimiCatalog(cliProxy),
 });
 
-export const kimiProvider: ProviderModule = {
+// What the Kimi module reads: its catalog, and whether a translator is there to serve it at all.
+export type KimiProviderDeps = Pick<Services, "config" | "kimiModels">;
+
+export const kimiProvider: ProviderModule<KimiProviderDeps> = {
     id: "kimi",
     adapters: [],
     catalog: (services) => services.kimiModels.models(),

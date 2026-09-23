@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { PortForwardResultSchema, PortParamSchema, PortsListSchema } from "../schemas/ports.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -6,15 +6,17 @@ import { OkSchema } from "../schemas/shared.js";
 // schemas/ports.ts). `forward` is idempotent, re-forwarding a port returns its existing slot's URL; `unforward`
 // frees the slot immediately (the hostname keeps resolving, the proxy just stops mapping it).
 export const portsContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/ports",
             summary: "What is listening inside the sandbox",
             description: "Every port something is answering on, and whether each one is reachable from outside.",
         })
+        // The desktop-sync watcher's poll, and the machine's check-in.
+        .meta({ sync: "poll" })
         .output(PortsListSchema),
-    forward: oc
+    forward: procedure
         .route({
             method: "POST",
             path: "/ports/forward",
@@ -24,7 +26,7 @@ export const portsContract = {
         })
         .input(PortParamSchema)
         .output(PortForwardResultSchema),
-    unforward: oc
+    unforward: procedure
         .route({
             method: "POST",
             path: "/ports/unforward",

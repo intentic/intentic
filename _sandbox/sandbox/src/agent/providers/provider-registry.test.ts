@@ -1,48 +1,7 @@
-import { capabilitiesOf, compareUnrankedModelIds, MINTED_PROVIDERS, type Model, NATIVE_PROVIDERS } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds, MINTED_PROVIDERS, type Model } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 import { seedModelsOf } from "../../runtimes/minted/minted-provider.js";
-import { PROVIDER_MODULES, servedModels } from "./provider-registry.js";
-
-// Pins invariants the registry's init guard doesn't message precisely: each module serves its own provider, and an
-// adapter-less module is backed by another module's runtime.
-
-test("exactly one module per native provider", () => {
-    expect(PROVIDER_MODULES.map((module) => module.id).toSorted()).toEqual([...NATIVE_PROVIDERS].toSorted());
-});
-
-test("each module's adapters serve runtimes the contract routes to its provider", () => {
-    for (const module of PROVIDER_MODULES) {
-        const runtimes = new Set([capabilitiesOf(module.id, "native").runtime, capabilitiesOf(module.id, "claude-code").runtime]);
-        for (const adapter of module.adapters) {
-            expect(runtimes.has(adapter.runtime), `${module.id} contributes ${adapter.runtime}, which never serves it`).toBe(true);
-        }
-    }
-});
-
-test("a module with no adapter is one another module's runtime serves", () => {
-    const provided = new Set(PROVIDER_MODULES.flatMap((module) => module.adapters.map((adapter) => adapter.runtime)));
-    for (const module of PROVIDER_MODULES.filter((entry) => entry.adapters.length === 0)) {
-        for (const harness of ["native", "claude-code"] as const) {
-            const runtime = capabilitiesOf(module.id, harness).runtime;
-            expect(provided.has(runtime), `${module.id}/${harness} needs ${runtime}, which no module provides`).toBe(true);
-        }
-    }
-});
-
-test("every module carries a catalog and a readiness rung", () => {
-    for (const module of PROVIDER_MODULES) {
-        expect(typeof module.catalog, module.id).toBe("function");
-        expect(typeof module.ready, module.id).toBe("function");
-    }
-});
-
-test("every minted provider has a generated module, and it contributes no adapter", () => {
-    for (const provider of MINTED_PROVIDERS) {
-        const module = PROVIDER_MODULES.find((entry) => entry.id === provider);
-        expect(module?.id, `${provider} has no module`).toBe(provider);
-        expect(module?.adapters, `${provider} contributes an adapter for a runtime it does not own`).toHaveLength(0);
-    }
-});
+import { servedModels } from "./provider-registry.js";
 
 // catalogOf/refusing build a fake catalog and a refused-model set, for servedModels: the catalog view after removing
 // models the plan refuses.

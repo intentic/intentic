@@ -1,4 +1,4 @@
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { detectScheme, type PortScheme } from "./port-probe.js";
 import type { LoopbackHost } from "./port-scan.js";
 

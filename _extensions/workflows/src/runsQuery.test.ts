@@ -10,16 +10,20 @@ import { runningOf, workflowRunsQuery } from "./runsQuery";
 const run = (state: WorkflowRun[`state`]): WorkflowRun => ({ state }) as WorkflowRun;
 
 const fakeHost = (runs: WorkflowRun[]) => {
-    const paths: string[] = [];
+    const procedures: string[] = [];
     const views: ViewRegistration[] = [];
     const fetched: HostQuery[] = [];
     const api = {
         sandbox: {
             key: (...parts: readonly string[]) => [`sandbox`, `box`, ...parts],
             reachable: () => true,
-            json: async (path: string) => {
-                paths.push(path);
-                return { runs };
+            rpc: {
+                workflows: {
+                    runs: async () => {
+                        procedures.push(`workflows.runs`);
+                        return { runs };
+                    },
+                },
             },
             // Returns the entry directly rather than running queryFn, so callers can hand it minimal run fixtures.
             fetch: async <T>(query: HostQuery<T>): Promise<T> => {
@@ -34,7 +38,7 @@ const fakeHost = (runs: WorkflowRun[]) => {
             },
         },
     } as unknown as IntenticApi;
-    return { api, paths, views, fetched };
+    return { api, procedures, views, fetched };
 };
 
 const subscriptions: { dispose(): void }[] = [];
@@ -49,13 +53,13 @@ const tile: Activation = { key: `workflows`, title: `Workflows` };
 
 describe(`the run ledger`, () => {
     it(`uses the entry the daemon's own file push already invalidates`, async () => {
-        const { api, paths } = fakeHost([]);
+        const { api, procedures } = fakeHost([]);
         bindHost(api);
 
         const query = workflowRunsQuery();
         expect(query.queryKey).toEqual([`sandbox`, `box`, `workflow-runs`]);
         await expect(query.queryFn()).resolves.toEqual([]);
-        expect(paths).toEqual([`/workflows/runs`]);
+        expect(procedures).toEqual([`workflows.runs`]);
     });
 
     it(`counts what is happening now and nothing that has already ended`, () => {

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
 import { test, expect } from "bun:test";
-import { stateRelPath } from "../layout/state-paths.js";
+import { stateRelPath } from "../../state-paths.js";
 import { isRendition, thumbnailable, workspaceThumbnail } from "./workspace-thumbnail.js";
 
 // The same table entry the module under test builds its cache dir from, so the two cannot drift.

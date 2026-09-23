@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import {
     AutomationApprovalIdParamSchema,
     AutomationApprovalsListSchema,
@@ -15,7 +15,7 @@ import { DoorTokenSchema, OkSchema } from "../schemas/shared.js";
 // Automations manifest (scheduled agent wake-ups); `pending*` is the owner's approval queue for wakes a
 // `requireApproval` automation holds instead of firing directly.
 export const automationsContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/automations",
@@ -23,7 +23,7 @@ export const automationsContract = {
             description: "Every automation with its recent runs and when it fires next.",
         })
         .output(AutomationsListSchema),
-    catalog: oc
+    catalog: procedure
         .route({
             method: "GET",
             path: "/automations/catalog",
@@ -32,7 +32,7 @@ export const automationsContract = {
                 "Every trigger this sandbox understands and every template worth starting from, the daemon's own merged with each installed extension's. Writing an automation is checked against this same list, so a screen and the daemon can never disagree about what is allowed.",
         })
         .output(AutomationCatalogSchema),
-    upsert: oc
+    upsert: procedure
         .route({
             method: "POST",
             path: "/automations",
@@ -41,7 +41,7 @@ export const automationsContract = {
         })
         .input(AutomationSchema)
         .output(OkSchema),
-    setEnabled: oc
+    setEnabled: procedure
         .route({
             method: "POST",
             path: "/automations/{id}/enabled",
@@ -50,7 +50,7 @@ export const automationsContract = {
         })
         .input(AutomationEnabledInputSchema)
         .output(OkSchema),
-    remove: oc
+    remove: procedure
         .route({
             method: "DELETE",
             path: "/automations/{id}",
@@ -59,7 +59,7 @@ export const automationsContract = {
         })
         .input(AutomationIdParamSchema)
         .output(OkSchema),
-    rotateToken: oc
+    rotateToken: procedure
         .route({
             method: "POST",
             path: "/automations/{id}/rotate-token",
@@ -70,7 +70,7 @@ export const automationsContract = {
         .input(AutomationIdParamSchema)
         .output(DoorTokenSchema),
     // Skips only the approval gate, since pressing this button is the owner's approval.
-    run: oc
+    run: procedure
         .route({
             method: "POST",
             path: "/automations/{id}/run",
@@ -80,7 +80,7 @@ export const automationsContract = {
         })
         .input(AutomationIdParamSchema)
         .output(OkSchema),
-    senders: oc
+    senders: procedure
         .route({
             method: "GET",
             path: "/automations/senders/{provider}",
@@ -90,7 +90,7 @@ export const automationsContract = {
         })
         .input(SendersProviderParamSchema)
         .output(SendersRosterSchema),
-    pendingList: oc
+    pendingList: procedure
         .route({
             method: "GET",
             path: "/automations/pending",
@@ -98,7 +98,7 @@ export const automationsContract = {
             description: "The queue an automation set to ask first lands in each time it would have fired.",
         })
         .output(AutomationApprovalsListSchema),
-    approve: oc
+    approve: procedure
         .route({
             method: "POST",
             path: "/automations/pending/{id}/approve",
@@ -107,7 +107,7 @@ export const automationsContract = {
         })
         .input(AutomationApprovalIdParamSchema)
         .output(OkSchema),
-    reject: oc
+    reject: procedure
         .route({
             method: "POST",
             path: "/automations/pending/{id}/reject",

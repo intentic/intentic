@@ -9,10 +9,12 @@ import {
     type LandResult,
     type WorkspaceModule,
 } from "@intentic/sandbox-contract";
+import { sandboxRef } from "@intentic/extension-api";
 import { computed, ref, watch, type Ref } from "vue";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
-import { sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
-import { AGENT_DIFF } from "../../../lib/queryKeys";
+import { rpcQuery } from "../../sandbox/client/rpcQuery";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import {
     askAgentToResolve,
@@ -29,7 +31,7 @@ import { blockersOf } from "./conflictResolution";
 import { useAgents } from "../fleet/useAgents";
 import { useNotifications } from "../../../shell/notifications/notifications";
 
-// Per-agent review of what a worktree has that main does not (GET /agents/{id}/diff): one flat set per repo, no
+// Per-agent review of what a worktree has that main does not (agents.diff): one flat set per repo, no
 // staged/unstaged split. `landed` is read off the tree; committed files drop into `absorbed`. Land/discard replace
 // commit/discard; this composable also tracks busy/error state, the last land's conflicts, and viewed progress.
 
@@ -54,22 +56,17 @@ const reviewFileKey = (repo: string, path: string): string => JSON.stringify([re
 // `at` names the sandbox the agent is in; undefined means the active one, same convention as agentActions. The key
 // encodes it too, since agent ids are per-sandbox and could otherwise collide across boxes.
 export const agentChangesKey = (agentId: string, at?: string): unknown[] =>
-    at === undefined ? AGENT_DIFF.of(agentId) : AGENT_DIFF.ofSandbox(at, agentId);
+    at === undefined ? rpcKey(`agents.diff`, { id: agentId }) : rpcKeyAt(at, `agents.diff`, { id: agentId });
 
 export const fetchAgentChanges = (agentId: string, at?: string): Promise<AgentChangesResponse> =>
-    at === undefined
-        ? sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(agentId)}/diff`)
-        : sandboxJsonAt<AgentChangesResponse>(at, `/agents/${encodeURIComponent(agentId)}/diff`);
+    sandboxRpc.agents.diff({ id: agentId }, { context: { at } });
 
-// Cached under the review's own key, so a list invalidation drops per-file diffs too, and warmed vs. clicked reads
-// share one entry. UNPERSISTED: a diff is two full file texts.
-export const agentFileDiffKey = (agentId: string, repo: string, path: string, at?: string): unknown[] => [
-    ...agentChangesKey(agentId, at),
-    UNPERSISTED,
-    `file`,
-    repo,
-    path,
-];
+// Warmed and clicked reads share one entry; whatever makes the review stale drops these with it (agentReviewKeys).
+// UNPERSISTED: a diff is two full file texts.
+export const agentFileDiffKey = (agentId: string, repo: string, path: string, at?: string): unknown[] =>
+    at === undefined
+        ? rpcKey(`agents.fileDiff`, { id: agentId, repo, path }, UNPERSISTED)
+        : rpcKeyAt(at, `agents.fileDiff`, { id: agentId, repo, path }, UNPERSISTED);
 
 // staleTime Infinity: only a write invalidates a diff, and writes already do so; gcTime bounds memory.
 export const AGENT_FILE_DIFF_OPTIONS = {
@@ -79,10 +76,8 @@ export const AGENT_FILE_DIFF_OPTIONS = {
     retry: false as const,
 };
 
-export const readAgentFileDiff = async (agentId: string, repo: string, path: string, at?: string): Promise<FileDiffResponse> => {
-    const route = `/agents/${encodeURIComponent(agentId)}/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}`;
-    return at === undefined ? sandboxJson<FileDiffResponse>(route) : sandboxJsonAt<FileDiffResponse>(at, route);
-};
+export const readAgentFileDiff = (agentId: string, repo: string, path: string, at?: string): Promise<FileDiffResponse> =>
+    sandboxRpc.agents.fileDiff({ id: agentId, repo, path }, { context: { at } });
 
 // Named apart from the fetch call so the background loader can be handed the query directly.
 export const agentFileDiffQuery = (agentId: string, repo: string, path: string, at?: string) => ({
@@ -102,12 +97,13 @@ const statOf = (subset: readonly AgentReviewFile[]): { files: number; additions:
     deletions: subset.reduce((total, file) => total + (file.change.deletions ?? 0), 0),
 });
 
-// Per-agent set of files already viewed; module-level so navigating away and back keeps it, but lost on reload.
-const viewedByAgent = ref<ReadonlyMap<string, ReadonlySet<string>>>(new Map());
+// Per-agent set of files already viewed; module-level so navigating away and back keeps it, but lost on reload, and on
+// a switch, since agent ids are minted per daemon and the next sandbox's same id is another agent.
+const viewedByAgent = sandboxRef<ReadonlyMap<string, ReadonlySet<string>>>(() => new Map());
 const NONE: ReadonlySet<string> = new Set();
 
 // Agents whose land conflict the user has handed back to them, from the press until the turn it started is over.
-const askedByAgent = ref<ReadonlySet<string>>(new Set());
+const askedByAgent = sandboxRef<ReadonlySet<string>>(() => new Set());
 const forgetAsk = (id: string): void => {
     if (!askedByAgent.value.has(id)) {
         return;
@@ -126,8 +122,7 @@ export function useAgentChanges(agentId: Ref<string>, at?: Ref<string | undefine
     const reach = computed(() => at?.value);
     const { query, error } = useSandboxQuery(
         {
-            queryKey: computed(() => agentChangesKey(agentId.value, reach.value)),
-            queryFn: () => fetchAgentChanges(agentId.value, reach.value),
+            ...rpcQuery(`agents.diff`, () => ({ id: agentId.value }), { at: reach }),
             enabled: computed(() => agentId.value !== ``),
         },
         reach,

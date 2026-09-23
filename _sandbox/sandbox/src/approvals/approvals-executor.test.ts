@@ -9,9 +9,7 @@ import * as actualDiscordPost from "./discord-post.js";
 const startTurn = mock(async () => undefined);
 const sendDiscord = mock(async () => ({ url: "https://discord.com/channels/1/2/3" }));
 
-mock.module("../agent/routes/agent.routes.js", () => ({ streamAgent: mock() }));
-mock.module("../agent/run/turn/turn-resume.js", () => ({ startConversationTurn: (...args: unknown[]) => startTurn(...(args as [])) }));
-mock.module("../system/runtime-watch.js", () => ({ publishRuntimeChange: mock() }));
+mock.module("../seams/runtime-feed.js", () => ({ publishRuntimeChange: mock() }));
 mock.module("./discord-post.js", () => ({
     // Whether a post can go the fast way is itself under test; only the network call is replaced.
     ...actualDiscordPost,
@@ -41,9 +39,9 @@ const action = (overrides: Partial<ActionApprovalSummary> & { id: string }): Act
     ...overrides,
 });
 
-// The third argument to a startConversationTurn call: the whole request.
+// The argument to a TurnStarter start: the whole request.
 const turnOf = (call: number): { prompt: string; actsAs?: string; conversationId: string; title?: string } =>
-    (startTurn.mock.calls[call] as unknown as [unknown, unknown, { prompt: string; actsAs?: string; conversationId: string; title?: string }])[2];
+    (startTurn.mock.calls[call] as unknown as [{ prompt: string; actsAs?: string; conversationId: string; title?: string }])[0];
 
 // A store that behaves like the file one: upsert replaces by id, list returns what is there now.
 const servicesWith = (...seed: ApprovalSummary[]) => {
@@ -65,6 +63,8 @@ const servicesWith = (...seed: ApprovalSummary[]) => {
             ],
         },
         logger: { error: mock(), warn: mock(), info: mock() },
+        // The detached start is the one door a turn goes through.
+        turns: { start: (...args: unknown[]) => startTurn(...(args as [])) },
         rows,
     } as unknown as Services & { rows: Map<string, ApprovalSummary> };
 };

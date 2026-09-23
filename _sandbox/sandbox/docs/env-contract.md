@@ -62,7 +62,7 @@ layers above, plus two names: `AUTOMATION_PAYLOAD` when the trigger arrived with
 sessions, the list of sessions that cleared its bar), and the root-only shelf exclusion a scanner-backed guard
 must pass on (`WORKSPACE_ROOT_EXCLUDE_ENV`).
 
-## 3. The process (`platform/leftovers.ts`)
+## 3. The process (`seams/workload-stamp.ts`, read by `platform/boot/leftovers.ts`)
 
 `INTENTIC_TURN_OWNER=<conversation id>` stamps every workload the daemon spawns on a turn's behalf: the
 agent process (Codex's per-turn app-server included), its shell, a `tmux-run` command. Two reserved owners

@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
-import { ExtensionReadinessSchema } from "@intentic/sandbox-contract";
 import { BrandMark, Button, DisclosureRow, ui, StatusBadge } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import ToggleSwitch from "primevue/toggleswitch";
 import { computed, ref, watch } from "vue";
 import { startAgent } from "../../agents/fleet/agentActions";
-import { sandboxJson } from "../client/sandboxClient";
+import { sandboxRpc } from "../client/sandboxRpc";
 import type { ExtensionEntry } from "../../extensions/useExtensionList";
 import { publishBrief, tightenBrief } from "./extensionBrief";
 import ExtensionSettingsForm from "./ExtensionSettingsForm.vue";
@@ -70,7 +69,7 @@ watch(
         }
         readinessError.value = undefined;
         try {
-            const result = ExtensionReadinessSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(entry.extension.id)}/readiness`));
+            const result = await sandboxRpc.extensions.readiness({ id: entry.extension.id });
             readiness.value = [...result.checks];
         } catch (failure) {
             readiness.value = undefined;

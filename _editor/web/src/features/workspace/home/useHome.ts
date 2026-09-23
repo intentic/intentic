@@ -1,6 +1,7 @@
 import type { WorkspaceSearchGroup } from "@intentic/api-contract";
 import { parentDir } from "@intentic/ui/path";
-import { type InjectionKey, type Ref, ref, watch } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
+import { type InjectionKey, type Ref, watch } from "vue";
 import type { RowAction } from "../explorer/rowActions";
 import { withinScope } from "../../../app/projectScope";
 import { workspaceDir } from "../health/workspaceScope";
@@ -28,22 +29,16 @@ export interface HomeSearch {
 export const HOME_SEARCH: InjectionKey<HomeSearch> = Symbol(`home-search`);
 
 // Root-relative; the scope root ("" for the whole tree) is the home's own root. An archive is a folder here: the home
-// enters `drop/photos.zip` and the daemon serves its contents.
-const homeDir = ref<string>(workspaceDir.value);
+// enters `drop/photos.zip` and the daemon serves its contents. A switch is a different /work, so it starts at the root.
+const homeDir = sandboxRef<string>(() => workspaceDir.value);
 // The current entry: what the last click, in the tree or on the home, landed on. Undefined after entering a folder.
-const selected = ref<string | undefined>(undefined);
+const selected = sandboxRef<string | undefined>(() => undefined);
 
 // Re-roots when the scope moves: a folder path means nothing under a different project root.
 watch(workspaceDir, (root) => {
     homeDir.value = root;
     selected.value = undefined;
 });
-
-// A sandbox switch is a different /work; the folder the reader was in is not there.
-export const resetHome = (): void => {
-    homeDir.value = workspaceDir.value;
-    selected.value = undefined;
-};
 
 // A path outside the open project names nothing this home can show, so it opens at the project's own floor instead.
 const openDir = (dir: string): void => {

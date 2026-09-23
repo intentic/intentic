@@ -7,7 +7,7 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { AGENT_GIT_AUTHOR } from "../git-identity.js";
-import { repoGitDir, syncRootExcludes } from "../history/history.js";
+import { repoGitDir, syncRootExcludes } from "./layout/git-layout.js";
 import { cachedScheme } from "../ports/port-probe.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { appPanelKey, buildAppSpec, discoverApps } from "./layout/app-previews.js";
@@ -18,7 +18,7 @@ import { discoverRepos, isValidRepoId, isValidRepoName } from "./layout/repo-dis
 import { resolveReference } from "./files/resolve-reference.js";
 import { missingCount } from "./layout/workspace-setup.js";
 import { syncWorkspaceRepos } from "./layout/sync-repos.js";
-import { listTemplates, loadManifest, readTemplatesConfig } from "../scaffold/templates-config.js";
+import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
 import { UnknownArchiveError } from "./files/workspace-extract.js";
 import { childrenForRead, containedForRead, containedIn, insideArchive, scopedTarget, workspaceRootFor } from "./layout/workspace-scope.js";
@@ -33,7 +33,7 @@ import {
     refuseUnlistable,
     searchPaths,
 } from "./layout/workspace-fence.js";
-import { refuseUnlessVisible } from "../auth/fleet-scope.js";
+import { provenanceOf, refuseUnlessVisible } from "../auth/fleet-scope.js";
 import { callerFence } from "../areas/area-scope.js";
 import type { Fence } from "@intentic/sandbox-contract";
 
@@ -108,7 +108,7 @@ export const createWorkspaceRoutes = (services: Services) => {
         const entry = services.agents.entry(agent);
         // An unknown id stays NOT_FOUND from the scope resolver; saying FORBIDDEN here would answer whether it exists.
         if (entry !== undefined) {
-            refuseUnlessVisible(context.identity, entry);
+            refuseUnlessVisible(context.identity, provenanceOf(entry));
         }
     };
     // Every scoped read asks both questions before a path reaches the resolver: whose copy, and whether this caller

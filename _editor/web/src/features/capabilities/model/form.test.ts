@@ -2,19 +2,26 @@ import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { type ForticlientConnection, VAULTED } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 import {
+    advancedLabel,
     buildConfig,
     cleanName,
+    defaultAnswer,
     fieldError,
     fieldInvalid,
     fieldMissing,
+    fieldRefusal,
     fieldVerified,
+    foldHoldsChoice,
     forticlientAnswers,
     formComplete,
     inlineField,
     keepsSecret,
     nameError,
+    placeholderFor,
+    refusedInFold,
     seedValues,
     shownFields,
+    submitWord,
 } from "./form";
 
 // What the form refuses, what it starts as, and what survives into the config.
@@ -265,4 +272,75 @@ test(`puts a question beside its label only when the answers fit there`, () => {
     ).toBe(false);
     // A plain text field stacks, and so does anything multiline however short its options are.
     expect(inlineField({ key: `server`, label: `Server` })).toBe(false);
+});
+
+// How loudly a box objects, by whether it was left and whether a submit was refused: silent before either, a muted
+// "Required" for an empty box merely tabbed past, red for a malformed value or, once refused, an empty required one.
+test(`refuses a value only as loudly as the reader has earned`, () => {
+    const server = { key: `server`, label: `Server` };
+    const url = { key: `url`, label: `URL` };
+    const stored = new Set<string>();
+    const cases: [field: typeof server, value: string, touched: boolean, attempted: boolean, alarm: string | undefined, quiet: boolean][] = [
+        [server, ``, false, false, undefined, false],
+        [url, `not a url`, false, false, undefined, false],
+        [server, ``, true, false, undefined, true],
+        [url, `not a url`, true, false, `Enter a valid URL (e.g. https://…).`, false],
+        [server, ``, false, true, `This field is required.`, false],
+        [server, ``, true, true, `This field is required.`, false],
+        [url, `not a url`, false, true, `Enter a valid URL (e.g. https://…).`, false],
+        [server, `vpn.acme.dev`, true, true, undefined, false],
+    ];
+    for (const [field, value, touched, attempted, alarm, quiet] of cases) {
+        expect(fieldRefusal(field, value, stored, { touched, attempted })).toEqual({ alarm, quiet });
+    }
+    // A stored credential left blank is kept, not missing, however refused the submit.
+    const password = { key: `password`, label: `Password`, secret: true };
+    expect(fieldRefusal(password, ``, new Set([`password`]), { touched: true, attempted: true })).toEqual({ alarm: undefined, quiet: false });
+});
+
+test(`promises a kept credential in the empty box, and the tile's own placeholder otherwise`, () => {
+    const password = { key: `password`, label: `Password`, secret: true, placeholder: `your VPN password` };
+    const stored = new Set([`password`]);
+
+    expect(placeholderFor(password, ``, stored)).toBe(`•••••••••••• already set, leave blank to keep it`);
+    // Typing replaces it, and an add has nothing to keep.
+    expect(placeholderFor(password, `hunter2`, stored)).toBe(`your VPN password`);
+    expect(placeholderFor(password, ``, new Set())).toBe(`your VPN password`);
+});
+
+// The fold opens by itself only over a value somebody chose, and opens after a refusal only when what refused is in it.
+test(`opens the Advanced fold when it holds a choice or the reason a submit was refused`, () => {
+    const entry = tile([
+        { key: `server`, label: `Server` },
+        { key: `mtu`, label: `MTU`, default: `1420`, advanced: true },
+        { key: `killswitch`, label: `Kill switch`, boolean: true, advanced: true },
+        { key: `port`, label: `Port`, advanced: true, optional: true },
+    ]);
+    const answers = { server: `vpn.acme.dev`, mtu: `1420`, killswitch: `off`, port: `` };
+
+    expect(foldHoldsChoice(entry, answers)).toBe(false);
+    expect(foldHoldsChoice(entry, { ...answers, killswitch: `on` })).toBe(true);
+    expect(foldHoldsChoice(entry, { ...answers, mtu: `1280` })).toBe(true);
+
+    // An empty server refuses from outside the fold; a malformed port or an emptied default refuses from inside it.
+    expect(refusedInFold(entry, { ...answers, server: `` }, new Set())).toBe(false);
+    expect(refusedInFold(entry, { ...answers, port: `70000` }, new Set())).toBe(true);
+    expect(refusedInFold(entry, { ...answers, mtu: `` }, new Set())).toBe(true);
+});
+
+test(`answers a field before anyone does: its default, and a switch's off`, () => {
+    expect(defaultAnswer({ key: `mtu`, label: `MTU`, default: `1420` })).toBe(`1420`);
+    expect(defaultAnswer({ key: `gpu`, label: `GPU`, boolean: true })).toBe(`off`);
+    expect(defaultAnswer({ key: `server`, label: `Server` })).toBe(``);
+});
+
+test(`names the fold and the submit in the tile's own words`, () => {
+    expect(advancedLabel(tile([], { kind: `browser` }))).toBe(`Let the agent sign in for you (optional)`);
+    expect(advancedLabel(tile([]))).toBe(`Advanced`);
+
+    // Editing leads: a pre-filled form over a live connection must not offer to "Add" it.
+    expect(submitWord(true, `devops`)).toBe(`Save changes`);
+    expect(submitWord(false, `devops`)).toBe(`Activate`);
+    expect(submitWord(false, `vpn`)).toBe(`Add`);
+    expect(submitWord(false, undefined)).toBe(`Add`);
 });

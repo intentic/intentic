@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { SafetyLogEntrySchema, SafetyPolicySchema } from "../policy/safety-policy.js";
 import { OkSchema } from "../schemas/shared.js";
 import { z } from "zod";
@@ -7,7 +7,7 @@ import { z } from "zod";
 // the policy is a document edited at human speed, the log changes on its own mid-turn. The policy travels as text,
 // never parsed, since its reader is a model, not a parser.
 export const safetyContract = {
-    policy: oc
+    policy: procedure
         .route({
             method: "GET",
             path: "/safety/policy",
@@ -16,7 +16,7 @@ export const safetyContract = {
                 "The document that decides when an agent stops to ask you before running something. Prose, not settings: it is read by the model that judges each command. When nobody has written one, this is the text the product ships with, and it describes the behaviour a fresh sandbox already has.",
         })
         .output(SafetyPolicySchema),
-    setPolicy: oc
+    setPolicy: procedure
         .route({
             method: "POST",
             path: "/safety/policy",
@@ -27,7 +27,7 @@ export const safetyContract = {
         .input(z.object({ text: z.string().describe("The policy, as you want it written.") }))
         .output(OkSchema),
     // Verdicts teach the owner which policy line to add next; answers why you weren't asked about something.
-    log: oc
+    log: procedure
         .route({
             method: "GET",
             path: "/safety/log",

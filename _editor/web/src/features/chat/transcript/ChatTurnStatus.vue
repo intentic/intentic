@@ -41,12 +41,12 @@ const now = useNow(() => streaming.value);
 
 // Start instant comes from the conversation, so a view mounted mid-turn starts its counter midway too.
 const loaderSeconds = computed(() => {
-    const startedAt = conversation.value.turnStartedAt.value;
+    const startedAt = conversation.value.turn.turnStartedAt.value;
     return startedAt === undefined ? 0 : Math.max(0, Math.floor((now.value - startedAt) / 1000));
 });
 // The readout itself is the shared elapsed format, so a turn that runs long reads "9m 12s" rather than "552s".
 const loaderElapsed = computed(() => {
-    const startedAt = conversation.value.turnStartedAt.value;
+    const startedAt = conversation.value.turn.turnStartedAt.value;
     return startedAt === undefined ? undefined : formatElapsed(startedAt, now.value);
 });
 // Swaps to "Waiting on N subagents" once the turn is only waiting on children, matching the roster count.
@@ -60,7 +60,7 @@ const loaderWord = computed(() => {
 });
 
 // Replaces the loader word during a provider outage, so a silent turn reads as waiting, not hung.
-const providerRetry = computed(() => conversation.value.providerRetry.value);
+const providerRetry = computed(() => conversation.value.turn.providerRetry.value);
 // Countdown only when the harness reports nextAttemptAt; Codex reports just the attempt number, not a time. Past
 // CLOCK_FROM_MS the instant replaces the countdown, since "165h 22m" is arithmetic and "Tue 15:45" is not.
 const retryWait = computed(() => {

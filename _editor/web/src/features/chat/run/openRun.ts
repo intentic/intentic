@@ -1,7 +1,7 @@
-import { type WorkflowRun, WorkflowRunsListSchema } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { agentSeed } from "../../agents/fleet/useAgents-actions";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { RunSession } from "./chatRun";
 import { summonChat } from "./summon";
 import { useChat } from "./useChat";
@@ -28,8 +28,8 @@ export const openRunSessions = (sessions: readonly RunSession[]): boolean => {
         // The provider here is only a composer seed; getting it wrong doesn't affect the transcript.
         return agentTabOf({
             id: session.conversationId,
-            provider: session.agent ?? active.value.provider.value,
-            harness: session.harness ?? active.value.harness.value,
+            provider: session.agent ?? active.value.selection.provider.value,
+            harness: session.harness ?? active.value.selection.harness.value,
         });
     });
     reveal({ verb: `panes`, entries, focus: entries.at(-1)!.conversationId, caret: false });
@@ -46,9 +46,7 @@ export const openRunInChat = async (run: WorkflowRun | string): Promise<void> =>
         return;
     }
     // The id named nothing in the ledger: nothing to show, nothing to claim.
-    if ((await sandboxRuns()).some((entry) => entry.runId === run)) {
+    if ((await sandboxRpc.workflows.runs()).runs.some((entry) => entry.runId === run)) {
         summonChat({ kind: `run`, runId: run });
     }
 };
-
-const sandboxRuns = async (): Promise<WorkflowRun[]> => WorkflowRunsListSchema.parse(await sandboxJson(`/workflows/runs`)).runs;

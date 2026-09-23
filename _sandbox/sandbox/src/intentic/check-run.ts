@@ -16,7 +16,11 @@ export const checkEventsDir = (historyRoot: string): string => join(historyRoot,
 // Whole-run ceiling: ops under resolve/plan are already bounded, so outliving this means wedged, not working.
 const RUN_WATCHDOG_MS = 10 * 60_000;
 
-export async function* runCheckCommand(services: Services, args: readonly string[], signal: AbortSignal | undefined): AsyncGenerator<IntenticLine> {
+export async function* runCheckCommand(
+    services: Pick<Services, "config" | "terminalRun" | "workspace">,
+    args: readonly string[],
+    signal: AbortSignal | undefined,
+): AsyncGenerator<IntenticLine> {
     const path = join(checkEventsDir(services.config.historyRoot), `${randomUUID()}.ndjson`);
     await resetEventsFile(path);
     if (services.terminalRun.visible) {

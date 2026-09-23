@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
-import { IN_MEMORY, openSearchIndex } from "./search-index.js";
+import { openSearchIndex } from "./search-index.js";
+import { IN_MEMORY } from "../store/sqlite.js";
 import type { SpokenLine } from "./transcript-search.js";
 
 const said = (...lines: [string, "user" | "agent"][]): SpokenLine[] => lines.map(([text, speaker]) => ({ text, speaker }));

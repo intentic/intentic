@@ -3,7 +3,7 @@ import { test, expect } from "bun:test";
 import { fakeFiles, tempWorkspace } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
-import { loadedSkillFile } from "../settings/loaded-skills.js";
+import { loadedSkillFile } from "../store/loaded-skills.js";
 import { openBrowserAccount } from "./open-account.js";
 
 // Pins that no site is unfileable: a signup the agent can perform must always be one it can record, never one that

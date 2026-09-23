@@ -1,10 +1,10 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { IssueIdParamSchema, IssueInstallsSchema, IssueIntakeIdParamSchema, IssuesListSchema, IssueStatusInputSchema } from "../schemas/issues.js";
 import { OkSchema } from "../schemas/shared.js";
 
 /* The issues inbox: bug reports that arrived from the owner's own sites and apps, grouped by fingerprint. */
 export const issuesContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/issues",
@@ -12,7 +12,7 @@ export const issuesContract = {
             description: "Everything that has crashed or been written in, grouped so a crash that hit a thousand people is one row with a count.",
         })
         .output(IssuesListSchema),
-    status: oc
+    status: procedure
         .route({
             method: "POST",
             path: "/issues/{id}/status",
@@ -21,7 +21,7 @@ export const issuesContract = {
         })
         .input(IssueStatusInputSchema)
         .output(OkSchema),
-    investigate: oc
+    investigate: procedure
         .route({
             method: "POST",
             path: "/issues/{id}/investigate",
@@ -31,7 +31,7 @@ export const issuesContract = {
         })
         .input(IssueIdParamSchema)
         .output(OkSchema),
-    remove: oc
+    remove: procedure
         .route({
             method: "DELETE",
             path: "/issues/{id}",
@@ -40,7 +40,7 @@ export const issuesContract = {
         })
         .input(IssueIdParamSchema)
         .output(OkSchema),
-    installs: oc
+    installs: procedure
         .route({
             method: "GET",
             path: "/issues/installs/{automationId}",

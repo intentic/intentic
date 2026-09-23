@@ -1,3 +1,4 @@
+import type { IntenticLine } from "@intentic/sandbox-contract";
 import type { StatusVariant } from "@intentic/ui";
 import { readIntenticLines } from "../../lib/intenticStream";
 import { t } from "@intentic/ui/i18n";
@@ -91,12 +92,12 @@ export interface PlanProgress {
 // Reduces an `intentic deploy plan` SSE stream (read + diff, no apply) to per-resource verdicts and an orphan list. A
 // terminal kind:"error" frame throws, so the caller can surface the reason instead of an empty plan.
 export const readPlanSteps = async (
-    body: ReadableStream<Uint8Array>,
+    frames: AsyncIterable<IntenticLine>,
     onProgress?: (progress: PlanProgress) => void,
 ): Promise<{ steps: PlanStep[]; orphans: PlanOrphan[] }> => {
     const steps: PlanStep[] = [];
     let orphans: PlanOrphan[] = [];
-    for await (const line of readIntenticLines(body)) {
+    for await (const line of readIntenticLines(frames)) {
         if (line[`kind`] === `node`) {
             const id = line[`id`];
             const action = line[`action`];

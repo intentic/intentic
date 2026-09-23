@@ -106,15 +106,21 @@ describe(`cache key registry`, () => {
         expect(stale, `drop these from EXEMPT — they no longer import sandboxKey`).toEqual([]);
     });
 
-    // The daemon invalidates by name; a name with no matching family here lands on nothing, the same silent failure as
-    // an inline literal. EXTENSION_OWNED covers names whose queries live in an extension package, via `api.key(...)`.
-    it(`gives every name the daemon can push a family to land on`, () => {
+    // The daemon invalidates by name; a name that lands on no family and stands for no contract read lands on nothing,
+    // the same silent failure as an inline literal. EXTENSION_OWNED covers names whose queries live in an extension
+    // package, via `api.key(...)`.
+    it(`gives every name the daemon can push a family or a contract read to land on`, () => {
         const EXTENSION_OWNED = new Set([`approvals`]);
         // Read from source, not import: the registry's chain reaches useSandbox, which wants a browser at import time.
-        const declared = new Set([...readFileSync(registry, `utf8`).matchAll(/=\s*family\(\s*`([^`]+)`/g)].map((match) => match[1]));
+        const source = readFileSync(registry, `utf8`);
+        const families = [...source.matchAll(/=\s*family\(\s*`([^`]+)`/g)].map((match) => match[1]);
+        const table = /PUSHED_READS[^=]*=\s*\{([\s\S]*?)\n\};/.exec(source)?.[1] ?? ``;
+        const bridged = [...table.matchAll(/^\s*"?([\w/-]+)"?:/gm)].map((match) => match[1]);
+        expect(bridged).toContain(`settings`);
+        const declared = new Set([...families, ...bridged]);
         const unlanded = [...new Set(WORKSPACE_STATE_FILES.flatMap((file) => file.invalidates))]
             .filter((name) => !EXTENSION_OWNED.has(name) && !declared.has(name))
             .toSorted();
-        expect(unlanded, `add a family in composables/queryKeys.ts, or record the name as extension-owned`).toEqual([]);
+        expect(unlanded, `add the read the name stands for to PUSHED_READS in lib/queryKeys.ts, or record it as extension-owned`).toEqual([]);
     });
 });

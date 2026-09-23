@@ -15,13 +15,14 @@ const props = defineProps<{ repo: string }>();
 const { data } = useQuery({
     // Always prefix with api.sandbox.key(...) so the cache can't bleed across a sandbox switch.
     queryKey: host.sandbox.key(\`incidents\`, props.repo),
-    queryFn: () => host.sandbox.json<{ lines: string[] }>(\`/logs\`),
+    // A daemon route by name, allowed by the manifest's "GET /logs"; the answer arrives parsed by the route's schema.
+    queryFn: () => host.sandbox.rpc.logs.list(),
     enabled: () => host.sandbox.reachable(),
 });
 </script>
 
 <template>
     <ul>
-        <li v-for="line in data?.lines ?? []" :key="line">{{ line }}</li>
+        <li v-for="file in data?.files ?? []" :key="file.name">{{ file.name }}</li>
     </ul>
 </template>`;

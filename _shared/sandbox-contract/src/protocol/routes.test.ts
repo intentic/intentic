@@ -2,7 +2,8 @@ import { eventIterator, oc } from "@orpc/contract";
 import { describe, it, expect } from "bun:test";
 import { z } from "zod";
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, SANDBOX_ROUTES, sandboxRouteName } from "../index.js";
-import { contractRoutes, routeNameForRequest, routeShapes, streamOf } from "./routes.js";
+import { procedure } from "./route-meta.js";
+import { contractRoutes, routeNameForRequest, routeShapes, servedRoute, streamOf } from "./routes.js";
 
 const fixture = {
     vpn: {
@@ -27,7 +28,14 @@ describe(`contractRoutes`, () => {
             name: `vpn.connect`,
             method: `POST`,
             path: `/vpn/{id}/connect`,
+            meta: {},
         });
+    });
+
+    it(`carries the policy a procedure declared, merged over its builder's`, () => {
+        const operated = procedure.meta({ agent: true, control: `never` });
+        const routes = contractRoutes({ vpn: { connect: operated.route({ method: "POST", path: "/vpn/{id}/connect" }).meta({ floor: `collaborator` }) } });
+        expect(routes).toEqual([{ name: `vpn.connect`, method: `POST`, path: `/vpn/{id}/connect`, meta: { agent: true, control: `never`, floor: `collaborator` } }]);
     });
 
     it(`ignores non-procedure members rather than inventing routes for them`, () => {
@@ -72,12 +80,67 @@ describe(`routeNameForRequest`, () => {
         expect(routeNameForRequest(routes, `POST`, `/vpn/connect`)).toBeUndefined();
     });
 
-    it(`does not let an empty segment stand in for a param`, () => {
+    it(`reads a trailing slash as the end of the path, never as an empty param`, () => {
         expect(routeNameForRequest(routes, `DELETE`, `/system/terminals/`)).toBeUndefined();
+    });
+
+    // What oRPC's router (rou3) dispatches: a spelling it serves must resolve to the route it serves, or a policy
+    // keyed on the route would not hold at that spelling.
+    it(`reads the path as oRPC's router does: two trailing slashes dropped, an empty inner segment still a param`, () => {
+        expect(routeNameForRequest(routes, `GET`, `/vpn/`)).toBe(`vpn.list`);
+        expect(routeNameForRequest(routes, `GET`, `/vpn//`)).toBe(`vpn.list`);
+        expect(routeNameForRequest(routes, `GET`, `/vpn///`)).toBeUndefined();
+        expect(routeNameForRequest(routes, `POST`, `/vpn//connect`)).toBe(`vpn.connect`);
+        expect(routeNameForRequest(routes, `POST`, `/vpn/corp-gw/connect/`)).toBe(`vpn.connect`);
+        expect(routeNameForRequest(routes, `GET`, `//vpn`)).toBeUndefined();
     });
 
     it(`returns undefined for the daemon's hand-written non-contract routes`, () => {
         expect(routeNameForRequest(routes, `GET`, `/health`)).toBeUndefined();
+    });
+});
+
+describe(`servedRoute`, () => {
+    const contract = contractRoutes(fixture);
+    const raw = [
+        { name: `GET /health`, method: `GET`, path: `/health`, meta: { auth: `door` as const } },
+        { name: `POST /vpn/{id}/connect`, method: `POST`, path: `/vpn/{id}/connect`, meta: { auth: `door` as const } },
+        { name: `DELETE /vpn/{id}/connect`, method: `DELETE`, path: `/vpn/{id}/connect`, meta: {} },
+        { name: `ALL /x/*`, method: `ALL`, path: `/x/*`, meta: {} },
+    ];
+    const served = (method: string, path: string) => servedRoute(raw, contract, method, path)?.name;
+
+    it(`answers with a raw route before the contract, as the daemon registers them ahead of oRPC's catch-all`, () => {
+        expect(served(`POST`, `/vpn/corp-gw/connect`)).toBe(`POST /vpn/{id}/connect`);
+        expect(served(`GET`, `/vpn`)).toBe(`vpn.list`);
+    });
+
+    // Hono is strict where oRPC is not, so a raw route's variant spelling falls through to the contract.
+    it(`matches a raw route exactly: no trailing slash, no empty param`, () => {
+        expect(served(`POST`, `/vpn/corp-gw/connect/`)).toBe(`vpn.connect`);
+        expect(served(`POST`, `/vpn//connect`)).toBe(`vpn.connect`);
+        expect(served(`GET`, `/health/`)).toBeUndefined();
+    });
+
+    it(`answers HEAD with a raw GET route and every method with an ALL one, in registration order`, () => {
+        expect(served(`HEAD`, `/health`)).toBe(`GET /health`);
+        expect(served(`HEAD`, `/vpn`)).toBeUndefined();
+        expect(served(`PATCH`, `/x/a/b`)).toBe(`ALL /x/*`);
+        expect(served(`DELETE`, `/vpn/corp-gw/connect`)).toBe(`DELETE /vpn/{id}/connect`);
+    });
+
+    // The CORS middleware answers a preflight for whatever sits at the path, before any route runs.
+    it(`resolves a preflight to the most literal route at its path, whatever method that route serves`, () => {
+        expect(served(`OPTIONS`, `/vpn/corp-gw/connect`)).toBe(`POST /vpn/{id}/connect`);
+        expect(served(`OPTIONS`, `/vpn`)).toBe(`vpn.list`);
+        expect(served(`OPTIONS`, `/no/such/route`)).toBeUndefined();
+    });
+
+    it(`gives a trailing /* the segments after the prefix, never the bare prefix`, () => {
+        expect(served(`GET`, `/x/`)).toBe(`ALL /x/*`);
+        expect(served(`GET`, `/x/a`)).toBe(`ALL /x/*`);
+        expect(served(`GET`, `/x`)).toBeUndefined();
+        expect(served(`GET`, `/xy/a`)).toBeUndefined();
     });
 });
 

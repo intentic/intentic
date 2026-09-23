@@ -1,5 +1,5 @@
 import { type Capability, type EndpointConfig, LOCAL_MODEL_WINDOW_DEFAULT, type LocalModelConfig } from "@intentic/sandbox-contract";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 
 // A local model expressed as the endpoint it is: the catalog probe, translator reconciler and credential resolution all
 // take an EndpointConfig, and a localmodel entry becomes one only here. The URL is derived from the id rather than

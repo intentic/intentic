@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Measures what FINDING a symbol costs, from transcripts; bench.mjs measures opening one instead.
-// Reads HISTORY_ROOT/transcripts/*.jsonl and agents.json (append-only). Definitions must not drift pre/post-run:
+// Reads HISTORY_ROOT/conversations/<id>/transcript.jsonl and conversations.db, read-only. Definitions must not drift
+// pre/post-run:
 // - work session: 3+ reads+searches; chat and one-shot commands aren't work.
 // - listing: Bash/exec starting ls/tree/find/fd/rg --files/exa/eza, matched on the command text, not the tool name.
 // - big listing: a listing whose result exceeds 4,000 characters.
@@ -8,15 +9,22 @@
 // - stale name: a mention of a name in STALE; extend STALE at every rename.
 import fs from "node:fs";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { HISTORY_ROOT } from "@intentic/constants";
 import { arg } from "./lib/args.mjs";
 
 const since = arg("since", "");
 
-const agents = JSON.parse(fs.readFileSync(path.join(HISTORY_ROOT, "agents.json"), "utf8"));
-const meta = new Map(agents.map((a) => [a.id, a]));
-const dir = path.join(HISTORY_ROOT, "transcripts");
-const files = fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
+const fleet = new DatabaseSync(path.join(HISTORY_ROOT, "conversations.db"), { readOnly: true });
+const meta = new Map(
+    fleet
+        .prepare("SELECT id, json_extract(record, '$.createdAt') AS createdAt, json_extract(record, '$.profile.provider') AS provider FROM conversation")
+        .all()
+        .map((row) => [row.id, row]),
+);
+fleet.close();
+const dir = path.join(HISTORY_ROOT, "conversations");
+const ids = fs.readdirSync(dir).filter((id) => fs.existsSync(path.join(dir, id, "transcript.jsonl")));
 
 // Names this repo no longer has; extend at every rename, until a name's count stays at zero.
 const STALE = ["_apps", "_libs", "_computers", "intentic-app/", "intentic-dev/", "packages/"];
@@ -131,8 +139,7 @@ const countTool = (s, seen, t) => {
     }
 };
 
-for (const f of files) {
-    const id = f.replace(/\.jsonl$/, "");
+for (const id of ids) {
     const m = meta.get(id) || {};
     const date = m.createdAt ? new Date(m.createdAt).toISOString().slice(0, 10) : "?";
     if (since !== "" && date < since) {
@@ -140,7 +147,7 @@ for (const f of files) {
     }
     let txt;
     try {
-        txt = fs.readFileSync(path.join(dir, f), "utf8");
+        txt = fs.readFileSync(path.join(dir, id, "transcript.jsonl"), "utf8");
     } catch {
         continue; // a transcript rotated away between readdir and here
     }

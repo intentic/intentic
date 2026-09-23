@@ -1,7 +1,11 @@
 import type { AgentEvent, DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
 import { it, expect, mock } from "bun:test";
-import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { type CreateAsk, createSandboxThroughFleet, type FleetGateDeps, slugOf } from "./fleet-gate.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
+import { memoryFleet } from "../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // The gate's whole job is ORDER: the owner's card comes before the account is touched, so a no costs nothing at all —
 // no row, no claim, nothing left to expire. Everything else here is what each way of not saying yes answers with.
@@ -31,6 +35,7 @@ const fake = (
     const flows: DeviceSandboxFlow[] = [];
     const provision = mock(async () => ok(PROVISIONED));
     const deps: FleetGateDeps = {
+        cards,
         token: async () => "itk_test",
         list: async () => ok({ sandboxes: [] }),
         provision,
@@ -67,7 +72,7 @@ const answerCard = async (frames: AgentEvent[], label: string | undefined): Prom
     if (raised.kind !== "question") {
         throw new Error(`expected a question frame, got ${raised.kind}`);
     }
-    resolveRequest(
+    cards.resolve(
         label === undefined
             ? { kind: "question", requestId: raised.requestId, cancelled: true }
             : { kind: "question", requestId: raised.requestId, answers: { [raised.questions[0]!.question]: [label] } },

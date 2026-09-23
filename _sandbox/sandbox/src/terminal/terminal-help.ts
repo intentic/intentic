@@ -1,14 +1,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../runtimes/claude/claude-sdk.js";
+import { sdk } from "../engines/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { z } from "zod";
-import { createRequest, resolveRequest } from "../agent/tools/agent-requests.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { captureScrollback } from "./terminal-session.js";
+import type { ParkedCards } from "../agents/actor/parked-cards.js";
 
 // Hands the terminal back to the person, the browser handover's twin: every Bash command runs in a tmux window the
 // owner can type into, so a prompt is one keystroke from being answered. Parks only on a command already waiting; the
@@ -30,7 +30,8 @@ interface TerminalHelp {
     readonly requestedAt: number;
 }
 
-const asks = new Map<string, TerminalHelp>();
+// Each open ask with how to settle it as not-helped, bound by the turn that raised it.
+const asks = new Map<string, { readonly help: TerminalHelp; readonly abandon: (note: string) => void }>();
 
 // The newest window whose pane is alive (a dead one is a finished command tmux-run kept for its output), by
 // window_activity since tmux renumbers. Name last, space-separated: a tab sanitizes to an underscore off UTF-8.
@@ -71,15 +72,15 @@ export const selectWindow = async (id: string): Promise<void> => {
 };
 
 // Raise the ask against a session, the state half the terminals list renders from.
-export const raiseTerminalHelp = (session: string, help: TerminalHelp): void => {
-    asks.set(session, help);
+export const raiseTerminalHelp = (session: string, help: TerminalHelp, abandon: (note: string) => void): void => {
+    asks.set(session, { help, abandon });
     publishRuntimeChange("terminals");
 };
 
 // Clears the banner however the waiter settled (answered, dismissed, aborted). Keyed by requestId, not session, so a
 // stale settle can't clear a newer ask.
 export const clearTerminalHelp = (requestId: string): void => {
-    for (const [session, help] of asks) {
+    for (const [session, { help }] of asks) {
         if (help.requestId === requestId) {
             asks.delete(session);
             publishRuntimeChange("terminals");
@@ -88,21 +89,16 @@ export const clearTerminalHelp = (requestId: string): void => {
 };
 
 // What the terminals list hangs on the session's row.
-export const terminalHelpFor = (session: string): TerminalHelp | undefined => asks.get(session);
+export const terminalHelpFor = (session: string): TerminalHelp | undefined => asks.get(session)?.help;
 
 // Called when the session dies under a parked ask (killed or reaped); settles it as not-helped, since nothing else
 // would ever release a wait on a person. Idempotent: a racing turn-abort settle finds the request already gone.
 export const settleTerminalHelpFor = (session: string): void => {
-    const help = asks.get(session);
-    if (help === undefined) {
+    const ask = asks.get(session);
+    if (ask === undefined) {
         return;
     }
-    resolveRequest({
-        kind: "terminal_help",
-        requestId: help.requestId,
-        helped: false,
-        note: "the terminal was closed before anyone could help",
-    });
+    ask.abandon("the terminal was closed before anyone could help");
     asks.delete(session);
     publishRuntimeChange("terminals");
 };
@@ -113,6 +109,8 @@ export interface TerminalHelpDeps {
     readonly conversationId?: string | undefined;
     readonly signal: AbortSignal;
     readonly push: (event: AgentEvent) => void;
+    // Where the ask's card is parked, and settled when the terminal closes under it.
+    readonly cards: Pick<ParkedCards, "create" | "resolve">;
 }
 
 export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWithInstance =>
@@ -141,12 +139,14 @@ export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWi
                         );
                     }
                     await selectWindow(window.id);
-                    const { id, wait } = createRequest(
+                    const { id, wait } = deps.cards.create(
                         "terminal_help",
                         { kind: "terminal_help", requestId: "", helped: false, note: "the turn ended before anyone could help" },
                         deps.conversationId,
                     );
-                    raiseTerminalHelp(session, { requestId: id, message, requestedAt: Date.now() });
+                    raiseTerminalHelp(session, { requestId: id, message, requestedAt: Date.now() }, (note) =>
+                        deps.cards.resolve({ kind: "terminal_help", requestId: id, helped: false, note }),
+                    );
                     deps.push({ kind: "terminal_help", requestId: id, session, message });
                     const { reply, resolved } = await wait(deps.signal);
                     clearTerminalHelp(id);

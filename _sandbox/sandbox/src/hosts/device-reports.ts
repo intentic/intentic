@@ -20,7 +20,7 @@ import type { Services } from "../composition.js";
 import { approvedPath } from "../environment/environment.js";
 import type { SyncEnrollmentRow } from "../platform/sync.js";
 import { emitDefinitionToml, settingsDefinition } from "../portability/definition.js";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { type HostClient, hostConnections, hostSummaries } from "./host-peer.js";
 
 // Every machine reachable from this sandbox, via two doors: the desktop-sync agent's volunteered report (free, no

@@ -2,17 +2,27 @@ import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { test, expect, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import type { AgentRequest } from "../../agent/run/agent.js";
-import { resolveRequest } from "../../agent/tools/agent-requests.js";
+import type { AgentRequest, CodexCredential, TurnHooks } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
-import { WORKLOAD_ENV } from "../../platform/boot/leftovers.js";
-import { fakeCodexRunner } from "../../testing.js";
+import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
+import { fakeCodexRunner, memoryFleet } from "../../testing.js";
 import type { CodexEvent, CodexRunner } from "./codex-app-server.js";
 import { createCodexAgent } from "./codex-agent.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 const createTestAgent = (runner: CodexRunner, codexHome = "/home") => createCodexAgent({ codexHome, runner });
 
-const request = { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, signal: new AbortController().signal };
+const request: AgentRequest<CodexCredential> = {
+    spec: { prompt: "add a /ping route", cwd: WORKSPACE_ROOT },
+    policy: {},
+    tools: {},
+    credential: { kind: "container" },
+    hooks: { cards },
+    signal: new AbortController().signal,
+};
 
 // Collects all events; onPlan/onQuestion schedule their answer after the generator parks on the pending-request bridge,
 // hence the setTimeout (the yield suspends before wait() registers).
@@ -27,11 +37,11 @@ const collect = async (
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
             const decision = onPlan(event.requestId);
-            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
+            setTimeout(() => cards.resolve({ kind: "plan", requestId: event.requestId, ...decision }), 0);
         }
         if (event.kind === "question" && onQuestion !== undefined) {
             const decision = onQuestion(event.requestId);
-            setTimeout(() => resolveRequest({ kind: "question", requestId: event.requestId, ...decision }), 0);
+            setTimeout(() => cards.resolve({ kind: "question", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -97,7 +107,10 @@ test("a Codex browser screenshot settles its card with the picture its answer na
             },
         },
     ]);
-    const events = await collect(createTestAgent(runner), { ...request, browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser` });
+    const events = await collect(createTestAgent(runner), {
+        ...request,
+        tools: { ...request.tools, browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser` },
+    });
     expect(events.filter((event) => event.kind === "tool_call_update")).toEqual([
         {
             kind: "tool_call_update",
@@ -115,10 +128,8 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), {
         ...request,
-        sessionId: "thr-9",
-        model: "gpt-5-codex",
-        effort: "max",
-        cliEnv: { DISCORD_BOT_TOKEN: "tok" },
+        spec: { ...request.spec, sessionId: "thr-9", model: "gpt-5-codex", effort: "max" },
+        tools: { ...request.tools, cliEnv: { DISCORD_BOT_TOKEN: "tok" } },
     });
     expect(calls).toHaveLength(1);
     const turn = calls[0]!;
@@ -142,7 +153,7 @@ test("the turn runs full-access with approvals off, resumes the session, and pin
 test("app-server carries the owner stamp of the conversation it works for, over any it inherited", async () => {
     const { runner, calls } = fakeCodexRunner([]);
     const agent = createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`);
-    await collect(agent, { ...request, conversationId: "conv-7" });
+    await collect(agent, { ...request, spec: { ...request.spec, conversationId: "conv-7" } });
     await collect(agent, request);
     expect(calls.map((turn) => turn.env[WORKLOAD_ENV])).toEqual(["conv-7", process.env[WORKLOAD_ENV]]);
 });
@@ -151,8 +162,12 @@ test("a subscription turn uses the translator bearer and the actor marker that u
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), {
         ...request,
-        model: "gpt-5.5",
-        codexEndpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "intentic-translator-local" },
+        spec: { ...request.spec, model: "gpt-5.5" },
+        credential: {
+            kind: "codex-endpoint",
+            baseUrl: "http://127.0.0.1:8788",
+            authToken: "intentic-translator-local",
+        },
     });
     const turn = calls[0]!;
     // The bearer rides CODEX_API_KEY (env_key), not an OAuth token in a home.
@@ -174,7 +189,10 @@ test("a subscription turn uses the translator bearer and the actor marker that u
 
 test("a native (account) turn carries no provider config: Codex uses its own credential resolution", async () => {
     const { runner, calls } = fakeCodexRunner([]);
-    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), { ...request, model: "gpt-5-codex" });
+    await collect(createTestAgent(runner, `${WORKSPACE_ROOT}/${STATE_DIR}/secrets/auth/codex`), {
+        ...request,
+        spec: { ...request.spec, model: "gpt-5-codex" },
+    });
     // The question tool is the one key every turn carries; nothing here names a provider or a credential.
     expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": true });
     expect(calls[0]!.env["CODEX_API_KEY"]).toBeUndefined();
@@ -184,15 +202,17 @@ test("process-backed browser MCP servers ride Codex's per-thread config", async 
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner), {
         ...request,
-        sdkServers: {
-            identity: {
-                type: "stdio",
-                command: "/usr/bin/socat",
-                args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"],
-                // PATH is inherited and must not be copied into thread config; DISPLAY is a real server delta.
-                env: { PATH: process.env["PATH"] ?? "", DISPLAY: ":99" },
-                timeout: 120_000,
-                alwaysLoad: true,
+        tools: {
+            ...request.tools,
+            sdkServers: {
+                identity: {
+                    type: "stdio",
+                    command: "/usr/bin/socat",
+                    args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"],
+                    env: { PATH: process.env["PATH"] ?? "", DISPLAY: ":99" },
+                    timeout: 120_000,
+                    alwaysLoad: true,
+                },
             },
         },
     });
@@ -226,10 +246,13 @@ test("attached images ride as native inputs while other files are referenced in 
     const { runner, calls } = fakeCodexRunner([]);
     await collect(createTestAgent(runner), {
         ...request,
-        attachments: [
-            `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/a/shot.png`,
-            `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/b/report.pdf`,
-        ],
+        spec: {
+            ...request.spec,
+            attachments: [
+                `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/a/shot.png`,
+                `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/attachments/b/report.pdf`,
+            ],
+        },
     });
     expect(calls[0]!.images).toEqual(["/work/.intentic/records/artifacts/attachments/a/shot.png"]);
     expect(calls[0]!.prompt).toContain("/work/.intentic/records/artifacts/attachments/b/report.pdf");
@@ -244,9 +267,17 @@ test("a plan turn sends attached images on the first planning turn only: the res
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const, attachments: [`${WORKSPACE_ROOT}/a/shot.png`] }, () => ({
-        approve: true,
-    }));
+    await collect(
+        createTestAgent(runner),
+        {
+            ...request,
+            spec: { ...request.spec, attachments: [`${WORKSPACE_ROOT}/a/shot.png`] },
+            policy: { ...request.policy, permissionMode: "plan" as const },
+        },
+        () => ({
+            approve: true,
+        }),
+    );
     expect(calls).toHaveLength(2);
     expect(calls[0]!.images).toEqual(["/work/a/shot.png"]);
     expect(calls[1]!.images).toBeUndefined();
@@ -260,7 +291,9 @@ test("a plan turn proposes read-only, then executes full-access on the same thre
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({
+        approve: true,
+    }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-2" },
@@ -292,7 +325,7 @@ test("a rejected plan loops another read-only planning turn carrying the feedbac
         [{ type: "item.completed", item: { id: "m3", type: "agent_message", text: "Executed." } }],
     );
     let planCount = 0;
-    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => {
+    const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => {
         planCount += 1;
         return planCount === 1 ? { approve: false, feedback: "use fastify" } : { approve: true };
     });
@@ -311,7 +344,7 @@ test("a plan turn that fails after holding a message emits the error and NO plan
         { type: "item.completed", item: { id: "m1", type: "agent_message", text: "Partial plan." } },
         { type: "turn.failed", error: { message: "Payment Required" } },
     ]);
-    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const });
+    const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } });
     expect(events).toEqual([{ kind: "session", sessionId: "thr-7" }, { kind: "error", message: "Payment Required" }, { kind: "done" }]);
     expect(events.some((event) => event.kind === "plan")).toBe(false);
     expect(calls).toHaveLength(1);
@@ -366,7 +399,9 @@ test("a plan turn survives an advisory and still proposes its plan", async () =>
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({
+        approve: true,
+    }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-10" },
@@ -420,7 +455,9 @@ test("an unrecognized warning is muted rather than reddening the turn, and a pla
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({
+        approve: true,
+    }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-16" },
@@ -469,7 +506,9 @@ test("a plan turn survives a stream retry and still proposes its plan", async ()
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({
+        approve: true,
+    }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-12" },
@@ -580,7 +619,9 @@ test("a plan turn survives a compaction and still proposes its plan", async () =
         ],
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
-    const events = await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const }, () => ({ approve: true }));
+    const events = await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, permissionMode: "plan" as const } }, () => ({
+        approve: true,
+    }));
 
     expect(events).toEqual([
         { kind: "session", sessionId: "thr-14" },
@@ -818,7 +859,7 @@ test("a dismissed question tells Codex so rather than leaving it holding the req
 
 test("an unattended turn is given no way to ask: a card nobody will answer is a deadlock", async () => {
     const { runner, calls } = fakeCodexRunner([]);
-    await collect(createTestAgent(runner), { ...request, unattended: true });
+    await collect(createTestAgent(runner), { ...request, policy: { ...request.policy, unattended: true } });
     // Turned off by name, not by omission: Codex registers the tool when the table is absent.
     expect(calls[0]!.config).toEqual({ "tools.experimental_request_user_input.enabled": false });
 });
@@ -845,7 +886,7 @@ test("an anchored turn's app-server is born in the turn's mount namespace", asyn
 
     await collect(createTestAgent(runner), {
         ...request,
-        isolation: { plan, anchor: { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } },
+        spec: { ...request.spec, isolation: { plan, anchor: { pid: 4321, cwd: WORKSPACE_ROOT, plan, dispose: () => {} } } },
     });
 
     expect(calls[0]!.namespace).toEqual({ pid: 4321, cwd: WORKSPACE_ROOT });
@@ -855,7 +896,7 @@ test("an isolated turn the container could not anchor carries no namespace and r
     const plan = { worktree: "/history/worktrees/c1/work", root: WORKSPACE_ROOT, mirrors: [], overlays: "/history/overlays/c1", fence: undefined };
     const { runner, calls } = fakeCodexRunner([]);
 
-    await collect(createTestAgent(runner), { ...request, cwd: plan.worktree, isolation: { plan } });
+    await collect(createTestAgent(runner), { ...request, spec: { ...request.spec, cwd: plan.worktree, isolation: { plan } } });
 
     expect(calls[0]!.namespace).toBeUndefined();
     expect(calls[0]!.options.workingDirectory).toBe(plan.worktree);
@@ -871,11 +912,15 @@ test("each turn gets a steering channel, and one typed while the plan is read re
         [{ type: "item.completed", item: { id: "m2", type: "agent_message", text: "Done." } }],
     );
 
-    await collect(createTestAgent(runner), { ...request, permissionMode: "plan" as const, steering: queue }, () => {
-        // Typed while the plan card is up; that phase's channel already closed, so it belongs to the next one.
-        queue.push("use fastify");
-        return { approve: true };
-    });
+    await collect(
+        createTestAgent(runner),
+        { ...request, spec: { ...request.spec, steering: queue }, policy: { ...request.policy, permissionMode: "plan" as const } },
+        () => {
+            // Typed while the plan card is up; that phase's channel already closed, so it belongs to the next one.
+            queue.push("use fastify");
+            return { approve: true };
+        },
+    );
 
     expect(calls).toHaveLength(2);
     expect(steered).toEqual([[], ["use fastify"]]);
@@ -892,14 +937,14 @@ const approvalTurn = (command: string, respond: (allow: boolean) => void): Codex
 
 // Stub judge: returns one constant verdict for whatever it's shown.
 const judging =
-    (decision: "allow" | "ask" | "refuse"): AgentRequest["judge"] =>
+    (decision: "allow" | "ask" | "refuse"): TurnHooks["judge"] =>
     async () => ({ decision, sentence: "It does the thing." });
 
 test("a refused command declines rather than cancelling the turn", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("git push --force origin main", (allow) => decisions.push(allow)));
 
-    const events = await collect(agent, { ...request, judge: judging("refuse") });
+    const events = await collect(agent, { ...request, hooks: { ...request.hooks, judge: judging("refuse") } });
 
     expect(decisions).toEqual([false]);
     // The turn carried on past the refusal: the agent hears no and picks something else.
@@ -910,7 +955,7 @@ test("an unclassified command is approved, so an ordinary turn is untouched", as
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("pnpm test", (allow) => decisions.push(allow)));
 
-    await collect(agent, { ...request, judge: judging("refuse") });
+    await collect(agent, { ...request, hooks: { ...request.hooks, judge: judging("refuse") } });
 
     expect(decisions).toEqual([true]);
 });
@@ -924,11 +969,11 @@ test("approvals are requested on every turn, configured or not", async () => {
     await collect(agent, request);
     expect(calls[0]!.options.approvalPolicy).toBe("untrusted");
 
-    await collect(agent, { ...request, judge: judging("ask") });
+    await collect(agent, { ...request, hooks: { ...request.hooks, judge: judging("ask") } });
     expect(calls[1]!.options.approvalPolicy).toBe("untrusted");
 
     // A turn woken by a stranger is gated too, which was already true under the taint floor.
-    await collect(agent, { ...request, outsideWake: "discord" });
+    await collect(agent, { ...request, policy: { ...request.policy, outsideWake: "discord" } });
     expect(calls[2]!.options.approvalPolicy).toBe("untrusted");
 });
 
@@ -939,10 +984,10 @@ test("an asked command raises a permission card and approves it when the user al
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));
     const events: AgentEvent[] = [];
 
-    for await (const event of agent({ ...request, judge: judging("ask") })) {
+    for await (const event of agent({ ...request, hooks: { ...request.hooks, judge: judging("ask") } })) {
         events.push(event);
         if (event.kind === "permission") {
-            setTimeout(() => resolveRequest({ kind: "permission", requestId: event.requestId, decision: "once" }), 0);
+            setTimeout(() => cards.resolve({ kind: "permission", requestId: event.requestId, decision: "once" }), 0);
         }
     }
 
@@ -960,9 +1005,9 @@ test("declining the card refuses the command", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));
 
-    for await (const event of agent({ ...request, judge: judging("ask") })) {
+    for await (const event of agent({ ...request, hooks: { ...request.hooks, judge: judging("ask") } })) {
         if (event.kind === "permission") {
-            setTimeout(() => resolveRequest({ kind: "permission", requestId: event.requestId, decision: "deny" }), 0);
+            setTimeout(() => cards.resolve({ kind: "permission", requestId: event.requestId, decision: "deny" }), 0);
         }
     }
 
@@ -973,7 +1018,11 @@ test("an unattended turn refuses rather than raising a card", async () => {
     const decisions: boolean[] = [];
     const agent = createTestAgent(approvalTurn("rm -rf build", (allow) => decisions.push(allow)));
 
-    const events = await collect(agent, { ...request, unattended: true, judge: judging("ask") });
+    const events = await collect(agent, {
+        ...request,
+        policy: { ...request.policy, unattended: true },
+        hooks: { ...request.hooks, judge: judging("ask") },
+    });
 
     expect(decisions).toEqual([false]);
     expect(events.some((event) => event.kind === "permission")).toBe(false);

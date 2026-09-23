@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 
 // No mocks: laneDrop reads the lane machine from agentStatus, a pure leaf; the fleet store import is type-only and
 // erased.
-import { dropActionFor, dropActionLabel, dropRejection, type DropAction } from "./laneDrop";
+import { dropActionFor, dropActionLabel, dropHint, dropRejection, type DropAction, pendingOf } from "./laneDrop";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 
 // A drop can't assign a status; it runs the action that causes one. Most drops have no action behind them at all.
@@ -246,5 +246,53 @@ describe("a card whose agent is in another sandbox", () => {
     // ordinary refusal.
     it("keeps the ordinary refusal when the box was never the obstacle", () => {
         expect(dropRejection(elsewhere({ status: `idle` }), `active`)).toContain(`message`);
+    });
+});
+
+// What the ghost promises over each target: the verb of the drop it would run, the reason there is none, or, over no
+// target at all, how to act.
+describe("dropHint", () => {
+    const none = { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false };
+    const running: FleetAgent = {
+        id: `a1`,
+        status: `running`,
+        provider: `claude`,
+        harness: `claude-code`,
+        branch: `agent/a1`,
+        updatedAt: 1,
+        attention: none,
+        open: false,
+        unread: false,
+        unsent: false,
+    };
+
+    it("names the action over a lane that takes the card, and the refusal over one that does not", () => {
+        expect(dropHint(dropActionFor(running, `finished`), running, `finished`)).toBe(`Stop the turn`);
+        expect(dropHint(dropActionFor(running, `active`), running, `active`)).toBe(`Send a message to start a turn`);
+    });
+
+    it("says how to act while the card is over no lane", () => {
+        expect(dropHint(undefined, running, undefined)).toBe(`Drop on a lane to act`);
+        expect(dropHint(undefined, undefined, `finished`)).toBe(`Drop on a lane to act`);
+    });
+});
+
+// A card is busy with its own press first; an archive or restore batch names ids alone, so it busies this box's card only.
+describe("pendingOf", () => {
+    const card = { id: `a1` };
+
+    it("reports the card's own press or drop ahead of any batch", () => {
+        expect(pendingOf(card, `land`, [`a1`])).toBe(`land`);
+    });
+
+    it("reads an archive batch as filing away, or as restoring for a card already archived", () => {
+        expect(pendingOf(card, undefined, [`a1`])).toBe(`archive`);
+        expect(pendingOf({ ...card, archivedAt: 5 }, undefined, [`a1`])).toBe(`restore`);
+        expect(pendingOf(card, undefined, [`a2`])).toBeUndefined();
+    });
+
+    it("never busies another box's card that happens to share the id", () => {
+        expect(pendingOf({ ...card, sandboxId: `laptop` }, undefined, [`a1`])).toBeUndefined();
+        expect(pendingOf({ ...card, sandboxId: `laptop` }, `stop`, [])).toBe(`stop`);
     });
 });

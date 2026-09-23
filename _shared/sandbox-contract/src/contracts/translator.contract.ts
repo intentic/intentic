@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { z } from "zod";
 import { TranslatorAccountsSchema } from "../schemas/providers/plan-limits.js";
 import { TranslatorCompleteSchema, TranslatorStartSchema, TranslatorStatusSchema } from "../schemas/providers/provider-oauth.js";
@@ -15,7 +15,7 @@ import { OkSchema } from "../schemas/shared.js";
 // URL this sandbox can't receive, so `complete` hands the landing URL to the translator. `connect.flow` tells the
 // card which mechanic it received without inferring it from whether an optional device code happened to exist.
 export const translatorContract = {
-    accounts: oc
+    accounts: procedure
         .route({
             method: "GET",
             path: "/translator/accounts",
@@ -24,7 +24,7 @@ export const translatorContract = {
                 "What is signed in per provider. Each provider can hold several accounts at once, and the translator spreads work across them.",
         })
         .output(TranslatorAccountsSchema),
-    connect: oc
+    connect: procedure
         .route({
             method: "POST",
             path: "/translator/{provider}/connect",
@@ -34,7 +34,7 @@ export const translatorContract = {
         })
         .input(z.object({ provider: KeyedProviderSchema }))
         .output(TranslatorStartSchema),
-    status: oc
+    status: procedure
         .route({
             method: "GET",
             path: "/translator/{provider}/connect",
@@ -44,7 +44,7 @@ export const translatorContract = {
         })
         .input(z.object({ provider: KeyedProviderSchema, state: z.string().min(1) }))
         .output(TranslatorStatusSchema),
-    complete: oc
+    complete: procedure
         .route({
             method: "POST",
             path: "/translator/{provider}/complete",
@@ -54,7 +54,7 @@ export const translatorContract = {
         })
         .input(TranslatorCompleteSchema)
         .output(OkSchema),
-    disconnect: oc
+    disconnect: procedure
         .route({
             method: "POST",
             path: "/translator/{provider}/disconnect",

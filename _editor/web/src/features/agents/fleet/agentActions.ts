@@ -13,13 +13,13 @@ import { ensureProjectPersona, projectPersonaId } from "../../sandbox/personas/p
 import { router } from "../../../router";
 import { refreshAcross } from "../../sandbox/live/fleetAcross";
 import { refreshChangesAcross } from "../../workspace/changes/changesAcross";
-import { type RequestOptions, sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
-import { jsonBody } from "../../sandbox/client/jsonBody";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../review/conflictResolution";
 import type { FleetAgent } from "./useAgents-fleet";
 import { claim, underClaim } from "./useAgents-provisional";
 import { useAgents } from "./useAgents";
-import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS } from "../../../lib/queryKeys";
+import { agentReviewKeys } from "./useAgents-registry";
+import { rpcPrefix, workingReviewKeys } from "../../../lib/queryKeys";
 import { t } from "@intentic/ui/i18n";
 
 // The fleet's mutations, addressed by agent id: the shared source for the review panel's bindings and the board's
@@ -31,10 +31,6 @@ import { t } from "@intentic/ui/i18n";
 // message through the chat singleton and so never will.
 export type AgentReach = string | undefined;
 
-const agentJson = <T>(at: AgentReach, path: string, init?: RequestInit, options?: RequestOptions): Promise<T> =>
-    at === undefined ? sandboxJson<T>(path, init, options) : sandboxJsonAt<T>(at, path, init, options);
-
-// Routes to the active sandbox, or to a named one, matching `at`.
 export const startAgent = (prompt?: string, actsAs?: string): string => {
     const conversation = draftConversation();
     // "New agent", as one action across every surface (board button, chat strip's +, mobile +): summon the tab in every
@@ -45,8 +41,10 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
     // there. A named persona is the caller's choice and stands.
     const project = projectScope.value;
     const fitted = actsAs === undefined && project !== undefined ? ensureProjectPersona(project) : undefined;
-    conversation.actsAs.value = actsAs ?? (project === undefined ? undefined : projectPersonaId(project));
-    conversation.startIn.value = project;
+    conversation.selection.apply({
+        kind: `set`,
+        picks: { actsAs: actsAs ?? (project === undefined ? undefined : projectPersonaId(project)), startIn: project },
+    });
     // The prompt rides the summons, so the turn runs in the window drawing the chat rather than whichever one was
     // clicked (summonTurn).
     if (fitted === undefined && prompt !== undefined) {
@@ -63,7 +61,7 @@ export const startAgent = (prompt?: string, actsAs?: string): string => {
     // chat; a daemon that refuses the card leaves the conversation unpinned rather than pinned to nothing.
     void fitted
         .catch(() => {
-            conversation.actsAs.value = undefined;
+            conversation.selection.apply({ kind: `set`, picks: { actsAs: undefined } });
         })
         .then(() => (prompt === undefined ? undefined : summonTurn(conversation, prompt)));
     return conversation.conversationId;
@@ -104,8 +102,7 @@ export const landAgent = (
     force = false,
     at: AgentReach = undefined,
 ): Promise<LandResult> => {
-    const request = (): Promise<LandResult> =>
-        agentJson<LandResult>(at, `/agents/${encodeURIComponent(id)}/land`, jsonBody(`POST`, { mode, span, force }), { deadline: false });
+    const request = (): Promise<LandResult> => sandboxRpc.agents.land({ id, mode, span, force }, { context: { at, deadline: false } });
     return mode === `measure` ? request() : underClaim(id, at, `land`, request, (result) => result.landed);
 };
 
@@ -117,17 +114,17 @@ export const nothingLanded = (): string => t(`agents.agentActions.nothingLanded`
 // A collaborator's stand-in for a land they can't perform (the daemon floors `land` at maintainer): stamps the ask so
 // every maintainer's board wears it.
 export const requestLandAgent = (id: string, at: AgentReach = undefined): Promise<AgentSummary> =>
-    agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/request-land`, jsonBody(`POST`, {}));
+    sandboxRpc.agents.requestLand({ id }, { context: { at } });
 
 // Makes a member answerable for a conversation (claim, hand over, take over: one route, the daemon decides which the
 // caller may). `to` is an address; the daemon checks it against the members it knows.
 export const assignAgent = (id: string, to: string, at: AgentReach = undefined): Promise<AgentSummary> =>
-    agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/assign`, jsonBody(`POST`, { to }));
+    sandboxRpc.agents.assign({ id, to }, { context: { at } });
 
 // Puts the caller's mark on a card, or takes it off; the daemon attributes it to the verified identity, so nothing here
 // says who. `on` states which, rather than flipping what's stored, so a double press lands where one did.
 export const reactToAgent = (id: string, emoji: string, on: boolean, at: AgentReach = undefined): Promise<AgentSummary> =>
-    agentJson<AgentSummary>(at, `/agents/${encodeURIComponent(id)}/react`, jsonBody(`POST`, { emoji, on }));
+    sandboxRpc.agents.react({ id, emoji, on }, { context: { at } });
 
 // Hands a land conflict back to the agent to resolve in its own worktree, rather than making the user merge by hand or
 // discarding the work. An ordinary turn: it lands in the transcript, a running turn takes it as steering, and Stop
@@ -159,7 +156,7 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
     }
     const press = claim(id, undefined, `turn`);
     const read = new AbortController();
-    const report = sandboxJson<AgentChangesResponse>(`/agents/${encodeURIComponent(id)}/diff`, { signal: read.signal });
+    const report = sandboxRpc.agents.diff({ id }, { signal: read.signal });
     // Awaited only inside `compose`, which a superseded press never reaches; its rejection is still thrown there.
     report.catch(() => undefined);
     // Settled by `compose` itself whenever it answers without a prompt; a turn that never went says nothing.
@@ -177,7 +174,7 @@ export const askAgentToResolve = async (id: string): Promise<ResolveAsk> => {
         // it both spends against a model the user never chose for this agent, relabels the card with it afterwards, and
         // bills an account this conversation was not running on.
         wearAgentRun(conversation, agent);
-        taken = await conversation.startErrand(errands().landConflict.opening, async (signal) => {
+        taken = await conversation.turn.startErrand(errands().landConflict.opening, async (signal) => {
             signal.addEventListener(`abort`, () => read.abort());
             const { conflicts } = await report;
             const answer = await answerFor(id, conflicts);
@@ -240,19 +237,22 @@ const wearAgentRun = (conversation: Conversation, agent: FleetAgent | undefined)
         return;
     }
     if (agent.model !== undefined && agent.model !== ``) {
-        conversation.wearModel({
-            provider: agent.provider,
-            model: agent.model,
-            harness: agent.harness,
-            ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
-            ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
+        conversation.selection.apply({
+            kind: `wearModel`,
+            pin: {
+                provider: agent.provider,
+                model: agent.model,
+                harness: agent.harness,
+                ...(agent.effort !== undefined ? { effort: agent.effort } : {}),
+                ...(agent.thinking !== undefined ? { thinking: agent.thinking } : {}),
+            },
         });
     }
     // After wearModel, never before: pointing at a provider re-scopes the account to that provider's remembered one.
     // Unnamed, the account is the daemon's to pick by headroom, and an account sitting idle BECAUSE it refuses reads
     // there as the emptiest — so the errand hops off the account the work ran on, retiring its session with it.
     if (agent.account !== undefined && agent.account !== ``) {
-        conversation.account.value = agent.account;
+        conversation.selection.apply({ kind: `set`, picks: { account: agent.account } });
     }
 };
 
@@ -260,17 +260,17 @@ const wearAgentRun = (conversation: Conversation, agent: FleetAgent | undefined)
 // press and comes back only if the daemon refuses.
 export const discardAgent = (id: string, at: AgentReach = undefined): Promise<void> =>
     underClaim(id, at, `discard`, async () => {
-        await agentJson(at, `/agents/${encodeURIComponent(id)}/discard`, { method: `POST` });
+        await sandboxRpc.agents.discard({ id }, { context: { at } });
     });
 
 // Scratch is what a land leaves in the conversation's copy (AgentChanges.scratch). Including stages it there, so the
 // next land carries it; deleting removes it from the copy. Both name paths exactly as the review listed them.
 export const includeAgentScratch = async (id: string, repo: string, paths: readonly string[], at: AgentReach = undefined): Promise<void> => {
-    await agentJson(at, `/agents/${encodeURIComponent(id)}/scratch/include`, jsonBody(`POST`, { repo, paths }));
+    await sandboxRpc.agents.includeScratch({ id, repo, paths: [...paths] }, { context: { at } });
 };
 
 export const deleteAgentScratch = async (id: string, repo: string, paths: readonly string[], at: AgentReach = undefined): Promise<void> => {
-    await agentJson(at, `/agents/${encodeURIComponent(id)}/scratch/delete`, jsonBody(`POST`, { repo, paths }));
+    await sandboxRpc.agents.deleteScratch({ id, repo, paths: [...paths] }, { context: { at } });
 };
 
 // True cancel for an in-flight turn, the card reading `stopping` from the press: an open streaming tab runs its own
@@ -279,25 +279,23 @@ export const stopAgent = (id: string, at: AgentReach = undefined): Promise<void>
     underClaim(id, at, `stop`, async () => {
         const { conversations } = useChat();
         const conversation = at === undefined ? conversations.value.find((candidate) => candidate.conversationId === id) : undefined;
-        if (conversation !== undefined && conversation.streaming.value) {
-            conversation.stop();
+        if (conversation !== undefined && conversation.turn.streaming.value) {
+            conversation.turn.stop();
             return;
         }
-        await agentJson(at, `/agent/stop`, jsonBody(`POST`, { conversationId: id }));
+        await sandboxRpc.agent.stop({ conversationId: id }, { context: { at } });
     });
 
-// After a land or discard, invalidate the agent's diff plus the workspace-wide changes and history caches so every
-// surface converges. The two workspace families use `.every` since a land in another box changes that box's own
-// `/work`.
+// After a land or discard, invalidate the agent's review plus the workspace-wide changes and snapshot history so every
+// surface converges. The two workspace reads go by prefix, every box's, since a land in another box changes that box's
+// own `/work`.
 export const invalidateAgentAction = async (id: string, at: AgentReach = undefined): Promise<void> => {
     if (at !== undefined) {
         refreshAcross();
         // ...and the changes ledger too: landing into another box's /work is exactly what moves its uncommitted count.
         refreshChangesAcross();
     }
-    await Promise.all([
-        queryClient.invalidateQueries({ queryKey: at === undefined ? AGENT_DIFF.of(id) : AGENT_DIFF.ofSandbox(at, id) }),
-        queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every }),
-        queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every }),
-    ]);
+    await Promise.all(
+        [...agentReviewKeys(id, at), ...workingReviewKeys, rpcPrefix(`history.list`)].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+    );
 };

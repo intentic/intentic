@@ -1,9 +1,7 @@
-import { PROCESS_ROLES, type ProcessRole, type SandboxMetrics, SandboxMetricsSchema } from "@intentic/sandbox-contract";
+import { PROCESS_ROLES, type ProcessRole, type SandboxMetrics } from "@intentic/sandbox-contract";
 import { definePreference } from "@intentic/ui/preference";
 import { computed, type ComputedRef, type InjectionKey, type Ref } from "vue";
-import { LIVE_METRICS } from "../../../lib/queryKeys";
-import { UNPERSISTED } from "../../../lib/queryPersistence";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { rpcQuery } from "../../sandbox/client/rpcQuery";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 
@@ -26,9 +24,8 @@ export const LIVE_METRICS_KEY: InjectionKey<ComputedRef<SandboxMetrics | undefin
 // Called by the board alone: leaving it drops the only observer, which stops the polling, and a hidden tab is never
 // polled. A refused read (a guest, an older daemon) stops asking until the board is opened again.
 export function useLiveMetrics(): ComputedRef<SandboxMetrics | undefined> {
-    const { query } = useSandboxQuery<SandboxMetrics>({
-        queryKey: LIVE_METRICS.of(UNPERSISTED),
-        queryFn: async () => SandboxMetricsSchema.parse(await sandboxJson(`/system/metrics`)),
+    const { query } = useSandboxQuery({
+        ...rpcQuery(`system.metrics`, undefined, { unpersisted: true }),
         enabled: computed(() => showLiveMetrics.value && supportsRoute(`system.metrics`)),
         refetchInterval: (current) => (current.state.status === `error` ? false : LIVE_METRICS_POLL_MS),
         staleTime: 0,

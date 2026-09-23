@@ -8,10 +8,12 @@ import { Hono } from "hono";
 import { test, expect } from "bun:test";
 import { memoryDoorTokens } from "../auth/door-tokens.js";
 import type { Services } from "../composition.js";
-import type { TurnFn } from "../loops/loop-runner.js";
 import { fileLoopsStore } from "../loops/loops-store.js";
 import { createGateRoute } from "./gate.routes.js";
 import { fileWorkflowRunsStore, fileWorkflowsStore } from "./workflows-store.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { drivenBy, memoryFleet } from "../testing.js";
+import { createDomainEvents } from "../seams/domain-events.js";
 
 // Gate route end to end: an identity-less runner posts, waits, and is told whether to ship. Each test uses its own
 // workflow id: the ceiling is a module singleton keyed by workflow, so ids must not collide.
@@ -30,7 +32,10 @@ const fakeServices = (root: string): Services =>
         workflowRuns: fileWorkflowRunsStore(join(root, "workflow-runs.json")),
         doorTokens: DOORS,
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
-        agents: unstubbed<Services["agents"]>("agents", { sessionIdOf: () => undefined }),
+        // Real actors, since the runner stops a turn through them; none is ever registered here.
+        conversations: memoryFleet().conversations,
+        // Heard by nobody: what reacts to a settled run is composition's to subscribe.
+        events: createDomainEvents(() => {}),
         agentWorktrees: unstubbed<Services["agentWorktrees"]>("agentWorktrees", { conversationDir: () => root, snapshot: async () => REPOS }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { append: async () => {} }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
@@ -59,8 +64,8 @@ const gated = (id: string, over: Partial<Workflow> = {}): Workflow => ({
 
 // Writes the step's verdict file and converges on the first iteration; `release` is the judge's decision, `prompts`
 // collects what it was asked.
-const judging = (root: string, release: string, prompts: string[] = []): TurnFn =>
-    async function* turn(_services, input: AgentTurn) {
+const judging = (root: string, release: string, prompts: string[] = []): TurnStarter["stream"] =>
+    async function* turn(input: AgentTurn) {
         prompts.push(input.prompt);
         const conversationId = input.conversationId ?? "";
         const n = /Iteration (\d+)/.exec(input.prompt)?.[1] ?? "1";
@@ -74,16 +79,16 @@ const judging = (root: string, release: string, prompts: string[] = []): TurnFn 
     };
 
 // The same judgment, handed in only after `delayMs`: a run that outlasts at least one heartbeat.
-const judgingAfter = (root: string, release: string, delayMs: number): TurnFn => {
+const judgingAfter = (root: string, release: string, delayMs: number): TurnStarter["stream"] => {
     const judge = judging(root, release);
-    return async function* turn(services, input: AgentTurn, signal) {
+    return async function* turn(input, signal) {
         await new Promise((resolve) => setTimeout(resolve, delayMs));
-        yield* judge(services, input, signal);
+        yield* judge(input, signal);
     };
 };
 
-const appFor = (services: Services, wake: TurnFn, heartbeatMs?: number): Hono =>
-    new Hono().post("/workflows/:id/gate", createGateRoute(services, wake, heartbeatMs));
+const appFor = (services: Services, wake: TurnStarter["stream"], heartbeatMs?: number): Hono =>
+    new Hono().post("/workflows/:id/gate", createGateRoute(drivenBy(services, wake), heartbeatMs));
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "gate-"));
 
@@ -215,7 +220,7 @@ test("a run that outlasts the deadline is stopped and answers blocked", async ()
     const root = tempRoot();
     const services = fakeServices(root);
     await services.workflows.save(gated("wf-slow"), true);
-    const slow: TurnFn = async function* () {
+    const slow: TurnStarter["stream"] = async function* () {
         await new Promise((resolve) => setTimeout(resolve, 3_000));
         yield { kind: "done" } as AgentEvent;
     };

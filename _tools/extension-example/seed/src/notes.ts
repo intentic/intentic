@@ -11,17 +11,13 @@ export interface Note {
 const isNote = (value: unknown): value is Note =>
     typeof value === `object` && value !== null && typeof (value as Note).at === `string` && typeof (value as Note).text === `string`;
 
-const contentOf = (body: unknown): string | undefined => {
-    const content = (body as { content?: unknown } | null)?.content;
-    return typeof content === `string` ? content : undefined;
-};
-
 // Newest first. A missing or unparsable file returns an empty list rather than throwing: the CLI owns this file, so an
 // absent or half-written one is an ordinary, transient state.
 export const readNotes = async (): Promise<readonly Note[]> => {
     let content: string | undefined;
     try {
-        content = contentOf(await host().sandbox.json(`/workspace/file?path=${encodeURIComponent(NOTES_PATH)}`));
+        const file = await host().sandbox.rpc.workspace.file({ path: NOTES_PATH });
+        content = file.present ? file.content : undefined;
     } catch {
         return [];
     }

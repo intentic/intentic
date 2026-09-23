@@ -20,7 +20,9 @@ import type {
     GitRemoteState,
     ScratchPath,
     IntenticLine,
+    ModelPin,
     NativeProvider,
+    SafetyVerdict,
     TranscriptRow,
     TranscriptTool,
     SidecarStatus,
@@ -49,6 +51,9 @@ import {
 import type { ResidentEngine } from "@intentic/iq-engine";
 import { createEngineClient } from "@intentic/iq-engine/host";
 import { capabilityCtx } from "./capabilities/capability.js";
+import { type OpenAccountInput, openBrowserAccount } from "./capabilities/open-account.js";
+import { composeEnvironment } from "./environment/environment.js";
+import { type JudgeFacts, judgeCommand } from "./agent/tools/command-judge.js";
 import { wakeLocalModel as wakeLocalModelServer } from "./capabilities/handlers/localmodel.handler.js";
 import { LOCAL_MODEL_WAKE_MS } from "./endpoints/local-model-idle.js";
 import { createInvariantRegistry, type InvariantRegistry } from "./invariants/invariants.js";
@@ -65,7 +70,8 @@ import { type DoorTokens, fileDoorTokens } from "./auth/door-tokens.js";
 import { createMediaTickets, type MediaTickets } from "./auth/media-tickets.js";
 import { createWsTickets, type WsTickets } from "./auth/ws-tickets.js";
 import { type ActivityStore, fileActivityStore } from "./activity/activity-store.js";
-import { type AgentRequest, runAgent } from "./agent/run/agent.js";
+import { type HarnessRequest, runAgent } from "./agent/run/agent.js";
+import type { AgentRequest, ContainerCredential } from "./agent/providers/agent-request.js";
 import {
     cliProxyAuthDir,
     type CliProxyClient,
@@ -149,15 +155,18 @@ import { filePeerStore } from "./peers/peer-store.js";
 import { filePeerTools } from "./peers/peer-tool-memory.js";
 import { fetchPresentation, type SandboxPresentation } from "./platform/platform-client.js";
 import { enrolledFleet, type SyncFleet, syncPairBurnPath, type SyncMode } from "./platform/sync.js";
-import { pairings, type Pairings } from "./store/enrollment.js";
-import { fileTurnJournal, type TurnJournal } from "./agent/run/turn/turn-journal.js";
-import { fileWatchJournal, type WatchJournal } from "./agent/verification/watch-journal.js";
-import { fileTurnCheckpoints, type TurnCheckpoints } from "./agent/checkpoints/turn-checkpoints.js";
+import { pairings, type Pairings } from "./peers/enrollment.js";
+import { sqliteTurnJournal, type TurnJournal, turnJournalRows } from "./agent/run/turn/turn-journal.js";
+import { sqliteWatchJournal, type WatchJournal } from "./agent/verification/watch-journal.js";
+import { sqliteTurnCheckpoints, type TurnCheckpoints } from "./agent/checkpoints/turn-checkpoints.js";
 import { filePromptRecord, type PromptRecord } from "./agent/prompt/prompt-record.js";
 import type { Config } from "./env.config.js";
-import { createAgentsRegistry, type AgentsRegistry } from "./agents/registry/agents-registry.js";
+import { createFleet, type AgentsRegistry } from "./agents/registry/agents-registry.js";
+import type { ConversationActors } from "./agents/actor/conversation-actors.js";
 import type { AgentArchiveDeps } from "./agents/registry/archive.js";
-import { fileAgentsStore } from "./agents/registry/agents-store.js";
+import { sqliteAgentsStore } from "./agents/registry/agents-store.js";
+import { type ConversationsDb, conversationsDbPath, openConversationsDb } from "./store/conversations-db.js";
+import { type ConversationUnits, conversationUnits } from "./store/conversation-units.js";
 import { createTurnIsolation, type TurnIsolation } from "./agents/worktrees/isolation.js";
 import { createAgentOrigins, type AgentOrigins } from "./agents/land/origins.js";
 import { createExpiryTracker } from "./agents/registry/expiry.js";
@@ -201,7 +210,9 @@ import { createGeminiSlice, type GeminiSlice } from "./runtimes/gemini/gemini-pr
 import { createGrokSlice, type GrokSlice } from "./runtimes/grok/grok-provider.js";
 import { createMintedSlice, type MintedSlice } from "./runtimes/minted/minted-provider.js";
 import { createKimiSlice, type KimiSlice } from "./runtimes/kimi/kimi-provider.js";
-import { type ProviderCatalog, providerCatalogsOf, providerReadiness } from "./agent/providers/provider-registry.js";
+import type { ProviderCatalog, ProviderModule } from "./agent/providers/provider-module.js";
+import { providerCatalogsOf, providerReadiness } from "./agent/providers/provider-registry.js";
+import { PROVIDER_MODULES, type ProviderDeps, RUNTIME_ADAPTERS, type RuntimeAdapters } from "./runtimes/runtime-table.js";
 import { createWorkspaceHistory, type WorkspaceHistory } from "./history/history.js";
 import { type IntenticRun, runIntentic } from "./intentic/intentic-runner.js";
 import { type ManagedProcesses, createManagedProcesses } from "./processes/managed-processes.js";
@@ -210,7 +221,6 @@ import { createPanelUpstreamResolver, type PanelUpstreamResolver } from "./panel
 import { discoverRepos } from "./workspace/layout/repo-discovery.js";
 import { type PushStore, filePushStore } from "./push/push-store.js";
 import { createPushSender, type PushSender } from "./push/push.js";
-import { turnAwaiting } from "./push/notifications.js";
 import { type PortForwards, createPortForwards } from "./ports/port-forwards.js";
 import { type ListeningPort, scanListeningPorts, withOwningSessions } from "./ports/port-scan.js";
 import {
@@ -246,13 +256,18 @@ import { type RuleFiringsStore, fileRuleFiringsStore } from "./rules/rule-firing
 import { type DriftSweep, createDriftSweep } from "./environment/drift-sweep.js";
 import { type RuntimeInstallsStore, fileRuntimeInstallsStore } from "./environment/runtime-installs.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
-import { liveRequestRun } from "./agent/run/offer-request.js";
-import { onTurnSettled } from "./agent/run/turn/turn-runs.js";
+import { actorObserver, liveRequestRun } from "./agents/actor/card-offers.js";
+import { turnDoors } from "./agent/run/turn/turn-doors.js";
+import { streamAgent } from "./agent/routes/agent.routes.js";
+import { dispatchWorkspaceEvent } from "./automations/workspace-events.js";
 import { clearTurnTaint } from "./guard/turn-taint.js";
+import { turnAwaiting, turnFinished } from "./push/notifications.js";
+import { createDomainEvents, type DomainEvents } from "./seams/domain-events.js";
+import type { TurnStarter } from "./seams/turn-starter.js";
 import { type Announcer, createAnnouncer } from "./platform/boot/announce.js";
 import { type ReachReporter, createReachReporter } from "./platform/listeners/reach-report.js";
 import { type BootTracker, createBootTracker } from "./platform/boot/boot.js";
-import { DAEMON_OWNER } from "./platform/boot/leftovers.js";
+import { DAEMON_OWNER } from "./seams/workload-stamp.js";
 import { type PlatformTunnel, startPlatformTunnel } from "./platform/listeners/local-tunnel.js";
 import { createResourceReaper, type ResourceReaper } from "./platform/boot/reaper.js";
 import { createClientLogger, createPerfLogger } from "./logger.js";
@@ -290,8 +305,9 @@ import { coalescingWorkspaceTree } from "./workspace/files/workspace-tree-coales
 import { listWorkspaceChildren, walkWorkspaceTree } from "./workspace/files/workspace-tree.js";
 
 import type { WorkspaceScopeDeps } from "./workspace/layout/workspace-scope.js";
-import { statePath } from "./workspace/layout/state-paths.js";
+import { statePath } from "./state-paths.js";
 import { createDependencyCoordinator, type DependencyCoordinator } from "./workspace/deps/reconcile-deps.js";
+import { type ParkedCards, parkedCards } from "./agents/actor/parked-cards.js";
 
 // Wired once at boot for the route factories; a module should Pick only the seams it uses, not take Services whole,
 // unless it orchestrates most of the daemon.
@@ -516,6 +532,18 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // needed, since it reaches every provider module and each reads its own stores: a caller that only wants the
     // answer would otherwise have to take the whole of Services to ask for it.
     readonly providerReadiness: () => Promise<Record<NativeProvider, boolean>>;
+    // Every native provider's module and every runtime's adapter (runtimes/runtime-table.ts), reached through here so no
+    // reader below the planner imports a runtime directory back.
+    readonly providerModules: readonly ProviderModule<ProviderDeps>[];
+    readonly adapters: RuntimeAdapters;
+    // The three orchestrators a runtime needs but may not import, since each reaches most of the daemon: the safety judge,
+    // filing a browser account, and recomposing the environment overlay.
+    readonly judgeCommand: (
+        input: { readonly policy: string; readonly program: string; readonly facts: JudgeFacts; readonly pins: readonly ModelPin[] },
+        signal: AbortSignal,
+    ) => Promise<SafetyVerdict>;
+    readonly openBrowserAccount: (input: OpenAccountInput) => Promise<string>;
+    readonly composeEnvironment: () => Promise<string | undefined>;
     // What each endpoint capability's server publishes, keyed by id; only the server says what it serves.
     readonly endpointModels: EndpointCatalog;
     // Brings a local model back after the idle sweep unloaded it, and waits for it to serve. Lives here rather than
@@ -531,12 +559,12 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     // Daemon-owned workspace snapshots on /history, outside agent reach: captured per turn and on an interval.
     readonly history: WorkspaceHistory;
     // The Claude Code loop: serves native Claude, Kimi, every routed provider, every endpoint capability.
-    readonly agent: (request: AgentRequest) => AsyncGenerator<AgentEvent>;
+    readonly agent: (request: HarnessRequest) => AsyncGenerator<AgentEvent>;
     // Generic ACP adapter for every agent-kind capability outside NATIVE_PROVIDERS; one warm subprocess per agent.
-    readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
+    readonly acpAgent: (id: string, config: AcpAgentConfig, request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
     readonly acpConnections: AcpConnections;
     // Pi adapter for the reserved pi agent-kind capability over Pi's RPC; one process per turn, sessions as files.
-    readonly piAgent: (config: AcpAgentConfig, request: AgentRequest) => AsyncGenerator<AgentEvent>;
+    readonly piAgent: (config: AcpAgentConfig, request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
     readonly intentic: (run: IntenticRun, signal?: AbortSignal) => AsyncGenerator<IntenticLine>;
     readonly git: {
         readonly init: (dir: string, separateGitDir?: string) => Promise<void>;
@@ -632,6 +660,20 @@ export interface Services extends ClaudeSlice, CodexSlice, CursorSlice, GrokSlic
     };
     // Fleet registry, one entry per isolated conversation; streamAgent runs turns, /agents lists/lands/discards.
     readonly agents: AgentsRegistry;
+    // Every conversation's directory on the history volume; the boot sweep takes the ones no registry row owns.
+    readonly conversationUnits: ConversationUnits;
+    // The database the registry and every row keyed by a conversation live in: as a bundle packs and lands it, and as
+    // a person diagnosing one conversation reads it.
+    readonly conversationsDb: Pick<ConversationsDb, "snapshot" | "empty" | "adopt" | "rowsOf">;
+    // Every door a subsystem starts or drives a turn through: the turn engine's own (agent/run/turn/turn-doors.ts),
+    // handed over here so no subsystem imports it.
+    readonly turns: TurnStarter;
+    // What turns and the fleet announce; `wireReactions` below subscribes what reacts to it.
+    readonly events: DomainEvents;
+    // One actor per conversation: its turn lifecycle, leases and in-memory records, and the one way it is disposed.
+    readonly conversations: ConversationActors;
+    // Every card a turn is parked on, held by those actors' conversations; what /agent/reply resolves.
+    readonly cards: ParkedCards;
     // Per-conversation worktree compositions on /history/worktrees: create/repair/remove/prune.
     readonly agentWorktrees: AgentWorktrees;
     // Everything a stopped conversation holds (processes, terminals, browsers, temp), reclaimed on its own clock.
@@ -869,8 +911,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: worktree ops and the Changes scan must file into the same tracker the summary line reads.
     const perf = createPerfTracker(logger, createPerfLogger(config));
 
+    // One database for the registry and everything keyed by a conversation, so a fact spanning its tables is one write.
+    const conversationsDb = openConversationsDb(conversationsDbPath(config.historyRoot));
+    const agentsStore = sqliteAgentsStore(conversationsDb);
+    const units = conversationUnits(config.historyRoot, agentsStore.has);
     // Hoisted: the invariant companions below observe these exact instances, not a second, disagreeing one.
-    const turnJournal = fileTurnJournal(join(config.historyRoot, "turns"));
+    const turnJournal = sqliteTurnJournal(conversationsDb);
     const invariants = createInvariantRegistry(logger);
 
     // Hoisted: the ACP connection pool implements ACP terminal/* over the same runner, so both share one instance.
@@ -906,32 +952,35 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the Changes scan and the turns share one registry; one tracker serves both landing readers' query.
     const landingExpiry = createExpiryTracker();
     const landedPresences = createLandedPresences(agentWorktrees, logger, landingExpiry);
-    const agents = createAgentsRegistry(
-        fileAgentsStore(join(config.historyRoot, "agents.json")),
+    const { agents, conversations } = createFleet(
+        { agents: agentsStore, journal: turnJournalRows(conversationsDb), transaction: conversationsDb.transaction, units },
         createLandStandings(agentWorktrees),
         landedPresences,
     );
+    const cards = parkedCards(conversations);
+    // A reaction's failure is its own; the announcement it answered has already been made.
+    const events = createDomainEvents((name, error) => logger.warn({ err: error, event: name }, "domain event: a reaction failed"));
     // Reaper keys to the same three facts as everything else: whose work, whether it's live, whether it's ours.
     const reaper = createResourceReaper({
-        ownerLive: (owner) => owner === DAEMON_OWNER || conversationBusy(owner),
+        ownerLive: (owner) => owner === DAEMON_OWNER || conversationBusy(conversations, owner),
         ownerKnown: (owner) => agents.entry(owner) !== undefined,
         liveSessionNames: () =>
             new Set([
-                ...agents.liveSessionIds().flatMap((sessionId) => {
+                ...conversations.liveSessionIds().flatMap((sessionId) => {
                     const session = agentSessionName(sessionId);
                     return session === undefined ? [] : [session];
                 }),
                 // A session still holding a background job, whose whole point is to outlive the turn that started it:
                 // without this the terminal sweep would kill the pane ten minutes after the conversation stopped, and
                 // the wake armed on the job would time out instead of firing (agent/tools/background-jobs.ts).
-                ...backgroundJobSessions(),
+                ...backgroundJobSessions(conversations),
             ]),
         panePids,
-        onOwnerStopped: (listener) => onTurnSettled((settled) => listener(settled.conversationId)),
+        onOwnerStopped: (listener) => events.subscribe("run.settled", (settled) => listener(settled.conversationId)),
         logger,
     });
     // A settled turn's outside-content taint drops with the turn; the registry must be told when that moment is.
-    onTurnSettled((settled) => clearTurnTaint(settled.conversationId));
+    events.subscribe("run.settled", (settled) => clearTurnTaint(settled.conversationId));
     // Hoisted like the presences above: its attribution caches report into the resource series.
     const agentOrigins = createAgentOrigins({ agents, logger, expiry: landingExpiry });
     // Hoisted: the CI hook reconciler reads the same manifest the routes edit.
@@ -1002,9 +1051,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
     // Hoisted: the background probe runner writes the same cache the /chores route reads.
     const chores = fileChoresStore(join(workspace.root, PROBES_FILE), join(workspace.root, LEDGER_FILE));
     // Bound once against the same registry, whose sessionIdOf reads live turn state as well as the persisted entry.
-    const turnCheckpoints = fileTurnCheckpoints(join(config.historyRoot, "turn-checkpoints.json"));
+    const turnCheckpoints = sqliteTurnCheckpoints(conversationsDb);
     const transcriptDeps: AgentTranscriptDeps = {
-        record: fileTranscriptRecord(join(config.historyRoot, "transcripts")),
+        record: fileTranscriptRecord(config.historyRoot),
         turnCheckpoints,
     };
     // Phrase index on the history volume, daemon-private; a pure cache, deleted and rebuilt on a schema bump.
@@ -1202,8 +1251,9 @@ export const createServices = (config: Config, logger: Logger): Services => {
         credentialGate: createCredentialGate({
             gates: credentialGates,
             grants: credentialGrants,
-            liveRun: liveRequestRun,
-            observe: agents.observe,
+            liveRun: liveRequestRun(conversations),
+            observe: actorObserver(conversations),
+            cards,
             notify: (conversationId) => void pushSender.notifyIfAway(turnAwaiting(conversationId, "credential_offer")),
         }),
         walletLedger: fileWalletLedger(statePath(workspace.root, ".intentic/records/wallet-ledger.json")),
@@ -1235,7 +1285,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         probeRunner: createProbeRunner({
             workspace,
             chores,
-            agents,
+            conversations,
             wanted: async () => (await enabledExtensions(extensionHostAdapter)).some((extension) => extension.id === "intentic.maintenance"),
             logger,
         }),
@@ -1248,14 +1298,14 @@ export const createServices = (config: Config, logger: Logger): Services => {
         issues: fileIssuesStore(statePath(workspace.root, ".intentic/records/issues/")),
         issueInstalls: fileInstallsStore(statePath(workspace.root, ".intentic/records/issue-installs.json")),
         turnJournal,
-        // Beside the turn journal on the history volume, for the same reason: it must outlive a container recreate.
-        watchJournal: fileWatchJournal(join(config.historyRoot, "watches")),
+        // Beside the turn journal, for the same reason: it must outlive a container recreate.
+        watchJournal: sqliteWatchJournal(conversationsDb),
         invariants,
         // The same instance the transcript reader holds; a second would answer from a file the first already passed.
         turnCheckpoints,
-        // Beside the transcripts, on the history volume: what a conversation is told outlives a container recreate the
+        // Beside the transcript in the conversation's unit: what a conversation is told outlives a container recreate the
         // same way what it said does.
-        promptRecord: filePromptRecord(join(config.historyRoot, "system-prompts")),
+        promptRecord: filePromptRecord(config.historyRoot),
         activity: fileActivityStore(join(config.historyRoot, "activity.jsonl")),
         usage: fileUsageStore(join(config.historyRoot, "usage.jsonl")),
         sandboxSettings: fileSandboxSettingsStore(statePath(workspace.root, ".intentic/config/settings.json")),
@@ -1263,7 +1313,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         safetyLog: fileSafetyLog(statePath(workspace.root, ".intentic/local/safety-log.json")),
         ruleFirings: fileRuleFiringsStore(statePath(workspace.root, ".intentic/local/rule-firings.json")),
         runtimeInstalls,
-        driftSweep: createDriftSweep({ workspace, runtimeInstalls, agents, logger }),
+        driftSweep: createDriftSweep({ workspace, runtimeInstalls, conversations, logger }),
         push: pushStore,
         pushSender,
         // Provider areas, spread whole; their members' docs live on the area interfaces, beside the code.
@@ -1281,7 +1331,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         modelCooldowns: fileModelCooldownStore(join(config.historyRoot, "model-cooldowns.json")),
         observedLimits,
         // Late-bound through the same holder the extension backend uses; the thunks only run per request.
-        providerCatalogs: providerCatalogsOf(() => {
+        providerCatalogs: providerCatalogsOf(PROVIDER_MODULES, () => {
             if (servicesHolder.current === undefined) {
                 throw new Error("provider catalog read before services finished composing");
             }
@@ -1293,6 +1343,11 @@ export const createServices = (config: Config, logger: Logger): Services => {
             }
             return providerReadiness(servicesHolder.current);
         },
+        providerModules: PROVIDER_MODULES,
+        adapters: RUNTIME_ADAPTERS,
+        judgeCommand: (input, signal) => judgeCommand(services, input, signal),
+        openBrowserAccount: (input) => openBrowserAccount(services, input),
+        composeEnvironment: () => composeEnvironment(services),
         endpointModels: createEndpointCatalog(join(authRoot, "endpoints")),
         // Same late binding as the thunks above: a wake needs the finished Services to build a capability context,
         // and the only caller is a turn, long after composing.
@@ -1304,7 +1359,8 @@ export const createServices = (config: Config, logger: Logger): Services => {
         openCode,
         authRoot,
         history: createWorkspaceHistory({ workspace, historyRoot: config.historyRoot, logger }),
-        agent: runAgent,
+        // The Claude Code loop over these actors, which hold the children and background commands a turn starts.
+        agent: (request) => runAgent(conversations, request),
         acpAgent: createAcpAgent(acpConnections),
         acpConnections,
         // Pi sessions sit beside other AI-provider state under authRoot, so a stable dir keeps them resumable.
@@ -1368,6 +1424,16 @@ export const createServices = (config: Config, logger: Logger): Services => {
             dropCommit,
         },
         agents,
+        conversationUnits: units,
+        conversationsDb,
+        conversations,
+        cards,
+        // Bound to streamAgent here, the one module that may name the turn body.
+        turns: turnDoors(
+            () => services,
+            (input, signal) => streamAgent(services, input, signal),
+        ),
+        events,
         agentWorktrees,
         reaper,
         workspaceScope: {
@@ -1465,10 +1531,12 @@ export const createServices = (config: Config, logger: Logger): Services => {
         auth,
     };
     servicesHolder.current = services;
+    wireReactions(services);
     // Registration only; nothing runs until a boot phase drives a moment, so a test build carries it unpaid for.
     registerDaemonInvariants(invariants, {
         turnJournal,
         agents,
+        conversations,
         agentWorktrees,
         areas,
         members,
@@ -1487,4 +1555,24 @@ export const createServices = (config: Config, logger: Logger): Services => {
         cursorHooks: services.cursorHooks,
     });
     return services;
+};
+
+// What reacts to the turns' and the fleet's announcements, subscribed in this order: chores to workspace events, the
+// owner's devices to a turn that parks or ends, history to a main tree a turn changed. Shared with the route harness,
+// so a suite's turn reaches the same reactions.
+export const wireReactions = (services: Services): void => {
+    services.events.subscribe("workspace", (event) =>
+        dispatchWorkspaceEvent(services, event).catch((error: unknown) =>
+            services.logger.warn({ err: error, event: event.event }, "workspace event dispatch failed"),
+        ),
+    );
+    services.events.subscribe("turn.awaiting", ({ conversationId, awaiting }) =>
+        services.pushSender.notifyIfAway(turnAwaiting(conversationId, awaiting)),
+    );
+    services.events.subscribe("turn.finished", ({ conversationId, prompt, outcome }) =>
+        services.pushSender.notifyIfAway(turnFinished(conversationId, prompt, outcome)),
+    );
+    services.events.subscribe("tree.changed", ({ label }) =>
+        services.history.snapshot("turn", label).catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed")),
+    );
 };

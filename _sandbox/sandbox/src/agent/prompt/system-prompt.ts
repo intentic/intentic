@@ -7,6 +7,7 @@ import { PERSONA_NOTE_TITLE } from "../../personas/personas.js";
 import { FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { MEMORY_NOTE_TITLE } from "./workspace-memory.js";
+import type { TurnPolicy, TurnSpec, TurnTools } from "../providers/agent-request.js";
 
 // Three modes: `intentic` and `claude` share the same appends over a different base; `custom` replaces the prompt
 // outright, nothing added. AgentCapabilities.instructions ("replace"/"append"/"none") decides how each of the six
@@ -322,7 +323,7 @@ export interface TurnPromptInput {
 
 // The prompt-side pieces a small window takes, as booleans rather than a tier: this module applies a decision, it does
 // not re-make one. The field notes are not here because they are withheld a step earlier, where the turn decides
-// whether to read them at all (turn-plan.ts fieldNotesFor) — a brief that was never read cannot be placed.
+// whether to read them at all (decide/turn-facts.ts fieldNotesFor) — a brief that was never read cannot be placed.
 export interface PromptTrim {
     // This product's own guidance paragraphs, both where the harness composes them and where they ride the append.
     readonly guidance: boolean;
@@ -441,20 +442,12 @@ export interface SdkSystemPromptInput {
     readonly trim?: PromptTrim;
 }
 
-// The turn fields the composed prompt reads. Declared here rather than taken from AgentRequest so both readers — the
-// adapter that sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
+// The turn fields the composed prompt reads, in the groups the request holds them in, so both readers — the adapter that
+// sends the prompt and the disclosure that shows it (prompt-disclosure.ts) — map a request one way.
 export interface PromptRequest {
-    readonly model?: string;
-    readonly systemPromptMode?: SystemPromptMode;
-    readonly systemPrompt?: string;
-    readonly systemAppend?: string;
-    readonly unattended?: boolean;
-    readonly browserOutputDir?: string;
-    readonly browserAccounts?: Record<string, string>;
-    readonly diagnostics?: boolean;
-    readonly hostDevices?: HostDeviceReach | undefined;
-    readonly ownBrowsers?: OwnBrowserReach | undefined;
-    readonly contextTrim?: PromptTrim;
+    readonly spec: Pick<TurnSpec, "model" | "systemPromptMode" | "systemPrompt" | "systemAppend" | "contextTrim">;
+    readonly policy: Pick<TurnPolicy, "unattended">;
+    readonly tools: Pick<TurnTools, "browserOutputDir" | "browserAccounts" | "diagnostics" | "hostDevices" | "ownBrowsers">;
 }
 
 // Whether the routed browser has any account behind it, deciding if the system prompt names that server at all.
@@ -462,24 +455,24 @@ const holdsBrowserAccounts = (accounts: Record<string, string> | undefined): boo
 
 // Whether the terminal hand-off server is mounted, kept as one predicate so the mount and its prompt sentence never
 // drift; off when unattended or without the tmux wrapper.
-export const terminalMounted = (request: Pick<PromptRequest, "unattended">, tmuxEnabled: boolean): boolean =>
-    tmuxEnabled && request.unattended !== true;
+export const terminalMounted = (request: Pick<PromptRequest, "policy">, tmuxEnabled: boolean): boolean =>
+    tmuxEnabled && request.policy.unattended !== true;
 
 // One request, one prompt input: the mapping every caller shares, so a field read differently by two of them can't
 // make the prompt shown disagree with the prompt sent.
-export const promptInputOf = (request: PromptRequest, terminal: boolean): SdkSystemPromptInput => ({
-    mode: request.systemPromptMode ?? "intentic",
-    ...(request.model === undefined ? {} : { model: request.model }),
-    custom: request.systemPrompt,
-    append: request.systemAppend,
-    unattended: request.unattended === true,
-    browserOutputDir: request.browserOutputDir,
-    browserAccounts: holdsBrowserAccounts(request.browserAccounts),
-    diagnostics: request.diagnostics === true,
+export const promptInputOf = ({ spec, policy, tools }: PromptRequest, terminal: boolean): SdkSystemPromptInput => ({
+    mode: spec.systemPromptMode ?? "intentic",
+    ...(spec.model === undefined ? {} : { model: spec.model }),
+    custom: spec.systemPrompt,
+    append: spec.systemAppend,
+    unattended: policy.unattended === true,
+    browserOutputDir: tools.browserOutputDir,
+    browserAccounts: holdsBrowserAccounts(tools.browserAccounts),
+    diagnostics: tools.diagnostics === true,
     terminal,
-    hostDevices: request.hostDevices,
-    ownBrowsers: request.ownBrowsers,
-    ...(request.contextTrim === undefined ? {} : { trim: request.contextTrim }),
+    hostDevices: tools.hostDevices,
+    ownBrowsers: tools.ownBrowsers,
+    ...(spec.contextTrim === undefined ? {} : { trim: spec.contextTrim }),
 });
 
 // This harness's own guidance, most-stable-first, with whatever the turn composed appended after. Shared by both

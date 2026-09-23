@@ -1,7 +1,11 @@
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { describe, it, expect, mock } from "bun:test";
-import { createAgentsRegistry, type AgentTurnIdentity } from "./agents-registry.js";
-import type { AgentsStore, PersistedAgent } from "./agents-store.js";
+import { openConversationsDb } from "../../store/conversations-db.js";
+import { IN_MEMORY } from "../../store/sqlite.js";
+import { beginTurn, fakeTurns, fleetStoreOver } from "../../testing.js";
+import type { BeginTurn } from "../actor/conversation-decide.js";
+import { createFleet, type FleetStore } from "./agents-registry.js";
+import { type PersistedAgent, worktreeOf } from "./agents-store.js";
 import { archivable, archivableByAge, archiveAgents, purgeArchived, sweepAgedAgents } from "./archive.js";
 import { createLogger } from "../../logger.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
@@ -11,17 +15,18 @@ import { armWatcher, listWatchers, startWatcherRuntime } from "../../agent/verif
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });
 const DAY = 24 * 60 * 60 * 1000;
 
-const memoryStore = (initial: PersistedAgent[] = []): AgentsStore => {
-    let data = initial;
-    return { load: async () => data, save: async (agents) => void (data = [...agents]) };
+// The real store on an in-memory database, seeded with `initial`.
+const memoryStore = (initial: PersistedAgent[] = []): FleetStore => {
+    const store = fleetStoreOver(openConversationsDb(IN_MEMORY));
+    store.agents.save(initial);
+    return store;
 };
 
-const turn = (overrides: Partial<AgentTurnIdentity> = {}): AgentTurnIdentity => ({
+const turn = (overrides: Partial<BeginTurn> = {}): BeginTurn => ({
     conversationId: "c1",
     isolated: true,
     prompt: "Fix the login bug",
-    provider: "claude",
-    harness: "native",
+    profile: { agent: "claude", harness: "native" },
     ...overrides,
 });
 
@@ -83,39 +88,39 @@ describe("archivable", () => {
 
 describe("archiveAgents", () => {
     it("retires each checkout, then marks the entries", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
-        await agents.begin(turn(), 1_000);
-        await agents.finish("c1", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const { worktrees, retire } = stubWorktrees();
 
-        const { archived, failed } = await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
+        const { archived, failed } = await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
 
         expect(archived).toEqual(["c1"]);
         expect(failed).toEqual([]);
-        expect(retire).toHaveBeenCalledWith("c1", agents.entry("c1")?.repos, "Fix the login bug");
+        expect(retire).toHaveBeenCalledWith("c1", worktreeOf(agents.entry("c1"))?.repos, "Fix the login bug");
         expect(agents.get("c1")?.archivedAt).toBe(9_000);
     });
 
     it("disarms the conversation's watches along with its checkout", async () => {
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         const stop = startWatcherRuntime({
             logger,
             runCheck: async () => ({ exitCode: 1, output: "" }),
-            steer: () => false,
-            start: async () => true,
+            turns: fakeTurns().turns,
             sessionIdOf: () => undefined,
             journal: memoryWatchJournal(),
             envOf: async () => ({}),
             conversationLive: () => true,
+            conversations,
         });
         try {
-            const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
             await agents.init();
-            await agents.begin(turn(), 1_000);
-            await agents.finish("c1", 2_000);
-            await armWatcher({ conversationId: "c1", command: "false", note: "CI", cwd: "/", env: {}, turn: {} });
+            await beginTurn(conversations, turn(), 1_000);
+            await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+            await armWatcher({ conversationId: "c1", command: "false", note: "CI", cwd: "/", env: {}, profile: {} });
             expect(listWatchers("c1")).toHaveLength(1);
-            await archiveAgents({ agents, agentWorktrees: stubWorktrees().worktrees, logger }, ["c1"], 9_000);
+            await archiveAgents({ agents, conversations, agentWorktrees: stubWorktrees().worktrees, logger }, ["c1"], 9_000);
             expect(listWatchers("c1")).toEqual([]);
         } finally {
             stop();
@@ -123,24 +128,24 @@ describe("archiveAgents", () => {
     });
 
     it("archives a workspace conversation without calling worktree teardown", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
-        await agents.begin(turn({ isolated: false }), 1_000);
-        await agents.finish("c1", 2_000);
+        await beginTurn(conversations, turn({ isolated: false }), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const { worktrees, retire } = stubWorktrees();
 
-        expect((await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000)).archived).toEqual(["c1"]);
+        expect((await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["c1"], 9_000)).archived).toEqual(["c1"]);
         expect(retire).not.toHaveBeenCalled();
         expect(agents.get("c1")?.archivedAt).toBe(9_000);
     });
 
     it("leaves an agent ON the board when its checkout could not be retired", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
-        await agents.begin(turn(), 1_000);
-        await agents.finish("c1", 2_000);
-        await agents.begin(turn({ conversationId: "c2" }), 1_000);
-        await agents.finish("c2", 2_000);
+        await beginTurn(conversations, turn(), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ conversationId: "c2" }), 1_000);
+        await conversations.send("c2", { kind: "settle" }, 2_000).settled;
         const retire = mock(async (id: string) => {
             if (id === "c1") {
                 throw new Error("worktree busy");
@@ -148,7 +153,7 @@ describe("archiveAgents", () => {
         });
         const { worktrees } = stubWorktrees(retire as never);
 
-        const { archived, failed } = await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1", "c2"], 9_000);
+        const { archived, failed } = await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["c1", "c2"], 9_000);
 
         // Failure leaves the card rather than losing track of it.
         expect(archived).toEqual(["c2"]);
@@ -159,28 +164,28 @@ describe("archiveAgents", () => {
     });
 
     it("ignores ids with no entry", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
         const { worktrees, retire } = stubWorktrees();
-        expect(await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual({ archived: [], failed: [] });
+        expect(await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["ghost"], 9_000)).toEqual({ archived: [], failed: [] });
         expect(retire).not.toHaveBeenCalled();
     });
 });
 
 describe("purgeArchived", () => {
     it("deletes the archive and leaves the board alone", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
-        await agents.begin(turn({ conversationId: "filed" }), 1_000);
-        await agents.finish("filed", 2_000);
-        await agents.begin(turn({ conversationId: "onboard" }), 1_000);
-        await agents.finish("onboard", 2_000);
+        await beginTurn(conversations, turn({ conversationId: "filed" }), 1_000);
+        await conversations.send("filed", { kind: "settle" }, 2_000).settled;
+        await beginTurn(conversations, turn({ conversationId: "onboard" }), 1_000);
+        await conversations.send("onboard", { kind: "settle" }, 2_000).settled;
         const { worktrees, remove } = stubWorktrees();
-        await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
-        const repos = agents.entry("filed")?.repos;
+        await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
+        const repos = worktreeOf(agents.entry("filed"))?.repos;
         const purgeConversationState = mock(async () => {});
 
-        const removed = await purgeArchived({ agents, agentWorktrees: worktrees, logger, purgeConversationState });
+        const removed = await purgeArchived({ agents, conversations, agentWorktrees: worktrees, logger, purgeConversationState });
 
         expect(removed).toEqual(["filed"]);
         // Removes the branch too, unlike archive; torn down against the entry's own recorded composition.
@@ -192,24 +197,24 @@ describe("purgeArchived", () => {
     });
 
     it("purges a workspace conversation without attempting branch removal", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
-        await agents.begin(turn({ isolated: false }), 1_000);
-        await agents.finish("c1", 2_000);
+        await beginTurn(conversations, turn({ isolated: false }), 1_000);
+        await conversations.send("c1", { kind: "settle" }, 2_000).settled;
         const { worktrees, remove } = stubWorktrees();
-        await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
+        await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["c1"], 9_000);
 
-        expect(await purgeArchived({ agents, agentWorktrees: worktrees, logger })).toEqual(["c1"]);
+        expect(await purgeArchived({ agents, conversations, agentWorktrees: worktrees, logger })).toEqual(["c1"]);
         expect(remove).not.toHaveBeenCalled();
         expect(agents.get("c1")).toBeUndefined();
     });
 
     it("keeps the agents whose teardown failed, and deletes the rest", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
         for (const id of ["a", "b"]) {
-            await agents.begin(turn({ conversationId: id }), 1_000);
-            await agents.finish(id, 2_000);
+            await beginTurn(conversations, turn({ conversationId: id }), 1_000);
+            await conversations.send(id, { kind: "settle" }, 2_000).settled;
         }
         const remove = mock(async (id: string) => {
             if (id === "a") {
@@ -217,9 +222,9 @@ describe("purgeArchived", () => {
             }
         });
         const { worktrees } = stubWorktrees(undefined, remove as never);
-        await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["a", "b"], 9_000);
+        await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["a", "b"], 9_000);
 
-        const removed = await purgeArchived({ agents, agentWorktrees: worktrees, logger });
+        const removed = await purgeArchived({ agents, conversations, agentWorktrees: worktrees, logger });
 
         // Keeps the row rather than losing track of a branch the disk still has.
         expect(removed).toEqual(["b"]);
@@ -227,16 +232,16 @@ describe("purgeArchived", () => {
     });
 
     it("leaves an agent that a new turn took back out of the archive", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
-        await agents.begin(turn({ conversationId: "filed" }), 1_000);
-        await agents.finish("filed", 2_000);
+        await beginTurn(conversations, turn({ conversationId: "filed" }), 1_000);
+        await conversations.send("filed", { kind: "settle" }, 2_000).settled;
         const { worktrees, remove } = stubWorktrees();
-        await archiveAgents({ agents, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
+        await archiveAgents({ agents, conversations, agentWorktrees: worktrees, logger }, ["filed"], 9_000);
         // A new turn un-archives via `begin`, taking the card out of this purge's scope.
-        await agents.begin(turn({ conversationId: "filed" }), 10_000);
+        await beginTurn(conversations, turn({ conversationId: "filed" }), 10_000);
 
-        expect(await purgeArchived({ agents, agentWorktrees: worktrees, logger })).toEqual([]);
+        expect(await purgeArchived({ agents, conversations, agentWorktrees: worktrees, logger })).toEqual([]);
         expect(remove).not.toHaveBeenCalled();
     });
 });
@@ -244,19 +249,19 @@ describe("purgeArchived", () => {
 describe("sweepAgedAgents", () => {
     it("archives only what has aged out, and skips a running turn", async () => {
         const now = 10 * DAY;
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
         // Old and finished: the sweep should take this one.
-        await agents.begin(turn({ conversationId: "old" }), 0);
-        await agents.finish("old", now - 5 * DAY);
+        await beginTurn(conversations, turn({ conversationId: "old" }), 0);
+        await conversations.send("old", { kind: "settle" }, now - 5 * DAY).settled;
         // Finished yesterday: too recent to age out.
-        await agents.begin(turn({ conversationId: "recent" }), 0);
-        await agents.finish("recent", now - 1 * DAY);
+        await beginTurn(conversations, turn({ conversationId: "recent" }), 0);
+        await conversations.send("recent", { kind: "settle" }, now - 1 * DAY).settled;
         // Old but still running: must be skipped despite its age.
-        await agents.begin(turn({ conversationId: "running" }), now - 5 * DAY);
+        await beginTurn(conversations, turn({ conversationId: "running" }), now - 5 * DAY);
         const { worktrees } = stubWorktrees();
 
-        const archived = await sweepAgedAgents({ agents, agentWorktrees: worktrees, logger }, now, 3 * DAY);
+        const archived = await sweepAgedAgents({ agents, conversations, agentWorktrees: worktrees, logger }, now, 3 * DAY);
 
         expect(archived).toEqual(["old"]);
         expect(
@@ -268,13 +273,13 @@ describe("sweepAgedAgents", () => {
     });
 
     it("does nothing when retention is off", async () => {
-        const agents = createAgentsRegistry(memoryStore(), noStandings, noPresences);
+        const { agents, conversations } = createFleet(memoryStore(), noStandings, noPresences);
         await agents.init();
-        await agents.begin(turn(), 0);
-        await agents.finish("c1", 0);
+        await beginTurn(conversations, turn(), 0);
+        await conversations.send("c1", { kind: "settle" }, 0).settled;
         const { worktrees, retire } = stubWorktrees();
 
-        expect(await sweepAgedAgents({ agents, agentWorktrees: worktrees, logger }, 100 * DAY, 0)).toEqual([]);
+        expect(await sweepAgedAgents({ agents, conversations, agentWorktrees: worktrees, logger }, 100 * DAY, 0)).toEqual([]);
         expect(retire).not.toHaveBeenCalled();
     });
 });

@@ -11,7 +11,7 @@ import { commitWorktreeRemainder } from "../../git/remote/root-repo.js";
 import { agentRepoChanges, checkpointOf } from "./agent-changes.js";
 import { branchSha, mainBranchOf } from "./agent-refs.js";
 import { reconcileLockfile } from "./lockfile-reconcile.js";
-import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
+import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // Lands a conversation's work into the main tree as uncommitted changes: preserves worktree state as a commit on
@@ -21,7 +21,7 @@ import type { AgentWorktrees } from "../worktrees/worktrees.js";
 // Wire LandResult plus registry state: `repos` carries advanced landedTips, `diff` is the cumulative anchor->tip stat
 // the review itself reads.
 export interface LandOutcome extends LandResult {
-    readonly repos: PersistedAgent["repos"];
+    readonly repos: RepoRecord[];
     readonly diff: { files: number; insertions: number; deletions: number };
     // False unless a `measure` re-judged a stored refusal; true lets a fresh verdict replace a stale one.
     readonly adjudicated: boolean;
@@ -270,7 +270,7 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
     const conflicts: LandConflict[] = [];
     const patchDir = await mkdtemp(join(tmpdir(), "intentic-classify-"));
     try {
-        for (const { repo, base, landedTip } of entry.repos) {
+        for (const { repo, base, landedTip } of entry.placement.repos) {
             await worktrees.withRepoLock(repo, async () => {
                 const main = worktrees.mainDir(repo);
                 if (!(await pathExists(join(main, ".git")))) {
@@ -280,7 +280,7 @@ export const outstandingConflicts = async (worktrees: AgentWorktrees, entry: Iso
                 }
                 const attached = await worktrees.attached(entry.id, repo);
                 const worktree = worktrees.worktreeDir(entry.id, repo);
-                const tip = attached ? (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim() : await branchSha(main, entry.branch, git);
+                const tip = attached ? (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim() : await branchSha(main, entry.placement.branch, git);
                 if (tip === undefined) {
                     return;
                 }
@@ -331,7 +331,7 @@ type RepoLandWrite =
     | (RepoLandTarget & { readonly kind: "merge"; readonly patchPath: string; readonly paths: readonly string[] });
 
 interface RepoLandPlan {
-    next: PersistedAgent["repos"][number];
+    next: RepoRecord;
     readonly write?: RepoLandWrite;
 }
 
@@ -346,7 +346,7 @@ const withRepoLocks = async <T>(worktrees: AgentWorktrees, repos: readonly strin
     return acquire(0);
 };
 
-const advancedRepo = async (target: RepoLandTarget, git: GitRunner): Promise<PersistedAgent["repos"][number]> => {
+const advancedRepo = async (target: RepoLandTarget, git: GitRunner): Promise<RepoRecord> => {
     const landedHead = await headSha(target.main, git);
     return {
         repo: target.repo,
@@ -432,7 +432,7 @@ const conflictOf = async (main: string, repo: string, report: DeltaReport, git: 
 // Lockfile fixed ahead of the locks, so manifest and lockfile still land as one commit: a resolution can run for minutes
 // and touches only the worktree, and every repo's lock held through it would queue the board behind it.
 const reconcileLockfiles = async ({ worktrees, entry, git }: LandRun): Promise<void> => {
-    for (const composed of entry.repos) {
+    for (const composed of entry.placement.repos) {
         if (await worktrees.attached(entry.id, composed.repo)) {
             await reconcileLockfile(worktrees.worktreeDir(entry.id, composed.repo), composed.landedTip ?? composed.base, git);
         }
@@ -445,16 +445,16 @@ const tipOf = async ({ worktrees, entry, git }: LandRun, repo: string, main: str
     const attached = await worktrees.attached(entry.id, repo);
     const worktree = worktrees.worktreeDir(entry.id, repo);
     if (!attached) {
-        const tip = await branchSha(main, entry.branch, git);
+        const tip = await branchSha(main, entry.placement.branch, git);
         return tip === undefined ? undefined : { tip, refDir: main };
     }
     // Stages staged/unstaged/untracked alike; a no-op when the only change is a nested repo's gitlink.
-    await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.title ?? entry.id}`, worktrees.mainDir("root"), git);
+    await commitWorktreeRemainder(repo, worktree, `Agent: ${entry.social.title?.text ?? entry.id}`, worktrees.mainDir("root"), git);
     return { tip: (await git(worktree, ["rev-parse", "HEAD"])).stdout.trim(), refDir: worktree };
 };
 
 // Totalled by the review's own reader, so the card's count can't disagree with the review.
-const cumulativeDiff = async ({ worktrees, entry, git }: LandRun, composed: PersistedAgent["repos"][number]): Promise<LandOutcome["diff"]> => {
+const cumulativeDiff = async ({ worktrees, entry, git }: LandRun, composed: RepoRecord): Promise<LandOutcome["diff"]> => {
     const diff = { files: 0, insertions: 0, deletions: 0 };
     for (const change of await agentRepoChanges(worktrees, entry, composed, "cumulative", git)) {
         diff.files += 1;
@@ -468,7 +468,7 @@ const cumulativeDiff = async ({ worktrees, entry, git }: LandRun, composed: Pers
 // applies retires the stored verdict; blocked paths report like the real gate.
 const measureRepo = async (
     { rejudging, patchDir, git }: LandRun,
-    composed: PersistedAgent["repos"][number],
+    composed: RepoRecord,
     target: RepoLandTarget,
     patchPath: string,
 ): Promise<Pick<RepoPlanning, "plan" | "conflict" | "held">> => {
@@ -488,7 +488,7 @@ const measureRepo = async (
 // same lines refuses it.
 const judgeRepo = async (
     { mode, patchDir, git }: LandRun,
-    composed: PersistedAgent["repos"][number],
+    composed: RepoRecord,
     target: RepoLandTarget,
     patchPath: string,
 ): Promise<Pick<RepoPlanning, "plan" | "conflict">> => {
@@ -512,7 +512,7 @@ const judgeRepo = async (
 };
 
 // Phase one for one repo: read-only, decides what phase two writes.
-const planRepo = async (run: LandRun, composed: PersistedAgent["repos"][number]): Promise<RepoPlanning> => {
+const planRepo = async (run: LandRun, composed: RepoRecord): Promise<RepoPlanning> => {
     const { worktrees, git } = run;
     const { repo, base } = composed;
     const main = worktrees.mainDir(repo);
@@ -550,7 +550,7 @@ const writePlans = async (
     plans: readonly RepoLandPlan[],
     patchDir: string,
     git: GitRunner,
-): Promise<{ repos: PersistedAgent["repos"]; conflicts: LandConflict[]; resolving: { repo: string; paths: string[] }[] }> => {
+): Promise<{ repos: RepoRecord[]; conflicts: LandConflict[]; resolving: { repo: string; paths: string[] }[] }> => {
     const conflicts: LandConflict[] = [];
     // Filled only by a `merge` land.
     const resolving: { repo: string; paths: string[] }[] = [];
@@ -582,7 +582,7 @@ export const landAgent = async (
         entry,
         mode,
         span,
-        rejudging: mode === "measure" && (entry.conflicts?.length ?? 0) > 0,
+        rejudging: mode === "measure" && (entry.landing.conflicts?.length ?? 0) > 0,
         // One temp dir for this run's patch files, removed whole in the finally.
         patchDir: await mkdtemp(join(tmpdir(), "intentic-land-")),
         git,
@@ -592,11 +592,11 @@ export const landAgent = async (
         await reconcileLockfiles(run);
         return await withRepoLocks(
             worktrees,
-            entry.repos.map(({ repo }) => repo),
+            entry.placement.repos.map(({ repo }) => repo),
             async () => {
                 // Phase one: read-only, computes every repo's plan; nothing is written if any repo conflicts.
                 const plannings: RepoPlanning[] = [];
-                for (const composed of entry.repos) {
+                for (const composed of entry.placement.repos) {
                     plannings.push(await planRepo(run, composed));
                 }
                 const diff = { files: 0, insertions: 0, deletions: 0 };
@@ -610,7 +610,7 @@ export const landAgent = async (
                 const conflicts = plannings.flatMap((planning) => (planning.conflict === undefined ? [] : [planning.conflict]));
                 // A refusal returns the original repo records, so a later land still applies the whole composed change.
                 if (conflicts.length > 0) {
-                    return { landed: false, changed, repos: [...entry.repos], diff, adjudicated, conflicts };
+                    return { landed: false, changed, repos: [...entry.placement.repos], diff, adjudicated, conflicts };
                 }
                 const written = await writePlans(
                     plannings.map(({ plan }) => plan),

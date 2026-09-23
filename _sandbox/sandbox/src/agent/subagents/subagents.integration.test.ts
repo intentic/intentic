@@ -25,8 +25,18 @@ import {
     type SubagentTaskMessage,
     type SubagentTurn,
 } from "./subagents.js";
+import { memoryFleet } from "../../testing.js";
 
-const turn = (): SubagentTurn => ({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: undefined });
+// One fleet's actors, which hold every record the registry under test files.
+const actors = memoryFleet().conversations;
+
+const turn = (): SubagentTurn => ({
+    conversationId: "conv-1",
+    conversations: actors,
+    cwd: WORKSPACE_ROOT,
+    sessionId: "sess-1",
+    subagentsDir: undefined,
+});
 
 // A `task_started` as the SDK delivers it. An override explicitly set to `undefined` means the SDK sent the task
 // without that field, distinct from the override being absent.
@@ -61,7 +71,7 @@ const update = (frame: AgentEvent | undefined): Extract<AgentEvent, { kind: "sub
     return frame;
 };
 
-beforeEach(() => resetSubagents());
+beforeEach(() => resetSubagents(actors));
 afterEach(() => jest.useRealTimers());
 
 describe("the SDK's own subagents", () => {
@@ -74,24 +84,24 @@ describe("the SDK's own subagents", () => {
             agentType: "Explore",
             description: "Locate claimIndexer",
         });
-        expect(listSubagentSessions()).toMatchObject([
+        expect(listSubagentSessions(actors)).toMatchObject([
             { id: "call-1", kind: "subagent", conversationId: "conv-1", agentType: "Explore", status: "running" },
         ]);
     });
 
     // Neither field rides a task_updated patch; both must come off the spawning call instead.
     it("takes 'backgrounded' and the model from the spawning tool call, onto the frame that announces the child", () => {
-        noteSubagentSpawn("call-1", { background: true, model: "sonnet" });
+        noteSubagentSpawn(actors, "call-1", { background: true, model: "sonnet" });
         expect(noteSubagentTask(turn(), started())).toMatchObject({ kind: "subagent", id: "call-1", background: true, model: "sonnet" });
-        expect(listSubagentSessions()).toMatchObject([{ id: "call-1", background: true, model: "sonnet" }]);
+        expect(listSubagentSessions(actors)).toMatchObject([{ id: "call-1", background: true, model: "sonnet" }]);
     });
 
     // `background: false` and `model: "inherit"` both leave the field unset, not false or "inherit".
     it("leaves an unmarked child without the flag, and a child that named no model without one", () => {
-        noteSubagentSpawn("call-1", { background: false, model: "inherit" });
+        noteSubagentSpawn(actors, "call-1", { background: false, model: "inherit" });
         expect(noteSubagentTask(turn(), started())).not.toHaveProperty("background");
-        expect(listSubagentSessions()[0]).not.toHaveProperty("background");
-        expect(listSubagentSessions()[0]).not.toHaveProperty("model");
+        expect(listSubagentSessions(actors)[0]).not.toHaveProperty("background");
+        expect(listSubagentSessions(actors)[0]).not.toHaveProperty("model");
     });
 
     // A meta file's model surfaces only when the spawning call named none.
@@ -103,7 +113,7 @@ describe("the SDK's own subagents", () => {
         noteSubagentTask(turn(), started({ tool_use_id: "call-2", task_id: "task-b" }));
         await stopped(dir, "xyz");
         await stopped(dir, "abc");
-        const byId = new Map(listSubagentSessions().map((session) => [session.id, session]));
+        const byId = new Map(listSubagentSessions(actors).map((session) => [session.id, session]));
         expect(byId.get("call-1")).toMatchObject({ model: "claude-haiku-4-5-20251001" });
         expect(byId.get("call-2")).not.toHaveProperty("model");
     });
@@ -111,20 +121,20 @@ describe("the SDK's own subagents", () => {
     // pairLiveSubagents is the only source of a model for a child the daemon never saw spawned.
     it("pairs a child that is still working when the roster is read", async () => {
         const dir = await mkdtemp(join(tmpdir(), "subagents-live-"));
-        noteSubagentTask({ conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: dir }, started());
+        noteSubagentTask({ conversationId: "conv-1", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: "sess-1", subagentsDir: dir }, started());
         await writeFile(join(dir, "agent-live.meta.json"), JSON.stringify({ toolUseId: "call-1", model: "sonnet", spawnDepth: 2 }));
-        await pairLiveSubagents();
-        expect(listSubagentSessions()[0]).toMatchObject({ id: "call-1", status: "running", model: "sonnet", spawnDepth: 2 });
+        await pairLiveSubagents(actors);
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ id: "call-1", status: "running", model: "sonnet", spawnDepth: 2 });
         // Deleted to prove the model came from the earlier cached read, not a fresh one.
         await rm(join(dir, "agent-live.meta.json"));
-        await pairLiveSubagents();
-        expect(listSubagentSessions()[0]).toMatchObject({ model: "sonnet" });
+        await pairLiveSubagents(actors);
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ model: "sonnet" });
     });
 
     it("skips a task with no tool_use id, and an ambient one", () => {
         expect(noteSubagentTask(turn(), started({ tool_use_id: undefined }))).toBeUndefined();
         expect(noteSubagentTask(turn(), started({ skip_transcript: true }))).toBeUndefined();
-        expect(listSubagentSessions()).toEqual([]);
+        expect(listSubagentSessions(actors)).toEqual([]);
     });
 
     it("files agent tasks only, not the shell/monitor/workflow work the same stream carries", () => {
@@ -134,12 +144,12 @@ describe("the SDK's own subagents", () => {
         expect(noteSubagentTask(turn(), started({ tool_use_id: "call-2", subagent_type: undefined, task_type: "monitor_ws" }))).toBeUndefined();
         expect(noteSubagentTask(turn(), started({ tool_use_id: "call-3", subagent_type: undefined, task_type: "local_workflow" }))).toBeUndefined();
         expect(noteSubagentTask(turn(), started({ tool_use_id: "call-4", subagent_type: undefined }))).toBeUndefined();
-        expect(listSubagentSessions()).toEqual([]);
+        expect(listSubagentSessions(actors)).toEqual([]);
         expect(noteSubagentTask(turn(), started({ tool_use_id: "call-5", subagent_type: undefined, task_type: "local_agent" }))).toMatchObject({
             kind: "subagent",
             id: "call-5",
         });
-        expect(listSubagentSessions().map((session) => session.id)).toEqual(["call-5"]);
+        expect(listSubagentSessions(actors).map((session) => session.id)).toEqual(["call-5"]);
     });
 
     it("folds progress onto the record and reports only what moved", () => {
@@ -172,7 +182,7 @@ describe("the SDK's own subagents", () => {
             id: "call-1",
             status: "completed",
         });
-        const [record] = listSubagentSessions();
+        const [record] = listSubagentSessions(actors);
         expect(record?.status).toBe("completed");
         expect(record?.endedAt).toBeGreaterThan(0);
     });
@@ -184,20 +194,26 @@ describe("the SDK's own subagents", () => {
         ).toMatchObject({ status: "killed", summary: "cut short" });
         noteSubagentTask(turn(), started({ tool_use_id: "call-2", task_id: "task-b" }));
         expect(noteSubagentTask(turn(), { subtype: "task_updated", task_id: "task-b", patch: { status: "reticulating" } })).toBeUndefined();
-        expect(listSubagentSessions().find((session) => session.id === "call-2")?.status).toBe("running");
+        expect(listSubagentSessions(actors).find((session) => session.id === "call-2")?.status).toBe("running");
     });
 
     it("hands the reader the ids a transcript is read with", () => {
         noteSubagentTask(turn(), started());
-        expect(subagentSource("call-1")).toMatchObject({ kind: "subagent", conversationId: "conv-1", sessionId: "sess-1", running: true });
-        expect(subagentSource("nobody")).toBeUndefined();
+        expect(subagentSource(actors, "call-1")).toMatchObject({ kind: "subagent", conversationId: "conv-1", sessionId: "sess-1", running: true });
+        expect(subagentSource(actors, "nobody")).toBeUndefined();
     });
 
     it("reads the turn's session id as it stands, not as it was when the child was born", () => {
-        const handle: SubagentTurn = { conversationId: "conv-1", cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined };
+        const handle: SubagentTurn = {
+            conversationId: "conv-1",
+            conversations: actors,
+            cwd: WORKSPACE_ROOT,
+            sessionId: undefined,
+            subagentsDir: undefined,
+        };
         noteSubagentTask(handle, started());
         handle.sessionId = "sess-late";
-        expect(subagentSource("call-1")).toMatchObject({ sessionId: "sess-late" });
+        expect(subagentSource(actors, "call-1")).toMatchObject({ sessionId: "sess-late" });
     });
 });
 
@@ -207,37 +223,37 @@ describe("the roster", () => {
         noteSubagentTask(turn(), started({ tool_use_id: "call-2", task_id: "task-b" }));
         noteSubagentTask(turn(), { subtype: "task_updated", task_id: "task-b", patch: { status: "completed" } });
         noteSubagentTask({ ...turn(), conversationId: "conv-2" }, started({ tool_use_id: "call-3", task_id: "task-c" }));
-        expect(subagentCountsOf("conv-1")).toEqual({ running: 1, total: 2 });
-        expect(subagentCountsOf("conv-3")).toEqual({ running: 0, total: 0 });
+        expect(subagentCountsOf(actors, "conv-1")).toEqual({ running: 1, total: 2 });
+        expect(subagentCountsOf(actors, "conv-3")).toEqual({ running: 0, total: 0 });
     });
 
     it("lists live children first, then the most recently active", () => {
         noteSubagentTask(turn(), started({ tool_use_id: "done-1", task_id: "task-a" }));
         noteSubagentTask(turn(), { subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } });
         noteSubagentTask(turn(), started({ tool_use_id: "live-1", task_id: "task-b" }));
-        expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1", "done-1"]);
+        expect(listSubagentSessions(actors).map((session) => session.id)).toEqual(["live-1", "done-1"]);
     });
 
     it("counts only tree-sharing children for the rebase gate", () => {
         openSpawnedChild(turn(), { id: "sub-own-tree", description: "port it" });
-        expect(subagentInParentTree("conv-1")).toBe(false);
+        expect(subagentInParentTree(actors, "conv-1")).toBe(false);
         noteSubagentTask(turn(), started());
-        expect(subagentInParentTree("conv-1")).toBe(true);
+        expect(subagentInParentTree(actors, "conv-1")).toBe(true);
         noteSubagentTask(turn(), { subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } });
-        expect(subagentInParentTree("conv-1")).toBe(false);
+        expect(subagentInParentTree(actors, "conv-1")).toBe(false);
     });
 
     it("kills whatever is still live when the turn ends", () => {
         noteSubagentTask(turn(), started());
         noteSubagentTask(turn(), started({ tool_use_id: "call-9", task_id: "task-b" }));
         noteSubagentTask({ ...turn(), conversationId: "conv-2" }, started({ tool_use_id: "other", task_id: "task-z" }));
-        expect(closeSubagents("conv-1").map((frame) => update(frame).id)).toEqual(["call-1", "call-9"]);
+        expect(closeSubagents(actors, "conv-1").map((frame) => update(frame).id)).toEqual(["call-1", "call-9"]);
         expect(
-            listSubagentSessions()
+            listSubagentSessions(actors)
                 .filter((session) => session.status === "running")
                 .map((session) => session.id),
         ).toEqual(["other"]);
-        expect(closeSubagents("conv-1")).toEqual([]);
+        expect(closeSubagents(actors, "conv-1")).toEqual([]);
     });
 
     // Retain window asserted from both sides (still listed at 4 min, gone by 6): the boundary is pinned, not
@@ -248,9 +264,9 @@ describe("the roster", () => {
         noteSubagentTask(turn(), started({ tool_use_id: "live-1", task_id: "task-b" }));
         noteSubagentTask(turn(), { subtype: "task_updated", task_id: "task-a", patch: { status: "completed" } });
         jest.advanceTimersByTime(4 * 60_000);
-        expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1", "call-1"]);
+        expect(listSubagentSessions(actors).map((session) => session.id)).toEqual(["live-1", "call-1"]);
         jest.advanceTimersByTime(2 * 60_000);
-        expect(listSubagentSessions().map((session) => session.id)).toEqual(["live-1"]);
+        expect(listSubagentSessions(actors).map((session) => session.id)).toEqual(["live-1"]);
     });
 });
 
@@ -261,7 +277,7 @@ describe("spawned children", () => {
 
     it("lists a spawned child under its parent, backgrounded, wearing its provider", () => {
         openSpawnedChild(turn(), { ...birth, harness: "native", spawnDepth: 1 });
-        const [session] = listSubagentSessions();
+        const [session] = listSubagentSessions(actors);
         expect(session).toMatchObject({
             id: "sub-brave-otter-a1b2",
             kind: "spawned",
@@ -273,28 +289,28 @@ describe("spawned children", () => {
             background: true,
             status: "running",
         });
-        expect(subagentCountsOf("conv-1")).toEqual({ running: 1, total: 1 });
+        expect(subagentCountsOf(actors, "conv-1")).toEqual({ running: 1, total: 1 });
     });
 
     it("reports blocked with what it waits on, and running again once answered", () => {
         openSpawnedChild(turn(), birth);
-        noteSpawnedChild(birth.id, { status: "blocked", summary: "Which port should the server bind?" });
-        expect(listSubagentSessions()[0]).toMatchObject({ status: "blocked", summary: "Which port should the server bind?" });
-        noteSpawnedChild(birth.id, { status: "running" });
-        expect(listSubagentSessions()[0]?.status).toBe("running");
+        noteSpawnedChild(actors, birth.id, { status: "blocked", summary: "Which port should the server bind?" });
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ status: "blocked", summary: "Which port should the server bind?" });
+        noteSpawnedChild(actors, birth.id, { status: "running" });
+        expect(listSubagentSessions(actors)[0]?.status).toBe("running");
     });
 
     it("outlives the parent's turn: close kills the SDK child and leaves the spawned one working", () => {
         noteSubagentTask(turn(), started());
         openSpawnedChild(turn(), birth);
-        expect(closeSubagents("conv-1").map((frame) => update(frame).id)).toEqual(["call-1"]);
-        expect(listSubagentSessions().find((session) => session.id === birth.id)?.status).toBe("running");
+        expect(closeSubagents(actors, "conv-1").map((frame) => update(frame).id)).toEqual(["call-1"]);
+        expect(listSubagentSessions(actors).find((session) => session.id === birth.id)?.status).toBe("running");
     });
 
     it("settles with the head of the child's closing text, and wakes a parked wait", async () => {
         openSpawnedChild(turn(), birth);
-        const parked = waitForSubagent("conv-1", { target: birth.id, until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild(birth.id, { failed: false, report: "The parser now handles nested arrays. Two files changed." });
+        const parked = waitForSubagent(actors, "conv-1", { target: birth.id, until: ["finished"], timeoutMs: 5_000 });
+        settleSpawnedChild(actors, birth.id, { failed: false, report: "The parser now handles nested arrays. Two files changed." });
         await expect(parked).resolves.toMatchObject({
             outcome: "finished",
             matched: { id: birth.id, status: "completed", summary: "The parser now handles nested arrays. Two files changed." },
@@ -303,8 +319,8 @@ describe("spawned children", () => {
 
     it("keeps a failure's error beside whatever it managed to say", () => {
         openSpawnedChild(turn(), birth);
-        settleSpawnedChild(birth.id, { failed: true, report: "Got as far as the lexer.", error: "provider refused the model" });
-        expect(listSubagentSessions()[0]).toMatchObject({
+        settleSpawnedChild(actors, birth.id, { failed: true, report: "Got as far as the lexer.", error: "provider refused the model" });
+        expect(listSubagentSessions(actors)[0]).toMatchObject({
             status: "failed",
             summary: "Got as far as the lexer.",
             error: "provider refused the model",
@@ -313,23 +329,23 @@ describe("spawned children", () => {
 
     it("hands the transcript reader the child's conversation key", () => {
         openSpawnedChild(turn(), { ...birth, harness: "native" });
-        expect(subagentSource(birth.id)).toMatchObject({ kind: "spawned", conversationId: "conv-1", provider: "cursor", harness: "native" });
+        expect(subagentSource(actors, birth.id)).toMatchObject({ kind: "spawned", conversationId: "conv-1", provider: "cursor", harness: "native" });
     });
 
     it("reopens a settled child for a follow-up turn, and never replaces a live one", () => {
         openSpawnedChild(turn(), birth);
-        settleSpawnedChild(birth.id, { failed: false, report: "first pass done" });
+        settleSpawnedChild(actors, birth.id, { failed: false, report: "first pass done" });
         openSpawnedChild(turn(), { ...birth, description: "also handle nested arrays" });
-        expect(listSubagentSessions()[0]).toMatchObject({ id: birth.id, status: "running", description: "also handle nested arrays" });
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ id: birth.id, status: "running", description: "also handle nested arrays" });
         openSpawnedChild(turn(), { ...birth, description: "a third ask" });
-        expect(listSubagentSessions()[0]).toMatchObject({ description: "also handle nested arrays" });
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ description: "also handle nested arrays" });
     });
 
     it("drops a late move from a child already settled", () => {
         openSpawnedChild(turn(), birth);
-        settleSpawnedChild(birth.id, { failed: false, report: "done" });
-        noteSpawnedChild(birth.id, { status: "blocked", summary: "too late" });
-        expect(listSubagentSessions()[0]).toMatchObject({ status: "completed", summary: "done" });
+        settleSpawnedChild(actors, birth.id, { failed: false, report: "done" });
+        noteSpawnedChild(actors, birth.id, { status: "blocked", summary: "too late" });
+        expect(listSubagentSessions(actors)[0]).toMatchObject({ status: "completed", summary: "done" });
     });
 });
 
@@ -342,62 +358,62 @@ describe("waitForSubagent", () => {
 
     it("resolves immediately when the target already satisfies the wait", async () => {
         spawn("bash-1");
-        settleSpawnedChild("bash-1", { failed: false, report: "done" });
-        const result = await waitForSubagent("conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
+        settleSpawnedChild(actors, "bash-1", { failed: false, report: "done" });
+        const result = await waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
         expect(result).toMatchObject({ outcome: "finished", matched: { id: "bash-1", status: "completed" } });
     });
 
     it("wakes when the child blocks", async () => {
         spawn("bash-1");
-        const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["blocked", "finished"], timeoutMs: 5_000 });
-        noteSpawnedChild("bash-1", { status: "blocked" });
+        const wait = waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["blocked", "finished"], timeoutMs: 5_000 });
+        noteSpawnedChild(actors, "bash-1", { status: "blocked" });
         expect(await wait).toMatchObject({ outcome: "blocked", matched: { id: "bash-1", status: "blocked" } });
     });
 
     it("a blocked flicker still wakes the waiter: the listener runs inside the transition, not after it", async () => {
         spawn("bash-1");
-        const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000 });
-        noteSpawnedChild("bash-1", { status: "blocked" });
-        noteSpawnedChild("bash-1", { status: "running" });
+        const wait = waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000 });
+        noteSpawnedChild(actors, "bash-1", { status: "blocked" });
+        noteSpawnedChild(actors, "bash-1", { status: "running" });
         expect(await wait).toMatchObject({ outcome: "blocked" });
     });
 
     it("with no target, the first of the conversation's children to move settles the wait: other conversations' don't", async () => {
         spawn("bash-1");
         openSpawnedChild(
-            { conversationId: "conv-2", cwd: WORKSPACE_ROOT, sessionId: "sess-2", subagentsDir: undefined },
+            { conversationId: "conv-2", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: "sess-2", subagentsDir: undefined },
             { id: "bash-other", description: "elsewhere" },
         );
-        const wait = waitForSubagent("conv-1", { until: ["blocked"], timeoutMs: 5_000 });
-        noteSpawnedChild("bash-other", { status: "blocked" });
-        noteSpawnedChild("bash-1", { status: "blocked" });
+        const wait = waitForSubagent(actors, "conv-1", { until: ["blocked"], timeoutMs: 5_000 });
+        noteSpawnedChild(actors, "bash-other", { status: "blocked" });
+        noteSpawnedChild(actors, "bash-1", { status: "blocked" });
         expect(await wait).toMatchObject({ outcome: "blocked", matched: { id: "bash-1" } });
     });
 
     it("a timeout answers with the target's current snapshot", async () => {
         spawn("bash-1");
-        const result = await waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 20 });
+        const result = await waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 20 });
         expect(result).toMatchObject({ outcome: "timeout", matched: { id: "bash-1", status: "running" } });
     });
 
     it("the turn's abort settles the wait", async () => {
         spawn("bash-1");
         const controller = new AbortController();
-        const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000, signal: controller.signal });
+        const wait = waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000, signal: controller.signal });
         controller.abort();
         expect(await wait).toMatchObject({ outcome: "aborted" });
     });
 
     it("a target the roster does not know answers unknown-target instead of hanging", async () => {
-        const result = await waitForSubagent("conv-1", { target: "never-was", until: ["finished"], timeoutMs: 5_000 });
+        const result = await waitForSubagent(actors, "conv-1", { target: "never-was", until: ["finished"], timeoutMs: 5_000 });
         expect(result).toMatchObject({ outcome: "unknown-target" });
     });
 
     it("answers immediately when nothing live could ever satisfy the wait", async () => {
-        expect(await waitForSubagent("conv-1", { until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({ outcome: "unknown-target" });
+        expect(await waitForSubagent(actors, "conv-1", { until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({ outcome: "unknown-target" });
         spawn("bash-1");
-        settleSpawnedChild("bash-1", { failed: false, report: "done" });
-        expect(await waitForSubagent("conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({
+        settleSpawnedChild(actors, "bash-1", { failed: false, report: "done" });
+        expect(await waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["blocked"], timeoutMs: 5_000 })).toMatchObject({
             outcome: "unknown-target",
             matched: { id: "bash-1", status: "completed" },
         });
@@ -405,32 +421,34 @@ describe("waitForSubagent", () => {
 
     it("still waits while the child is live", async () => {
         spawn("bash-1");
-        const wait = waitForSubagent("conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild("bash-1", { failed: false, report: "done" });
+        const wait = waitForSubagent(actors, "conv-1", { target: "bash-1", until: ["finished"], timeoutMs: 5_000 });
+        settleSpawnedChild(actors, "bash-1", { failed: false, report: "done" });
         expect(await wait).toMatchObject({ outcome: "finished" });
     });
 
     it("with no target, moves on to the next child rather than answering again with one already reported", async () => {
         spawn("fan-1");
         spawn("fan-2");
-        settleSpawnedChild("fan-1", { failed: false, report: "first" });
-        expect(await waitForSubagent("conv-1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
+        settleSpawnedChild(actors, "fan-1", { failed: false, report: "first" });
+        expect(await waitForSubagent(actors, "conv-1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
             outcome: "finished",
             matched: { id: "fan-1" },
         });
-        const next = waitForSubagent("conv-1", { until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild("fan-2", { failed: false, report: "second" });
+        const next = waitForSubagent(actors, "conv-1", { until: ["finished"], timeoutMs: 5_000 });
+        settleSpawnedChild(actors, "fan-2", { failed: false, report: "second" });
         expect(await next).toMatchObject({ outcome: "finished", matched: { id: "fan-2" } });
-        expect(await waitForSubagent("conv-1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "unknown-target" });
-        expect(await waitForSubagent("conv-1", { target: "fan-1", until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "finished" });
+        expect(await waitForSubagent(actors, "conv-1", { until: ["finished"], timeoutMs: 5_000 })).toMatchObject({ outcome: "unknown-target" });
+        expect(await waitForSubagent(actors, "conv-1", { target: "fan-1", until: ["finished"], timeoutMs: 5_000 })).toMatchObject({
+            outcome: "finished",
+        });
     });
 
     it("knows a child's ending reached its parent only once a wait handed it over", async () => {
         spawn("told");
-        settleSpawnedChild("told", { failed: false, report: "done" });
-        expect(subagentEndingReported("told")).toBe(false);
-        await waitForSubagent("conv-1", { target: "told", until: ["finished"], timeoutMs: 5_000 });
-        expect(subagentEndingReported("told")).toBe(true);
+        settleSpawnedChild(actors, "told", { failed: false, report: "done" });
+        expect(subagentEndingReported(actors, "told")).toBe(false);
+        await waitForSubagent(actors, "conv-1", { target: "told", until: ["finished"], timeoutMs: 5_000 });
+        expect(subagentEndingReported(actors, "told")).toBe(true);
     });
 });
 
@@ -444,28 +462,38 @@ describe("how a subagent ends", () => {
         await stopped(dir, "xyz", "Found it in the reducer.");
         // The SDK's exit notification lands afterwards with its own digest: the child's own words stand.
         noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-1", status: "completed", summary: "ran 12 tools" });
-        expect(listSubagentSessions()).toMatchObject([{ id: "call-1", status: "completed", summary: "Found it in the reducer." }]);
+        expect(listSubagentSessions(actors)).toMatchObject([{ id: "call-1", status: "completed", summary: "Found it in the reducer." }]);
     });
 
     it("stamps the verification the moment it ends, whichever road it came down", () => {
         openSpawnedChild(turn(), { id: "sub-verify-1", description: "port the parser" });
         noteChildWork(
+            actors,
             { kind: "tool_call", id: "c1", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/parser.ts" }] },
             "sub-verify-1",
         );
-        expect(listSubagentSessions()[0]?.verification).toBeUndefined();
-        settleSpawnedChild("sub-verify-1", { failed: false, report: "Ported it." });
-        expect(listSubagentSessions()[0]?.verification).toEqual({ state: "unproven", paths: ["src/parser.ts"] });
+        expect(listSubagentSessions(actors)[0]?.verification).toBeUndefined();
+        settleSpawnedChild(actors, "sub-verify-1", { failed: false, report: "Ported it." });
+        expect(listSubagentSessions(actors)[0]?.verification).toEqual({ state: "unproven", paths: ["src/parser.ts"] });
     });
 
     it("carries the verdict on the same frame as the report, for an SDK child too", () => {
         noteSubagentTask(turn(), started({ tool_use_id: "call-v" }));
         noteChildWork(
+            actors,
             { kind: "tool_call", id: "c1", name: "Write", category: "edit", status: "completed", locations: [{ path: "src/a.ts" }] },
             "call-v",
         );
-        noteChildWork({ kind: "tool_call", id: "c2", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" }, "call-v");
-        noteChildWork({ kind: "tool_call_update", id: "c2", status: "completed", content: [{ type: "text", text: "--- [exit 0, 2s]" }] }, undefined);
+        noteChildWork(
+            actors,
+            { kind: "tool_call", id: "c2", name: "Bash", category: "execute", status: "in_progress", target: "pnpm test" },
+            "call-v",
+        );
+        noteChildWork(
+            actors,
+            { kind: "tool_call_update", id: "c2", status: "completed", content: [{ type: "text", text: "--- [exit 0, 2s]" }] },
+            undefined,
+        );
         const frame = update(noteSubagentTask(turn(), { subtype: "task_notification", tool_use_id: "call-v", status: "completed", summary: "done" }));
         expect(frame.verification).toEqual({ state: "verified", paths: ["src/a.ts"], check: "pnpm test" });
     });
@@ -473,6 +501,7 @@ describe("how a subagent ends", () => {
     it("appends the warning to a Task result the parent is about to read", async () => {
         noteSubagentTask(turn(), started({ tool_use_id: "call-w" }));
         noteChildWork(
+            actors,
             { kind: "tool_call", id: "c1", name: "Edit", category: "edit", status: "completed", locations: [{ path: "src/a.ts" }] },
             "call-w",
         );
@@ -492,7 +521,7 @@ describe("how a subagent ends", () => {
 
     it("says nothing about a child that edited no code", async () => {
         noteSubagentTask(turn(), started({ tool_use_id: "call-q" }));
-        noteChildWork({ kind: "tool_call", id: "c1", name: "Grep", category: "search", status: "completed", target: "needle" }, "call-q");
+        noteChildWork(actors, { kind: "tool_call", id: "c1", name: "Grep", category: "search", status: "completed", target: "needle" }, "call-q");
         const output = await subagentHooks(turn()).PostToolUse?.[0]?.hooks[0]?.(
             {
                 hook_event_name: "PostToolUse",
@@ -509,11 +538,11 @@ describe("how a subagent ends", () => {
 
     it("does not re-end a finished child, but does let a late failure through", () => {
         openSpawnedChild(turn(), { id: "sub-late-1", description: "go" });
-        settleSpawnedChild("sub-late-1", { failed: false, report: "All done." });
-        expect(listSubagentSessions()).toMatchObject([{ id: "sub-late-1", status: "completed" }]);
-        settleSpawnedChild("sub-late-1", { failed: false, report: "" });
-        expect(listSubagentSessions()).toMatchObject([{ id: "sub-late-1", status: "completed" }]);
-        settleSpawnedChild("sub-late-1", { failed: true, report: "", error: "exit 1" });
-        expect(listSubagentSessions()).toMatchObject([{ id: "sub-late-1", status: "failed", summary: "All done.", error: "exit 1" }]);
+        settleSpawnedChild(actors, "sub-late-1", { failed: false, report: "All done." });
+        expect(listSubagentSessions(actors)).toMatchObject([{ id: "sub-late-1", status: "completed" }]);
+        settleSpawnedChild(actors, "sub-late-1", { failed: false, report: "" });
+        expect(listSubagentSessions(actors)).toMatchObject([{ id: "sub-late-1", status: "completed" }]);
+        settleSpawnedChild(actors, "sub-late-1", { failed: true, report: "", error: "exit 1" });
+        expect(listSubagentSessions(actors)).toMatchObject([{ id: "sub-late-1", status: "failed", summary: "All done.", error: "exit 1" }]);
     });
 });

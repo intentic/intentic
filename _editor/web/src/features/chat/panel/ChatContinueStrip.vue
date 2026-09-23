@@ -31,7 +31,7 @@ const props = defineProps<{
 // The press, and whether it keeps the provider session across an account change (the menu's carrying variant).
 const emit = defineEmits<{ (event: "continue", options?: { readonly carry?: boolean }): void }>();
 
-const { conversation, connected, pickUp, provider, model, account, accounts, selectAccount } = usePaneView();
+const { conversation, connected, pickUp, provider, model, account, accounts } = usePaneView();
 const { reachable } = useSandbox();
 const { settings } = useSandboxSettings();
 const { mobile } = useDevice();
@@ -175,7 +175,7 @@ const continueOnFallback = (carry: boolean): void => {
         return;
     }
     waysOpen.value = false;
-    selectAccount(target.id);
+    conversation.value.selection.apply({ kind: `selectAccount`, account: target.id });
     emit(`continue`, { carry });
 };
 const canCarry = computed(() => pickUp.value?.held?.ran === true);

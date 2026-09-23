@@ -2,7 +2,7 @@ import { type AgentProvider, type CatalogOption, effortAllowed, EFFORT_TIERS, NA
 import { providerModels } from "../../accounts/providerCatalog";
 
 // Which reasoning tiers a model offers, and what a pick runs at: a scale is a property of the model, not the provider
-// (Kimi K2.7 stops at 'high', K3 at 'max'). Read at every use (composer segments, Conversation.effort) rather than
+// (Kimi K2.7 stops at 'high', K3 at 'max'). Read at every use (composer segments, ComposerSelection.effort) rather than
 // written back, so a smaller model never ratchets the pick down.
 
 const EFFORT_LABELS: Record<string, string> = {

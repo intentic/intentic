@@ -1,13 +1,13 @@
 import type { AgentOptions, ModelSelection, Run, SDKAgent, SendOptions } from "@cursor/sdk";
-import type { AgentEvent } from "@intentic/sandbox-contract";
+import { type AgentEvent, CURSOR } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { whenAborted } from "../../abort.js";
 import { type SteeringChannel, steeringRelay } from "../../agent/checkpoints/agent-steering.js";
-import type { AgentRequest } from "../../agent/run/agent.js";
+import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { EventQueue } from "../../agent/run/event-queue.js";
 import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-note.js";
-import { EXECUTE_PROMPT, type ExecutePhase, PLAN_PREAMBLE, type PlanPhase, runPlanEmulation } from "../../agent/prompt/plan-emulation.js";
-import { createTurnGate } from "../../guard/turn-gate.js";
+import { EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
+import { vendorTurnGate } from "../decorators/vendor-gate.js";
 import type { CursorCatalog } from "./cursor-catalog.js";
 import { createCursorEventMapper } from "./cursor-events.js";
 import type { CursorHookService } from "./cursor-hooks.js";
@@ -104,7 +104,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         planning: boolean,
         channel: SteeringChannel | undefined,
     ): AsyncGenerator<AgentEvent, { errored: boolean; planText: string | undefined }> {
-        const mapper = createCursorEventMapper(request.cwd, planning);
+        const mapper = createCursorEventMapper(request.spec.cwd, planning);
         let sawDelta = false;
         const options: SendOptions = {
             mode: modeFor(planning),
@@ -216,15 +216,15 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         return { errored: errored || captured.errored === true, planText: captured.planText };
     }
 
-    return async function* cursorAgent(request: AgentRequest): AsyncGenerator<AgentEvent> {
+    return async function* cursorAgent(request: AgentRequest<CursorCredential>): AsyncGenerator<AgentEvent> {
         const sdk = await cursorSdk();
         if (sdk === undefined) {
             yield { kind: "error", message: CURSOR_SDK_MISSING };
             yield { kind: "done" };
             return;
         }
-        const apiKey = request.cursorApiKey;
-        if (apiKey === undefined || apiKey === "") {
+        const apiKey = request.credential.apiKey;
+        if (apiKey === "") {
             // Reached only when a request is built by hand; planCursorTurn already refuses first with the same code.
             yield { kind: "error", message: "Connect your Cursor subscription in Sandbox ▸ Agent to run Cursor.", code: "subscription-required" };
             yield { kind: "done" };
@@ -232,15 +232,15 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         }
 
         // The SDK requires an explicit model with no default; the catalog is never empty, so this always resolves.
-        const modelId = request.model !== undefined && request.model !== "" ? request.model : (await deps.catalog.models()).default;
+        const modelId = request.spec.model !== undefined && request.spec.model !== "" ? request.spec.model : (await deps.catalog.models()).default;
         const item = await deps.catalog.item(modelId);
         // Without the vendor record (persisted/seeded) the bare id is sent: an untranslatable effort isn't guessed.
-        const selection: ModelSelection = item === undefined ? { id: modelId } : selectionFor(item, request.effort);
+        const selection: ModelSelection = item === undefined ? { id: modelId } : selectionFor(item, request.spec.effort);
 
         // Attachments ride the prompt as a file list; Cursor's read tool takes them off disk, like the OpenCode/Pi
         // runtimes.
-        const { images, others } = splitAttachments(request.attachments ?? []);
-        const basePrompt = withFileNote(request.prompt, [...images, ...others]);
+        const { images, others } = splitAttachments(request.spec.attachments ?? []);
+        const basePrompt = withFileNote(request.spec.prompt, [...images, ...others]);
 
         // One stream for the turn, two producers: the SDK's mapped deltas, and the custom tool handlers and hooks that
         // run inside Cursor's loop with no generator to yield from. They share it because a handler that parks on a
@@ -252,14 +252,14 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
         // Rulebook axis "hooks" makes a hold park on a card, not refuse, while the hook process waits on the socket.
         // Built ahead of the options because the JS backend rides a custom tool and consults this gate from inside its
         // own handler, where no hook can reach it.
-        const { gate, taint, release } = createTurnGate(request);
+        const { gate, taint, release } = vendorTurnGate(request);
 
         const options: AgentOptions = {
             model: selection,
             apiKey,
             disallowedTools: [...TOOLS_WITHHELD],
             local: {
-                cwd: request.cwd,
+                cwd: request.spec.cwd,
                 // mdm carries the command gate (cursor-hooks.ts); user is skipped, it also reads this daemon's Claude
                 // settings.
                 settingSources: ["mdm", "project"],
@@ -270,7 +270,7 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
 
         let agent: SDKAgent | undefined;
         try {
-            agent = request.sessionId !== undefined ? await sdk.Agent.resume(request.sessionId, options) : await sdk.Agent.create(options);
+            agent = request.spec.sessionId !== undefined ? await sdk.Agent.resume(request.spec.sessionId, options) : await sdk.Agent.create(options);
         } catch (error) {
             release();
             yield await codedError(error, sdk);
@@ -284,14 +284,14 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
 
         const retire = deps.hooks.register({
             conversationId: agent.agentId,
-            ...(request.cliEnv !== undefined ? { cliEnv: request.cliEnv } : {}),
-            ...(request.systemAppend !== undefined ? { systemAppend: request.systemAppend } : {}),
+            ...(request.tools.cliEnv !== undefined ? { cliEnv: request.tools.cliEnv } : {}),
+            ...(request.spec.systemAppend !== undefined ? { systemAppend: request.spec.systemAppend } : {}),
             gate,
             push,
         });
 
         // This turn's one consumer of the steering queue; absent for a bench or benchmark run with no queue.
-        const relay = request.steering === undefined ? undefined : steeringRelay(request.steering);
+        const relay = request.spec.steering === undefined ? undefined : steeringRelay(request.spec.steering);
 
         try {
             const live = agent;
@@ -307,22 +307,23 @@ export const createCursorAgent = (deps: CursorAgentDeps) => {
                 }
             };
 
-            if (request.permissionMode === "plan") {
-                const planPhase: PlanPhase = async function* (prompt) {
-                    const outcome = yield* send(prompt, true);
-                    // Session never changes across phases; reporting undefined here keeps the emulation's seed rather
-                    // than reassigning it.
-                    return { sessionId: undefined, planText: outcome.planText, errored: outcome.errored };
-                };
-                const executePhase: ExecutePhase = async function* () {
-                    yield* send(EXECUTE_PROMPT, false);
-                };
-                // The preamble rides the prompt though mode:"plan" enforces read-only: it tells the model to end with a
-                // plan.
-                yield* runPlanEmulation(request.signal, `${PLAN_PREAMBLE}${basePrompt}`, request.sessionId, planPhase, executePhase);
-            } else {
-                yield* send(basePrompt, false);
-            }
+            yield* planMode(
+                CURSOR,
+                request,
+                () => ({
+                    // The preamble rides the prompt though mode:"plan" enforces read-only: it tells the model to end with a
+                    // plan.
+                    prompt: `${PLAN_PREAMBLE}${basePrompt}`,
+                    async *plan(prompt) {
+                        const outcome = yield* send(prompt, true);
+                        // Session never changes across phases; reporting undefined here keeps the emulation's seed rather
+                        // than reassigning it.
+                        return { sessionId: undefined, planText: outcome.planText, errored: outcome.errored };
+                    },
+                    execute: () => send(EXECUTE_PROMPT, false),
+                }),
+                () => send(basePrompt, false),
+            );
         } finally {
             // Order matters: retire, then release, then close; a consult between finds no turn, and is allowed.
             retire();

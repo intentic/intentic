@@ -1,4 +1,5 @@
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 
@@ -22,18 +23,13 @@ const sandboxJsonMock = mock(async (..._args: unknown[]): Promise<unknown> => ({
 mock.module("../client/sandboxClient", () => ({
     sandboxJson: (...args: unknown[]) => sandboxJsonMock(...args),
     sandboxRequest: mock(),
-    sandboxRequestVia: mock(),
-    sandboxJsonAt: mock(),
-    sandboxJsonQuietly: mock(),
-    sandboxJsonVia: mock(),
     sandboxBlob: mock(),
     sandboxUpload: mock(),
     sandboxError: mock(async () => new Error(`unused`)),
-    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { resetAgents, useAgents } from "../../agents/fleet/useAgents";
+import { useAgents } from "../../agents/fleet/useAgents";
 import { setAgents } from "../../agents/fleet/useAgents-registry";
 import { queryClient } from "../../../lib/queryPersistence";
 import { applySystemEvent } from "./systemEvents";
@@ -60,7 +56,7 @@ const ids = (): string[] =>
         .map((agent) => agent.id);
 
 beforeEach(() => {
-    resetAgents();
+    resetSandboxScope();
     sandboxJsonMock.mockReset();
 });
 

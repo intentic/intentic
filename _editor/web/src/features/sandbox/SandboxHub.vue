@@ -71,7 +71,7 @@ const updatable = computed(() => updateCount(listedExtensions.value.map((entry) 
 const hosted = computed(() => (sandbox.active.value?.hosted ? sandbox.active.value.id : undefined));
 const { build: hostedBuild } = useHostedBuild(() => hosted.value);
 const runningIn = (slug: string): string | undefined =>
-    hubWorkRunning(hubWorkKey(HUB, slug)) ??
+    hubWorkRunning(hubWorkKey(HUB, slug), sandbox.activeSandboxId.value) ??
     (slug === `environment` && hostedBuild.value?.state === `building` ? `Building your environment` : undefined);
 
 // A colliding activation key is dropped, not shadowed by the v-if chain; built-ins own their names.

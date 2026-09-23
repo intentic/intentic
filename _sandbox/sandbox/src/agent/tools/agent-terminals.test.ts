@@ -5,11 +5,14 @@ import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { test, expect } from "bun:test";
 import { shellQuote } from "@intentic/sandbox-run/quote";
-import { syncHookOutput } from "../../testing.js";
+import { syncHookOutput, memoryFleet } from "../../testing.js";
 import { DEFAULT_HEAVY_COMMANDS, type HeavyCommands, HeavyCommandsSchema } from "../../platform/resources/heavy-commands.js";
-import type { SecretAccess } from "./agent-secrets.js";
+import type { SecretAccess } from "../../secrets/secret-access.js";
 import { bashTmuxHooks } from "./agent-terminals.js";
 import { backgroundJobOf, type BackgroundJob, noteJobShell, settledBackgroundJobs } from "./background-jobs.js";
+
+// One fleet's actors, and the cards a turn here parks in them.
+const actors = memoryFleet().conversations;
 
 // Demotes a command via nice/ionice and runs it as one `bash -c` tree, before tmux-run sees it.
 const demoted = (command: string): string => `nice -n 10 ionice -c 2 -n 7 bash -c ${shellQuote(command)}`;
@@ -94,17 +97,17 @@ test("stamps the pane command with the conversation owner, and refuses one outsi
 // what stops tmux-run killing the pane when the turn's exit SIGTERMs the wrapper, and the dir is where the daemon
 // reads the completion nobody is left to see.
 test("a background command carries a job dir, and is filed for the turn's ending to adopt", async () => {
-    const jobs = { conversationId: "conv-bg", turn: {} };
+    const jobs = { conversationId: "conv-bg", profile: {}, conversations: actors };
     const command = await rewritten(
         { command: "pnpm build", description: "Build the app", run_in_background: true },
         bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs),
     );
     const dir = /tmux-run -b (\S+) -c /.exec(command ?? "")?.[1];
     expect(dir).toStartWith(join(tmpdir(), "intentic-run-job-"));
-    noteJobShell("tu-1", "bsh42");
-    expect(backgroundJobOf("conv-bg", "bsh42")?.dir).toBe(dir as string);
+    noteJobShell(actors, "tu-1", "bsh42");
+    expect(backgroundJobOf(actors, "conv-bg", "bsh42")?.dir).toBe(dir as string);
     // The registry holds the same job, so the settle that follows can hand it to a watch.
-    const filed = settledBackgroundJobs("conv-bg").running;
+    const filed = settledBackgroundJobs(actors, "conv-bg").running;
     expect(filed.map((job: BackgroundJob) => job.dir)).toEqual([dir as string]);
     expect(filed[0]?.command).toBe("pnpm build");
     // What the chat shows the job as: the agent's own words for the call, not its command.
@@ -113,12 +116,12 @@ test("a background command carries a job dir, and is filed for the turn's ending
 });
 
 test("an ordinary command, and a background one with nowhere to deliver a wake, carry no job dir", async () => {
-    const jobs = { conversationId: "conv-bg-none", turn: {} };
+    const jobs = { conversationId: "conv-bg-none", profile: {}, conversations: actors };
     // Foreground: dies with the turn as everything else does, which is what its timeout semantics need.
     expect(await rewritten({ command: "pnpm build" }, bashTmuxHooks([], undefined, undefined, undefined, undefined, jobs))).not.toContain("-b ");
     // No conversation: a job that outlived the turn would have nobody to report to.
     expect(await rewritten({ command: "pnpm build", run_in_background: true })).not.toContain("-b ");
-    expect(settledBackgroundJobs("conv-bg-none")).toEqual({ running: [], unseen: [] });
+    expect(settledBackgroundJobs(actors, "conv-bg-none")).toEqual({ running: [], unseen: [] });
 });
 
 test("forwards env key NAMES as sorted -e flags before the session: never values", async () => {

@@ -1,6 +1,7 @@
 // THE LEDGER BEHIND A HUB ROW'S TURNING MARK. What is pinned here is the part a component cannot hold: a run
 // survives the section that started it, the row it belongs to, and how a row with several runs describes itself.
 import { it, expect, afterEach } from "bun:test";
+import { activeSandboxId } from "../../features/sandbox/overview/activeSandbox";
 import { beginHubWork, forgetHubWork, hubWorkKey, hubWorkRunning, trackHubWork } from "./hubWork";
 
 const DEVICES = hubWorkKey(`sandbox`, `devices`);
@@ -53,4 +54,19 @@ it(`ends a run once however often it is told to`, () => {
     end();
     expect(hubWorkRunning(DEVICES)).toBe(`Restarting an agent`);
     other();
+});
+
+// A rebuild runs on the box it was started on: another sandbox's row does not turn for it, and the first box's still
+// does once it is back on screen.
+it(`marks a sandbox's row only for the work begun on that sandbox`, () => {
+    activeSandboxId.value = `box-a`;
+    const end = beginHubWork(ENVIRONMENT, `Rebuilding from your checkout`);
+    activeSandboxId.value = `box-b`;
+
+    expect(hubWorkRunning(ENVIRONMENT, `box-b`)).toBeUndefined();
+    expect(hubWorkRunning(ENVIRONMENT, `box-a`)).toBe(`Rebuilding from your checkout`);
+    // A row about no one sandbox (the settings hub's) counts it wherever it began.
+    expect(hubWorkRunning(ENVIRONMENT)).toBe(`Rebuilding from your checkout`);
+    end();
+    activeSandboxId.value = undefined;
 });

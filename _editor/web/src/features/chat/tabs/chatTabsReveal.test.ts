@@ -1,11 +1,12 @@
 // Pins that any focus write (board card, history row, chord, new agent) scrolls the list's card into view via
 // `nearest`, including the docked sheet's first frame after mount.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { draftConversation, reveal } from "../panel/useChat-reveal";
 // Store half of "New agent" (agentActions.startAgent); this suite's fixture for extra tabs.
 const newChat = () => {
@@ -50,7 +51,7 @@ beforeEach(async () => {
     app?.unmount();
     app = undefined;
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
-    resetChat();
+    resetSandboxScope();
     reveals.length = 0;
     await nextTick();
 });

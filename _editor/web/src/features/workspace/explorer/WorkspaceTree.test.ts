@@ -1,6 +1,7 @@
 // jsdom: the subject is what the explorer renders after a reload (open folders restored, revealed
 // file), not just composable state.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import PrimeVue from "primevue/config";
@@ -13,6 +14,9 @@ import { IconStub } from "@intentic/ui/testing";
 import { ACTIVE_KEY, activeSandboxId } from "../../sandbox/overview/activeSandbox";
 import { useEntryDrag } from "./transfer/useEntryDrag";
 import * as actualSandboxClient from "../../sandbox/client/sandboxClient";
+import * as actualSandboxRpc from "../../sandbox/client/sandboxRpc";
+import type { ProcedureName } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // jsdom implements no scrollIntoView; spied rather than stubbed so calls can be inspected.
 const scrolled = hoisted(() => {
@@ -34,37 +38,60 @@ localStorage.setItem(ACTIVE_KEY, SANDBOX);
 // static import below has already done by the time this line runs.
 activeSandboxId.value = SANDBOX;
 
-// Records calls instead of hitting the network (no sandbox is registered in tests); every call answers ok unless a test
-// parks it (`hold`) or refuses it (`refuse`). Parking is what lets a test read the tree in the gap the daemon's answer
+// Records calls instead of hitting the network (no sandbox is registered in tests): a typed call by its procedure and
+// input, a raw one (the uploads) by its path. Every call answers ok unless a test parks it (`hold`) or refuses it
+// (`refuse`, a procedure or a path prefix). Parking is what lets a test read the tree in the gap the daemon's answer
 // used to fill — the gap this surface exists to cover.
+type DaemonCall = { readonly procedure: ProcedureName; readonly input: unknown } | { readonly path: string };
 const daemon = hoisted(() => ({
-    calls: [] as { path: string; init?: RequestInit }[],
+    calls: [] as DaemonCall[],
     hold: undefined as undefined | Promise<void>,
     release: undefined as undefined | (() => void),
     refuse: undefined as undefined | string,
 }));
+// One exchange: recorded as it leaves, then parked or refused as the test says, else answered.
+const exchange = async <T>(call: DaemonCall, answer: T): Promise<T> => {
+    daemon.calls.push(call);
+    if (daemon.hold !== undefined) {
+        await daemon.hold;
+    }
+    if (daemon.refuse !== undefined && (`procedure` in call ? call.procedure : call.path).startsWith(daemon.refuse)) {
+        throw new Error(`the daemon refused that`);
+    }
+    return answer;
+};
+const OK = { ok: true } as const;
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in. The factory is synchronous, since awaiting in one that replaces a loaded module never returns.
 const realSandboxClient = { ...actualSandboxClient };
 mock.module("../../sandbox/client/sandboxClient", () => {
     return {
         ...realSandboxClient,
-        sandboxJson: async (path: string, init?: RequestInit): Promise<unknown> => {
-            daemon.calls.push({ path, init });
-            if (daemon.hold !== undefined) {
-                await daemon.hold;
-            }
-            if (daemon.refuse !== undefined && path.startsWith(daemon.refuse)) {
-                throw new Error(`the daemon refused that`);
-            }
-            return { ok: true };
-        },
+        sandboxJson: (path: string): Promise<unknown> => exchange({ path }, OK),
+    };
+});
+const realSandboxRpc = { ...actualSandboxRpc };
+mock.module("../../sandbox/client/sandboxRpc", () => {
+    return {
+        ...realSandboxRpc,
+        sandboxRpc: fakeSandboxRpc({
+            workspace: {
+                move: (input) => exchange({ procedure: `workspace.move`, input }, OK),
+                delete: (input) => exchange({ procedure: `workspace.delete`, input }, OK),
+                mkdir: (input) => exchange({ procedure: `workspace.mkdir`, input }, OK),
+                file: (input) => exchange({ procedure: `workspace.file`, input }, { present: false as const, path: input.path }),
+            },
+        }),
     };
 });
 
+// What reached the daemon: every path the raw client was asked for, and every input one procedure was sent, in order.
+const paths = (): string[] => daemon.calls.flatMap((call) => (`path` in call ? [call.path] : []));
+const inputsTo = (procedure: ProcedureName): unknown[] =>
+    daemon.calls.flatMap((call) => (`procedure` in call && call.procedure === procedure ? [call.input] : []));
+
 const { default: WorkspaceTree } = await import("./WorkspaceTree.vue");
-const { resetWorkspaceTreeState } = await import("./useWorkspaceTree");
-const { markFailed, noteArriving, reconcileProvisional, resetProvisional } = await import("../files/provisionalEntries");
+const { markFailed, noteArriving, reconcileProvisional } = await import("../files/provisionalEntries");
 const { queryClient } = await import("../../../lib/queryPersistence");
 const { useLayout } = await import("../../../shell/window/useLayout");
 const { useNotifications } = await import("../../../shell/notifications/notifications");
@@ -108,7 +135,7 @@ const recordTooltip = {
 // Rebuilds the module-level open-folder set from storage, as a page load or sandbox switch would.
 const restoreFrom = (expanded: readonly string[]): void => {
     sessionStorage.setItem(`intentic.workspaceTree.${SANDBOX}`, JSON.stringify(expanded));
-    resetWorkspaceTreeState();
+    resetSandboxScope();
 };
 
 const mount = async (props: {
@@ -494,10 +521,10 @@ describe(`empty folders (barren branches)`, () => {
         keep.click();
         await advanceTimersByTimeAsync(1);
 
-        const uploads = daemon.calls.filter((call) => call.path.startsWith(`/workspace/upload`));
+        const uploads = paths().filter((path) => path.startsWith(`/workspace/upload`));
         expect(uploads.length).toBe(1);
-        expect(decodeURIComponent(uploads[0]?.path ?? ``)).toContain(`web/demo/assets/.gitkeep`);
-        expect(daemon.calls.some((call) => call.init?.method === `DELETE`)).toBe(false);
+        expect(decodeURIComponent(uploads[0] ?? ``)).toContain(`web/demo/assets/.gitkeep`);
+        expect(inputsTo(`workspace.delete`)).toEqual([]);
     });
 
     it(`sweeps from the line without a dialog, and the receipt names what went`, async () => {
@@ -508,18 +535,14 @@ describe(`empty folders (barren branches)`, () => {
         await advanceTimersByTimeAsync(1);
 
         expect(document.body.textContent).not.toContain(`Delete folder?`);
-        const deletes = daemon.calls.filter((call) => call.init?.method === `DELETE`);
-        expect(deletes.length).toBe(1);
-        expect(String(deletes[0]?.init?.body)).toContain(`"web"`);
+        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `web` }]);
         const { receipt } = useNotifications();
         expect(receipt.value?.title).toContain(`web / demo / assets`);
         expect(receipt.value?.title).toMatch(/removed/i);
 
         // Undo recreates the deepest folder via a recursive create.
         await receipt.value?.actions?.[0]?.run();
-        const creates = daemon.calls.filter((call) => call.path === `/workspace/dir`);
-        expect(creates.length).toBe(1);
-        expect(String(creates[0]?.init?.body)).toContain(`web/demo/assets`);
+        expect(inputsTo(`workspace.mkdir`)).toEqual([{ path: `web/demo/assets` }]);
     });
 
     it(`says where a buried folder is, on the line and on the receipt`, async () => {
@@ -546,7 +569,7 @@ describe(`empty folders (barren branches)`, () => {
         // Receipt only counts; naming happens on the sweep line before the click.
         expect(useNotifications().receipt.value?.title).toContain(`2`);
         expect(useNotifications().receipt.value?.title).toMatch(/removed/i);
-        expect(daemon.calls.filter((call) => call.init?.method === `DELETE`).length).toBe(2);
+        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `web` }, { path: `src/old` }]);
     });
 
     it(`skips the confirm dialog when the Delete key lands on a barren-only selection`, async () => {
@@ -655,7 +678,7 @@ describe(`where a drop on a row lands`, () => {
         row.dispatchEvent(event);
         await settleMove();
     };
-    const moves = (): unknown[] => daemon.calls.filter((call) => call.path === `/workspace/move`).map((call) => JSON.parse(String(call.init?.body)));
+    const moves = (): unknown[] => inputsTo(`workspace.move`);
 
     beforeEach(() => {
         daemon.calls.length = 0;
@@ -697,7 +720,7 @@ describe(`where a drop on a row lands`, () => {
         await dragOnto(source, rowNamed(el, `routes.ts`));
         source.dispatchEvent(new MouseEvent(`click`, { bubbles: true }));
 
-        expect(daemon.calls.filter((call) => call.path.startsWith(`/workspace/file`))).toEqual([]);
+        expect(inputsTo(`workspace.file`)).toEqual([]);
     });
 
     // Browsers make images and links drag sources too; rows read only a drag of OS files natively.
@@ -718,7 +741,7 @@ describe(`files still arriving`, () => {
     const rowNamed = (el: HTMLElement, name: string): HTMLElement =>
         [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === name) as HTMLElement;
 
-    afterEach(() => resetProvisional());
+    afterEach(() => resetSandboxScope());
 
     it(`draws the pasted file in the folder it went into, where its real row will sit`, async () => {
         restoreFrom([`src`]);
@@ -829,7 +852,7 @@ describe(`a file gesture before the daemon has answered`, () => {
     });
     afterEach(async () => {
         await answer();
-        resetProvisional();
+        resetSandboxScope();
     });
 
     it(`carries the new name the instant a rename is committed`, async () => {
@@ -840,13 +863,13 @@ describe(`a file gesture before the daemon has answered`, () => {
         await renameTo(el, `main.ts`, `entry.ts`);
 
         expect(rows(el)).toEqual([`src`, `api`, `entry.ts`, `README.md`]);
-        expect(daemon.calls.filter((call) => call.path === `/workspace/move`).length).toBe(1);
+        expect(inputsTo(`workspace.move`)).toEqual([{ from: `src/main.ts`, to: `src/entry.ts` }]);
     });
 
     it(`puts the old name back when the rename is refused`, async () => {
         restoreFrom([`src`]);
         const el = await mount({ tree: TREE });
-        daemon.refuse = `/workspace/move`;
+        daemon.refuse = `workspace.move`;
         hold();
 
         await renameTo(el, `main.ts`, `entry.ts`);
@@ -861,7 +884,7 @@ describe(`a file gesture before the daemon has answered`, () => {
         const { openFile, strip } = useWorkspaceTabs();
         openFile(`src/main.ts`);
         const el = await mount({ tree: TREE });
-        daemon.refuse = `/workspace/move`;
+        daemon.refuse = `workspace.move`;
         hold();
 
         await renameTo(el, `main.ts`, `entry.ts`);
@@ -925,9 +948,9 @@ describe(`a file gesture before the daemon has answered`, () => {
         confirm?.click();
         await nextTick();
 
-        // Both rows gone, and both DELETEs already in flight while the first answer is still parked.
+        // Both rows gone, and both deletes already in flight while the first answer is still parked.
         expect(rows(el)).toEqual([`src`, `api`]);
-        expect(daemon.calls.filter((call) => call.init?.method === `DELETE`).length).toBe(2);
+        expect(inputsTo(`workspace.delete`)).toEqual([{ path: `src/main.ts` }, { path: `README.md` }]);
     });
 });
 
@@ -993,7 +1016,7 @@ describe(`a tree rooted at one project`, () => {
         daemon.calls.length = 0;
     });
     afterEach(() => {
-        resetProvisional();
+        resetSandboxScope();
     });
 
     it(`writes a new file into the project, not into the workspace root`, async () => {
@@ -1005,8 +1028,9 @@ describe(`a tree rooted at one project`, () => {
         expect(el.querySelector(`input`)?.getAttribute(`aria-label`)).toBe(`New file name`);
         await typeName(el, `notes.md`);
 
-        const uploads = daemon.calls.filter((call) => call.path.startsWith(`/workspace/upload`));
-        expect(uploads.map((call) => call.path)).toEqual([`/workspace/upload?path=${encodeURIComponent(`${PROJECT}/notes.md`)}`]);
+        expect(paths().filter((path) => path.startsWith(`/workspace/upload`))).toEqual([
+            `/workspace/upload?path=${encodeURIComponent(`${PROJECT}/notes.md`)}`,
+        ]);
     });
 
     it(`creates a new folder in the project, and stands its row up there`, async () => {
@@ -1015,8 +1039,140 @@ describe(`a tree rooted at one project`, () => {
         await runBackgroundVerb(el, `New Folder`);
         await typeName(el, `drafts`);
 
-        const created = daemon.calls.filter((call) => call.path === `/workspace/dir`).map((call) => JSON.parse(String(call.init?.body)));
-        expect(created).toEqual([{ path: `${PROJECT}/drafts` }]);
+        expect(inputsTo(`workspace.mkdir`)).toEqual([{ path: `${PROJECT}/drafts` }]);
         expect(rows(el)).toContain(`drafts`);
+    });
+});
+
+// The template's bindings to the tree's headless parts, each through the gesture that reaches it: the keys, an inline
+// field ending without a write, the confirm's Cancel, an OS drag's lit folder, an arriving row's tooltip, focus and copy.
+describe(`the gestures the template hands on`, () => {
+    const rowNamed = (el: HTMLElement, name: string): HTMLElement =>
+        [...el.querySelectorAll(`[role="treeitem"]`)].find((row) => row.textContent?.trim() === name) as HTMLElement;
+    const press = async (target: HTMLElement, key: string): Promise<void> => {
+        target.dispatchEvent(new KeyboardEvent(`keydown`, { key, bubbles: true, cancelable: true }));
+        await nextTick();
+        await nextTick();
+    };
+
+    beforeEach(() => {
+        daemon.calls.length = 0;
+        daemon.refuse = undefined;
+    });
+    afterEach(() => {
+        resetSandboxScope();
+    });
+
+    it(`walks the rows with the arrow keys, selecting and focusing each, and climbs back out of a folder`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        rowNamed(el, `README.md`).click();
+        await nextTick();
+
+        await press(rowNamed(el, `README.md`), `ArrowUp`);
+        expect([
+            rowNamed(el, `main.ts`).getAttribute(`aria-selected`),
+            rowNamed(el, `README.md`).getAttribute(`aria-selected`),
+            document.activeElement?.textContent?.trim(),
+        ]).toEqual([`true`, `false`, `main.ts`]);
+
+        await press(rowNamed(el, `main.ts`), `ArrowLeft`);
+        expect([rowNamed(el, `src`).getAttribute(`aria-selected`), document.activeElement?.textContent?.trim(), rows(el)]).toEqual([
+            `true`,
+            `src`,
+            [`src`, `api`, `main.ts`, `README.md`],
+        ]);
+    });
+
+    it(`closes the rename field on Escape, asking the daemon nothing and keeping the old name`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        const row = rowNamed(el, `main.ts`);
+        row.click();
+        await nextTick();
+        await press(row, `F2`);
+        const input = el.querySelector(`input`) as HTMLInputElement;
+        input.value = `entry.ts`;
+        input.dispatchEvent(new Event(`input`));
+
+        input.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
+        await nextTick();
+        expect([el.querySelector(`input`), rows(el), inputsTo(`workspace.move`)]).toEqual([null, [`src`, `api`, `main.ts`, `README.md`], []]);
+    });
+
+    it(`drops a new name the field refused once it loses the focus, writing nothing`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        rowNamed(el, `src`).dispatchEvent(new MouseEvent(`contextmenu`, { bubbles: true, cancelable: true }));
+        await nextTick();
+        await nextTick();
+        [...document.querySelectorAll(`a`)]
+            .find((link) => (link.textContent ?? ``).includes(`New File`))
+            ?.dispatchEvent(new MouseEvent(`click`, { bubbles: true, cancelable: true }));
+        await nextTick();
+        const input = el.querySelector(`input`) as HTMLInputElement;
+        input.value = `main.ts`;
+        input.dispatchEvent(new Event(`input`));
+        await nextTick();
+        expect(el.textContent).toContain(`"main.ts" already exists.`);
+
+        input.dispatchEvent(new FocusEvent(`blur`));
+        await nextTick();
+        expect([el.querySelector(`input`), paths().filter((path) => path.startsWith(`/workspace/upload`))]).toEqual([null, []]);
+    });
+
+    it(`names the file in the delete confirm, and deletes nothing when it is cancelled`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        const row = rowNamed(el, `main.ts`);
+        row.click();
+        await nextTick();
+        await press(row, `Delete`);
+        expect(document.body.textContent).toContain(`Delete file?`);
+
+        [...document.body.querySelectorAll(`button`)].find((candidate) => candidate.textContent?.trim() === `Cancel`)?.click();
+        await nextTick();
+        expect([rows(el), inputsTo(`workspace.delete`)]).toEqual([[`src`, `api`, `main.ts`, `README.md`], []]);
+    });
+
+    it(`lights the folder an OS file drag would land in when it is over any row inside it`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        const drag = new Event(`dragover`, { bubbles: true, cancelable: true });
+        Object.defineProperty(drag, `dataTransfer`, { value: { types: [`Files`], dropEffect: `none` } });
+
+        rowNamed(el, `main.ts`).dispatchEvent(drag);
+        await nextTick();
+        expect([
+            rowNamed(el, `src`).className.includes(`ui-row-select-drop`),
+            rowNamed(el, `main.ts`).className.includes(`ui-row-select-drop`),
+            drag.defaultPrevented,
+        ]).toEqual([true, false, true]);
+    });
+
+    it(`says on a row still arriving what is happening to it, and nothing on a listed one`, async () => {
+        restoreFrom([`src`]);
+        noteArriving(`src/notes.md`, { kind: `upload`, size: 12 });
+
+        const el = await mount({ tree: TREE });
+        expect([rowNamed(el, `notes.md`).getAttribute(`data-tooltip`), rowNamed(el, `main.ts`).getAttribute(`data-tooltip`)]).toEqual([
+            `Uploading…`,
+            null,
+        ]);
+    });
+
+    it(`takes the focus on a press below the rows, and copies the selection as text from there`, async () => {
+        restoreFrom([`src`]);
+        const el = await mount({ tree: TREE });
+        rowNamed(el, `main.ts`).click();
+        await nextTick();
+        const treeEl = el.querySelector(`[role="tree"]`) as HTMLElement;
+
+        treeEl.dispatchEvent(new MouseEvent(`mousedown`, { bubbles: true }));
+        const written: string[] = [];
+        const copy = new Event(`copy`, { bubbles: true, cancelable: true });
+        Object.defineProperty(copy, `clipboardData`, { value: { setData: (format: string, text: string) => written.push(`${format}: ${text}`) } });
+        treeEl.dispatchEvent(copy);
+        expect([document.activeElement === treeEl, written, copy.defaultPrevented]).toEqual([true, [`text/plain: src/main.ts`], true]);
     });
 });

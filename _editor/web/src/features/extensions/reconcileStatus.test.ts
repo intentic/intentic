@@ -1,18 +1,16 @@
+import type { IntenticLine } from "@intentic/sandbox-contract";
+import { ORPCError } from "@orpc/client";
 import { describe, it, expect } from "bun:test";
 import { readPlanSteps, statusLabel, statusVariant } from "./reconcileStatus";
 
-// Build the SSE body the daemon emits for an `intentic deploy plan` stream: one `data: <json>\n\n` frame per line.
-const sseStream = (frames: Record<string, unknown>[]): ReadableStream<Uint8Array> => {
-    const encoder = new TextEncoder();
-    return new ReadableStream({
-        start(controller) {
-            for (const frame of frames) {
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
-            }
-            controller.close();
-        },
-    });
-};
+// The frames an `intentic deploy plan` stream yields through the typed client, one per line the CLI printed, ended by
+// `failure` when the daemon reports its own failure mid-stream (the client throws it as the stream's error).
+async function* planStream(frames: readonly IntenticLine[], failure?: Error): AsyncGenerator<IntenticLine> {
+    yield* frames;
+    if (failure !== undefined) {
+        throw failure;
+    }
+}
 
 describe(`statusLabel`, () => {
     it(`frames the gap on the live board and the intended change in a plan`, () => {
@@ -36,7 +34,7 @@ describe(`readPlanSteps`, () => {
     it(`collects per-resource verdicts, narrates progress, and normalizes the orphan list`, async () => {
         const progress: (string | undefined)[] = [];
         const { steps, orphans } = await readPlanSteps(
-            sseStream([
+            planStream([
                 { kind: `node`, phase: `plan`, state: `start`, id: `shop.production` },
                 { kind: `node`, phase: `plan`, state: `done`, id: `shop.production`, action: `create` },
                 { kind: `node`, phase: `plan`, state: `done`, id: `db.production`, action: `update`, reason: `image changed` },
@@ -58,6 +56,12 @@ describe(`readPlanSteps`, () => {
     });
 
     it(`throws on a terminal error frame instead of returning an empty plan`, async () => {
-        await expect(readPlanSteps(sseStream([{ kind: `error`, message: `SSH unreachable` }]))).rejects.toThrow(`SSH unreachable`);
+        await expect(readPlanSteps(planStream([{ kind: `error`, message: `SSH unreachable` }]))).rejects.toThrow(`SSH unreachable`);
+    });
+
+    // The daemon's own failure after the stream opened arrives as the stream's error; it ends the plan in its words.
+    it(`throws the daemon's own words when it fails the stream midway`, async () => {
+        const failure = new ORPCError(`INTERNAL_SERVER_ERROR`, { message: `The deploy engine stopped answering.` });
+        await expect(readPlanSteps(planStream([{ kind: `log`, message: `reading` }], failure))).rejects.toThrow(`The deploy engine stopped answering.`);
     });
 });

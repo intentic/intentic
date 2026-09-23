@@ -1,6 +1,6 @@
 import { fetchBrowsers, browsersKey } from "../../../features/browsers/browsersQuery";
 import { capabilitiesKey, fetchCapabilities } from "../../../features/capabilities/connect/useCapabilities";
-import { fetchPanels, panelsKey } from "../../../features/extensions/usePanels";
+import { rpcQuery } from "../../../features/sandbox/client/rpcQuery";
 import { fetchSubagents, subagentsKey } from "../../../features/chat/subagents/subagentsQuery";
 import { fetchModules, modulesKey } from "../../../features/workspace/health/useModules";
 import { fetchWorkspaceTree } from "../../../features/workspace/explorer/useWorkspaceTree";
@@ -17,7 +17,7 @@ export const railWarmSource = (): readonly WarmTask[] => [
     warmQuery(`rail:workspace-tree`, `rail`, { queryKey: workspaceTreeKey(), queryFn: fetchWorkspaceTree }),
     // Layout the Changes panel groups rows by; the agent review needs no entry, its layout rides its own diff.
     warmQuery(`rail:workspace-modules`, `rail`, { queryKey: modulesKey(), queryFn: fetchModules }),
-    warmQuery(`rail:panels`, `rail`, { queryKey: panelsKey, queryFn: fetchPanels }),
+    warmQuery(`rail:panels`, `rail`, rpcQuery(`panels.list`)),
     warmQuery(`rail:capabilities`, `rail`, { queryKey: capabilitiesKey, queryFn: fetchCapabilities }),
     warmQuery(`rail:browsers`, `rail`, { queryKey: browsersKey, queryFn: fetchBrowsers }),
     warmQuery(`rail:subagents`, `rail`, { queryKey: subagentsKey, queryFn: fetchSubagents }),

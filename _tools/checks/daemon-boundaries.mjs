@@ -12,75 +12,38 @@ import { join, relative, resolve, sep } from "node:path";
 const root = resolve(import.meta.filename, "../../..");
 const src = join(root, "_sandbox/sandbox/src");
 
-// Snapshot of modules taking Services whole; each is a promise to narrow. Shrink this list; never grow it.
-const NARROW_TAKERS = new Set([
-    "activity/outbound.ts",
-    "agent/providers/adapter.ts",
-    "agent/providers/provider-module.ts",
-    "agent/run/turn/turn-interactions.ts",
-    "chores/chore-signals.ts",
-    "runtimes/codex/codex-readiness.ts",
-    "intentic/check-run.ts",
-    "personas/personas.routes.ts",
-    "platform/sync-ssh.ts",
-    "scaffold/ensure-intent.ts",
-    "scaffold/starter-site.ts",
-    "system/workspace-identity.ts",
-    "workspace/layout/sync-repos.ts",
-]);
+// Modules that bind the whole Services and hand it to nothing: none are left, so a new one fails until it names its
+// seams.
+const NARROW_TAKERS = new Set();
 
-// Snapshot of value-import cycles, a <-> b sorted; cut via a type-only port, an event, or a module above both.
+// The value-import cycles still standing, a <-> b sorted; cut via a type-only port, an event, or a module above both.
+// Each says what keeps it, so the next cut starts from the reason rather than the list.
 const MUTUAL_PAIRS = new Set([
-    "agent <-> runtimes/acp",
+    // The fleet sits below the engine, but its card reads the engine's failure sentences and subagent counts, a land
+    // writes its subject with the engine's role model and queues its whole-tree check on the engine's terminal lane,
+    // and its routes cancel watches and disclose base prompt text: six ports, not one.
     "agent <-> agents",
-    "agent <-> automations",
-    "agent <-> browser",
-    "agent <-> capabilities",
-    "agent <-> runtimes/claude",
-    "agent <-> runtimes/codex",
-    "agent <-> runtimes/cursor",
-    "agent <-> endpoints",
-    "agent <-> engines",
-    "agent <-> execution",
-    "agent <-> extensions",
-    "agent <-> runtimes/gemini",
-    "agent <-> runtimes/grok",
-    "agent <-> guard",
-    "agent <-> runtimes/minted",
-    "agent <-> runtimes/kimi",
-    "agent <-> runtimes/pi",
+    // rules/turn-ending.ts is the engine's Stop hook and reads the engine's verification ledgers.
     "agent <-> rules",
-    "agent <-> runners",
-    "agent <-> secrets",
+    // Claude Code is the engine's native harness: the engine mints and re-mints its OAuth token through the runtime's
+    // own rotation while the runtime implements the engine's adapter seams.
+    "agent <-> runtimes/claude",
+    // Transcript parsing reuses the engine's prompt and tool vocabulary, which belongs in the contract below both.
     "agent <-> sessions",
-    "agent <-> settings",
-    "agent <-> system",
-    "agent <-> terminal",
-    "agents <-> loops",
-    "agents <-> workflows",
-    "agents <-> workspace",
-    "auth <-> store",
-    "automations <-> ci",
+    // The listener control surface is automations' door for extension gateways, and the catalog reads the extension
+    // inventory.
     "automations <-> extensions",
-    "automations <-> issues",
+    // The browser and identity handlers own browser session storage, and a browser profile reads capability
+    // contributions.
     "browser <-> capabilities",
-    "browser <-> platform",
-    "browser <-> system",
+    // Handlers contribute image packs the environment composes from the capability registry.
     "capabilities <-> environment",
+    // An extension is a capability kind: its lifecycle runs through the registry, and handlers read the inventory.
     "capabilities <-> extensions",
+    // The device handler's tool note lives with the hosts that pair devices through that handler.
     "capabilities <-> hosts",
-    "capabilities <-> settings",
-    "engines <-> runtimes/claude",
+    // An extension's install, update or removal recomposes the overlay, which reads the enabled extension set.
     "environment <-> extensions",
-    "git <-> history",
-    "history <-> workspace",
-    "personas <-> settings",
-    "platform <-> system",
-    "processes <-> system",
-    "processes <-> terminal",
-    "scaffold <-> workspace",
-    "store <-> workspace",
-    "system <-> terminal",
 ]);
 
 const relPath = (file) => relative(src, file).split(sep).join("/");

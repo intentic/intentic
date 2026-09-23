@@ -1,15 +1,10 @@
 import { errorMessage } from "@intentic/base/errors";
 import { ciContract, ciFixConversationId, type CiRepo, type PipelineRun } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { stopTurn } from "../agent/checkpoints/agent-steering.js";
-import { streamAgent } from "../agent/routes/agent.routes.js";
-import { fireHeldResume, heldTurn, startConversationTurn } from "../agent/run/turn/turn-resume.js";
-import { actorOf, areasOf, ownerOf } from "../agent/run/turn/turn-actor.js";
-import { opt } from "../agent/run/opt.js";
-import { turnRunOf } from "../agent/run/turn/turn-runs.js";
+import { actorOf, areasOf, ownerOf } from "../auth/principal.js";
+import { opt } from "../opt.js";
 import { archiveAgents } from "../agents/registry/archive.js";
 import { startFixAttempt } from "./fix-attempts.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
@@ -59,7 +54,7 @@ const failureEvidence = async (
     return { failedJobs, logs };
 };
 
-export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, fetchFn: FetchFn = fetch) => {
+export const createCiRoutes = (services: Services, fetchFn: FetchFn = fetch) => {
     const i = implement(ciContract).$context<OrpcContext>();
     const resolve = async (repo: string): Promise<CiProject> => {
         const project = (await ciProjects(services)).find((candidate) => candidate.repo === repo);
@@ -147,10 +142,7 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                     roster: () => services.agents.list(),
                     archivedIds: () => services.agents.listArchived().map((agent) => agent.id),
                     stop: async (conversationId) => {
-                        const live = turnRunOf(conversationId);
-                        stopTurn(conversationId);
-                        services.agents.stopping(conversationId, "stopped");
-                        await live?.waitUntilFinished();
+                        await services.turns.stop(conversationId);
                     },
                     archive: async (conversationId) => {
                         const { failed } = await archiveAgents(services, [conversationId], Date.now());
@@ -161,11 +153,11 @@ export const createCiRoutes = (services: Services, wake: WakeFn = streamAgent, f
                     },
                     // Same detached-run boundary as POST /agent, so the run map, journal, transcript and observer stay wired;
                     // no composer holds these words, so a refusal at the door leaves the sandbox keeping the turn.
-                    start: (turn) => startConversationTurn(services, wake, turn),
+                    start: (turn) => services.turns.start(turn),
                     // A pick is a choice made now, so it outranks the kept turn's routing: the whole prompt goes on it.
                     rerun: async (conversationId) =>
-                        input.pick === undefined && heldTurn(conversationId)?.reason === "door"
-                            ? fireHeldResume(services, wake, conversationId)
+                        input.pick === undefined && services.conversations.state(conversationId)?.resume.held?.reason === "door"
+                            ? services.turns.resume(conversationId)
                             : undefined,
                 },
                 {

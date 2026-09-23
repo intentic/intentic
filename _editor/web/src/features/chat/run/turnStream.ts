@@ -1,7 +1,7 @@
 import { createBackoff, sleep } from "@intentic/base/async";
-import { type AgentHarness, type AgentProvider, type AttachFrame, sseData, sseFrames } from "@intentic/sandbox-contract";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { sandboxRequestVia } from "../../sandbox/client/sandboxClient";
+import type { AgentHarness, AgentProvider, AttachFrame } from "@intentic/sandbox-contract";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { acquireStreamSlot } from "../../sandbox/client/streamBudget";
 import type { ChatAttachment } from "../transcript/transcript";
 
@@ -104,37 +104,33 @@ export const followRun = async (
             slot();
             return attached;
         }
-        let response: Response;
+        let frames: AsyncIterable<AttachFrame>;
         try {
-            response = await sandboxRequestVia(at, `/agent/attach`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                signal: controller.signal,
-                body: JSON.stringify({ conversationId, ...(run !== undefined ? { run } : {}) }),
-            });
-        } catch {
-            // Network drop between attaches: an unengaged probe gives up (caller retries next reachability flip); an
-            // engaged stream backs off and retries. Slot releases before either.
+            frames = await sandboxRpc.agent.attach(
+                { conversationId, ...(run !== undefined ? { run } : {}) },
+                { signal: controller.signal, context: { at } },
+            );
+        } catch (error) {
+            // The daemon refusing ends the follow (the run finished, stopped, or never started). A network drop between
+            // attaches: an unengaged probe gives up (caller retries next reachability flip); an engaged stream backs off
+            // and retries. Slot releases before any of them.
             slot();
-            if (controller.signal.aborted || !attached) {
+            if (error instanceof SandboxHttpError || controller.signal.aborted || !attached) {
                 return attached;
             }
             await sleep(ladder.next());
             continue;
         }
-        if (!response.ok || !response.body) {
-            slot();
-            return attached;
-        }
         ladder.reset();
         const before = delivered;
         try {
-            for await (const frame of sseFrames(response.body)) {
-                const parsed = sseData(frame) as AttachFrame | undefined;
-                if (parsed === undefined || typeof parsed !== `object`) {
+            for await (const frame of frames) {
+                // A frame with no body says nothing; skipped rather than read as the end of the run.
+                const parsed: unknown = frame;
+                if (typeof parsed !== `object` || parsed === null) {
                     continue;
                 }
-                const ended = applyFrame(parsed);
+                const ended = applyFrame(frame);
                 if (ended !== undefined) {
                     return ended;
                 }
@@ -159,13 +155,24 @@ export const followRun = async (
     }
 };
 
-// Posts a turn-control message (steer/stop/reply) to the conversation's own box, per followRun's addressing
-// rule: the wrong daemon would report success for a turn still running elsewhere.
-export const postTurnControl = async (at: string | undefined, path: string, body: unknown): Promise<boolean> => {
-    try {
-        const response = await sandboxRequestVia(at, path, jsonBody(`POST`, body));
-        return response.ok;
-    } catch {
-        return false;
-    }
+// The side channel into a running turn, and what each message carries.
+export interface TurnControl {
+    readonly reply: ProcedureInput<`agent.reply`>;
+    readonly steer: ProcedureInput<`agent.steer`>;
+    readonly stop: ProcedureInput<`agent.stop`>;
+}
+
+// Sends a turn-control message to the conversation's own box, per followRun's addressing rule: the wrong daemon would
+// report success for a turn still running elsewhere. True once the daemon took it.
+export const postTurnControl = async <K extends keyof TurnControl>(at: string | undefined, control: K, input: TurnControl[K]): Promise<boolean> => {
+    const options = { context: { at } };
+    const send: { readonly [C in keyof TurnControl]: (input: TurnControl[C]) => Promise<unknown> } = {
+        reply: (body) => sandboxRpc.agent.reply(body, options),
+        steer: (body) => sandboxRpc.agent.steer(body, options),
+        stop: (body) => sandboxRpc.agent.stop(body, options),
+    };
+    return send[control](input).then(
+        () => true,
+        () => false,
+    );
 };

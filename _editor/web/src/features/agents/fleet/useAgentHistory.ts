@@ -1,23 +1,14 @@
-import type { AgentHistoryCommit, AgentHistoryResponse } from "@intentic/api-contract";
+import type { AgentHistoryCommit } from "@intentic/api-contract";
 import type { WorkspaceModule } from "@intentic/sandbox-contract";
 import { computed, type Ref } from "vue";
-import { sandboxJson, sandboxJsonAt } from "../../sandbox/client/sandboxClient";
+import { rpcQuery } from "../../sandbox/client/rpcQuery";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
-import { agentChangesKey, type AgentReviewFile } from "../review/useAgentChanges";
+import type { AgentReviewFile } from "../review/useAgentChanges";
 
 // The other half of the review: what this conversation wrote that's already in your own history, and which commits hold
 // it. The review only lists what still differs from main, so committing an agent's work retires its rows, leaving the
 // reader nowhere to find it; this hands back the same AgentReviewFile rows under a filter, so every review mechanism
 // works on them for free.
-
-// Filed under the review's own key, not beside it, so it needs no invalidation of its own: whatever makes the review
-// stale makes this stale too.
-export const agentHistoryKey = (agentId: string, at?: string): unknown[] => [...agentChangesKey(agentId, at), `history`];
-
-export const fetchAgentHistory = (agentId: string, at?: string): Promise<AgentHistoryResponse> =>
-    at === undefined
-        ? sandboxJson<AgentHistoryResponse>(`/agents/${encodeURIComponent(agentId)}/history`)
-        : sandboxJsonAt<AgentHistoryResponse>(at, `/agents/${encodeURIComponent(agentId)}/history`);
 
 // One commit as the panel's summary renders it: its own fields plus which repo and how much of this conversation's work
 // it carries.
@@ -27,10 +18,10 @@ export interface AgentHistoryEntry extends AgentHistoryCommit {
 
 export function useAgentHistory(agentId: Ref<string>, enabled: Ref<boolean>, at?: Ref<string | undefined>) {
     const reach = computed(() => at?.value);
+    // Stale whenever the review is: agentReviewKeys invalidates the two together.
     const { query, error } = useSandboxQuery(
         {
-            queryKey: computed(() => agentHistoryKey(agentId.value, reach.value)),
-            queryFn: () => fetchAgentHistory(agentId.value, reach.value),
+            ...rpcQuery(`agents.history`, () => ({ id: agentId.value }), { at: reach }),
             enabled: computed(() => agentId.value !== `` && enabled.value),
         },
         reach,

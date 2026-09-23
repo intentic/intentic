@@ -11,7 +11,7 @@ import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../platform/resources/perf.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import type { AgentsRegistry } from "../registry/agents-registry.js";
-import type { PersistedAgent } from "../registry/agents-store.js";
+import { type PersistedAgent, worktreeOf } from "../registry/agents-store.js";
 import { createExpiryTracker } from "../registry/expiry.js";
 import { landAgent } from "./land.js";
 import { createAgentOrigins } from "./origins.js";
@@ -66,7 +66,7 @@ const registryOf = (...entries: PersistedAgent[]): AgentsRegistry =>
         ids: () => entries.map((entry) => entry.id),
         entry: (id: string) => entries.find((entry) => entry.id === id),
         markLandingAbsorbed: async (id: string, repo: string, landedHead: string, landedTip: string, size: number) => {
-            const row = entries.find((entry) => entry.id === id)?.repos.find((composed) => composed.repo === repo);
+            const row = worktreeOf(entries.find((entry) => entry.id === id))?.repos.find((composed) => composed.repo === repo);
             if (row === undefined || row.landedHead !== landedHead || row.landedTip !== landedTip || row.absorbed !== undefined) {
                 return;
             }
@@ -162,8 +162,7 @@ test("committing a rename of a landed path retires BOTH of its names", async () 
 test("identify names an ARCHIVED agent: the roster the client mirrors no longer carries it", async () => {
     // Archiving drops an agent from the roster but doesn't commit its landed lines; `entry` still covers it.
     const archived = { ...isolatedAgent([], { id: "c1" }), archivedAt: 1 };
-    const untitled = { ...isolatedAgent([], { id: "c2" }) };
-    delete untitled.title;
+    const untitled = isolatedAgent([], { id: "c2", social: { reactions: [] } });
     const origins = originsOf(registryOf(archived, untitled));
     expect(origins.identify(["c1", "c2", "gone"])).toEqual({
         c1: { provider: "claude", title: "fix the thing" },
@@ -248,7 +247,7 @@ test("an absorbed claim is never re-derived, not by the next scan, and not by th
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "reviewed");
     expect(await origins.forRepo("root", work)).toEqual({});
-    expect(entry.repos[0]?.absorbed).toBe(1);
+    expect(entry.placement.repos[0]?.absorbed).toBe(1);
 
     calls.length = 0;
     expect(await origins.forRepo("root", work)).toEqual({});

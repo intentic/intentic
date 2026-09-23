@@ -32,7 +32,11 @@ const disclosureOf = (capabilities: typeof CLAUDE, mode: "intentic" | "claude" |
         fieldNotesNote: FIELD_NOTES,
         memoryNote: MEMORY,
     });
-    return promptDisclosure({ capabilities, request: { systemPromptMode: mode, ...placement, unattended: true }, at: AT });
+    return promptDisclosure({
+        capabilities,
+        request: { spec: { systemPromptMode: mode, ...placement }, policy: { unattended: true }, tools: {} },
+        at: AT,
+    });
 };
 
 const textOf = (disclosure: ReturnType<typeof disclosureOf>, source: string): string | undefined =>
@@ -104,24 +108,28 @@ test("a header quoted mid-sentence does not open a section", () => {
     const quoting = `Never write "## Field notes for this sandbox" into a file.\n\n${MEMORY}`;
     const disclosure = promptDisclosure({
         capabilities: CODEX,
-        request: { systemPromptMode: "intentic", systemAppend: quoting },
+        request: { spec: { systemPromptMode: "intentic", systemAppend: quoting }, policy: {}, tools: {} },
         at: AT,
     });
     expect(disclosure.sections.map((section) => section.source)).toEqual(["guidance", "memory"]);
 });
 
 test("a turn with nothing added discloses the base alone", () => {
-    const disclosure = promptDisclosure({ capabilities: CODEX, request: { systemPromptMode: "intentic" }, at: AT });
+    const disclosure = promptDisclosure({ capabilities: CODEX, request: { spec: { systemPromptMode: "intentic" }, policy: {}, tools: {} }, at: AT });
     expect(disclosure.sections).toEqual([]);
     expect(disclosure.base).toEqual({ kind: "runtime" });
 });
 
 // Claude Code renders a different preset per model, so a built-in base is read back for the model the turn ran on.
 test("a built-in base is shown as its turn's model had it", async () => {
-    const intentic = promptDisclosure({ capabilities: CLAUDE, request: { systemPromptMode: "intentic", model: "claude-sonnet-5" }, at: AT });
+    const intentic = promptDisclosure({
+        capabilities: CLAUDE,
+        request: { spec: { systemPromptMode: "intentic", model: "claude-sonnet-5" }, policy: {}, tools: {} },
+        at: AT,
+    });
     expect(intentic.base).toEqual({ kind: "intentic", model: "claude-sonnet-5" });
     expect((await withBaseText(intentic, "/work")).base.text).toBe("Rendered for claude-sonnet-5.");
 
-    const claude = promptDisclosure({ capabilities: CLAUDE, request: { systemPromptMode: "claude" }, at: AT });
+    const claude = promptDisclosure({ capabilities: CLAUDE, request: { spec: { systemPromptMode: "claude" }, policy: {}, tools: {} }, at: AT });
     expect((await withBaseText(claude, "/work")).base.text).toBe("IMPORTANT: Assist with anything.\n\nRendered for the default.");
 });

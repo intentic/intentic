@@ -1,3 +1,4 @@
+import { sandboxRef } from "@intentic/extension-api";
 import {
     type AgentCommand,
     type AgentProvider,
@@ -13,11 +14,10 @@ import {
     providerLabel,
     type TrialHealth,
 } from "@intentic/sandbox-contract";
-import { ref } from "vue";
 
 // Live per-sandbox catalogs (models, defaults, commands, installed ACP agents) and the label rules
 // pickers read them through. Module state, not per-conversation, since a catalog belongs to the
-// sandbox; useChat fills it on the reachable seam and resetChat clears it. Nothing here fetches, and
+// sandbox; useChat fills it on the reachable seam and a switch clears it with the scope. Nothing here fetches, and
 // nothing is synthesized: labels and badges are the provider's own words.
 
 // A live-catalog model option; all fields optional since catalogs vary in how much they report
@@ -37,12 +37,12 @@ export const perProvider = <T>(seed: (provider: NativeProvider) => T): Record<Ag
     Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, seed(provider)] as const));
 
 // Daemon-owned model catalog per provider; empty only until the first load.
-export const providerModels = ref<Record<AgentProvider, ModelOption[]>>(perProvider<ModelOption[]>(() => []));
+export const providerModels = sandboxRef<Record<AgentProvider, ModelOption[]>>(() => perProvider<ModelOption[]>(() => []));
 // Each provider's daemon-resolved default model id; empty only until the first load.
-export const providerDefaultModel = ref<Record<AgentProvider, string>>(perProvider(() => ``));
+export const providerDefaultModel = sandboxRef<Record<AgentProvider, string>>(() => perProvider(() => ``));
 // Per-provider fetch state, so the picker can show a spinner/retry instead of a silently-empty list.
 export type CatalogLoadState = "idle" | "loading" | "loaded" | "error";
-export const providerModelsState = ref<Record<AgentProvider, CatalogLoadState>>(perProvider<CatalogLoadState>(() => `idle`));
+export const providerModelsState = sandboxRef<Record<AgentProvider, CatalogLoadState>>(() => perProvider<CatalogLoadState>(() => `idle`));
 
 // The model a fresh conversation seeds; harness-independent, since codex/grok run the same ids either
 // way. Falls back to the live catalog's first entry before the daemon default has loaded.
@@ -73,18 +73,18 @@ export const modelOptionsFor = (provider: AgentProvider): ModelOption[] => {
 };
 
 // Slash commands last published per provider, seeding the composer's `/` popover.
-export const providerCommands = ref<Record<AgentProvider, readonly AgentCommand[]>>(perProvider<readonly AgentCommand[]>(() => []));
+export const providerCommands = sandboxRef<Record<AgentProvider, readonly AgentCommand[]>>(() => perProvider<readonly AgentCommand[]>(() => []));
 
 // Installed ACP agent providers (id + label), loaded alongside accounts/models; empty until the first load.
-export const acpProviders = ref<readonly { id: string; label: string }[]>([]);
+export const acpProviders = sandboxRef<readonly { id: string; label: string }[]>(() => []);
 
 // Native providers the daemon says can run a turn right now. The account lists answer the same question for anyone
 // who may read them; this is the answer for a tier that may drive a turn but not see what the box is signed in as —
 // a guest, which was otherwise told to connect a provider this sandbox already holds.
-export const nativeReady = ref<readonly AgentProvider[]>([]);
+export const nativeReady = sandboxRef<readonly AgentProvider[]>(() => []);
 
 // What's left of today's free trial; `available: false` is both "no trial" and "not loaded yet".
-export const trialStatus = ref<{
+export const trialStatus = sandboxRef<{
     available: boolean;
     allowance: number;
     used: number;
@@ -94,16 +94,16 @@ export const trialStatus = ref<{
     retryAt?: string;
     // The real model behind the trial's most recent message; the trial routes per message.
     servedModel?: string;
-}>({
+}>(() => ({
     available: false,
     allowance: 0,
     used: 0,
     remaining: 0,
     health: "unknown",
-});
+}));
 
 // Installed model endpoints; `kind` distinguishes local weights from a remote server, for display only.
-export const endpointProviders = ref<readonly { id: string; label: string; kind: "endpoint" | "localmodel" }[]>([]);
+export const endpointProviders = sandboxRef<readonly { id: string; label: string; kind: "endpoint" | "localmodel" }[]>(() => []);
 
 // Which glyph stands in for a provider with no brand mark; the one place that decision is made
 // (ProviderLogo draws it).
@@ -120,7 +120,7 @@ export const providerGlyph = (provider: AgentProvider): "gift" | "cpu" | "server
 };
 
 // Whether the capability half (endpoints, trial allowance) has loaded, separately from `accountsLoaded`.
-export const endpointsLoaded = ref(false);
+export const endpointsLoaded = sandboxRef(() => false);
 
 // Display label for any provider, falling back through ACP/endpoint name, a gone endpoint's raw id,
 // then the static label. The raw-id rung exists for the spend ledger, which outlives a deleted card.

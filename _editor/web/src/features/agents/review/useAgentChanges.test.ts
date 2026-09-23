@@ -1,5 +1,6 @@
 import { it, expect, afterEach, mock } from "bun:test";
 import { mocked, hoisted } from "@intentic/testing/bun";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 const stub = hoisted(() => ({
     // The app's one self-retiring receipt lane, so a test can tell an outcome from a failure by which channel it took.
@@ -22,7 +23,7 @@ mock.module("../../../shell/notifications/notifications", () => ({
     useNotifications: () => ({ say: (message: string) => stub.said.push(message) }),
 }));
 mock.module("../../../lib/queryPersistence", () => ({ queryClient: { fetchQuery: mock() }, UNPERSISTED: `unpersisted` }));
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 mock.module("../../sandbox/client/useSandboxQuery", () => ({
     useSandboxQuery: () => ({
         query: {

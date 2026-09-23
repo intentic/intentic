@@ -12,6 +12,7 @@ import { readWorkspaceFile, removeWorkspacePath, writeWorkspaceFile } from "../w
 import { readEnvironmentContents } from "./contents.js";
 import { customPath, proposalPath } from "./environment.js";
 import { clearVersionCache } from "./version-probe.js";
+import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
 
 // End-to-end with real files, capabilities, and probes; asserts versions only on `node` (guaranteed present here),
 // everything else by name and grouping, never a version number.
@@ -25,6 +26,8 @@ const nodeVersion = async (): Promise<string> => (await execFileAsync("node", ["
 
 const stubServices = (capabilities: Capability[] = [], environmentHash = ""): Services =>
     unstubbed<Services>("services", {
+        // The real module list: which packs a connected provider wants is each module's own answer.
+        providerModules: PROVIDER_MODULES,
         config: unstubbed<Services["config"]>("config", {
             sandbox: {
                 profile: "container",

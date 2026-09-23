@@ -65,22 +65,22 @@ export const EMPTY_STRIP: Strip = { active: undefined, panes: [], tabs: [] };
 // - messages or a session already exist: `resumed`, not `draft`
 // Everything else is an empty `draft`.
 export const standingOf = (conversation: Conversation): ClientAgentStatus => {
-    if (conversation.streaming.value) {
+    if (conversation.turn.streaming.value) {
         return `starting`;
     }
     if (conversation.error.value !== null) {
         return `failed`;
     }
-    return conversation.messages.value.length > 0 || conversation.session.value !== undefined ? `resumed` : `draft`;
+    return conversation.transcript.messages.value.length > 0 || conversation.session.value !== undefined ? `resumed` : `draft`;
 };
 
 const turnFacts = (conversation: Conversation): TurnFacts => ({
-    effort: conversation.effort.value,
-    thinking: conversation.thinking.value,
-    fast: conversation.fast.value,
-    startedAt: conversation.turnStartedAt.value,
-    ...(conversation.inputTokens.value > 0 ? { inputTokens: conversation.inputTokens.value, outputTokens: conversation.outputTokens.value } : {}),
-    ...(conversation.costUsd.value > 0 ? { costUsd: conversation.costUsd.value } : {}),
+    effort: conversation.selection.effort.value,
+    thinking: conversation.selection.thinking.value,
+    fast: conversation.selection.fast.value,
+    startedAt: conversation.turn.turnStartedAt.value,
+    ...(conversation.transcript.inputTokens.value > 0 ? { inputTokens: conversation.transcript.inputTokens.value, outputTokens: conversation.transcript.outputTokens.value } : {}),
+    ...(conversation.transcript.costUsd.value > 0 ? { costUsd: conversation.transcript.costUsd.value } : {}),
 });
 
 // One live conversation as the board reads it. Undefined fields stay undefined rather than omitted, since
@@ -91,14 +91,14 @@ export const tabFacts = (conversation: Conversation): TabFacts => {
         id: conversation.conversationId,
         registered: conversation.registered.value,
         standing,
-        provider: conversation.provider.value,
-        harness: conversation.harness.value,
+        provider: conversation.selection.provider.value,
+        harness: conversation.selection.harness.value,
         box: conversation.box.value,
         title: conversation.title.value ?? undefined,
         peek: conversation.peek.value,
         standIn: conversation.standIn.value,
         sessionId: conversation.session.value?.id,
-        model: conversation.model.value,
+        model: conversation.selection.model.value,
         unsent: conversation.unsent.value,
         draftAt: conversation.draftAt.value,
         turn: standing === `starting` ? turnFacts(conversation) : undefined,

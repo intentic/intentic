@@ -1,6 +1,7 @@
 // jsdom: the subject is a keystroke and its answer, a refusal in words or silence. Tests what a
 // member below the write tier sees in the explorer, not just the daemon's 403.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { WorkspaceTreeEntry } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach, mock } from "bun:test";
@@ -8,7 +9,9 @@ import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick } from "vue";
 import { IconStub } from "@intentic/ui/testing";
 import { ACTIVE_KEY, activeSandboxId } from "../../sandbox/overview/activeSandbox";
-import * as actualSandboxClient from "../../sandbox/client/sandboxClient";
+import * as actualSandboxRpc from "../../sandbox/client/sandboxRpc";
+import type { ProcedureName } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 globalThis.Element.prototype.scrollIntoView = function scrollIntoView(): void {};
 
@@ -18,18 +21,22 @@ localStorage.setItem(ACTIVE_KEY, SANDBOX);
 // static import below has already done by the time this line runs.
 activeSandboxId.value = SANDBOX;
 
-// Records daemon calls; a refused gesture must not reach the daemon at all, not just get a 403.
-const daemon = hoisted(() => ({ calls: [] as { path: string; init?: RequestInit }[] }));
+// Records daemon calls by procedure and input; a refused gesture must not reach the daemon at all, not just get a 403.
+const daemon = hoisted(() => ({ calls: [] as { procedure: ProcedureName; input: unknown }[] }));
 // Snapshotted before the mock replaces the module: a namespace is a live binding, so spreading it afterwards would
 // spread the stand-in.
-const realSandboxClient = { ...actualSandboxClient };
-mock.module("../../sandbox/client/sandboxClient", () => {
+const realSandboxRpc = { ...actualSandboxRpc };
+mock.module("../../sandbox/client/sandboxRpc", () => {
     return {
-        ...realSandboxClient,
-        sandboxJson: async (path: string, init?: RequestInit): Promise<unknown> => {
-            daemon.calls.push({ path, init });
-            return { ok: true };
-        },
+        ...realSandboxRpc,
+        sandboxRpc: fakeSandboxRpc({
+            workspace: {
+                delete: async (input) => {
+                    daemon.calls.push({ procedure: `workspace.delete`, input });
+                    return { ok: true };
+                },
+            },
+        }),
     };
 });
 
@@ -49,7 +56,7 @@ mock.module("../../sandbox/secrets/useRole", () => {
 });
 
 const { default: WorkspaceTree } = await import("./WorkspaceTree.vue");
-const { resetWorkspaceTreeState, useWorkspaceTree } = await import("./useWorkspaceTree");
+const { useWorkspaceTree } = await import("./useWorkspaceTree");
 const { queryClient } = await import("../../../lib/queryPersistence");
 
 const file = (path: string): WorkspaceTreeEntry => ({ name: path.slice(path.lastIndexOf(`/`) + 1), path, type: `file` });
@@ -84,7 +91,7 @@ beforeEach(() => {
     role.canWrite = false;
     daemon.calls.length = 0;
     sessionStorage.clear();
-    resetWorkspaceTreeState();
+    resetSandboxScope();
 });
 
 afterEach(() => {
@@ -100,7 +107,7 @@ it(`answers a read-only member's Delete with the tier, and asks the daemon nothi
     row.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Delete`, bubbles: true }));
     await nextTick();
 
-    expect(daemon.calls.filter((call) => call.init?.method === `DELETE`)).toEqual([]);
+    expect(daemon.calls.filter((call) => call.procedure === `workspace.delete`)).toEqual([]);
     expect(document.body.textContent).not.toContain(`Delete file?`);
     expect(feedback?.actionError.value?.title).toMatch(/writer access/i);
 });

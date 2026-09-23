@@ -18,7 +18,7 @@ import { devices, manageDeviceSandbox, mergeDevices, type PullResult, runDeviceA
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact this file states in one line.
 const { published } = hoisted(() => ({ published: [] as string[] }));
-mock.module("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+mock.module("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
 const report = (hostname: string, overrides: Partial<DeviceReport> = {}): DeviceReport => ({
     hostname,

@@ -1,13 +1,23 @@
 import { join } from "node:path";
-import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { browserFields } from "../../browser/tools/browser-fields.js";
 import { browserPrepareBridge } from "../../browser/tools/browser-prepare.js";
 import { browserServersOf } from "../../browser/tools/browser-tools.js";
-import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
+import {
+    attemptProbe,
+    armPlan,
+    type AgentAdapter,
+    healthReady,
+    healthUnavailable,
+    healthUnknown,
+    type TurnArmPlan,
+    type TurnContext,
+} from "../../agent/providers/adapter.js";
+import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
+import { opt } from "../../opt.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import { turnToolsOf } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 import { mayDelegate, turnPersona } from "../../personas/personas.js";
@@ -17,13 +27,13 @@ import { type CursorStore, fileCursorStore, readCursorCredentials } from "./curs
 import { createCursorHookService, type CursorHookService } from "./cursor-hooks.js";
 import { cursorReadiness } from "./cursor-readiness.js";
 import { cursorSdk } from "./cursor-sdk.js";
-import { cursorAccountDoor } from "./cursor-accounts.js";
-import { cursorOneShot } from "./cursor-one-shot.js";
-import { cursorAccountForTurn } from "./cursor-usage.js";
+import { type CursorAccountDeps, cursorAccountDoor } from "./cursor-accounts.js";
+import { type CursorOneShotDeps, cursorOneShot } from "./cursor-one-shot.js";
+import { cursorAccountForTurn, cursorTurnLimit } from "./cursor-usage.js";
 
-// Everything Cursor contributes to the daemon, aggregated by the provider registry (agent/provider-module.ts); the
-// directory's other files keep their own jobs. Holds only what the shared tables used to hold: the turn arm, the
-// adapter row, the service slice, and the registry's answers.
+// Everything Cursor contributes to the daemon, listed in runtimes/runtime-table.ts; the directory's other files keep
+// their own jobs. Holds only what the shared tables used to hold: the turn arm, the adapter row, the service slice, and
+// the registry's answers.
 
 // The Services members Cursor contributes; declared here so composition just spreads them and their docs live with the
 // owning provider.
@@ -35,7 +45,7 @@ export interface CursorSlice {
     // Socket-backed command gate, live-turn registry (cursor-hooks.ts); one per daemon, hooks file is global.
     readonly cursorHooks: CursorHookService;
     // Cursor's runtime, run in this process via @cursor/sdk, not a child; hence no spawner and cwd-based isolation.
-    readonly cursorAgent: Services["agent"];
+    readonly cursorAgent: (request: AgentRequest<CursorCredential>) => AsyncGenerator<AgentEvent>;
 }
 
 export const createCursorSlice = (input: { readonly authRoot: string; readonly logger: Logger }): CursorSlice => {
@@ -51,11 +61,27 @@ export const createCursorSlice = (input: { readonly authRoot: string; readonly l
     };
 };
 
+// What a Cursor turn is planned from: the account store and catalog, the refusal ledger that places an unnamed account,
+// and the seams its MCP tools and browser stack are mounted from.
+export type CursorPlanDeps = Pick<
+    Services,
+    | "browserBridgeToken"
+    | "config"
+    | "cursorAgent"
+    | "cursorModels"
+    | "cursorStore"
+    | "hostBridgeToken"
+    | "observedLimits"
+    | "tools"
+    | "webextBridgeToken"
+    | "workspace"
+>;
+
 // Credential rides the request as a key, not an env var: Cursor runs inside this daemon, where an env var is
 // daemon-wide, unlike Codex's or OpenCode's processes. Browser MCP servers come along too, the one foreign runtime that
 // manages them.
 export const planCursorTurn = async (
-    services: Services,
+    services: CursorPlanDeps,
     input: AgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
@@ -82,29 +108,28 @@ export const planCursorTurn = async (
     // The same remote MCP set the harness and ACP arms mount, which cursorMcpServers turns into http servers: a machine,
     // a connected browser or an mcp capability the owner granted must reach a Cursor turn like any other.
     const tools = turnToolsOf(services, granted, input.conversationId);
-    const request = {
+    const request: AgentRequest<CursorCredential> = {
         ...context.base,
-        model,
-        cursorApiKey: account.apiKey,
-        ...(tools.length > 0 ? { tools } : {}),
-        ...(context.steering !== undefined ? { steering: context.steering } : {}),
-        // Same predicate the harness arm applies: a child has shell and write; a narrowed turn can't proxy them back.
-        ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
-        ...browserFields(services.workspace.root, browser),
+        spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
+        tools: { ...context.base.tools, ...(tools.length > 0 ? { remote: tools } : {}), ...browserFields(services.workspace.root, browser) },
+        credential: { kind: "cursor-key", apiKey: account.apiKey },
+        hooks: {
+            ...context.base.hooks,
+            // Same predicate the harness arm applies: a child has shell and write; a narrowed turn can't proxy them back.
+            ...(context.children !== undefined && mayDelegate(persona) ? { children: context.children } : {}),
+        },
     };
-    return {
-        ok: true,
-        run: services.cursorAgent,
-        // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid.
-        account: account.id,
-        // Attachments fold into the prompt as a file list; Cursor's read tool takes them off disk, like OpenCode/Pi.
-        request: withAttachments(request, context.attachmentPaths),
-    };
+    // Real account id, not a shared marker: usage and rate-limit frames can name which connection paid. Attachments fold
+    // into the prompt as a file list; Cursor's read tool takes them off disk, like OpenCode/Pi.
+    return armPlan(services.cursorAgent, withAttachments(request, context.attachmentPaths), account.id);
 };
 
 // Nothing to probe on PATH, no server to reach: what can be missing is the SDK module (a pack) or a usable credential,
 // and cursorReadiness answers both in the order that names the right fix.
-const CURSOR_ADAPTER: AgentAdapter<"cursor"> = {
+// What the Cursor adapter reads: its arm's deps and the one-shot helper's.
+export type CursorAdapterDeps = CursorPlanDeps & CursorOneShotDeps;
+
+const CURSOR_ADAPTER: AgentAdapter<"cursor", CursorAdapterDeps> = {
     runtime: "cursor",
     oneShot: cursorOneShot,
     preflight: (services, input, context, granted) => planCursorTurn(services, input, context, granted),
@@ -129,7 +154,11 @@ const CURSOR_ADAPTER: AgentAdapter<"cursor"> = {
     },
 };
 
-export const cursorProvider: ProviderModule = {
+// What the Cursor module reads beyond its adapter: the account door's seams, the hook service its boot starts, and the
+// auth root its pack wish is read from.
+export type CursorProviderDeps = CursorAdapterDeps & CursorAccountDeps & Pick<Services, "authRoot" | "cursorHooks">;
+
+export const cursorProvider: ProviderModule<CursorProviderDeps> = {
     id: "cursor",
     accounts: cursorAccountDoor,
     adapters: [CURSOR_ADAPTER],
@@ -151,6 +180,8 @@ export const cursorProvider: ProviderModule = {
     // surviving recreation. Reads the file-backed store, not a live probe: no runtime needed, survives the module being
     // absent.
     packs: async (services) => ((await readCursorCredentials(join(services.authRoot, "cursor"))).length > 0 ? ["cursor"] : []),
+    // Cursor publishes no allowance to poll, so its reading is what it has already refused, per account and per model.
+    turnLimit: cursorTurnLimit,
     secretEntries: async (services) =>
         (await services.cursorStore.list()).map((account) =>
             providerAccountEntry("cursor", "Cursor", account.id, account.label, authStateRelPath("cursor", `${account.id}.json`)),

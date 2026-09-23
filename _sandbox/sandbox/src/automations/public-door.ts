@@ -8,7 +8,7 @@ import { dailyBudget } from "../store/daily-budget.js";
 import { rateWindow } from "../store/rate-window.js";
 import { fileInstallsStore, type InstallsStore } from "../store/installs.js";
 import type { AutomationRecord } from "./automations-store.js";
-import { fireAutomation, type FireOptions, type FireOutcome, type WakeFn } from "./scheduler.js";
+import { fireAutomation, type FireOptions, type FireOutcome } from "./scheduler.js";
 
 // Public door: routes an anonymous browser reaches directly (Visitor chat, bug intake), each a stranger's script tag
 // rather than an extension, driving fireAutomation directly. No credential; app.ts's auth skip names exactly these
@@ -64,7 +64,6 @@ export interface PublicDoor<Config> {
         automation: AutomationRecord,
         thread: { readonly key: string; readonly conversationId: string },
         ttlMs: number,
-        wake: WakeFn,
         options: Omit<FireOptions, "conversationId" | "sessionId">,
         onOpened?: (conversationId: string) => Promise<void>,
     ) => Promise<FireOutcome>;
@@ -125,11 +124,11 @@ export const createPublicDoor = <Config>(
         overDailyCeiling: (automationId, max, now) => daily.spend(automationId, max, now),
         antiBotPassed: (mode, config, answer, callerId, c, now) => antiBotAccepted(mode, config, answer, callerId, remoteIpOf(c), now),
         thread,
-        fireOnThread: async (automation, threadOf, ttlMs, wake, options, onOpened) => {
+        fireOnThread: async (automation, threadOf, ttlMs, options, onOpened) => {
             const now = Date.now();
             const session = await services.threadSessions.open(threadOf.key, () => threadOf.conversationId, ttlMs, now);
             await onOpened?.(session.conversationId);
-            const settled = await fireAutomation(services as Services, automation, wake, {
+            const settled = await fireAutomation(services as Services, automation, {
                 ...options,
                 // Same conversation every time, so a chat or a recurring crash stays one card and one worktree.
                 conversationId: session.conversationId,

@@ -1,7 +1,15 @@
 import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
-import { type AgentAdapter, attemptProbe, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
+import {
+    type AgentAdapter,
+    armPlan,
+    attemptProbe,
+    healthReady,
+    healthUnavailable,
+    healthUnknown,
+    type TurnArmPlan,
+    type TurnContext,
+} from "../../agent/providers/adapter.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
-import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import { turnToolsOf } from "../../agent/tools/turn-tools.js";
 import type { Services } from "../../composition.js";
 
@@ -9,10 +17,13 @@ import type { Services } from "../../composition.js";
 // Sited beside the runtime it serves, like the native providers, but a plain adapter, not a module: an ACP agent's
 // catalog, credentials and packs are the capability system's business.
 
+// What the ACP adapter reads: the installed manifest, the daemon's tools it passes through, and the warm connection pool.
+export type AcpAdapterDeps = Pick<Services, "acpAgent" | "capabilities" | "config" | "hostBridgeToken" | "tools" | "webextBridgeToken">;
+
 // Harness doesn't apply here, the agent is its own loop, and neither do the Claude-only request fields; MCP tools pass
 // through when the agent advertises support.
 export const planAcpTurn = async (
-    services: Services,
+    services: AcpAdapterDeps,
     input: AgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
@@ -24,14 +35,20 @@ export const planAcpTurn = async (
     }
     const acpConfig = capability.config;
     const tools = turnToolsOf(services, granted, input.conversationId);
-    return {
-        ok: true,
-        run: (turnRequest) => services.acpAgent(provider, acpConfig, turnRequest),
-        request: withAttachments(tools.length > 0 ? { ...context.base, tools } : context.base, context.attachmentPaths),
-    };
+    return armPlan(
+        (request) => services.acpAgent(provider, acpConfig, request),
+        withAttachments(
+            {
+                ...context.base,
+                tools: tools.length > 0 ? { ...context.base.tools, remote: tools } : context.base.tools,
+                credential: { kind: "container" },
+            },
+            context.attachmentPaths,
+        ),
+    );
 };
 
-export const ACP_ADAPTER: AgentAdapter<"acp"> = {
+export const ACP_ADAPTER: AgentAdapter<"acp", AcpAdapterDeps> = {
     runtime: "acp",
     preflight: (services, input, context, installed) => planAcpTurn(services, input, context, installed, input.agent ?? "claude"),
     // Installed is runnable, since an ACP agent carries its own credentials; the only failure here is nothing

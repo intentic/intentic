@@ -1,13 +1,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Cron } from "croner";
-import type { AgentEvent, AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger, Zone } from "@intentic/sandbox-contract";
+import type { AgentOrigin, AgentTurn, Automation, AutomationApproval, ModelPin, Trigger, Zone } from "@intentic/sandbox-contract";
 import { cronOptions, wallClockIn } from "@intentic/sandbox-contract";
 import { WORKSPACE_ROOT_EXCLUDE_ENV } from "@intentic/sandbox-contract/chores";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { TranscriptFold } from "@intentic/sandbox-contract/transcript-fold";
 import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
-import type { TurnInput } from "../agent/run/turn/turn-actor.js";
 import type { Services } from "../composition.js";
 import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import { sessionStart, wakeSourceOf } from "../guard/actions.js";
@@ -30,10 +29,6 @@ const GUARD_DETAIL_TAIL = 500;
 export const PAYLOAD_MAX = 64_000;
 // The contract's cap on AgentTurn.title, a surfaced wake's title is built from a message, so it's clamped here.
 export const TITLE_MAX = 80;
-
-// Wake-the-agent shape (streamAgent's), injected by every caller rather than imported, since importing it would create
-// a cycle through agent.routes and workspace-events.ts back into fireAutomation.
-export type WakeFn = (services: Services, input: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
 
 // Live sink for a turn's assistant text; undefined means the agent sends its own reply. `failed` distinguishes no
 // output from an error, carrying the raw reason for each sink to redact; always followed by `end`.
@@ -139,9 +134,9 @@ const sessionsSinceLastWake = (services: Services, automationId: string): Sessio
         .filter(
             (entry) =>
                 entry.createdAt > since &&
-                entry.origin === undefined &&
+                entry.identity.origin === undefined &&
                 !entry.id.startsWith(AUTOMATION_CONVERSATION_PREFIX) &&
-                (entry.turns ?? 0) >= 1,
+                entry.totals.turns >= 1,
         )
         .sort((a, b) => b.createdAt - a.createdAt);
     return { since, sessions };
@@ -162,11 +157,11 @@ const sessionsListing = ({ since, sessions }: SessionsSinceWake): string => {
         .map((session) =>
             [
                 session.id,
-                session.title ?? "(untitled)",
+                session.social.title?.text ?? "(untitled)",
                 new Date(session.createdAt).toISOString(),
-                `${session.turns ?? 0} turns`,
-                `${session.toolUses ?? 0} tool uses`,
-                `$${session.costUsd.toFixed(2)}`,
+                `${session.totals.turns} turns`,
+                `${session.totals.toolUses} tool uses`,
+                `$${session.totals.costUsd.toFixed(2)}`,
             ].join(" · "),
         );
     const more = sessions.length > SESSIONS_LISTED ? [`… and ${sessions.length - SESSIONS_LISTED} more (agents ls --all)`] : [];
@@ -230,12 +225,7 @@ export interface FireOutcome {
 
 // Fires one automation, one turn at a time; owns only the overlap policy (refuse or wait), with `runFire` doing the
 // fire itself. Callers run it detached; tests await it directly.
-export const fireAutomation = async (
-    services: Services,
-    automation: AutomationRecord,
-    wake: WakeFn,
-    options: FireOptions = {},
-): Promise<FireOutcome> => {
+export const fireAutomation = async (services: Services, automation: AutomationRecord, options: FireOptions = {}): Promise<FireOutcome> => {
     const running = inFlight.get(automation.id);
     if (running !== undefined && options.overlap !== "queue") {
         // Dropped as overlapping means no reply is coming; runFire's finally never runs here, so this closes the sink.
@@ -245,8 +235,8 @@ export const fireAutomation = async (
     }
     // The chain is the lock: each fire runs after the last; failure still lets the next start (`.then(job, job)`).
     const turn = (running ?? Promise.resolve()).then(
-        () => runFire(services, automation, wake, options),
-        () => runFire(services, automation, wake, options),
+        () => runFire(services, automation, options),
+        () => runFire(services, automation, options),
     );
     const settled = turn.then(
         () => undefined,
@@ -337,7 +327,6 @@ const heldWakeSnapshot = (
 const runFire = async (
     services: Services,
     automation: AutomationRecord,
-    wake: WakeFn,
     {
         payload,
         cleared,
@@ -486,7 +475,7 @@ const runFire = async (
         // Opened before the provider runs, like every other conversation turn (a fork's copy; nothing else opens).
         await openTurnTranscript(services, turn);
         try {
-            for await (const event of wake(services, turn, undefined)) {
+            for await (const event of services.turns.stream(turn, undefined)) {
                 fold.apply(event);
                 if (event.kind === "session") {
                     runtimeSessionId = event.sessionId;
@@ -568,11 +557,11 @@ const heldWakeOptions = (held: AutomationApproval, sink: OutboxSink | undefined)
 
 // Runs a held wake with its snapshot (`cleared: "both"`, guard already ran), then settles its thread so the next
 // message resumes it. Shared by both releases, the approve route and the countdown scan.
-export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval, wake: WakeFn): Promise<void> => {
+export const runHeldWake = async (services: Services, automation: AutomationRecord, held: AutomationApproval): Promise<void> => {
     // The visitor's own stream closed when the wake was held, so a Visitor chat answer has nowhere live to go; queue it
     // where their next page load will collect it. Undefined for every other origin, which answers through its gateway.
     const sink = services.outboxStreamFor(held.origin);
-    const settled = await fireAutomation(services, automation, wake, heldWakeOptions(held, sink));
+    const settled = await fireAutomation(services, automation, heldWakeOptions(held, sink));
     // Before the release is over: the approve route answers its caller here, and the visitor polling a moment later
     // must find the answer rather than an empty thread.
     await sink?.settled();
@@ -650,7 +639,7 @@ export const resumable = (automation: Pick<Automation, "enabled" | "trigger">): 
 // Deliberately not gated on the poll window the cron path uses: a schedule that misses a beat has another one coming,
 // a one-time wake has nothing behind it, so a moment that passed while the sandbox was down still fires, late and
 // saying so.
-const fireOnceWake = async (services: Services, automation: AutomationRecord, at: number, wake: WakeFn, now: number, sandbox: Zone): Promise<void> => {
+const fireOnceWake = async (services: Services, automation: AutomationRecord, at: number, now: number, sandbox: Zone): Promise<void> => {
     if (at > now) {
         return;
     }
@@ -658,7 +647,7 @@ const fireOnceWake = async (services: Services, automation: AutomationRecord, at
     // The sandbox's zone, never a per-automation override: a one-time wake stores an instant and has no zone of its
     // own, and the clock the owner will recognise is the sandbox's.
     const late = now - at >= LATE_WAKE_MS ? { payload: lateWakeNote(at, now, sandbox) } : {};
-    void fireAutomation(services, automation, wake, late).catch((error: unknown) =>
+    void fireAutomation(services, automation, late).catch((error: unknown) =>
         services.logger.error({ err: error, automation: automation.id }, "one-time automation run failed"),
     );
 };
@@ -666,9 +655,9 @@ const fireOnceWake = async (services: Services, automation: AutomationRecord, at
 // One enabled automation's clock, per poll: a one-time wake fires the moment it is due or already overdue, a cron
 // fires when its next run measured from the last poll falls inside this one. Every other trigger has its own
 // dispatcher and nothing to do here.
-const fireIfDue = async (services: Services, automation: AutomationRecord, wake: WakeFn, windowStart: number, now: number, sandbox: Zone): Promise<void> => {
+const fireIfDue = async (services: Services, automation: AutomationRecord, windowStart: number, now: number, sandbox: Zone): Promise<void> => {
     if (automation.trigger.kind === "once") {
-        await fireOnceWake(services, automation, automation.trigger.at, wake, now, sandbox);
+        await fireOnceWake(services, automation, automation.trigger.at, now, sandbox);
         return;
     }
     if (automation.trigger.kind !== "schedule") {
@@ -684,16 +673,16 @@ const fireIfDue = async (services: Services, automation: AutomationRecord, wake:
     if (due === null || due.getTime() > now) {
         return;
     }
-    void fireAutomation(services, automation, wake).catch((error: unknown) =>
+    void fireAutomation(services, automation).catch((error: unknown) =>
         services.logger.error({ err: error, automation: automation.id }, "automation run failed"),
     );
 };
 
 // Releases countdown holds past deadline while no turn is live; removed before running so it can't re-fire. A retired
 // one-time wake still releases: it was switched off by the very fire now waiting in the queue.
-const releaseCountdownHolds = async (services: Services, wake: WakeFn, now: number): Promise<void> => {
+const releaseCountdownHolds = async (services: Services, now: number): Promise<void> => {
     for (const held of await services.heldWakes.list()) {
-        if (held.autoRunAt === undefined || held.autoRunAt > now || services.agents.liveSessionIds().length > 0) {
+        if (held.autoRunAt === undefined || held.autoRunAt > now || services.conversations.liveSessionIds().length > 0) {
             continue;
         }
         const automation = await services.automations.get(held.automationId);
@@ -701,7 +690,7 @@ const releaseCountdownHolds = async (services: Services, wake: WakeFn, now: numb
         if (automation === undefined || !resumable(automation)) {
             continue;
         }
-        void runHeldWake(services, automation, held, wake).catch((error: unknown) =>
+        void runHeldWake(services, automation, held).catch((error: unknown) =>
             services.logger.error({ err: error, automation: automation.id }, "countdown-released automation run failed"),
         );
     }
@@ -709,7 +698,7 @@ const releaseCountdownHolds = async (services: Services, wake: WakeFn, now: numb
 
 // Polls the manifest and fires whatever came due since the last pass, with no resync bookkeeping; fires run detached,
 // since a turn can outlast many polls. Event automations fire from the fire route instead.
-export const createAutomationsScheduler = (services: Services, wake: WakeFn, intervalMs = 30_000): AutomationsScheduler => {
+export const createAutomationsScheduler = (services: Services, intervalMs = 30_000): AutomationsScheduler => {
     let since = Date.now();
     let timer: NodeJS.Timeout | undefined;
 
@@ -721,10 +710,10 @@ export const createAutomationsScheduler = (services: Services, wake: WakeFn, int
         const sandbox = await sandboxZone(services);
         for (const automation of await services.automations.list()) {
             if (automation.enabled) {
-                await fireIfDue(services, automation, wake, windowStart, now, sandbox);
+                await fireIfDue(services, automation, windowStart, now, sandbox);
             }
         }
-        await releaseCountdownHolds(services, wake, now);
+        await releaseCountdownHolds(services, now);
     };
 
     return {

@@ -205,7 +205,7 @@ export interface OutboundSniffer {
 
 // One per turn, teed into streamAgent; appends are fire-and-forget so monitoring never fails the turn. `turnId` (minted
 // in agent.routes.ts) is stamped on every call so the feed folds a turn's sends into its own row.
-export const createOutboundSniffer = (services: Services, turnId: string): OutboundSniffer => {
+export const createOutboundSniffer = (services: Pick<Services, "activity" | "logger">, turnId: string): OutboundSniffer => {
     const pending = new Map<string, OutboundCall>();
     let sessionId: string | undefined;
     const record = (call: OutboundCall, result?: { outcome: "ok" | "error"; error?: string }): void => {

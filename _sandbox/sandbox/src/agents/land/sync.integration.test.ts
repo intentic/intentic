@@ -7,7 +7,7 @@ import { test, expect, afterEach } from "bun:test";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../platform/resources/perf.js";
-import { noIsolation } from "../../testing.js";
+import { isolatedAgent, noIsolation } from "../../testing.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import type { IsolatedAgent } from "../registry/agents-store.js";
 import { landAgent } from "./land.js";
@@ -56,20 +56,7 @@ const sync = (worktrees: AgentWorktrees, landedTip?: string): ReturnType<typeof 
     syncConversation(worktrees, "c1", [{ repo: "root", landedTip }], "fix the thing");
 
 // The registry row a real land reads, so tests produce `landedTip` the way a turn does, not a hand-picked sha.
-const entryOf = (base: string, landedTip?: string): IsolatedAgent => ({
-    id: "c1",
-    branch: "agent/c1",
-    title: "fix the thing",
-    provider: "claude",
-    harness: "native",
-    repos: [{ repo: "root", base, ...(landedTip === undefined ? {} : { landedTip }) }],
-    status: "idle",
-    costUsd: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    createdAt: 0,
-    updatedAt: 0,
-});
+const entryOf = (base: string, landedTip?: string): IsolatedAgent => isolatedAgent([{ repo: "root", base, ...(landedTip === undefined ? {} : { landedTip }) }]);
 
 // One turn's work, committed on the branch the way land's own provenance commit does.
 const turn = async (worktree: string, write: () => Promise<void>): Promise<void> => {
@@ -361,22 +348,7 @@ test("a synced branch still lands only its own work", async () => {
     await commit(work, "user work");
 
     await sync(worktrees);
-    const entry = {
-        id: "c1",
-        branch: "agent/c1",
-        title: "fix the thing",
-        provider: "claude" as const,
-        harness: "native" as const,
-        isolated: true as const,
-        repos: [{ repo: "root", base }],
-        status: "idle" as const,
-        costUsd: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        createdAt: 0,
-        updatedAt: 0,
-    };
-    const outcome = await landAgent(worktrees, entry);
+    const outcome = await landAgent(worktrees, isolatedAgent([{ repo: "root", base }]));
     expect(outcome.landed).toBe(true);
     expect(outcome.diff.files).toBe(1);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("one\ntwo\nthree\nfour\nAGENT\n");
@@ -410,14 +382,14 @@ test("without the last-moment rebase, a land refuses over main-line movement it 
 test("with it, the same turn lands clean and both edits survive", async () => {
     const { work, worktrees, base } = await midTurnDrift();
     const recorded: { id: string; repos: readonly { repo: string; base: string }[] }[] = [];
-    const repos = await syncBeforeLand(worktrees, { id: "c1", title: "fix the thing", repos: entryOf(base).repos }, async (id, next) => {
+    const repos = await syncBeforeLand(worktrees, { id: "c1", title: "fix the thing", repos: entryOf(base).placement.repos }, async (id, next) => {
         recorded.push({ id, repos: next });
     });
     // The composition it hands back names where the branch now sits, and the registry was told.
     expect(repos[0]?.base).toBe(await sh(work, "rev-parse", "HEAD"));
     expect(recorded).toHaveLength(1);
 
-    const outcome = await landAgent(worktrees, { ...entryOf(base), repos: [...repos] });
+    const outcome = await landAgent(worktrees, isolatedAgent([...repos]));
     expect(outcome.landed).toBe(true);
     expect(outcome.conflicts).toBeUndefined();
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("one\ntwo\nUSER\nfour\nAGENT\n");
@@ -430,9 +402,9 @@ test("is a no-op on a branch that is already current", async () => {
     const { work, worktrees } = await setup();
     const base = await sh(work, "rev-parse", "HEAD");
     const recorded: string[] = [];
-    const repos = await syncBeforeLand(worktrees, { id: "c1", title: "t", repos: entryOf(base).repos }, async (id) => {
+    const repos = await syncBeforeLand(worktrees, { id: "c1", title: "t", repos: entryOf(base).placement.repos }, async (id) => {
         recorded.push(id);
     });
-    expect(repos).toEqual(entryOf(base).repos);
+    expect(repos).toEqual(entryOf(base).placement.repos);
     expect(recorded).toEqual([]);
 });

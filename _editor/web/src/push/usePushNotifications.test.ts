@@ -1,6 +1,7 @@
 import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { ref } from "vue";
+import { fakeSandboxRpc } from "../testing/sandboxRpcFake";
 import { usePushNotifications } from "./usePushNotifications";
 
 // The two ways enabling notifications fails without saying anything true: a toggle stuck 'on' for a device that can
@@ -9,8 +10,11 @@ import { usePushNotifications } from "./usePushNotifications";
 const reachable = ref(true);
 mock.module(`../features/sandbox/client/useSandbox`, () => ({ useSandbox: () => ({ reachable }) }));
 
-const sandboxJson = mock();
-mock.module(`../features/sandbox/client/sandboxClient`, () => ({ sandboxJson: (path: string, init?: RequestInit) => sandboxJson(path, init) }));
+// The daemon's push routes: what a device needs to subscribe, and the registration writes.
+const config = mock();
+const subscribe = mock();
+const unsubscribe = mock();
+mock.module(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ push: { config, subscribe, unsubscribe } }) }));
 
 // Two valid uncompressed P-256 points (0x04 || X || Y), base64url: only their bytes matter here.
 const KEY_A = `B${`A`.repeat(85)}Q`;
@@ -53,9 +57,9 @@ beforeEach(() => {
     jest.clearAllMocks();
     reachable.value = true;
     manager.getSubscription.mockResolvedValue(null);
-    sandboxJson.mockImplementation(async (path: string) =>
-        path.startsWith(`/push/config`) ? { publicKey: KEY_A, subscribed: false } : { ok: true },
-    );
+    config.mockResolvedValue({ publicKey: KEY_A, subscribed: false });
+    subscribe.mockResolvedValue({ ok: true });
+    unsubscribe.mockResolvedValue({ ok: true });
 });
 
 test(`a subscription minted for a key the daemon no longer holds is replaced, not reused`, async () => {
@@ -70,7 +74,7 @@ test(`a subscription minted for a key the daemon no longer holds is replaced, no
 
     expect(stale.unsubscribe).toHaveBeenCalledTimes(1);
     expect(manager.subscribe).toHaveBeenCalledTimes(1);
-    expect(sandboxJson).toHaveBeenCalledWith(`/push/subscribe`, expect.objectContaining({ body: expect.stringContaining(`/fresh`) }));
+    expect(subscribe).toHaveBeenCalledWith({ kind: `webpush`, endpoint: `https://push.example/fresh`, keys: { p256dh: `p256dh`, auth: `auth` } });
     expect(push.state.value).toBe(`on`);
 });
 
@@ -114,16 +118,18 @@ test(`the state is read again once the daemon comes online, not only on mount`, 
     // The page can mount before the daemon answers; a read landing in that window has nobody to ask.
     stubBrowser(`granted`, false);
     manager.getSubscription.mockResolvedValue(subscription(`https://push.example/live`, KEY_A));
-    sandboxJson.mockResolvedValue({ publicKey: KEY_A, subscribed: true });
+    config.mockResolvedValue({ publicKey: KEY_A, subscribed: true });
     reachable.value = false;
 
     const push = usePushNotifications();
-    await waitFor(() => expect(sandboxJson).not.toHaveBeenCalled());
+    await waitFor(() => expect(config).not.toHaveBeenCalled());
     expect(push.state.value).toBe(`off`);
 
     reachable.value = true;
 
     await waitFor(() => expect(push.state.value).toBe(`on`));
+    // Asked about this device by its own id, not about the sandbox as a whole.
+    expect(config).toHaveBeenCalledWith({ id: `https://push.example/live` });
 });
 
 test(`a stale read cannot overwrite the toggle the user just moved`, async () => {
@@ -131,9 +137,7 @@ test(`a stale read cannot overwrite the toggle the user just moved`, async () =>
     stubBrowser(`granted`, false);
     manager.getSubscription.mockResolvedValue(null);
     manager.subscribe.mockResolvedValue(subscription(`https://push.example/fresh`, KEY_A));
-    sandboxJson.mockImplementation(async (path: string) =>
-        path.startsWith(`/push/config`) ? { publicKey: KEY_A, subscribed: false } : { ok: true },
-    );
+    config.mockResolvedValue({ publicKey: KEY_A, subscribed: false });
 
     const push = usePushNotifications();
     // The mount-time read is still in flight, deliberately not awaited, when the user turns it on.
@@ -147,7 +151,7 @@ test(`refresh reports "off" for a subscription bound to a superseded key`, async
     // Both halves exist (subscription, daemon row) but the key moved; reporting on would hide that.
     stubBrowser(`granted`, false);
     manager.getSubscription.mockResolvedValue(subscription(`https://push.example/stale`, KEY_B));
-    sandboxJson.mockResolvedValue({ publicKey: KEY_A, subscribed: true });
+    config.mockResolvedValue({ publicKey: KEY_A, subscribed: true });
 
     const push = usePushNotifications();
     await push.refresh();

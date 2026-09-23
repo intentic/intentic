@@ -1,13 +1,20 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { CapabilityField } from "@intentic/extension-manifest";
-import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract";
+import { type RemoteRef, type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
 import type { PickerGroup } from "@intentic/ui";
-import { isCommitSha } from "./form";
+import { type FormValues, isCommitSha, type StoredSecrets } from "./form";
 import { t } from "@intentic/ui/i18n";
 
 // The one field the picker stands in for: an extension's `ref`, the only answer on this form that must be a commit and
 // can never be a name. Everything else stays a plain box.
 export const picksVersion = (entry: CapabilityCatalogEntry, field: CapabilityField): boolean => entry.kind === `extension` && field.key === `ref`;
+
+// What the version read authorizes with: the token typed here, or the marker for one this edit is keeping, which the
+// daemon resolves against the connection; without it a private repo's install could never list its versions.
+export const versionReadToken = (values: Readonly<FormValues>, stored: StoredSecrets): string => {
+    const typed = (values[`token`] ?? ``).trim();
+    return typed === `` && stored.has(`token`) ? VAULTED : typed;
+};
 
 // The version picker's model: what a repository offers, ordered the way someone looks for it, and which entry to land
 // on when the answer arrives. Pure over the daemon's reply; the component only draws what these return.

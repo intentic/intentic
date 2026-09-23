@@ -1,23 +1,16 @@
-import { InfoSchema } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { sandboxJson } from "../../client/sandboxClient";
-import { SANDBOX_INFO } from "../../../../lib/queryKeys";
+import { rpcQuery } from "../../client/rpcQuery";
 import { useSandboxQuery } from "../../client/useSandboxQuery";
 import { useEnvironment } from "../../environment/useEnvironment";
 
-// Sandbox daemon's self-report (/info): running `version`, and once checked, `latest` and `updateAvailable`. One shared
+// Sandbox daemon's self-report (`system.info`): running `version`, and once checked, `latest` and `updateAvailable`. One shared
 // query feeds both the hub card and the chip's attention list. The update itself runs on the host (HostRecreate), never
 // the sandbox; no per-version dismiss, since the fact just badges the chip and clears itself.
-
-const INFO_KEY = SANDBOX_INFO.of();
 
 export function useSandboxVersion() {
     const { serverManaged, state: envState, localImage } = useEnvironment();
 
-    const { query } = useSandboxQuery({
-        queryKey: INFO_KEY,
-        queryFn: async () => InfoSchema.parse(await sandboxJson(`/info`)),
-    });
+    const { query } = useSandboxQuery(rpcQuery(`system.info`));
     const info = computed(() => query.data.value);
     const installed = computed(() => info.value?.version);
     const latest = computed(() => info.value?.latest);
@@ -65,7 +58,7 @@ export function useSandboxVersion() {
         // A checkout-built base: the published release is not this sandbox's update, so the card offers the rebuild
         // that is.
         localImage,
-        // The /info read is still out; without this, "the sandbox hasn't said" looks identical to "the sandbox says
+        // The info read is still out; without this, "the sandbox hasn't said" looks identical to "the sandbox says
         // nothing".
         isLoading: query.isLoading,
     };

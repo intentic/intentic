@@ -1,6 +1,10 @@
 import { test, expect } from "bun:test";
-import { createRequest } from "../../agent/tools/agent-requests.js";
 import { clearBrowserHelp, closeBrowserSession, listBrowserSessions, openBrowserSession, raiseBrowserHelp } from "./browser-sessions.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Help-request state, without a Chromium: openBrowserSession registers the record from the hook alone, so everything
 // the /browsers banner renders from (raise, list, clear, close-settles-the-waiter) is assertable here.
@@ -15,8 +19,8 @@ test("a help request lands on the account's running browser and lists for the ba
     const name = open("he1p1111-2222", "reddit-work");
     try {
         // Addressed by account, not by session name: the tool knows which sign-in it is stuck on.
-        expect(raiseBrowserHelp("nobody-connected-this", { requestId: "r0", message: "x", requestedAt: 1 })).toBeUndefined();
-        expect(raiseBrowserHelp("reddit-work", { requestId: "r1", message: "please solve the captcha", requestedAt: 1 })).toBe(name);
+        expect(raiseBrowserHelp("nobody-connected-this", { requestId: "r0", message: "x", requestedAt: 1 }, () => {})).toBeUndefined();
+        expect(raiseBrowserHelp("reddit-work", { requestId: "r1", message: "please solve the captcha", requestedAt: 1 }, () => {})).toBe(name);
 
         const listed = listBrowserSessions().find((session) => session.name === name);
         expect(listed?.help).toEqual({ requestId: "r1", message: "please solve the captcha", requestedAt: 1 });
@@ -35,8 +39,13 @@ test("a help request lands on the account's running browser and lists for the ba
 // reads as "not helped", the honest account of a browser that closed first.
 test("closing a browser settles its open help request as not-helped", async () => {
     const name = open("he1p3333-4444", "npmjs-main");
-    const { id, wait } = createRequest("browser_help", { kind: "browser_help", requestId: "", helped: false, note: "aborted" });
-    expect(raiseBrowserHelp("npmjs-main", { requestId: id, message: "type the password", requestedAt: 2 })).toBe(name);
+    const { id, wait } = cards.create("browser_help", { kind: "browser_help", requestId: "", helped: false, note: "aborted" });
+    // The raiser binds how its card settles unhelped, as accounts-tools does.
+    expect(
+        raiseBrowserHelp("npmjs-main", { requestId: id, message: "type the password", requestedAt: 2 }, (note) =>
+            cards.resolve({ kind: "browser_help", requestId: id, helped: false, note }),
+        ),
+    ).toBe(name);
 
     const settled = wait(new AbortController().signal);
     await closeBrowserSession(name);

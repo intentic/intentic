@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { PublicListSchema, PublishResultSchema, PublishSchema, UnpublishSchema } from "../schemas/public.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -9,7 +9,7 @@ import { OkSchema } from "../schemas/shared.js";
 // unauthenticated `public-<slot>` hostname, and a second, authenticated way in would just be the workspace file
 // API with extra steps.
 export const publicContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/public",
@@ -18,7 +18,7 @@ export const publicContract = {
                 "Everything currently in the outbox and the address it answers on. There is no call to read a published file back: it is served openly to anyone with the link, which is the entire point of having put it there.",
         })
         .output(PublicListSchema),
-    publish: oc
+    publish: procedure
         .route({
             method: "POST",
             path: "/public/publish",
@@ -28,7 +28,7 @@ export const publicContract = {
         })
         .input(PublishSchema)
         .output(PublishResultSchema),
-    unpublish: oc
+    unpublish: procedure
         .route({
             method: "POST",
             path: "/public/unpublish",

@@ -7,8 +7,8 @@ import PlanStepRow from "../../components/PlanStepRow.vue";
 import { convergedBadge, type PlanOrphan, type PlanStep, readPlanSteps, statusDot, statusLabel } from "../../features/extensions/reconcileStatus";
 import { groupAccent } from "../../features/extensions/resourceVisual";
 import { reveal } from "../../features/capabilities/connect/useSecrets";
-import { sandboxRequest } from "../../features/sandbox/client/sandboxClient";
-import { jsonBody } from "../../features/sandbox/client/jsonBody";
+import { SandboxHttpError } from "../../features/sandbox/client/sandboxHttpError";
+import { sandboxRpc } from "../../features/sandbox/client/sandboxRpc";
 import { useDeployments } from "../../features/extensions/useDeployments";
 import { useWorkspaceState } from "../../features/extensions/useWorkspaceState";
 import { useRole } from "../../features/sandbox/secrets/useRole";
@@ -58,12 +58,10 @@ const runLiveCheck = async (): Promise<void> => {
     liveActions.value = [];
     liveOrphans.value = [];
     try {
-        const response = await sandboxRequest(`/intentic`, jsonBody(`POST`, { args: [`deploy`, `plan`] }));
-        if (!response.ok || !response.body) {
-            const detail = (await response.json().catch(() => null)) as { error?: string } | null;
-            throw new Error(detail?.error ?? `Could not run a live check (${response.status}).`);
-        }
-        const { steps, orphans } = await readPlanSteps(response.body);
+        const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `plan`] }).catch((failure: unknown) => {
+            throw failure instanceof SandboxHttpError ? new Error(failure.said.error ?? `Could not run a live check (${failure.status}).`) : failure;
+        });
+        const { steps, orphans } = await readPlanSteps(lines);
         liveActions.value = steps;
         liveOrphans.value = orphans;
         liveRan.value = true;

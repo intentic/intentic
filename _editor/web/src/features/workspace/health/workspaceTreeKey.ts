@@ -1,4 +1,4 @@
-import { WORKSPACE_TREE } from "../../../lib/queryKeys";
+import { rpcKey } from "../../../lib/queryKeys";
 import { UNPERSISTED } from "../../../lib/queryPersistence";
 import { workspaceAgent } from "./workspaceScope";
 
@@ -6,10 +6,10 @@ import { workspaceAgent } from "./workspaceScope";
 // of the key: different scopes are different trees. UNPERSISTED: a wide workspace runs to tens of thousands of entries,
 // and the mirror structured-cloning it every couple of seconds stalls the main thread longer than the paint it saves.
 
-const treeKeyOf = (scope: string): unknown[] => WORKSPACE_TREE.of(scope, UNPERSISTED);
+const treeKeyOf = (agent: string | undefined): unknown[] => rpcKey(`workspace.tree`, { agent }, UNPERSISTED);
 
 // The tree on screen, read live: the prefetch loader asks before anything mounts.
-export const workspaceTreeKey = (): unknown[] => treeKeyOf(workspaceAgent.value ?? `shared`);
+export const workspaceTreeKey = (): unknown[] => treeKeyOf(workspaceAgent.value);
 
 // The shared tree whichever checkout is on screen, under the very entry the explorer reads it through when unscoped.
-export const sharedWorkspaceTreeKey = (): unknown[] => treeKeyOf(`shared`);
+export const sharedWorkspaceTreeKey = (): unknown[] => treeKeyOf(undefined);

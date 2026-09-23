@@ -1,6 +1,7 @@
 import { cp, mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { packageRoot } from "@intentic/constants/node";
 import { slugOf } from "./transcript/slug.js";
 
@@ -40,18 +41,15 @@ export const makeRecallFixture = async (): Promise<{
         await writeFile(join(projectsDir, name), resolved);
         sessionIds.push(name.replace(/\.jsonl$/, ""));
     }
-    // Fleet registry derived from the transcripts just written; reachable only via `historyRoot`.
+    // Fleet registry derived from the transcripts just written, as the daemon's conversations database holds it (the
+    // columns and record fields fleet/conversations.ts reads); reachable only via `historyRoot`.
     await mkdir(historyRoot, { recursive: true });
-    await writeFile(
-        join(historyRoot, "agents.json"),
-        JSON.stringify(
-            sessionIds.map((sessionId, index) => ({
-                id: `fixture-agent-${index + 1}`,
-                branch: `agent/fixture-agent-${index + 1}`,
-                title: `Fixture conversation ${index + 1}`,
-                sessionId,
-            })),
-        ),
+    const fleet = new DatabaseSync(join(historyRoot, "conversations.db"));
+    fleet.exec("CREATE TABLE conversation (id TEXT PRIMARY KEY, record TEXT NOT NULL)");
+    const insert = fleet.prepare("INSERT INTO conversation (id, record) VALUES (?, ?)");
+    sessionIds.forEach((sessionId, index) =>
+        insert.run(`fixture-agent-${index + 1}`, JSON.stringify({ sessionId, social: { title: { text: `Fixture conversation ${index + 1}`, source: "derived" } } })),
     );
+    fleet.close();
     return { root, claudeDir, projectsDir, historyRoot, cleanup: () => rm(tmp, { recursive: true, force: true }) };
 };

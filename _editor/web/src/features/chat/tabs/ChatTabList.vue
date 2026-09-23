@@ -128,7 +128,7 @@ const tabMatches = (entry: OpenChat): boolean => {
     const title = entry.conversation.title.value;
     return (
         title?.toLowerCase().includes(needle.value) === true ||
-        entry.conversation.messages.value.some((message) => message.role !== `notice` && message.text.toLowerCase().includes(needle.value))
+        entry.conversation.transcript.messages.value.some((message) => message.role !== `notice` && message.text.toLowerCase().includes(needle.value))
     );
 };
 
@@ -325,7 +325,7 @@ defineExpose({ beginRename });
 // it's about now); images ride along since a prompt is often a screenshot.
 const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
 const showPreview = (event: MouseEvent, entry: OpenChat): void => {
-    const prompts = entry.conversation.messages.value.filter((message) => message.role === `user`);
+    const prompts = entry.conversation.transcript.messages.value.filter((message) => message.role === `user`);
     const first = prompts[0];
     const last = prompts.at(-1);
     hoverCard.value?.show(event, {

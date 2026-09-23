@@ -54,7 +54,7 @@ const apply = (summons: Summons): void => {
     // Only the window holding the chat's own window sends a carried turn: every window applies this summons, and the
     // one that composed it kept the turn for itself unless it draws no chat (summonTurn).
     if (summons.deliver !== undefined && focused !== undefined && floatingWindowPanel.value === `chat`) {
-        void focused.enqueue(summons.deliver);
+        void focused.turn.enqueue(summons.deliver);
     }
 };
 
@@ -115,7 +115,7 @@ export const summonTurn = (conversation: Conversation, prompt: string): void => 
         ...(here ? {} : { deliver: prompt }),
     });
     if (here) {
-        void conversation.enqueue(prompt);
+        void conversation.turn.enqueue(prompt);
         return;
     }
     // Raises the window already holding the chat, so the answer arrives where the eye goes; never opens one.

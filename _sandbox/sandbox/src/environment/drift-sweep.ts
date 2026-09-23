@@ -19,7 +19,7 @@ const WARMUP_MS = 90_000;
 export interface DriftSweepDeps {
     readonly workspace: { readonly root: string };
     readonly runtimeInstalls: RuntimeInstallsStore;
-    readonly agents: { readonly liveSessionIds: () => readonly string[] };
+    readonly conversations: { readonly liveSessionIds: () => readonly string[] };
     readonly logger: Logger;
 }
 
@@ -52,7 +52,7 @@ export const createDriftSweep = (deps: DriftSweepDeps): DriftSweep => {
     };
 
     const tick = (): void => {
-        if (deps.agents.liveSessionIds().length > 0) {
+        if (deps.conversations.liveSessionIds().length > 0) {
             return;
         }
         void run();

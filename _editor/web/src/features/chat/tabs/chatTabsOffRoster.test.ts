@@ -1,34 +1,20 @@
 // Pins the fallback text a card shows for a chat off the fleet roster (title, model, cost), checked as text
 // since jsdom lays nothing out.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { it, expect, beforeEach, mock } from "bun:test";
-import { mocked, hoisted } from "@intentic/testing/bun";
+import { hoisted } from "@intentic/testing/bun";
+import { AgentsListSchema } from "@intentic/sandbox-contract";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Stubs the daemon at the seam the list reaches it through, so the archive probe is asserted as a call.
-mock.module("../../sandbox/client/sandboxClient", () => {
-    const sandboxJson = mock(async () => ({ agents: [] }));
-    const sandboxRequest = mock();
-    return {
-        sandboxJson,
-        sandboxRequest,
-        // `undefined` is the active box: every call this suite makes.
-        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) => sandboxJson(),
-        sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
-            init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
-        // Named by the graph but never called here; bun links an ESM import against exactly what this returns.
-        sandboxJsonAt: mock(),
-        sandboxJsonQuietly: mock(),
-        sandboxBlob: mock(),
-        sandboxError: mock(async () => new Error(`unused`)),
-        SandboxHttpError: class SandboxHttpError extends Error {},
-    };
-});
+const archived = mock(async () => AgentsListSchema.parse({ agents: [], rev: 0 }));
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { archived } }) }));
 
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { modelLabelFor } from "../accounts/providerCatalog";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
@@ -59,7 +45,7 @@ beforeEach(async () => {
     app = undefined;
     host?.remove();
     localStorage.clear();
-    resetChat();
+    resetSandboxScope();
     await nextTick();
 });
 
@@ -69,9 +55,9 @@ it(`draws the model from the conversation when the fleet cannot resolve it`, asy
     // Registered, so the join treats it as an agent merely off the roster, not a draft.
     conversation.registered.value = true;
     conversation.title.value = `Detached intentic chat · fix`;
-    conversation.model.value = `claude-opus-4-5`;
+    conversation.selection.apply({ kind: `set`, picks: { model: `claude-opus-4-5` } });
     // Cost is read off the rows: each turn's usage sits on the bubble its answer ended in.
-    conversation.restoreMessages([{ role: `assistant`, text: `done`, usage: { costUsd: 7.02 } }]);
+    conversation.transcript.restoreMessages([{ role: `assistant`, text: `done`, usage: { costUsd: 7.02 } }]);
 
     await mountList();
 
@@ -85,11 +71,11 @@ it(`draws the model from the conversation when the fleet cannot resolve it`, asy
 it(`asks the daemon for the archive when an open chat is off the roster`, async () => {
     const chat = useChat();
     chat.active.value.registered.value = true;
-    mocked(sandboxJson).mockClear();
+    archived.mockClear();
 
     await mountList();
 
-    expect(mocked(sandboxJson).mock.calls.some(([path]) => path === `/agents/archived`)).toBe(true);
+    expect(archived).toHaveBeenCalledWith();
 });
 
 it(`prints no spend at all, so a restored chat cannot print a zero`, async () => {

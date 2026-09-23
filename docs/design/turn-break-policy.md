@@ -77,10 +77,10 @@ is the single helper every surface renders an instant through, near as a countdo
 **The daemon owns every ladder** (`turn-resume.ts`). `runLimitPass` became `runHeldPass`, routing by the hold's
 reason: a limit keeps its one appointment at the published reset, a stopped turn climbs `RETRY_LADDER_MS`
 (5s/15s/45s) and then stands down through `abandonResume` with a sentence naming the count it spent. The
-try count lives in `stopTries`, apart from the pending entry, because every turn start wipes that entry —
-including the ladder's own fire — so a count held there would reset itself on the very fire it bounds. Only a
-turn that settles with nothing held clears it (`clearStopLadder`, called from `recordTurnHold`'s fall-through),
-which is the one honest proof the run is getting somewhere.
+try count lives in the conversation actor's `resume.stopTries`, apart from the pending hold, because every turn
+start wipes that hold — including the ladder's own fire — so a count held there would reset itself on the very fire
+it bounds. Only a turn that settles with nothing held clears it (the actor's `turn-got-somewhere` event, sent when
+`performSettlement` finds no hold), which is the one honest proof the run is getting somewhere.
 
 **One reader, one writer.** `breakPolicyFor(services, conversationId, ending)` replaced three near-identical
 `*Armed` functions; `agents.breakPolicy` replaced three near-identical routes; `setBreakPolicy` replaced three

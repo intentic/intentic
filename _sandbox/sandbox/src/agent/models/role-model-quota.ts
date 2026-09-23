@@ -1,7 +1,6 @@
 import { KeyedProviderSchema, type ModelChoice, renewsInWords } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { fleetLimit, type TurnLimit } from "../../usage/fleet-limit.js";
-import { cursorTurnLimit } from "../../runtimes/cursor/cursor-usage.js";
 
 // Reads a rung's recorded quota instead of discovering it by asking and being refused; a rung whose every account is
 // spent is stepped over on that reading, scoped per-model through fleet-limit's own gates. Only ever says spent —
@@ -35,10 +34,11 @@ export const rungLimit = async (services: Services, choice: ModelChoice): Promis
             // An unmeasured account may still answer, so it counts as headroom rather than as spent.
             return limit.spent + limit.withHeadroom < connected.length ? { ...limit, withHeadroom: limit.withHeadroom + 1 } : limit;
         }
-        // Cursor publishes no allowance to poll, so its reading is what it has already refused, per account and per
-        // model. Without this branch one account's spent Composer benches the rung for every account it has.
-        if (choice.provider === `cursor`) {
-            return await cursorTurnLimit(services, choice.model);
+        // A provider keeping its own reading (Cursor's, what it has already refused, per account and per model) answers
+        // for itself; read from the pool instead, one account's spent Composer would bench the rung for every account.
+        const module = services.providerModules.find((candidate) => candidate.id === choice.provider);
+        if (module?.turnLimit !== undefined) {
+            return await module.turnLimit(services, choice.model);
         }
         const provider = KeyedProviderSchema.safeParse(choice.provider);
         return provider.success ? await services.cliProxy.turnLimit(provider.data, choice.model) : undefined;

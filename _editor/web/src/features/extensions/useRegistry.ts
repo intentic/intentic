@@ -1,6 +1,7 @@
 import type { Marketplace } from "@intentic/api-contract";
 import { OFFICIAL_REGISTRY_URL, type RegistryEntry } from "@intentic/registry";
-import { computed, type MaybeRefOrGetter, ref, toValue } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
+import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { REGISTRY } from "../../lib/queryKeys";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 import { browseMarketplace } from "../capabilities/connect/useCapabilities";
@@ -9,9 +10,10 @@ import { browseMarketplace } from "../capabilities/connect/useCapabilities";
 // showing. A browse is a daemon-side clone, so it's cached hard (5-minute stale, no refetch on mount); the URL is
 // module state, not per-caller, since Discover and the hub's newer-commit badge must share one registry.
 
-// Session-scoped, not URL-based: a token in the address bar ends up in browser history.
-const registryUrl = ref(OFFICIAL_REGISTRY_URL);
-const registryToken = ref(``);
+// Held in memory, not the URL: a token in the address bar ends up in browser history. Per sandbox, since the active
+// daemon is what clones the registry, so the token goes to it: a switch into somebody else's box must not carry it.
+const registryUrl = sandboxRef(() => OFFICIAL_REGISTRY_URL);
+const registryToken = sandboxRef(() => ``);
 
 /** True while the surface is reading the registry it ships with rather than one somebody typed. */
 const isOfficialRegistry = computed(() => registryUrl.value.trim() === OFFICIAL_REGISTRY_URL);

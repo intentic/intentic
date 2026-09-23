@@ -32,10 +32,12 @@ line in the app:
   registry but consume privileged internals **by design**, and the file documents exactly why each one
   can't be a clean extension.
 
-The **data plane** an extension talks to is `sandbox-contract` over an authenticated transport
-(`api.sandbox.request/json`: auth injected host-side, tokens never seen by the bundle). An extension's
-reach into daemon routes is **declared in its manifest and gated by the host**, so coupling is explicit and
-reviewable rather than ambient. The narrow `facts.ts` surface
+The **data plane** an extension talks to is `sandbox-contract` as a typed client over an authenticated
+transport (`api.sandbox.rpc`: a call names a procedure and its answer arrives parsed by the procedure's own
+schema; auth injected host-side, tokens never seen by the bundle). `api.sandbox.request` is left for what the
+contract does not carry: bytes, uploads, an extension's own backend. An extension's reach into daemon routes is
+**declared in its manifest and gated by the host**, on the method and path each call resolves to, so coupling
+is explicit and reviewable rather than ambient. The narrow `facts.ts` surface
 ([facts.ts](../../_shared/extension-api/src/facts.ts)) is only the stable **detection** vocabulary a view's
 `detect()` reads to decide when to activate: not the data plane. The SDK is published as two npm packages:
 [`@intentic/extension-api`](../../_shared/extension-api) (types + manifest schema) and
@@ -157,8 +159,14 @@ feature that moves out. An extension's UI calls its own namespace with **no `per
 (its backend is its own code from the same approved checkout); any other namespace conforms like a core
 route. The backend's reach back into the daemon is `permissions.daemon`: same glob grammar, enforced by a
 minted per-extension token (the `x-intentic-extension` grant in [grants.ts](../../_sandbox/sandbox/src/auth/grants.ts)),
-deliberately NOT the all-routes panel token. Workspace files it touches directly with `node:fs` under
-`api.workspaceRoot`: full trust means no file service in between.
+deliberately NOT the all-routes panel token. It calls a contract route the way its browser half does, through
+`api.daemon.rpc`: the typed client the host builds for it ([backend-daemon.ts](../../_sandbox/sandbox/src/extensions/backend/backend-daemon.ts))
+and hands over, so a server bundle carries no client of its own. That client presents the token, parses each
+answer with the procedure's output schema (a stream passes as it arrives), and refuses a call outside
+`permissions.daemon` before sending it, on the method and path the call resolves to: the verdict the grant would
+reach for the same call by path, which `backend-daemon.test.ts` holds for every procedure. `api.daemon.request` is left for bytes (`/workspace/raw`).
+Workspace files it touches directly with `node:fs` under `api.workspaceRoot`: full trust means no file service
+in between.
 
 The extracted features are **deployments** and **knowledge**: each one's routes, translation layer and
 schemas live entirely in its own repository (a listed extension: UI bundle and `dist/server.js` both committed

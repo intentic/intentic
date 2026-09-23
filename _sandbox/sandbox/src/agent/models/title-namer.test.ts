@@ -1,6 +1,8 @@
 import { test, expect, beforeEach, mock, type Mock } from "bun:test";
 import type { Services } from "../../composition.js";
 import { unstubbed } from "@intentic/testing";
+import type { Social } from "../../agents/registry/agents-store.js";
+import { conversationEntry } from "../../testing.js";
 import { cleanSessionTitle, nameAgentTitle, splitTitleAction } from "./title-namer.js";
 
 const ask = mock<() => Promise<{ value: string }>>();
@@ -76,12 +78,9 @@ const STOLEN_TITLES = [
     "I am Claude",
 ];
 
-const servicesWith = (
-    entry: { title?: string; titleSource?: "derived" | "model" | "plan" | "user" } | undefined,
-    setTitle: Mock<Services["agents"]["setTitle"]>,
-): Services =>
+const servicesWith = (title: Social["title"], setTitle: Mock<Services["agents"]["setTitle"]>): Services =>
     unstubbed<Services>("services", {
-        agents: unstubbed<Services["agents"]>("agents", { entry: () => entry as ReturnType<Services["agents"]["entry"]>, setTitle }),
+        agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationEntry({ social: { title, reactions: [] } }), setTitle }),
     });
 
 beforeEach(() => {
@@ -93,7 +92,7 @@ test("asks nothing when no model is set for session titles", async () => {
     const setTitle = mock<Services["agents"]["setTitle"]>();
     modelSet.mockReturnValue(false);
 
-    await nameAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", "fix the auth tests");
+    await nameAgentTitle(servicesWith({ text: "Fix the auth tests", source: "derived" }, setTitle), "c1", "fix the auth tests");
 
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
@@ -103,7 +102,7 @@ test("names a still-derived conversation from the prompt that just opened its tu
     const setTitle = mock<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ value: "Fleet board broadcast · wire" });
     await nameAgentTitle(
-        servicesWith({ title: "We should look at the fleet board and figure out why it…", titleSource: "derived" }, setTitle),
+        servicesWith({ text: "We should look at the fleet board and figure out why it…", source: "derived" }, setTitle),
         "c1",
         "we should look at the fleet board and figure out why it stops updating",
     );
@@ -113,7 +112,7 @@ test("names a still-derived conversation from the prompt that just opened its tu
 test("leaves a conversation that already answers to a better name alone", async () => {
     // titleSource `plan` outranks a model name, skipping the call rather than paying for promoteTitle to reject it.
     const setTitle = mock<Services["agents"]["setTitle"]>();
-    await nameAgentTitle(servicesWith({ title: "Session titles · rethink", titleSource: "plan" }, setTitle), "c1", "rethink session titles");
+    await nameAgentTitle(servicesWith({ text: "Session titles · rethink", source: "plan" }, setTitle), "c1", "rethink session titles");
     expect(ask).not.toHaveBeenCalled();
     expect(setTitle).not.toHaveBeenCalled();
 });
@@ -123,7 +122,7 @@ test("a chain that never wrote a usable name leaves the derived title standing",
     ask.mockRejectedValue(new Error("gemini-3.5-flash: wrote a tool call instead of a session title"));
 
     await expect(
-        nameAgentTitle(servicesWith({ title: "Fix the auth tests", titleSource: "derived" }, setTitle), "c1", "fix the auth tests"),
+        nameAgentTitle(servicesWith({ text: "Fix the auth tests", source: "derived" }, setTitle), "c1", "fix the auth tests"),
     ).rejects.toThrow(/tool call/);
 
     expect(setTitle).not.toHaveBeenCalled();
@@ -132,6 +131,6 @@ test("a chain that never wrote a usable name leaves the derived title standing",
 test.each(STOLEN_TITLES)("a stored title reading %s counts as no name: the pass runs again and heals it", async (stolen) => {
     const setTitle = mock<Services["agents"]["setTitle"]>();
     ask.mockResolvedValue({ value: "Auth test flakiness · fix" });
-    await nameAgentTitle(servicesWith({ title: stolen, titleSource: "model" }, setTitle), "c1", "fix the auth tests");
+    await nameAgentTitle(servicesWith({ text: stolen, source: "model" }, setTitle), "c1", "fix the auth tests");
     expect(setTitle).toHaveBeenCalledWith("c1", "Auth test flakiness", "model", "fix");
 });

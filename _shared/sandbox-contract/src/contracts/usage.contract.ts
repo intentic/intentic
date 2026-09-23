@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { z } from "zod";
 import { LimitResetClaimSchema, LimitResetStatusSchema } from "../schemas/providers/plan-limits.js";
 import { DayWindowQuerySchema, UsageRollupSchema } from "../schemas/providers/usage.js";
@@ -28,7 +28,7 @@ export type PlanLimitsHeld = PlanLimitsRefreshed["held"][number];
 // Durable spend ledger, read-only over the wire; rows are appended daemon-side at turn end.
 // `rollup` groups by day, provider, account and model, so every cost panel re-projects from this one answer.
 export const usageContract = {
-    rollup: oc
+    rollup: procedure
         .route({
             method: "GET",
             path: "/usage/rollup",
@@ -39,7 +39,7 @@ export const usageContract = {
         .input(DayWindowQuerySchema)
         .output(UsageRollupSchema),
     // Re-measures every account's plan limits on request; readings also arrive via /events and account lists otherwise.
-    refreshPlanLimits: oc
+    refreshPlanLimits: procedure
         .route({
             method: "POST",
             path: "/usage/plan-limits/refresh",
@@ -52,7 +52,7 @@ export const usageContract = {
     // Asked, not polled: the provider only evaluates this when told the account is at the wall, and the answer isn't
     // cached.
     // Answers `available: false` rather than failing when the account has no such mechanism.
-    limitReset: oc
+    limitReset: procedure
         .route({
             method: "GET",
             path: "/usage/limit-reset/{account}",
@@ -62,7 +62,7 @@ export const usageContract = {
         })
         .input(z.object({ account: z.string().min(1).describe("Which account.") }))
         .output(LimitResetStatusSchema),
-    claimLimitReset: oc
+    claimLimitReset: procedure
         .route({
             method: "POST",
             path: "/usage/limit-reset/{account}/claim",

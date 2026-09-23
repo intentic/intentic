@@ -127,7 +127,8 @@ const readMainTree = async (deps: HandoffStateDeps, edited: readonly string[]): 
 
 const readTree = async (deps: HandoffStateDeps, state: HandoffState): Promise<TreeReading> => {
     const entry = deps.agents.entry(state.conversationId);
-    return entry?.branch !== undefined ? readBranch(deps, entry.id, entry.repos) : readMainTree(deps, state.standing?.paths ?? []);
+    const placement = entry?.placement;
+    return placement?.kind === "worktree" ? readBranch(deps, state.conversationId, placement.repos) : readMainTree(deps, state.standing?.paths ?? []);
 };
 
 // Prefers the CLI's own task store for the retired session over the fold's last checklist, since the fold cannot see a

@@ -2,14 +2,16 @@ import { useQueryClient } from "@tanstack/vue-query";
 import { sleep } from "@intentic/base/async";
 import { isBrowsableArchive } from "@intentic/sandbox-contract";
 import { errorMessage } from "@intentic/ui/async";
+import { sandboxRef, sandboxScopeGuard, sandboxValue } from "@intentic/extension-api";
 import { computed, markRaw, reactive, ref } from "vue";
 import { detectProjects, managerFromPackageJson, type ProjectSetup } from "@intentic/workspace-setup";
 import { collectDroppedFiles, type DroppedFile, isRootGitPath } from "../../explorer/transfer/dropEntries";
 import { packTar } from "../../explorer/transfer/tarStream";
 import { sandboxJson, sandboxUpload } from "../../../sandbox/client/sandboxClient";
 import { jsonBody } from "../../../sandbox/client/jsonBody";
-import { WORKSPACE_TREE } from "../../../../lib/queryKeys";
-import { scopeQuery } from "../../health/workspaceScope";
+import { sandboxRpc } from "../../../sandbox/client/sandboxRpc";
+import { rpcPrefix } from "../../../../lib/queryKeys";
+import { workspaceAgent } from "../../health/workspaceScope";
 import { chunkItems, dedupeByPath } from "./uploadChunking";
 import { clearUnsettledUploads, markFailed, markSettled, noteArriving } from "../provisionalEntries";
 
@@ -38,24 +40,25 @@ const TAR_STALL_MS = 60_000;
 // Optimistic; flips false once proven unavailable (HTTP/1.1), and stays false for the session.
 let canStreamRequestBody = true;
 
-const files = ref<QueueFile[]>([]);
-const bytesTotal = ref(0);
-const bytesDone = ref(0);
-const currentName = ref("");
-const finished = ref(false);
-const startedAt = ref(0);
+// One upload session per sandbox: the bytes go into that sandbox's /work, so a switch starts the card over.
+const files = sandboxRef<QueueFile[]>(() => []);
+const bytesTotal = sandboxRef(() => 0);
+const bytesDone = sandboxRef(() => 0);
+const currentName = sandboxRef(() => ``);
+const finished = sandboxRef(() => false);
+const startedAt = sandboxRef(() => 0);
 
 // Pre-upload tree walk; scanning narrates progress until every overlapping scan (activeScans) finishes.
-const scanning = ref(false);
-const scannedCount = ref(0);
-const scanningName = ref("");
+const scanning = sandboxRef(() => false);
+const scannedCount = sandboxRef(() => 0);
+const scanningName = sandboxRef(() => ``);
 let activeScans = 0;
 
 // Set when a drop produced no files (unreadable items or an empty folder), so the panel can say so.
-const skippedNotice = ref<number | undefined>(undefined);
+const skippedNotice = sandboxRef<number | undefined>(() => undefined);
 
 // Files skipped as identical on the sandbox (size + mtime); shown so nothing looks silently dropped.
-const skippedUnchanged = ref(0);
+const skippedUnchanged = sandboxRef(() => 0);
 
 const joinPath = (dir: string, rel: string): string => (dir === `` ? rel : `${dir}/${rel}`);
 
@@ -66,7 +69,7 @@ const warmArchive = (path: string): void => {
     if (!isBrowsableArchive(path.slice(path.lastIndexOf(`/`) + 1))) {
         return;
     }
-    void sandboxJson(`/workspace/children?${scopeQuery(new URLSearchParams({ path })).toString()}`).catch(() => undefined);
+    void sandboxRpc.workspace.children({ path, agent: workspaceAgent.value }).catch(() => undefined);
 };
 
 // The one place a file's status moves, so the explorer's placeholder row for it can't drift from the card's counts.
@@ -84,7 +87,7 @@ const setStatus = (item: QueueFile, status: FileStatus): void => {
 };
 
 // Projects detected in the drop, offered for install; dirs are workspace-root-relative already.
-const setupProjects = ref<readonly ProjectSetup[]>([]);
+const setupProjects = sandboxRef<readonly ProjectSetup[]>(() => []);
 
 const INSTALL_PREF_KEY = `intentic.install-on-import`;
 // Sticky default rather than a separate "always" toggle; the last choice predicts better than a fixed one, and
@@ -107,9 +110,9 @@ const setInstallAfterUpload = (enabled: boolean): void => {
 };
 
 // What the daemon actually queued (the client's list is only a guess); installSettled gates dismissal.
-const installQueued = ref<readonly string[]>([]);
-const installError = ref<string | undefined>(undefined);
-const installSettled = ref(false);
+const installQueued = sandboxRef<readonly string[]>(() => []);
+const installError = sandboxRef<string | undefined>(() => undefined);
+const installSettled = sandboxRef(() => false);
 
 // Reads each detected project's package.json for `packageManager`; that beats any lockfile guess since the File
 // is already on hand. A missing or unreadable manifest leaves the lockfile answer standing.
@@ -140,32 +143,41 @@ const runInstall = async (): Promise<void> => {
         installSettled.value = true;
         return;
     }
+    // An answer arriving after a switch is about the box left behind, whose import this view no longer shows.
+    const current = sandboxScopeGuard();
     try {
-        const { queued } = await sandboxJson<{ queued: string[] }>(`/workspace/setup/install`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ dirs: projects.map((project) => project.dir) }),
-        });
-        installQueued.value = queued;
+        const { queued } = await sandboxRpc.workspace.install({ dirs: projects.map((project) => project.dir) });
+        if (current()) {
+            installQueued.value = queued;
+        }
     } catch (error) {
-        installError.value = errorMessage(error, `Couldn't start the install.`);
+        if (current()) {
+            installError.value = errorMessage(error, `Couldn't start the install.`);
+        }
     } finally {
-        installSettled.value = true;
+        if (current()) {
+            installSettled.value = true;
+        }
     }
 };
 
-const pending: QueueFile[][] = [];
+// Drops waiting behind the one uploading, oldest first.
+const pending = sandboxValue<QueueFile[][]>(() => []);
 let running = false;
 let queryClient: ReturnType<typeof useQueryClient> | undefined;
 
-// Threaded into the scan, XHR pool, and tar fetch; a run keeps its own captured signal across a reset.
-let controller = new AbortController();
+// Threaded into the scan, XHR pool, and tar fetch; a run keeps its own captured signal across a restart. A switch
+// aborts it, since the bytes in flight are bound for the sandbox being left.
+const controller = sandboxValue(
+    () => new AbortController(),
+    (previous) => previous.abort(),
+);
 
 // Clears the queue and aborts anything in flight, then mints a fresh controller. Used for a fresh start, dismiss,
 // and cancel alike; running/activeScans are left for the in-flight run/scan to settle once they observe the abort.
-export const resetUploadQueue = (): void => {
-    controller.abort();
-    controller = new AbortController();
+const restartQueue = (): void => {
+    controller.value.abort();
+    controller.value = new AbortController();
     // Placeholder rows for bytes that never landed go with the queue; ones already on disk stay until the tree lists
     // them, since the row is the only sign of them until it does.
     clearUnsettledUploads();
@@ -184,7 +196,7 @@ export const resetUploadQueue = (): void => {
     installQueued.value = [];
     installError.value = undefined;
     installSettled.value = false;
-    pending.length = 0;
+    pending.value = [];
 };
 
 // Matches a repo's own .git: the directory, anything under it, or the file a worktree/submodule uses instead.
@@ -379,7 +391,7 @@ const queueBatch = (items: QueueFile[]): void => {
     }
     files.value.push(...items);
     bytesTotal.value += items.reduce((sum, item) => sum + item.size, 0);
-    pending.push(items);
+    pending.value.push(items);
     void run();
 };
 
@@ -392,14 +404,14 @@ const run = async (): Promise<void> => {
     if (startedAt.value === 0) {
         startedAt.value = performance.now();
     }
-    // This run's own captured signal; a mid-run reset swaps the module controller, not this loop's copy.
-    const signal = controller.signal;
+    // This run's own captured signal; a mid-run restart swaps the module controller, not this loop's copy.
+    const { signal } = controller.value;
     try {
-        while (pending.length > 0) {
+        while (pending.value.length > 0) {
             if (signal.aborted) {
                 break;
             }
-            const batch = pending.shift() as QueueFile[];
+            const batch = pending.value.shift() as QueueFile[];
             // Uploads in bounded chunks retried independently, so a stall or reset costs one chunk, not the whole drop.
             for (const chunk of chunkItems(batch)) {
                 if (signal.aborted) {
@@ -411,12 +423,12 @@ const run = async (): Promise<void> => {
     } finally {
         // Always clears running, even on a throw, so the queue can't wedge; work queued during the unwind keeps going.
         running = false;
-        if (!controller.signal.aborted && pending.length > 0) {
+        if (!controller.value.signal.aborted && pending.value.length > 0) {
             void run();
         } else if (!signal.aborted) {
             finished.value = true;
-            // `.every`, not a single scope: a drop can land files outside the focused scope, so every variant is stale.
-            await queryClient?.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
+            // Every scope's tree, not the focused one: a drop can land files outside that scope, so every variant is stale.
+            await queryClient?.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) });
             // Runs after the tree refresh and after the abort check, so a cancelled drop installs nothing.
             await runInstall();
         }
@@ -434,7 +446,7 @@ export function useUploadQueue() {
         if (entries.length === 0) {
             // A bare `.git` drop on the root leaves nothing to send; say so, since the scan already narrated a file
             // count.
-            if (dropped.length > 0 && !running && pending.length === 0) {
+            if (dropped.length > 0 && !running && pending.value.length === 0) {
                 skippedNotice.value = dropped.length;
                 finished.value = true;
             }
@@ -442,18 +454,18 @@ export function useUploadQueue() {
         }
         // A finished-and-untouched queue starts fresh on the next drop.
         if (finished.value && !running) {
-            resetUploadQueue();
+            restartQueue();
         }
+        // Captured before either round trip, so a cancel or a switch (which aborts it) during one aborts the enqueue too.
+        const { signal } = controller.value;
         // Detected before the unchanged-file filter prunes the usually-unchanged manifests; dedupe by dir across drops.
         const detected = await detectSetup(targetDir, entries);
-        const known = new Set(setupProjects.value.map((project) => project.dir));
-        setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
-        // Capture the signal before the round-trip, so a cancel during it aborts the enqueue too.
-        const signal = controller.signal;
         const unchanged = await filterUnchanged(targetDir, entries);
         if (signal.aborted) {
             return;
         }
+        const known = new Set(setupProjects.value.map((project) => project.dir));
+        setupProjects.value = [...setupProjects.value, ...detected.filter((project) => !known.has(project.dir))];
         // Two entries can target the same destination; keep only the last, or parallel writes interleave into one file.
         const surviving = dedupeByPath(unchanged, (entry) => entry.path);
         // Sinks .git entries to the back (stable sort) so the daemon doesn't see a repo before its work tree lands.
@@ -461,7 +473,7 @@ export function useUploadQueue() {
         skippedUnchanged.value += entries.length - surviving.length;
         if (surviving.length === 0) {
             // Drop already fully up to date; surface via skippedUnchanged rather than a silent no-op.
-            if (!running && pending.length === 0) {
+            if (!running && pending.value.length === 0) {
                 finished.value = true;
                 // Still offer install: re-dropping an up-to-date project is exactly what someone does when it isn't
                 // working.
@@ -480,10 +492,10 @@ export function useUploadQueue() {
     // files to enqueue. Must call collectDroppedFiles synchronously, before the drag store tears down.
     const enqueueFromDataTransfer = (targetDir: string, dataTransfer: DataTransfer): void => {
         if (finished.value && !running && activeScans === 0) {
-            resetUploadQueue();
+            restartQueue();
         }
         // Captures this session's signal so a cancel during the walk stops it and skips the enqueue.
-        const signal = controller.signal;
+        const { signal } = controller.value;
         activeScans += 1;
         scanning.value = true;
         finished.value = false;
@@ -544,6 +556,6 @@ export function useUploadQueue() {
         installSettled,
         enqueue,
         enqueueFromDataTransfer,
-        dismiss: resetUploadQueue,
+        dismiss: restartQueue,
     };
 }

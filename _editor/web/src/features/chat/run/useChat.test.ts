@@ -1,34 +1,76 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/constants";
-import { sandboxRouteName, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
+import { type AttachFrame, sandboxRouteName, TRIAL_PROVIDER, TrialStatusSchema } from "@intentic/sandbox-contract";
 import { nextTick, ref, toRaw } from "vue";
 import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import type { SandboxCallContext } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
+import { activeSandboxId } from "../../sandbox/overview/activeSandbox";
 import { chatRun } from "./chatRun";
+import { runningTurn } from "../../../testing/runningTurn";
 
-// Declared outside the factory with concrete signatures: the real `sandboxJson<T>` is generic, and an
-// implementation answering one concrete shape cannot satisfy a generic one.
-const sandboxRequestMock = mock(async (_path: string, _init?: RequestInit): Promise<Response> => new Response());
-const sandboxJsonMock = mock(async (_path: string, _init?: RequestInit): Promise<unknown> => ({}));
-mock.module("../../sandbox/client/sandboxClient", () => ({
-    sandboxRequest: (path: string, init?: RequestInit) => sandboxRequestMock(path, init),
-    sandboxJson: (path: string, init?: RequestInit) => sandboxJsonMock(path, init),
-    // The `Via` forms delegate to the same spies (`at` is always the active box in these tests).
-    sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
-        init === undefined ? sandboxRequestMock(path) : sandboxRequestMock(path, init),
-    sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) =>
-        init === undefined ? sandboxJsonMock(path) : sandboxJsonMock(path, init),
-    sandboxError: mock(async (response: Response) => {
-        const body = (await response.json()) as { message?: string; error?: string };
-        return new Error(body.message ?? body.error ?? `Request failed (${response.status}).`);
+// How a call was aimed and paced, as the typed client hands it to a procedure.
+interface CallOptions {
+    readonly signal?: AbortSignal;
+    readonly context?: SandboxCallContext;
+}
+
+// The daemon as this suite models it: one handler over each procedure's route name, handed exactly the arguments the
+// call was made with. Its default is the connection reads below; a test driving a turn or a transcript answers those
+// procedures itself (daemonAnswers).
+const daemon = mock<(procedure: string, input?: unknown, options?: CallOptions) => Promise<unknown>>();
+// Each procedure the chat calls, served by the model above; the answer is the model's to shape, so the client's own
+// answer type is waived here and nowhere else.
+const procedureOf =
+    (name: string) =>
+    (...call: [input?: unknown, options?: CallOptions]): never =>
+        daemon(name, ...call) as never;
+mock.module("../../sandbox/client/sandboxRpc", () => ({
+    sandboxRpc: fakeSandboxRpc({
+        accounts: {
+            accounts: procedureOf(`accounts.accounts`),
+            start: procedureOf(`accounts.start`),
+            complete: procedureOf(`accounts.complete`),
+            cancel: procedureOf(`accounts.cancel`),
+            rename: procedureOf(`accounts.rename`),
+            disconnect: procedureOf(`accounts.disconnect`),
+        },
+        translator: {
+            accounts: procedureOf(`translator.accounts`),
+            connect: procedureOf(`translator.connect`),
+            status: procedureOf(`translator.status`),
+            complete: procedureOf(`translator.complete`),
+            disconnect: procedureOf(`translator.disconnect`),
+        },
+        usage: { refreshPlanLimits: procedureOf(`usage.refreshPlanLimits`) },
+        agent: {
+            refusals: procedureOf(`agent.refusals`),
+            commands: procedureOf(`agent.commands`),
+            run: procedureOf(`agent.run`),
+            attach: procedureOf(`agent.attach`),
+            reply: procedureOf(`agent.reply`),
+            steer: procedureOf(`agent.steer`),
+            stop: procedureOf(`agent.stop`),
+            resume: procedureOf(`agent.resume`),
+        },
+        providers: { list: procedureOf(`providers.list`), models: procedureOf(`providers.models`) },
+        endpoints: { models: procedureOf(`endpoints.models`), trial: procedureOf(`endpoints.trial`) },
+        sessions: { list: procedureOf(`sessions.list`), get: procedureOf(`sessions.get`) },
+        agents: { transcript: procedureOf(`agents.transcript`) },
     }),
-    // Named by the graph but never thrown here; bun links an ESM import against exactly what this returns.
-    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
+// A refusal, in the daemon's words: the status's own fallback when it said none.
+const daemonRefusal = (status: number, message = `Request failed (${status}).`): SandboxHttpError => new SandboxHttpError(status, message);
+// The field of a call's input a test answers by: which provider, which conversation.
+const field = (input: unknown, name: string): unknown => (input as Record<string, unknown> | undefined)?.[name];
 // Avoids the window.env chain; send() only needs track() mocked.
 mock.module("../../../app/analytics", () => ({ track: mock() }));
-// Avoids the window.env chain; tab persistence only reads activeSandboxId + reachable.
+// Avoids the window.env chain; tab persistence only reads activeSandboxId + reachable. The id is the app's own one ref,
+// as in the app, since the run view restores from it too.
+activeSandboxId.value = `sb1`;
 mock.module("../../sandbox/client/useSandbox", () => {
-    const activeSandboxId = ref<string | undefined>(`sb1`);
     const reachable = ref(false);
     // sandboxKey included: hydrate's transcript cache read is keyed by sandbox, and needs it defined.
     return { useSandbox: () => ({ activeSandboxId, reachable }), sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId] };
@@ -63,23 +105,50 @@ const storage = {
 
 const { queryClient } = await import("../../../lib/queryPersistence");
 
-// Both connection reads go through sandboxJson; a real failure throws rather than resolving empty (see
-// refreshAccounts). `accounts` is keyed by the provider route prefix.
+// Both connection reads, as a reachable daemon answers them; a real failure throws rather than resolving empty (see
+// refreshAccounts). `accounts` is keyed by provider.
 type Subscriptions = { codex: unknown[]; grok: unknown[]; kimi: unknown[]; gemini: unknown[] };
 const NO_SUBSCRIPTIONS: Subscriptions = { codex: [], grok: [], kimi: [], gemini: [] };
-const mockConnections = (connections: { subscriptions?: Subscriptions; accounts?: (path: string) => unknown[] } = {}): void => {
-    sandboxJsonMock.mockImplementation((path: string) =>
-        Promise.resolve(
-            path === `/translator/accounts` ? (connections.subscriptions ?? NO_SUBSCRIPTIONS) : { accounts: connections.accounts?.(path) ?? [] },
-        ),
-    );
+const NO_TRIAL = TrialStatusSchema.parse({ available: false, allowance: 0, used: 0, remaining: 0, health: `unknown` });
+interface Connections {
+    readonly subscriptions?: Subscriptions;
+    readonly accounts?: (provider: string) => unknown[];
+}
+// What a reachable daemon says to the reads a chat makes on arrival, around the connections a test names; it refuses
+// anything else as unknown.
+const connectionsOf =
+    (connections: Connections) =>
+    async (procedure: string, input?: unknown): Promise<unknown> => {
+        switch (procedure) {
+            case `translator.accounts`:
+                return connections.subscriptions ?? NO_SUBSCRIPTIONS;
+            case `accounts.accounts`:
+                return { accounts: connections.accounts?.(String(field(input, `provider`))) ?? [] };
+            case `usage.refreshPlanLimits`:
+                return { ok: true, held: [] };
+            case `agent.refusals`:
+                return { refusals: {} };
+            case `agent.commands`:
+                return { commands: [] };
+            case `endpoints.trial`:
+                return NO_TRIAL;
+            default:
+                throw daemonRefusal(404);
+        }
+    };
+let connectionReads = connectionsOf({});
+const mockConnections = (connections: Connections = {}): void => {
+    connectionReads = connectionsOf(connections);
 };
-const { useSandbox } = await import("../../sandbox/client/useSandbox");
+// A test's own answers for the procedures it drives (undefined for the rest), over the connection reads.
+const daemonAnswers = (own: (procedure: string, input?: unknown, options?: CallOptions) => Promise<unknown> | undefined): void => {
+    daemon.mockImplementation((procedure, input, options) => own(procedure, input, options) ?? connectionReads(procedure, input));
+};
 const { setDaemonRoutes } = await import("../../sandbox/overview/useDaemonRoutes");
-const { resetChat, useChat } = await import("./useChat");
+const { useChat } = await import("./useChat");
 const { agentTabOf, draftConversation, openAgentConversation, reveal } = await import("../panel/useChat-reveal");
 const { hydrateOnce } = await import("./useChat-sessions");
-const { loadAccountStatus, providerBase, refreshConnections } = await import("../accounts/useChat-accounts");
+const { loadAccountStatus, refreshConnections } = await import("../accounts/useChat-accounts");
 // The store half of "New agent", as the summons applies it (agentActions.startAgent): the fixture these
 // suites open extra tabs with.
 const newChat = () => {
@@ -97,9 +166,8 @@ const { endpointProviders, endpointsLoaded, trialStatus } = await import("../acc
 const { turnDefaults } = await import("./turnDefaults");
 
 beforeEach(() => {
-    // Default: nothing to say unless a test overrides it. Resolving keeps a stray background read from surfacing as an
-    // unhandled rejection.
-    sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
+    // Default: nothing to say beyond the connection reads unless a test overrides it.
+    daemonAnswers(() => undefined);
     mockConnections();
 });
 
@@ -119,12 +187,13 @@ afterEach(async () => {
 describe(`useChat provider reconciliation`, () => {
     it(`settles a repeated ChatGPT sign-in when the same account was replaced in place`, async () => {
         jest.useFakeTimers();
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
         const existing = { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] };
         chat.translatorAccounts.value = existing;
-        sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/translator/codex/connect` && init?.method === `POST`) {
+        mockConnections({ subscriptions: existing });
+        daemonAnswers((procedure, input) => {
+            if (procedure === `translator.connect` && field(input, `provider`) === `codex`) {
                 return Promise.resolve({
                     url: `https://auth.openai.com/codex/device`,
                     code: `ABCD-EFGH`,
@@ -132,10 +201,10 @@ describe(`useChat provider reconciliation`, () => {
                     flow: `device`,
                 });
             }
-            if (path === `/translator/codex/connect?state=codex-attempt-1`) {
+            if (procedure === `translator.status` && field(input, `provider`) === `codex` && field(input, `state`) === `codex-attempt-1`) {
                 return Promise.resolve({ status: `ok` });
             }
-            return Promise.resolve(path === `/translator/accounts` ? existing : { accounts: [] });
+            return undefined;
         });
 
         await chat.connectTranslator(`codex`);
@@ -149,12 +218,12 @@ describe(`useChat provider reconciliation`, () => {
 
     it(`takes the Google sign-in down on the paste's own answer, not three seconds later on a poll tick`, async () => {
         jest.useFakeTimers();
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
         const landed = { codex: [], grok: [], kimi: [], gemini: [{ name: `antigravity-user.json`, label: `user@example.com` }] };
         let subscriptions: Subscriptions = { ...NO_SUBSCRIPTIONS };
-        sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/translator/gemini/connect` && init?.method === `POST`) {
+        daemonAnswers((procedure, input) => {
+            if (procedure === `translator.connect` && field(input, `provider`) === `gemini`) {
                 return Promise.resolve({
                     url: `https://accounts.google.com/o/oauth2/v2/auth`,
                     code: ``,
@@ -162,11 +231,11 @@ describe(`useChat provider reconciliation`, () => {
                     flow: `redirect`,
                 });
             }
-            if (path === `/translator/gemini/complete`) {
+            if (procedure === `translator.complete` && field(input, `provider`) === `gemini`) {
                 subscriptions = landed;
-                return Promise.resolve({});
+                return Promise.resolve({ ok: true });
             }
-            return Promise.resolve(path === `/translator/accounts` ? subscriptions : { accounts: [] });
+            return procedure === `translator.accounts` ? Promise.resolve(subscriptions) : undefined;
         });
 
         await chat.connectTranslator(`gemini`);
@@ -180,39 +249,36 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.error.value).toBeNull();
         // And the poll armed for that attempt is retired with it, rather than reporting on a state already spent.
         await advanceTimersByTimeAsync(10_000);
-        expect(sandboxJsonMock.mock.calls.some(([path]) => String(path).startsWith(`/translator/gemini/connect?state=`))).toBe(false);
+        expect(daemon.mock.calls.filter(([procedure]) => procedure === `translator.status`)).toEqual([]);
     });
 
     it(`marks a redirect grant redeemed, and keeps the poll its credential still has to land through`, async () => {
         jest.useFakeTimers();
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
         chat.setManagedProvider(`zai`);
         const minted = { id: `zai-1`, label: `Z.ai`, connectedAt: Date.now() };
         let accounts: unknown[] = [];
-        const ok = (body: unknown): Response => ({ ok: true, status: 200, json: () => Promise.resolve(body) }) as Response;
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path === `/accounts/zai/login/start`) {
-                return Promise.resolve(
-                    ok({
-                        url: `https://bigmodel.cn/login`,
-                        code: ``,
-                        state: `st-9`,
-                        flow: `redirect`,
-                        variant: `bigmodel`,
-                        handshake: `h4`,
-                        expiresAt: Date.now() + 900_000,
-                    }),
-                );
+        daemonAnswers((procedure, input) => {
+            if (procedure === `accounts.start` && field(input, `provider`) === `zai`) {
+                return Promise.resolve({
+                    url: `https://bigmodel.cn/login`,
+                    code: ``,
+                    state: `st-9`,
+                    flow: `redirect`,
+                    variant: `bigmodel`,
+                    handshake: `h4`,
+                    expiresAt: Date.now() + 900_000,
+                });
             }
-            if (path === `/accounts/zai/login/complete`) {
+            if (procedure === `accounts.complete` && field(input, `provider`) === `zai`) {
                 // BigModel's door accepts the address and mints afterwards: an accepted grant carries no account.
                 accounts = [minted];
-                return Promise.resolve(ok({}));
+                return Promise.resolve({});
             }
-            return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
+            return undefined;
         });
-        mockConnections({ accounts: (path) => (path === `/accounts/zai` ? accounts : []) });
+        mockConnections({ accounts: (provider) => (provider === `zai` ? accounts : []) });
 
         await chat.startConnect(`bigmodel`);
         expect(chat.nativeConnectFlow.value?.redeemed).toBe(false);
@@ -229,10 +295,10 @@ describe(`useChat provider reconciliation`, () => {
 
     it(`leaves the Google sign-in up when the account read that should show the new row didn't answer`, async () => {
         jest.useFakeTimers();
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
-        sandboxJsonMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/translator/gemini/connect` && init?.method === `POST`) {
+        daemonAnswers((procedure, input) => {
+            if (procedure === `translator.connect` && field(input, `provider`) === `gemini`) {
                 return Promise.resolve({
                     url: `https://accounts.google.com/o/oauth2/v2/auth`,
                     code: ``,
@@ -240,11 +306,11 @@ describe(`useChat provider reconciliation`, () => {
                     flow: `redirect`,
                 });
             }
-            if (path === `/translator/gemini/complete`) {
-                return Promise.resolve({});
+            if (procedure === `translator.complete` && field(input, `provider`) === `gemini`) {
+                return Promise.resolve({ ok: true });
             }
             // The listing is what the row is drawn from; unreachable, it leaves nothing to show the account by.
-            return path === `/translator/accounts` ? Promise.reject(new Error(`sandbox offline`)) : Promise.resolve({ accounts: [] });
+            return procedure === `translator.accounts` ? Promise.reject(new Error(`sandbox offline`)) : undefined;
         });
 
         await chat.connectTranslator(`gemini`);
@@ -268,7 +334,7 @@ describe(`useChat provider reconciliation`, () => {
 
     it(`treats a Kimi Code translator subscription as Kimi's connection`, async () => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
         mockConnections({ subscriptions: { codex: [], grok: [], kimi: [{ name: `kimi-user.json`, label: `Kimi User` }], gemini: [] } });
 
@@ -282,19 +348,19 @@ describe(`useChat provider reconciliation`, () => {
 
     it(`gates a routed (claude-code harness) chat on the translator subscription, not the native account`, async () => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
-        mockConnections({ accounts: (path) => (path.startsWith(`/accounts/grok`) ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : []) });
+        mockConnections({ accounts: (provider) => (provider === `grok` ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : []) });
         await loadAccountStatus();
         await nextTick();
 
         chat.selectProvider(`grok`);
         expect(chat.connected.value).toBe(true);
-        chat.active.value.selectHarness(`claude-code`);
+        chat.active.value.selection.apply({ kind: `selectHarness`, harness: `claude-code` });
         expect(chat.connected.value).toBe(false);
 
         mockConnections({
-            accounts: (path) => (path.startsWith(`/accounts/grok`) ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : []),
+            accounts: (provider) => (provider === `grok` ? [{ id: `xai`, label: `Grok`, connectedAt: 0 }] : []),
             subscriptions: { codex: [], grok: [{ name: `xai-user.json`, label: `user@x.ai` }], kimi: [], gemini: [] },
         });
         await loadAccountStatus();
@@ -304,19 +370,16 @@ describe(`useChat provider reconciliation`, () => {
     it(`keeps a Claude user on Claude when the ChatGPT subscription answers first`, async () => {
         storage.clear();
         turnDefaults.provider.value = `claude`;
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
-        chat.active.value.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        chat.active.value.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
 
-        sandboxJsonMock.mockImplementation((path: string) => {
-            if (path === `/translator/accounts`) {
-                return Promise.resolve({ codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] });
-            }
-            if (path.startsWith(`/accounts/claude`)) {
-                return new Promise((resolve) => setTimeout(() => resolve({ accounts: [{ id: `a1`, label: `Personal`, connectedAt: 0 }] }), 20));
-            }
-            return Promise.resolve({ accounts: [] });
-        });
+        mockConnections({ subscriptions: { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] } });
+        daemonAnswers((procedure, input) =>
+            procedure === `accounts.accounts` && field(input, `provider`) === `claude`
+                ? new Promise((resolve) => setTimeout(() => resolve({ accounts: [{ id: `a1`, label: `Personal`, connectedAt: 0 }] }), 20))
+                : undefined,
+        );
 
         await loadAccountStatus();
         await nextTick();
@@ -328,7 +391,7 @@ describe(`useChat provider reconciliation`, () => {
     it(`moves a GPT-only user's chat to Codex without rewriting the provider they picked`, async () => {
         storage.clear();
         turnDefaults.provider.value = `claude`;
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
         mockConnections({ subscriptions: { codex: [{ name: `codex-user.json`, label: `user@example.com` }], grok: [], kimi: [], gemini: [] } });
 
@@ -338,13 +401,13 @@ describe(`useChat provider reconciliation`, () => {
         expect(chat.provider.value).toBe(`codex`);
         expect(chat.connected.value).toBe(true);
         expect(turnDefaults.provider.value).toBe(`claude`);
-        expect(new Conversation().provider.value).toBe(`codex`);
+        expect(new Conversation().selection.provider.value).toBe(`codex`);
     });
 
     it(`returns an untouched trial fallback to Google once the connected account becomes available`, async () => {
         storage.clear();
         turnDefaults.provider.value = `gemini`;
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
 
         // Account and trial reads land independently; the repoint pass waits for both (access.accessKnown).
@@ -361,22 +424,22 @@ describe(`useChat provider reconciliation`, () => {
         await nextTick();
 
         expect(chat.provider.value).toBe(`gemini`);
-        expect(new Conversation().provider.value).toBe(`gemini`);
+        expect(new Conversation().selection.provider.value).toBe(`gemini`);
     });
 });
 
 describe(`account usage hydration`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         usageByAccount.value = {};
         mockConnections();
     });
 
     it(`seeds the usage map from the persisted snapshots on the account list`, async () => {
         mockConnections({
-            accounts: (path) =>
-                path.startsWith(`/accounts/claude`)
+            accounts: (provider) =>
+                provider === `claude`
                     ? [
                           {
                               id: `a1`,
@@ -401,8 +464,8 @@ describe(`account usage hydration`, () => {
     it(`keeps a live streamed reading when the persisted one is older`, async () => {
         usageByAccount.value = { "claude:a1": { windows: [{ kind: `seven_day`, utilization: 80, gates: `all` }], measuredAt: 9_000 } };
         mockConnections({
-            accounts: (path) =>
-                path.startsWith(`/accounts/claude`)
+            accounts: (provider) =>
+                provider === `claude`
                     ? [
                           {
                               id: `a1`,
@@ -425,23 +488,18 @@ describe(`account usage hydration`, () => {
 describe(`native account connection`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     it(`starts Cursor on its dedicated login route and preserves the daemon's failure`, async () => {
         const chat = useChat();
         const daemonMessage = `The Cursor SDK download failed: npm registry unavailable.`;
         chat.setManagedProvider(`cursor`);
-        sandboxRequestMock.mockResolvedValue(
-            new Response(JSON.stringify({ message: daemonMessage }), {
-                status: 412,
-                headers: { "content-type": `application/json` },
-            }),
-        );
+        daemonAnswers((procedure) => (procedure === `accounts.start` ? Promise.reject(daemonRefusal(412, daemonMessage)) : undefined));
 
         await chat.startConnect();
 
-        expect(sandboxRequestMock).toHaveBeenCalledWith(`/accounts/cursor/login/start`, expect.objectContaining({ method: `POST` }));
+        expect(daemon).toHaveBeenCalledWith(`accounts.start`, { provider: `cursor` });
         expect(chat.error.value).toBe(daemonMessage);
         expect(chat.accountBusy.value).toBeUndefined();
     });
@@ -469,25 +527,32 @@ describe(`native account connection`, () => {
         chat.setManagedProvider(`cursor`);
         turnDefaults.provider.value = TRIAL_PROVIDER;
 
-        resetChat();
+        resetSandboxScope();
 
         expect(chat.managedProvider.value).toBe(`cursor`);
     });
 
     /* AND A CALL THAT IS MADE STAYS ON ITS ROUTE. */
-    it(`keeps an account route on its route for a provider id carrying a slash`, () => {
-        expect(providerBase(TRIAL_PROVIDER)).toBe(`/accounts/${encodeURIComponent(TRIAL_PROVIDER)}`);
-        expect(sandboxRouteName(`POST`, `${providerBase(TRIAL_PROVIDER)}/login/start`)).toBe(`accounts.start`);
-        // The ids that carry no slash are untouched, which is what the Cursor call above still asserts verbatim.
-        expect(providerBase(`claude`)).toBe(`/accounts/claude`);
+    it(`keeps an account route on its route for a provider id carrying a slash`, async () => {
+        const chat = useChat();
+        chat.setManagedProvider(TRIAL_PROVIDER);
+
+        await chat.startConnect();
+
+        // Handed over whole, as the route's one parameter: the client encodes it into a single path segment, which the
+        // contract's own table resolves back to the same route.
+        expect(daemon.mock.calls.filter(([procedure]) => procedure === `accounts.start`)).toEqual([[`accounts.start`, { provider: TRIAL_PROVIDER }]]);
+        expect(sandboxRouteName(`POST`, `/accounts/${encodeURIComponent(TRIAL_PROVIDER)}/login/start`)).toBe(`accounts.start`);
+        // The ids that carry no slash are handed over as they are, which is what the Cursor call above asserts verbatim.
+        expect(sandboxRouteName(`POST`, `/accounts/claude/login/start`)).toBe(`accounts.start`);
     });
 });
 
 // Account choice persists per sandbox (ids name credential files in one sandbox's store); an already-open chat keeps
 // the account it ran on.
 describe(`the remembered account`, () => {
-    const TWO = (path: string): unknown[] =>
-        path.startsWith(`/accounts/claude`)
+    const TWO = (provider: string): unknown[] =>
+        provider === `claude`
             ? [
                   { id: `first`, label: `Claude`, connectedAt: 1 },
                   { id: `second`, label: `Claude`, connectedAt: 2 },
@@ -497,20 +562,20 @@ describe(`the remembered account`, () => {
     // A page load, as the singleton sees it: re-reads its own stores, then the daemon answers.
     const reload = async (): Promise<void> => {
         await nextTick(); // let the snapshot / preference watches land before the stores are re-read
-        resetChat();
+        resetSandboxScope();
         await loadAccountStatus();
     };
 
     beforeEach(async () => {
         storage.clear();
         mockConnections({ accounts: TWO });
-        resetChat();
+        resetSandboxScope();
         await loadAccountStatus();
     });
 
     it(`opens a new session on the account last picked, not on the provider's first`, async () => {
         const chat = useChat();
-        chat.selectAccount(`second`);
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
 
         await reload();
         expect(chat.account.value).toBe(`second`);
@@ -521,10 +586,10 @@ describe(`the remembered account`, () => {
 
     it(`holds the pick through the window where the daemon hasn't answered yet`, async () => {
         const chat = useChat();
-        chat.selectAccount(`second`);
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
         await nextTick();
 
-        resetChat();
+        resetSandboxScope();
         expect(chat.account.value).toBe(`second`);
 
         await loadAccountStatus();
@@ -534,27 +599,27 @@ describe(`the remembered account`, () => {
     it(`leaves an open chat on the account it was running on when another tab switches`, async () => {
         const chat = useChat();
         const first = chat.active.value.conversationId;
-        chat.selectAccount(`first`);
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `first` });
         chat.draft.value = `keep this tab real`;
 
         const other = newChat();
-        chat.selectAccount(`second`);
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
         other.draft.value = `and this one`;
 
         await reload();
         const restored = (id: string): string | undefined =>
-            chat.conversations.value.find((conversation) => conversation.conversationId === id)?.account.value;
+            chat.conversations.value.find((conversation) => conversation.conversationId === id)?.selection.account.value;
         expect(restored(first)).toBe(`first`);
         expect(restored(other.conversationId)).toBe(`second`);
     });
 
     it(`moves a chat off an account that was disconnected while the window was away`, async () => {
         const chat = useChat();
-        chat.selectAccount(`second`);
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
 
         await nextTick();
-        mockConnections({ accounts: (path) => (path.startsWith(`/accounts/claude`) ? [{ id: `first`, label: `Claude`, connectedAt: 1 }] : []) });
-        resetChat();
+        mockConnections({ accounts: (provider) => (provider === `claude` ? [{ id: `first`, label: `Claude`, connectedAt: 1 }] : []) });
+        resetSandboxScope();
         await loadAccountStatus();
 
         expect(chat.account.value).toBe(`first`);
@@ -562,12 +627,11 @@ describe(`the remembered account`, () => {
 
     it(`keeps each sandbox's pick to itself: an account id names a credential in one sandbox's store`, async () => {
         const chat = useChat();
-        chat.selectAccount(`second`);
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
         await nextTick();
 
-        const { activeSandboxId } = useSandbox();
         activeSandboxId.value = `sb2`;
-        resetChat();
+        resetSandboxScope();
         await loadAccountStatus();
         expect(chat.account.value).toBeUndefined();
 
@@ -578,16 +642,16 @@ describe(`the remembered account`, () => {
 
     it(`survives an account read that comes back EMPTY: a list is not a verdict on the user's choice`, async () => {
         const chat = useChat();
-        chat.selectAccount(`second`);
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
         await nextTick();
 
         mockConnections({ accounts: () => [] });
-        resetChat();
+        resetSandboxScope();
         await loadAccountStatus();
         expect(chat.account.value).toBe(`second`);
 
         mockConnections({ accounts: TWO });
-        resetChat();
+        resetSandboxScope();
         await loadAccountStatus();
         expect(chat.account.value).toBe(`second`);
         chat.draft.value = `this tab is in use`;
@@ -597,16 +661,16 @@ describe(`the remembered account`, () => {
 
     it(`moves an open chat off a pick the list no longer has, and still remembers the pick`, async () => {
         const chat = useChat();
-        chat.selectAccount(`second`);
+        chat.active.value.selection.apply({ kind: `selectAccount`, account: `second` });
         await nextTick();
 
-        mockConnections({ accounts: (path) => (path.startsWith(`/accounts/claude`) ? [{ id: `first`, label: `Claude`, connectedAt: 1 }] : []) });
-        resetChat();
+        mockConnections({ accounts: (provider) => (provider === `claude` ? [{ id: `first`, label: `Claude`, connectedAt: 1 }] : []) });
+        resetSandboxScope();
         await loadAccountStatus();
         expect(chat.account.value).toBe(`first`);
 
         mockConnections({ accounts: TWO });
-        resetChat();
+        resetSandboxScope();
         await loadAccountStatus();
         chat.draft.value = `this tab is in use`;
         newChat();
@@ -617,7 +681,7 @@ describe(`the remembered account`, () => {
 describe(`per-tab drafts`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     it(`keeps each tab's draft through new-tab and switching back`, () => {
@@ -642,7 +706,7 @@ describe(`per-tab drafts`, () => {
         chat.draft.value = `draft two`;
         await nextTick(); // flush the persistence watch
 
-        resetChat(); // same restore path as a page refresh / sandbox switch-back
+        resetSandboxScope(); // same restore path as a page refresh / sandbox switch-back
         const tabs = chat.conversations.value;
         expect(tabs).toHaveLength(2);
         expect(tabs[0]!.draft.value).toBe(`draft one`);
@@ -655,7 +719,7 @@ describe(`per-tab drafts`, () => {
 
     it(`restores messages queued behind a running turn, with their attachments`, async () => {
         const chat = useChat();
-        chat.active.value.queued.value = [
+        chat.active.value.turn.queued.value = [
             {
                 id: `q1`,
                 text: `also update the tests`,
@@ -664,7 +728,7 @@ describe(`per-tab drafts`, () => {
         ];
         await nextTick();
 
-        resetChat();
+        resetSandboxScope();
         expect(toRaw(chat.queued.value)).toMatchObject([
             { text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/records/artifacts/attachments/u1/spec.md` }] },
         ]);
@@ -672,7 +736,7 @@ describe(`per-tab drafts`, () => {
 
     it(`degrades a corrupt snapshot to a single fresh tab`, () => {
         storage.set(`intentic.chatTabs.sb1`, `not json`);
-        resetChat();
+        resetSandboxScope();
         expect(useChat().conversations.value).toHaveLength(1);
         expect(useChat().draft.value).toBe(``);
     });
@@ -708,7 +772,7 @@ describe(`per-tab drafts`, () => {
             await nextTick(); // flush the stamp and the persistence watch
 
             clock.mockReturnValue(9_000);
-            resetChat(); // same restore path as a page refresh
+            resetSandboxScope(); // same restore path as a page refresh
             await nextTick();
 
             expect(useChat().conversations.value[0]!.draftAt.value).toBe(1_000);
@@ -723,7 +787,7 @@ describe(`per-tab drafts`, () => {
 describe(`per-tab turn settings`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     it(`gives each tab back the settings it was showing, not the last pick made anywhere`, async () => {
@@ -738,12 +802,12 @@ describe(`per-tab turn settings`, () => {
         chat.selectModel({ provider: `claude`, value: `claude-opus-4-1-20250805` });
         await nextTick(); // flush the persistence watch
 
-        resetChat(); // the same restore path as a page refresh
+        resetSandboxScope(); // the same restore path as a page refresh
         const tabs = chat.conversations.value;
-        expect(tabs[0]!.model.value).toBe(`claude-sonnet-4-5-20250929`);
-        expect(tabs[0]!.effort.value).toBe(`medium`);
-        expect(tabs[0]!.thinking.value).toBe(false);
-        expect(tabs[1]!.model.value).toBe(`claude-opus-4-1-20250805`);
+        expect(tabs[0]!.selection.model.value).toBe(`claude-sonnet-4-5-20250929`);
+        expect(tabs[0]!.selection.effort.value).toBe(`medium`);
+        expect(tabs[0]!.selection.thinking.value).toBe(false);
+        expect(tabs[1]!.selection.model.value).toBe(`claude-opus-4-1-20250805`);
     });
 
     // `max` effort requires thinking on; restore clamps invalid pairs the same way the constructor does.
@@ -768,7 +832,7 @@ describe(`per-tab turn settings`, () => {
             }),
         );
 
-        resetChat();
+        resetSandboxScope();
 
         expect(useChat().effort.value).toBe(`xhigh`);
     });
@@ -784,12 +848,12 @@ describe(`tab snapshots across windows and sandboxes`, () => {
         chatRun.value = { runId: `run-1`, mode: `graph` };
         await nextTick();
 
-        resetChat();
+        resetSandboxScope();
 
         expect(chat.activeId.value).toBe(focused);
         expect(chatRun.value).toEqual({ runId: `run-1`, mode: `graph` });
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         expect(chatRun.value).toBeUndefined();
     });
     // Simulates what another window would write: a snapshot naming conversations by id; each tab carries composer text
@@ -802,7 +866,7 @@ describe(`tab snapshots across windows and sandboxes`, () => {
 
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     it(`keeps a tab this window closed closed, whatever another window writes afterwards`, async () => {
@@ -818,7 +882,7 @@ describe(`tab snapshots across windows and sandboxes`, () => {
         // The other window is still on the pre-close set and persists it on its next change.
         local.set(`intentic.chatTabs.sb1`, foreignSnapshot(closed, [kept, closed]));
 
-        resetChat(); // A reload (live-reload's or the user's).
+        resetSandboxScope(); // A reload (live-reload's or the user's).
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([kept]);
     });
 
@@ -826,7 +890,7 @@ describe(`tab snapshots across windows and sandboxes`, () => {
         session.clear();
         local.set(`intentic.chatTabs.sb1`, foreignSnapshot(`conv-b`, [`conv-a`, `conv-b`]));
 
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([`conv-a`, `conv-b`]);
         expect(chat.activeId.value).toBe(`conv-b`);
@@ -847,7 +911,7 @@ describe(`tab snapshots across windows and sandboxes`, () => {
             }),
         );
 
-        resetChat();
+        resetSandboxScope();
         const chat = useChat();
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([`conv-real`]);
         expect(chat.activeId.value).toBe(`conv-real`);
@@ -857,7 +921,6 @@ describe(`tab snapshots across windows and sandboxes`, () => {
     // persist under the outgoing sandbox's key.
     it(`writes a tab snapshot under the sandbox its tabs came from, never the one being switched to`, async () => {
         const chat = useChat();
-        const { activeSandboxId } = useSandbox();
         chat.draft.value = `still typing in sandbox one`;
         await nextTick();
 
@@ -865,12 +928,12 @@ describe(`tab snapshots across windows and sandboxes`, () => {
         chat.draft.value = `still typing in sandbox one, mid-switch`;
         await nextTick();
 
-        resetChat(); // sandboxScope's watch, one flush later
+        resetSandboxScope(); // sandboxScope's watch, one flush later
         expect(chat.conversations.value).toHaveLength(1);
         expect(chat.draft.value).toBe(``);
 
         activeSandboxId.value = `sb1`;
-        resetChat();
+        resetSandboxScope();
         expect(chat.draft.value).toBe(`still typing in sandbox one, mid-switch`);
     });
 });
@@ -880,7 +943,7 @@ describe(`tab snapshots across windows and sandboxes`, () => {
 describe(`closing tabs`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     // Four tabs, third active, each holding text so an untouched draft doesn't collapse them into one (setConversations
@@ -1012,7 +1075,7 @@ describe(`closing tabs`, () => {
 describe(`abandoned drafts`, () => {
     beforeEach(async () => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         await nextTick();
     });
 
@@ -1159,7 +1222,7 @@ describe(`abandoned drafts`, () => {
 describe(`chats opened for a look`, () => {
     beforeEach(async () => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         await nextTick();
     });
 
@@ -1209,7 +1272,7 @@ describe(`chats opened for a look`, () => {
         const first = working();
         const looked = peekAgent(`agent-a`);
 
-        looked.selectModel({ provider: `claude`, value: `claude-sonnet-4-5` });
+        looked.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-sonnet-4-5` } });
 
         expect(looked.peek.value).toBe(false);
         chat.setActive(first);
@@ -1259,7 +1322,7 @@ describe(`chats opened for a look`, () => {
         peekAgent(`agent-a`);
         await nextTick();
 
-        resetChat();
+        resetSandboxScope();
 
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([first, `agent-a`]);
         expect(chat.active.value.peek.value).toBe(true);
@@ -1271,7 +1334,7 @@ describe(`chats opened for a look`, () => {
 describe(`chats the roster has finished with`, () => {
     beforeEach(async () => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         await nextTick();
     });
 
@@ -1382,7 +1445,7 @@ describe(`chats the roster has finished with`, () => {
 describe(`the blank left when the last chat closes`, () => {
     beforeEach(async () => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         await nextTick();
     });
 
@@ -1424,7 +1487,7 @@ describe(`the blank left when the last chat closes`, () => {
         const blank = chat.active.value.conversationId;
         await nextTick();
 
-        resetChat();
+        resetSandboxScope();
 
         expect(chat.conversations.value.map((conversation) => conversation.conversationId)).toEqual([blank]);
         expect(unaskedDraft(chat.active.value)).toBe(true);
@@ -1446,43 +1509,39 @@ const SESSION_BINDINGS: Record<string, { provider: string; harness: string; acco
 describe(`opening a fleet agent`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         // No run in flight: the attach probe stands down and the stored transcript paints.
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path.endsWith(`/transcript`)) {
-                const agent = path.split(`/`)[2] ?? ``;
-                return Promise.resolve({
-                    ok: true,
-                    json: () =>
-                        Promise.resolve({
-                            sessionId: `current-sdk-session`,
-                            // Session binding rides with the id; taken as given, not filled from the tab.
-                            ...SESSION_BINDINGS[agent],
-                            messages: [
-                                { role: `user`, text: `What model are you?` },
-                                { role: `assistant`, text: `Gemini.` },
-                            ],
-                        }),
-                } as Response);
-            }
-            return Promise.resolve({ ok: false, status: 404 } as Response);
-        });
+        daemonAnswers((procedure, input) =>
+            procedure === `agents.transcript`
+                ? Promise.resolve({
+                      sessionId: `current-sdk-session`,
+                      // Session binding rides with the id; taken as given, not filled from the tab.
+                      ...SESSION_BINDINGS[String(field(input, `id`))],
+                      messages: [
+                          { role: `user`, text: `What model are you?` },
+                          { role: `assistant`, text: `Gemini.` },
+                      ],
+                      from: 0,
+                      more: false,
+                  })
+                : undefined,
+        );
     });
 
     it(`replays a finished Gemini agent's transcript, no native runtime means its session is the SDK store's`, async () => {
         const conversation = openAgentConversation({ id: `a1`, sessionId: `sess-g`, provider: `gemini`, harness: `native` });
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
-        expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a1/transcript`);
-        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Gemini.` });
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+        expect(daemon).toHaveBeenCalledWith(`agents.transcript`, { id: `a1` }, { context: { at: undefined } });
+        expect(conversation.transcript.messages.value[1]).toMatchObject({ role: `assistant`, text: `Gemini.` });
         expect(conversation.session.value?.id).toBe(`current-sdk-session`);
     });
 
     it(`replays a Codex agent routed under the Claude Code harness`, async () => {
         const conversation = openAgentConversation({ id: `a2`, sessionId: `sess-c`, provider: `codex`, harness: `claude-code` });
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
-        expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a2/transcript`);
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+        expect(daemon).toHaveBeenCalledWith(`agents.transcript`, { id: `a2` }, { context: { at: undefined } });
         expect(conversation.session.value?.id).toBe(`current-sdk-session`);
     });
 
@@ -1514,24 +1573,24 @@ describe(`opening a fleet agent`, () => {
             fast: false,
         });
 
-        expect(conversation.model.value).toBe(`claude-sonnet-4-5-20250929`);
-        expect(conversation.effort.value).toBe(`medium`);
-        expect(conversation.thinking.value).toBe(false);
-        expect(chat.conversations.value[0]!.model.value).toBe(`claude-fable-5`);
+        expect(conversation.selection.model.value).toBe(`claude-sonnet-4-5-20250929`);
+        expect(conversation.selection.effort.value).toBe(`medium`);
+        expect(conversation.selection.thinking.value).toBe(false);
+        expect(chat.conversations.value[0]!.selection.model.value).toBe(`claude-fable-5`);
     });
 
     it(`falls back to the remembered picks for an agent that has run nothing to describe`, () => {
         const chat = useChat();
         chat.selectModel({ provider: `claude`, value: `claude-fable-5` });
 
-        expect(openAgentConversation({ id: `a5`, provider: `claude`, harness: `native`, registered: false }).model.value).toBe(`claude-fable-5`);
+        expect(openAgentConversation({ id: `a5`, provider: `claude`, harness: `native`, registered: false }).selection.model.value).toBe(`claude-fable-5`);
     });
 
     it(`replays a NATIVE Codex agent: the daemon holds what it streamed, whatever ran the turn`, async () => {
         const conversation = openAgentConversation({ id: `a3`, sessionId: `sess-n`, provider: `codex`, harness: `native` });
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
-        expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/a3/transcript`);
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
+        expect(daemon).toHaveBeenCalledWith(`agents.transcript`, { id: `a3` }, { context: { at: undefined } });
     });
 
     // A tab's account pick and its session's account can differ, most commonly after switching accounts mid-chat (e.g.
@@ -1542,11 +1601,11 @@ describe(`opening a fleet agent`, () => {
         // No remembered pick and no account list yet: the seed the tab falls back to is nothing at all.
         selectedAccountId.value = { ...selectedAccountId.value, claude: undefined };
         const conversation = openAgentConversation({ id: `a4`, sessionId: `sess-s`, provider: `claude`, harness: `native` });
-        expect(conversation.account.value).toBeUndefined();
+        expect(conversation.selection.account.value).toBeUndefined();
 
         await waitFor(() => expect(conversation.session.value?.account).toBe(`acct-work`));
 
-        expect(conversation.account.value).toBe(`acct-work`);
+        expect(conversation.selection.account.value).toBe(`acct-work`);
     });
 
     it(`binds a reopened session to the account the daemon recorded, not to the tab's pick`, async () => {
@@ -1561,15 +1620,15 @@ describe(`opening a fleet agent`, () => {
 
         await waitFor(() => expect(conversation.session.value?.id).toBe(`current-sdk-session`));
         expect(conversation.session.value?.account).toBe(`acct-work`);
-        expect(conversation.account.value).toBe(`acct-personal`);
+        expect(conversation.selection.account.value).toBe(`acct-personal`);
 
         // Back onto the account that holds the session: nothing is retired, so there is nothing to announce.
-        conversation.selectAccount(`acct-work`);
-        expect(conversation.messages.value.some((message) => message.role === `notice`)).toBe(false);
+        conversation.selection.apply({ kind: `selectAccount`, account: `acct-work` });
+        expect(conversation.transcript.messages.value.some((message) => message.role === `notice`)).toBe(false);
 
         // Away from it again: that genuinely costs a fresh session, so it says so.
-        conversation.selectAccount(`acct-personal`);
-        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.startsWith(`Switched to Claude`))).toBe(true);
+        conversation.selection.apply({ kind: `selectAccount`, account: `acct-personal` });
+        expect(conversation.transcript.messages.value.some((message) => message.role === `notice` && message.text.startsWith(`Switched to Claude`))).toBe(true);
     });
 });
 
@@ -1578,11 +1637,9 @@ describe(`opening a fleet agent`, () => {
 describe(`a tab whose agent the fleet no longer has`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
         // 404 on this exact id, unlike an archive (entry kept) or an unreachable daemon (throw).
-        sandboxRequestMock.mockImplementation((path: string) =>
-            Promise.resolve(path.endsWith(`/transcript`) ? ({ ok: false, status: 404 } as Response) : ({ ok: false, status: 404 } as Response)),
-        );
+        daemonAnswers((procedure) => (procedure === `agents.transcript` ? Promise.reject(daemonRefusal(404)) : undefined));
     });
 
     it(`stops claiming the agent, so an empty one leaves the strip with the focus`, async () => {
@@ -1600,12 +1657,12 @@ describe(`a tab whose agent the fleet no longer has`, () => {
     it(`keeps one that has a transcript: the work is still readable, the fleet claim is not`, async () => {
         const chat = useChat();
         const kept = openAgentConversation({ id: `discarded-with-work`, provider: `claude`, harness: `claude-code`, title: `Ship the thing` });
-        kept.restoreMessages([{ role: `user`, text: `do the thing` }]);
+        kept.transcript.restoreMessages([{ role: `user`, text: `do the thing` }]);
 
         await waitFor(() => expect(kept.registered.value).toBe(false));
 
         expect(chat.conversations.value).toContain(kept);
-        expect(kept.messages.value).toHaveLength(1);
+        expect(kept.transcript.messages.value).toHaveLength(1);
     });
 
     it(`believes a 404 only from a daemon that advertises the route`, async () => {
@@ -1613,7 +1670,7 @@ describe(`a tab whose agent the fleet no longer has`, () => {
         setDaemonRoutes([`agents.list`]);
         const stale = openAgentConversation({ id: `still-there`, provider: `claude`, harness: `claude-code` });
 
-        await waitFor(() => expect(sandboxRequestMock).toHaveBeenCalledWith(`/agents/still-there/transcript`));
+        await waitFor(() => expect(daemon).toHaveBeenCalledWith(`agents.transcript`, { id: `still-there` }, { context: { at: undefined } }));
         await nextTick();
 
         expect(stale.registered.value).toBe(true);
@@ -1626,7 +1683,7 @@ describe(`a tab whose agent the fleet no longer has`, () => {
 describe(`effort/thinking pairing`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     it(`clamps a 'max' effort down when extended thinking is switched off, and persists the clamp`, () => {
@@ -1654,7 +1711,7 @@ describe(`effort/thinking pairing`, () => {
 describe(`chat panes`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     // Three tabs with content, so none is the untouched draft the strip would reap; the first is focused.
@@ -1822,7 +1879,7 @@ describe(`chat panes`, () => {
         chat.openBeside(ids[2]!);
         await nextTick();
 
-        resetChat();
+        resetSandboxScope();
 
         expect(useChat().panes.value).toEqual([ids[0], ids[2]]);
     });
@@ -1841,7 +1898,7 @@ describe(`chat panes`, () => {
             }),
         );
 
-        resetChat();
+        resetSandboxScope();
 
         expect(useChat().panes.value).toEqual([`conv-a`, `conv-b`]);
     });
@@ -1859,7 +1916,7 @@ describe(`chat panes`, () => {
             }),
         );
 
-        resetChat();
+        resetSandboxScope();
 
         expect(useChat().panes.value).toEqual([`conv-b`]);
     });
@@ -1868,9 +1925,6 @@ describe(`chat panes`, () => {
 // A running turn isn't in the daemon's record (only settled turns are); a record-based redraw must not overwrite it.
 // Pinned below: hydration runs one pass at a time, and a replay stands down for a live turn.
 describe(`hydrating a conversation whose turn is still running`, () => {
-    const encoder = new TextEncoder();
-    const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
-
     // The record: the turn before the live one, which is all a settling-time record can hold.
     const RECORDED = {
         sessionId: `sess-live`,
@@ -1878,36 +1932,32 @@ describe(`hydrating a conversation whose turn is still running`, () => {
             { role: `user`, text: `reword the notice` },
             { role: `assistant`, text: `Reworded and verified.` },
         ],
+        from: 0,
+        more: false,
     } as const;
 
     // A run parked on its plan card: head, one patch, no `end`; the stream stays open as long as the agent waits on the
     // user.
-    const parkedRun = (): Response => {
-        const body = new ReadableStream<Uint8Array>({
+    const parkedRun = (): ReadableStream<AttachFrame> =>
+        new ReadableStream<AttachFrame>({
             start(controller) {
-                controller.enqueue(
-                    sseFrame({
-                        kind: `attached`,
-                        run: `r1`,
-                        startedAt: 1000,
-                        seq: 0,
-                        rows: [{ role: `user`, text: `add the reconcile engine`, sentAt: 1000 }],
-                    }),
-                );
-                controller.enqueue(
-                    sseFrame({
-                        kind: `patch`,
-                        seq: 1,
-                        patch: {
-                            op: `append`,
-                            row: { role: `assistant`, text: ``, plan: { requestId: `p1`, text: `# Reconcile engine\n\nStep 1`, status: `pending` } },
-                        },
-                    }),
-                );
+                controller.enqueue({
+                    kind: `attached`,
+                    run: `r1`,
+                    startedAt: 1000,
+                    seq: 0,
+                    rows: [{ role: `user`, text: `add the reconcile engine`, sentAt: 1000 }],
+                });
+                controller.enqueue({
+                    kind: `patch`,
+                    seq: 1,
+                    patch: {
+                        op: `append`,
+                        row: { role: `assistant`, text: ``, plan: { requestId: `p1`, text: `# Reconcile engine\n\nStep 1`, status: `pending` } },
+                    },
+                });
             },
         });
-        return { ok: true, body } as Response;
-    };
 
     // The typewriter and frame buffer drain via requestAnimationFrame; run it synchronously so a landed frame is
     // visible before an assertion reads the transcript.
@@ -1918,7 +1968,7 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         });
         stubGlobal(`cancelAnimationFrame`, () => {});
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     afterEach(() => {
@@ -1929,40 +1979,34 @@ describe(`hydrating a conversation whose turn is still running`, () => {
     // and a daemon that knows nothing of the conversation. Coming back, the press finishes rather than leaving the
     // blank chat that made "Fix with agent" look like it did nothing.
     it(`sends a first turn the daemon never heard of when its tab comes back`, async () => {
-        sandboxRequestMock.mockImplementation((path: string) =>
-            Promise.resolve(
-                path === `/agent`
-                    ? ({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response)
-                    : ({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response),
-            ),
-        );
+        daemonAnswers((procedure) => (procedure === `agent.run` ? Promise.resolve({ run: `r1` }) : undefined));
         const conversation = useChat().active.value;
-        conversation.queued.value = [{ id: `q1`, text: `the check failed, fix it`, attachments: [] }];
+        conversation.turn.queued.value = [{ id: `q1`, text: `the check failed, fix it`, attachments: [] }];
 
         hydrateOnce(conversation);
 
         await waitFor(() =>
-            expect(
-                sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent`).map(([, init]) => JSON.parse(init!.body as string)),
-            ).toMatchObject([{ prompt: `the check failed, fix it` }]),
+            expect(daemon.mock.calls.filter(([procedure]) => procedure === `agent.run`).map(([, input]) => input)).toMatchObject([
+                { prompt: `the check failed, fix it` },
+            ]),
         );
-        expect(conversation.queued.value).toHaveLength(0);
+        expect(conversation.turn.queued.value).toHaveLength(0);
     });
 
     it(`runs one pass at a time, so a second trigger cannot answer about a tab the first has moved on`, async () => {
         let reads = 0;
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path.endsWith(`/transcript`)) {
+        daemonAnswers((procedure) => {
+            if (procedure === `agents.transcript`) {
                 reads += 1;
-                return Promise.resolve({ ok: true, json: () => Promise.resolve(RECORDED) } as Response);
+                return Promise.resolve(RECORDED);
             }
-            return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
+            return undefined;
         });
 
         const conversation = openAgentConversation({ id: `hydrated-twice`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(reads).toBe(1);
@@ -1974,7 +2018,7 @@ describe(`hydrating a conversation whose turn is still running`, () => {
         const conversation = useChat().active.value;
         // A tab with a transcript already on it: the record is only re-read on the fall-back path.
         conversation.registered.value = true;
-        conversation.restoreMessages(RECORDED.messages);
+        conversation.transcript.restoreMessages(RECORDED.messages);
 
         // Attaches first, resolves last: by then the stream below owns the turn, so this probe stands down.
         let releaseProbe = (): void => undefined;
@@ -1982,12 +2026,12 @@ describe(`hydrating a conversation whose turn is still running`, () => {
             releaseProbe = resolve;
         });
         let attaches = 0;
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path.endsWith(`/transcript`)) {
-                return Promise.resolve({ ok: true, json: () => Promise.resolve(RECORDED) } as Response);
+        daemonAnswers((procedure) => {
+            if (procedure === `agents.transcript`) {
+                return Promise.resolve(RECORDED);
             }
-            if (path !== `/agent/attach`) {
-                return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response);
+            if (procedure !== `agent.attach`) {
+                return undefined;
             }
             attaches += 1;
             return attaches === 1 ? probed.then(parkedRun) : Promise.resolve(parkedRun());
@@ -1995,17 +2039,17 @@ describe(`hydrating a conversation whose turn is still running`, () => {
 
         hydrateOnce(conversation);
         await waitFor(() => expect(attaches).toBe(1));
-        void conversation.reattach();
-        await waitFor(() => expect(conversation.messages.value.some((message) => message.plan !== undefined)).toBe(true));
+        void conversation.turn.reattach();
+        await waitFor(() => expect(conversation.transcript.messages.value.some((message) => message.plan !== undefined)).toBe(true));
 
         releaseProbe();
         // Mock resolving isn't the redraw; that's a further microtask, so assert after both awaits.
         await new Promise((resolve) => setTimeout(resolve, 0));
         await nextTick();
 
-        expect(conversation.streaming.value).toBe(true);
-        expect(conversation.messages.value.map((message) => message.text)).toContain(`add the reconcile engine`);
-        expect(conversation.messages.value.find((message) => message.plan !== undefined)?.plan?.status).toBe(`pending`);
+        expect(conversation.turn.streaming.value).toBe(true);
+        expect(conversation.transcript.messages.value.map((message) => message.text)).toContain(`add the reconcile engine`);
+        expect(conversation.transcript.messages.value.find((message) => message.plan !== undefined)?.plan?.status).toBe(`pending`);
     });
 });
 
@@ -2019,20 +2063,18 @@ describe(`opening a session whose last turn stopped short`, () => {
             { role: `user`, text: `rewrite the reconcile engine` },
             { role: `assistant`, text: `Started on the reducer.` },
         ],
+        from: 0,
+        more: false,
     } as const;
 
     // The record answers the transcript read; nothing is running, so the attach probe finds no turn.
     const daemonReads = (body: unknown): void => {
-        sandboxRequestMock.mockImplementation((path: string) =>
-            path.endsWith(`/transcript`)
-                ? Promise.resolve({ ok: true, json: () => Promise.resolve(body) } as Response)
-                : Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response),
-        );
+        daemonAnswers((procedure) => (procedure === `agents.transcript` ? Promise.resolve(body) : undefined));
     };
 
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     it(`offers the continuation on a tab that never watched the turn stop`, async () => {
@@ -2041,7 +2083,7 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `stopped-elsewhere`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
         // `stopped` and nothing more: a bare record says the turn didn't finish and nothing else.
         await waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `stopped` }));
     });
@@ -2054,7 +2096,7 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `spent-overnight`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
         // Seconds on the wire, milliseconds here: pick-up compares every instant against Date.now().
         await waitFor(() => expect(conversation.pickUp.value).toEqual({ reason: `limit`, readyAt: 4_200_000, held: { ran: false } }));
     });
@@ -2067,7 +2109,7 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `booked-for-the-reset`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
         await waitFor(() =>
             expect(conversation.pickUp.value).toEqual({
                 reason: `limit`,
@@ -2079,12 +2121,12 @@ describe(`opening a session whose last turn stopped short`, () => {
     });
 
     it(`says nothing about a conversation whose last turn ended on its own`, async () => {
-        daemonReads({ sessionId: `sess-done`, messages: STOPPED.messages });
+        daemonReads({ sessionId: `sess-done`, messages: STOPPED.messages, from: 0, more: false });
 
         const conversation = openAgentConversation({ id: `finished-cleanly`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
         expect(conversation.pickUp.value).toBeUndefined();
     });
 
@@ -2098,7 +2140,7 @@ describe(`opening a session whose last turn stopped short`, () => {
         conversation.pickUp.value = spent;
         hydrateOnce(conversation);
 
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(2));
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(2));
         expect(conversation.pickUp.value).toEqual(spent);
     });
 
@@ -2108,9 +2150,9 @@ describe(`opening a session whose last turn stopped short`, () => {
         const conversation = openAgentConversation({ id: `stopped-but-empty`, provider: `claude`, harness: `native` });
         hydrateOnce(conversation);
 
-        await waitFor(() => expect(sandboxRequestMock.mock.calls.some(([path]) => String(path).endsWith(`/transcript`))).toBe(true));
+        await waitFor(() => expect(daemon.mock.calls.some(([procedure]) => procedure === `agents.transcript`)).toBe(true));
         await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(conversation.messages.value).toHaveLength(0);
+        expect(conversation.transcript.messages.value).toHaveLength(0);
         expect(conversation.pickUp.value).toBeUndefined();
     });
 });
@@ -2119,14 +2161,14 @@ describe(`opening a session whose last turn stopped short`, () => {
 describe(`forking at a cut`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
-        sandboxRequestMock.mockReset();
+        resetSandboxScope();
+        daemon.mockClear();
     });
 
     // Four bubbles, two of them prompts the daemon still holds a state for: a conversation reopened from history.
     const seed = (): ReturnType<typeof useChat> => {
         const chat = useChat();
-        chat.active.value.restoreMessages([
+        chat.active.value.transcript.restoreMessages([
             { role: `user`, text: `first`, checkpointId: `snap-1` },
             { role: `assistant`, text: `one` },
             { role: `user`, text: `second`, checkpointId: `snap-2` },
@@ -2144,10 +2186,10 @@ describe(`forking at a cut`, () => {
         expect(chat.conversations.value).toHaveLength(2);
         const fork = chat.active.value;
         expect(fork).not.toBe(source);
-        expect(fork.messages.value.map((message) => message.text)).toEqual([`first`, `one`]);
+        expect(fork.transcript.messages.value.map((message) => message.text)).toEqual([`first`, `one`]);
         expect(fork.draft.value).toBe(`second`);
-        expect(sandboxRequestMock).not.toHaveBeenCalled();
-        expect(source.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
+        expect(daemon).not.toHaveBeenCalled();
+        expect(source.transcript.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
     });
 
     it(`forks the whole conversation with an empty composer`, () => {
@@ -2156,7 +2198,7 @@ describe(`forking at a cut`, () => {
         chat.forkAt(4, `now`);
 
         const fork = chat.active.value;
-        expect(fork.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
+        expect(fork.transcript.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
         expect(fork.draft.value).toBe(``);
     });
 
@@ -2193,7 +2235,7 @@ describe(`forking at a cut`, () => {
     // combination is refused until the turn ends.
     it(`forks the chat while a turn runs, and refuses to move files under it`, () => {
         const chat = seed();
-        chat.active.value.streaming.value = true;
+        runningTurn(chat.active.value.turn);
 
         chat.forkAt(2, `then`);
         expect(chat.conversations.value).toHaveLength(1);
@@ -2208,15 +2250,13 @@ describe(`forking at a cut`, () => {
 describe(`unsent drafts keep their own picks`, () => {
     beforeEach(() => {
         storage.clear();
-        resetChat();
+        resetSandboxScope();
     });
 
     const bothConnected = (): void => {
         mockConnections({
-            accounts: (path) =>
-                path.startsWith(`/accounts/claude`) || path.startsWith(`/accounts/cursor`)
-                    ? [{ id: `a-${path.split(`/`)[2]}`, label: `Personal`, connectedAt: 0 }]
-                    : [],
+            accounts: (provider) =>
+                provider === `claude` || provider === `cursor` ? [{ id: `a-${provider}`, label: `Personal`, connectedAt: 0 }] : [],
         });
     };
 
@@ -2229,19 +2269,19 @@ describe(`unsent drafts keep their own picks`, () => {
 
         const first = chat.active.value;
         first.draft.value = `first task`;
-        first.selectModel({ provider: `cursor`, value: `composer-2.5` });
+        first.selection.apply({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5` } });
 
         const second = newChat();
         second.draft.value = `second task`;
-        second.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        second.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
         await nextTick();
 
-        expect([first.provider.value, first.model.value]).toEqual([`cursor`, `composer-2.5`]);
+        expect([first.selection.provider.value, first.selection.model.value]).toEqual([`cursor`, `composer-2.5`]);
 
         // A routine connection refresh (runs on a timer) must not drag the first draft onto the last pick.
         await refreshConnections(true);
         await nextTick();
-        expect([first.provider.value, first.model.value]).toEqual([`cursor`, `composer-2.5`]);
+        expect([first.selection.provider.value, first.selection.model.value]).toEqual([`cursor`, `composer-2.5`]);
     });
 
     it(`gives every draft its own pick back after a reload`, async () => {
@@ -2252,18 +2292,18 @@ describe(`unsent drafts keep their own picks`, () => {
         await nextTick();
 
         chat.active.value.draft.value = `first task`;
-        chat.active.value.selectModel({ provider: `cursor`, value: `composer-2.5` });
+        chat.active.value.selection.apply({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5` } });
         const second = newChat();
         second.draft.value = `second task`;
-        second.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        second.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
         await nextTick();
 
-        resetChat(); // the same restore path as a page refresh
+        resetSandboxScope(); // the same restore path as a page refresh
         await loadAccountStatus();
         endpointsLoaded.value = true;
         await nextTick();
 
-        expect(chat.conversations.value.map((tab) => [tab.provider.value, tab.model.value])).toEqual([
+        expect(chat.conversations.value.map((tab) => [tab.selection.provider.value, tab.selection.model.value])).toEqual([
             [`cursor`, `composer-2.5`],
             [`claude`, `claude-opus-5`],
         ]);
@@ -2280,19 +2320,19 @@ describe(`unsent drafts keep their own picks`, () => {
 
         const prepared = chat.active.value;
         prepared.draft.value = `first task`;
-        prepared.selectModel({ provider: `cursor`, value: `composer-2.5` });
+        prepared.selection.apply({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5` } });
 
         // A second draft, switched to Claude: what leaves the remembered provider pointing elsewhere.
         const second = newChat();
         second.draft.value = `second task`;
-        second.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        second.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
 
         chat.setActive(prepared.conversationId);
-        prepared.selectModel({ provider: `cursor`, value: `composer-2.5-fast` });
+        prepared.selection.apply({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5-fast` } });
         await nextTick();
 
         const fresh = new Conversation();
-        expect([fresh.provider.value, fresh.model.value]).toEqual([`cursor`, `composer-2.5-fast`]);
+        expect([fresh.selection.provider.value, fresh.selection.model.value]).toEqual([`cursor`, `composer-2.5-fast`]);
     });
 
     // A chat the app moved off an unreachable provider returns to its own provider once reachable again, not to
@@ -2301,25 +2341,25 @@ describe(`unsent drafts keep their own picks`, () => {
         const chat = useChat();
         const stranded = chat.active.value;
         stranded.draft.value = `written while Claude was down`;
-        stranded.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        stranded.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
 
         const beside = newChat();
         beside.draft.value = `prepared on Cursor`;
-        beside.selectModel({ provider: `cursor`, value: `composer-2.5` });
+        beside.selection.apply({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5` } });
 
         // Only Cursor answers: the Claude draft cannot send, so the app parks it there.
-        mockConnections({ accounts: (path) => (path.startsWith(`/accounts/cursor`) ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
+        mockConnections({ accounts: (provider) => (provider === `cursor` ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
         await loadAccountStatus();
         endpointsLoaded.value = true;
         await nextTick();
-        expect(stranded.provider.value).toBe(`cursor`);
-        expect([beside.provider.value, beside.model.value]).toEqual([`cursor`, `composer-2.5`]);
+        expect(stranded.selection.provider.value).toBe(`cursor`);
+        expect([beside.selection.provider.value, beside.selection.model.value]).toEqual([`cursor`, `composer-2.5`]);
 
         bothConnected();
         await refreshConnections(true);
         await nextTick();
-        expect([stranded.provider.value, stranded.model.value]).toEqual([`claude`, `claude-opus-5`]);
-        expect([beside.provider.value, beside.model.value]).toEqual([`cursor`, `composer-2.5`]);
+        expect([stranded.selection.provider.value, stranded.selection.model.value]).toEqual([`claude`, `claude-opus-5`]);
+        expect([beside.selection.provider.value, beside.selection.model.value]).toEqual([`cursor`, `composer-2.5`]);
     });
 
     // New agent hands back an untouched draft rather than minting a twin, and re-seeds it from the latest pick so it
@@ -2333,18 +2373,18 @@ describe(`unsent drafts keep their own picks`, () => {
 
         const prepared = chat.active.value;
         prepared.draft.value = `first task`;
-        prepared.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        prepared.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
 
         // The empty draft the strip keeps, minted while Claude was the remembered pick.
         const empty = newChat();
-        expect([empty.provider.value, empty.model.value]).toEqual([`claude`, `claude-opus-5`]);
+        expect([empty.selection.provider.value, empty.selection.model.value]).toEqual([`claude`, `claude-opus-5`]);
 
         // A pick made since, in the other chat; focus stays on the empty draft so it isn't swept meanwhile.
-        prepared.selectModel({ provider: `cursor`, value: `composer-2.5` });
+        prepared.selection.apply({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5` } });
 
         const started = draftConversation();
         expect(started.conversationId).toBe(empty.conversationId);
-        expect([started.provider.value, started.model.value]).toEqual([`cursor`, `composer-2.5`]);
+        expect([started.selection.provider.value, started.selection.model.value]).toEqual([`cursor`, `composer-2.5`]);
     });
 
     // Two Claude drafts parked on Cursor by one outage each return to the model they were moved off, not the provider's
@@ -2353,31 +2393,31 @@ describe(`unsent drafts keep their own picks`, () => {
         const chat = useChat();
         const opus = chat.active.value;
         opus.draft.value = `the opus task`;
-        opus.selectModel({ provider: `claude`, value: `claude-opus-5` });
+        opus.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
 
         const sonnet = newChat();
         sonnet.draft.value = `the sonnet task`;
-        sonnet.selectModel({ provider: `claude`, value: `claude-sonnet-4-5-20250929` });
+        sonnet.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-sonnet-4-5-20250929` } });
 
-        mockConnections({ accounts: (path) => (path.startsWith(`/accounts/cursor`) ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
+        mockConnections({ accounts: (provider) => (provider === `cursor` ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
         await loadAccountStatus();
         endpointsLoaded.value = true;
         await nextTick();
-        expect([opus.provider.value, sonnet.provider.value]).toEqual([`cursor`, `cursor`]);
+        expect([opus.selection.provider.value, sonnet.selection.provider.value]).toEqual([`cursor`, `cursor`]);
 
         bothConnected();
         await refreshConnections(true);
         await nextTick();
-        expect(opus.model.value).toBe(`claude-opus-5`);
-        expect(sonnet.model.value).toBe(`claude-sonnet-4-5-20250929`);
+        expect(opus.selection.model.value).toBe(`claude-opus-5`);
+        expect(sonnet.selection.model.value).toBe(`claude-sonnet-4-5-20250929`);
     });
 
     // A chat opened while its own provider is down is born on a substitute (rememberedProviderFor); that's the same
     // displacement, owed the same return.
     it(`returns a chat that OPENED on a substitute once its own provider is back`, async () => {
         const chat = useChat();
-        chat.active.value.selectModel({ provider: `claude`, value: `claude-opus-5` });
-        mockConnections({ accounts: (path) => (path.startsWith(`/accounts/cursor`) ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
+        chat.active.value.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-5` } });
+        mockConnections({ accounts: (provider) => (provider === `cursor` ? [{ id: `cur`, label: `Cursor`, connectedAt: 0 }] : []) });
         await loadAccountStatus();
         endpointsLoaded.value = true;
         await nextTick();
@@ -2385,11 +2425,11 @@ describe(`unsent drafts keep their own picks`, () => {
         // Opened during the outage: Claude is the pick, Cursor is what can answer.
         const born = newChat();
         born.draft.value = `written during the outage`;
-        expect(born.provider.value).toBe(`cursor`);
+        expect(born.selection.provider.value).toBe(`cursor`);
 
         bothConnected();
         await refreshConnections(true);
         await nextTick();
-        expect([born.provider.value, born.model.value]).toEqual([`claude`, `claude-opus-5`]);
+        expect([born.selection.provider.value, born.selection.model.value]).toEqual([`claude`, `claude-opus-5`]);
     });
 });

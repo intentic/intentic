@@ -1,20 +1,17 @@
+import { sandboxRef } from "@intentic/extension-api";
 import type { BootProgress } from "@intentic/sandbox-contract";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 
 // Where the active daemon is in its own boot (from the /events hello + boot frames). It answers /health and
 // /events before data routes are ready, so a restart doesn't read as an outage; `reachable` (useSandbox) gates on
-// this. Module singleton fed only by useSandboxLiveness; undefined means assume ready.
+// this. Fed only by useSandboxLiveness; undefined means assume ready. Sandbox-scoped, not dropped with a connection,
+// so one sandbox's boot isn't attributed to another.
 
-const progress = ref<BootProgress | undefined>(undefined);
+const progress = sandboxRef<BootProgress | undefined>(() => undefined);
 
 // Called on every hello and boot frame; a daemon that says nothing leaves the state at assume-ready.
 export const setDaemonBoot = (reported: BootProgress | undefined): void => {
     progress.value = reported;
-};
-
-// Cleared on a sandbox switch, not on a dropped connection alone, so one sandbox's boot isn't attributed to another.
-export const resetDaemonBoot = (): void => {
-    progress.value = undefined;
 };
 
 // Can the active daemon serve data routes yet; an unknown daemon answers true.

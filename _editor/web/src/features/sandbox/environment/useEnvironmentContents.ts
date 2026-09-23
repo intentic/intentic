@@ -1,6 +1,7 @@
 import { EnvironmentContentsSchema, type EnvironmentItem } from "@intentic/api-contract";
 import { computed, ref } from "vue";
-import { SandboxHttpError, sandboxJson } from "../client/sandboxClient";
+import { sandboxJson } from "../client/sandboxClient";
+import { SandboxHttpError } from "../client/sandboxHttpError";
 import { ENVIRONMENT_CONTENTS } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 import { t } from "@intentic/ui/i18n";

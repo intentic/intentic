@@ -63,7 +63,7 @@ const placed = async (
     worktrees: AgentWorktrees,
     entry: ReturnType<typeof isolatedAgent>,
 ): Promise<{ subject: string; paths: string[] }[]> => {
-    const composed = entry.repos[0];
+    const composed = entry.placement.repos[0];
     if (composed === undefined) {
         throw new Error("no repo in the composition");
     }
@@ -82,7 +82,7 @@ const placed = async (
     const landedHead = composed.landedHead;
     // Same fallback ladder the route walks: the recorded head while still on the main line, else the merge-base anchor.
     const from =
-        (landedHead === undefined ? undefined : await historySpanStart(work, landedHead, head)) ?? (await sh(work, "merge-base", head, entry.branch));
+        (landedHead === undefined ? undefined : await historySpanStart(work, landedHead, head)) ?? (await sh(work, "merge-base", head, entry.placement.branch));
     const carried = await commitsCarrying(work, from, head, absorbed);
     return carried.map((commitOf) => ({ subject: commitOf.subject, paths: [...commitOf.paths].sort() }));
 };

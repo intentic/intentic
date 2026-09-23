@@ -1,6 +1,9 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { PushChannelIdSchema, PushChannelSchema, PushConfigQuerySchema, PushConfigSchema, PushTestSchema } from "../schemas/push.js";
 import { OkSchema } from "../schemas/shared.js";
+
+// A member's own devices, which no control token reaches.
+const pushRoute = procedure.meta({ control: "never" });
 
 // Push notifications for this sandbox. The daemon owns the VAPID keypair and the channel list (see
 // push/push-store.ts for why the key lives on the history volume), and sends on the three moments where the
@@ -12,7 +15,7 @@ import { OkSchema } from "../schemas/shared.js";
 // (device permission, service-worker or shell registration, the daemon's key, the push service itself), a
 // button that proves the whole chain end-to-end is worth more than any amount of status rendering.
 export const pushContract = {
-    config: oc
+    config: pushRoute
         .route({
             method: "GET",
             path: "/push/config",
@@ -21,7 +24,7 @@ export const pushContract = {
         })
         .input(PushConfigQuerySchema)
         .output(PushConfigSchema),
-    subscribe: oc
+    subscribe: pushRoute
         .route({
             method: "POST",
             path: "/push/subscribe",
@@ -29,18 +32,21 @@ export const pushContract = {
             description:
                 "Registers one device. The sandbox only interrupts you on the three moments where attention is genuinely wanted: a turn has finished, the agent is stuck on a question, and something is waiting for approval.",
         })
+        // A member's own device notifications.
+        .meta({ floor: "collaborator" })
         .input(PushChannelSchema)
         .output(OkSchema),
-    unsubscribe: oc
+    unsubscribe: pushRoute
         .route({
             method: "POST",
             path: "/push/unsubscribe",
             summary: "Stop notifying a device",
             description: "Removes one registered device. Others keep receiving.",
         })
+        .meta({ floor: "collaborator" })
         .input(PushChannelIdSchema)
         .output(OkSchema),
-    test: oc
+    test: pushRoute
         .route({
             method: "POST",
             path: "/push/test",
@@ -48,5 +54,6 @@ export const pushContract = {
             description:
                 "Proves the whole chain end to end. Worth having, because there are four separate places a notification can be lost that nobody can inspect from the outside: the device's permission, its registration, the sandbox's key, and the delivery service.",
         })
+        .meta({ floor: "collaborator" })
         .output(PushTestSchema),
 };

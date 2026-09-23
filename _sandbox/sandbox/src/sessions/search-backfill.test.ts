@@ -2,7 +2,8 @@ import { test, expect, mock } from "bun:test";
 import { createLogger } from "../logger.js";
 import { testConfig } from "../testing.js";
 import { backfillSearchIndex, type BackfillSource } from "./search-backfill.js";
-import { IN_MEMORY, openSearchIndex } from "./search-index.js";
+import { openSearchIndex } from "./search-index.js";
+import { IN_MEMORY } from "../store/sqlite.js";
 import type { SpokenLine } from "./transcript-search.js";
 
 const logger = createLogger(testConfig);

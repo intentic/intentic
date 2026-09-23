@@ -1,4 +1,4 @@
-import { type TerminalsList, TerminalsListSchema } from "@intentic/sandbox-contract";
+import type { TerminalsList } from "@intentic/sandbox-contract";
 import { useQuery } from "@tanstack/vue-query";
 import { computed, type ComputedRef } from "vue";
 import { host } from "./host";
@@ -9,7 +9,7 @@ export type TerminalSession = TerminalsList["sessions"][number];
 
 // One key, one fetcher: this also feeds the entry core's terminal panel and rail badge, so it must return the whole
 // session shape, not just the fields this view uses, or a refetch would silently drop core's other fields.
-const fetchTerminals = async (): Promise<TerminalSession[]> => TerminalsListSchema.parse(await host().sandbox.json(`/system/terminals`)).sessions;
+const fetchTerminals = async (): Promise<TerminalSession[]> => (await host().sandbox.rpc.system.terminals()).sessions;
 
 export function useTerminals(): { sessions: ComputedRef<TerminalSession[]> } {
     const api = host();

@@ -4,7 +4,8 @@ import { test, expect, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { withRuntimeHistory } from "../agent/providers/runtime-history.js";
 import { createRecentSessions, listWorkspaceSessions, readWorkspaceSession, readWorkspaceSessionTail, searchWorkspaceSessions } from "./sessions.js";
-import { IN_MEMORY, openSearchIndex } from "./search-index.js";
+import { openSearchIndex } from "./search-index.js";
+import { IN_MEMORY } from "../store/sqlite.js";
 import { readSessionLines } from "./transcript-search.js";
 
 // Fakes the SDK store: `listSessions` is newest-first, `getSessionMessages` returns Anthropic-shaped turns.

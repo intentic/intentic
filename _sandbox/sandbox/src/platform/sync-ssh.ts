@@ -46,7 +46,7 @@ const frameOf = (chunk: Buffer): Uint8Array<ArrayBuffer> => {
 
 // The sync token rides the x-intentic-sync header (a Node client can set one), so this route skips the query-ticket
 // machinery the terminal socket needs for a browser's header-less upgrade.
-export const createSyncSshRoute = (services: Services) =>
+export const createSyncSshRoute = (services: Pick<Services, "logger">) =>
     upgradeWebSocket(() => {
         let socket: Socket | undefined;
         let drain: NodeJS.Timeout | undefined;

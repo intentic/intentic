@@ -11,7 +11,7 @@ import { accountsLoaded, providerAccounts, translatorAccounts } from "../../chat
 import { endpointProviders, endpointsLoaded, trialStatus } from "../../chat/accounts/providerCatalog";
 import { useChat } from "../../chat/run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
-import { PANELS } from "../../../lib/queryKeys";
+import { rpcKey } from "../../../lib/queryKeys";
 import { buildIdeas, buildPrompt } from "./buildIdeas";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
@@ -122,13 +122,13 @@ it(`fills the composer with the build task rather than sending it`, async () => 
     await nextTick();
 
     expect(useChat().active.value.draft.value).toBe(buildPrompt(buildIdeas()[0]!.idea));
-    expect(useChat().active.value.messages.value).toHaveLength(0);
+    expect(useChat().active.value.transcript.messages.value).toHaveLength(0);
 });
 
 it(`suggests work once the workspace has some, and a starter fills the chat rather than sending`, async () => {
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1` }] as never };
     // One repository in the workspace, which is what makes "Explain this codebase" a thing to press.
-    queryClient.setQueryData(PANELS.of(), { panels: [{ repo: `app` }] });
+    queryClient.setQueryData(rpcKey(`panels.list`), { panels: [{ repo: `app` }] });
     const board = mount(AgentsView);
     await nextTick();
 
@@ -140,7 +140,7 @@ it(`suggests work once the workspace has some, and a starter fills the chat rath
 
     // Filled, not sent: the prompt sits in the chat's own composer, no agent started, no second tab opened.
     expect(useChat().active.value.draft.value).toContain(`Explain this codebase`);
-    expect(useChat().active.value.messages.value).toHaveLength(0);
+    expect(useChat().active.value.transcript.messages.value).toHaveLength(0);
     expect(useChat().conversations.value).toHaveLength(Math.max(before, 1));
     // Still the empty board: filling the composer is not starting anything.
     expect(board.textContent).toContain(`first agent`);
@@ -157,7 +157,7 @@ it(`chats on the free trial rather than demanding a sign-in first`, async () => 
     const board = mount(AgentsView);
     await nextTick();
 
-    expect(useChat().active.value.provider.value).toBe(TRIAL_PROVIDER);
+    expect(useChat().active.value.selection.provider.value).toBe(TRIAL_PROVIDER);
     expect(useChat().connected.value).toBe(true);
     expect(board.textContent).toContain(`first agent`);
     expect(board.textContent).not.toContain(`Try free with Google`);

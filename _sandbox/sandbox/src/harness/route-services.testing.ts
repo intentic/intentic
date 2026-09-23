@@ -5,19 +5,20 @@ import type { CredentialGate } from "@intentic/sandbox-contract";
 import { capabilitiesOf, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { portSlotsFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { unstubbed } from "@intentic/testing";
-import { createAgentsRegistry } from "../agents/registry/agents-registry.js";
 import { createAuthConnections } from "../auth/connections.js";
 import { createPasskeyCeremonies } from "../auth/passkeys/passkey-store.js";
 import type { ControlScope } from "../auth/control-tokens.js";
 import { memoryDoorTokens } from "../auth/door-tokens.js";
 import { createMediaTickets } from "../auth/media-tickets.js";
 import { createWsTickets } from "../auth/ws-tickets.js";
-import type { Services } from "../composition.js";
+import { type Services, wireReactions } from "../composition.js";
 import { createLogger } from "../logger.js";
 import { createAnnouncer } from "../platform/boot/announce.js";
 import { createBootTracker } from "../platform/boot/boot.js";
 import { createPerfTracker } from "../platform/resources/perf.js";
+import { providerReadiness } from "../agent/providers/provider-registry.js";
 import { ROOMY_MEMORY } from "../agent/run/turn/turn-plan.testing.js";
+import { PROVIDER_MODULES, RUNTIME_ADAPTERS } from "../runtimes/runtime-table.js";
 import { createMemoryWarnings } from "../platform/resources/memory-admission.js";
 import { createReachReporter } from "../platform/listeners/reach-report.js";
 import { enrolledFleet, syncPairBurnPath, type SyncMode } from "../platform/sync.js";
@@ -42,14 +43,22 @@ import { deriveBytes } from "../derived/derived-blob.js";
 import { deriveText, readDerivedText } from "../derived/derived-text.js";
 import { sidecarStatus } from "../derived/sidecar-service.js";
 import { claudeStoreOf } from "../sessions/session-store.js";
-import { IN_MEMORY, openSearchIndex } from "../sessions/search-index.js";
+import { openSearchIndex } from "../sessions/search-index.js";
+import { IN_MEMORY } from "../store/sqlite.js";
 import { toolChildrenOf, transcriptPageOf } from "../sessions/agent-transcript.js";
 import { spokenLinesOf } from "../sessions/transcript-search.js";
-import { pairings } from "../store/enrollment.js";
+import { pairings } from "../peers/enrollment.js";
 import { createTerminalRunner } from "../terminal/terminal-run.js";
-import { noIsolation, testConfig } from "../testing.js";
-import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { fleetStoreOver, memoryFleet, noIsolation, testConfig } from "../testing.js";
+import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
+import { openConversationsDb } from "../store/conversations-db.js";
+import { conversationUnits } from "../store/conversation-units.js";
+import { stateRelPath } from "../state-paths.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import { turnDoors } from "../agent/run/turn/turn-doors.js";
+import { streamAgent } from "../agent/routes/agent.routes.js";
+import { createDomainEvents } from "../seams/domain-events.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
 
 // Composes the daemon's `Services` for route suites driving its HTTP surface, split by what a suite reaches for: stores
 // (route-stores.testing.ts), recording fakes (route-fakes.testing.ts), the client and auth stubs
@@ -109,12 +118,13 @@ export const testMintedSlices = (): Services["minted"] => {
 
 export const services = (overrides: ServiceOverrides = {}): Services => {
     const { auth, git, usage, claudeStore, cliProxy, sandboxSettings, iq, ...rest } = overrides;
-    // Real registry, memory-backed; worktree git stays stubbed, hoisted so workspaceScope shares this instance.
-    const agents = createAgentsRegistry(
-        { load: async () => [], save: async () => {} },
-        { of: () => "idle", causesOf: () => [], refresh: async () => false, forget: () => {} },
-        { of: () => undefined, refresh: async () => false, forget: () => {}, metrics: () => ({}) },
-    );
+    // Real registry over an in-memory conversations database, with every conversation's directory under the suite's own
+    // history root; worktree git stays stubbed, hoisted so workspaceScope shares this instance.
+    const conversationsDb = openConversationsDb(IN_MEMORY);
+    const units = conversationUnits((rest.config ?? testConfig).historyRoot, sqliteAgentsStore(conversationsDb).has);
+    const { agents, conversations } = memoryFleet(fleetStoreOver(conversationsDb, units));
+    // The cards a suite's turns park on, over the same actors, so a reply through the routes finds them.
+    const cards = parkedCards(conversations);
     const workspace = workspacePaths(WORKSPACE_ROOT);
     // Real pairing table so mint and redeem share one implementation, following the test's own history root.
     const syncPairings = pairings<SyncMode>(syncPairBurnPath((rest.config ?? testConfig).historyRoot));
@@ -251,7 +261,9 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             remove: async () => false,
         },
         // Inert: every dispatched turn files what it was told, and no suite here reads it back.
-        promptRecord: { record: async () => {}, of: async () => undefined, forget: async () => {} },
+        promptRecord: { record: async () => {}, of: async () => undefined },
+        conversationsDb,
+        conversationUnits: units,
         // Inert: every fire path writes an in-flight entry and clears it; nothing here resumes.
         turnJournal: {
             list: async () => [],
@@ -328,6 +340,11 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
         codexHome: `${WORKSPACE_ROOT}/${stateRelPath(".intentic/secrets/auth/", "codex")}`,
         codexThreadExists: async () => true,
         providerCatalogs: testProviderCatalogs,
+        // The real tables: which runtime a pair reaches and which module answers for a provider are facts about the
+        // product, not stand-ins. Readiness is swept through `merged`, so it asks this suite's stores.
+        providerModules: PROVIDER_MODULES,
+        adapters: RUNTIME_ADAPTERS,
+        providerReadiness: () => providerReadiness(merged),
         // Held directly too: the native Codex turn's resolution and self-heal both read this, not the table above.
         codexModels: { models: async () => ({ models: [{ id: "gpt-5.1", label: "GPT 5.1" }], default: "gpt-5.1" }), record: async () => {} },
         // Per-provider catalogs the provider modules read directly; mirrors testProviderCatalogs row for row, so
@@ -427,6 +444,8 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             ...git,
         }),
         agents,
+        conversations,
+        cards,
         // Inert: archive/discard hard-stop on every press; a route suite has no tmux, processes or browsers to reap.
         reaper: { start: () => {}, stop: () => {}, sweep: async () => {}, reapConversation: async () => {}, metrics: () => ({}) },
         agentWorktrees: {
@@ -539,12 +558,15 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
                   },
         authRoot: `${WORKSPACE_ROOT}/${STATE_DIR}`,
         // Defaults to the claude-code-only shape production reads before a provider-native record exists, keyed off the
-        // registry's `sessionIdOf`. Reads through `merged`, so an override of `sessions.read` or `agents` applies here
-        // too.
+        // actors' `sessionIdOf`. Reads through `merged`, so an override of `sessions.read` or `conversations` applies
+        // here too.
         transcripts: {
             read: async (agent) => {
+                const profile = merged.agents.entry(agent.id)?.profile;
                 const sessionId =
-                    capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? merged.agents.sessionIdOf(agent.id) : undefined;
+                    profile !== undefined && capabilitiesOf(profile.provider, profile.harness).runtime === "claude-code"
+                        ? merged.conversations.sessionIdOf(agent.id)
+                        : undefined;
                 return sessionId === undefined ? [] : merged.sessions.read(merged.workspace.root, sessionId);
             },
             // Derived from `read` via production's own window rule, so a route test can't disagree with the daemon.
@@ -579,8 +601,15 @@ export const services = (overrides: ServiceOverrides = {}): Services => {
             indexing: () => false,
         },
         purgeConversationState: async () => {},
+        // The engine's own doors over these services, as composition binds them, and the reactions it subscribes.
+        events: createDomainEvents((name, error) => merged.logger.warn({ err: error, event: name }, "domain event: a reaction failed")),
+        turns: turnDoors(
+            () => merged,
+            (input, signal) => streamAgent(merged, input, signal),
+        ),
         ...rest,
     });
+    wireReactions(merged);
     return merged;
 };
 
@@ -592,4 +621,111 @@ export const codexConnectedProxy = {
     complete: async () => {},
     disconnect: async () => {},
     models: async () => [],
+};
+
+// What one turn wrote to the stores it runs and settles into, in call order per store; `recordingTurnStores` fills it.
+export interface TurnWrites {
+    readonly activity: Parameters<Services["activity"]["append"]>[0][];
+    readonly usage: Parameters<Services["usage"]["record"]>[0][];
+    readonly providerRefusals: { readonly provider: string; readonly refusal: Parameters<Services["providerRefusals"]["record"]>[1] }[];
+    readonly refusalsCleared: { readonly provider: string; readonly account: string | undefined }[];
+    readonly headroomRefreshes: Parameters<Services["headroom"]["refresh"]>[0][];
+    readonly headroomRecords: { readonly provider: string; readonly account: string; readonly usage: Parameters<Services["headroom"]["record"]>[2] }[];
+    readonly seatsRefused: { readonly account: string; readonly reason: string }[];
+    readonly seatsCleared: string[];
+    readonly modelRefusals: { readonly provider: string; readonly model: string; readonly refusal: Parameters<Services["modelRefusals"]["record"]>[2] }[];
+    readonly modelCooldowns: { readonly provider: string; readonly model: string; readonly cooldown: Parameters<Services["modelCooldowns"]["record"]>[2] }[];
+    readonly observedLimits: {
+        readonly provider: string;
+        readonly account: string;
+        readonly model: string;
+        readonly limit: Parameters<Services["observedLimits"]["record"]>[3];
+    }[];
+    readonly snapshots: { readonly trigger: Parameters<Services["history"]["snapshot"]>[0]; readonly label?: string }[];
+    readonly checkpoints: {
+        readonly conversationId: string;
+        readonly index: number;
+        readonly checkpoint: Parameters<Services["turnCheckpoints"]["record"]>[2];
+    }[];
+    readonly ruleFirings: { readonly rule: string; readonly at: number }[];
+    // Every span the turn timed, by name and attributes: which mode a land ran in is only visible here.
+    readonly spans: { readonly name: string; readonly attrs: unknown }[];
+}
+
+// The stores a turn writes while it runs and as it settles, each recording every write and otherwise answering like an
+// empty one, and the spans it times; `snapshot` is the id every history capture answers with. Spread `overrides` into
+// `services`.
+export const recordingTurnStores = (options: { readonly snapshot?: string } = {}): { readonly writes: TurnWrites; readonly overrides: ServiceOverrides } => {
+    const writes: TurnWrites = {
+        activity: [],
+        usage: [],
+        providerRefusals: [],
+        refusalsCleared: [],
+        headroomRefreshes: [],
+        headroomRecords: [],
+        seatsRefused: [],
+        seatsCleared: [],
+        modelRefusals: [],
+        modelCooldowns: [],
+        observedLimits: [],
+        snapshots: [],
+        checkpoints: [],
+        ruleFirings: [],
+        spans: [],
+    };
+    // The real tracker, so a timed step still runs and still reports; only what was timed is noted beside it.
+    const { perf } = services();
+    return {
+        writes,
+        overrides: {
+            activity: { append: async (event) => void writes.activity.push(event), list: async () => [] },
+            usage: { record: async (turn) => void writes.usage.push(turn) },
+            providerRefusals: {
+                read: async () => ({}),
+                record: async (provider, refusal) => void writes.providerRefusals.push({ provider, refusal }),
+                clear: async (provider, account) => void writes.refusalsCleared.push({ provider, account }),
+                onChange: () => () => {},
+            },
+            // Every other member answers as the inert headroom above does.
+            headroom: {
+                ...services().headroom,
+                refresh: async (refresh) => void writes.headroomRefreshes.push(refresh),
+                record: async (provider, account, usage) => void writes.headroomRecords.push({ provider, account, usage }),
+            },
+            claudeSeats: {
+                read: async () => ({}),
+                refuse: async (account, reason) => void writes.seatsRefused.push({ account, reason }),
+                clear: async (account) => void writes.seatsCleared.push(account),
+            },
+            modelRefusals: { refused: async () => new Set(), record: async (provider, model, refusal) => void writes.modelRefusals.push({ provider, model, refusal }) },
+            modelCooldowns: {
+                cooling: async () => new Map(),
+                record: async (provider, model, cooldown) => void writes.modelCooldowns.push({ provider, model, cooldown }),
+            },
+            observedLimits: {
+                spent: async () => ({}),
+                record: async (provider, account, model, limit) => void writes.observedLimits.push({ provider, account, model, limit }),
+            },
+            history: fakeHistory({
+                snapshot: async (trigger, label) => {
+                    writes.snapshots.push({ trigger, ...(label === undefined ? {} : { label }) });
+                    return options.snapshot;
+                },
+            }),
+            turnCheckpoints: {
+                record: async (conversationId, index, checkpoint) => void writes.checkpoints.push({ conversationId, index, checkpoint }),
+                of: async () => undefined,
+                all: async () => new Map(),
+                truncate: async () => {},
+            },
+            ruleFirings: { get: async () => ({}), stamp: async (rule, at) => void writes.ruleFirings.push({ rule, at }) },
+            perf: {
+                ...perf,
+                track: (name, attrs, fn) => {
+                    writes.spans.push({ name, attrs });
+                    return perf.track(name, attrs, fn);
+                },
+            },
+        },
+    };
 };

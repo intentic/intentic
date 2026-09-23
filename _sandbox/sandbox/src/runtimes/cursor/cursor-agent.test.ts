@@ -5,10 +5,14 @@ import { unstubbed } from "@intentic/testing";
 import type { Logger } from "pino";
 import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import type { AgentRequest } from "../../agent/run/agent.js";
-import { resolveRequest } from "../../agent/tools/agent-requests.js";
+import type { AgentRequest, CursorCredential } from "../../agent/providers/agent-request.js";
 import { createCursorAgent, type CursorAgentDeps, FIRST_DELTA_MS } from "./cursor-agent.js";
 import type { CursorHookService } from "./cursor-hooks.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 const create = mock<(options: unknown) => Promise<unknown>>();
 const cancel = mock<() => Promise<void>>();
@@ -37,11 +41,12 @@ const deps = (): CursorAgentDeps => ({
     logger: unstubbed<Logger>(`logger`, { warn: () => {} }),
 });
 
-const request = (): AgentRequest => ({
-    prompt: `add an auto mode of model selecting`,
-    cwd: WORKSPACE_ROOT,
-    model: MODEL,
-    cursorApiKey: `key`,
+const request = (): AgentRequest<CursorCredential> => ({
+    spec: { prompt: `add an auto mode of model selecting`, cwd: WORKSPACE_ROOT, model: MODEL },
+    policy: {},
+    tools: {},
+    credential: { kind: `cursor-key`, apiKey: `key` },
+    hooks: { cards },
     signal: new AbortController().signal,
 });
 
@@ -134,7 +139,7 @@ test("a question raised inside a tool is streamed while that tool is still waiti
     const card = seen.find((event): event is Extract<AgentEvent, { kind: `question` }> => event.kind === `question`);
     expect(card?.questions).toEqual([QUESTION]);
 
-    expect(resolveRequest({ kind: `question`, requestId: card?.requestId ?? ``, answers: { [QUESTION.question]: [`Postgres`] } })).toBe(`settled`);
+    expect(cards.resolve({ kind: `question`, requestId: card?.requestId ?? ``, answers: { [QUESTION.question]: [`Postgres`] } })).toBe(`settled`);
     expect(await asked).toBe(`The user answered:\n- Store: Postgres`);
 
     settleRun({ status: `success` });
@@ -161,7 +166,7 @@ test("an approved plan streams its executing phase on the queue the planning pha
 
     const seen: AgentEvent[] = [];
     const turn = (async () => {
-        for await (const event of createCursorAgent(deps())({ ...request(), permissionMode: `plan` })) {
+        for await (const event of createCursorAgent(deps())({ ...request(), policy: { permissionMode: `plan` } })) {
             seen.push(event);
         }
     })();
@@ -173,7 +178,7 @@ test("an approved plan streams its executing phase on the queue the planning pha
     // Planning holds the prose back rather than streaming it: the plan is what the phase captured.
     expect(plan?.text).toBe(`ship it`);
 
-    expect(resolveRequest({ kind: `plan`, requestId: plan?.requestId ?? ``, approve: true })).toBe(`settled`);
+    expect(cards.resolve({ kind: `plan`, requestId: plan?.requestId ?? ``, approve: true })).toBe(`settled`);
     await waitFor(() => expect(settle).toHaveLength(2));
     settle[1]?.({ status: `success` });
     await turn;

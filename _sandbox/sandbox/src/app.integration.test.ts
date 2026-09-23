@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 
-import { type AgentEvent, type Capability, isTurnFact, type TranscriptRow } from "@intentic/sandbox-contract";
+import { type AgentEvent, type Capability, isTurnFact, PROVIDER_VENDOR, RAW_ROUTE_LIST, type TranscriptRow } from "@intentic/sandbox-contract";
 
 import { sandboxIdFromToken, sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 
@@ -20,7 +20,7 @@ import { createLogger } from "./logger.js";
 
 import { createBootTracker } from "./platform/boot/boot.js";
 
-import type { AgentTool } from "./agent/tools/agent-tools.js";
+import type { AgentRequest } from "./agent/providers/agent-request.js";
 
 import { testConfig } from "./testing.js";
 
@@ -29,8 +29,16 @@ import { fakeFiles, fakeHistory } from "./harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
 import { automationRecord, memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
 import { runAgentTurn } from "./harness/route-turns.testing.js";
-import { clearPendingResume, recordHeldTurn } from "./agent/run/turn/turn-resume.js";
 import { toolChildrenOf, transcriptPageOf } from "./sessions/agent-transcript.js";
+
+// A raw route exists only under its declaration and every declaration is served, in the declared order: the order the
+// route matcher reads overlapping routes in, and so the policy every gate applies.
+test("the app registers exactly the declared raw routes, in declaration order, ahead of the oRPC catch-all", () => {
+    const registered = createApp(services()).routes.map((route) => `${route.method} ${route.path}`);
+    // Everything before the first route is middleware, registered on `*`.
+    const routes = registered.slice(registered.findIndex((route) => route !== "ALL /*"));
+    expect(routes).toEqual([...RAW_ROUTE_LIST.map((route) => `${route.method} ${route.path.replaceAll(/\{([^}]+)\}/gu, ":$1")}`), "ALL /*"]);
+});
 
 test("GET /health reports ok, and names the sandbox so a loopback probe can tell WHICH daemon answered", async () => {
     const res = await createApp(services()).request("/health");
@@ -596,7 +604,7 @@ test("agent.run streams the agent events, fenced by a user snapshot before and a
 });
 
 test("agent.run resolves the oauth token from the sandbox store (not the body) and forwards model/session", async () => {
-    let seen: { oauthToken?: string; model?: string; sessionId?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const client = clientFor(
         createApp(
             services({
@@ -614,13 +622,13 @@ test("agent.run resolves the oauth token from the sandbox store (not the body) a
         ),
     );
     await runAgentTurn(client, { prompt: "do it", sessionId: "s1", model: "opus" });
-    expect(seen?.oauthToken).toBe("tok-xyz");
-    expect(seen?.model).toBe("opus");
-    expect(seen?.sessionId).toBe("s1");
+    expect(seen?.credential).toEqual({ kind: "claude-oauth", token: "tok-xyz", refresh: expect.any(Function) });
+    expect(seen?.spec.model).toBe("opus");
+    expect(seen?.spec.sessionId).toBe("s1");
 });
 
 test("agent.run selects the Claude account named on the turn and forwards its token", async () => {
-    let seen: { oauthToken?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const client = clientFor(
         createApp(
             services({
@@ -641,11 +649,11 @@ test("agent.run selects the Claude account named on the turn and forwards its to
         ),
     );
     await runAgentTurn(client, { prompt: "hi", account: "b" });
-    expect(seen?.oauthToken).toBe("tok-b");
+    expect(seen?.credential).toEqual({ kind: "claude-oauth", token: "tok-b", refresh: expect.any(Function) });
 });
 
 test("agent.run serves a Codex turn on the translator subscription over the local bearer, no per-turn home", async () => {
-    let seen: { codexEndpoint?: { baseUrl: string; authToken: string }; codexHome?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const client = clientFor(
         createApp(
             services({
@@ -661,8 +669,7 @@ test("agent.run serves a Codex turn on the translator subscription over the loca
     const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "codex" });
     expect(facts.some((fact) => fact.kind === "error")).toBe(false);
     // Served over the translator's endpoint on the fixed local bearer; codexHome falls back to the adapter default.
-    expect(seen?.codexEndpoint).toEqual({ baseUrl: "http://127.0.0.1:8788", authToken: "local-bearer" });
-    expect(seen?.codexHome).toBeUndefined();
+    expect(seen?.credential).toEqual({ kind: "codex-endpoint", baseUrl: "http://127.0.0.1:8788", authToken: "local-bearer" });
 });
 
 test("agent.run gates a Codex turn with no subscription and no api key as subscription-required", async () => {
@@ -719,7 +726,7 @@ test("agent.run sends a Gemini turn to the native runtime even when the Claude C
 });
 
 test("agent.run serves Kimi K3 on the Kimi Code subscription through the translator", async () => {
-    let seen: { baseUrl?: string; authToken?: string; model?: string; oauthToken?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const client = clientFor(
         createApp(
             services({
@@ -742,10 +749,14 @@ test("agent.run serves Kimi K3 on the Kimi Code subscription through the transla
     const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "kimi" });
 
     expect(facts.some((fact) => fact.kind === "error")).toBe(false);
-    expect(seen?.baseUrl).toBe("http://127.0.0.1:8788");
-    expect(seen?.authToken).toBe("local-bearer");
-    expect(seen?.model).toBe("kimi-k3");
-    expect(seen?.oauthToken).toBeUndefined();
+    // Routed, so no subscription token rides along: the credential names the endpoint and whose allowance it spends.
+    expect(seen?.credential).toEqual({
+        kind: "routed",
+        baseUrl: "http://127.0.0.1:8788",
+        authToken: "local-bearer",
+        allowance: { vendor: PROVIDER_VENDOR.kimi, limit: expect.any(Function) },
+    });
+    expect(seen?.spec.model).toBe("kimi-k3");
 });
 
 test("agent.run keeps a pinned Gemini model the catalog still offers, and refuses one it doesn't", async () => {
@@ -761,7 +772,7 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and refuse
     // unchanged.
     // geminiModels overrides the direct member the runtime reads, not the derived record.
     const run = async (model?: string): Promise<{ sent: string | undefined; errors: Extract<AgentEvent, { kind: "error" }>[] }> => {
-        let seen: { model?: string } | undefined;
+        let seen: AgentRequest | undefined;
         const client = clientFor(
             createApp(
                 services({
@@ -782,7 +793,7 @@ test("agent.run keeps a pinned Gemini model the catalog still offers, and refuse
             ),
         );
         const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "gemini", ...(model === undefined ? {} : { model }) });
-        return { sent: seen?.model, errors: facts.flatMap((fact) => (fact.kind === "error" ? [fact] : [])) };
+        return { sent: seen?.spec.model, errors: facts.flatMap((fact) => (fact.kind === "error" ? [fact] : [])) };
     };
     expect((await run("gemini-3-flash")).sent).toBe("gemini-3-flash");
     // Nothing pinned is the one case that resolves to the catalog's own head.
@@ -860,7 +871,7 @@ test("agent.run sends a Gemini turn with no harness to the native OpenCode runti
 });
 
 test("agent.run runs a Codex turn whose thread is gone as a fresh one, rather than refusing it", async () => {
-    let seen: { sessionId?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const client = clientFor(
         createApp(
             services({
@@ -876,7 +887,7 @@ test("agent.run runs a Codex turn whose thread is gone as a fresh one, rather th
     );
     const { facts } = await runAgentTurn(client, { prompt: "hi", agent: "codex", sessionId: "gone" });
     // The dead id is dropped rather than handed on: a resume against it fails opaquely inside the CLI.
-    expect(seen?.sessionId).toBeUndefined();
+    expect(seen?.spec.sessionId).toBeUndefined();
     expect(facts.some((fact) => fact.kind === "error")).toBe(false);
 });
 
@@ -902,7 +913,7 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
                         disconnect: async () => {},
                     },
                     async *grokAgent(request) {
-                        seen.push(request.model);
+                        seen.push(request.spec.model);
                         yield { kind: "done" };
                     },
                 }),
@@ -915,7 +926,7 @@ test("agent.run sends a Grok turn an explicit live-valid model, replacing an inv
 });
 
 test("agent.run merges internal (env) tools with the mcp-kind capabilities for the turn", async () => {
-    let seen: { tools?: readonly AgentTool[] } | undefined;
+    let seen: AgentRequest | undefined;
     const client = clientFor(
         createApp(
             services({
@@ -932,7 +943,7 @@ test("agent.run merges internal (env) tools with the mcp-kind capabilities for t
     );
     await runAgentTurn(client, { prompt: "do it" });
     // Internal first, then external mcp capabilities (last-wins on name collisions).
-    expect(seen?.tools).toEqual([
+    expect(seen?.tools.remote).toEqual([
         { name: "obs", url: "https://signoz.example.com/mcp", token: "internal" },
         { name: "linear", url: "https://mcp.linear.app/sse", token: "external" },
     ]);
@@ -991,7 +1002,7 @@ test("agent.run surfaces a connect-your-account error (not an opaque CLI failure
 // leaves an id nothing was saved under.
 // The record outlives the session, so reopening needs nothing from the user.
 test("agent.run reopens a conversation whose session the sandbox never stored, seeded from its own record", async () => {
-    let seen: { prompt?: string; sessionId?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const recorded: TranscriptRow[] = [
         { role: "user", text: "what is 2+2?" },
         { role: "assistant", text: "4" },
@@ -1025,13 +1036,13 @@ test("agent.run reopens a conversation whose session the sandbox never stored, s
     const { facts } = await runAgentTurn(client, { prompt: "and now?", conversationId: "conv-stopped", sessionId: "gone" });
     expect(facts.some((fact) => fact.kind === "error")).toBe(false);
     // Fresh session, carrying what the conversation already said: the same handoff a provider switch gets.
-    expect(seen?.sessionId).toBeUndefined();
-    expect(seen?.prompt).toContain("User: what is 2+2?");
-    expect(seen?.prompt?.endsWith("and now?")).toBe(true);
+    expect(seen?.spec.sessionId).toBeUndefined();
+    expect(seen?.spec.prompt).toContain("User: what is 2+2?");
+    expect(seen?.spec.prompt?.endsWith("and now?")).toBe(true);
 });
 
 test("agent.run folds a switched conversation's history into the prompt as a role-attributed preamble", async () => {
-    let seen: { prompt?: string } | undefined;
+    let seen: AgentRequest | undefined;
     // The daemon's own record seeds a turn resuming no session, which is what a provider/account/harness switch leaves
     // behind.
     // The client never sends a transcript up the wire.
@@ -1060,56 +1071,56 @@ test("agent.run folds a switched conversation's history into the prompt as a rol
     );
     // No sessionId: the retired session is exactly the case the preamble exists for.
     await runAgentTurn(client, { prompt: "and now?", conversationId: "conv-switched" });
-    expect(seen?.prompt).toContain("continues from another AI runtime");
-    expect(seen?.prompt).toContain("User: what is 2+2?");
-    expect(seen?.prompt).toContain("Assistant: 4");
+    expect(seen?.spec.prompt).toContain("continues from another AI runtime");
+    expect(seen?.spec.prompt).toContain("User: what is 2+2?");
+    expect(seen?.spec.prompt).toContain("Assistant: 4");
     // The user's actual message closes the prompt, after the preamble.
-    expect(seen?.prompt?.endsWith("and now?")).toBe(true);
+    expect(seen?.spec.prompt?.endsWith("and now?")).toBe(true);
 });
 
 // A fix press the door turned away left its prompt in the record under the refusal. The press that sends it again
 // carries those words itself, so a session seeded from the record must not be handed the refused copy as history too.
 test("agent.resume sends a turn the door turned away without seeding its refused copy as history", async () => {
-    let seen: { prompt?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const recorded: TranscriptRow[] = [
         { role: "user", text: "what is 2+2?", run: "run-earlier" },
         { role: "assistant", text: "4", run: "run-earlier" },
         { role: "user", text: "fix the pipeline", run: "run-refused" },
         { role: "notice", text: "Sandbox memory is low.", noticeAction: "sendAnyway", sandboxHeld: true, run: "run-refused" },
     ];
-    const client = clientFor(
-        createApp(
-            services({
-                async *agent(request) {
-                    seen = request;
-                    yield { kind: "done" };
-                },
-                transcripts: {
-                    read: async () => recorded,
-                    fork: async () => {},
-                    append: async () => {},
-                    page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
-                    toolChildren: async (_agent, toolId) => toolChildrenOf(recorded, toolId),
-                    count: async () => recorded.length,
-                    truncate: async () => 0,
-                },
-            }),
-        ),
-    );
-    recordHeldTurn({ reason: "door", input: { prompt: "fix the pipeline", conversationId: "conv-door" }, ran: false, run: "run-refused" });
+    const svc = services({
+        async *agent(request) {
+            seen = request;
+            yield { kind: "done" };
+        },
+        transcripts: {
+            read: async () => recorded,
+            fork: async () => {},
+            append: async () => {},
+            page: async (_agent, window = {}) => transcriptPageOf(recorded, window),
+            toolChildren: async (_agent, toolId) => toolChildrenOf(recorded, toolId),
+            count: async () => recorded.length,
+            truncate: async () => 0,
+        },
+    });
+    const client = clientFor(createApp(svc));
+    svc.conversations.send("conv-door", {
+        kind: "turn-held",
+        held: { reason: "door", input: { prompt: "fix the pipeline", conversationId: "conv-door" }, ran: false, run: "run-refused" },
+    });
 
     await client.agent.resume({ conversationId: "conv-door" });
     expect((await collect(await client.agent.attach({ conversationId: "conv-door" }))).at(-1)).toEqual({ kind: "end" });
 
-    expect(seen?.prompt).toContain("User: what is 2+2?");
-    expect(seen?.prompt).not.toContain("User: fix the pipeline");
-    expect(seen?.prompt).not.toContain("Sandbox memory is low.");
-    expect(seen?.prompt?.endsWith("fix the pipeline")).toBe(true);
-    clearPendingResume("conv-door");
+    expect(seen?.spec.prompt).toContain("User: what is 2+2?");
+    expect(seen?.spec.prompt).not.toContain("User: fix the pipeline");
+    expect(seen?.spec.prompt).not.toContain("Sandbox memory is low.");
+    expect(seen?.spec.prompt?.endsWith("fix the pipeline")).toBe(true);
+    expect(svc.conversations.state("conv-door")?.resume.held).toBeUndefined();
 });
 
 test("agent.run folds attachments into the claude prompt as absolute paths, allowing an attachment-only turn", async () => {
-    let seen: { prompt?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const client = clientFor(
         createApp(
             services({
@@ -1121,7 +1132,7 @@ test("agent.run folds attachments into the claude prompt as absolute paths, allo
         ),
     );
     await runAgentTurn(client, { prompt: "", attachments: [`${STATE_DIR}/records/artifacts/attachments/x/shot.png`] });
-    expect(seen?.prompt).toContain("/work/.intentic/records/artifacts/attachments/x/shot.png");
+    expect(seen?.spec.prompt).toContain("/work/.intentic/records/artifacts/attachments/x/shot.png");
 });
 
 // Refused at the door, not mid-stream: an error frame arrives after the message is already in the transcript, which
@@ -1139,7 +1150,7 @@ test("agent.run refuses an attachment path escaping the workspace before the tur
 test("agent.run drops a mention that escapes or names no file, and runs the turn with the rest", async () => {
     const root = mkdtempSync(join(tmpdir(), "mentions-"));
     writeFileSync(join(root, "notes.md"), "read me");
-    let seen: { prompt?: string } | undefined;
+    let seen: AgentRequest | undefined;
     const client = clientFor(
         createApp(
             services({
@@ -1155,9 +1166,9 @@ test("agent.run drops a mention that escapes or names no file, and runs the turn
     const { facts } = await runAgentTurn(client, { prompt: "look", mentions: ["/tmp/probe/req.json", "gone.md", "notes.md"] });
 
     expect(facts.filter((fact) => fact.kind === "error")).toEqual([]);
-    expect(seen?.prompt).toContain(`${root}/notes.md`);
-    expect(seen?.prompt).not.toContain("req.json");
-    expect(seen?.prompt).not.toContain("gone.md");
+    expect(seen?.spec.prompt).toContain(`${root}/notes.md`);
+    expect(seen?.spec.prompt).not.toContain("req.json");
+    expect(seen?.spec.prompt).not.toContain("gone.md");
 });
 
 // Stopping a turn is not a failure: every adapter reports a hard-cancel's unwind as an error frame from the inside.

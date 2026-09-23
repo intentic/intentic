@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import {
@@ -18,10 +18,13 @@ import { MarketplaceRequestSchema, MarketplaceSchema } from "../schemas/marketpl
 import { RemoteRefsRequestSchema, RemoteRefsSchema } from "../schemas/git/remote-refs.js";
 import { OkSchema } from "../schemas/shared.js";
 
+// Connected services name accounts and what this sandbox reaches: the operating tier's, reads included, and no token's.
+const capabilityRoute = procedure.meta({ floor: "maintainer", control: "never" });
+
 // The sandbox's unified capability manifest, spanning `list`/`add`/`remove`/`status`/`marketplace`. A VAULTED marker
 // with nothing stored behind it is refused rather than silently written.
 export const capabilitiesContract = {
-    list: oc
+    list: capabilityRoute
         .route({
             method: "GET",
             path: "/capabilities",
@@ -30,7 +33,7 @@ export const capabilitiesContract = {
                 "Each connection with its live state, the settings that are safe to show, and the names of the credentials it holds. The values of those credentials are never in the answer, on any route but one.",
         })
         .output(CapabilitiesListSchema),
-    add: oc
+    add: capabilityRoute
         .route({
             method: "POST",
             path: "/capabilities",
@@ -41,7 +44,7 @@ export const capabilitiesContract = {
         .input(CapabilitySchema)
         .output(streamOf(IntenticLineSchema)),
     // A credential the caller is keeping arrives as VAULTED here too, so an edit can be tested without retyping a key.
-    probe: oc
+    probe: capabilityRoute
         .route({
             method: "POST",
             path: "/capabilities/probe",
@@ -49,9 +52,11 @@ export const capabilitiesContract = {
             description:
                 "Dials the service the way this connection would and hands back what it said, before anything is written. The answer is the service's own confirmation or its exact refusal, so a wrong token or an unreachable host is found on the form rather than on a card afterwards.",
         })
+        // Sends a stored key to a caller-supplied host: withheld from the panel token every panel process holds.
+        .meta({ panel: false })
         .input(CapabilitySchema)
         .output(CapabilityProbeSchema),
-    remove: oc
+    remove: capabilityRoute
         .route({
             method: "DELETE",
             path: "/capabilities/{id}",
@@ -61,7 +66,7 @@ export const capabilitiesContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(OkSchema),
-    rename: oc
+    rename: capabilityRoute
         .route({
             method: "POST",
             path: "/capabilities/{id}/rename",
@@ -72,7 +77,7 @@ export const capabilitiesContract = {
         .input(CapabilityRenameSchema)
         .output(OkSchema),
     // Called by the /secrets page's edit action.
-    setSecret: oc
+    setSecret: capabilityRoute
         .route({
             method: "POST",
             path: "/capabilities/{id}/secret",
@@ -81,7 +86,7 @@ export const capabilitiesContract = {
         })
         .input(CapabilitySecretInputSchema)
         .output(OkSchema),
-    status: oc
+    status: capabilityRoute
         .route({
             method: "GET",
             path: "/capabilities/{id}/status",
@@ -91,7 +96,7 @@ export const capabilitiesContract = {
         .input(CapabilityIdParamSchema)
         .output(CapabilityStatusSchema),
     // Gated by `permissions.daemon` in the manifest (ext-deployments reads its Komodo key pair this way).
-    connection: oc
+    connection: capabilityRoute
         .route({
             method: "GET",
             path: "/capabilities/{id}/connection",
@@ -99,9 +104,11 @@ export const capabilitiesContract = {
             description:
                 "The one call that hands back stored secrets, so an extension's own backend can dial the service behind a connection. Never answered for a signed-in person: only a machine credential reaches it, and an extension's only if its manifest asked for this route out loud at install time.",
         })
+        // Answers with the secrets included: withheld from the panel token every panel process holds.
+        .meta({ panel: false })
         .input(CapabilityIdParamSchema)
         .output(CapabilityConnectionSchema),
-    marketplace: oc
+    marketplace: capabilityRoute
         .route({
             method: "POST",
             path: "/capabilities/marketplace",
@@ -111,7 +118,7 @@ export const capabilitiesContract = {
         .input(MarketplaceRequestSchema)
         .output(MarketplaceSchema),
     // What the install form pins to, so nobody has to read a commit sha off a web page and paste it.
-    refs: oc
+    refs: capabilityRoute
         .route({
             method: "POST",
             path: "/capabilities/refs",
@@ -121,7 +128,7 @@ export const capabilitiesContract = {
         })
         .input(RemoteRefsRequestSchema)
         .output(RemoteRefsSchema),
-    dismiss: oc
+    dismiss: capabilityRoute
         .route({
             method: "DELETE",
             path: "/capabilities/recommendations/{entry}",
@@ -132,7 +139,7 @@ export const capabilitiesContract = {
         .input(CapabilityEntryParamSchema)
         .output(OkSchema),
     // Runs the capability's declared `loginCommand` in the terminal session the panel attaches to.
-    login: oc
+    login: capabilityRoute
         .route({
             method: "POST",
             path: "/capabilities/{id}/login",
@@ -143,7 +150,7 @@ export const capabilitiesContract = {
         .input(CapabilityIdParamSchema)
         .output(CapabilityLoginSchema),
     // The seed comes from the config field the card marks `totp`.
-    otp: oc
+    otp: capabilityRoute
         .route({
             method: "GET",
             path: "/capabilities/{id}/otp",
@@ -151,6 +158,8 @@ export const capabilitiesContract = {
             description:
                 "Generates a single two-factor code from a stored seed. The one credential-adjacent read an agent is allowed, and it is safe because a code expires in seconds and never reveals the seed, so an agent can answer a prompt without ever holding the factor.",
         })
+        // The `otp` CLI mints a code on the agent token; it never reads the seed behind it.
+        .meta({ agent: true })
         .input(CapabilityIdParamSchema)
         .output(CapabilityOtpSchema),
 };

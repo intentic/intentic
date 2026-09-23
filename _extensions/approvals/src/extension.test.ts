@@ -35,17 +35,21 @@ const wake = (id: string, over: Partial<AutomationApproval> = {}): AutomationApp
 });
 
 const fakeHost = (approvals: ApprovalsList, held: AutomationApproval[]) => {
-    const paths: string[] = [];
+    const procedures: string[] = [];
     const views: ViewRegistration[] = [];
     const api = {
         sandbox: {
             key: (...parts: readonly string[]) => [`sandbox`, `box`, ...parts],
             reachable: () => true,
-            json: async (path: string) => {
-                paths.push(path);
-                return { approvals: held };
+            rpc: {
+                approvals: { list: async () => approvals },
+                automations: {
+                    pendingList: async () => {
+                        procedures.push(`automations.pendingList`);
+                        return { approvals: held };
+                    },
+                },
             },
-            rpc: { approvals: { list: async () => approvals } },
             fetch: async <T>(query: HostQuery<T>): Promise<T> => query.queryFn(),
         },
         views: {
@@ -55,7 +59,7 @@ const fakeHost = (approvals: ApprovalsList, held: AutomationApproval[]) => {
             },
         },
     } as unknown as IntenticApi;
-    return { api, paths, views };
+    return { api, procedures, views };
 };
 
 const subscriptions: { dispose(): void }[] = [];
@@ -83,12 +87,12 @@ describe(`what the queue owes`, () => {
     });
 
     it(`reads the held wakes from one sandbox-scoped entry, the one the view reads`, async () => {
-        const { api, paths } = fakeHost({ approvals: [], invalid: [] }, []);
+        const { api, procedures } = fakeHost({ approvals: [], invalid: [] }, []);
         bindHost(api);
         const query = heldWakesQuery();
         expect(query.queryKey).toEqual([`sandbox`, `box`, `automation-approvals`]);
         await expect(query.queryFn()).resolves.toEqual([]);
-        expect(paths).toEqual([`/automations/pending`]);
+        expect(procedures).toEqual([`automations.pendingList`]);
     });
 });
 

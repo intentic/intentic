@@ -2,7 +2,7 @@ import type { CapabilityFacts, Disposable, ExtensionContext, IntenticApi, Picked
 import { extensionApiVersion, flattenQuery, mergeQuery } from "@intentic/extension-api";
 import { extensionIdOf, sandboxRouteAllowed } from "@intentic/extension-manifest";
 import { useDevice, useTheme } from "@intentic/ui";
-import { type AgentHarness, type AgentProvider, type ExtensionSummary, sandboxRequestFor, WorkspaceFileSchema } from "@intentic/sandbox-contract";
+import { type AgentHarness, type AgentProvider, type ExtensionSummary, sandboxRequestFor } from "@intentic/sandbox-contract";
 import { watch } from "vue";
 import { projectScope, setProjectScope, withinScope } from "../app/projectScope";
 import { useAudience } from "../app/useAudience";
@@ -18,7 +18,7 @@ import { registerCommand, executeCommand } from "../shell/commands/useCommands";
 import { extensionSettingsStore } from "../features/extensions/useExtensionSettings";
 import { queryClient } from "../lib/queryPersistence";
 import { sandboxJson, sandboxRequest } from "../features/sandbox/client/sandboxClient";
-import { gatedSandboxRpc } from "../features/sandbox/client/sandboxRpc";
+import { gatedSandboxRpc, sandboxRpc } from "../features/sandbox/client/sandboxRpc";
 import { useTerminalPanel } from "../features/terminal/useTerminalPanel";
 import { sandboxKey } from "../features/sandbox/overview/activeSandbox";
 import { useSandbox } from "../features/sandbox/client/useSandbox";
@@ -139,11 +139,11 @@ export const createExtensionApi = (
     const declaredSettingKeys = new Set(declaredSettings.map((setting) => setting.key));
     const settings = extensionSettingsStore(summary.id);
 
-    const processPath = (name: string): string => {
+    const declaredProcess = (name: string): { readonly id: string; readonly name: string } => {
         if (!declaredProcesses.has(name)) {
             throw new Error(`process "${name}" is not declared in the manifest's contributes.processes`);
         }
-        return `/extensions/${encodeURIComponent(summary.id)}/processes/${encodeURIComponent(name)}`;
+        return { id: summary.id, name };
     };
 
     // The manifest's declared sandbox-route allowlist: an undeclared method+path throws, so a bundle can only reach
@@ -355,13 +355,10 @@ export const createExtensionApi = (
             },
             // No navigation or focus change on either device: filling a tab is not a gesture the user made.
             fillDiff: (payload) => useWorkspaceTabs().fillDiff(payload),
-            // Through guardSandbox and the daemon's schema, so the manifest grant still applies and the envelope is
-            // validated once.
+            // Through this extension's gated client, so the manifest grant still applies and the answer arrives parsed.
             file: async (path) => {
-                const route = `/workspace/file?path=${encodeURIComponent(path)}`;
-                guardSandbox(route);
                 try {
-                    const answer = WorkspaceFileSchema.parse(await sandboxJson(route));
+                    const answer = await rpc.workspace.file({ path });
                     // Absent is the ordinary first state, not an error (see IntenticApi.workspace.file).
                     return answer.present ? answer.content : undefined;
                 } catch {
@@ -392,12 +389,12 @@ export const createExtensionApi = (
             },
         },
         processes: {
-            status: (name) => sandboxJson<ProcessStatus>(processPath(name)),
+            status: (name): Promise<ProcessStatus> => sandboxRpc.extensions.processStatus(declaredProcess(name)),
             start: async (name) => {
-                await sandboxJson(`${processPath(name)}/start`, { method: `POST` });
+                await sandboxRpc.extensions.processStart(declaredProcess(name));
             },
             stop: async (name) => {
-                await sandboxJson(`${processPath(name)}/stop`, { method: `POST` });
+                await sandboxRpc.extensions.processStop(declaredProcess(name));
             },
         },
         terminal: {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { test, expect, afterEach } from "bun:test";
-import { repoGitDir } from "../../history/history.js";
+import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";
 import { workspacePaths } from "../../workspace/workspace.js";
 import { ensureRepoGitDirs } from "./repo-git-dirs.js";

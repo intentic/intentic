@@ -1,20 +1,20 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { fileBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { contributedFileBindings } from "../../../extension-host/fileBindings";
 import { emitFilesChanged } from "../../../extension-host/fileEvents";
 import { emitRefsChanged } from "../../../extension-host/refEvents";
-import { resetEditBuffers } from "../../workspace/files/useEditBuffers";
+import { dropEditBuffers } from "../../workspace/files/useEditBuffers";
 import { desyncAgents } from "../../agents/fleet/useAgents";
 import { auditRoster, refreshAgents, setAgents } from "../../agents/fleet/useAgents-registry";
 import { providerRefusals, setAccountUsage } from "../../chat/accounts/providerAccounts";
 import { useChat } from "../../chat/run/useChat";
-import { AGENT_DIFF, GIT_CHANGES, HISTORY_SNAPSHOTS, PANELS } from "../../../lib/queryKeys";
+import { agentReviewPrefixes, pushedKeys, rpcPrefix } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
 import { setPresenceUsers } from "../../../shell/presence/usePresence";
 import { landingNow } from "../../workspace/changes/landing";
 import { markDerivedChanged, markWorkspaceChanged, worktreeMovedRecently } from "../../workspace/changes/live/useWorkspaceLive";
 import { emitRuntimeChanged } from "./runtimeEvents";
-import { resetWorkspaceScopedState } from "../client/sandboxScope";
 import { daemonRebuilt, dropSandboxLocalState, sandboxQueryPredicate, workspaceReplaced } from "./systemEventRouting";
 import { setDaemonBoot } from "../overview/useDaemonBoot";
 import { setDaemonRoutes } from "../overview/useDaemonRoutes";
@@ -33,18 +33,34 @@ const refreshChanges = throttleTrailing(() => {
     if (landingNow.value) {
         return;
     }
-    void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
+    for (const key of pushedKeys([`git`, `changes`])) {
+        void queryClient.invalidateQueries({ queryKey: key });
+    }
     // A review compares the agent's branch against this tree, not just its own commits, so tree changes invalidate it
-    // too.
-    void queryClient.invalidateQueries({ predicate: (query) => AGENT_DIFF.matches(query.queryKey) });
+    // too, whole.
+    for (const key of agentReviewPrefixes) {
+        void queryClient.invalidateQueries({ queryKey: key });
+    }
 }, CHANGES_REFRESH_MS);
 
-// Used only to scope the storage sweep to the sandbox in view; the sweep itself runs for any sandbox's frame.
+// Whether a replaced workspace is the one in view, whose scope starts over; the storage sweep runs for any sandbox.
 const { activeSandboxId } = useSandbox();
 
 // A (re)connection, which is the one frame that reconciles rather than invalidates: everything pushed-only has to be
 // refetched here, since frames that landed while this browser was away are simply gone.
 const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: string): void => {
+    // Workspace replaced (recreated under the same id) or daemon rebuilt into a differently-shaped one; either makes the
+    // cached workspace state stale.
+    const replaced = workspaceReplaced(sandboxId, event.workspaceId);
+    const rebuilt = daemonRebuilt(sandboxId, event.build);
+    // A replaced workspace is a new sandbox scope under the same id: its remembered tabs, folders and drafts are swept
+    // first, so the scope reads nothing back from storage, and the rest of this hello fills it like any first connect.
+    if (replaced) {
+        dropSandboxLocalState(sandboxId);
+        if (activeSandboxId.value === sandboxId) {
+            resetSandboxScope();
+        }
+    }
     // A new connection may restart the daemon's revision counter; reset here so a lower revision isn't dropped as stale.
     desyncAgents();
     // Wakes held for approval arrive only via GET /agents, never the stream, so refetch them explicitly on every hello.
@@ -60,21 +76,10 @@ const applyHello = (event: Extract<SystemEvent, { kind: `hello` }>, sandboxId: s
     // in flight and start another, which the daemon answers twice. Ahead of the reset below, so a replaced workspace
     // still gets the stronger treatment.
     void queryClient.invalidateQueries({ refetchType: `active` });
-    // Workspace replaced (recreated under the same id) or daemon rebuilt into a differently-shaped one; either makes the
-    // cached workspace state stale.
-    const replaced = workspaceReplaced(sandboxId, event.workspaceId);
-    const rebuilt = daemonRebuilt(sandboxId, event.build);
+    // A rebuild leaves the scope alone, since `/work` is unchanged; either way the cached reads go.
     if (replaced || rebuilt) {
         // Reset, not remove, so active observers refetch rather than render empty.
         void queryClient.resetQueries({ predicate: sandboxQueryPredicate(sandboxId) });
-    }
-    // A replaced workspace also clears remembered tabs/folders/drafts and re-scopes the live view; a rebuild leaves
-    // them, since `/work` is unchanged.
-    if (replaced) {
-        dropSandboxLocalState(sandboxId);
-        if (activeSandboxId.value === sandboxId) {
-            resetWorkspaceScopedState();
-        }
     }
     // Catches views an invalidation can't reach (nothing mounted); an empty batch is this channel's "something changed,
     // unspecified" (fileEvents.ts).
@@ -87,8 +92,8 @@ const applyWorkspaceChanged = (event: Extract<SystemEvent, { kind: `workspaceCha
     // Keys are core's table unioned with what activated extensions declare; an inactive extension contributes nothing.
     // An empty path list means the daemon truncated the batch, so it invalidates every file-bound key, not none.
     const stale = event.paths.length === 0 ? fileBoundQueryKeys(contributedFileBindings()) : staleQueryKeys(event.paths, contributedFileBindings());
-    for (const key of stale) {
-        void queryClient.invalidateQueries({ queryKey: [key] });
+    for (const key of stale.flatMap((name) => pushedKeys([name]))) {
+        void queryClient.invalidateQueries({ queryKey: key });
     }
     // Same frame, announced for rail badges with no mounted query; sent even for an empty batch, the largest change
     // there is.
@@ -140,7 +145,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
         case `runtimeChanged`:
             // No roster in the frame: invalidation only reaches queries someone is observing, so an idle tab pays
             // nothing.
-            for (const key of staleRuntimeQueryKeys(event.domains)) {
+            for (const key of staleRuntimeQueryKeys(event.domains).flatMap(pushedKeys)) {
                 void queryClient.invalidateQueries({ queryKey: key });
             }
             // Same frame, announced for readers that hold plain refs instead of queries (pairing cards), so they need
@@ -150,7 +155,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
         case `reposChanged`:
             // Watcher never sees `.git` paths, so no workspaceChanged batch covers this; the daemon diffs its own repo
             // discovery.
-            void queryClient.invalidateQueries({ queryKey: PANELS.every });
+            void queryClient.invalidateQueries({ queryKey: rpcPrefix(`panels.list`) });
             return;
         case `refsChanged`: {
             // Refs moved (commit, checkout, branch, tag, rebase) outside this tab; three things go stale:
@@ -158,9 +163,9 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // - the Checkpoints timeline
             // - open editor buffers, only if the worktree itself moved
             refreshChanges();
-            void queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every });
+            void queryClient.invalidateQueries({ queryKey: rpcPrefix(`history.list`) });
             if (worktreeMovedRecently()) {
-                resetEditBuffers();
+                dropEditBuffers();
             }
             // Extensions own their own caches; this only announces that a ref moved (see extension-host/refEvents).
             emitRefsChanged(event.repos);

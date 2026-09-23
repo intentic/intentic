@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { lanesFor, type OfferRead } from "./setupLanes";
+import { isNotFound, lanesFor, type OfferRead, readOffer } from "./setupLanes";
 
 const yes: OfferRead<boolean> = { kind: `answered`, value: true };
 const no: OfferRead<boolean> = { kind: `answered`, value: false };
@@ -48,5 +48,35 @@ describe(`lanesFor`, () => {
     test(`a lane in hand beats a lost read`, () => {
         expect(lanesFor({ address: yes, hosted: lost, hasMachine: false })).toEqual({ kind: `takeable` });
         expect(lanesFor({ address: lost, hosted: hosting(1), hasMachine: false })).toEqual({ kind: `takeable` });
+    });
+});
+
+describe(`one offer read`, () => {
+    test(`records what the platform answered`, async () => {
+        expect(await readOffer(async () => ({ enabled: true }), { enabled: false })).toEqual({ kind: `answered`, value: { enabled: true } });
+    });
+
+    // A platform without the route has answered: the feature is off here, and saying so needs no retry.
+    test(`takes a missing route as the answer that the feature is off`, async () => {
+        const off = Object.assign(new Error(`not found`), { code: `NOT_FOUND` });
+        expect(await readOffer(() => Promise.reject(off), { enabled: false })).toEqual({ kind: `answered`, value: { enabled: false } });
+    });
+
+    test(`records a lost read as no answer at all, even one that throws before it is asked`, async () => {
+        expect(await readOffer(() => Promise.reject(new Error(`timeout`)), { enabled: false })).toEqual({ kind: `unreachable` });
+        const missing = (): Promise<{ enabled: boolean }> => {
+            throw new TypeError(`hostedOffer is not a function`);
+        };
+        expect(await readOffer(missing, { enabled: false })).toEqual({ kind: `unreachable` });
+    });
+
+    test(`reads NOT_FOUND by code or by status, and nothing else`, () => {
+        expect([{ code: `NOT_FOUND` }, { status: 404 }, { code: `FORBIDDEN`, status: 403 }, `404`, undefined].map(isNotFound)).toEqual([
+            true,
+            true,
+            false,
+            false,
+            false,
+        ]);
     });
 });

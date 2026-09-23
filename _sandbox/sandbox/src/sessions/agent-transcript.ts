@@ -1,14 +1,12 @@
-import type { AgentHarness, AgentProvider, ToolCallContent, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
+import type { ToolCallContent, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import type { TurnCheckpoint, TurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
 import { type SpokenLine, spokenLinesOf } from "./transcript-search.js";
 import { type TranscriptPage, type TranscriptRecord, type TranscriptWindow, windowOf } from "./transcript-record.js";
 
-// Which conversation to answer about; provider/harness are the registry's, never re-derived from the running turn, so a
-// mid-conversation provider switch is still one transcript.
+// Which conversation to answer about: its record is keyed by the conversation alone, so a mid-conversation provider
+// switch is still one transcript.
 export interface TranscriptAgent {
     readonly id: string;
-    readonly provider: AgentProvider;
-    readonly harness: AgentHarness;
 }
 
 export interface AgentTranscriptDeps {

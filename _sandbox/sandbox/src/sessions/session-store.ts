@@ -1,11 +1,11 @@
 import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { statePath, stateRelPath } from "../workspace/layout/state-paths.js";
+import { statePath, stateRelPath } from "../state-paths.js";
+import { conversationUnit } from "../store/conversation-units.js";
 
-// One conversation's own store, outside the workspace so no other conversation's namespace holds it.
-export const sessionsRoot = (historyRoot: string): string => join(historyRoot, "sessions");
-export const sessionsDir = (historyRoot: string, id: string): string => join(sessionsRoot(historyRoot), id);
+// One conversation's own store, in its unit outside the workspace, so no other conversation's namespace holds it.
+export const sessionsDir = (historyRoot: string, id: string): string => join(conversationUnit(historyRoot, id), "sessions");
 
 // Per-conversation state to symlink onto the workspace; settings and skills stay container-local on purpose.
 // Exported because a fenced conversation's own store has to hold the same names before its turn starts: the symlinks
@@ -32,7 +32,7 @@ const persistRetention = async (claudeHome: string): Promise<void> => {
 // foldersOf answers undefined for exactly this case), and asked without the area manifest so every reader agrees.
 export interface StoreOwner {
     readonly id: string;
-    readonly areas?: readonly string[] | undefined;
+    readonly identity: { readonly areas?: readonly string[] | undefined };
 }
 
 /**
@@ -41,7 +41,7 @@ export interface StoreOwner {
  * path (agents/worktrees/isolation.ts), so the CLI writing to `~/.claude` and the daemon reading here name one file.
  */
 export const claudeStoreOf = (workspaceRoot: string, historyRoot: string, entry: StoreOwner | undefined): string =>
-    entry?.areas === undefined ? statePath(workspaceRoot, ".intentic/records/sessions/claude/") : sessionsDir(historyRoot, entry.id);
+    entry?.identity.areas === undefined ? statePath(workspaceRoot, ".intentic/records/sessions/claude/") : sessionsDir(historyRoot, entry.id);
 
 export const linkClaudeState = async (workspaceRoot: string, home = homedir()): Promise<void> => {
     const store = statePath(workspaceRoot, ".intentic/records/sessions/claude/");

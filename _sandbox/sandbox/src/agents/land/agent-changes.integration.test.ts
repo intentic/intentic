@@ -61,7 +61,7 @@ const review = async (
     worktrees: AgentWorktrees,
     entry: ReturnType<typeof isolatedAgent>,
 ): Promise<{ rows: string[]; landed: string[]; absorbed: string[] }> => {
-    const composed = entry.repos[0];
+    const composed = entry.placement.repos[0];
     if (composed === undefined) {
         throw new Error("no repo in the composition");
     }
@@ -171,7 +171,7 @@ test("a branch git cannot read hides nothing: every row stays, and none of them 
     const entry = isolatedAgent(landed.repos);
 
     // An unreadable branch must answer as though it never looked: nothing landed, nothing absorbed.
-    const present = await presentInMain(worktrees, { ...entry, branch: "agent/does-not-exist" }, entry.repos[0]!, ["app.ts"]);
+    const present = await presentInMain(worktrees, { ...entry, placement: { ...entry.placement, branch: "agent/does-not-exist" } }, entry.placement.repos[0]!, ["app.ts"]);
     expect([...present.absorbed]).toEqual([]);
     expect([...present.inWorkspace]).toEqual([]);
 });

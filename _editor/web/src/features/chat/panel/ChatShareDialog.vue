@@ -3,8 +3,7 @@
 import { Button, ui, CopyButton, Icon, Modal, Notice } from "@intentic/ui";
 import type { ShareDetail, SharedConversation } from "@intentic/sandbox-contract";
 import { computed, ref, watch } from "vue";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
@@ -53,10 +52,7 @@ const share = async (): Promise<void> => {
     busy.value = true;
     error.value = undefined;
     try {
-        result.value = await sandboxJson<SharedConversation>(
-            `/share`,
-            jsonBody(`POST`, { conversationId: props.conversationId, title: name.value.trim(), detail: detail.value }),
-        );
+        result.value = await sandboxRpc.share.create({ conversationId: props.conversationId, title: name.value.trim(), detail: detail.value });
         emit(`shared`);
     } catch (caught) {
         error.value = caught instanceof Error ? caught.message : `The conversation could not be shared.`;

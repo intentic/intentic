@@ -3,15 +3,18 @@ import "@intentic/testing/dom";
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import { effectScope } from "vue";
+import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 const openFile = mock();
 const openAtLine = mock();
 const push = mock();
 // Daemon's reference resolver; unmatched by default so a click opens the path as written.
-const resolved = mock<() => { path?: string }>(() => ({}));
+const unmatched = async (_input: ProcedureInput<`workspace.resolve`>): Promise<{ path?: string }> => ({});
+const resolve = mock(unmatched);
 
 mock.module("../../../lib/queryPersistence", () => ({ queryClient: { getQueriesData: () => [] } }));
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: () => Promise.resolve(resolved()) }));
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { resolve } }) }));
 mock.module("../tabs/useWorkspaceTabs", () => ({ useWorkspaceTabs: () => ({ openFile, openAtLine }) }));
 mock.module("../../../router", () => ({ router: { push } }));
 
@@ -41,7 +44,8 @@ beforeEach(() => {
     openFile.mockClear();
     openAtLine.mockClear();
     push.mockClear();
-    resolved.mockReturnValue({});
+    resolve.mockClear();
+    resolve.mockImplementation(unmatched);
     workspaceAgent.value = undefined;
 });
 
@@ -64,9 +68,10 @@ describe(`clicking a file the agent mentioned`, () => {
     });
 
     it(`opens the file an abbreviated mention resolves to, not the path as written`, async () => {
-        resolved.mockReturnValue({ path: `_editor/web/src/pages/Foo.vue` });
+        resolve.mockResolvedValue({ path: `_editor/web/src/pages/Foo.vue` });
         clickFileLink(surface("Gone from `pages/Foo.vue`."));
         await waitFor(() => expect(openFile).toHaveBeenCalledWith(`_editor/web/src/pages/Foo.vue`));
+        expect(resolve).toHaveBeenCalledWith({ path: `pages/Foo.vue`, agent: undefined });
         expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`_editor`, `web`, `src`, `pages`, `Foo.vue`] }, query: {} });
     });
 
@@ -100,11 +105,12 @@ describe(`clicking a file an isolated conversation mentioned`, () => {
         expect(push).toHaveBeenCalledWith({ name: `workspace`, params: { path: [`docs`, `plan.md`] }, query: { agent: `c-1` } });
     });
 
-    // Scope is set before the daemon is asked; resolving against the shared tree returns unmatched.
+    // Scope is set before the daemon is asked, and travels with the question; the shared tree answers unmatched.
     it(`asks the daemon within that conversation's tree`, async () => {
-        resolved.mockImplementation(() => ({ path: workspaceAgent.value === `c-1` ? `docs/plan.md` : undefined }));
+        resolve.mockImplementation(async ({ agent }) => (agent === `c-1` ? { path: `docs/plan.md` } : {}));
         clickFileLink(scopedSurface("Wrote `plan.md/notes.md` just now."));
         await waitFor(() => expect(openFile).toHaveBeenCalledWith(`docs/plan.md`));
+        expect(resolve).toHaveBeenCalledWith({ path: `plan.md/notes.md`, agent: `c-1` });
     });
 
     it(`takes the reader back out again when the next link is a shared one`, async () => {

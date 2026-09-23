@@ -1,10 +1,9 @@
 import { STATE_DIR } from "@intentic/constants";
 import { errorMessage } from "@intentic/ui/async";
-import type { BridgeCall } from "./directoryUiVerbs";
-import { resolveBridgeCall } from "./directoryUiVerbs";
+import { type BridgeCall, resolveBridgeCall } from "./directoryUiVerbs";
 import { readFileWindow } from "../files/fileWindow";
-import { readIntenticLines } from "../../../lib/intenticStream";
-import { sandboxJson, sandboxRequest } from "../../sandbox/client/sandboxClient";
+import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 
 // Directory-defined UI: a directory's self-contained `.intentic/ui/index.html`, read via the normal file route
 // and rendered into a sandboxed, opaque-origin iframe with no DOM/cookie/token access. Talks to its sandbox only
@@ -22,10 +21,22 @@ export const loadDirectoryUi = async (dir: string): Promise<string | undefined> 
     }
 };
 
-const init = (call: BridgeCall): RequestInit => ({
-    method: call.method,
-    ...(call.body !== undefined ? { headers: { "content-type": `application/json` }, body: call.body } : {}),
-});
+// Sends one allowed call: its procedure on the typed client, or the GET the contract does not carry on the raw one.
+const send = (call: BridgeCall): Promise<unknown> => {
+    if (`path` in call) {
+        return sandboxJson(call.path);
+    }
+    switch (call.procedure) {
+        case `panels.list`:
+            return sandboxRpc.panels.list();
+        case `panels.start`:
+            return sandboxRpc.panels.start(call.input);
+        case `panels.stop`:
+            return sandboxRpc.panels.stop(call.input);
+        case `workspace.file`:
+            return sandboxRpc.workspace.file(call.input);
+    }
+};
 
 // Validates messages by source (the iframe's own window), not origin — a sandboxed srcdoc frame's origin is
 // opaque "null". Replies target that window directly, so targetOrigin "*" is safe: it carries no secrets.
@@ -43,18 +54,7 @@ export const createDirectoryUiBridge = (iframe: HTMLIFrameElement): (() => void)
         const reply = (payload: Record<string, unknown>): void => frame.postMessage({ __intentic: true, id, ...payload }, `*`);
         try {
             const call = resolveBridgeCall(msg.verb, (msg.args as Record<string, unknown> | undefined) ?? {});
-            if (!call.stream) {
-                reply({ ok: true, data: await sandboxJson(call.path, init(call)) });
-                return;
-            }
-            const response = await sandboxRequest(call.path, init(call));
-            if (!response.ok || response.body === null) {
-                throw new Error(`Request failed (${response.status}).`);
-            }
-            for await (const frameLine of readIntenticLines(response.body)) {
-                reply({ frame: frameLine });
-            }
-            reply({ done: true });
+            reply({ ok: true, data: await send(call) });
         } catch (error) {
             reply({ ok: false, error: errorMessage(error, `directory UI call failed`) });
         }

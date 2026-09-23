@@ -1,6 +1,6 @@
-import type { RemoteRef, RemoteRefs } from "@intentic/sandbox-contract";
+import { type RemoteRef, type RemoteRefs, VAULTED } from "@intentic/sandbox-contract";
 import { describe, test, expect } from "bun:test";
-import { initialChoice, MANUAL_KEY, refGroups, refKey, refSummary } from "./refs";
+import { initialChoice, MANUAL_KEY, refGroups, refKey, refSummary, versionReadToken } from "./refs";
 
 // The version picker's ordering and its opening selection: what a repository offers, turned into the list a person
 // reads and the one row that starts selected.
@@ -105,4 +105,13 @@ describe(`refSummary`, () => {
     test(`both name the commit, short, since that is what gets stored`, () => {
         expect(refSummary(branch(`main`))).toContain(branch(`main`).sha.slice(0, 7));
     });
+});
+
+// Editing a private repo's install holds the token's marker, never the token: without it the picker could never list
+// that install's versions.
+test(`reads versions with the token typed, or the marker for one an edit keeps`, () => {
+    expect(versionReadToken({ token: ` ghp_new ` }, new Set([`token`]))).toBe(`ghp_new`);
+    expect(versionReadToken({ token: `` }, new Set([`token`]))).toBe(VAULTED);
+    expect(versionReadToken({ token: `` }, new Set())).toBe(``);
+    expect(versionReadToken({}, new Set())).toBe(``);
 });

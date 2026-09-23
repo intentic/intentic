@@ -93,8 +93,8 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   another account) reads the old list only as prose in its hand-off note, so unless the agent re-creates it the
   turn ends having observed no list at all, and the carry rule kept copying the old count through every later
   finish, the land included. A CI-fix conversation refused twice for capacity wore "4 of 4 steps unfinished"
-  from the refused turn after its retry had fixed the test, landed, and said so. The registry's finish now reads
-  silence by how the turn ended (`stepsLeft`): a turn that ran to its own end with no list in view has no open
+  from the refused turn after its retry had fixed the test, landed, and said so. The settle now reads silence by
+  how the turn ended (`stepsLeft`, from the ending the conversation's actor hands the registry): a turn that ran to its own end with no list in view has no open
   steps, a turn cut short (refused, errored, stopped, dismissed) keeps the last measurement, and a manual land
   (no turn) leaves the mark exactly as it was rather than re-dating it off the runtime state the last turn left.
   The other stale mark is honest measurement of dishonest bookkeeping: a session that did its last step and
@@ -103,14 +103,15 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   once at Stop, off the CLI's own store, with the three honest ways out (finish, tick, delete) and leave to say
   so if stopping short on purpose; the board's mark is only as good as the list it reads.
 - **A turn that ends with nothing to show for it is a failure, not a finish** (`silentEnding` in
-  [src/agent/routes/agent.routes.ts](../src/agent/routes/agent.routes.ts)). A Gemini turn on the OpenCode runtime read and
+  [src/agent/run/frames/frame-decorators.ts](../src/agent/run/frames/frame-decorators.ts)). A Gemini turn on the OpenCode runtime read and
   grepped 59 times, changed no file, wrote not one word, and was ended by an ordinary `session.idle`: no error
   frame, so the row said `outcome: "ok"`, the registry wrote the resting `idle`, and the card settled into the
   board's **Finished** lane over an empty assistant bubble — the lane that means "nothing to do here", on the
   one card that most needed somebody. The daemon now injects an `error` frame ahead of `done` for exactly that
   shape — the provider answered, and then no prose, no card the turn parked on and no file edited — which puts
   it on the one path every reader of a failed turn already watches: the transcript, the activity record, the
-  ledger, and the registry's `errored`, which is what moves the card into **Attention**. Uncoded deliberately,
+  ledger, and the failure the conversation's actor holds for the turn (`src/agents/actor/`), which is what moves the
+  card into **Attention**. Uncoded deliberately,
   because an uncoded failure is the one shape the chat answers with a Continue press, and a press on an intact
   session is the whole recovery. Two neighbouring endings are deliberately not this: a turn that EDITED
   something left a diff, a diffstat and a standing to land, and `outcome: "ok"` with `verification: "unproven"`
@@ -119,7 +120,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   version of the same silence is fixed where it starts ([src/runtimes/grok/grok-agent.ts](../src/runtimes/grok/grok-agent.ts)): an
   OpenCode event stream that ENDS without `session.idle` or `session.error` is the shared `opencode serve`
   going away mid-turn, and it now throws rather than returning as though the turn had finished.
-- **The command rules at `turn.ending` run on every runtime too** (`agent.routes.ts` `daemonStopFindings`,
+- **The command rules at `turn.ending` run on every runtime too** (`agent/run/settle/settle-turn.ts` `daemonStopFindings`,
   `rules/turn-ending.ts` `commandRuleFindings`). "Verify before you finish" was a Claude Stop hook and nothing else:
   46% of the turns that edited code in the week of 2026-09-01 ended `unproven`, most of them Cursor, Gemini, Codex
   and Kimi turns whose first reader was the push. The daemon now runs those rules itself once such a turn's frames
@@ -142,26 +143,27 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   turn really touched, the work has to be genuinely unproven, the turn has to have ended `ok` (a cancelled one
   is never answered by the daemon starting another), it is never a spawned child (whose reader is its parent,
   already told what it proved), and a nudge never answers a nudge.
-- **A nudge, and a watch wake, run as the turn they continue — every field of it**
-  (`src/agent/run/turn/turn-seed.ts`). Both start a turn that picks an earlier one's thread back up, so both copy
-  that turn's whole identity: provider, harness, account, model, effort, reasoning, speed, persona and job.
-  They each used to spell that list out for themselves and each spelled a different, shorter one — provider,
-  model and effort travelled while `thinking`, `fast` and `actsAs` did not — so a follow-up on a
+- **A turn that continues another runs as it — every field of it** (`TurnProfile` and `profileOf` in
+  `@intentic/sandbox-contract`'s `schemas/agent.ts`). A nudge, a watch wake, a background job's wake, a child's
+  report and a peer's message all start a turn that picks an earlier one's thread back up, so each carries that
+  turn's whole profile: provider, harness, account, model, effort, reasoning, speed, persona, placement, audience
+  and job. They each used to spell that list out for themselves and each spelled a different, shorter one —
+  provider, model and effort travelled while `thinking`, `fast` and `actsAs` did not — so a follow-up on a
   reasoning-off turn came back reasoning, and a follow-up on a persona's turn came back as nobody, losing that
-  card's toolbox and signed-in accounts in a turn whose entire job is to go and run something. One list, one
-  place. There is no `watch-wake` or `verify-nudge` model role behind either any more: both could only ever
+  card's toolbox and signed-in accounts in a turn whose entire job is to go and run something. One value, one
+  place: the watch journal and a job's own file validate it with the same schema. There is no `watch-wake` or `verify-nudge` model role behind either any more: both could only ever
   have bound for a turn that named no model AND no provider AND no role AND no persona, which nothing here
   starts, so they were settings rows advertising exactly the model switch these two must never make.
 - **Claude Code turns are told about automatic Stop commands before they run**
   (`src/rules/turn-ending-note.ts`). The note lists enabled `turn.ending` command rules and tells the model not
   to duplicate them. Built-ins add no prompt text. Native runtimes are omitted because their fallback does not
   execute command rules. Said on a conversation's opening message and on the first turn after a compaction, not
-  on every turn (`src/agent/run/turn/turn-plan.ts`, the `send.turnEnding` gate): from the second message the note stands
+  on every turn (`src/agent/run/decide/turn-premise.ts`, the `send.turnEnding` gate): from the second message the note stands
   in the session's own history where the model can read it, and repeating it there is the per-turn cost the
   dependency notice and the rebase note were each walked back from. A compaction is the one event that takes it
   back out of that history, so it is the one event that earns it again — recorded per conversation as the turn
-  it happened under (`PersistedAgent.compactedTurn`, written from the registry's `compact` case) and read one
-  turn later by the plan.
+  it happened under (`PersistedAgent.compactedTurn`, written when the conversation's actor sees a `compact`
+  frame) and read one turn later by the plan.
 - **An entrant is not allowed to bring the daemon's logical working directory in with it**
   (`src/agents/worktrees/isolation.ts`, `NO_INHERITED_CWD`, on both `nsenterArgv` and `nsenterPrefix`). `--wdns` moves
   the KERNEL's cwd after `setns`; `PWD` still rides in from the daemon, naming the worktree by its
@@ -172,7 +174,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   dependency directories are bare mount points and reported a red tree over `prisma: not found` in a fully
   installed workspace, with `nsenter` right there in its own command line. Unset rather than reassigned: with
   nothing to trust, every shell takes it from `getcwd()`, which `--wdns` already made correct.
-- **A `turn.ending` check says in the log where it ran** (`src/agent/run/turn/turn-plan.ts`): `checks: check started`
+- **A `turn.ending` check says in the log where it ran** (`src/agent/run/harness/harness-hooks.ts`): `checks: check started`
   and `checks: check settled` carry the command, `anchored`, the status, the exit code and the duration, the
   same shape `prepush` has. Without them a check that exited 127 over a missing workspace binary left the only
   record of itself in a model's transcript.
@@ -285,8 +287,8 @@ The decisions this daemon is built on and the traps that cost somebody a day —
 - **The conversation record is what was on screen, cards included, because both come from ONE fold.** A turn's
   frames are folded into transcript rows as they arrive, inside the run itself (`TurnRun` in src/agent/run/turn/turn-runs.ts,
   running the contract's `TranscriptFold`, `@intentic/sandbox-contract/transcript-fold`), and everything reads
-  those rows: `/agent/attach` hands a window the run's rows whole and then every change as a patch, the record on
-  `/history/transcripts` is appended the settled run's rows (src/sessions/turn-transcript.ts), a subagent's
+  those rows: `/agent/attach` hands a window the run's rows whole and then every change as a patch, the record in
+  the conversation's directory is appended the settled run's rows (src/sessions/turn-transcript.ts), a subagent's
   transcript is its parent run's rows tagged with its tool call, and the demo folds its recording through the same
   class. The browser never folds a frame: it applies patches. What the daemon does to a turn is therefore what
   every reader sees, live and a week later alike: a card is raised `pending` and the reply that releases it
@@ -396,9 +398,25 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   boot race: the routing table rendered before the availability probe answered, so a fresh install offered a
   trial it could not route and every first message died with "unknown provider for model". Anything new about
   the trial keeps this split: offer surfaces may read the probe, the turn path and the routing table must not.
-- Archiving a finished agent preserves its transcript and parked branches while reclaiming checkouts. Explicitly
-  purging the archive also removes the daemon transcript, unshared attachment UUID dirs, and separately-owned
-  Claude session files; provider-native state that still shares an auth home is never guessed at destructively.
+- Archiving a finished agent keeps everything it wrote (its rows, its directory, its parked branches) and reclaims
+  only its checkouts. Purging is one path behind both doors, discarding a conversation and emptying the archive
+  (`forgetConversations`, src/agents/registry/archive.ts): the workspace's leftovers first (unshared attachment UUID
+  dirs, a shared-store Claude session's files: src/sessions/conversation-purge.ts), then the actor's dispose, which
+  deletes the conversation's row and removes its directory. Provider-native state that still shares an auth home is
+  never guessed at destructively.
+- **A conversation is one row family and one directory, so a purge cannot forget a store.** Every durable row about
+  it hangs off its row in `/history/conversations.db` (src/store/conversations-db.ts: the record, per-repo
+  provenance, checkpoints, the turn journal, armed watches) with `ON DELETE CASCADE`, and every file the daemon keeps
+  for it lives under `/history/conversations/<id>/` (src/store/conversation-units.ts: the transcript record, the
+  system-prompt disclosure, a fenced conversation's own runtime session store). A new per-conversation store takes a
+  table with that foreign key or a file in that directory; `archive.integration.test.ts` walks the volume and every
+  table after a purge, so one kept anywhere else fails it without being named. Three traps: a conversation row is
+  upserted with `ON CONFLICT … DO UPDATE`, never `INSERT OR REPLACE`, whose delete-then-insert cascades every child row
+  away; a transaction's work is synchronous (src/store/sqlite.ts refuses a promise), because an `await` inside one
+  lets any other write on the connection into it; and a turn's journal entry is staged on its actor and written in
+  the same transaction as the begin that registers it (the foreign key refuses it earlier), after which rewrites go
+  straight to the row. The worktrees and overlays stay outside the directory: an archive retires them while the
+  conversation stays, and `git worktree`'s own admin records name each checkout by its path.
 - **The image runs a different dependency graph than the tests do**, and nothing but booting it says so. Every
   check upstream of the image jobs runs in the development install: all devDependencies present, every
   workspace package linked: while `prepare-image-trees.sh` prunes the shipped tree with `pnpm deploy --prod`.

@@ -1,64 +1,28 @@
+import { resetSandboxScope, sandboxRef } from "@intentic/extension-api";
 import { watch } from "vue";
-import { resetAgents } from "../../agents/fleet/useAgents";
-import { loadArchived, resetArchive } from "../../agents/fleet/useAgents-registry";
-import { resetChat } from "../../chat/run/useChat";
+import { loadArchived } from "../../agents/fleet/useAgents-registry";
 import { loadAccountStatus } from "../../chat/accounts/useChat-accounts";
-import { resetEditBuffers } from "../../workspace/files/useEditBuffers";
-import { resetPreviewSurface } from "../../preview/previewSurface";
-import { resetPresence } from "../../../shell/presence/usePresence";
-import { resetPushFlow } from "../../workspace/push/usePushFlow";
 import { useSandbox } from "./useSandbox";
-import { resetTerminalOpen } from "../../../shell/window/useLayout";
-import { resetWorkspaceLive } from "../../workspace/changes/live/useWorkspaceLive";
-import { resetWorkspaceTabs } from "../../workspace/tabs/useWorkspaceTabs";
-import { resetWorkspaceTreeState } from "../../workspace/explorer/useWorkspaceTree";
-import { resetHome } from "../../workspace/home/useHome";
 
-// Re-scopes client-side singleton state to the active sandbox; vue-query is already scoped by key, but these
-// live outside the component tree. Liveness, sandboxSession's credentials and the extension host re-scope
-// themselves rather than being called from here. Registered at module scope, not in the shell, since the active
-// sandbox can change while the shell is unmounted (the add-sandbox flow).
+// The one place a sandbox switch resets anything: every module-level value about one sandbox is declared through the
+// scope primitive (sandboxRef, sandboxValue), the editor's and the extensions' alike, and comes back as its initial
+// here. Module scope, not the shell's, since the active sandbox can change while the shell is unmounted (add-sandbox).
 
 const { activeSandboxId, reachable } = useSandbox();
 
-// The /work-derived half of the reset: chat, edit buffers, tree and tabs. Also runs when the hello reports the
-// workspace itself was replaced under the same sandbox id, since nothing else would notice that.
-export const resetWorkspaceScopedState = (): void => {
-    resetChat();
-    resetEditBuffers();
-    resetWorkspaceTreeState();
-    // The editor strip goes with the tree it browses: both are paths into one sandbox's /work.
-    resetWorkspaceTabs();
-    // The home's open folder is a path into that same tree.
-    resetHome();
-    resetTerminalOpen();
-    // Path-keyed, and two sandboxes of the same project share every path, so this is stale, not just surplus,
-    // without a reset.
-    resetWorkspaceLive();
-    // A staged push names commits in one workspace; offering to send them from another is the most consequential
-    // item here.
-    resetPushFlow();
-    // Content-keyed and unbounded; the preview and its parked panel belong to one sandbox's app, so a switch is
-    // where it's dropped.
-    resetPreviewSurface();
-};
-
 watch(activeSandboxId, (id, previous) => {
-    if (id === previous) {
-        return;
+    if (id !== previous) {
+        resetSandboxScope();
     }
-    resetWorkspaceScopedState();
-    // The roster belongs to the daemon it came from; the new sandbox's stream repaints it on connect.
-    resetPresence();
-    // Not handled by liveness, which only clears the fleet on stream failure; a switch must reset it separately.
-    resetAgents();
-    // Also reset here, but not on stream failures; resetArchive's own comment says why.
-    resetArchive();
 });
 
-// Reloads account status on first reachability, a reconnect, or a switch; activeSandboxId is watched too so a
-// switch between two already-healthy boxes still fires it. Runs after the reset watch above.
-watch([reachable, activeSandboxId], ([isReachable]) => {
+// Minted fresh per scope, so the reads below follow every new one: a switch, or the workspace replaced under the same
+// sandbox id (systemEvents.ts), whose reset has no id change to watch.
+const scope = sandboxRef(() => ({}));
+
+// Reloads what lives on the daemon on first reachability, a reconnect, or a new scope (a switch between two
+// already-healthy boxes flips no reachability at all). Runs after the reset above.
+watch([reachable, scope], ([isReachable]) => {
     if (isReachable) {
         void loadAccountStatus();
         // Pull-only, rides the same seam: a reachable daemon may have archived agents itself since the last read.

@@ -38,13 +38,16 @@ The long form — every surface, and why each one lives here rather than in the 
 ## Key files
 
 - [src/app.ts](src/app.ts): the HTTP composition root — every route the browser and the CLI reach, mounted in
-  one fixed order, because that order is behaviour.
+  one fixed order, because that order is behaviour. Each gate reads the policy the contract declares on the route
+  (`RouteMeta`); a raw route is registered only under its row in the contract's raw-route table.
 - [src/composition.ts](src/composition.ts): what is wired to what. Start here to find the owner of a seam.
 - [src/agent/](src/agent), **singular**: one conversation — the turn loop (`run/`), what the model is told
   (`prompt/`), what it can do (`tools/`), and whether it proved anything (`verification/`).
-- [src/agents/](src/agents), **plural**: the fleet — the roster (`registry/`), the isolated checkouts
-  (`worktrees/`) and the work coming back (`land/`).
-- [src/runtimes/](src/runtimes): the nine agent runtimes behind one seam ([src/agent/providers/adapter.ts](src/agent/providers/adapter.ts)).
+- [src/agents/](src/agents), **plural**: the fleet — the roster (`registry/`), each conversation's live state
+  and its one writer (`actor/`), the isolated checkouts (`worktrees/`) and the work coming back (`land/`).
+- [src/runtimes/](src/runtimes): the nine agent runtimes behind one seam ([src/agent/providers/adapter.ts](src/agent/providers/adapter.ts),
+  handed one grouped request, [agent-request.ts](src/agent/providers/agent-request.ts)), listed once in
+  [runtime-table.ts](src/runtimes/runtime-table.ts), with what the vendor loops share in `decorators/`.
 - [src/capabilities/](src/capabilities) and [src/environment/](src/environment): what the owner connected, and
   the image overlay that makes it real.
 

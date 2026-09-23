@@ -2,13 +2,13 @@ import type { WorkspaceSearchMode, WorkspaceSearchResult } from "@intentic/api-c
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/vue-query";
 import type { Ref } from "vue";
 import { computed, onScopeDispose, ref, watch } from "vue";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { type ProcedureInput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSearchOptions } from "./useSearchOptions";
 import { workspaceAgent, workspaceDir } from "../health/workspaceScope";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { WORKSPACE_SEARCH } from "../../../lib/queryKeys";
 
-// Search over /work via the sandbox daemon (GET /workspace/search). Two scopes, two verbs:
+// Search over /work via the sandbox daemon (workspace.search). Two scopes, two verbs:
 // text → iq's `find` (ripgrep): one literal/regex pattern, phrase-matched, case-insensitive unless Aa.
 // smart → iq's `q` (BM25 + embeddings + rerank): the query is a question, scored by word, can match without
 // containing any of them.
@@ -45,42 +45,39 @@ export function useWorkspaceSearch(filter: Ref<string>, scope: Ref<SearchScope>,
     // The daemon rejects queries under 2 chars (contract's min length); short input just disables the query.
     const enabled = computed(() => reachable.value && active.value && debounced.value.length >= 2);
     // Only `text` reads the match switches, `smart` has no pattern to apply them to.
-    const params = computed(() => {
-        const search = new URLSearchParams({ query: debounced.value, mode: VERB[scope.value] });
+    const input = computed(() => {
+        const search: ProcedureInput<`workspace.search`> = { query: debounced.value, mode: VERB[scope.value] };
         // The open project narrows this the way it narrows the tree beside it (app/projectScope.ts): a hit the reader
         // cannot reach from the tree they are looking at is not an answer. A prefix, not a glob, so a typed `include`
         // still applies on top of it.
         if (workspaceDir.value !== ``) {
-            search.set(`dir`, workspaceDir.value);
+            search.dir = workspaceDir.value;
         }
         if (includeIgnored.value) {
-            search.set(`includeIgnored`, `true`);
+            search.includeIgnored = `true`;
         }
         // Files to ask, in VSCode's glob grammar; scopes both text and smart search equally.
         if (debouncedInclude.value !== ``) {
-            search.set(`include`, debouncedInclude.value);
+            search.include = debouncedInclude.value;
         }
         if (scope.value === `text`) {
             // `find` takes a rust regex; with `.*` off the query is literal text (rg -F), dots and parens included.
             if (!useRegex.value) {
-                search.set(`literal`, `true`);
+                search.literal = `true`;
             }
             if (matchCase.value) {
-                search.set(`caseSensitive`, `true`);
+                search.caseSensitive = `true`;
             }
             if (wholeWord.value) {
-                search.set(`word`, `true`);
+                search.word = `true`;
             }
         }
-        return search.toString();
+        return search;
     });
     const query = useInfiniteQuery({
         // Every switch is in the key: flipping one is a different search, and its previous answer stays cached.
-        queryKey: computed(() => WORKSPACE_SEARCH.of(params.value)),
-        queryFn: ({ pageParam, signal }) =>
-            sandboxJson<WorkspaceSearchResult>(`/workspace/search?${params.value}${pageParam === undefined ? `` : `&after=${pageParam}`}`, {
-                signal,
-            }),
+        queryKey: computed(() => WORKSPACE_SEARCH.of(input.value)),
+        queryFn: ({ pageParam, signal }) => sandboxRpc.workspace.search({ ...input.value, after: pageParam }, { signal }),
         initialPageParam: undefined as string | undefined,
         getNextPageParam: (last: WorkspaceSearchResult) => last.cursor,
         enabled,

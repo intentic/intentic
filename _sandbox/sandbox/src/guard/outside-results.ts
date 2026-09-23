@@ -13,7 +13,7 @@ export const INTERNAL_SERVERS: ReadonlySet<string> = new Set([
     // agent/agent.ts mounts these two directly.
     "ui", // AskUserQuestion
     "accounts", // browser/accounts-tools.ts: the roster and the credential typists
-    // agent/turn-plan.ts sdkServers.
+    // agent/run/harness/harness-servers.ts, the harness arm's own mounts.
     "secrets", // browser/secrets-tools.ts: types a stored value into a focused field
     "hashline", // hash-anchored Edit/Write replacements
     "subagents", // the `wait` park

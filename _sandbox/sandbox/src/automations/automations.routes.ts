@@ -1,16 +1,14 @@
 import { type Automation, type AutomationCatalog, type AutomationSummary, automationsContract, cronOptions, VISITOR_CHAT_PERSONA, type Zone } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { Cron } from "croner";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { DoorKind } from "../auth/door-tokens.js";
 import { operatorHere } from "../auth/operator.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { reconcileListenerProcesses } from "../extensions/extension-processes.js";
-import { ISSUES_PROVIDER } from "../issues/provider.js";
+import { automationCatalog, ISSUES_PROVIDER, triggerSourceEvents } from "./catalog.js";
 import { ensureVisitorChatPersona } from "../personas/visitor-chat.js";
 import type { AutomationRecord } from "./automations-store.js";
-import { automationCatalog, triggerSourceEvents } from "./catalog.js";
 import { sandboxZone, zoneOf } from "./schedule-zone.js";
 import { fireAutomation, nextRunOf, runHeldWake } from "./scheduler.js";
 
@@ -195,7 +193,7 @@ export const createAutomationsRoutes = (services: Services) => {
             if (automation.trigger.kind === "once") {
                 await services.automations.setEnabled(automation.id, false);
             }
-            void fireAutomation(services, automation, streamAgent, { cleared: "approval" }).catch((error: unknown) =>
+            void fireAutomation(services, automation, { cleared: "approval" }).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: automation.id }, "by-hand automation run failed"),
             );
             return { ok: true } as const;
@@ -216,7 +214,7 @@ export const createAutomationsRoutes = (services: Services) => {
             }
             // Everything the hold snapshotted rides runHeldWake, the same release the scheduler's countdown scan uses.
             // So the two paths out of the queue cannot drift.
-            void runHeldWake(services, automation, pending, streamAgent).catch((error: unknown) =>
+            void runHeldWake(services, automation, pending).catch((error: unknown) =>
                 services.logger.error({ err: error, automation: automation.id }, "approved automation run failed"),
             );
             return { ok: true } as const;

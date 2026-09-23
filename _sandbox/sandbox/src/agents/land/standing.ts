@@ -1,7 +1,7 @@
 import type { LandConflictReason } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { headSha } from "../../git/changes/changes.js";
-import type { IsolatedAgent, PersistedAgent } from "../registry/agents-store.js";
+import type { IsolatedAgent, RepoRecord } from "../registry/agents-store.js";
 import { checkpointOf, carriesContent } from "./agent-changes.js";
 import { agentBranchTips } from "./agent-refs.js";
 import { dirtyPaths } from "./land.js";
@@ -29,7 +29,7 @@ const NOTHING: Refusal = { stands: false, causes: [] };
 
 // One repo of a composition as this pass read it.
 interface RepoShas {
-    readonly composed: PersistedAgent["repos"][number];
+    readonly composed: RepoRecord;
     readonly head: string | undefined;
     readonly tip: string | undefined;
 }
@@ -72,7 +72,7 @@ const readDirty = async (main: string, git: GitRunner): Promise<DirtyRead> => {
 // next pass. Leaning towards clearing is deliberate — a wrong `ready` costs one refused land, which arms the report
 // again, while a wrong `conflict` is the dead end this exists to end.
 const refusalOf = async (entry: IsolatedAgent, dirtyAt: (repo: string, path: string) => Promise<boolean>): Promise<Refusal> => {
-    const conflicts = entry.conflicts ?? [];
+    const conflicts = entry.landing.conflicts ?? [];
     if (conflicts.length === 0) {
         return NOTHING;
     }
@@ -158,10 +158,10 @@ export const createLandStandings = (worktrees: AgentWorktrees, git: GitRunner = 
             for (const entry of entries) {
                 // Ref reads run in the main repo either way: the shared object store covers a retired worktree too.
                 const shas = await Promise.all(
-                    entry.repos.map(async (composed) => ({
+                    entry.placement.repos.map(async (composed) => ({
                         composed,
                         head: await headOf(composed.repo),
-                        tip: await tipOf(composed.repo, entry.branch),
+                        tip: await tipOf(composed.repo, entry.placement.branch),
                     })),
                 );
                 const refusal = await refusalOf(entry, dirtyAt);

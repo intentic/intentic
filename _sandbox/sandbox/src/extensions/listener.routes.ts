@@ -7,9 +7,8 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { stream } from "hono/streaming";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import { DEBOUNCE_MS, dispatchListenerMessage, reportListenerFailure } from "../automations/listeners.js";
-import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "../automations/scheduler.js";
+import { PAYLOAD_MAX, type TurnStream } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { listenerState } from "./listener-state.js";
@@ -19,7 +18,7 @@ import { setListenerStatus } from "./listener-status.js";
 // Four routes: /state (reconcile), /dispatch (inbound events, optional ndjson stream), and failure/status reports.
 // Reached only with the per-boot panel token, server-side; /state returning connector secrets is not a new exposure.
 
-export const createListenerRoutes = (services: Services, wake: WakeFn = streamAgent) => ({
+export const createListenerRoutes = (services: Services) => ({
     // Reconcile feed: enabled listener automations plus connector configs (bot tokens included); polled to connect.
     state: async (c: Context<AppEnv, "/listeners/:provider">): Promise<Response> => c.json(await listenerState(services, c.req.param("provider"))),
 
@@ -41,7 +40,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
             return c.json({ error: "provider mismatch" }, 400);
         }
         if (c.req.query("stream") !== "1") {
-            await dispatchListenerMessage(services, message, wake);
+            await dispatchListenerMessage(services, message);
             return c.json({ ok: true });
         }
         c.header("content-type", "application/x-ndjson");
@@ -68,7 +67,7 @@ export const createListenerRoutes = (services: Services, wake: WakeFn = streamAg
                     },
                 };
             };
-            const matched = await dispatchListenerMessage(services, message, wake, DEBOUNCE_MS, makeStream);
+            const matched = await dispatchListenerMessage(services, message, DEBOUNCE_MS, makeStream);
             await Promise.all(matched.map((id) => sinks.get(id) ?? Promise.resolve()));
         });
     },

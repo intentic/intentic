@@ -1,9 +1,7 @@
 import { localZone } from "@intentic/sandbox-contract/time";
-import type { TimezoneState } from "@intentic/api-contract";
-import { sandboxJson } from "../client/sandboxClient";
-import { jsonBody } from "../client/jsonBody";
+import { sandboxRpc } from "../client/sandboxRpc";
 import { queryClient } from "../../../lib/queryPersistence";
-import { SANDBOX_SETTINGS } from "../../../lib/queryKeys";
+import { rpcKey } from "../../../lib/queryKeys";
 
 // A sandbox runs its daemon in a UTC container; the person setting a schedule almost never lives in one. Nothing in
 // the daemon can work out where its owner is, so the browser — the one part of this system standing next to them —
@@ -25,11 +23,11 @@ export const offerTimezone = async (): Promise<void> => {
     }
     offered = true;
     try {
-        const state = (await sandboxJson(`/settings/timezone`, jsonBody(`POST`, { timezone: localZone() }))) as TimezoneState;
+        const state = await sandboxRpc.settings.adoptTimezone({ timezone: localZone() });
         // Only when this call is what set it: an offer the sandbox declined changed nothing, and invalidating then
         // would refetch every settings screen in every window for no new fact.
         if (state.adopted) {
-            await queryClient.invalidateQueries({ queryKey: SANDBOX_SETTINGS.of() });
+            await queryClient.invalidateQueries({ queryKey: rpcKey(`settings.get`) });
         }
     } catch {
         // A daemon too old to know this route, or one not reachable yet. Neither is worth a notice: the zone is

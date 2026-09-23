@@ -2,6 +2,7 @@
 import { computed, onUnmounted } from "vue";
 import { boxNameOf } from "../../agents/fleet/fleetScope";
 import type { Conversation } from "../session/conversation";
+import { placeConversation } from "./pane/composerControls";
 import { type BoxFleet, otherBoxes, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
 import { useRunners } from "../../sandbox/devices/runners/useRunners";
 import { useT } from "@intentic/ui/i18n";
@@ -62,7 +63,7 @@ const placedAt = computed(() => {
 });
 
 const place = (at: { box?: string; runner?: string }): void => {
-    if (conversation.placeAt(at)) {
+    if (placeConversation(conversation, at)) {
         emit(`selected`);
     }
 };

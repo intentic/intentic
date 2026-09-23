@@ -1,3 +1,4 @@
+import { sandboxValue } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { computed, watch } from "vue";
 import { awaitingUser, blocked, type ClientAgentStatus, type FleetLane, laneOf, NO_ATTENTION, turnInFlight, unregistered } from "./agentStatus";
@@ -150,22 +151,23 @@ const weight = (entry: FleetAgent): number =>
 
 // Same stabilization as the roster: reuses the previous FleetAgent when its derived fields are unchanged, so Vue
 // can skip re-rendering cards whose agent didn't move.
-const fleetStable = new Map<string, FleetAgent>();
-let stableFleet: FleetAgent[] = [];
+// Sandbox-scoped: its cached cards are one daemon's objects.
+const fleetStable = sandboxValue(() => new Map<string, FleetAgent>());
+const stableFleet = sandboxValue<FleetAgent[]>(() => []);
 
 const stabilizeFleetEntry = (entry: FleetAgent): FleetAgent => {
-    const cached = fleetStable.get(entry.id);
+    const cached = fleetStable.value.get(entry.id);
     if (cached !== undefined && snapshotFingerprint(cached) === snapshotFingerprint(entry)) {
         return cached;
     }
-    fleetStable.set(entry.id, entry);
+    fleetStable.value.set(entry.id, entry);
     return entry;
 };
 
-// Clears the memo tied to the previous daemon's roster; its cached cards are that daemon's objects.
+// Clears the memo tied to the connection's roster; a reconnect's snapshot is new objects.
 export const forgetFleet = (): void => {
-    fleetStable.clear();
-    stableFleet = [];
+    fleetStable.value.clear();
+    stableFleet.value = [];
 };
 
 export const fleet = computed<FleetAgent[]>(() => {
@@ -225,15 +227,15 @@ export const fleet = computed<FleetAgent[]>(() => {
     ].toSorted((a, b) => weight(a) - weight(b) || b.updatedAt - a.updatedAt);
     const next = built.map(stabilizeFleetEntry);
     const nextIds = new Set(next.map((agent) => agent.id));
-    for (const id of fleetStable.keys()) {
+    for (const id of fleetStable.value.keys()) {
         if (!nextIds.has(id)) {
-            fleetStable.delete(id);
+            fleetStable.value.delete(id);
         }
     }
-    if (sameEntries(stableFleet, next)) {
-        return stableFleet;
+    if (sameEntries(stableFleet.value, next)) {
+        return stableFleet.value;
     }
-    stableFleet = next;
+    stableFleet.value = next;
     return next;
 });
 

@@ -1,14 +1,14 @@
-import type { AgentSearchResult, MatchSnippet, Speaker } from "@intentic/sandbox-contract";
+import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract";
 import { keepPreviousData, useQuery } from "@tanstack/vue-query";
 import { computed, onScopeDispose, ref, watch } from "vue";
 import type { Conversation } from "../../chat/session/conversation";
 import { useChat } from "../../chat/run/useChat";
 import type { ChatSession } from "../../chat/run/useChat-sessions";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import { useAgents } from "../fleet/useAgents";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
-import { AGENTS, SESSIONS } from "../../../lib/queryKeys";
+import { rpcKey } from "../../../lib/queryKeys";
 
 // Filters the fleet by what was said, as a factory (not a singleton) so each surface owns its own query. Matches in two
 // tiers, local per keystroke over open transcripts and titles, debounced daemon for the rest, merged as a union so
@@ -27,7 +27,7 @@ interface SpokenLine {
 }
 
 const linesOf = (conversation: Conversation, caseSensitive: boolean): readonly SpokenLine[] =>
-    conversation.messages.value.flatMap((message) => {
+    conversation.transcript.messages.value.flatMap((message) => {
         if (message.role !== `user` && message.role !== `assistant`) {
             return [];
         }
@@ -122,13 +122,13 @@ export function useAgentFilter() {
 
     const enabled = computed(() => reachable.value && settled.value.length >= MIN_QUERY);
 
-    // Flipping `Aa` re-asks at once rather than debouncing with the text, and rides in the key as well as the URL,
+    // Flipping `Aa` re-asks at once rather than debouncing with the text, and rides in the key as well as the request,
     // since the same words under the other rule cache separately.
-    const params = computed(() => `query=${encodeURIComponent(settled.value)}${matchCase.value ? `&caseSensitive=true` : ``}`);
+    const search = computed(() => ({ query: settled.value, ...(matchCase.value ? { caseSensitive: `true` } : {}) }));
 
     const fleetSearch = useQuery({
-        queryKey: computed(() => AGENTS.of(`search`, params.value)),
-        queryFn: ({ signal }) => sandboxJson<AgentSearchResult>(`/agents/search?${params.value}`, { signal }),
+        queryKey: computed(() => rpcKey(`agents.search`, search.value)),
+        queryFn: ({ signal }) => sandboxRpc.agents.search(search.value, { signal }),
         enabled,
         placeholderData: keepPreviousData,
     });
@@ -136,8 +136,8 @@ export function useAgentFilter() {
     // The never-carded conversations: sessions no agent entry owns. Fetched here rather than through useChat's
     // loadSessions, which writes the singleton History popover list a board query must not rewrite.
     const sessionSearch = useQuery({
-        queryKey: computed(() => SESSIONS.of(`search`, params.value)),
-        queryFn: ({ signal }) => sandboxJson<{ sessions: ChatSession[] }>(`/sessions?${params.value}`, { signal }),
+        queryKey: computed(() => rpcKey(`sessions.list`, search.value)),
+        queryFn: ({ signal }) => sandboxRpc.sessions.list(search.value, { signal }),
         enabled,
         placeholderData: keepPreviousData,
     });

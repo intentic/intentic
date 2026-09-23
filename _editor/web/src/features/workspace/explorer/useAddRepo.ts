@@ -1,9 +1,7 @@
 import { useQueryClient } from "@tanstack/vue-query";
 import { ref } from "vue";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { panelsKey } from "../../extensions/usePanels";
-import { GIT_CHANGES, GIT_REPOS, WORKSPACE_TREE } from "../../../lib/queryKeys";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { rpcPrefix, workingReviewKeys } from "../../../lib/queryKeys";
 import { repoNameFromUrl } from "../health/repoName";
 
 // Clones a repository into the workspace, landing at /work/<name> derived from the URL. The daemon reserves some names
@@ -30,13 +28,12 @@ export function useAddRepo() {
         cloning.value = true;
         error.value = undefined;
         try {
-            await sandboxJson(`/workspace/repos`, jsonBody(`POST`, { name, cloneUrl: url }));
-            await Promise.all([
-                queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }),
-                queryClient.invalidateQueries({ queryKey: panelsKey }),
-                queryClient.invalidateQueries({ queryKey: GIT_REPOS.every }),
-                queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every }),
-            ]);
+            await sandboxRpc.workspace.addRepo({ name, cloneUrl: url });
+            await Promise.all(
+                [rpcPrefix(`workspace.tree`), rpcPrefix(`panels.list`), rpcPrefix(`git.repos`), ...workingReviewKeys].map((queryKey) =>
+                    queryClient.invalidateQueries({ queryKey }),
+                ),
+            );
             return true;
         } catch (cause) {
             // Daemon's own message: knows whether it's a reserved name, unreachable host, or missing credentials.

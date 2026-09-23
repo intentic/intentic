@@ -10,9 +10,9 @@ import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick, ref, type Ref } from "vue";
 import { reasonCopy } from "./conflictResolution";
 import { useAgentChanges } from "./useAgentChanges";
-import { agentHistoryKey } from "../fleet/useAgentHistory";
 import { queryClient } from "../../../lib/queryPersistence";
-import { AGENT_DIFF, WORKSPACE_MODULES } from "../../../lib/queryKeys";
+import { rpcKey } from "../../../lib/queryKeys";
+import { modulesKey } from "../../workspace/health/useModules";
 import { router } from "../../../router";
 import { IconStub } from "@intentic/ui/testing";
 // The threshold the outline itself waits for, read from where it's defined rather than restated as a number here.
@@ -94,11 +94,11 @@ const mount = async (modules: readonly WorkspaceModule[] = [], seed?: AgentChang
     for (const repo of changes.repos) {
         repos.push(repo.repo === `root` ? { ...repo, modules: [...modules] } : repo);
     }
-    queryClient.setQueryData(AGENT_DIFF.of(AGENT), seed ?? ({ ...changes, repos } satisfies AgentChangesResponse));
+    queryClient.setQueryData(rpcKey(`agents.diff`, { id: AGENT }), seed ?? ({ ...changes, repos } satisfies AgentChangesResponse));
     // History is lazy: the panel only enables it once absorbed work is reported, so it's seeded only for tests about
     // that state, empty otherwise to avoid a permanent loading line.
     if ((seed ?? changes).absorbed > 0) {
-        queryClient.setQueryData(agentHistoryKey(AGENT), history ?? ({ repos: [], unaccounted: 0 } satisfies AgentHistoryResponse));
+        queryClient.setQueryData(rpcKey(`agents.history`, { id: AGENT }), history ?? ({ repos: [], unaccounted: 0 } satisfies AgentHistoryResponse));
     }
     const el = document.createElement(`div`);
     document.body.append(el);
@@ -355,7 +355,7 @@ it(`narrows to exactly the blocked files`, async () => {
 // An agent's new package exists only in its worktree, so grouping by the workspace-wide read put its files in the
 // unnamed bucket. Groups by the agent's own diff instead; the workspace read is seeded to disagree and ignored.
 it(`groups by the packages of the agent's own tree, not the workspace's`, async () => {
-    queryClient.setQueryData(WORKSPACE_MODULES.of(), { repos: [{ repo: `root`, modules: [] }] });
+    queryClient.setQueryData(modulesKey(), { repos: [{ repo: `root`, modules: [] }] });
     const el = await mount(MODULES);
     const heading = packageHeading(el, `@shop/auth`);
     expect(heading.querySelector(`[data-icon="box"]`)).not.toBeNull();

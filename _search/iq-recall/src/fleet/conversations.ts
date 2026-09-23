@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { HISTORY_ROOT } from "@intentic/constants";
 
-// Maps a recall session's bare uuid to its fleet conversation (branch name, title); reads the daemon's fleet registry
-// as a plain file, one entry per conversation. Tolerant: `iq` also runs with no daemon nearby, so a read failure means
-// there is no fleet here, and returns an empty map rather than failing the search.
+// Maps a recall session's bare uuid to its fleet conversation (title, owner); reads the daemon's conversations database
+// read-only, one row per conversation. Tolerant: `iq` also runs with no daemon nearby, so a read failure means there is
+// no fleet here, and returns an empty map rather than failing the search.
 
 export interface Conversation {
     // Conversation id; also its branch name and worktree dir, the handle other surfaces use (`agents show <id>`).
@@ -14,44 +14,55 @@ export interface Conversation {
     readonly owner?: string;
 }
 
-interface RegistryEntry {
-    readonly id?: unknown;
-    readonly title?: unknown;
-    readonly sessionId?: unknown;
-    readonly owner?: unknown;
+interface ConversationRow {
+    readonly id: string;
+    readonly sessionId: unknown;
+    readonly title: unknown;
+    readonly owner: unknown;
 }
 
-const ownerOf = (entry: RegistryEntry): string | undefined => {
-    const email = (entry.owner as { email?: unknown } | undefined)?.email;
-    return typeof email === "string" && email !== "" ? email : undefined;
+// Only the fields this reader needs, pulled out of the stored record in place: the rest of its shape is the daemon's.
+const ROWS = `SELECT id,
+    json_extract(record, '$.sessionId') AS sessionId,
+    json_extract(record, '$.social.title.text') AS title,
+    json_extract(record, '$.social.owner.email') AS owner
+FROM conversation`;
+
+const readRows = (historyRoot: string): ConversationRow[] => {
+    const db = new DatabaseSync(join(historyRoot, "conversations.db"), { readOnly: true });
+    try {
+        return db.prepare(ROWS).all() as unknown as ConversationRow[];
+    } finally {
+        db.close();
+    }
 };
 
-// One registry entry as a conversation, or nothing for one that no recall row can point at (no session yet).
-const conversationOf = (entry: RegistryEntry): { readonly sessionId: string; readonly conversation: Conversation } | undefined => {
-    if (typeof entry?.id !== "string" || typeof entry.sessionId !== "string" || entry.sessionId === "") {
+// One row as a conversation, or nothing for one that no recall row can point at (no session yet).
+const conversationOf = (row: ConversationRow): { readonly sessionId: string; readonly conversation: Conversation } | undefined => {
+    if (typeof row.sessionId !== "string" || row.sessionId === "") {
         return undefined;
     }
-    const owner = ownerOf(entry);
     return {
-        sessionId: entry.sessionId,
-        conversation: { id: entry.id, ...(typeof entry.title === "string" ? { title: entry.title } : {}), ...(owner === undefined ? {} : { owner }) },
+        sessionId: row.sessionId,
+        conversation: {
+            id: row.id,
+            ...(typeof row.title === "string" ? { title: row.title } : {}),
+            ...(typeof row.owner === "string" && row.owner !== "" ? { owner: row.owner } : {}),
+        },
     };
 };
 
 // Keyed on the session id: what a recall row holds and needs translated into a conversation.
 export const conversationsBySession = (historyRoot: string = HISTORY_ROOT): Map<string, Conversation> => {
-    let parsed: unknown;
+    let rows: ConversationRow[];
     try {
-        parsed = JSON.parse(readFileSync(join(historyRoot, "agents.json"), "utf8"));
+        rows = readRows(historyRoot);
     } catch {
         return new Map();
     }
-    if (!Array.isArray(parsed)) {
-        return new Map();
-    }
     const bySession = new Map<string, Conversation>();
-    for (const entry of parsed as RegistryEntry[]) {
-        const found = conversationOf(entry);
+    for (const row of rows) {
+        const found = conversationOf(row);
         if (found !== undefined) {
             bySession.set(found.sessionId, found.conversation);
         }

@@ -1,44 +1,24 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import {
-    type CapabilityKind,
-    type ExtensionUpdatePolicy,
-    type InvalidWorkspaceExtension,
-    ExtensionRemovalPlanSchema,
-    ExtensionRemovedSchema,
-    ExtensionUpdateAppliedSchema,
-    ExtensionUpdatePreviewSchema,
-    type ExtensionSummary,
-    ExtensionsListSchema,
-    WorkspaceExtensionCreatedSchema,
-} from "@intentic/sandbox-contract";
+import type { CapabilityKind, ExtensionUpdatePolicy, InvalidWorkspaceExtension, ExtensionSummary } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { sandboxJson } from "../sandbox/client/sandboxClient";
-import { jsonBody } from "../sandbox/client/jsonBody";
-import { EXTENSIONS } from "../../lib/queryKeys";
+import { rpcQuery } from "../sandbox/client/rpcQuery";
+import { sandboxRpc } from "../sandbox/client/sandboxRpc";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 
 // Installed extensions (capabilities resolved to manifests) for the Extensions tab. The extension host's boot does its
 // own one-shot fetch of the same route (loader.ts); this query is for reactive rendering, not loading code.
 
-const QUERY_KEY = EXTENSIONS.of();
-
 // Preview of what an update would change (version, capability diff), read from a staged clone. Module-scoped, unlike
 // the verbs below, since it never reads back into the query.
-const previewUpdate = async (id: string, ref?: string) =>
-    ExtensionUpdatePreviewSchema.parse(
-        await sandboxJson(`/extensions/${encodeURIComponent(id)}/update/preview`, jsonBody(`POST`, ref !== undefined ? { ref } : {})),
-    );
+const previewUpdate = (id: string, ref?: string) => sandboxRpc.extensions.updatePreview({ id, ...(ref !== undefined ? { ref } : {}) });
 
 // What removing one would destroy, read on demand rather than carried on the list: it joins the configured capability
 // entries and the stored settings, neither of which the list route knows about. Module-scoped like previewUpdate, for
 // the same reason: it never reads back into the query.
-export const removalPlan = async (id: string) => ExtensionRemovalPlanSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/removal`));
+export const removalPlan = (id: string) => sandboxRpc.extensions.removalPlan({ id });
 
 export function useExtensions() {
-    const { query, error } = useSandboxQuery({
-        queryKey: QUERY_KEY,
-        queryFn: async () => ExtensionsListSchema.parse(await sandboxJson(`/extensions`)),
-    });
+    const { query, error } = useSandboxQuery(rpcQuery(`extensions.list`));
     const extensions = computed<ExtensionSummary[]>(() => query.data.value?.extensions ?? []);
     // Workspace-extension directories that failed to enumerate, and why; the only feedback their author gets.
     const invalid = computed<InvalidWorkspaceExtension[]>(() => query.data.value?.invalid ?? []);
@@ -47,13 +27,13 @@ export function useExtensions() {
     // Flips one extension's switch and re-reads the list. The daemon converges its own half; the caller's
     // reloadExtensions() activates or retires it without a page reload.
     const setEnabled = async (id: string, enabled: boolean): Promise<void> => {
-        await sandboxJson(`/extensions/${encodeURIComponent(id)}/enabled`, jsonBody(`POST`, { enabled }));
+        await sandboxRpc.extensions.setEnabled({ id, enabled });
         await query.refetch();
     };
     // Authors a new extension in this workspace; the row exists before the caller's reloadExtensions() makes it run, so
     // a failed activation still has a row to report on.
     const create = async (publisher: string, name: string): Promise<{ id: string; dir: string }> => {
-        const created = WorkspaceExtensionCreatedSchema.parse(await sandboxJson(`/extensions/workspace`, jsonBody(`POST`, { publisher, name })));
+        const created = await sandboxRpc.extensions.create({ publisher, name });
         await query.refetch();
         return created;
     };
@@ -62,7 +42,7 @@ export function useExtensions() {
     // capabilities, is where that happens. Nothing in this file may reach for the query client — BackgroundProcesses
     // mounts this composable outside the query plugin, and useQueryClient() throws there.
     const remove = async (id: string) => {
-        const removed = ExtensionRemovedSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/remove`, jsonBody(`POST`, {})));
+        const removed = await sandboxRpc.extensions.remove({ id });
         await query.refetch();
         return removed;
     };
@@ -75,23 +55,21 @@ export function useExtensions() {
     // Update lifecycle verbs; each re-reads the list since each changes what a row says. Update and revert are
     // owner-gated daemon-side.
     const checkUpdates = async (): Promise<void> => {
-        await sandboxJson(`/extensions/updates/check`, jsonBody(`POST`, {}));
+        await sandboxRpc.extensions.checkUpdates();
         await query.refetch();
     };
     const applyUpdate = async (id: string, ref?: string) => {
-        const applied = ExtensionUpdateAppliedSchema.parse(
-            await sandboxJson(`/extensions/${encodeURIComponent(id)}/update`, jsonBody(`POST`, ref !== undefined ? { ref } : {})),
-        );
+        const applied = await sandboxRpc.extensions.applyUpdate({ id, ...(ref !== undefined ? { ref } : {}) });
         await query.refetch();
         return applied;
     };
     const revertUpdate = async (id: string) => {
-        const reverted = ExtensionUpdateAppliedSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/revert`, jsonBody(`POST`, {})));
+        const reverted = await sandboxRpc.extensions.revert({ id });
         await query.refetch();
         return reverted;
     };
     const setUpdatePolicy = async (id: string, patch: Partial<ExtensionUpdatePolicy>): Promise<void> => {
-        await sandboxJson(`/extensions/${encodeURIComponent(id)}/update-policy`, jsonBody(`POST`, patch));
+        await sandboxRpc.extensions.setUpdatePolicy({ id, ...patch });
         await query.refetch();
     };
     return {

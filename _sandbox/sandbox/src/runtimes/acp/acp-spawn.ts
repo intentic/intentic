@@ -1,7 +1,7 @@
 import { type ChildProcessByStdio, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ndJsonStream, type Stream } from "@agentclientprotocol/sdk";
-import { DAEMON_OWNER, workloadStamp } from "../../platform/boot/leftovers.js";
+import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { webStream } from "../../web-stream.js";
 
 /* Spawning an ACP agent subprocess: the capability's command split on whitespace (no shell quoting, the config documents this). */

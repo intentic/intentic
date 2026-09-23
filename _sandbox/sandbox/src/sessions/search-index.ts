@@ -1,6 +1,7 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
+import { IN_MEMORY, openSqlite, transaction } from "../store/sqlite.js";
 import type { MatchSnippet, Speaker } from "@intentic/sandbox-contract";
 import type { SpokenLine } from "./transcript-search.js";
 
@@ -92,24 +93,12 @@ export const SEARCH_SQL = `
 
 const isSpeaker = (value: unknown): value is Speaker => value === "user" || value === "agent";
 
-// An in-memory index: same schema and SQL as a real one, so tests exercise the real query, not a stand-in.
-export const IN_MEMORY = ":memory:";
-
+// `IN_MEMORY` for an index with the same schema and SQL as a real one, so tests exercise the real query.
 export const openSearchIndex = (dir: string): SearchIndex => {
     const memory = dir === IN_MEMORY;
-    if (!memory) {
-        mkdirSync(dir, { recursive: true });
-    }
     const path = memory ? IN_MEMORY : join(dir, "said.db");
-    const connect = (): DatabaseSync => {
-        const db = new DatabaseSync(path);
-        // WAL so an append never blocks a search; NORMAL since a lost last write just re-indexes one turn.
-        if (!memory) {
-            db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
-        }
-        return db;
-    };
-    let db = connect();
+    // A lost last write under WAL's NORMAL sync just re-indexes one turn.
+    let db: DatabaseSync = openSqlite(path);
     const stamped = (): string | undefined => {
         try {
             const row = db.prepare("SELECT value FROM meta WHERE key = 'schema'").get() as { value?: string } | undefined;
@@ -124,7 +113,7 @@ export const openSearchIndex = (dir: string): SearchIndex => {
         for (const suffix of ["", "-wal", "-shm"]) {
             rmSync(`${path}${suffix}`, { force: true });
         }
-        db = connect();
+        db = openSqlite(path);
     }
     db.exec(DDL);
     db.prepare("INSERT INTO meta(key, value) VALUES('schema', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(SCHEMA_VERSION);
@@ -144,17 +133,6 @@ export const openSearchIndex = (dir: string): SearchIndex => {
     const countSources = db.prepare("SELECT kind, count(*) AS sources, coalesce(sum(lines), 0) AS lines FROM source GROUP BY kind");
     const query = db.prepare(SEARCH_SQL);
 
-    const write = (run: () => void): void => {
-        db.exec("BEGIN");
-        try {
-            run();
-            db.exec("COMMIT");
-        } catch (error) {
-            db.exec("ROLLBACK");
-            throw error;
-        }
-    };
-
     const add = (key: string, kind: SearchKind, lines: readonly SpokenLine[]): void => {
         for (const line of lines) {
             insertLine.run(key, kind, line.speaker, line.text, line.text.toLowerCase());
@@ -163,13 +141,13 @@ export const openSearchIndex = (dir: string): SearchIndex => {
 
     return {
         put: (key, kind, version, lines) =>
-            write(() => {
+            transaction(db, () => {
                 deleteLines.run(key);
                 add(key, kind, lines);
                 upsertSource.run(key, kind, version, lines.length);
             }),
         extend: (key, kind, version, lines) =>
-            write(() => {
+            transaction(db, () => {
                 add(key, kind, lines);
                 bumpSource.run(key, kind, version, lines.length);
             }),
@@ -178,7 +156,7 @@ export const openSearchIndex = (dir: string): SearchIndex => {
             return new Map(rows.map((row) => [row.key, row.version]));
         },
         forget: (key) =>
-            write(() => {
+            transaction(db, () => {
                 deleteLines.run(key);
                 deleteSource.run(key);
             }),

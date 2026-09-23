@@ -1,4 +1,4 @@
-import type { AgentHarness, AgentProvider, TranscriptRow } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, SandboxHandlerOutput, TranscriptRow } from "@intentic/sandbox-contract";
 import { SUPPORT_SWEEP_PATH } from "./browserShots";
 import { MAKER_REVIEW_ID, SEPTEMBER_AFTER, SEPTEMBER_BEFORE } from "./maker";
 import { REVIEW_AGENT_ID, SOFT_DELETES_JOBS, SOFT_E2E_JOB, SOFT_TYPECHECK_JOB } from "./fleet";
@@ -11,7 +11,7 @@ interface AgentTranscript {
     readonly provider?: AgentProvider;
     readonly harness?: AgentHarness;
     readonly account?: string;
-    readonly messages: readonly TranscriptRow[];
+    readonly messages: TranscriptRow[];
 }
 
 // /agents/{id}/transcript returns the restored transcript for a finished agent; other cards return empty, honestly.
@@ -303,4 +303,5 @@ const TRANSCRIPTS: Record<string, AgentTranscript> = {
     [PRIYA_CHAT_ID]: PRIYA_PAYOUTS,
 };
 
-export const transcriptFor = (id: string): AgentTranscript => TRANSCRIPTS[id] ?? { messages: [] };
+// Each recording is one whole page: it starts at the record's first message, and nothing older precedes it.
+export const transcriptFor = (id: string): SandboxHandlerOutput<`agents`, `transcript`> => ({ ...(TRANSCRIPTS[id] ?? { messages: [] }), from: 0, more: false });

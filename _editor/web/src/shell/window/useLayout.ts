@@ -1,4 +1,5 @@
-import { computed, ref, type Ref } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
+import { computed, type Ref } from "vue";
 import { definePreference } from "@intentic/ui/preference";
 import { useAudience } from "../../app/useAudience";
 import { activeSandboxId } from "../../features/sandbox/overview/activeSandbox";
@@ -169,19 +170,9 @@ const widthPref = (key: string, clamp: (px: number) => number, fallback: () => n
         write: String,
     });
 
-const terminalOpen = ref<boolean>(false);
-
-// Reads against whichever sandbox is active at call time, never a captured one, so a toggle always belongs to the
-// sandbox on screen.
-const restoreTerminalOpen = (): void => {
-    terminalOpen.value = readWindowState(terminalOpenKey(activeSandboxId.value), parseTerminalOpen) ?? false;
-};
-restoreTerminalOpen();
-
-// Called when a sandbox switch lands, to show the terminal exactly as that sandbox was left.
-export const resetTerminalOpen = (): void => {
-    restoreTerminalOpen();
-};
+// Read against whichever sandbox is active, never a captured one, so a switch shows the terminal exactly as that
+// sandbox was left and a toggle always belongs to the sandbox on screen.
+const terminalOpen = sandboxRef<boolean>(() => readWindowState(terminalOpenKey(activeSandboxId.value), parseTerminalOpen) ?? false);
 
 const position = enumPref(STORAGE_KEY, [`left`, `right`] as const, `left`);
 const chatHome = enumPref(CHAT_HOME_KEY, [`side`, `rail`] as const, `side`);

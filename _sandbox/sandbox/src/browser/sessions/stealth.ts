@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BrowserFingerprint } from "./fingerprint.js";
-import { statePath } from "../../workspace/layout/state-paths.js";
+import { statePath } from "../../state-paths.js";
 
 // Init script run before a page's own scripts; patches only the residual tells of a GPU-less container (WebGL
 // vendor/renderer, hardwareConcurrency, deviceMemory, navigator.webdriver) using the per-owner device from

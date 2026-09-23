@@ -7,6 +7,11 @@ import { createTurnGate } from "../../guard/turn-gate.js";
 import { humanizeModelId } from "../../agent/models/model-discovery.js";
 import { SEED_XAI_MODELS } from "./grok-models.js";
 import { createOpenCodeService, geminiProviderConfig, registerSessionGate, releaseSessionGate } from "./opencode.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Captures server-spawn options instead of booting a real `opencode serve`; the client double also feeds an event
 // stream and records every permission answered.
@@ -212,6 +217,7 @@ test("a permission ask on a watched directory is answered with a standing yes", 
 test("a registered session's permission is judged by the policy, and a refused command is rejected", async () => {
     const xdg = await scratch();
     const { gate, release } = createTurnGate({
+        cards,
         judge: async () => ({ decision: "refuse", sentence: "Discards commits the remote has." }),
         // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so an ask refuses too.
         rulebook: "refuse-only",
@@ -235,6 +241,7 @@ test("a registered session's permission is judged by the policy, and a refused c
 test("a command the policy allows is approved for this call only", async () => {
     const xdg = await scratch();
     const { gate, release } = createTurnGate({
+        cards,
         judge: async () => ({ decision: "allow", sentence: "Pushes a feature branch." }),
         // What capabilitiesOf("grok", …) declares: this runtime cannot park on a card, so an ask refuses too.
         rulebook: "refuse-only",

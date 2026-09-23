@@ -8,10 +8,14 @@ import type { Services } from "../composition.js";
 import { fakeFiles } from "../harness/route-fakes.testing.js";
 import { services } from "../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../harness/route-stores.testing.js";
-import { testConfig } from "../testing.js";
+import { sqliteTurnCheckpoints } from "../agent/checkpoints/turn-checkpoints.js";
+import { sqliteAgentsStore } from "../agents/registry/agents-store.js";
+import { transcriptFile } from "../sessions/transcript-record.js";
+import { isolatedAgent, testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
 import { packBundle } from "./bundle.js";
 import { applyBundle, BundleFormatError, bundleItems, dropSpool, spoolBundle } from "./bundle-arrival.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 
 // Exports a sandbox's two volumes into empty ones and checks the result, including deliberate omissions. Arrival is
 // spool->items->apply; a secret needs both the exporter's choice and the receiver's includeSecrets.
@@ -62,6 +66,9 @@ const arrive = async (
         { workspaceRoot: target.work, historyRoot: target.history },
         { items: items.filter(options.pick ?? (() => true)), includeSecrets: options.includeSecrets ?? true },
         LIMIT,
+        async (snapshot) => {
+            openConversationsDb(conversationsDbPath(target.history)).adopt(snapshot);
+        },
     );
     await dropSpool(held.spool);
     return { plan: items, report };
@@ -238,6 +245,28 @@ test("conversation state travels while every provider runtime home stays secret"
     for (const [provider, file] of providerFiles) {
         expect(await readFile(join(secretTarget.work, ".intentic/secrets/auth", provider, file), "utf8")).toBe("secret");
     }
+    await cleanup();
+});
+
+test("a conversation travels whole: its rows as a snapshot of the live database, its directory as files", async () => {
+    const source = await makeRoots();
+    const live = openConversationsDb(conversationsDbPath(source.history));
+    const moved = isolatedAgent([{ repo: "root", base: "a".repeat(40) }], { id: "moved-1" });
+    sqliteAgentsStore(live).save([moved]);
+    await sqliteTurnCheckpoints(live).record("moved-1", 0, { kind: "tree", snapshot: "s-0" });
+    const record = `${JSON.stringify({ role: "user", text: "go" })}\n`;
+    await mkdir(join(source.history, "conversations", "moved-1"), { recursive: true });
+    await writeFile(transcriptFile(source.history, "moved-1"), record);
+
+    const target = await makeRoots();
+    const { plan, report } = await arrive(await bundleOf(source, false, [], { conversationsDb: live }), target);
+
+    expect(plan).toContain("bundle:history");
+    expect(report.applied.map((entry) => entry.id)).toContain("bundle:history");
+    const arrived = openConversationsDb(conversationsDbPath(target.history));
+    expect(sqliteAgentsStore(arrived).load()).toEqual([moved]);
+    expect(await sqliteTurnCheckpoints(arrived).all("moved-1")).toEqual(new Map([[0, { kind: "tree", snapshot: "s-0" }]]));
+    expect(await readFile(transcriptFile(target.history, "moved-1"), "utf8")).toBe(record);
     await cleanup();
 });
 

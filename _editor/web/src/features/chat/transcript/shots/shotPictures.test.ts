@@ -5,17 +5,15 @@ import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
 import { freshImport } from "@intentic/testing/bun";
+import { SandboxHttpError } from "../../../sandbox/client/sandboxHttpError";
 
 const blob = mock<(path: string, init?: RequestInit) => Promise<Blob>>();
 const daemonBase = ref<string | undefined>(`https://sandbox-1.example`);
 
-class HttpError extends Error {
-    constructor(readonly status: number) {
-        super(`http ${status}`);
-    }
-}
+// A daemon refusal, as the raw client throws it.
+const refusal = (status: number): SandboxHttpError => new SandboxHttpError(status, `Request failed (${status}).`);
 
-mock.module("../../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string, init?: RequestInit) => blob(path, init), SandboxHttpError: HttpError }));
+mock.module("../../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string, init?: RequestInit) => blob(path, init) }));
 mock.module("../../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 type Pictures = typeof import("./shotPictures");
@@ -102,7 +100,7 @@ it(`draws a picture the daemon will not re-encode from the file itself`, async (
     const svg = `${STATE_DIR}/records/artifacts/browser/sweep.svg`;
     blob.mockImplementation(async (route) => {
         if (route.startsWith(`/workspace/thumb`)) {
-            throw new HttpError(415);
+            throw refusal(415);
         }
         return new Blob([`<svg/>`]);
     });
@@ -114,7 +112,7 @@ it(`draws a picture the daemon will not re-encode from the file itself`, async (
 
 it.each([400, 403, 404, 412, 413])(`a %i is nothing to draw, answered as such rather than left loading`, async (status) => {
     const { stripOf, viewOf, originalOf } = await load();
-    blob.mockRejectedValue(new HttpError(status));
+    blob.mockRejectedValue(refusal(status));
     stripOf(`cnv-1`, REPO_SHOT);
     viewOf(`cnv-1`, REPO_SHOT);
     originalOf(`cnv-1`, REPO_SHOT);

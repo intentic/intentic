@@ -1,6 +1,7 @@
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
-import { mocked } from "@intentic/testing/bun";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Same edges useAgents.test.ts cuts: importing the fleet store pulls in useChat and the app shell behind it.
 mock.module("../../../router", () => ({ router: { push: mock() } }));
@@ -11,15 +12,20 @@ mock.module("../../sandbox/client/useSandbox", () => {
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
+// The read marker, the one daemon write this gate decides.
+const seen = mock();
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { seen } }) }));
 mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { nextTick, ref } from "vue";
 import { Conversation } from "../../chat/session/conversation";
 import { useChat } from "../../chat/run/useChat";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { resetAgents } from "./useAgents";
+import { useAgents } from "./useAgents";
 import { setAgents } from "./useAgents-registry";
+
+// The fleet store itself, whose watch is the gate under test.
+const { fleet } = useAgents();
 
 // A turn landing while its conversation is watched is not news; the card must not badge. Watching means this
 // window is on screen with that chat focused, answered per window, including a floating chat's own copy.
@@ -41,13 +47,9 @@ const worked = (id: string): AgentSummary => ({
     attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
 });
 
-const seen = (id: string): [string, RequestInit] => [`/agents/${id}/seen`, { method: `POST` }];
-
 beforeEach(() => {
-    resetAgents();
-    mocked(sandboxJson)
-        .mockReset()
-        .mockResolvedValue(undefined as never);
+    resetSandboxScope();
+    seen.mockReset().mockImplementation(async ({ id }: { id: string }) => worked(id));
 });
 
 afterEach(() => show(document, true));
@@ -60,7 +62,8 @@ describe(`the unread badge`, () => {
         setAgents([worked(`a1`)], 1);
         await nextTick();
 
-        expect(sandboxJson).toHaveBeenCalledWith(...seen(`a1`));
+        expect(fleet.value.map((agent) => agent.id)).toEqual([`a1`]);
+        expect(seen).toHaveBeenCalledWith({ id: `a1` });
     });
 
     it(`stands while this window is away`, async () => {
@@ -71,6 +74,6 @@ describe(`the unread badge`, () => {
         await nextTick();
 
         // What the badge is for: a turn landing with nobody looking is news, whichever conversation was active.
-        expect(sandboxJson).not.toHaveBeenCalledWith(...seen(`a2`));
+        expect(seen).not.toHaveBeenCalledWith({ id: `a2` });
     });
 });

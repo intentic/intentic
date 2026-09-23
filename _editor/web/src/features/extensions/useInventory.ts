@@ -1,45 +1,31 @@
-import { type AddInventoryInput, type InventoryEntry, InventoryEntrySchema } from "@intentic/api-contract";
+import type { AddInventoryInput, InventoryEntry } from "@intentic/api-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxError, sandboxRequest } from "../sandbox/client/sandboxClient";
-import { jsonBody } from "../sandbox/client/jsonBody";
-import { INVENTORY } from "../../lib/queryKeys";
+import { rpcKey } from "../../lib/queryKeys";
+import { rpcQuery } from "../sandbox/client/rpcQuery";
+import { sandboxRpc } from "../sandbox/client/sandboxRpc";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 
-/* The sandbox's inventory, the i.have.* / i.want.service entries in its intent repo deploy.config.ts. */
-
-// Call a daemon /inventory route and validate the `{ entries }` it returns at the boundary (the daemon
-// produces the shape this contract mirrors, validated here so a cross-repo drift fails loudly).
-const fetchEntries = async (path: string, init?: RequestInit): Promise<InventoryEntry[]> => {
-    const response = await sandboxRequest(path, init);
-    if (!response.ok) {
-        throw await sandboxError(response, { method: init?.method ?? `GET`, path });
-    }
-    const body = (await response.json()) as { entries?: unknown };
-    return InventoryEntrySchema.array().parse(body.entries ?? []);
-};
+/* The sandbox's inventory, the i.have.* / i.want.service entries in its intent repo deploy.config.ts. Every write
+   answers with the whole updated list, which replaces the cached one. */
 
 export function useInventory() {
     const queryClient = useQueryClient();
-    const queryKey = INVENTORY.of();
 
-    const { query, error } = useSandboxQuery({
-        queryKey,
-        queryFn: () => fetchEntries(`/inventory`),
-    });
+    const { query, error } = useSandboxQuery(rpcQuery(`inventory.list`));
 
     const add = useMutation({
-        mutationFn: (input: AddInventoryInput) => fetchEntries(`/inventory`, jsonBody(`POST`, input)),
-        onSuccess: (entries) => queryClient.setQueryData(queryKey, entries),
+        mutationFn: (input: AddInventoryInput) => sandboxRpc.inventory.add(input),
+        onSuccess: (list) => queryClient.setQueryData(rpcKey(`inventory.list`), list),
     });
 
     const remove = useMutation({
-        mutationFn: (name: string) => fetchEntries(`/inventory/${encodeURIComponent(name)}`, { method: `DELETE` }),
-        onSuccess: (entries) => queryClient.setQueryData(queryKey, entries),
+        mutationFn: (name: string) => sandboxRpc.inventory.remove({ name }),
+        onSuccess: (list) => queryClient.setQueryData(rpcKey(`inventory.list`), list),
     });
 
     return {
-        entries: computed<InventoryEntry[]>(() => query.data.value ?? []),
+        entries: computed<InventoryEntry[]>(() => query.data.value?.entries ?? []),
         error,
         isLoading: query.isLoading,
         refetch: query.refetch,

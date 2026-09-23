@@ -7,8 +7,9 @@ import { createGunzip } from "node:zlib";
 import type { Context } from "hono";
 import type { Services } from "../composition.js";
 import { bearerFrom } from "../auth/auth.js";
-import { repoGitDir } from "../history/history.js";
-import { type Presented, refusePresented } from "../peers/peer-store.js";
+import { repoGitDir } from "../workspace/layout/git-layout.js";
+import type { Presented } from "../peers/enrollment.js";
+import { refusePresented } from "../peers/peer-store.js";
 import { nodeStream } from "../web-stream.js";
 
 // Smart-HTTP git door: one repo's real git dir served for a runner's stock git fetch/push. No protocol lives here, each

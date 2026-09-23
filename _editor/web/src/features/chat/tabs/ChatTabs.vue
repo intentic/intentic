@@ -55,7 +55,7 @@ const runningCount = computed(
     () =>
         conversations.value.filter((conversation) => {
             const agent = agentById(conversation.conversationId);
-            return agent !== undefined ? turnInFlight(agent) : conversation.streaming.value;
+            return agent !== undefined ? turnInFlight(agent) : conversation.turn.streaming.value;
         }).length,
 );
 const attentionCount = computed(

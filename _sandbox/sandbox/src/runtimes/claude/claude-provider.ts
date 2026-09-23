@@ -2,15 +2,16 @@ import { join } from "node:path";
 import type { Logger } from "pino";
 import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import { planHarnessTurn } from "../../agent/run/turn/turn-plan.js";
+import { type HarnessPlanDeps, planHarnessTurn } from "../../agent/run/harness/harness-plan.js";
+import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { type ClaudeStore, fileClaudeStore, startClaudeRefresh } from "./claude-credentials.js";
 import { claudeOneShot } from "./claude-one-shot.js";
 import { type ClaudeCatalog, createClaudeCatalog } from "./claude-models.js";
 import { type ClaudeSeatStore, fileClaudeSeatStore } from "./claude-seats.js";
-import { claudeAccountDoor } from "./claude-accounts.js";
+import { type ClaudeAccountDeps, claudeAccountDoor } from "./claude-accounts.js";
 
-// Everything Claude contributes to the daemon (aggregated via agent/provider-module.ts). Claude is the anchor module:
+// Everything Claude contributes to the daemon (listed in runtimes/runtime-table.ts). Claude is the anchor module:
 // its adapter is the Claude Code loop, which also serves Kimi and the routed providers under the claude-code harness.
 
 export interface ClaudeSlice {
@@ -36,7 +37,10 @@ export const createClaudeSlice = (input: {
     };
 };
 
-const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code"> = {
+// What the Claude Code loop's adapter reads: the harness arm's own deps, and the stores its probes ask.
+export type ClaudeCodeDeps = HarnessPlanDeps & Pick<Services, "claudeStore" | "config" | "sessions">;
+
+const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code", ClaudeCodeDeps> = {
     runtime: "claude-code",
     oneShot: claudeOneShot,
     preflight: (services, input, context, installed) => planHarnessTurn(services, input, context, installed),
@@ -55,7 +59,10 @@ const CLAUDE_CODE_ADAPTER: AgentAdapter<"claude-code"> = {
     holdsSession: (services, sessionId, cwd) => services.sessions.exists(cwd, sessionId),
 };
 
-export const claudeProvider: ProviderModule = {
+// What the Claude module reads beyond its adapter: the catalog it serves and the account door's stores.
+export type ClaudeProviderDeps = ClaudeCodeDeps & ClaudeAccountDeps & Pick<Services, "claudeModels">;
+
+export const claudeProvider: ProviderModule<ClaudeProviderDeps> = {
     id: "claude",
     accounts: claudeAccountDoor,
     adapters: [CLAUDE_CODE_ADAPTER],

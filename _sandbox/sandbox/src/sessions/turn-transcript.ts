@@ -9,7 +9,6 @@ import {
 import { userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { stripAttachmentNote } from "../agent/prompt/attachment-note.js";
 import { parseRuntimeHistory } from "../agent/providers/runtime-history.js";
-import { takeSteerCheckpoints } from "../agent/checkpoints/steer-checkpoints.js";
 import type { Services } from "../composition.js";
 import type { TranscriptAgent } from "./agent-transcript.js";
 
@@ -53,13 +52,8 @@ export const openingRows = (
     return [resume?.kind === "note" ? { ...row, notes: [resume.note] } : row];
 };
 
-// Single derivation of which conversation a turn records against, so fork and append can't disagree. Provider/harness
-// default to what streamAgent actually ran the turn as (absent means claude/native).
-const transcriptAgentOf = (turn: AgentTurn & { readonly conversationId: string }): TranscriptAgent => ({
-    id: turn.conversationId,
-    provider: turn.agent ?? "claude",
-    harness: turn.harness ?? "native",
-});
+// Single derivation of which conversation a turn records against, so fork and append can't disagree.
+const transcriptAgentOf = (turn: AgentTurn & { readonly conversationId: string }): TranscriptAgent => ({ id: turn.conversationId });
 
 // Opens a fork's record before its first turn, once: only a copy can supply the prefix it inherits from its source.
 // Never rejects; a disk failure in this side channel must not fail the turn.
@@ -109,7 +103,7 @@ const recorded = (rows: readonly TranscriptRow[]): TranscriptRow[] =>
 // Writes one settled turn to the record; every path a turn can start down funnels through this one call. Never rejects;
 // the returned boolean lets the restart-recovery path hold a journal entry until the write actually lands.
 export const recordTurnTranscript = async (
-    services: Pick<Services, "transcripts" | "turnCheckpoints" | "workspace" | "logger">,
+    services: Pick<Services, "transcripts" | "turnCheckpoints" | "conversations" | "workspace" | "logger">,
     turn: AgentTurn & { readonly conversationId: string },
     rows: readonly TranscriptRow[],
     // Where the user's mid-turn messages sit among `rows`, as the fold placed them (`TranscriptFold.steerRows`).
@@ -141,12 +135,12 @@ const recordedCount = async (services: Pick<Services, "transcripts">, agent: Tra
 // Files a steer's pinned state under the row index it landed on, computed only once the turn settles. Drains the queue
 // regardless, since a leftover would be misfiled under the next turn's rows; never throws.
 const recordSteerAnchors = async (
-    services: Pick<Services, "turnCheckpoints" | "logger">,
+    services: Pick<Services, "turnCheckpoints" | "conversations" | "logger">,
     conversationId: string,
     positions: readonly number[],
     base: number | undefined,
 ): Promise<void> => {
-    const anchors = takeSteerCheckpoints(conversationId);
+    const anchors = services.conversations.send(conversationId, { kind: "steers-taken" }).reply;
     if (base === undefined) {
         return;
     }
@@ -174,8 +168,8 @@ const interruptedTurnRows = async (
     sessionId: string | undefined,
     sentAt: number,
 ): Promise<readonly TranscriptRow[]> => {
-    const agent = transcriptAgentOf(turn);
-    if (sessionId === undefined || capabilitiesOf(agent.provider, agent.harness).runtime !== "claude-code") {
+    // What streamAgent actually ran the turn as; absent means claude/native.
+    if (sessionId === undefined || capabilitiesOf(turn.agent ?? "claude", turn.harness ?? "native").runtime !== "claude-code") {
         return [];
     }
     const rows = await services.sessions.readTail(services.workspace.root, sessionId).catch((error: unknown) => {

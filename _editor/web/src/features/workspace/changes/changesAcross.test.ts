@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, mock } from "bun:test";
 import { ref } from "vue";
 import type { RepoChanges } from "@intentic/api-contract";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Reading of another sandbox's repos: which rows show, and what each says.
 // Polling is fleetAcross's pattern, tested there; the network is mocked out here.
@@ -8,7 +9,7 @@ import type { RepoChanges } from "@intentic/api-contract";
 const sandboxes = ref<{ id: string; name: string; lastSeenAt: string | null }[]>([]);
 const activeSandboxId = ref<string | undefined>(`sbx-here`);
 mock.module("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ sandboxes, activeSandboxId }) }));
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJsonAt: mock(), sandboxJsonQuietly: mock(), sandboxJsonVia: mock() }));
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 mock.module("../../sandbox/client/sandboxScreen", () => ({ landOnAfterSwitch: mock() }));
 mock.module("../../../lib/queryPersistence", () => ({ queryClient: { setQueryData: mock() } }));
 

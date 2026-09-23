@@ -1,14 +1,10 @@
 import type { PipelineRun, ListenerMessage } from "@intentic/sandbox-contract";
+import { CI_PROVIDER } from "../automations/catalog.js";
 import { dispatchListenerMessage } from "../automations/listeners.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 
 // Turns a finished PipelineRun into `ci` listener messages for the webhook (ci/webhook.routes.ts) and the poller
 // (ci/poller.ts); the previous-conclusion memory is written only here. Canceled and skipped runs produce nothing.
-
-// Provider name for CI triggers; one value for both vendors, narrowed by repo, branch and result, not by host.
-export const CI_PROVIDER = "ci";
-export const CI_EVENT_TYPES = new Set(["pipeline_failed", "pipeline_broken", "pipeline_succeeded", "pipeline_fixed"]);
 
 // pipeline_broken/pipeline_fixed fire only when the previous conclusion is known; an unknown one is never guessed as
 // the opposite color, so a cold start reports no edges.
@@ -77,19 +73,14 @@ export const rememberCiRun = async (services: Services, run: PipelineRun): Promi
 // Records the run's conclusion and dispatches the matching listener messages; returns the dispatched event types, empty
 // if not a result. Conclusion is recorded before dispatch, so a wake cannot be replayed as the previous state by the
 // next run.
-export const dispatchCiRun = async (
-    services: Services,
-    run: PipelineRun,
-    author: { id: string; name: string },
-    wake: WakeFn,
-): Promise<readonly string[]> => {
+export const dispatchCiRun = async (services: Services, run: PipelineRun, author: { id: string; name: string }): Promise<readonly string[]> => {
     const result = ciResultOf(run);
     if (result === undefined) {
         return [];
     }
     const types = typesFor(result, await rememberCiRun(services, run));
     for (const type of types) {
-        await dispatchListenerMessage(services, ciMessageOf(run, type, author), wake);
+        await dispatchListenerMessage(services, ciMessageOf(run, type, author));
     }
     return types;
 };

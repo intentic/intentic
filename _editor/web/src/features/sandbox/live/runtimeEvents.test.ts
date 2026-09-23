@@ -17,14 +17,9 @@ mock.module("../client/useSandbox", () => {
 mock.module("../client/sandboxClient", () => ({
     sandboxJson: mock(),
     sandboxRequest: mock(),
-    sandboxRequestVia: mock(),
-    sandboxJsonAt: mock(),
-    sandboxJsonQuietly: mock(),
-    sandboxJsonVia: mock(),
     sandboxBlob: mock(),
     sandboxUpload: mock(),
     sandboxError: mock(async () => new Error(`unused`)),
-    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 
 import { queryClient } from "../../../lib/queryPersistence";
@@ -47,15 +42,16 @@ beforeEach(() => {
     });
 });
 
+// Each pushed name reaches what an extension files under it, then the app's own read of the route it stands for.
 it(`refreshes the terminal surfaces when the daemon says a session moved`, () => {
     applySystemEvent({ kind: `runtimeChanged`, domains: [`terminals`] }, SANDBOX);
-    expect(invalidated).toEqual([[`terminals`]]);
+    expect(invalidated).toEqual([[`terminals`], [`system.terminals`]]);
 });
 
 it(`refreshes the panels AND the per-repo apps from one dev-server frame`, () => {
     // Both lists are drawn from the same managed process, so one domain name invalidates both keys.
     applySystemEvent({ kind: `runtimeChanged`, domains: [`panels`] }, SANDBOX);
-    expect(invalidated).toEqual([[`panels`], [`apps`]]);
+    expect(invalidated).toEqual([[`panels`], [`panels.list`], [`apps`]]);
 });
 
 it(`asks nothing of a domain this build does not know`, () => {
@@ -66,7 +62,7 @@ it(`asks nothing of a domain this build does not know`, () => {
 
 it(`leaves the file-backed views alone: a running thing moving is not a file changing`, () => {
     applySystemEvent({ kind: `runtimeChanged`, domains: [`browsers`, `subagents`] }, SANDBOX);
-    expect(invalidated).toEqual([[`browsers`], [`subagents`]]);
+    expect(invalidated).toEqual([[`browsers`], [`system.browsers`], [`subagents`], [`system.subagents`]]);
 });
 
 // Driven through the real cache: what matters is how many reads reach the daemon, and a second invalidation of a key
@@ -74,7 +70,22 @@ it(`leaves the file-backed views alone: a running thing moving is not a file cha
 it(`re-asks every runtime-bound view on a new connection, once each`, async () => {
     invalidateSpy.mockRestore();
     // Replaces the polls: a frame missed while the stream was down is never resent, so hello re-asks all.
-    const keys = [`terminals`, `panels`, `apps`, `ports`, `browsers`, `subagents`, `capabilities`].map((key) => [key, SANDBOX]);
+    const keys = [
+        `terminals`,
+        `panels`,
+        `apps`,
+        `ports`,
+        `browsers`,
+        `subagents`,
+        `capabilities`,
+        `system.terminals`,
+        `panels.list`,
+        `ports.list`,
+        `system.browsers`,
+        `system.subagents`,
+        `capabilities.list`,
+        `system.devices`,
+    ].map((key) => [key, SANDBOX]);
     const views = viewsOnScreen(queryClient, keys);
     try {
         applySystemEvent({ kind: `hello`, workspaceId: `ws-a`, routes: [], build: `0.0.0:1`, boot: undefined }, SANDBOX);

@@ -1,27 +1,19 @@
 // Pins the summons channel's contract: a chat summoned anywhere is on screen everywhere. Queued messages never ride the
 // wire, and a summons for another sandbox's chats is ignored whole.
+import { resetSandboxScope } from "@intentic/extension-api";
 import { effectScope, nextTick, ref } from "vue";
 import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { mocked } from "@intentic/testing/bun";
 import type { Summons } from "./summon";
 import type { StoredTab } from "../tabs/tabSnapshot";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import type { ProcedureInput } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
-mock.module("../../sandbox/client/sandboxClient", () => {
-    const sandboxRequest = mock();
-    const sandboxJson = mock();
-    // `undefined` is the active box; every call this suite makes targets it.
-    return {
-        sandboxRequest,
-        sandboxJson,
-        sandboxRequestVia: (_at: string | undefined, path: string, init?: RequestInit) =>
-            init === undefined ? sandboxRequest(path) : sandboxRequest(path, init),
-        sandboxJsonVia: (_at: string | undefined, path: string, init?: RequestInit) =>
-            init === undefined ? sandboxJson(path) : sandboxJson(path, init),
-        // Named by the graph but never called here; bun links an ESM import against exactly what this returns.
-        sandboxError: mock(async () => new Error(`unused`)),
-        SandboxHttpError: class SandboxHttpError extends Error {},
-    };
+// A daemon with nothing to say: every turn is refused at the door. A send is the one call only a turn makes.
+const run = mock(async (_turn: ProcedureInput<`agent.run`>) => {
+    throw new SandboxHttpError(404, `Request failed (404).`);
 });
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agent: { run } }) }));
 mock.module("../../../app/analytics", () => ({ track: mock() }));
 mock.module("../../sandbox/client/useSandbox", () => {
     const activeSandboxId = ref<string | undefined>(`sb1`);
@@ -46,9 +38,7 @@ const store = (name: "localStorage" | "sessionStorage"): Map<string, string> => 
 const local = store(`localStorage`);
 const session = store(`sessionStorage`);
 
-const { sandboxRequest } = await import("../../sandbox/client/sandboxClient");
-const sandboxRequestMock = mocked(sandboxRequest);
-const { resetChat, useChat } = await import("./useChat");
+const { useChat } = await import("./useChat");
 const { Conversation } = await import("../session/conversation");
 const { chatRun } = await import("./chatRun");
 const { claimedSummons, relaySummons, summonChat, summonTurn, wireSummons } = await import("./summon");
@@ -79,12 +69,10 @@ const setAside = (conversationId: string, draft: string): StoredTab => ({
 beforeEach(() => {
     local.clear();
     session.clear();
-    resetChat();
+    resetSandboxScope();
     for (const entry of closedDrafts.value) {
         forgetClosedDraft(entry.conversationId);
     }
-    // A daemon with nothing to say by default; reveal hydrates whatever tab it opens.
-    sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
 });
 
 afterEach(() => {
@@ -121,7 +109,7 @@ it(`carries the caret with a New agent summons, so every window's composer is re
 // Queued messages are about to be sent; restoring them in another window would send them twice.
 it(`strips queued messages from the wire form`, () => {
     const conversation = new Conversation();
-    conversation.queued.value = [{ id: `q1`, text: `about to be sent`, attachments: [] }];
+    conversation.turn.queued.value = [{ id: `q1`, text: `about to be sent`, attachments: [] }];
     const wire = wireSummons({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
     expect(wire.kind === `reveal` && wire.entries[0]).toMatchObject({ conversationId: conversation.conversationId, queued: [] });
 });
@@ -269,8 +257,8 @@ it(`sets no words aside for a chat this window is only shadowing`, async () => {
     expect(closedDrafts.value).toEqual([]);
 });
 
-// Which window ran a turn, by the one call only a send makes; `/agent/attach` is hydration, not a send.
-const turnsSentHere = (): number => sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent`).length;
+// Which window ran a turn, by the words of the one call only a send makes; an attach is hydration, not a send.
+const turnsSentHere = (): string[] => run.mock.calls.map(([turn]) => turn.prompt);
 
 // A card's "start an agent for me" press: the turn belongs to the window drawing the chat, not to whichever window was
 // clicked. A turn run in a window with no chat on screen is invisible while it works, keeps its refusal where nobody
@@ -280,7 +268,7 @@ it(`sends a summoned turn itself while it draws the chat`, () => {
 
     summonTurn(conversation, `the check failed, fix it`);
 
-    expect(turnsSentHere()).toBe(1);
+    expect(turnsSentHere()).toEqual([`the check failed, fix it`]);
     expect(useChat().activeId.value).toBe(conversation.conversationId);
 });
 
@@ -290,7 +278,7 @@ it(`hands a summoned turn over rather than running it where no chat is drawn`, (
 
     summonTurn(conversation, `the check failed, fix it`);
 
-    expect(turnsSentHere()).toBe(0);
+    expect(turnsSentHere()).toEqual([]);
 });
 
 // The chat's own window claims the panel for as long as it is that window; node has none of the browser it polls for,
@@ -317,7 +305,7 @@ it(`runs a carried turn in the window holding the chat's own window`, () => {
         deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: true, deliver: `fix it` }));
     });
 
-    expect(turnsSentHere()).toBe(1);
+    expect(turnsSentHere()).toEqual([`fix it`]);
 });
 
 // Every window applies the summons; a second sender would start the same fix twice.
@@ -327,7 +315,7 @@ it(`leaves a carried turn alone in a window only shadowing the chat`, () => {
 
     deliver(wireSummons({ kind: `reveal`, verb: `show`, entries: [clicked], focus: clicked.conversationId, caret: true, deliver: `fix it` }));
 
-    expect(turnsSentHere()).toBe(0);
+    expect(turnsSentHere()).toEqual([]);
 });
 
 it(`strips queued turns from the words a summons carries`, () => {

@@ -2,7 +2,7 @@ import { readDevRebuildLog } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, onScopeDispose, reactive, ref } from "vue";
 import { type DevRebuildLayers, type DevRebuildStage, rebuildFraction, readRebuildProgress, stageStart } from "./devRebuildStages";
 import { runDeviceCommand } from "../devices/useDevices";
-import { SandboxHttpError } from "../client/sandboxClient";
+import { SandboxHttpError } from "../client/sandboxHttpError";
 import { useSandbox } from "../client/useSandbox";
 import { expectRestart, type RestartQuiet } from "../live/sandboxRestart";
 import { removeStoredValue, storedValue, storeValue } from "../../../lib/browserStorage";

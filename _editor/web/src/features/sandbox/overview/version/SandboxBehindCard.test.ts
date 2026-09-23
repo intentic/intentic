@@ -4,10 +4,11 @@
 // RELOAD — that word belongs to the page, and blurring the two sends someone to press F5 at a stale sandbox.
 // jsdom: mounts the component tree and reads rendered text.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { type Device, SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
 import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { type App, createApp, defineComponent, h, nextTick, ref } from "vue";
-import { resetDaemonRoutes, setDaemonRoutes } from "../useDaemonRoutes";
+import { setDaemonRoutes } from "../useDaemonRoutes";
 import { resetContractFreshness } from "../contractFreshness";
 import { IconStub } from "@intentic/ui/testing";
 
@@ -68,7 +69,7 @@ const mount = (): HTMLElement => {
 };
 
 beforeEach(() => {
-    resetDaemonRoutes();
+    resetSandboxScope();
     // Reset to "the dev server hasn't answered", so only the test that asks for it sees an uncompiled contract.
     resetContractFreshness();
     hostId.value = undefined;

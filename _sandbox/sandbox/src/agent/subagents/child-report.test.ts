@@ -1,10 +1,10 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { agentWordsOf, type AgentTurn } from "@intentic/sandbox-contract";
+import { agentWordsOf } from "@intentic/sandbox-contract";
 import { pino } from "pino";
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { Steer } from "../checkpoints/agent-steering.js";
-import { childActor } from "../run/turn/turn-actor.js";
-import type { TurnSettled } from "../run/turn/turn-runs.js";
+import { childActor } from "../../auth/principal.js";
+import type { DomainEventMap } from "../../seams/domain-events.js";
+import { type FakeTurns, fakeTurns, memoryFleet } from "../../testing.js";
 import { type ChildReportDeps, reportChildTurn } from "./child-report.js";
 import { openSpawnedChild, resetSubagents, settleSpawnedChild, waitForSubagent } from "./subagents.js";
 
@@ -12,47 +12,34 @@ import { openSpawnedChild, resetSubagents, settleSpawnedChild, waitForSubagent }
 
 const logger = pino({ level: "silent" });
 
-interface Doors {
+// One fleet's actors, which hold the children and the waits every report reads.
+const actors = memoryFleet().conversations;
+
+interface Doors extends FakeTurns {
     readonly deps: ChildReportDeps;
-    readonly started: (AgentTurn & { conversationId: string })[];
-    readonly steers: Steer[];
 }
 
 const doorsOf = (
     over: { live?: boolean; parentArchived?: boolean; entries?: Record<string, { startedBy?: string; title?: string }> } = {},
 ): Doors => {
-    const started: (AgentTurn & { conversationId: string })[] = [];
-    const steers: Steer[] = [];
     const entries: Record<string, { startedBy?: string; title?: string; archivedAt?: number }> = {
         "parent-1": { title: "Refactor the parser", ...(over.parentArchived === true ? { archivedAt: 1 } : {}) },
         "sub-1": { startedBy: childActor("parent-1"), title: "Port the tests" },
         ...over.entries,
     };
-    return {
-        started,
-        steers,
+    const turns = fakeTurns({ live: over.live === true });
+    return Object.assign(turns, {
         deps: {
-            doors: {
-                steer: (_conversationId, steer) => {
-                    if (over.live === true) {
-                        steers.push(steer);
-                    }
-                    return over.live === true;
-                },
-                start: async (turn) => {
-                    started.push(turn);
-                    return true;
-                },
-                sessionIdOf: () => "parent-session",
-            },
+            doors: { turns: turns.turns, sessionIdOf: () => "parent-session" },
             logger,
-            entryOf: (conversationId) => entries[conversationId],
-            routingOf: (conversationId) => (entries[conversationId] === undefined ? undefined : { agent: "claude", model: "opus" }),
+            conversations: actors,
+            entryOf: (conversationId: string) => entries[conversationId],
+            profileOf: (conversationId: string) => (entries[conversationId] === undefined ? undefined : { agent: "claude", model: "opus" }),
         },
-    };
+    });
 };
 
-const settledOf = (over: Partial<TurnSettled> = {}): TurnSettled => ({
+const settledOf = (over: Partial<DomainEventMap["run.settled"]> = {}): DomainEventMap["run.settled"] => ({
     conversationId: "sub-1",
     actor: childActor("parent-1"),
     failure: undefined,
@@ -61,7 +48,7 @@ const settledOf = (over: Partial<TurnSettled> = {}): TurnSettled => ({
 });
 
 describe("a spawned child's report", () => {
-    beforeEach(() => resetSubagents());
+    beforeEach(() => resetSubagents(actors));
 
     it("wakes a parent whose turn is over with the child's own answer, drawn as the child's", async () => {
         const doors = doorsOf();
@@ -99,11 +86,11 @@ describe("a spawned child's report", () => {
 
     it("stays quiet when a parked wait of the parent's already took the ending", async () => {
         openSpawnedChild(
-            { conversationId: "parent-1", cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+            { conversationId: "parent-1", conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
             { id: "sub-1", description: "port" },
         );
-        const parked = waitForSubagent("parent-1", { target: "sub-1", until: ["finished"], timeoutMs: 5_000 });
-        settleSpawnedChild("sub-1", { failed: false, report: "done" });
+        const parked = waitForSubagent(actors, "parent-1", { target: "sub-1", until: ["finished"], timeoutMs: 5_000 });
+        settleSpawnedChild(actors, "sub-1", { failed: false, report: "done" });
         await parked;
         const doors = doorsOf();
         await reportChildTurn(doors.deps, settledOf());

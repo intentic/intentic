@@ -1,3 +1,5 @@
+import type { HarnessCredential } from "./agent-request.js";
+
 // Distinguishes an auth refusal (a subscription that excludes the model, which the proxy then answers instantly and
 // forever) from a real outage; the harness sees both as a bare 5xx and retries either way. Reads the response body as
 // text, since the SDK's own classification discards it, and probes the endpoint for the vendor's actual sentence.
@@ -74,16 +76,12 @@ export interface RoutedEndpoint {
     readonly model: string;
 }
 
-// A turn's routed endpoint, or undefined for a native Claude turn, which has nothing to ask. The three fields are set
-// together by harness-credentials.
-export const routedEndpointOf = (credentials: {
-    readonly baseUrl?: string;
-    readonly authToken?: string;
-    readonly model?: string;
-}): RoutedEndpoint | undefined =>
-    credentials.baseUrl === undefined || credentials.authToken === undefined || credentials.model === undefined
-        ? undefined
-        : { baseUrl: credentials.baseUrl, authToken: credentials.authToken, model: credentials.model };
+// A turn's routed endpoint, or undefined for a native Claude turn, which has nothing to ask. The trial rides the
+// translator the same way, so it is asked too.
+export const routedEndpointOf = (credential: HarnessCredential, model: string | undefined): RoutedEndpoint | undefined =>
+    (credential.kind === "routed" || credential.kind === "trial") && model !== undefined
+        ? { baseUrl: credential.baseUrl, authToken: credential.authToken, model }
+        : undefined;
 
 // Smallest legal Messages request: one token out, one word in, no tools. Never throws; any failure to read an answer
 // just means carry on as before, since ending the turn sooner is this function's only power.

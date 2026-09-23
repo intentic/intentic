@@ -1,4 +1,4 @@
-import { type ActivityEvent, ActivityListSchema, type ActivityStatus, ActivityStatusSchema } from "@intentic/sandbox-contract";
+import type { ActivityEvent, ActivityStatus } from "@intentic/sandbox-contract";
 import { useInfiniteQuery, useQuery } from "@tanstack/vue-query";
 import { computed, type Ref, watch } from "vue";
 import { sinceOf, type TimeWindow } from "@intentic/extension-ui";
@@ -20,9 +20,7 @@ export function useActivity(window: Ref<TimeWindow>) {
 
     const feed = useInfiniteQuery({
         queryKey: api.sandbox.key(`activity`),
-        queryFn: async ({ pageParam }) =>
-            ActivityListSchema.parse(await api.sandbox.json(`/activity?limit=${PAGE}${pageParam === undefined ? `` : `&before=${pageParam}`}`))
-                .events,
+        queryFn: async ({ pageParam }) => (await api.sandbox.rpc.activity.list({ limit: PAGE, before: pageParam })).events,
         initialPageParam: undefined as number | undefined,
         // The oldest event's `at` is the next exclusive cursor; a short page is the end of the log.
         getNextPageParam: (last: ActivityEvent[]) => (last.length < PAGE ? undefined : last.at(-1)?.at),
@@ -30,7 +28,7 @@ export function useActivity(window: Ref<TimeWindow>) {
     });
     const status = useQuery({
         queryKey: api.sandbox.key(`activity-status`),
-        queryFn: async () => ActivityStatusSchema.parse(await api.sandbox.json(`/activity/status`)),
+        queryFn: () => api.sandbox.rpc.activity.status(),
         enabled,
     });
 

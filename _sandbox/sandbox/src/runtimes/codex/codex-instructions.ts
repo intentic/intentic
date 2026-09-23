@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { AgentRequest } from "../../agent/run/agent.js";
+import type { TurnSpec } from "../../agent/providers/agent-request.js";
 import type { JsonValue } from "./codex-app-server.js";
 
 // The owner's standing instructions, as Codex takes them: two undocumented config keys sent in the per-thread config
@@ -21,18 +21,18 @@ export const instructionsPath = (codexHome: string, text: string): string =>
 // This turn's config overrides for the instruction keys; empty when the turn asks for neither, leaving Codex untouched.
 // An empty string prompt is still legal and sent like any other, distinct from asking for nothing.
 export const codexInstructionConfig = async (
-    request: Pick<AgentRequest, "systemPrompt" | "systemAppend">,
+    spec: Pick<TurnSpec, "systemPrompt" | "systemAppend">,
     codexHome: string,
 ): Promise<Record<string, JsonValue>> => {
     const config: Record<string, JsonValue> = {};
-    if (request.systemPrompt !== undefined) {
-        const path = instructionsPath(codexHome, request.systemPrompt);
+    if (spec.systemPrompt !== undefined) {
+        const path = instructionsPath(codexHome, spec.systemPrompt);
         await mkdir(instructionsDir(codexHome), { recursive: true });
-        await writeFile(path, request.systemPrompt);
+        await writeFile(path, spec.systemPrompt);
         config["model_instructions_file"] = path;
     }
-    if (request.systemAppend !== undefined) {
-        config["developer_instructions"] = request.systemAppend;
+    if (spec.systemAppend !== undefined) {
+        config["developer_instructions"] = spec.systemAppend;
     }
     return config;
 };

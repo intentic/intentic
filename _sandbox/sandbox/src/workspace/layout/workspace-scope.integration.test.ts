@@ -4,13 +4,11 @@ import { join } from "node:path";
 import { ORPCError } from "@orpc/server";
 import { describe, it, expect } from "bun:test";
 import type { PersistedAgent } from "../../agents/registry/agents-store.js";
+import { conversationEntry, isolatedAgent } from "../../testing.js";
 import { scopedTarget, type WorkspaceScopeDeps, workspaceRootFor } from "./workspace-scope.js";
 
 // Whose copy of the workspace a read means, and the three failures that resolution can produce.
 // Runs on disk, not mocked: whether the checkout exists is the question being answered.
-
-const agent = (over: Partial<PersistedAgent>): PersistedAgent =>
-    ({ id: "c-1", provider: "claude", harness: "claude-code", repos: [], status: "idle", updatedAt: 0, ...over }) as PersistedAgent;
 
 const setup = async (): Promise<{ main: string; worktrees: string; deps: WorkspaceScopeDeps }> => {
     const base = await mkdtemp(join(tmpdir(), "scope-"));
@@ -19,9 +17,9 @@ const setup = async (): Promise<{ main: string; worktrees: string; deps: Workspa
     await mkdir(main, { recursive: true });
     await mkdir(worktrees, { recursive: true });
     const entries = new Map<string, PersistedAgent>();
-    entries.set("isolated", agent({ id: "isolated", branch: "agent/isolated" }));
-    entries.set("shared-mode", agent({ id: "shared-mode" }));
-    entries.set("archived", agent({ id: "archived", branch: "agent/archived" }));
+    entries.set("isolated", isolatedAgent([], { id: "isolated" }));
+    entries.set("shared-mode", conversationEntry({ id: "shared-mode" }));
+    entries.set("archived", isolatedAgent([], { id: "archived" }));
     return {
         main,
         worktrees,

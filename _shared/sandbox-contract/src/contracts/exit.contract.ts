@@ -1,15 +1,18 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import { ExitCountriesSchema, ExitIdParamSchema, ExitListSchema, ExitObservationSchema, ExitUseInputSchema } from "../schemas/exit.js";
 import { OkSchema } from "../schemas/shared.js";
+
+// The agent's `exit` CLI operates these on the agent token; a control token never reaches them.
+const exitRoute = procedure.meta({ agent: true, control: "never" });
 
 // An exit is added as an `exit` capability; started, moved and rotated here, since switching country is a
 // runtime operation done both by the operator and by the agent's `exit` command on PATH. Each exit publishes an opt-in
 // SOCKS proxy; the sandbox's default route, model endpoint and reachability tunnel never move.
 export const exitContract = {
     // Drives the capability card, the account picker and `geo list` (the CLI is `geo`; `exit` is a shell builtin).
-    list: oc
+    list: exitRoute
         .route({
             method: "GET",
             path: "/exit",
@@ -19,7 +22,7 @@ export const exitContract = {
         })
         .output(ExitListSchema),
     // "Provider" is Tor's directory, VPN Gate's CSV, or pasted confs; this is what auto-fills the country picker.
-    countries: oc
+    countries: exitRoute
         .route({
             method: "GET",
             path: "/exit/{id}/countries",
@@ -29,7 +32,7 @@ export const exitContract = {
         })
         .input(ExitIdParamSchema)
         .output(ExitCountriesSchema),
-    start: oc
+    start: exitRoute
         .route({
             method: "POST",
             path: "/exit/{id}/start",
@@ -39,7 +42,7 @@ export const exitContract = {
         })
         .input(ExitIdParamSchema)
         .output(streamOf(IntenticLineSchema)),
-    use: oc
+    use: exitRoute
         .route({
             method: "POST",
             path: "/exit/{id}/use",
@@ -50,7 +53,7 @@ export const exitContract = {
         .input(ExitUseInputSchema)
         .output(streamOf(IntenticLineSchema)),
     // Cheap on tor (a control-port signal); a re-dial to another server for everything else.
-    rotate: oc
+    rotate: exitRoute
         .route({
             method: "POST",
             path: "/exit/{id}/rotate",
@@ -60,7 +63,7 @@ export const exitContract = {
         })
         .input(ExitIdParamSchema)
         .output(streamOf(IntenticLineSchema)),
-    check: oc
+    check: exitRoute
         .route({
             method: "POST",
             path: "/exit/{id}/check",
@@ -70,7 +73,7 @@ export const exitContract = {
         })
         .input(ExitIdParamSchema)
         .output(ExitObservationSchema),
-    stop: oc
+    stop: exitRoute
         .route({
             method: "POST",
             path: "/exit/{id}/stop",

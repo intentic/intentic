@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { parseSkillFile, skillDocument } from "../settings/skill-file.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { parseSkillFile, skillDocument } from "../skill-file.js";
+import { statePath } from "../state-paths.js";
 
 // A persona's own kit: prompt, skills and tools in one folder per persona, read natively by the runtime's own Claude Code
 // plugin loader, so nothing here is copied, projected, or swept back on a persona change. Separate from

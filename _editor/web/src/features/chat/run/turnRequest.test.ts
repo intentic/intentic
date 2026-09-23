@@ -26,8 +26,8 @@ describe(`turnRequestBody`, () => {
         settings,
         resume: undefined,
         forkOf: undefined,
-        attachmentPaths: [],
-        mentionedPaths: [],
+        attachmentPaths: [] as string[],
+        mentionedPaths: [] as string[],
         editorContext: undefined,
     } as const;
 

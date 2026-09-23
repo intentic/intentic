@@ -1,6 +1,6 @@
 import type { WalletConfig } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { liveRequestRun } from "../agent/run/offer-request.js";
+import { actorObserver, liveRequestRun } from "../agents/actor/card-offers.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { conversationTainted } from "../guard/turn-taint.js";
@@ -66,8 +66,9 @@ export const createWalletRoutes = (services: Services) => ({
                 wallet: () => walletEntry(services),
                 ledger: services.walletLedger,
                 sign: (request) => relayWalletSign(services.config, request),
-                liveRun: liveRequestRun,
-                observe: services.agents.observe,
+                liveRun: liveRequestRun(services.conversations),
+                observe: actorObserver(services.conversations),
+                cards: services.cards,
                 tainted: conversationTainted,
             },
             {

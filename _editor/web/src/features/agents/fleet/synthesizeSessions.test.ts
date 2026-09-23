@@ -1,3 +1,4 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/constants";
 // The guarantee under test is the quality contract of "Synthesize N": every source rides whole (reasoning, tools,
 // diffs, notices, never a summary), the preparation refuses whole synthesis when any source can't be captured
@@ -6,12 +7,16 @@ import type { TranscriptRow } from "@intentic/sandbox-contract";
 import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { ref } from "vue";
 import { mocked } from "@intentic/testing/bun";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
+import { runningTurn } from "../../../testing/runningTurn";
 
+// What agents.transcript answers, per test; the upload stays on the raw client, which carries bytes.
+const transcript = mock();
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ agents: { transcript } }) }));
 mock.module("../../sandbox/client/sandboxClient", () => ({
     sandboxRequest: mock(),
-    sandboxRequestVia: mock(),
     sandboxError: mock(),
-    SandboxHttpError: class SandboxHttpError extends Error {},
     sandboxJson: mock(),
     sandboxUpload: mock(),
 }));
@@ -52,7 +57,7 @@ const { sandboxRequest, sandboxUpload } = await import("../../sandbox/client/san
 const sandboxRequestMock = mocked(sandboxRequest);
 const sandboxUploadMock = mocked(sandboxUpload);
 const { revealConversation } = await import("./agentActions");
-const { resetChat, useChat } = await import("../../chat/run/useChat");
+const { useChat } = await import("../../chat/run/useChat");
 const { draftConversation, reveal } = await import("../../chat/panel/useChat-reveal");
 // The store half of "New agent", as the summons applies it: the fixture these suites open extra tabs with.
 const newChat = () => {
@@ -69,10 +74,11 @@ const { receiveChatNote } = await import("../../chat/run/chatChannel");
 beforeEach(() => {
     local.clear();
     session.clear();
-    resetChat();
+    resetSandboxScope();
     // A daemon with nothing to say unless the test overrides it: an unmocked background call resolving to undefined
     // surfaces as an unhandled rejection on whichever test happens to be running.
     sandboxRequestMock.mockImplementation(() => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response));
+    transcript.mockRejectedValue(new SandboxHttpError(404, `No such conversation.`));
     sandboxUploadMock.mockResolvedValue(undefined);
 });
 
@@ -86,13 +92,13 @@ afterEach(() => {
 const openTwoPanes = (): readonly [string, string] => {
     const chat = useChat();
     const first = chat.active.value;
-    first.restoreMessages([
+    first.transcript.restoreMessages([
         { role: `user`, text: `try approach one` },
         { role: `assistant`, text: `done it one way` },
     ]);
     first.title.value = `Approach one`;
     const second = newChat();
-    second.restoreMessages([
+    second.transcript.restoreMessages([
         { role: `user`, text: `try approach two` },
         { role: `assistant`, text: `done it another way` },
     ]);
@@ -102,16 +108,15 @@ const openTwoPanes = (): readonly [string, string] => {
     return [first.conversationId, second.conversationId];
 };
 
-// The daemon's record for each source, keyed by conversation id: what /agents/:id/transcript answers.
+// The daemon's record for each source, keyed by conversation id: what agents.transcript answers, one page holding the
+// whole record. Any other id is refused, as a conversation the daemon holds no record of is.
 const mockTranscripts = (byId: Record<string, TranscriptRow[]>): void => {
-    sandboxRequestMock.mockImplementation((path: string) => {
-        const match = /^\/agents\/([^/]+)\/transcript$/u.exec(path);
-        const messages = match === null ? undefined : byId[decodeURIComponent(match[1] ?? ``)];
-        return Promise.resolve(
-            messages === undefined
-                ? ({ ok: false, status: 404, json: () => Promise.resolve({}) } as Response)
-                : ({ ok: true, status: 200, json: () => Promise.resolve({ messages }) } as unknown as Response),
-        );
+    transcript.mockImplementation(async ({ id }: { id: string }) => {
+        const messages = byId[id];
+        if (messages === undefined) {
+            throw new SandboxHttpError(404, `No such conversation.`);
+        }
+        return { messages, from: 0, more: false };
     });
 };
 
@@ -212,7 +217,7 @@ describe(`synthesizeSessions`, () => {
 
     it(`refuses while any selected agent is still running`, async () => {
         const [first] = openTwoPanes();
-        useChat().conversations.value.find((conversation) => conversation.conversationId === first)!.streaming.value = true;
+        runningTurn(useChat().conversations.value.find((conversation) => conversation.conversationId === first)!.turn);
 
         const result = await synthesizeSessions();
 
@@ -230,6 +235,23 @@ describe(`synthesizeSessions`, () => {
 
         expect(result).toMatchObject({ started: false, why: expect.stringContaining(`nothing was synthesized`) });
         expect(useChat().conversations.value.length).toBe(before);
+        expect(sandboxUploadMock).not.toHaveBeenCalled();
+    });
+
+    // The panes are the old box's conversations: nothing of them may be written into, or opened in, the box switched to.
+    it(`stops before anything lands when the sandbox switches while the sources are read`, async () => {
+        openTwoPanes();
+        transcript.mockImplementation(async () => {
+            resetSandboxScope();
+            return { messages: [{ role: `user`, text: `try approach one` }], from: 0, more: false };
+        });
+
+        const result = await synthesizeSessions();
+
+        expect(result).toEqual({
+            started: false,
+            why: `The sandbox changed while the conversations were being captured, so nothing was synthesized.`,
+        });
         expect(sandboxUploadMock).not.toHaveBeenCalled();
     });
 
@@ -268,12 +290,12 @@ describe(`synthesizeSessions`, () => {
         expect(composed.attachments.value).toHaveLength(2);
         expect(composed.attachments.value[0]).toMatchObject({ name: `source-A-approach-one.md`, status: `done` });
         expect(composed.attachments.value[1]).toMatchObject({ name: `source-B-approach-two.md`, status: `done` });
-        expect(composed.modePick.value).toBe(`default`);
-        expect(composed.messages.value).toHaveLength(0);
-        expect(composed.streaming.value).toBe(false);
+        expect(composed.selection.modePick.value).toBe(`default`);
+        expect(composed.transcript.messages.value).toHaveLength(0);
+        expect(composed.turn.streaming.value).toBe(false);
         expect(revealConversation).toHaveBeenCalledWith(composed);
         // The sources are untouched: a synthesis reads them, it never rewrites them.
         const source = useChat().conversations.value.find((conversation) => conversation.conversationId === first)!;
-        expect(source.messages.value).toHaveLength(2);
+        expect(source.transcript.messages.value).toHaveLength(2);
     });
 });

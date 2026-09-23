@@ -2,13 +2,7 @@ import { unstubbed } from "@intentic/testing";
 import type { AccountUsage } from "@intentic/sandbox-contract";
 import { test, expect, mock } from "bun:test";
 import type { Services } from "../../composition.js";
-
-// The environment builder reaches the provider registry, which imports this module back: entering the graph here
-// rather than through the registry would leave cursor-provider.js reading a half-built module. Nothing below connects
-// or disconnects an account, so the builder stays out of the graph.
-mock.module("../../environment/environment.js", () => ({ composeEnvironment: mock() }));
-
-const { cursorAccountDoor } = await import("./cursor-accounts.js");
+import { cursorAccountDoor } from "./cursor-accounts.js";
 
 /* Two Cursor accounts look identical until one of them has been refused something; carrying that reading onto the row
    is the whole of what a picker has to tell them apart by. */

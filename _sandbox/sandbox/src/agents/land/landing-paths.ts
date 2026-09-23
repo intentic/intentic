@@ -11,7 +11,7 @@ export const landingPaths = async (
 ): Promise<readonly string[]> => {
     const perRepo = await Promise.all(
         span.map(async ({ repo }) => {
-            const composed = agent.repos.find((entry) => entry.repo === repo);
+            const composed = agent.placement.repos.find((entry) => entry.repo === repo);
             if (composed === undefined) {
                 return [];
             }

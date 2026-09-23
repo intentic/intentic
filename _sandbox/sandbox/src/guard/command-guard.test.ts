@@ -8,11 +8,15 @@ import {
     WORKSPACE_ROOT,
 } from "@intentic/sandbox-contract";
 import { describe, test, expect } from "bun:test";
-import { resolveRequest } from "../agent/tools/agent-requests.js";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandGateHooks, type CommandGuardOptions } from "./command-guard.js";
 import { createTurnTaint, NO_TAINT } from "./turn-taint.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
+import { memoryFleet } from "../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 const FORCE_PUSH = "git push --force origin main";
 
@@ -45,6 +49,7 @@ const harness = (options: Partial<CommandGuardOptions> = {}): Harness => {
     const controller = new AbortController();
     const judge = options.judge;
     const matchers = commandGateHooks({
+        cards,
         policy: DEFAULT_SAFETY_POLICY,
         // Default setting; other `judging` values are covered in their own describe blocks below.
         judging: "on",
@@ -189,7 +194,7 @@ describe("command gate: verdicts", () => {
         await settled();
         const card = cardOf(gate.events);
         expect(card).toMatchObject({ toolName: "Bash", program: { text: FORCE_PUSH, language: "bash", truncated: false } });
-        expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
+        expect(cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
         expect(await pending).toEqual({});
         // Every parked card owes the stream its resolution frame.
         expect(gate.events.some((event) => event.kind === "resolved")).toBe(true);
@@ -204,7 +209,7 @@ describe("command gate: verdicts", () => {
         // `explain` stays unset here; repeating the title as a subline would duplicate it.
         expect(cardOf(gate.events).explain).toBeUndefined();
         // The card and its resolution are the only two event frames emitted here.
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
         expect(gate.events.map((event) => event.kind)).toEqual(["permission", "resolved"]);
     });
@@ -220,7 +225,7 @@ describe("command gate: verdicts", () => {
         expect(card.title).not.toContain(COMMAND_CLASS_LABELS["files.destructive"]);
         // Both matched fragments are marked, in the command's own order.
         expect(card.program?.spans.map((span) => command.slice(span.start, span.end))).toEqual([`rm -rf /tmp/repro/state`, `npm publish`]);
-        resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
         await pending;
     });
 
@@ -228,7 +233,7 @@ describe("command gate: verdicts", () => {
         const gate = harness({ judge: always("ask") });
         const pending = gate.run(`rm -rf ${WORKSPACE_ROOT}/intentic`);
         await settled();
-        expect(resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" })).toBe("settled");
+        expect(cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" })).toBe("settled");
         const out = await pending;
         expect(out.hookSpecificOutput).toMatchObject({ permissionDecision: "deny" });
         expect(reasonOf(out)).toMatch(/declined/i);
@@ -240,7 +245,7 @@ describe("command gate: verdicts", () => {
         const pending = gate.run("rm -rf build");
         await settled();
         const requestId = cardOf(gate.events).requestId;
-        expect(resolveRequest({ kind: "permission", requestId, decision: "deny", feedback: "Use `pnpm clean` instead." })).toBe("settled");
+        expect(cards.resolve({ kind: "permission", requestId, decision: "deny", feedback: "Use `pnpm clean` instead." })).toBe("settled");
         expect(reasonOf(await pending)).toBe("Use `pnpm clean` instead.");
     });
 
@@ -270,7 +275,7 @@ describe("command gate: verdicts", () => {
         await settled();
         // cardOf throws when nothing was raised, so reaching here is the assertion that it asked rather than refused.
         const card = cardOf(gate.events);
-        resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
         await pending;
         // The log is where "asked, and they said yes" is recorded; the unattended refusal above never reaches it.
         expect(gate.logged).toMatchObject([{ outcome: "allowed", answer: "allowed" }]);
@@ -374,7 +379,7 @@ describe("command gate: the hard rule", () => {
             await settled();
             const card = cardOf(gate.events);
             expect(card.title, command).toContain("wipe a disk");
-            resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+            cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
             expect((await pending).hookSpecificOutput, command).toBeUndefined();
         }
     });
@@ -400,7 +405,7 @@ describe("command gate: the hard rule", () => {
             const card = cardOf(gate.events);
             // No hard rule behind this card, so the judge's sentence is the title, not a sub-line.
             expect(card.title, command).toBe(`Deletes a named volume.`);
-            resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+            cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
             expect((await pending).hookSpecificOutput, command).toBeUndefined();
         }
     });
@@ -444,7 +449,7 @@ describe("command gate: no judge", () => {
         const pending = gate.run("mkfs.ext4 /dev/sda1");
         await settled();
         expect(cardOf(gate.events).explain).toContain("could not be reached");
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         expect((await pending).hookSpecificOutput).toBeUndefined();
     });
 
@@ -511,7 +516,7 @@ describe("command gate: the owner's switch", () => {
                     outcome: "asked",
                 },
             ]);
-            resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+            cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
             expect((await pending).hookSpecificOutput).toBeUndefined();
         });
     });
@@ -544,7 +549,7 @@ describe("command gate: the owner's switch", () => {
             const card = cardOf(gate.events);
             expect(card.title).toContain("wipe a disk");
             expect(card.explain).toBe(`Formats the second disk.`);
-            resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" });
+            cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" });
             expect((await pending).hookSpecificOutput).toBeUndefined();
         });
     });
@@ -557,7 +562,7 @@ describe("command gate: what an answer remembers", () => {
         const gate = harness({ judge: always("ask") });
         const pending = gate.run(FORCE_PUSH);
         await settled();
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
         expect(await gate.run(FORCE_PUSH)).toEqual({});
         expect(gate.events.filter((event) => event.kind === "permission")).toHaveLength(1);
@@ -569,7 +574,7 @@ describe("command gate: what an answer remembers", () => {
         const gate = harness({ judge: always("ask") });
         const pending = gate.run("rm -rf build");
         await settled();
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
         void gate.run(`rm -rf ${WORKSPACE_ROOT}/intentic`);
         await settled();
@@ -583,7 +588,7 @@ describe("command gate: what an answer remembers", () => {
         await settled();
         const card = cardOf(gate.events);
         expect(card.alwaysLabel).toContain("Deleting build directories under /work is fine.");
-        resolveRequest({ kind: "permission", requestId: card.requestId, decision: "always" });
+        cards.resolve({ kind: "permission", requestId: card.requestId, decision: "always" });
         await pending;
         await settled();
         expect(gate.remembered).toEqual(["Deleting build directories under /work is fine."]);
@@ -595,7 +600,7 @@ describe("command gate: what an answer remembers", () => {
         const pending = gate.run(FORCE_PUSH);
         await settled();
         expect(cardOf(gate.events).alwaysLabel).toBeUndefined();
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
     });
 
@@ -604,7 +609,7 @@ describe("command gate: what an answer remembers", () => {
         const pending = gate.run(FORCE_PUSH);
         await settled();
         expect(cardOf(gate.events).alwaysLabel).toBeUndefined();
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
     });
 });
@@ -641,7 +646,7 @@ describe("command gate: the log", () => {
         const pending = gate.run(FORCE_PUSH);
         await settled();
         expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, decision: "ask", outcome: "asked" }]);
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "deny" });
         await pending;
         expect(rowsOf(gate.logged)).toEqual([{ ...FORCE_PUSH_ROW, decision: "ask", outcome: "refused", answer: "declined" }]);
     });
@@ -663,7 +668,7 @@ describe("the card's program", () => {
         await settled();
         const { program } = cardOf(gate.events);
         expect(program?.spans.map((span) => command.slice(span.start, span.end))).toEqual([".env.production"]);
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
     });
 
@@ -678,7 +683,7 @@ describe("the card's program", () => {
         expect(program?.text.length).toBe(400);
         expect(program?.text).not.toContain(`not shown`);
         expect(program?.spans.map((span) => program.text.slice(span.start, span.end))).toEqual([`.env.production`]);
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
     });
 
@@ -695,7 +700,7 @@ describe("the card's program", () => {
         expect(program?.text).toMatch(/\[… \d+ characters not shown …\]/);
         expect(program?.text.startsWith(command.slice(0, 120))).toBe(true);
         expect(program?.spans.map((span) => program.text.slice(span.start, span.end))).toEqual([`.env`]);
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
     });
 
@@ -707,7 +712,7 @@ describe("the card's program", () => {
         await settled();
         const { program } = cardOf(gate.events);
         expect(program?.spans.map((span) => program.text.slice(span.start, span.end))).toEqual([`rm(dir, { recursive: true`]);
-        resolveRequest({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
+        cards.resolve({ kind: "permission", requestId: cardOf(gate.events).requestId, decision: "once" });
         await pending;
     });
 });
@@ -735,7 +740,7 @@ describe("the gate over JS runs", () => {
         // Calling it a script (not bash) is the judge's own sentence, driven by facts.language.
         expect(card).toMatchObject({ toolName: JS_TOOL_NAME, displayName: "Run code", program: { text: script, language: "javascript" } });
         expect(gate.seen[0]?.facts.language).toBe("javascript");
-        expect(resolveRequest({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
+        expect(cards.resolve({ kind: "permission", requestId: card.requestId, decision: "once" })).toBe("settled");
         expect(await pending).toEqual({});
     });
 });

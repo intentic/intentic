@@ -1,5 +1,6 @@
 import { eventIterator } from "@orpc/contract";
 import { z } from "zod";
+import type { RouteMeta } from "./route-meta.js";
 
 // Named route surface of the daemon's contract (`<group>.<route>`), derived automatically so nothing here is
 // hand-maintained. The daemon advertises which routes it implements (the /events hello frame); the browser diffs that
@@ -18,29 +19,30 @@ export const streamOf = <T extends z.ZodType>(frame: T) => Object.assign(eventIt
 const frameOf = (schema: unknown): z.ZodType | undefined =>
     typeof schema === "object" && schema !== null && FRAME in schema ? ((schema as Record<symbol, unknown>)[FRAME] as z.ZodType) : undefined;
 
-// Structural shape of `~orpc.route`, the metadata oRPC attaches to every `oc.route(...)` procedure; read this way since
-// oRPC's internal types aren't public.
+// Structural shape of `~orpc`, what oRPC attaches to every procedure: its route, and the RouteMeta its builder carried
+// (route-meta.ts). Read this way since oRPC's internal types aren't public.
 interface ContractProcedureLike {
-    readonly "~orpc": { readonly route?: { readonly method?: string; readonly path?: string } };
+    readonly "~orpc": { readonly route?: { readonly method?: string; readonly path?: string }; readonly meta?: RouteMeta };
 }
 
-const procedureRoute = (value: unknown): { method: string; path: string } | undefined => {
+const procedureRoute = (value: unknown): Omit<ContractRoute, "name"> | undefined => {
     if (typeof value !== "object" || value === null || !("~orpc" in value)) {
         return undefined;
     }
-    const { route } = (value as ContractProcedureLike)["~orpc"];
+    const { route, meta } = (value as ContractProcedureLike)["~orpc"];
     if (route?.method === undefined || route.path === undefined) {
         return undefined;
     }
-    return { method: route.method, path: route.path };
+    return { method: route.method, path: route.path, meta: meta ?? {} };
 };
 
-// One advertised route: contract name plus wire shape, matched back to a concrete request path by routeNameForRequest.
+// One declared route: its name and wire shape, matched back to a concrete request by servedRoute, and its policy.
 export interface ContractRoute {
     readonly name: string;
     readonly method: string;
-    // oRPC path template with `{param}` placeholders, e.g. `/system/terminals/{name}`.
+    // Path template with `{param}` placeholders, e.g. `/system/terminals/{name}`; a raw route's may end in `/*`.
     readonly path: string;
+    readonly meta: RouteMeta;
 }
 
 // Walks a contract object (group → procedure) into a flat route list, sorted by name for a stable diff.
@@ -53,7 +55,7 @@ export const contractRoutes = (contract: Record<string, unknown>): ContractRoute
         for (const [name, procedure] of Object.entries(procedures as Record<string, unknown>)) {
             const route = procedureRoute(procedure);
             if (route !== undefined) {
-                routes.push({ name: `${group}.${name}`, method: route.method, path: route.path });
+                routes.push({ name: `${group}.${name}`, ...route });
             }
         }
     }
@@ -143,30 +145,89 @@ export const routeShapes = (contract: Record<string, unknown>): Record<string, s
     return shapes;
 };
 
-// Matches a concrete path against a route template segment-wise; `{param}` matches exactly one segment, so length must
-// match too.
-const pathMatches = (template: string, path: string): boolean => {
-    const wanted = template.split("/");
-    const actual = path.split("/");
-    if (wanted.length !== actual.length) {
-        return false;
+// A template split once: a literal segment, or undefined for a `{param}`; `tail` for a raw route's trailing `/*`.
+interface Pattern {
+    readonly route: ContractRoute;
+    readonly segments: readonly (string | undefined)[];
+    readonly tail: boolean;
+}
+
+const compiled = new WeakMap<readonly ContractRoute[], readonly Pattern[]>();
+
+const patternsOf = (routes: readonly ContractRoute[]): readonly Pattern[] => {
+    const known = compiled.get(routes);
+    if (known !== undefined) {
+        return known;
     }
-    return wanted.every((segment, index) => (segment.startsWith("{") && segment.endsWith("}") ? actual[index] !== "" : segment === actual[index]));
+    const patterns = routes.map((route) => {
+        const parts = route.path.split("/").slice(1);
+        const tail = parts.at(-1) === "*";
+        const segments = (tail ? parts.slice(0, -1) : parts).map((part) => (part.startsWith("{") && part.endsWith("}") ? undefined : part));
+        return { route, segments, tail };
+    });
+    compiled.set(routes, patterns);
+    return patterns;
 };
 
-// The contract route a request belongs to, or undefined for a hand-written daemon route (/health, /workspace/raw) never
-// gated by the contract. Query string stripped first.
-// How many segments a template leaves open; the tie-breaker below prefers the template that leaves fewest.
-const paramCount = (template: string): number => template.split("/").filter((segment) => segment.startsWith("{") && segment.endsWith("}")).length;
+// Whether a template takes a request's segments. Hono (`raw`) gives a `{param}` only a non-empty segment and a `/*` one
+// or more further ones; oRPC's router gives a `{param}` any segment, the empty one included.
+const takes = (pattern: Pattern, segments: readonly string[], raw: boolean): boolean => {
+    const { segments: wanted, tail } = pattern;
+    if (tail ? segments.length <= wanted.length : segments.length !== wanted.length) {
+        return false;
+    }
+    return wanted.every((segment, index) => (segment === undefined ? !raw || segments[index] !== "" : segment === segments[index]));
+};
 
-export const routeNameForRequest = (routes: readonly ContractRoute[], method: string, pathWithQuery: string): string | undefined => {
-    const path = pathWithQuery.split("?")[0] ?? pathWithQuery;
+// oRPC's router tries a literal segment before a parameter, left to right: `/agents/search` is the search route, not
+// `get` with an id of "search", whichever of the two the list happens to hold first.
+const moreLiteral = (a: Pattern, b: Pattern): boolean => {
+    const at = a.segments.findIndex((segment, index) => (segment === undefined) !== (b.segments[index] === undefined));
+    return at >= 0 && a.segments[at] !== undefined;
+};
+
+const mostLiteral = (patterns: readonly Pattern[]): Pattern | undefined =>
+    patterns.reduce<Pattern | undefined>((best, pattern) => (best === undefined || moreLiteral(pattern, best) ? pattern : best), undefined);
+
+// Whether a route declared for one method answers a request's. The CORS middleware answers a preflight (OPTIONS) for
+// every route at its path; Hono (`raw`) answers every method with an `ALL` route and HEAD with a GET one.
+const answers = (declared: string, method: string, raw: boolean): boolean =>
+    method === "OPTIONS" || declared === method || (raw && (declared === "ALL" || (declared === "GET" && method === "HEAD")));
+
+// A request path as oRPC's router reads it: one trailing slash dropped, then one trailing empty segment, so `/a/` and
+// `/a//` are `/a` while `/a///` is not.
+const orpcSegments = (path: string): string[] => {
+    const segments = (path.endsWith("/") ? path.slice(0, -1) : path).split("/").slice(1);
+    return segments.at(-1) === "" ? segments.slice(0, -1) : segments;
+};
+
+const contractRouteFor = (routes: readonly ContractRoute[], method: string, path: string): ContractRoute | undefined => {
+    const segments = orpcSegments(path);
+    return mostLiteral(patternsOf(routes).filter((pattern) => answers(pattern.route.method.toUpperCase(), method, false) && takes(pattern, segments, false)))
+        ?.route;
+};
+
+// Hono matches the path exactly, and among overlapping routes the first registered answers; a preflight belongs to none
+// of them, so the most literal names it.
+const rawRouteFor = (routes: readonly ContractRoute[], method: string, path: string): ContractRoute | undefined => {
+    const segments = path.split("/").slice(1);
+    const matching = patternsOf(routes).filter((pattern) => answers(pattern.route.method, method, true) && takes(pattern, segments, true));
+    return (method === "OPTIONS" ? mostLiteral(matching) : matching[0])?.route;
+};
+
+const pathOf = (pathWithQuery: string): string => pathWithQuery.split("?")[0] ?? pathWithQuery;
+
+// The contract route a request belongs to, read as oRPC's router reads it, or undefined for a hand-written daemon route
+// (/health, /workspace/raw) the contract never declared. Query string stripped first.
+export const routeNameForRequest = (routes: readonly ContractRoute[], method: string, pathWithQuery: string): string | undefined =>
+    contractRouteFor(routes, method.toUpperCase(), pathOf(pathWithQuery))?.name;
+
+// The route that serves a request to the daemon: a raw route as Hono matches it, since those are registered ahead of
+// oRPC's catch-all, else a contract route as oRPC's router does; undefined when neither serves it.
+export const servedRoute = (raw: readonly ContractRoute[], contract: readonly ContractRoute[], method: string, pathWithQuery: string): ContractRoute | undefined => {
     const upper = method.toUpperCase();
-    // A literal segment outranks a parameter: `/agents/search` is the search route, not `get` with an id of "search",
-    // whichever of the two the sorted list happens to hold first.
-    return routes
-        .filter((route) => route.method.toUpperCase() === upper && pathMatches(route.path, path))
-        .toSorted((a, b) => paramCount(a.path) - paramCount(b.path))[0]?.name;
+    const path = pathOf(pathWithQuery);
+    return rawRouteFor(raw, upper, path) ?? contractRouteFor(contract, upper, path);
 };
 
 // The route a typed client call belongs to; oRPC addresses a procedure by contract position (`['git','stashApply']`),

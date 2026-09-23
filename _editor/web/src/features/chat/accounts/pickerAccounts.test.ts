@@ -1,13 +1,14 @@
 import { test, expect, mock } from "bun:test";
 import { capacityCounts, matchAccounts } from "./pickerAccounts";
 import type { PlanHeadroom } from "../session/usageStatus";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The two derivations behind a folded account list: the summary line a fold states in place of its
 // rows, and the filter that finds one row inside it. Both pure functions.
 
 // pickerAccounts reaches useChat for live account lists; stub its side-effecting seams so import
 // stays inert.
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxRequest: mock() }));
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 mock.module("./useChat-accounts", () => ({
     accountsOf: mock(() => []),
     refreshConnections: mock(async () => {}),

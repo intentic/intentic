@@ -16,8 +16,8 @@ import {
 } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
 import type { Services } from "../../composition.js";
-import { compatYaml, endpointCompatEntries, translatedEndpoints } from "../../endpoints/endpoint-translator.js";
-import { DAEMON_OWNER, workloadStamp } from "../../platform/boot/leftovers.js";
+import { type CompatEntry, compatYaml, endpointCompatEntries, translatedEndpoints } from "../../endpoints/endpoint-translator.js";
+import { DAEMON_OWNER, workloadStamp } from "../../seams/workload-stamp.js";
 import { engineBinary } from "../../engines/engine-resolve.js";
 import type { AccountUsageStore } from "../../usage/account-usage.js";
 import { fleetLimit, type TurnLimit } from "../../usage/fleet-limit.js";
@@ -90,7 +90,7 @@ export const connectedTranslatorProviders = async (authRoot: string): Promise<Se
 };
 
 // Whether starting the translator would serve anything: a subscription or a user's own endpoint connected.
-export const translatorWanted = async (services: Services): Promise<boolean> =>
+export const translatorWanted = async (services: Pick<Services, "authRoot" | "capabilities">): Promise<boolean> =>
     (await connectedTranslatorProviders(services.authRoot)).size > 0 || translatedEndpoints(await services.capabilities.list()).length > 0;
 
 // The word 'rebuild' is required: the UI matches it to route the error to the Environment card.
@@ -242,6 +242,9 @@ export interface CliProxyClient {
     readonly complete: (input: { provider: KeyedProvider; redirectUrl: string; state: string }) => Promise<void>;
     readonly disconnect: (provider: KeyedProvider, name: string) => Promise<void>;
     readonly models: (provider: KeyedProvider) => Promise<Model[]>;
+    // Replaces the running proxy's whole endpoint list, since the daemon owns every entry; rejects when the proxy can't
+    // be reached, and answers how it took the list otherwise.
+    readonly putCompat: (entries: readonly CompatEntry[]) => Promise<{ readonly ok: boolean; readonly status: number }>;
 }
 
 // Namespaced by provider since the store is shared with native accounts and a file name is unique only within one.
@@ -606,6 +609,14 @@ export const createCliProxyClient = (params: {
                           },
                       ],
             );
+        },
+        putCompat: async (entries) => {
+            const response = await fetchFn(`${managementUrl}/openai-compatibility`, {
+                method: "PUT",
+                headers: { ...auth, "content-type": "application/json" },
+                body: JSON.stringify(entries),
+            });
+            return { ok: response.ok, status: response.status };
         },
     };
 };

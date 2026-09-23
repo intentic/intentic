@@ -9,7 +9,7 @@ import {
     mentionsSpentAllowance,
     versionFloorOf,
 } from "../providers/failure-sentences.js";
-import { opt } from "./opt.js";
+import { opt } from "../../opt.js";
 
 type ErrorEvent = Extract<AgentEvent, { kind: "error" }>;
 

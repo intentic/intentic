@@ -12,7 +12,7 @@ import { isRendition, thumbnailable, workspaceThumbnail } from "./workspace-thum
 import { insideArchive, scopedTarget } from "../layout/workspace-scope.js";
 import { fenceOpens, refuseFenced } from "../layout/workspace-fence.js";
 import type { Fence } from "@intentic/sandbox-contract";
-import { refuseUnlessVisible } from "../../auth/fleet-scope.js";
+import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import type { Caller } from "../../auth/auth.js";
 import { callerFence } from "../../areas/area-scope.js";
 
@@ -34,7 +34,7 @@ const scopedFileTarget = async (
         if (agent !== undefined) {
             const entry = services.agents.entry(agent);
             if (entry !== undefined) {
-                refuseUnlessVisible(caller, entry);
+                refuseUnlessVisible(caller, provenanceOf(entry));
             }
         }
         refuseFenced(callerFence(await services.areas.list(), caller), path);

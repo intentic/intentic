@@ -2,15 +2,30 @@ import { errorMessage } from "@intentic/ui/async";
 import { reactive, type Ref, ref } from "vue";
 import { collectDroppedFiles } from "../../workspace/explorer/transfer/dropEntries";
 import { forgetMedia, type MediaKind, rememberMedia } from "./attachmentPreviews";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { sandboxJsonVia, sandboxUpload } from "../../sandbox/client/sandboxClient";
-import type { PendingAttachment } from "../session/conversation";
+import { sandboxUpload } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { ChatAttachment } from "../transcript/transcript";
 import { uuid } from "../../../lib/uuid";
 
 // Files staged for the next turn: the composer chips, arriving via paperclip dialog, paste, or drop. Per-tab like the
 // draft, since the upload closure keeps pointing at its own entry rather than the list. Abandoned uploads orphan files
 // under .intentic/records/artifacts/attachments, visible and deletable in the workspace tree.
+
+// A file staged in the composer, uploaded to the workspace immediately so send is instant; each gets its own uuid dir.
+// `previewUrl` and `controller` are session-only, absent on a restored entry.
+export interface PendingAttachment {
+    readonly id: string;
+    readonly name: string;
+    // Workspace-relative destination: .intentic/records/artifacts/attachments/<uuid>/<name>.
+    readonly path: string;
+    // Object URL for staged bytes an element shows or plays (a thumbnail, a waveform); revoked on remove, handed to
+    // the sent message on submit.
+    readonly previewUrl?: string;
+    readonly controller?: AbortController;
+    status: `uploading` | `done` | `failed`;
+    progress: number;
+    error?: string;
+}
 
 // An object URL for bytes an element can draw or play, and which element that is. Typed by the browser rather than by
 // the name's ending: these bytes are in this window already, so what they ARE is knowable without asking the path.
@@ -86,9 +101,18 @@ export const useChatAttachments = (composer: {
                 // Fire-and-forget: drop the uploaded dir; a failure leaves the orphan visible and deletable in the
                 // tree.
                 const dir = attachment.path.slice(0, attachment.path.lastIndexOf(`/`));
-                sandboxJsonVia(composer.at.value, `/workspace/entry`, jsonBody(`DELETE`, { path: dir })).catch(() => undefined);
+                sandboxRpc.workspace.delete({ path: dir }, { context: { at: composer.at.value } }).catch(() => undefined);
             }
             composer.attachments.value = composer.attachments.value.filter((entry) => entry.id !== attachment.id);
+        },
+        // The paperclip's picker, the only road for a photo on a phone, where nothing is dropped or pasted. Cleared after,
+        // so picking the same file twice fires `change` twice.
+        onPick: (event: Event): void => {
+            const picker = event.target as HTMLInputElement;
+            for (const file of picker.files ?? []) {
+                attach(file);
+            }
+            picker.value = ``;
         },
         onPaste: (event: ClipboardEvent): void => {
             const files = Array.from(event.clipboardData?.files ?? []);

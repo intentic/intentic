@@ -45,7 +45,8 @@ blocked and unpinned rows remain non-admitted.
 | `index.html` | the entry; sets `window.env` inline (sentinel origins) and loads `src/main.ts` |
 | `src/transport.ts` | what the demo claims from `fetch`/`WebSocket`/`XMLHttpRequest`, and the socket shim |
 | `src/platform.ts` | the platform as a fetch handler: the session and the sandbox row the gates need |
-| `src/daemon.ts` | the daemon as a fetch handler: the route table and the `/events` stream |
+| `src/daemon.ts` | the daemon as a typed fixture router: a handler per served contract procedure, the raw routes answered by hand, and the live state the `/events` stream re-broadcasts |
+| `src/router.ts` | the dispatcher standing in for the daemon's OpenAPI handler: the contract's own matcher, oRPC's input decoding and schema parse, answers typed by the contract |
 | `src/turn.ts` | the recorded `AgentEvent` run behind `/agent/attach`, folded into the rows and patches the chat draws |
 | `src/sse.ts` | the event-iterator wire format |
 | `src/terminal.ts` | the recorded pty, as `TerminalServerMessage` frames |
@@ -53,6 +54,7 @@ blocked and unpinned rows remain non-admitted.
 | `src/mode.ts` | how full the recording is: the three states, and which one this page load serves |
 | `src/switcher.ts` | the bar at the bottom of the screen that switches between them; the demo's only chrome |
 | `scripts/sync-extensions.mjs` | fetches the listed first-party extensions (manifest + built bundle) at the commits `vendor/extensions.json` pins, before every build |
+| `scripts/smoke-daemon.ts` | `pnpm smoke`: one request per served procedure through the dispatcher, every answer parsed by its contract schema |
 | `vendor/` | those pins, the fetched bundles (gitignored) and a generated copy of the knowledge engine's fs-free half (see `vendor/README.md`) |
 | `src/fixture/` | the data: `fleet.ts` (the roster), `transcripts.ts` (what a finished agent's chat holds), `openChats.ts` (the chats this window opens holding, the featured run, plus one per persona), `workspace.ts` (the filesystem, diffs, landing), `chores.ts`, `acceptance.ts`, `docs.ts`, `storefront.ts`, `ci.ts`, `memory.ts`, `automations.ts`, `sandbox.ts` |
 
@@ -70,7 +72,9 @@ sides are not a change and there would be nothing to render, and a note written 
 by the reading setting that strips comments before the diff is computed.
 
 Anything the fixture does not serve answers 404 and logs one line naming the method and path. That console line
-is the tool: it is how the served routes were found, and how the next one will be.
+is the tool: it is how the served routes were found, and how the next one will be. Serving one is a handler in
+`daemon.ts`'s router under the procedure's own group and name, typed by the contract, plus its sample input in
+`scripts/smoke-daemon.ts`, which the compiler asks for.
 
 ## The maker recording
 
@@ -128,6 +132,7 @@ Design notes, the route/event coverage table and what is deliberately absent:
 
 - [src/main.ts](src/main.ts), the entry: install the fakes, seed credentials, then import the app's own `main.ts`.
 - [src/platform.ts](src/platform.ts) / [src/daemon.ts](src/daemon.ts): the two globals the app reaches the outside world through.
+- [src/router.ts](src/router.ts): how a request reaches a fixture handler, and why its answer is held to the contract.
 - [src/fixture](src/fixture), the recording: every surface's contents, as data.
 - [src/turn.ts](src/turn.ts): replaying an agent turn convincingly, including its timing.
 - [src/mode.ts](src/mode.ts): what the demo allows and what it quietly declines.

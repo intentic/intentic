@@ -19,7 +19,7 @@ const deps = (overrides: {
     const calls: string[] = [];
     let leaseHeld = false;
     const services = {
-        agents: {
+        conversations: {
             withRewindLease: async <T>(_id: string, fn: () => Promise<T>): Promise<T | undefined> => {
                 if (overrides.running === true) {
                     return undefined;
@@ -31,12 +31,16 @@ const deps = (overrides: {
                     leaseHeld = false;
                 }
             },
-            entry: () => (overrides.entry === false ? undefined : { id: CONVERSATION, provider: "claude", harness: "native" }),
-            clearSession: async () => {
+            // The rewind's one event is the cleared session.
+            send: (_id: string, event: { readonly kind: string }) => {
                 // Every step asserts the lease is still held; releasing early would let turns run again mid-rewind.
                 expect(leaseHeld).toBe(true);
-                calls.push("clearSession");
+                calls.push(event.kind === "session-cleared" ? "clearSession" : event.kind);
+                return { reply: undefined, settled: Promise.resolve(undefined) };
             },
+        },
+        agents: {
+            entry: () => (overrides.entry === false ? undefined : { id: CONVERSATION, provider: "claude", harness: "native" }),
         },
         turnCheckpoints: {
             of: async () => {

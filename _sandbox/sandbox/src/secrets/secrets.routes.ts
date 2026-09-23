@@ -11,10 +11,9 @@ import type { CredentialGate, SecretInventoryEntry } from "@intentic/sandbox-con
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, bearerFrom, ForbiddenError } from "../auth/auth.js";
 import { secretsContract } from "@intentic/sandbox-contract";
-import { providerSecretEntries } from "../agent/providers/provider-registry.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
-import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { stateRelPath } from "../state-paths.js";
 import { type TextFile, textFile } from "../store/text-file.js";
 
 // One connected provider account as an inventory entry; provider tokens are never revealable.
@@ -64,8 +63,9 @@ const lastUseFor = (entry: Pick<SecretInventoryEntry, "key" | "kind">, lastByNam
 
 // User-supplied secrets go to desired-state/.env (mode 0600); set/remove/list/reveal refuse until DevOps has scaffolded
 // that repo, though inventory always answers. Every set/remove fires a best-effort `deploy secrets push` for the CI
-// copy.
-export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
+// copy. `providerAccounts` answers every provider's connected-account rows, which the router reads from the provider
+// modules themselves.
+export const createSecretsRoutes = (services: SecretsRoutesDeps, providerAccounts: () => Promise<readonly SecretInventoryEntry[]>) => {
     const i = implement(secretsContract).$context<OrpcContext>();
     const desiredState = (): string => services.workspace.repos["desired-state"];
     const envPath = (): string => join(desiredState(), ENV_FILE);
@@ -165,7 +165,7 @@ export const createSecretsRoutes = (services: SecretsRoutesDeps) => {
                 services.capabilities.list(),
                 contributionRegistry(services),
                 // Every provider's connected-account rows, from the modules themselves, not hand-kept here.
-                providerSecretEntries(services),
+                providerAccounts(),
                 services.secretUses.all().catch(() => [] as const),
                 // The approval policy, joined below; unreadable reads as no gates here, since this is a display
                 // surface.

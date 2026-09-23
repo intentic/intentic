@@ -2,14 +2,12 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { errorMessage } from "@intentic/base/errors";
 import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import { PAYLOAD_MAX } from "../automations/scheduler.js";
 import { presentedDoorToken } from "../auth/door-tokens.js";
 import { sessionStart } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import type { TurnFn } from "../loops/loop-runner.js";
 import { dailyBudget } from "../store/daily-budget.js";
 import { gateVerdictOf } from "./workflow-gate.js";
 import { openRun, runWorkflow, stopWorkflowRun } from "./workflow-runner.js";
@@ -64,7 +62,7 @@ const verdictStream = (verdict: Promise<GateVerdict>, hangUp: () => void, heartb
 };
 
 export const createGateRoute =
-    (services: Services, wake: TurnFn = streamAgent, heartbeatMs = HEARTBEAT_MS) =>
+    (services: Services, heartbeatMs = HEARTBEAT_MS) =>
     async (c: Context<AppEnv, "/workflows/:id/gate">): Promise<Response> => {
         const workflow = await services.workflows.get(c.req.param("id"));
         // One 404 for both no such workflow and no gate declared; nothing here is fixable by learning which.
@@ -110,7 +108,7 @@ export const createGateRoute =
 
         // Holding the connection is the point: a pipeline step blocks until it knows rather than polling. The run
         // promise is caught so a rejection past the deadline is not left unhandled.
-        const finished = runWorkflow(services, run, wake).then(
+        const finished = runWorkflow(services, run).then(
             () => true,
             () => true,
         );

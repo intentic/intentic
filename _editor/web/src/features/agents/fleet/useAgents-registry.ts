@@ -1,31 +1,33 @@
 import type { AgentSummary, AutomationApproval } from "@intentic/sandbox-contract";
-import { computed, ref, shallowRef, watch } from "vue";
+import { sandboxRef, sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
+import { computed, watch } from "vue";
 import { invalidateAgentTranscript } from "../../chat/transcript/agentTranscript";
 import { useChat } from "../../chat/run/useChat";
 import { reportClient } from "../../../app/clientDiagnostics";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { onScreen } from "../../../shell/window/onScreen";
-import { AGENT_DIFF } from "../../../lib/queryKeys";
-import { queryClient } from "../../../lib/queryPersistence";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { AGENT_REVIEW, rpcKey, rpcKeyAt } from "../../../lib/queryKeys";
+import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 import type { FleetAgent } from "./useAgents-fleet";
 
 // Daemon's agent registry mirrored: the roster pushed by /events, the archived half pulled separately, ordered by
-// a revision line. Bottom of the fleet store's module graph; nothing here reads a module above it.
+// a revision line. Bottom of the fleet store's module graph; nothing here reads a module above it. All of it belongs
+// to the daemon it came from, so it is sandbox-scoped: another daemon's archive must never offer restores here.
 
-// shallowRef: writes replace the array wholesale; a deep ref would re-proxy every summary each frame.
-export const registry = shallowRef<AgentSummary[]>([]);
+// Shallow: writes replace the array wholesale; a deep ref would re-proxy every summary each frame.
+export const registry = sandboxShallowRef<AgentSummary[]>(() => []);
 
-// Archive half of the fleet; shallowRef like `registry`, and unbounded in size unlike the live roster.
-export const archived = shallowRef<FleetAgent[]>([]);
-export const archiveLoading = ref(false);
+// Archive half of the fleet; shallow like `registry`, and unbounded in size unlike the live roster.
+export const archived = sandboxShallowRef<FleetAgent[]>(() => []);
+export const archiveLoading = sandboxRef(() => false);
 
 // Daemon's approvals queue as last read; kept separate since the stream never carries holds.
-const heldRead = shallowRef<AutomationApproval[]>([]);
+const heldRead = sandboxShallowRef<AutomationApproval[]>(() => []);
 
 // Holds a press here released that a read may still list; each retires on the first read without it (releaseHeld).
-const releasing = shallowRef<ReadonlySet<string>>(new Set());
+const releasing = sandboxShallowRef<ReadonlySet<string>>(() => new Set());
 
 // The approvals queue as the board draws it: what the daemon holds, less what a press here has already let go.
 export const heldWakes = computed<AutomationApproval[]>(() =>
@@ -38,9 +40,9 @@ export const heldWakes = computed<AutomationApproval[]>(() =>
 // - a local add/remove holds as a pending intent until a snapshot at or past its own revision arrives
 
 // Highest applied revision; -1 until the first snapshot, so a fresh connection accepts revision 0.
-let appliedRev = -1;
+const appliedRev = sandboxValue(() => -1);
 
-// Tags which daemon the revision counter belongs to; a reset bumps it so a stale late read can't reapply it.
+// Tags which connection the revision counter belongs to; a reconnect bumps it so a stale late read can't reapply it.
 let epoch = 0;
 
 // Ids locally added/removed from the board, held until `untilRev` applies. `present` is the summary to restore; a
@@ -49,15 +51,15 @@ interface PendingMove {
     readonly untilRev: number;
     readonly present?: AgentSummary;
 }
-const pending = new Map<string, PendingMove>();
+const pending = sandboxValue(() => new Map<string, PendingMove>());
 
 // Applies still-pending local moves on top of a server snapshot.
 const withPending = (agents: AgentSummary[]): AgentSummary[] => {
-    if (pending.size === 0) {
+    if (pending.value.size === 0) {
         return agents;
     }
-    const kept = agents.filter((agent) => !pending.has(agent.id));
-    const restored = [...pending.values()].flatMap((move) => (move.present === undefined ? [] : [move.present]));
+    const kept = agents.filter((agent) => !pending.value.has(agent.id));
+    const restored = [...pending.value.values()].flatMap((move) => (move.present === undefined ? [] : [move.present]));
     return [...kept, ...restored];
 };
 
@@ -76,22 +78,22 @@ const latchRegistered = (agents: readonly AgentSummary[]): void => {
 // ...) mutate the held entry, so a cached string would compare stale and mask a declined write.
 export const snapshotFingerprint = (value: unknown): string => JSON.stringify(value);
 
-const registryStable = new Map<string, AgentSummary>();
+const registryStable = sandboxValue(() => new Map<string, AgentSummary>());
 
 const stabilizeRegistry = (incoming: readonly AgentSummary[]): AgentSummary[] => {
     const nextIds = new Set<string>();
     const stabilized = incoming.map((agent) => {
         nextIds.add(agent.id);
-        const cached = registryStable.get(agent.id);
+        const cached = registryStable.value.get(agent.id);
         if (cached !== undefined && snapshotFingerprint(cached) === snapshotFingerprint(agent)) {
             return cached;
         }
-        registryStable.set(agent.id, agent);
+        registryStable.value.set(agent.id, agent);
         return agent;
     });
-    for (const id of registryStable.keys()) {
+    for (const id of registryStable.value.keys()) {
         if (!nextIds.has(id)) {
-            registryStable.delete(id);
+            registryStable.value.delete(id);
         }
     }
     return stabilized;
@@ -128,9 +130,9 @@ const unrelease = (id: string): void => {
 
 // Retires every intent the server has now absorbed, then re-projects what remains.
 const applySnapshot = (agents: AgentSummary[], rev: number): void => {
-    for (const [id, move] of pending) {
+    for (const [id, move] of pending.value) {
         if (rev >= move.untilRev) {
-            pending.delete(id);
+            pending.value.delete(id);
         }
     }
     latchRegistered(agents);
@@ -145,9 +147,9 @@ const applySnapshot = (agents: AgentSummary[], rev: number): void => {
 // for the mutation) arrives, no timers or fixed windows.
 export const holdPending = (moves: readonly { id: string; present?: AgentSummary }[], rev: number): void => {
     for (const move of moves) {
-        pending.set(move.id, move.present === undefined ? { untilRev: rev } : { untilRev: rev, present: move.present });
+        pending.value.set(move.id, move.present === undefined ? { untilRev: rev } : { untilRev: rev, present: move.present });
     }
-    registry.value = withPending(registry.value.filter((agent) => !pending.has(agent.id)));
+    registry.value = withPending(registry.value.filter((agent) => !pending.value.has(agent.id)));
 };
 
 // Optimistic remove: the card leaves before the daemon answers, held at +Infinity since there's no revision yet
@@ -162,11 +164,11 @@ export const takeOffBoard = (ids: readonly string[]): ((keep?: ReadonlySet<strin
         const back = [...held].filter(([id]) => keep?.has(id) !== true);
         for (const [id] of back) {
             // Only this call's own pending intent; dropping a since-reheld one would flicker an archived card back.
-            if (pending.get(id)?.untilRev === Number.POSITIVE_INFINITY) {
-                pending.delete(id);
+            if (pending.value.get(id)?.untilRev === Number.POSITIVE_INFINITY) {
+                pending.value.delete(id);
             }
         }
-        const returning = back.filter(([id]) => !pending.has(id)).map(([, agent]) => agent);
+        const returning = back.filter(([id]) => !pending.value.has(id)).map(([, agent]) => agent);
         if (returning.length > 0) {
             registry.value = withPending([...registry.value, ...returning]);
         }
@@ -184,24 +186,34 @@ export const putOnBoard = (agents: readonly AgentSummary[]): ((keep?: ReadonlySe
         const back = new Set(agents.filter((agent) => keep?.has(agent.id) !== true).map((agent) => agent.id));
         for (const id of back) {
             // Only this call's own intent: a hold since replaced by a revision is the daemon's confirmation, not ours.
-            if (pending.get(id)?.untilRev === Number.POSITIVE_INFINITY && pending.get(id)?.present !== undefined) {
-                pending.delete(id);
+            if (pending.value.get(id)?.untilRev === Number.POSITIVE_INFINITY && pending.value.get(id)?.present !== undefined) {
+                pending.value.delete(id);
             }
         }
-        const leaving = [...back].filter((id) => !pending.has(id));
+        const leaving = [...back].filter((id) => !pending.value.has(id));
         if (leaving.length > 0) {
             registry.value = withPending(registry.value.filter((agent) => !leaving.includes(agent.id)));
         }
     };
 };
 
-// Invalidates the pull-only diff query on any status change, since that is the daemon settling something about
-// the agent's work. An id never seen before also counts, in case its outcome landed while no stream was up.
+// One agent's review (AGENT_REVIEW) in the box `at` names, undefined for the active one. `{ id }` partially matches every
+// file diff's input; those are filed UNPERSISTED, and the mark sits before the box in the key, so it must be named.
+export const agentReviewKeys = (id: string, at?: string): readonly unknown[][] =>
+    AGENT_REVIEW.map((procedure) => {
+        const marks = procedure === `agents.fileDiff` ? [UNPERSISTED] : [];
+        return at === undefined ? rpcKey(procedure, { id }, ...marks) : rpcKeyAt(at, procedure, { id }, ...marks);
+    });
+
+// Invalidates the pull-only review on any status change, since that is the daemon settling something about the
+// agent's work. An id never seen before also counts, in case its outcome landed while no stream was up.
 const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
     const held = new Map(registry.value.map((agent) => [agent.id, agent.status]));
     for (const agent of agents) {
         if (held.get(agent.id) !== agent.status) {
-            void queryClient.invalidateQueries({ queryKey: AGENT_DIFF.of(agent.id) });
+            for (const queryKey of agentReviewKeys(agent.id)) {
+                void queryClient.invalidateQueries({ queryKey });
+            }
             // Same signal invalidates the transcript too: the daemon writes a turn's record only once it settles.
             invalidateAgentTranscript(agent.id);
         }
@@ -211,34 +223,30 @@ const invalidateStaleWork = (agents: readonly AgentSummary[]): void => {
 // Applies a roster snapshot from the stream or an explicit read; dropped if it predates what's already held,
 // since an out-of-order answer is a regression, not news.
 export const setAgents = (agents: AgentSummary[], rev: number): void => {
-    if (rev < appliedRev) {
+    if (rev < appliedRev.value) {
         return;
     }
     invalidateStaleWork(agents);
     // Ids that left the roster by another hand than this browser's (daemon sweep, another device); local moves are
     // excluded via `pending`. Triggers an archive-list refresh and closes their chat tabs.
     const incoming = new Set(agents.map((agent) => agent.id));
-    const departed = new Set(registry.value.filter((agent) => !incoming.has(agent.id) && !pending.has(agent.id)).map((agent) => agent.id));
+    const departed = new Set(registry.value.filter((agent) => !incoming.has(agent.id) && !pending.value.has(agent.id)).map((agent) => agent.id));
     if (departed.size > 0) {
         void loadArchived();
         useChat().closeRetired(departed);
     }
-    appliedRev = rev;
+    appliedRev.value = rev;
     applySnapshot(agents, rev);
     // Attaches a tab opened before its turn existed to the turn now running (workflow step, wake, another device).
     useChat().attachStarted(new Set(agents.filter((agent) => agent.status === `running`).map((agent) => agent.id)));
 };
 
-// Drops per-daemon state: revision line and pending moves always; `keepRoster` keeps the roster on a mere
-// disconnect but clears it (and held wakes, also painted) on a sandbox switch.
-export const desyncRegistry = (keepRoster: boolean): void => {
-    if (!keepRoster) {
-        registry.value = [];
-        setHeldWakes([]);
-    }
-    pending.clear();
-    registryStable.clear();
-    appliedRev = -1;
+// Drops per-connection state on a mere disconnect: the revision line and pending moves, keeping the painted roster
+// until the reconnect's snapshot overwrites it. A sandbox switch drops everything here with the scope.
+export const desyncRegistry = (): void => {
+    pending.value.clear();
+    registryStable.value.clear();
+    appliedRev.value = -1;
     epoch += 1;
 };
 
@@ -250,7 +258,7 @@ export const markSeen = (id: string): void => {
         return;
     }
     entry.seenAt = Date.now();
-    void sandboxJson(`/agents/${encodeURIComponent(id)}/seen`, { method: `POST` }).catch(() => undefined);
+    void sandboxRpc.agents.seen({ id }).catch(() => undefined);
 };
 
 // Clears every unread badge at once, instead of requiring a click through each card.
@@ -259,7 +267,7 @@ export const markAllSeen = (): void => {
     for (const agent of registry.value) {
         agent.seenAt = now;
     }
-    void sandboxJson(`/agents/seen`, { method: `POST` }).catch(() => undefined);
+    void sandboxRpc.agents.seenAll().catch(() => undefined);
 };
 
 // An open tab adopts the registry's title unconditionally: the daemon never promotes a title that would overwrite
@@ -306,37 +314,39 @@ watch(registry, (entries) => {
 let auditing: Promise<void> | undefined;
 
 export const auditRoster = (rev: number): void => {
-    if (rev === appliedRev) {
+    if (rev === appliedRev.value) {
         return;
     }
     // Logged once per occurrence (deduped) so a silent repair leaves a trace in logs/client.jsonl.
     reportClient(`fleet.roster-behind`, `the roster missed a snapshot and was read back`, {
         level: `warn`,
-        fields: { held: appliedRev, beat: rev },
+        fields: { held: appliedRev.value, beat: rev },
     });
-    if (rev < appliedRev) {
-        appliedRev = -1;
+    if (rev < appliedRev.value) {
+        appliedRev.value = -1;
     }
     auditing ??= refresh().finally(() => {
         auditing = undefined;
     });
 };
 
-// Explicit registry pull for the reachable seam and pull-to-refresh; steady state rides /events. Exported
-// separately since sandboxScope calls it on a switch, mainly to refill held wakes, which the stream never populates.
+// Explicit registry pull for the hello and pull-to-refresh; steady state rides /events. Exported separately since the
+// hello (systemEvents) calls it, mainly to refill held wakes, which the stream never populates.
 export const refreshAgents = async (): Promise<void> => refresh();
 
 export const refresh = async (): Promise<void> => {
     const issuedAt = epoch;
+    const current = sandboxScopeGuard();
     try {
-        const body = await sandboxJson<{ agents: AgentSummary[]; rev: number; held?: AutomationApproval[] }>(`/agents`);
-        // Stale: issued to a daemon since replaced (`epoch`); its revision can't be trusted as a high-water mark.
-        if (issuedAt !== epoch) {
+        const body = await sandboxRpc.agents.list();
+        // Stale: issued to a connection since replaced (`epoch`) or to another sandbox; its revision can't be trusted as
+        // a high-water mark.
+        if (issuedAt !== epoch || !current()) {
             return;
         }
         // Goes through setAgents, not a raw assignment, so a slow read can't undo a newer frame from the stream.
         setAgents(body.agents, body.rev);
-        setHeldWakes(body.held ?? []);
+        setHeldWakes(body.held);
     } catch {
         // Leave the last roster; the events stream repaints on reconnect.
     }
@@ -357,7 +367,7 @@ watch([onScreen, reachable] as const, ([looking, live], [wasLooking]) => {
 export const releaseHeld = async (id: string, verb: `approve` | `reject`): Promise<void> => {
     releasing.value = new Set(releasing.value).add(id);
     try {
-        await sandboxJson(`/automations/pending/${encodeURIComponent(id)}/${verb}`, { method: `POST` });
+        await sandboxRpc.automations[verb]({ id });
     } catch (error) {
         unrelease(id);
         throw error;
@@ -369,32 +379,33 @@ export const releaseHeld = async (id: string, verb: `approve` | `reject`): Promi
 // instead, at points something could have changed it: board mount, opening the archive, the daemon reconnecting,
 // or an id leaving the roster by another hand (setAgents).
 
-// Cleared only on a sandbox switch, since another daemon's archive must never offer restores here. Not folded into
-// resetAgents, which also fires on a mere stream failure, when keeping the last list beats blanking the door.
-export const resetArchive = (): void => {
-    archived.value = [];
-};
-
 // Concurrent callers (several mounted panes asking at once) share one in-flight request instead of each replacing
-// the array. A caller arriving after it settles gets its own fresh request.
-let archiveInFlight: Promise<void> | undefined;
+// the array. A caller arriving after it settles gets its own fresh request, and so does the first one after a switch:
+// joining the outgoing sandbox's read would hand this one that daemon's archive.
+const archiveInFlight = sandboxValue<Promise<void> | undefined>(() => undefined);
 
 export const loadArchived = async (): Promise<void> => {
-    archiveInFlight ??= (async () => {
+    const current = sandboxScopeGuard();
+    archiveInFlight.value ??= (async () => {
         archiveLoading.value = true;
         try {
-            const body = await sandboxJson<{ agents: AgentSummary[] }>(`/agents/archived`);
+            const { agents } = await sandboxRpc.agents.archived();
+            if (!current()) {
+                return;
+            }
             // Widened to FleetAgent here: nothing archived is unread; an open entry gets its live fields from `fleet`
             // instead.
-            archived.value = body.agents.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false }));
+            archived.value = agents.map((agent) => Object.assign(agent, { open: false, unread: false, unsent: false }));
         } catch {
             // Leave whatever was listed last; the view reports its own emptiness.
         } finally {
-            archiveLoading.value = false;
-            archiveInFlight = undefined;
+            if (current()) {
+                archiveLoading.value = false;
+                archiveInFlight.value = undefined;
+            }
         }
     })();
-    await archiveInFlight;
+    await archiveInFlight.value;
 };
 
 // One roster per window: a hot update re-executes this module while the stream keeps writing to the old instance,

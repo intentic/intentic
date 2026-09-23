@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
+import { rawRouteServer } from "../raw-route-server.js";
 import { MAX_UTTERANCE_WAV_BYTES, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
 
 // Bytes in, words out, off oRPC since a WAV doesn't fit its JSON contract. `/speech/status` is arming: an absent model
@@ -12,10 +13,11 @@ export type SpeechRoutesDeps = Pick<Services, "perf" | "speech">;
 
 export const createSpeechRoute = (services: SpeechRoutesDeps): Hono<AppEnv> => {
     const app = new Hono<AppEnv>();
+    const serve = rawRouteServer(app);
 
-    app.get("/speech/status", async (c) => c.json(await services.speech.status()));
+    serve("GET /speech/status", async (c) => c.json(await services.speech.status()));
 
-    app.post("/speech/transcribe", async (c) => {
+    serve("POST /speech/transcribe", async (c) => {
         const declared = Number(c.req.header("content-length"));
         if (Number.isFinite(declared) && declared > MAX_UTTERANCE_WAV_BYTES) {
             return c.json({ error: "utterance too long" }, 413);

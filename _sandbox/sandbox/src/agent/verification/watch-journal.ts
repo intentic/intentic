@@ -1,13 +1,9 @@
-import { readdir, readFile, unlink } from "node:fs/promises";
-import { join } from "node:path";
-import { AgentHarnessSchema, AgentProviderSchema, isConversationId, ModelRoleSchema, WatchOutcomeSchema } from "@intentic/sandbox-contract";
+import { TurnProfileSchema, WatchOutcomeSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { writeJsonFile } from "../../store/json-file.js";
+import type { ConversationsDb } from "../../store/conversations-db.js";
 
-// One file per armed or firing watch, deleted only once its wake landed; env var names only, never a credential.
+// One row per armed or firing watch, deleted only once its wake landed; env var names only, never a credential.
 
-// The charset ConversationIdSchema and watch ids share; a filename that doesn't match is ignored, never trusted, same
-// rule as the turn journal and approvals queue.
 const JournalledWatchSchema = z.object({
     id: z.string(),
     conversationId: z.string(),
@@ -34,73 +30,47 @@ const JournalledWatchSchema = z.object({
         .optional(),
     // The NAMES of the environment the check ran with, never the values. See the header.
     envKeys: z.array(z.string()),
-    // The turn identity the wake must reproduce; `sessionId` is absent on purpose, looked up at fire time instead.
+    // The arming turn's profile, which the wake runs as; `sessionId` is not part of it, looked up at fire time instead.
     // Every field of it: a field missing here is silently changed by a container recreate, the ordinary event.
-    turn: z.object({
-        agent: AgentProviderSchema.optional(),
-        harness: AgentHarnessSchema.optional(),
-        account: z.string().optional(),
-        model: z.string().optional(),
-        effort: z.string().optional(),
-        thinking: z.boolean().optional(),
-        fast: z.boolean().optional(),
-        // Which persona the arming turn wore; absent is the strict real answer, no card means no signed-in account.
-        actsAs: z.string().optional(),
-        isolated: z.boolean().optional(),
-        unattended: z.boolean().optional(),
-        // What JOB the arming turn was, carried so the wake stays that same job. Not a model fallback: the wake
-        // already runs on the arming turn's own model (see agent/run/turn/turn-seed.ts).
-        runRole: ModelRoleSchema.optional(),
-    }),
+    turn: TurnProfileSchema,
 });
 export type JournalledWatch = z.infer<typeof JournalledWatchSchema>;
 
 export interface WatchJournal {
     // Every armed watch, which after a boot means every watch the daemon died under.
     readonly list: () => Promise<JournalledWatch[]>;
+    // Filed under its conversation, whose row must exist; a purge takes it with the conversation.
     readonly record: (watch: JournalledWatch) => Promise<void>;
     // Awaited by every caller ending a watch, so a stop followed by a container recreate can't resurrect it.
     readonly drop: (id: string) => Promise<void>;
 }
 
-// A per-file JSON store, used in production at <historyRoot>/watches/.
-export const fileWatchJournal = (dir: string): WatchJournal => ({
-    list: async () => {
-        let names: string[];
-        try {
-            names = await readdir(dir);
-        } catch {
-            // No directory means nothing was ever armed here, which is the overwhelmingly common boot.
-            return [];
-        }
-        const entries: JournalledWatch[] = [];
-        for (const name of names.filter((file) => file.endsWith(".json"))) {
-            if (!isConversationId(name.slice(0, -".json".length))) {
-                continue;
-            }
-            // An entry that won't parse is skipped, never deleted: a file caught mid-write reads as garbage for an
-            // instant.
-            try {
-                const parsed = JournalledWatchSchema.safeParse(JSON.parse(await readFile(join(dir, name), "utf8")));
-                if (parsed.success) {
-                    entries.push(parsed.data);
-                }
-            } catch {
-                continue;
-            }
-        }
-        return entries;
-    },
-    // Sibling-temp plus atomic rename, like every manifest store: never found half-written after a crash.
-    record: (watch) => writeJsonFile(join(dir, `${watch.id}.json`), watch),
-    // A drop that finds nothing has nothing to do: the watch ended twice, or a boot pass already took it.
-    drop: async (id) => {
-        if (!isConversationId(id)) {
-            return;
-        }
-        await unlink(join(dir, `${id}.json`)).catch(() => undefined);
-    },
-});
+// A row this build can no longer read is skipped, never deleted, like the turn journal's.
+const watchOf = (id: string, conversationId: string, raw: string): JournalledWatch[] => {
+    const parsed = JournalledWatchSchema.safeParse({ ...JSON.parse(raw), id, conversationId });
+    return parsed.success ? [parsed.data] : [];
+};
+
+export const sqliteWatchJournal = ({ db }: ConversationsDb): WatchJournal => {
+    const upsert = db.prepare(
+        "INSERT INTO watch(id, conversation_id, entry) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET conversation_id = excluded.conversation_id, entry = excluded.entry",
+    );
+    const selectAll = db.prepare("SELECT id, conversation_id, entry FROM watch ORDER BY rowid");
+    const remove = db.prepare("DELETE FROM watch WHERE id = ?");
+    return {
+        list: async () =>
+            (selectAll.all() as unknown as { id: string; conversation_id: string; entry: string }[]).flatMap((row) =>
+                watchOf(row.id, row.conversation_id, row.entry),
+            ),
+        record: async ({ id, conversationId, ...entry }) => {
+            upsert.run(id, conversationId, JSON.stringify(entry));
+        },
+        // A drop that finds nothing has nothing to do: the watch ended twice, or a boot pass already took it.
+        drop: async (id) => {
+            remove.run(id);
+        },
+    };
+};
 
 // The journal tests and the conversationless bench run on: same contract, no disk, so a watcher runtime never branches
 // on its absence.

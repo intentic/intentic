@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import { IntenticRunSchema } from "../schemas/intentic.js";
@@ -7,7 +7,7 @@ import { OkSchema } from "../schemas/shared.js";
 // Run the in-sandbox intentic CLI (resolve/plan/apply/deployments/…) and stream its ndjson lines as they
 // arrive, so the UI sees live progress. A non-zero exit surfaces as a thrown error once the stream ends.
 export const intenticContract = {
-    run: oc
+    run: procedure
         .route({
             method: "POST",
             path: "/intentic",
@@ -19,7 +19,7 @@ export const intenticContract = {
         .output(streamOf(IntenticLineSchema)),
     // Launch the minutes-long apply → adopt reconcile as a one-shot tmux job (session panel-infra-apply) and
     // return immediately, progress is followed by attaching the terminal, not by holding this request open.
-    apply: oc
+    apply: procedure
         .route({
             method: "POST",
             path: "/intentic/apply",
@@ -32,7 +32,7 @@ export const intenticContract = {
     // renders as text, persisted to a durable file so the UI shows per-resource progress that survives a page
     // refresh. Replays from the run's {kind:"start"} then follows live, closing on {kind:"exit"}. GET, like
     // /events, because it takes no input; reuses the loose IntenticLine shape so no new schema is needed.
-    applyEvents: oc
+    applyEvents: procedure
         .route({
             method: "GET",
             path: "/intentic/apply/events",
@@ -40,5 +40,6 @@ export const intenticContract = {
             description:
                 "The same progress the terminal shows, as structured events, kept on disk so a page refresh does not lose it. It replays from the start of the run and then follows live, closing when the run ends.",
         })
+        .meta({ stream: true })
         .output(streamOf(IntenticLineSchema)),
 };

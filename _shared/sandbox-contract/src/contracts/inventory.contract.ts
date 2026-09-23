@@ -1,11 +1,11 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { AddInventoryInputSchema, InventoryListSchema, InventoryNameParamSchema } from "../schemas/inventory.js";
 
 // The i.have.* / i.want.service entries in deploy.config.ts's managed region. add/remove rewrite the region and
 // commit it (mirroring an agent edit) and return the full updated list so the UI re-renders from one response.
 // Deploy-target hosts self-register out-of-band via the daemon's plain /enroll route (connect-host script).
 export const inventoryContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/inventory",
@@ -13,7 +13,7 @@ export const inventoryContract = {
             description: "What the deployment configuration says this setup owns and what it wants provisioned.",
         })
         .output(InventoryListSchema),
-    add: oc
+    add: procedure
         .route({
             method: "POST",
             path: "/inventory",
@@ -23,7 +23,7 @@ export const inventoryContract = {
         })
         .input(AddInventoryInputSchema)
         .output(InventoryListSchema),
-    remove: oc
+    remove: procedure
         .route({
             method: "DELETE",
             path: "/inventory/{name}",

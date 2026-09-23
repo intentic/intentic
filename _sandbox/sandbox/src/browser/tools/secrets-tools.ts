@@ -1,7 +1,7 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../../runtimes/claude/claude-sdk.js";
+import { sdk } from "../../engines/claude-sdk.js";
 import { z } from "zod";
-import type { SecretAccess } from "../../agent/tools/agent-secrets.js";
+import type { SecretAccess } from "../../secrets/secret-access.js";
 import { type NamedSecret, secretReference } from "../../secrets/secret-registry.js";
 import { browserAccountPage } from "../sessions/browser-sessions.js";
 import { focusedEditable } from "./accounts-tools.js";

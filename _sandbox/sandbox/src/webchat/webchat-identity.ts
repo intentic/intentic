@@ -1,7 +1,7 @@
 import type { WebchatConfig, WebchatMessage } from "@intentic/sandbox-contract";
 import { createGoogleVerifier, fileOwnerStore, type IdTokenVerifier } from "../auth/auth.js";
 import type { Services } from "../composition.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 
 // Who the daemon tells the model it is talking to.
 // The distinction it keeps is between a name someone typed and a name Google signed: both reach the prompt, but a

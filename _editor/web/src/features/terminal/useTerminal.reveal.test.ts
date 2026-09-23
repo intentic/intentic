@@ -1,9 +1,11 @@
 // Pins that work terminals (agent/job) tab only while revealed and let go once finished. The pane is mocked wholesale:
 // no real terminal or canvas, which jsdom lacks.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { test, expect, beforeEach, mock } from "bun:test";
 import { waitFor, stubGlobal } from "@intentic/testing/bun";
 import { ref } from "vue";
+import { fakeSandboxRpc } from "../../testing/sandboxRpcFake";
 
 const store = new Map<string, string>();
 stubGlobal(`localStorage`, {
@@ -11,7 +13,7 @@ stubGlobal(`localStorage`, {
     setItem: (key: string, value: string) => store.set(key, value),
     removeItem: (key: string) => store.delete(key),
 });
-mock.module("../sandbox/client/sandboxClient", () => ({ sandboxJson: mock() }));
+mock.module("../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 // Every remembered key is filed under the sandbox it belongs to; the ids below are this test's sandbox.
 mock.module("../sandbox/overview/activeSandbox", () => ({
     ACTIVE_KEY: `intentic.activeSandboxId`,
@@ -32,7 +34,6 @@ mock.module("./terminalSession", () => ({
 
 const { createTerminalTabs } = await import("./useTerminal");
 const { showWorkTerminals } = await import("./useWorkTerminals");
-const { clearPendingTerminals } = await import("./terminalsQuery");
 
 // activityAt is just 'said something recently'; the sweep itself is tested in terminalSweep.test.ts.
 type Listed = { name: string; label?: string; kind: "shell" | "panel" | "agent" | "job"; running: boolean; activityAt: number };
@@ -90,7 +91,7 @@ const panel = (initial: Listed[]) => {
 
 beforeEach(() => {
     store.clear();
-    clearPendingTerminals();
+    resetSandboxScope();
     showWorkTerminals.value = false;
 });
 

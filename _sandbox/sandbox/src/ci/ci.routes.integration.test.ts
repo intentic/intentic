@@ -9,14 +9,17 @@ import { unstubbed } from "@intentic/testing";
 import { call } from "@orpc/server";
 import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
-import type { WakeFn } from "../automations/scheduler.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import type { OrpcContext } from "../app-env.js";
 import type { Services } from "../composition.js";
 import { createCiRoutes } from "./ci.routes.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { createDomainEvents } from "../seams/domain-events.js";
+import { drivenBy, memoryFleet } from "../testing.js";
 
 /* What Fix on a red pipeline actually starts: a session nobody has limited, carrying a prepared prompt. */
 
@@ -57,13 +60,16 @@ const harness = async () => {
         ciRuns,
         sandboxSettings: unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => SandboxSettingsSchema.parse({}) }),
         agents: unstubbed<Services["agents"]>("agents", { list: () => [], listArchived: () => [] }),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
+        // Real actors, which hold the run a Fix starts; what reacts to it is composition's to subscribe.
+        conversations: memoryFleet().conversations,
+        events: createDomainEvents(() => {}),
     });
     const started: AgentTurn[] = [];
-    const wake: WakeFn = async function* (_services, input) {
+    const wake: TurnStarter["stream"] = async function* (input) {
         started.push(input);
         yield { kind: "done" } as never;
     };
@@ -71,7 +77,7 @@ const harness = async () => {
         String(url).includes("/logs")
             ? new Response("Error: P1001: Can't reach database server at `postgres:5432`")
             : new Response(JSON.stringify(JOBS))) as unknown as FetchFn;
-    return { routes: createCiRoutes(services, wake, fetchFn), started };
+    return { routes: createCiRoutes(drivenBy(services, wake), fetchFn), started };
 };
 
 // The complaint this exists for: the turn carried `unattended`, so its own briefing told it nobody had started it, and

@@ -12,7 +12,7 @@ import { warmRows } from "./warmRows";
 // already holds an observer, so this only has to cover a cold cache.
 
 // On screen (Changes panel open) the rows are `now`; everywhere else `near`, never lower. A turn ending
-// invalidates the whole review at once (list and diffs share changesKey), so it needs reading back early.
+// invalidates the whole review at once (list and diffs, workingReviewKeys), so it needs reading back early.
 const band = (): WarmBand => {
     if (router.currentRoute.value.name !== `workspace`) {
         return `near`;

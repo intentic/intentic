@@ -1,5 +1,5 @@
 import type { Options, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "./claude-sdk.js";
+import { sdk } from "../../engines/claude-sdk.js";
 import { CLAUDE_SEED_MODELS, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Logger } from "pino";

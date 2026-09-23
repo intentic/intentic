@@ -1,6 +1,5 @@
 import { type Capability, type EndpointConfig, TRIAL_ENDPOINT_ID } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
-import { cliProxyManagementUrl } from "../agent/providers/translator.js";
 import { trialCompatEntry } from "../trial/trial-endpoint.js";
 import { parseHeaders, versionedBase } from "./endpoint-config.js";
 import { endpointConfigOf } from "./local-model.js";
@@ -95,11 +94,7 @@ export const syncEndpointCompat = async (services: Services): Promise<void> => {
         return;
     }
     const entries = await endpointCompatEntries(services);
-    const response = await fetch(`${cliProxyManagementUrl(services.config)}/openai-compatibility`, {
-        method: "PUT",
-        headers: { authorization: `Bearer ${services.config.translator.token}`, "content-type": "application/json" },
-        body: JSON.stringify(entries),
-    }).catch((error: unknown) => {
+    const response = await services.cliProxy.putCompat(entries).catch((error: unknown) => {
         services.logger.warn({ err: error }, "translator: endpoint sync could not reach the management api");
         return undefined;
     });

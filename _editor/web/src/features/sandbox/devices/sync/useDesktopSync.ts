@@ -4,7 +4,7 @@ import { computed, ref, watch } from "vue";
 import { desktopSyncLink } from "../../../../app/environments/desktop";
 import { bashCommand, psCommand } from "../../../../app/environments/scriptCommand";
 import { onRuntimeChanged } from "../../live/runtimeEvents";
-import { DEVICES } from "../../../../lib/queryKeys";
+import { rpcKey } from "../../../../lib/queryKeys";
 import { sandboxRequest } from "../../client/sandboxClient";
 import { useSandbox } from "../../client/useSandbox";
 
@@ -128,7 +128,7 @@ export function useDesktopSync() {
     watch(pairToken, (token) => {
         stop();
         if (token !== undefined) {
-            unsubscribe = onRuntimeChanged([`hosts`], () => void client.invalidateQueries({ queryKey: DEVICES.of() }));
+            unsubscribe = onRuntimeChanged([`hosts`], () => void client.invalidateQueries({ queryKey: rpcKey(`system.devices`) }));
         }
     });
     // One-shot read of whether sync is available; the Devices list above handles steady polling.

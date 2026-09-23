@@ -7,14 +7,20 @@ import { type AgentTurn, DEFAULT_SAFETY_POLICY, SandboxSettingsSchema } from "@i
 import { test, expect, mock } from "bun:test";
 import { unstubbed } from "@intentic/testing";
 import type { Services } from "../../../composition.js";
-import { testConfig } from "../../../testing.js";
-import { SKILL_CATALOG_NOTE_HEADER } from "../../../settings/loaded-skills.js";
+import { conversationAfter, testConfig, memoryFleet } from "../../../testing.js";
+import { SKILL_CATALOG_NOTE_HEADER } from "../../../store/loaded-skills.js";
 import { SETUP_NOTICE_HEADER, STALE_NOTICE_HEADER, workspaceSetup } from "../../../workspace/layout/workspace-setup.js";
-import type { AgentRequest } from "../agent.js";
+import type { AgentRequest } from "../../providers/agent-request.js";
 import { composeWirePrompt } from "../../prompt/turn-preamble.js";
-import { planTurn, type TurnContext } from "./turn-plan.js";
+import type { TurnContext } from "../../providers/adapter.js";
+import { planTurn } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOMY_MEMORY, servicesWith, turn, wire } from "./turn-plan.testing.js";
 import { createMemoryWarnings } from "../../../platform/resources/memory-admission.js";
+import { RUNTIME_ADAPTERS } from "../../../runtimes/runtime-table.js";
+import { parkedCards } from "../../../agents/actor/parked-cards.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Every runtime is told the tree is behind, but the delivery differs: a full runtime gets readiness tools and hooks,
 // native runtimes (with no such seam) get the prose note instead.
@@ -45,7 +51,7 @@ const daemonSideWorktree = async (): Promise<string> => {
 };
 
 const contextIn = (root: string, localCwd = root): TurnContext => ({
-    base: { prompt: "do the thing", cwd: root, signal: new AbortController().signal },
+    base: { spec: { prompt: "do the thing", cwd: root }, policy: {}, tools: {}, hooks: { cards }, signal: new AbortController().signal },
     attachmentPaths: [],
     localCwd,
     effectiveCwd: localCwd,
@@ -57,6 +63,8 @@ const contextIn = (root: string, localCwd = root): TurnContext => ({
 const servicesIn = (root: string, overrides: Partial<Services> = {}): Services =>
     unstubbed<Services>("services", {
         tools: [],
+        // The real table: which arm a (provider, harness) pair reaches is part of what a plan is.
+        adapters: RUNTIME_ADAPTERS,
         memoryHeadroom: ROOMY_MEMORY,
         memoryWarnings: createMemoryWarnings(),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -101,7 +109,7 @@ const promptOf = async (services: Services, agentTurn: AgentTurn, turnContext: T
     const plan = await planTurn(services, agentTurn, turnContext);
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
-    return composeWirePrompt(request.notes ?? [], request.prompt);
+    return composeWirePrompt(request.spec.notes ?? [], request.spec.prompt);
 };
 
 // The harness arm gets the readiness mechanism now, not a paragraph re-stapled to every message in the conversation
@@ -120,12 +128,12 @@ test("a Claude turn gets the readiness tools instead of the paragraph, however f
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
 
-    expect(request.prompt).toBe("do the thing");
-    expect(Object.keys(request.sdkServers ?? {})).toContain("deps");
+    expect(request.spec.prompt).toBe("do the thing");
+    expect(Object.keys(request.tools.sdkServers ?? {})).toContain("deps");
     // And the daemon's own records, so "why did that fail" is a tool call, not a rebuild of the instrumentation.
-    expect(Object.keys(request.sdkServers ?? {})).toContain("diagnostics");
+    expect(Object.keys(request.tools.sdkServers ?? {})).toContain("diagnostics");
     // Daemon-side readers still need the real tree: the isolated turn's cwd names a worktree with empty mounts.
-    expect(request.sessionStore).toBe(claudeStoreOf(root, testConfig.historyRoot, undefined));
+    expect(request.spec.sessionStore).toBe(claudeStoreOf(root, testConfig.historyRoot, undefined));
 });
 
 // A persona that can't read the workspace can't read the daemon's log either: withheld whole, since half an answer
@@ -144,7 +152,7 @@ test("a persona with no file reads does not get the diagnostic tools", async () 
 
     const plan = await planTurn(services, { prompt: "do the thing", actsAs: "reader" } as AgentTurn, contextIn(root));
     expect(plan).toMatchObject({ ok: true });
-    expect((plan as { request: AgentRequest }).request.sdkServers?.["diagnostics"]).toBeUndefined();
+    expect((plan as { request: AgentRequest }).request.tools.sdkServers?.["diagnostics"]).toBeUndefined();
 });
 
 // The whole reason memory is composed here: a card that starts a conversation inside one folder used to be at the mercy
@@ -166,9 +174,9 @@ test("a persona starting in a nested folder is told the workspace's rules and th
     expect(plan).toMatchObject({ ok: true });
     const request = (plan as { request: AgentRequest }).request;
 
-    expect(request.cwd).toBe(join(root, "shop"));
-    expect(request.systemAppend).toContain("No legacy support.");
-    expect(request.systemAppend).toContain("Prices are integers, in cents.");
+    expect(request.spec.cwd).toBe(join(root, "shop"));
+    expect(request.spec.systemAppend).toContain("No legacy support.");
+    expect(request.spec.systemAppend).toContain("Prices are integers, in cents.");
 });
 
 test("a native Codex turn is told the tree's dependencies are missing, exactly as a Claude turn no longer is", async () => {
@@ -200,7 +208,7 @@ test("a resumed native session is not charged the same dependency paragraph on e
     const resumed = contextIn(root);
     const prompt = await promptOf(services, { prompt: "do the thing", agent: "codex" } as AgentTurn, {
         ...resumed,
-        base: { ...resumed.base, sessionId: "codex-session-1" },
+        base: { ...resumed.base, spec: { ...resumed.base.spec, sessionId: "codex-session-1" } },
     });
 
     expect(prompt).toBe("do the thing");
@@ -265,7 +273,7 @@ test("a runtime without a skill loader receives the catalogue once; native loade
     await writeFile(join(skillDir, "SKILL.md"), `---\nname: quill\ndescription: ${skillDescription}\n---\n\nDraw a quill.\n`);
     const skillContext: TurnContext = {
         ...context,
-        base: { ...base, cwd: root },
+        base: { ...base, spec: { ...base.spec, cwd: root } },
         localCwd: root,
         effectiveCwd: root,
     };
@@ -284,7 +292,7 @@ test("a runtime without a skill loader receives the catalogue once; native loade
         servicesWith({
             workspace,
             openCode,
-            agents: unstubbed<Services["agents"]>("agents", { entry: () => ({ turns: 2 }) as ReturnType<Services["agents"]["entry"]> }),
+            agents: unstubbed<Services["agents"]>("agents", { entry: () => conversationAfter(2) }),
         }),
         turn({ agent: "grok", conversationId: "grok-skills" }),
         skillContext,

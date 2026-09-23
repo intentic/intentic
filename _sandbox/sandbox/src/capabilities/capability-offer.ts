@@ -2,7 +2,7 @@ import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import { instancesOf } from "@intentic/capability-catalog";
 import { sleep } from "@intentic/base/async";
 import type { CapabilityOffer, CapabilityStatus } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../agent/run/offer-request.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../agents/actor/card-offers.js";
 
 // Setup gate: an agent asks the owner, in chat, to connect a missing capability; shaped like the wallet's payment gate.
 // A yes watches the manifest and resumes the parked call once live; a no is remembered per-conversation.
@@ -147,7 +147,7 @@ export const createCapabilityGate = (deps: AskDeps): CapabilityGate => {
             deadlineMs: deps.deadlineMs ?? OFFER_DEADLINE_MS,
         });
         if (!request.reply.connect) {
-            // Two different no's, told apart by whether a person actually answered (offer-request.ts argues why).
+            // Two different no's, told apart by whether a person actually answered (card-offers.ts argues why).
             if (!request.answered) {
                 remember(run.conversationId, entry.id, undefined);
                 return refusal(

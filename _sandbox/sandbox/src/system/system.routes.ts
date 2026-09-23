@@ -13,22 +13,29 @@ import { implement, ORPCError } from "@orpc/server";
 import type { Caller } from "../auth/auth.js";
 import { listSubagentSessions, pairLiveSubagents } from "../agent/subagents/subagents.js";
 import { closeBrowserSession, listBrowserSessions } from "../browser/sessions/browser-sessions.js";
-import { readSubagentTranscript } from "../sessions/subagent-transcript.js";
+import { readSubagentTranscript } from "../agent/subagents/subagent-transcript.js";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { extensionProcessIndex } from "../extensions/extension-processes.js";
-import { type ManagedProcesses, PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
-import { SERVICE_SESSION_PREFIX, serviceSession } from "../processes/service-processes.js";
+import type { ManagedProcesses } from "../processes/managed-processes.js";
+import { serviceSession } from "../processes/service-processes.js";
 import { foreground, PANE_FORMAT, paneStates, SHELL } from "../terminal/pane-state.js";
 import { subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { subscribeUnwatchedWrites, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import { subscribeDerived } from "../derived/sidecar-service.js";
-import { publishRuntimeChange, subscribeRuntimeChanges } from "./runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
+import { subscribeRuntimeChanges } from "./runtime-watch.js";
 import { registerPresence, subscribePresence, updatePresence } from "./presence.js";
-import { captureScrollback, isValidSessionName, jobSessionLabel } from "../terminal/terminal-session.js";
+import {
+    captureScrollback,
+    isValidSessionName,
+    jobSessionLabel,
+    PANEL_SESSION_PREFIX,
+    SERVICE_SESSION_PREFIX,
+} from "../terminal/terminal-session.js";
 import { settleTerminalHelpFor, terminalHelpFor } from "../terminal/terminal-help.js";
 import { isNewer, latestVersion } from "../platform/boot/version-check.js";
 import { breakingNotes, MAX_UPDATE_NOTES, updateNotes } from "../platform/boot/release-notes.js";
@@ -361,7 +368,7 @@ export const createSystemRoutes = (services: Services) => {
                 const { stdout } = await execFileAsync("tmux", ["list-panes", "-a", "-F", PANE_FORMAT]);
                 const states = paneStates(stdout);
                 const liveAgentSessions = new Set(
-                    services.agents.liveSessionIds().flatMap((sessionId) => {
+                    services.conversations.liveSessionIds().flatMap((sessionId) => {
                         const session = agentSessionName(sessionId);
                         return session === undefined ? [] : [session];
                     }),
@@ -425,12 +432,12 @@ export const createSystemRoutes = (services: Services) => {
         // Subagents this sandbox started, and one's transcript; both records from the registry and the child's store.
         // Paired against meta files first: the only model source for a child the daemon never watched spawn.
         subagents: i.subagents.handler(async () => {
-            await pairLiveSubagents();
-            return { sessions: listSubagentSessions() };
+            await pairLiveSubagents(services.conversations);
+            return { sessions: listSubagentSessions(services.conversations) };
         }),
         subagentTranscript: i.subagentTranscript.handler(async ({ input }) => ({
             messages: await readSubagentTranscript(
-                { root: services.workspace.root, conversation: (agent) => services.transcripts.read(agent) },
+                { root: services.workspace.root, conversations: services.conversations, conversation: (agent) => services.transcripts.read(agent) },
                 input.id,
             ),
         })),

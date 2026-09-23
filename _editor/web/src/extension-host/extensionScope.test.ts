@@ -3,6 +3,8 @@ import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { sandboxRef } from "@intentic/extension-api";
 import { test, expect, beforeEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
+import type { ProcedureOutput } from "../features/sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../testing/sandboxRpcFake";
 
 // The switch, at the loader's grain: pointing the browser at another sandbox drops everything this host was holding on
 // the last one's behalf, and a load pass overtaken by a switch cannot put any of it back.
@@ -18,7 +20,7 @@ const state = hoisted(() => ({
     // bundle fetch would need, which no node test environment can perform.
     builtins: new Map<string, { manifest: ExtensionManifest; activate: () => void }>(),
     // The daemon's extension list, as a thunk so a test can hold the answer and stage a switch mid-pass.
-    list: (): Promise<unknown> => Promise.resolve({ extensions: [], invalid: [] }),
+    list: (): Promise<ProcedureOutput<`extensions.list`>> => Promise.resolve({ extensions: [], invalid: [] }),
     // What runActivate awaits before it registers: the seam the overtaking test squeezes into.
     settingsLoad: (): Promise<void> => Promise.resolve(),
 }));
@@ -35,8 +37,8 @@ mock.module(`./builtins`, () => ({ builtinModules: state.builtins }));
 mock.module(`../features/extensions/useExtensionSettings`, () => ({
     extensionSettingsStore: () => ({ load: () => state.settingsLoad() }),
 }));
+mock.module(`../features/sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc({ extensions: { list: () => state.list() } }) }));
 mock.module(`../features/sandbox/client/sandboxClient`, () => ({
-    sandboxJson: () => state.list(),
     sandboxRequest: () => Promise.resolve(new Response(``)),
     sandboxError: (response: Response) => new Error(String(response.status)),
 }));
@@ -82,7 +84,9 @@ test(`an ordinary pass activates what the sandbox lists and reports it as final`
     expect(extensionStatuses.value.map((status) => status.state)).toEqual([`active`]);
 });
 
-test(`retiring drops the activations, the record of them, and the extensions' own state`, async () => {
+// A relocale retires too (useExtensionHost), so what the extensions hold for this sandbox is left to the switch itself
+// (sandboxScope.ts): a language change must not blank a badge, a chat or an edit buffer.
+test(`retiring drops the activations and the record of them, and leaves the extensions' own state as it was`, async () => {
     const badge = sandboxRef(() => 0);
     state.list = () => Promise.resolve({ extensions: [compiled(`maintenance`)], invalid: [] });
     await loadExtensions(bindings);
@@ -91,9 +95,7 @@ test(`retiring drops the activations, the record of them, and the extensions' ow
     retireExtensions();
 
     expect(state.deactivatedAll).toBe(1);
-    // The reported bug, in one assertion: the count the previous sandbox filled in is gone before the next sandbox has
-    // been asked anything.
-    expect(badge.value).toBe(0);
+    expect(badge.value).toBe(21);
     expect(extensionStatuses.value).toEqual([]);
     expect(extensionsLoaded.value).toBe(false);
 });

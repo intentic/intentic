@@ -1,4 +1,5 @@
 import { inject, type InjectionKey, provide, type Ref, shallowRef } from "vue";
+import { activeSandboxId } from "../../features/sandbox/overview/activeSandbox";
 
 // WORK IN FLIGHT BEHIND A HUB ROW. A hub mounts one section at a time, so the rebuild started on Environment leaves
 // nothing on screen the moment Devices is opened — and these are the runs that take minutes. The ledger is module
@@ -11,6 +12,8 @@ interface HubRun {
     readonly key: string;
     /** A continuation of "Environment: …", like ViewBadge.running, since that is where it ends up. */
     readonly what: string;
+    /** The sandbox on screen when the work began: a rebuild runs on that box, and marks that box's row alone. */
+    readonly sandboxId: string | undefined;
 }
 
 const runs = shallowRef<readonly HubRun[]>([]);
@@ -23,7 +26,7 @@ export const hubWorkKey = (hub: string, slug: string): string => `${hub}:${slug}
 export const beginHubWork = (key: string, what: string): (() => void) => {
     last += 1;
     const id = last;
-    runs.value = [...runs.value, { id, key, what }];
+    runs.value = [...runs.value, { id, key, what, sandboxId: activeSandboxId.value }];
     return (): void => {
         runs.value = runs.value.filter((run) => run.id !== id);
     };
@@ -39,9 +42,12 @@ export const trackHubWork = async <T>(key: string, what: string, task: () => Pro
     }
 };
 
-/** A row's `ViewBadge.running`: one run speaks for itself, several are counted rather than listed. */
-export const hubWorkRunning = (key: string): string | undefined => {
-    const here = runs.value.filter((run) => run.key === key);
+/**
+ * A row's `ViewBadge.running`: one run speaks for itself, several are counted rather than listed. A row about one
+ * sandbox names it, and counts only the work begun on that sandbox.
+ */
+export const hubWorkRunning = (key: string, sandboxId?: string): string | undefined => {
+    const here = runs.value.filter((run) => run.key === key && (sandboxId === undefined || run.sandboxId === sandboxId));
     const first = here[0];
     if (first === undefined) {
         return undefined;

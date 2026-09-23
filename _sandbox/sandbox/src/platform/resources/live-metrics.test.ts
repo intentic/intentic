@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { DAEMON_OWNER, ONE_SHOT_OWNER, WORKLOAD_ENV } from "../boot/leftovers.js";
+import { DAEMON_OWNER, ONE_SHOT_OWNER, WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import {
     createLiveMetrics,
     type DaemonReading,

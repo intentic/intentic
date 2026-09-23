@@ -1,11 +1,11 @@
-import { childReportPrompt } from "@intentic/sandbox-contract";
+import { childReportPrompt, type TurnProfile } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
-import { parentOfActor } from "../run/turn/turn-actor.js";
-import type { TurnSettled } from "../run/turn/turn-runs.js";
-import type { ConversationRouting } from "../run/turn/wake-doors.js";
+import { parentOfActor } from "../../auth/principal.js";
 import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
 import { childVerification } from "./child-verification.js";
 import { subagentEndingReported } from "./subagents.js";
+import type { DomainEventMap } from "../../seams/domain-events.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
 // A child's settled turn reaches its parent one way: a parked `wait` took it, or it is delivered like any wake.
 
@@ -16,17 +16,20 @@ const REPORT_WINDOW_MS = 6 * 3_600_000;
 export interface ChildReportDeps {
     readonly doors: WakeDoors;
     readonly logger: Logger;
+    // Where the child's roster record and its verification ledger are held.
+    readonly conversations: Pick<ConversationActors, "holdings">;
     // A child's entry names its parent in `startedBy`.
     readonly entryOf: (
         conversationId: string,
     ) => { readonly startedBy?: string | undefined; readonly title?: string | undefined; readonly archivedAt?: number | undefined } | undefined;
-    readonly routingOf: (conversationId: string) => ConversationRouting | undefined;
+    // What the parent runs as now, which the report's turn continues.
+    readonly profileOf: (conversationId: string) => TurnProfile | undefined;
 }
 
 // Characters of the child's answer a report carries, from the head where the answer is; the rest stays in its chat.
 const REPORT_CHARS = 4_000;
 
-const reportText = (settled: TurnSettled): string => {
+const reportText = (settled: DomainEventMap["run.settled"]): string => {
     const answer =
         settled.closing.length <= REPORT_CHARS ? settled.closing : `${settled.closing.slice(0, REPORT_CHARS)}… (the rest is in its own chat)`;
     return [answer, ...(settled.failure === undefined ? [] : [`The turn failed: ${settled.failure}`])].filter((part) => part !== "").join("\n\n");
@@ -35,26 +38,26 @@ const reportText = (settled: TurnSettled): string => {
 // Nobody when a person started the turn in the child's own chat, a wait already took it, or the parent is off the board.
 const parentToTell = (
     deps: ChildReportDeps,
-    settled: TurnSettled,
-): { readonly parent: string; readonly routing: ConversationRouting; readonly title: string | undefined } | undefined => {
+    settled: DomainEventMap["run.settled"],
+): { readonly parent: string; readonly profile: TurnProfile; readonly title: string | undefined } | undefined => {
     const entry = deps.entryOf(settled.conversationId);
     const parent = parentOfActor(entry?.startedBy);
     if (
         parent === undefined ||
         (settled.actor !== undefined && parentOfActor(settled.actor) !== parent) ||
-        subagentEndingReported(settled.conversationId)
+        subagentEndingReported(deps.conversations, settled.conversationId)
     ) {
         return undefined;
     }
     const parentEntry = deps.entryOf(parent);
-    const routing = deps.routingOf(parent);
-    return parentEntry === undefined || parentEntry.archivedAt !== undefined || routing === undefined
+    const profile = deps.profileOf(parent);
+    return parentEntry === undefined || parentEntry.archivedAt !== undefined || profile === undefined
         ? undefined
-        : { parent, routing, title: entry?.title };
+        : { parent, profile, title: entry?.title };
 };
 
 /** Never throws: it runs off a turn's ending. */
-export const reportChildTurn = async (deps: ChildReportDeps, settled: TurnSettled): Promise<void> => {
+export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEventMap["run.settled"]): Promise<void> => {
     try {
         const target = parentToTell(deps, settled);
         if (target === undefined) {
@@ -65,11 +68,11 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: TurnSettle
             title: target.title,
             failed: settled.failure !== undefined,
             report: reportText(settled),
-            verification: childVerification(settled.conversationId),
+            verification: childVerification(deps.conversations, settled.conversationId),
         });
         const landing = await deliverWake(
             deps.doors,
-            { conversationId: target.parent, prompt, voice: "sandbox", turn: target.routing },
+            { conversationId: target.parent, prompt, voice: "sandbox", profile: target.profile },
             {
                 attempts: REPORT_WINDOW_MS / REPORT_RETRY_MS,
                 retryMs: REPORT_RETRY_MS,

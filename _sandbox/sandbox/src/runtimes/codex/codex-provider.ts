@@ -1,14 +1,24 @@
 import { join } from "node:path";
-import type { AgentTurn, Capability } from "@intentic/sandbox-contract";
+import type { AgentEvent, AgentTurn, Capability } from "@intentic/sandbox-contract";
 import type { Config } from "../../env.config.js";
 import { browserFields } from "../../browser/tools/browser-fields.js";
 import { browserPrepareBridge } from "../../browser/tools/browser-prepare.js";
 import { browserServersOf } from "../../browser/tools/browser-tools.js";
-import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
+import {
+    attemptProbe,
+    armPlan,
+    type AgentAdapter,
+    healthReady,
+    healthUnavailable,
+    healthUnknown,
+    type TurnArmPlan,
+    type TurnContext,
+} from "../../agent/providers/adapter.js";
+import type { AgentRequest, CodexCredential } from "../../agent/providers/agent-request.js";
+import { opt } from "../../opt.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
 import { connectedTranslatorProviders } from "../../agent/providers/translator.js";
-import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import { turnPersona } from "../../personas/personas.js";
 import { onPath } from "../../platform/boot/on-path.js";
@@ -18,8 +28,7 @@ import { type CodexCatalog, createCodexCatalog } from "./codex-catalog.js";
 import { writeCodexConfig } from "./codex-config.js";
 import { codexReadiness } from "./codex-readiness.js";
 
-// Everything Codex contributes to the daemon, aggregated by the provider registry (agent/provider-module.ts); the
-// runtime files keep their own jobs.
+// Everything Codex contributes to the daemon, listed in runtimes/runtime-table.ts; the runtime files keep their own jobs.
 
 export interface CodexSlice {
     // Codex's own catalog; a native turn resolves its model here instead of the SDK's rejected gpt-5-codex default.
@@ -28,7 +37,7 @@ export interface CodexSlice {
     readonly codexHome: string;
     // Whether a thread's rollout exists in CODEX_HOME; false opens a fresh thread on resume instead of failing.
     readonly codexThreadExists: (threadId: string) => Promise<boolean>;
-    readonly codexAgent: Services["agent"];
+    readonly codexAgent: (request: AgentRequest<CodexCredential>) => AsyncGenerator<AgentEvent>;
 }
 
 export const createCodexSlice = (input: { readonly config: Config; readonly authRoot: string }): CodexSlice => {
@@ -42,10 +51,13 @@ export const createCodexSlice = (input: { readonly config: Config; readonly auth
     };
 };
 
+// What a native Codex turn is planned from: the translator's accounts, the catalog, and the browser bridge.
+export type CodexPlanDeps = Pick<Services, "browserBridgeToken" | "cliProxy" | "codexAgent" | "codexModels" | "config" | "workspace">;
+
 // Native Codex turns ride app-server behind the translator, with process-backed MCP servers from the persona-filtered
 // manifest. Mid-turn steering rides a real queue (`turn/steer`), like Pi's.
 export const planCodexTurn = async (
-    services: Services,
+    services: CodexPlanDeps,
     input: AgentTurn,
     context: TurnContext,
     granted: readonly Capability[],
@@ -71,22 +83,23 @@ export const planCodexTurn = async (
         // Plan emulation restarts app-server between review and execution; a fresh process rereads the same manifest.
         browserServersOf(granted, services.workspace.root, browserPrepareBridge(services), persona.powers.browser, input.conversationId),
     ]);
-    const withModel = { ...context.base, model, ...(context.steering !== undefined ? { steering: context.steering } : {}) };
-    // Subscription turns use the translator endpoint with a fixed bearer; the dev path falls to Codex's own key.
-    const withAuth = translatorReady
-        ? { ...withModel, codexEndpoint: { baseUrl: services.config.translator.url, authToken: services.config.translator.token } }
-        : withModel;
-    const withBrowser = { ...withAuth, ...browserFields(services.workspace.root, browser) };
-    return {
-        ok: true,
-        run: services.codexAgent,
-        // Attribution key: the shared subscription serving every Codex turn, else undefined for the api-key fallback.
-        ...(translatorReady ? { account: "codex-subscription" } : {}),
-        request: withAttachments(withBrowser, context.attachmentPaths),
+    const request: AgentRequest<CodexCredential> = {
+        ...context.base,
+        spec: { ...context.base.spec, model, ...opt("steering", context.steering) },
+        tools: { ...context.base.tools, ...browserFields(services.workspace.root, browser) },
+        // Subscription turns use the translator endpoint with a fixed bearer; the dev path falls to Codex's own key.
+        credential: translatorReady
+            ? { kind: "codex-endpoint", baseUrl: services.config.translator.url, authToken: services.config.translator.token }
+            : { kind: "container" },
     };
+    // Attribution key: the shared subscription serving every Codex turn, else undefined for the api-key fallback.
+    return armPlan(services.codexAgent, withAttachments(request, context.attachmentPaths), translatorReady ? "codex-subscription" : undefined);
 };
 
-const CODEX_ADAPTER: AgentAdapter<"codex"> = {
+// What the Codex adapter reads: its arm's deps, the readiness answer's, and the thread store a resume asks.
+export type CodexAdapterDeps = CodexPlanDeps & Pick<Services, "authRoot" | "codexThreadExists">;
+
+const CODEX_ADAPTER: AgentAdapter<"codex", CodexAdapterDeps> = {
     runtime: "codex",
     preflight: (services, input, context, granted) => planCodexTurn(services, input, context, granted),
     // Same question planCodexTurn answers, without building a turn: one resolver, so the tooltip and the refusal can't
@@ -104,10 +117,13 @@ const CODEX_ADAPTER: AgentAdapter<"codex"> = {
 
 // Reads connection state from disk, never a live probe: on a core image the translator binary is absent, so a probe
 // would always say disconnected and block the rebuild that installs it.
-export const codexConnected = async (services: Services): Promise<boolean> =>
+export const codexConnected = async (services: Pick<Services, "authRoot" | "config">): Promise<boolean> =>
     services.config.openaiApiKey !== "" || (await connectedTranslatorProviders(services.authRoot)).has("codex");
 
-export const codexProvider: ProviderModule = {
+// What the Codex module reads beyond its adapter: the CODEX_HOME its boot writes the config into.
+export type CodexProviderDeps = CodexAdapterDeps & Pick<Services, "codexHome">;
+
+export const codexProvider: ProviderModule<CodexProviderDeps> = {
     id: "codex",
     adapters: [CODEX_ADAPTER],
     catalog: (services) => services.codexModels.models(),

@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { z } from "zod";
 import { CapabilityIdParamSchema } from "../schemas/capabilities.js";
 import { ModelsSchema } from "../schemas/providers/provider-oauth.js";
@@ -87,7 +87,7 @@ export const LocalModelFitSchema = z.object({
 export type LocalModelFitResponse = z.infer<typeof LocalModelFitSchema>;
 
 export const endpointsContract = {
-    models: oc
+    models: procedure
         .route({
             method: "GET",
             path: "/endpoints/{id}/models",
@@ -97,7 +97,7 @@ export const endpointsContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(ModelsSchema),
-    trial: oc
+    trial: procedure
         .route({
             method: "GET",
             path: "/endpoints/trial/status",
@@ -108,7 +108,7 @@ export const endpointsContract = {
         .output(TrialStatusSchema),
     // Sized against this machine rather than a table in the browser, because the numbers that matter (a cgroup cap, a
     // GPU that may not be passed through, weights already on disk) are only knowable in here.
-    localModelFit: oc
+    localModelFit: procedure
         .route({
             method: "GET",
             path: "/endpoints/local-model/fit",
@@ -119,7 +119,7 @@ export const endpointsContract = {
         .output(LocalModelFitSchema),
     // Start or stop fetching the instant model's weights before anyone has asked for them, so the first local turn does
     // not begin with a download. Idempotent: starting twice joins the transfer already running.
-    localModelPrefetch: oc
+    localModelPrefetch: procedure
         .route({
             method: "POST",
             path: "/endpoints/local-model/prefetch",

@@ -1,9 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Logger } from "pino";
-import { activeTurnCount } from "../agent/checkpoints/agent-steering.js";
-import { listSubagentSessions, subagentRunning } from "../agent/subagents/subagents.js";
-import { armedWatcherCount } from "../agent/verification/watchers.js";
 import { connectedCount } from "./presence.js";
 
 // Stops the daemon (SIGTERM to self) when nobody is connected and nothing is running for a full window, since a hosted
@@ -42,13 +39,11 @@ export interface IdleStopProbes {
     readonly nextOneTimeWakeAt: () => Promise<number>;
 }
 
-// Everything the daemon can answer about itself. `nextOneTimeWakeAt` is not among them: it reads the workspace's own
-// automations manifest, which this module has no business reaching into, so the composition root supplies it.
-export const DEFAULT_PROBES: IdleStopProbes = {
+// Everything the daemon can answer about itself. What its conversations are doing is not among it: turns, children and
+// watches are held by the conversations' actors, which the composition root holds and supplies, as it does the
+// workspace's own one-time wakes.
+export const DEFAULT_PROBES: Omit<IdleStopProbes, "turns" | "delegates" | "watchers"> = {
     connected: connectedCount,
-    turns: activeTurnCount,
-    delegates: () => listSubagentSessions().filter((session) => subagentRunning(session)).length,
-    watchers: armedWatcherCount,
     terminalActivityAt: lastTerminalActivity,
     nextOneTimeWakeAt: () => Promise.resolve(0),
 };
@@ -59,7 +54,7 @@ const CHECK_INTERVAL_MS = 60 * 1000;
 // exit 0.
 export const startIdleStop = (
     args: { minutes: number; logger: Logger },
-    probes: IdleStopProbes = DEFAULT_PROBES,
+    probes: IdleStopProbes,
     stop: () => void = () => process.kill(process.pid, "SIGTERM"),
 ): (() => void) => {
     const windowMs = args.minutes * 60 * 1000;

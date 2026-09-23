@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { PanelRepoParamSchema, PanelsListSchema } from "../schemas/panels.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -7,7 +7,7 @@ import { OkSchema } from "../schemas/shared.js";
 // on the global GET /system/terminals (the web app's one terminal panel); the interactive I/O is the
 // /system/terminal WebSocket.
 export const panelsContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/panels",
@@ -15,7 +15,7 @@ export const panelsContract = {
             description: "Every repo with whether its dev server is up and what the sandbox worked out about its contents.",
         })
         .output(PanelsListSchema),
-    start: oc
+    start: procedure
         .route({
             method: "POST",
             path: "/panels/{repo}/start",
@@ -24,7 +24,7 @@ export const panelsContract = {
         })
         .input(PanelRepoParamSchema)
         .output(OkSchema),
-    stop: oc
+    stop: procedure
         .route({
             method: "POST",
             path: "/panels/{repo}/stop",

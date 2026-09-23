@@ -1,3 +1,4 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { SandboxSummary } from "@intentic/api-contract";
 import { describe, it, expect, beforeEach, mock, jest } from "bun:test";
 import { stubGlobal, mocked } from "@intentic/testing/bun";
@@ -9,7 +10,7 @@ mock.module("../../../lib/useApi", () => ({
 const { apiClient } = await import("../../../lib/useApi");
 const listMock = mocked(apiClient.sandbox.list);
 const { queryClient } = await import("../../../lib/queryPersistence");
-const { resetDaemonBoot, setDaemonBoot } = await import("../overview/useDaemonBoot");
+const { setDaemonBoot } = await import("../overview/useDaemonBoot");
 const { signalConnection, useSandbox } = await import("./useSandbox");
 
 const summary = (id: string): SandboxSummary => ({
@@ -133,7 +134,7 @@ describe(`useSandbox list/mutation race`, () => {
 describe(`reachable`, () => {
     beforeEach(() => {
         signalConnection({ kind: `disconnect` });
-        resetDaemonBoot();
+        resetSandboxScope();
     });
 
     it(`stays false while nothing is connected`, () => {

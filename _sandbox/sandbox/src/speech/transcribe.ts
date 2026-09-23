@@ -8,7 +8,7 @@ import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { cleanTranscription, WHISPER_MODEL_REPO } from "@intentic/sandbox-contract";
 import { downloadFile } from "@huggingface/hub";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 import { nodeStream } from "../web-stream.js";
 
 // whisper.cpp over WAV utterances the browser already segments (16kHz mono s16le; this side never decodes audio).

@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 import { pathExists } from "../../path-exists.js";
 import type { AgentsRegistry } from "./agents-registry.js";
+import { reposOf } from "./agents-store.js";
 import type { AgentWorktrees } from "../worktrees/worktrees.js";
 
 // Drops a repo from every conversation once its directory is gone; composition is frozen at first turn, so deletion is
@@ -22,7 +23,8 @@ export const dropVanishedRepos = async (deps: VanishedRepoDeps): Promise<string[
     const { agents, agentWorktrees, logger } = deps;
     const named = new Map<string, string[]>();
     for (const id of agents.ids()) {
-        for (const { repo } of agents.entry(id)?.repos ?? []) {
+        const entry = agents.entry(id);
+        for (const { repo } of entry === undefined ? [] : reposOf(entry)) {
             if (repo !== ROOT) {
                 named.set(repo, [...(named.get(repo) ?? []), id]);
             }

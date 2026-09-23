@@ -13,13 +13,14 @@ import type { Services } from "../../composition.js";
 import type { SeatRefusal } from "../../runtimes/claude/claude-seats.js";
 import { services, withTranslator } from "../../harness/route-services.testing.js";
 import { memoryCapabilitiesStore } from "../../harness/route-stores.testing.js";
-import { harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
+import type { HarnessCredential } from "./agent-request.js";
+import { harnessCredentialOf, harnessEnv, resolveHarnessCredentials } from "./harness-credentials.js";
 
 // A routed turn's translator serves exactly one model; every other name the harness might resolve (a subagent tier,
 // Task's default) must collapse onto it or come back 502.
 
 test("a routed endpoint collapses every model tier onto the endpoint's own model", () => {
-    const env = harnessEnv({ baseUrl: "http://127.0.0.1:8788", authToken: "local", model: "gpt-5.6-sol" });
+    const env = harnessEnv({ kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "local" }, { model: "gpt-5.6-sol" });
     expect(env["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
     expect(env["ANTHROPIC_AUTH_TOKEN"]).toBe("local");
     // The alias table the CLI resolves subagent + tier requests through.
@@ -33,7 +34,7 @@ test("a routed endpoint collapses every model tier onto the endpoint's own model
 });
 
 test("a native Claude turn keeps the real alias table: sonnet and opus are different models there", () => {
-    const env = harnessEnv({ oauthToken: "sk-oauth", model: "claude-opus-5" });
+    const env = harnessEnv({ kind: "claude-oauth", token: "sk-oauth" }, { model: "claude-opus-5" });
     expect(env["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("sk-oauth");
     expect(env["ANTHROPIC_BASE_URL"]).toBeUndefined();
     expect(env["ANTHROPIC_DEFAULT_SONNET_MODEL"]).toBeUndefined();
@@ -44,13 +45,18 @@ test("a native Claude turn keeps the real alias table: sonnet and opus are diffe
 test("every harness TURN is told to ride out a provider outage rather than give up on it", () => {
     // Retry budget is about the provider being down, unrelated to which credential is in play; giving up here means
     // turn-resume.ts rebuilds from scratch at full context cost.
-    for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
-        expect(harnessEnv(credentials)["CLAUDE_CODE_RETRY_WATCHDOG"]).toBe("1");
+    const credentials: HarnessCredential[] = [
+        { kind: "claude-oauth", token: "sk-oauth" },
+        { kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "local" },
+        { kind: "container" },
+    ];
+    for (const credential of credentials) {
+        expect(harnessEnv(credential)["CLAUDE_CODE_RETRY_WATCHDOG"]).toBe("1");
     }
 });
 
 test("a free-trial turn uses the platform's bounded key walk instead of the long harness watchdog", () => {
-    const env = harnessEnv({ baseUrl: "http://127.0.0.1:8788", authToken: "local", model: "gemini-flash-latest", trial: true });
+    const env = harnessEnv({ kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" }, { model: "gemini-flash-latest" });
     expect(env["CLAUDE_CODE_RETRY_WATCHDOG"]).toBeUndefined();
     expect(env["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
 });
@@ -103,16 +109,21 @@ test("a trial turn on a cold availability cache re-probes once instead of refusi
 test("a HELPER is told the opposite, so a rung that will not answer is stepped over rather than waited out", () => {
     // The regression this pins: a one-shot inheriting the turn's watchdog ground through a refusing rung instead of
     // failing over to the next model in the chain.
-    for (const credentials of [{ oauthToken: "sk-oauth" }, { baseUrl: "http://127.0.0.1:8788", authToken: "local" }, {}]) {
-        expect(harnessEnv({ ...credentials, helper: true })["CLAUDE_CODE_RETRY_WATCHDOG"]).toBeUndefined();
+    const credentials: HarnessCredential[] = [
+        { kind: "claude-oauth", token: "sk-oauth" },
+        { kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "local" },
+        { kind: "container" },
+    ];
+    for (const credential of credentials) {
+        expect(harnessEnv(credential, { helper: true })["CLAUDE_CODE_RETRY_WATCHDOG"]).toBeUndefined();
     }
     // Everything else about a helper's environment is a turn's: only the patience differs.
-    expect(harnessEnv({ oauthToken: "sk-oauth", helper: true })["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("sk-oauth");
-    expect(harnessEnv({ helper: true })["IS_SANDBOX"]).toBe("1");
+    expect(harnessEnv({ kind: "claude-oauth", token: "sk-oauth" }, { helper: true })["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("sk-oauth");
+    expect(harnessEnv({ kind: "container" }, { helper: true })["IS_SANDBOX"]).toBe("1");
 });
 
 test("a custom endpoint with no resolved model pins nothing rather than an empty id", () => {
-    const env = harnessEnv({ baseUrl: "https://router.example", authToken: "local" });
+    const env = harnessEnv({ kind: "routed", baseUrl: "https://router.example", authToken: "local" });
     expect(env["ANTHROPIC_BASE_URL"]).toBe("https://router.example");
     expect(env["ANTHROPIC_DEFAULT_SONNET_MODEL"]).toBeUndefined();
     expect(env["CLAUDE_CODE_SUBAGENT_MODEL"]).toBeUndefined();
@@ -219,7 +230,9 @@ describe.each(MINTED_PROVIDERS.map((provider) => ({ provider })))("a $provider t
 
     test("carries no Claude subscription token into the vendor's environment", async () => {
         const result = await resolveHarnessCredentials(await withKey(), { agent: provider });
-        const env = harnessEnv(result.ok ? { ...result.credentials.endpoint } : {});
+        const env = harnessEnv(result.ok ? harnessCredentialOf(result.credentials) : { kind: "container" }, {
+            model: result.ok ? result.credentials.endpoint?.model : undefined,
+        });
         expect(env["ANTHROPIC_AUTH_TOKEN"]).toBe("vendor-key");
         expect(env["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
     });

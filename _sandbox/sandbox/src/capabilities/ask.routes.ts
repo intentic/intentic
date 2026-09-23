@@ -1,7 +1,7 @@
 import { instancesOf } from "@intentic/capability-catalog";
 import type { CapabilityStatus } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { liveRequestRun } from "../agent/run/offer-request.js";
+import { actorObserver, liveRequestRun } from "../agents/actor/card-offers.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { capabilityCtx } from "./capability.js";
@@ -26,8 +26,9 @@ export const createCapabilityAskRoutes = (services: Services) => {
         entries: () => connectableEntries(services),
         list: () => services.capabilities.list(),
         status: statusOf,
-        liveRun: liveRequestRun,
-        observe: services.agents.observe,
+        liveRun: liveRequestRun(services.conversations),
+        observe: actorObserver(services.conversations),
+        cards: services.cards,
     });
     return {
         connectable: async (c: Context<AppEnv>): Promise<Response> => {

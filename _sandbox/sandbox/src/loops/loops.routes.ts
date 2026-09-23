@@ -1,6 +1,5 @@
 import { loopCanConverge, loopsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { loopRunning, runLoop, stopLoop } from "./loop-runner.js";
@@ -12,7 +11,7 @@ export const createLoopsRoutes = (services: Services) => {
         list: i.list.handler(async () => ({ loops: await services.loops.list() })),
         start: i.start.handler(async ({ input }) => {
             // Refused, not queued: two pumps on one conversation would race the same worktree and turn mutex.
-            if (loopRunning(input.conversationId)) {
+            if (loopRunning(services.conversations, input.conversationId)) {
                 throw new ORPCError("CONFLICT", { message: "This agent is already looping, stop that loop before starting another." });
             }
             // No output and no check: a loop can only run out of iterations, refused here instead of failing slowly.
@@ -23,11 +22,11 @@ export const createLoopsRoutes = (services: Services) => {
             }
             const record = await services.loops.start(input, Date.now());
             // Detached like any turn-starting route: the first iteration can take minutes; watched from the fleet card.
-            void runLoop(services, record, streamAgent);
+            void runLoop(services, record);
             return record;
         }),
         stop: i.stop.handler(async ({ input }) => {
-            if (!stopLoop(input.conversationId)) {
+            if (!stopLoop(services.conversations, input.conversationId)) {
                 // Not-running usually means it already ended, which the row shows; an empty `ok` would say nothing.
                 throw new ORPCError("NOT_FOUND", { message: "No loop is running on this agent." });
             }

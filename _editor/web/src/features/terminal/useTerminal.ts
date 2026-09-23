@@ -1,3 +1,4 @@
+import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import { computed, type ComputedRef, ref, type Ref, watch } from "vue";
 import { activeSandboxId } from "../sandbox/overview/activeSandbox";
 import { showWorkTerminals } from "./useWorkTerminals";
@@ -51,28 +52,22 @@ export interface TerminalTabsSource {
 const createPane = (tab: TerminalTab, onExit: (name: string) => void, spawnWithin: HTMLElement | undefined): TerminalSession =>
     createTerminalSession(tab.name, onExit, tab.kind === `process`, spawnWithin);
 
-// Sandbox switch: drops every cached socket and bumps the epoch so mounted surfaces reset and relist. Sessions
-// themselves keep running; reattaching replays their history from tmux.
-export const disposeAllSessions = (): void => {
-    for (const session of cache.values()) {
-        disposeTerminalSession(session);
-    }
-    cache.clear();
-    epoch.value += 1;
-};
-
-// Shared session cache, one xterm+socket per name; disposed only when a session deliberately ends.
-const cache = new Map<string, TerminalSession>();
+// Shared session cache, one xterm+socket per name; disposed only when a session deliberately ends, or with the
+// sandbox: a switch drops every cached socket. Sessions themselves keep running; reattaching replays their history.
+const cache = sandboxValue(
+    () => new Map<string, TerminalSession>(),
+    (previous) => previous.forEach((session) => disposeTerminalSession(session)),
+);
 
 // Live session behind a tab name, for surfaces acting on the terminal itself (copy/paste/scrollback).
-export const terminalSessionOf = (name: string): TerminalSession | undefined => cache.get(name);
+export const terminalSessionOf = (name: string): TerminalSession | undefined => cache.value.get(name);
 
-// Bumped whenever the cache is wiped wholesale (sandbox switch); mounted surfaces watch it.
-const epoch = ref(0);
+// Minted per sandbox scope, after the cache above is dropped; mounted surfaces watch it to reset and relist.
+const epoch = sandboxRef(() => ({}));
 
 // Terminal glyphs are drawn at a size CSS can't rescale; every cached session re-types on a size change.
 watch(useTextSize().scale, () => {
-    for (const session of cache.values()) {
+    for (const session of cache.value.values()) {
         retypeTerminalSession(session);
     }
 });
@@ -80,7 +75,7 @@ watch(useTextSize().scale, () => {
 // The scheme and the skin are the two things that move `--color-terminal`; either one repaints every cached session,
 // on screen or parked, since xterm keeps colours as values rather than reading them from CSS.
 watch([useTheme().scheme, useSkin().skin], () => {
-    for (const session of cache.values()) {
+    for (const session of cache.value.values()) {
         retintTerminalSession(session);
     }
 });
@@ -200,14 +195,14 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
 
     // Derive sessions from the full tab so a cache hit cannot ignore the daemon's pane kind.
     const sessionOf = (tab: TerminalTab): TerminalSession => {
-        const cached = cache.get(tab.name);
+        const cached = cache.value.get(tab.name);
         if (cached !== undefined) {
             // Sessions outlive the instance that created them; rebind so this instance's list gets the exit.
             cached.onExit = endSession;
             return cached;
         }
         const session = createPane(tab, endSession, container);
-        cache.set(tab.name, session);
+        cache.value.set(tab.name, session);
         return session;
     };
 
@@ -220,7 +215,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         const listed = new Map(order.value.map((tab) => [tab.name, tab]));
         const group = groupOf(name).filter((member) => listed.has(member));
         for (const mounted of mountedNames) {
-            const session = cache.get(mounted);
+            const session = cache.value.get(mounted);
             if (session !== undefined) {
                 parkTerminalSession(session);
             }
@@ -380,7 +375,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }, PENDING_RELIST_MS);
     });
 
-    // Sandbox switch while mounted: sessions are already disposed; drop stale tab state and relist anew.
+    // Sandbox switch while mounted: sessions are already disposed with the scope; drop stale tab state and relist anew.
     watch(epoch, () => {
         order.value = [];
         processes.value = [];
@@ -437,7 +432,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // `container` retires this instance, so every async path re-checks it first.
     const detach = (): void => {
         for (const mounted of mountedNames) {
-            const session = cache.get(mounted);
+            const session = cache.value.get(mounted);
             if (session !== undefined) {
                 parkTerminalSession(session);
             }
@@ -459,10 +454,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
         }
         // This name is spent either way; a lingering claim would keep it in the shared list and the rail's count.
         dropPendingTerminal(name);
-        const session = cache.get(name);
+        const session = cache.value.get(name);
         if (session !== undefined) {
             disposeTerminalSession(session);
-            cache.delete(name);
+            cache.value.delete(name);
         }
         const group = arrangement.value.find((members) => members.includes(name));
         arrangement.value = arrangement.value.map((members) => members.filter((member) => member !== name)).filter((members) => members.length > 0);
@@ -535,7 +530,7 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
     // Routes programmatic input through xterm's own input handler, reusing the socket wiring a keystroke uses.
     const sendInput = (data: string): void => {
         const name = activeName.value;
-        const session = name === undefined ? undefined : cache.get(name);
+        const session = name === undefined ? undefined : cache.value.get(name);
         if (session !== undefined) {
             session.term.input(data, true);
         }
@@ -655,10 +650,10 @@ export const createTerminalTabs = (source: TerminalTabsSource, storageKey: strin
             return;
         }
         void kill(name);
-        const session = cache.get(name);
+        const session = cache.value.get(name);
         if (session !== undefined) {
             disposeTerminalSession(session);
-            cache.delete(name);
+            cache.value.delete(name);
         }
         const tab = claim(create());
         order.value = [...order.value.filter((entry) => entry.name !== name), tab];

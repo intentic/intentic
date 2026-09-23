@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
+import { rawRouteServer } from "../../raw-route-server.js";
 import { contentTypeForPath } from "../../workspace/files/workspace-files-download.js";
 import { createDiffLocator, DiffLocateError, parseDiffSourceQuery } from "./diff-locate.js";
 
@@ -11,7 +12,7 @@ export const createDiffRawRoute = (services: Services): Hono<AppEnv> => {
     const locator = createDiffLocator(services);
     const app = new Hono<AppEnv>();
 
-    app.get("/diff/raw", async (c) => {
+    rawRouteServer(app)("GET /diff/raw", async (c) => {
         const query = new URL(c.req.url).searchParams;
         try {
             const which = query.get("which");

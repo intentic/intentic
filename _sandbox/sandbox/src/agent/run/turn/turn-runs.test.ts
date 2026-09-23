@@ -1,13 +1,22 @@
-import type { AgentEvent, AgentTurn } from "@intentic/sandbox-contract";
+import type { AgentEvent } from "@intentic/sandbox-contract";
 import { describe, it, expect, mock, jest } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
-import type { JournalEntry } from "./turn-journal.js";
+import type { JournalledTurn } from "./turn-journal.js";
+import { type AttachEntry, type AttachHead, turnRunOf } from "../../../agents/actor/conversation-holdings.js";
+import { createDomainEvents, type DomainEventMap } from "../../../seams/domain-events.js";
+import type { TurnInput, TurnStarter } from "../../../seams/turn-starter.js";
+import { openConversationsDb } from "../../../store/conversations-db.js";
+import { IN_MEMORY } from "../../../store/sqlite.js";
+import { fleetStoreOver, memoryFleet } from "../../../testing.js";
 import { commandsOf, resetCommands } from "../../providers/agent-commands.js";
-import { type AttachEntry, type AttachHead, onTurnSettled, startTurnRun, type TurnFn, type TurnSettled, turnRunOf } from "./turn-runs.js";
+import { startTurnRun } from "./turn-runs.js";
+
+// Where every run here is filed and announced: one fleet's actors, one bus.
+const deps = { conversations: memoryFleet().conversations, events: createDomainEvents(() => {}) };
 
 // A hand-cranked turn: push events (or a failure) and the pump consumes them as they land, mirroring SteeringQueue's
 // push/pull shape.
-const crankedTurn = (): { turnFn: TurnFn; push: (event: AgentEvent) => void; fail: (error: Error) => void; close: () => void } => {
+const crankedTurn = (): { turnFn: TurnStarter["stream"]; push: (event: AgentEvent) => void; fail: (error: Error) => void; close: () => void } => {
     const buffer: (AgentEvent | Error | typeof CLOSE)[] = [];
     const CLOSE = Symbol(`close`);
     let wake: (() => void) | undefined;
@@ -41,12 +50,15 @@ const crankedTurn = (): { turnFn: TurnFn; push: (event: AgentEvent) => void; fai
     };
 };
 
-const turn = (conversationId: string): AgentTurn & { conversationId: string } => ({ prompt: `do the thing`, conversationId });
+const turn = (conversationId: string): TurnInput & { conversationId: string } => ({ prompt: `do the thing`, conversationId });
 const opening = () => [{ role: `user` as const, text: `do the thing`, sentAt: 1 }];
 
 // Attach and drain: the head, then everything until the run finishes.
-const collect = async (conversationId: string): Promise<{ head: AttachHead; entries: AttachEntry[] }> => {
-    const { head, entries } = turnRunOf(conversationId)!.attach();
+const collect = async (
+    conversationId: string,
+    conversations: typeof deps.conversations = deps.conversations,
+): Promise<{ head: AttachHead; entries: AttachEntry[] }> => {
+    const { head, entries } = turnRunOf(conversations, conversationId)!.attach();
     const drained: AttachEntry[] = [];
     for await (const entry of entries) {
         drained.push(entry);
@@ -57,7 +69,7 @@ const collect = async (conversationId: string): Promise<{ head: AttachHead; entr
 describe(`turn runs`, () => {
     it(`opens with the turn's rows, streams changes to them and facts about it with 1-based seqs, and settles at the turn's end`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const run = startTurnRun(turnFn, turn(`c-live`), { opening })!;
+        const run = startTurnRun(deps, turnFn, turn(`c-live`), { opening })!;
         // Every row the run emits says which run it is, so a client redrawing it knows where it already sits.
         expect(run.rows).toEqual([{ role: `user`, text: `do the thing`, sentAt: 1, run: run.id }]);
 
@@ -89,11 +101,11 @@ describe(`turn runs`, () => {
 
     it(`hands a late attach the rows so far and the facts, then only what follows`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const run = startTurnRun(turnFn, turn(`c-replay`), { opening })!;
+        const run = startTurnRun(deps, turnFn, turn(`c-replay`), { opening })!;
         push({ kind: `session`, sessionId: `s1` });
         push({ kind: `delta`, text: `a` });
         push({ kind: `delta`, text: `b` });
-        await waitFor(() => expect(turnRunOf(`c-replay`)!.rows[1]?.text).toBe(`ab`));
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-replay`)!.rows[1]?.text).toBe(`ab`));
 
         const followed = collect(`c-replay`);
         push({ kind: `delta`, text: `c` });
@@ -112,11 +124,11 @@ describe(`turn runs`, () => {
 
     it(`serves several concurrent followers: each gets every change from its own head on`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        startTurnRun(turnFn, turn(`c-multi`), { opening });
+        startTurnRun(deps, turnFn, turn(`c-multi`), { opening });
 
         const first = collect(`c-multi`);
         push({ kind: `delta`, text: `a` });
-        await waitFor(() => expect(turnRunOf(`c-multi`)!.rows).toHaveLength(2));
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-multi`)!.rows).toHaveLength(2));
         const second = collect(`c-multi`);
         push({ kind: `delta`, text: `b` });
         close();
@@ -129,7 +141,7 @@ describe(`turn runs`, () => {
 
     it(`hands its raw frames to a listener from the moment it subscribes`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const run = startTurnRun(turnFn, turn(`c-frames`))!;
+        const run = startTurnRun(deps, turnFn, turn(`c-frames`))!;
         const frames: AgentEvent[] = [];
         const listening = (async () => {
             for await (const event of run.frames()) {
@@ -145,7 +157,7 @@ describe(`turn runs`, () => {
 
     it(`exposes a settlement barrier that does not resolve on an intermediate frame`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const run = startTurnRun(turnFn, turn(`c-wait`))!;
+        const run = startTurnRun(deps, turnFn, turn(`c-wait`))!;
         let settled = false;
         const waiting = run.waitUntilFinished().then(() => {
             settled = true;
@@ -162,42 +174,50 @@ describe(`turn runs`, () => {
 
     it(`refuses a second start while the run is live, allows one after it settles`, async () => {
         const { turnFn, close } = crankedTurn();
-        const first = startTurnRun(turnFn, turn(`c-busy`))!;
-        expect(startTurnRun(turnFn, turn(`c-busy`))).toBeUndefined();
+        const first = startTurnRun(deps, turnFn, turn(`c-busy`))!;
+        expect(startTurnRun(deps, turnFn, turn(`c-busy`))).toBeUndefined();
 
         close();
         await waitFor(() => expect(first.done).toBe(true));
         const { turnFn: nextTurnFn, close: closeNext } = crankedTurn();
-        const second = startTurnRun(nextTurnFn, turn(`c-busy`))!;
+        const second = startTurnRun(deps, nextTurnFn, turn(`c-busy`))!;
         expect(second.id).not.toBe(first.id);
-        expect(turnRunOf(`c-busy`)!.id).toBe(second.id);
+        expect(turnRunOf(deps.conversations, `c-busy`)!.id).toBe(second.id);
         closeNext();
     });
 
     it(`folds a thrown turn into a failure line and an abort into a stop`, async () => {
         const { turnFn, fail } = crankedTurn();
-        startTurnRun(turnFn, turn(`c-throw`), { opening });
+        startTurnRun(deps, turnFn, turn(`c-throw`), { opening });
         fail(new Error(`adapter exploded`));
-        await waitFor(() => expect(turnRunOf(`c-throw`)!.done).toBe(true));
-        expect(turnRunOf(`c-throw`)!.rows.at(-1)).toEqual({ role: `notice`, text: `adapter exploded`, run: turnRunOf(`c-throw`)!.id });
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-throw`)!.done).toBe(true));
+        expect(turnRunOf(deps.conversations, `c-throw`)!.rows.at(-1)).toEqual({
+            role: `notice`,
+            text: `adapter exploded`,
+            run: turnRunOf(deps.conversations, `c-throw`)!.id,
+        });
         expect((await collect(`c-throw`)).entries).toEqual([{ kind: `fact`, seq: 2, fact: { kind: `error`, message: `adapter exploded` } }]);
 
         const { turnFn: abortFn, fail: abort } = crankedTurn();
-        startTurnRun(abortFn, turn(`c-abort`), { opening });
+        startTurnRun(deps, abortFn, turn(`c-abort`), { opening });
         abort(new DOMException(`aborted`, `AbortError`) as unknown as Error);
-        await waitFor(() => expect(turnRunOf(`c-abort`)!.done).toBe(true));
-        expect(turnRunOf(`c-abort`)!.rows.at(-1)).toEqual({ role: `notice`, text: `Stopped.`, run: turnRunOf(`c-abort`)!.id });
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-abort`)!.done).toBe(true));
+        expect(turnRunOf(deps.conversations, `c-abort`)!.rows.at(-1)).toEqual({
+            role: `notice`,
+            text: `Stopped.`,
+            run: turnRunOf(deps.conversations, `c-abort`)!.id,
+        });
         expect((await collect(`c-abort`)).entries).toEqual([]);
     });
 
     it(`freezes a card the stop caught pending, before the stop's own line`, async () => {
         const { turnFn, push, fail } = crankedTurn();
-        startTurnRun(turnFn, turn(`c-park-stop`), { opening });
+        startTurnRun(deps, turnFn, turn(`c-park-stop`), { opening });
         push({ kind: `question`, requestId: `q1`, questions: [] });
-        await waitFor(() => expect(turnRunOf(`c-park-stop`)!.rows).toHaveLength(2));
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-park-stop`)!.rows).toHaveLength(2));
         fail(new DOMException(`aborted`, `AbortError`) as unknown as Error);
-        await waitFor(() => expect(turnRunOf(`c-park-stop`)!.done).toBe(true));
-        const parkStop = turnRunOf(`c-park-stop`)!;
+        await waitFor(() => expect(turnRunOf(deps.conversations, `c-park-stop`)!.done).toBe(true));
+        const parkStop = turnRunOf(deps.conversations, `c-park-stop`)!;
         expect(parkStop.rows.slice(1)).toEqual([
             { role: `assistant`, text: ``, question: { requestId: `q1`, questions: [], status: `cancelled` }, run: parkStop.id },
             { role: `notice`, text: `Stopped.`, run: parkStop.id },
@@ -206,7 +226,7 @@ describe(`turn runs`, () => {
 
     it(`takes a note the daemon writes, as a row every follower sees`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const run = startTurnRun(turnFn, turn(`c-note`), { opening })!;
+        const run = startTurnRun(deps, turnFn, turn(`c-note`), { opening })!;
         const followed = collect(`c-note`);
         push({ kind: `plan`, requestId: `p1`, text: `the plan` });
         await waitFor(() => expect(run.rows).toHaveLength(2));
@@ -230,7 +250,7 @@ describe(`turn runs`, () => {
 
     it(`keeps one transcript per helper, out of the same frames`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const run = startTurnRun(turnFn, turn(`c-child`), { opening })!;
+        const run = startTurnRun(deps, turnFn, turn(`c-child`), { opening })!;
         push({ kind: `tool_call`, id: `task-1`, name: `Agent`, category: `other`, status: `in_progress` });
         push({ kind: `delta`, text: `child prose`, parentToolUseId: `task-1` });
         close();
@@ -243,14 +263,14 @@ describe(`turn runs`, () => {
         jest.useFakeTimers();
         try {
             const { turnFn, close } = crankedTurn();
-            startTurnRun(turnFn, turn(`c-retain`));
+            startTurnRun(deps, turnFn, turn(`c-retain`));
             close();
-            await waitFor(() => expect(turnRunOf(`c-retain`)!.done).toBe(true));
+            await waitFor(() => expect(turnRunOf(deps.conversations, `c-retain`)!.done).toBe(true));
 
             jest.advanceTimersByTime(45_000);
-            expect(turnRunOf(`c-retain`)).toEqual(expect.any(Object));
+            expect(turnRunOf(deps.conversations, `c-retain`)).toEqual(expect.any(Object));
             jest.advanceTimersByTime(20_000);
-            expect(turnRunOf(`c-retain`)).toBeUndefined();
+            expect(turnRunOf(deps.conversations, `c-retain`)).toBeUndefined();
         } finally {
             jest.useRealTimers();
         }
@@ -263,6 +283,7 @@ describe(`turn runs`, () => {
         });
         let invoked = false;
         const run = startTurnRun(
+            deps,
             async function* () {
                 invoked = true;
                 yield { kind: `done` };
@@ -281,7 +302,7 @@ describe(`turn runs`, () => {
     it(`hands the settled rows and the steered positions to the transcript sink`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const transcript = mock(async () => true);
-        const run = startTurnRun(turnFn, turn(`c-sink`), { opening, transcript })!;
+        const run = startTurnRun(deps, turnFn, turn(`c-sink`), { opening, transcript })!;
         push({ kind: `delta`, text: `a` });
         push({ kind: `steer`, text: `and`, sentAt: 2 });
         close();
@@ -303,7 +324,7 @@ describe(`turn runs`, () => {
     it(`writes no record for a turn that was refused before it ran`, async () => {
         const { turnFn, push, close } = crankedTurn();
         const transcript = mock(async () => true);
-        const run = startTurnRun(turnFn, turn(`c-unrun`), { opening, transcript })!;
+        const run = startTurnRun(deps, turnFn, turn(`c-unrun`), { opening, transcript })!;
         push({ kind: `error`, code: `sandbox-memory-low`, message: `Not enough sandbox memory to start this turn.` });
         close();
 
@@ -322,7 +343,7 @@ describe(`turn runs`, () => {
             const { turnFn, push, close } = crankedTurn();
             const transcript = mock(async () => true);
             const held: { conversationId: string; run: string }[] = [];
-            const run = startTurnRun(turnFn, turn(`c-kept`), {
+            const run = startTurnRun(deps, turnFn, turn(`c-kept`), {
                 opening,
                 transcript,
                 holdTurnedAway: ({ input, run: refused }) => void held.push({ conversationId: input.conversationId, run: refused }),
@@ -343,7 +364,7 @@ describe(`turn runs`, () => {
 
             // A refusal after the turn had spoken ended a turn that happened: there is nothing to hold for a press.
             const spoke = crankedTurn();
-            const late = startTurnRun(spoke.turnFn, turn(`c-spoke`), {
+            const late = startTurnRun(deps, spoke.turnFn, turn(`c-spoke`), {
                 opening,
                 holdTurnedAway: ({ input }) => void held.push({ conversationId: input.conversationId, run: `` }),
             })!;
@@ -355,55 +376,65 @@ describe(`turn runs`, () => {
         });
     });
 
-    // Fake journal with slow, ordered writes, to prove recordTurn/clearTurn never race however slow the writes are.
-    // writeMs > clearMs mirrors a real disk: an unserialized clear would otherwise outrun a slower write.
-    const fakeJournal = (writeMs = 20, clearMs = 1) => {
-        const calls: string[] = [];
-        const after = async (ms: number, label: string): Promise<void> => {
-            await new Promise((resolve) => setTimeout(resolve, ms));
-            calls.push(label);
-        };
-        return {
-            calls,
+    // A fleet whose journal rows are recorded as they are written, over the real store on an in-memory database, and
+    // the turn body as streamAgent opens one: `begin` claims the conversation before any frame goes out.
+    const journalledFleet = (putTurn: (entry: JournalledTurn) => void = () => undefined) => {
+        const store = fleetStoreOver(openConversationsDb(IN_MEMORY));
+        const writes: string[] = [];
+        const entries: JournalledTurn[] = [];
+        const fleet = memoryFleet({
+            ...store,
             journal: {
-                list: async () => [],
-                recordTurn: (entry: JournalEntry & { kind: "turn" }) =>
-                    after(writeMs, entry.sessionId === undefined ? `record` : `record:${entry.sessionId}`),
-                recordFire: async () => undefined,
-                clearTurn: (conversationId: string) => after(clearMs, `clear:${conversationId}`),
-                clearFire: async () => undefined,
+                putTurn: (entry) => {
+                    putTurn(entry);
+                    store.journal.putTurn(entry);
+                    entries.push(entry);
+                    writes.push(entry.sessionId === undefined ? `record` : `record:${entry.sessionId}`);
+                },
+                deleteTurn: (conversationId) => {
+                    store.journal.deleteTurn(conversationId);
+                    writes.push(`clear:${conversationId}`);
+                },
             },
-        };
+        });
+        const journalDeps = { conversations: fleet.conversations, events: createDomainEvents(() => {}) };
+        const beginning =
+            (body: TurnStarter["stream"]): TurnStarter["stream"] =>
+            async function* (input, signal) {
+                const conversationId = input.conversationId ?? ``;
+                await fleet.conversations.send(conversationId, { kind: `begin`, turn: { conversationId, isolated: false, prompt: input.prompt, profile: {} } }).settled;
+                yield* body(input, signal);
+                await fleet.conversations.send(conversationId, { kind: `settle` }).settled;
+            };
+        return { store, writes, entries, journalDeps, beginning, conversations: fleet.conversations };
     };
 
-    it(`journals the in-flight turn, folds in its session, and clears LAST however slow the writes are`, async () => {
+    it(`journals the in-flight turn with the entry that opens it, folds in its session, and clears it last`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const { calls, journal } = fakeJournal();
-        startTurnRun(turnFn, turn(`c-journal`), { journal });
+        const { writes, journalDeps, beginning, conversations } = journalledFleet();
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-journal`), { journalled: true });
 
         push({ kind: `session`, sessionId: `sess-7` });
         push({ kind: `done` });
         close();
-        await waitFor(() => expect(turnRunOf(`c-journal`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(conversations, `c-journal`)!.done).toBe(true));
 
-        await waitFor(() => expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]));
-        await new Promise((resolve) => setTimeout(resolve, 60));
-        expect(calls).toEqual([`record`, `record:sess-7`, `clear:c-journal`]);
+        await waitFor(() => expect(writes).toEqual([`record`, `record:sess-7`, `clear:c-journal`]));
     });
 
     it(`clears the entry for a FAILED turn too: only a turn nobody saw the end of deserves resuming`, async () => {
         const { turnFn, fail } = crankedTurn();
-        const { calls, journal } = fakeJournal();
-        startTurnRun(turnFn, turn(`c-journal-fail`), { journal });
+        const { writes, journalDeps, beginning, conversations } = journalledFleet();
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-journal-fail`), { journalled: true });
         fail(new Error(`adapter exploded`));
-        await waitFor(() => expect(turnRunOf(`c-journal-fail`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(conversations, `c-journal-fail`)!.done).toBe(true));
 
-        await waitFor(() => expect(calls).toEqual([`record`, `clear:c-journal-fail`]));
+        await waitFor(() => expect(writes).toEqual([`record`, `clear:c-journal-fail`]));
     });
 
     it(`does not clear the recovery journal until the transcript append has committed`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const { calls, journal } = fakeJournal();
+        const { writes, journalDeps, beginning } = journalledFleet();
         let commit!: () => void;
         const transcript = mock(
             () =>
@@ -411,29 +442,20 @@ describe(`turn runs`, () => {
                     commit = () => resolve(true);
                 }),
         );
-        startTurnRun(turnFn, turn(`c-transcript-commit`), { journal, transcript });
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-transcript-commit`), { journalled: true, transcript });
         push({ kind: `done` });
         close();
 
         await waitFor(() => expect(transcript).toHaveBeenCalledTimes(1));
-        await waitFor(() => expect(calls).toEqual([`record`]));
+        expect(writes).toEqual([`record`]);
         commit();
-        await waitFor(() => expect(calls).toEqual([`record`, `clear:c-transcript-commit`]));
+        await waitFor(() => expect(writes).toEqual([`record`, `clear:c-transcript-commit`]));
     });
 
     it(`journals a raised card, keeps the session beside it, and takes the card back off when it resolves`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const entries: (JournalEntry & { kind: "turn" })[] = [];
-        const journal = {
-            list: async () => [],
-            recordTurn: async (entry: JournalEntry & { kind: "turn" }) => {
-                entries.push(entry);
-            },
-            recordFire: async () => undefined,
-            clearTurn: async () => undefined,
-            clearFire: async () => undefined,
-        };
-        startTurnRun(turnFn, turn(`c-parked`), { journal });
+        const { entries, journalDeps, beginning, conversations } = journalledFleet();
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-parked`), { journalled: true });
 
         push({ kind: `session`, sessionId: `sess-3` });
         push({ kind: `plan`, requestId: `r-plan`, text: `the plan` });
@@ -444,11 +466,11 @@ describe(`turn runs`, () => {
         push({ kind: `resolved`, requestId: `r-plan` });
         push({ kind: `done` });
         close();
-        await waitFor(() => expect(turnRunOf(`c-parked`)!.done).toBe(true));
+        await waitFor(() => expect(turnRunOf(conversations, `c-parked`)!.done).toBe(true));
 
         const parked = entries.map((entry) => ({ session: entry.sessionId, cards: (entry.parked ?? []).map((card) => card.requestId) }));
         expect(parked).toEqual([
-            { session: undefined, cards: [] }, // opening write
+            { session: undefined, cards: [] }, // opening write, with the entry
             { session: `sess-3`, cards: [] },
             { session: `sess-3`, cards: [`r-plan`] },
             { session: `sess-3`, cards: [`r-plan`, `r-q`] },
@@ -456,28 +478,37 @@ describe(`turn runs`, () => {
         ]);
     });
 
-    it(`a journal that throws cannot break the turn`, async () => {
+    it(`a journal rewrite that throws cannot break the turn`, async () => {
         const { turnFn, push, close } = crankedTurn();
-        const broken = {
-            list: async () => [],
-            recordTurn: () => Promise.reject(new Error(`disk full`)),
-            recordFire: () => Promise.reject(new Error(`disk full`)),
-            clearTurn: () => Promise.reject(new Error(`disk full`)),
-            clearFire: () => Promise.reject(new Error(`disk full`)),
-        };
-        startTurnRun(turnFn, turn(`c-journal-broken`), { journal: broken });
+        const { journalDeps, beginning } = journalledFleet((entry) => {
+            if (entry.sessionId !== undefined) {
+                throw new Error(`disk full`);
+            }
+        });
+        startTurnRun(journalDeps, beginning(turnFn), turn(`c-journal-broken`), { journalled: true });
 
-        const followed = collect(`c-journal-broken`);
+        const followed = collect(`c-journal-broken`, journalDeps.conversations);
         push({ kind: `session`, sessionId: `sess-9` });
         push({ kind: `done` });
         close();
         expect((await followed).entries).toEqual([{ kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `sess-9` } }]);
     });
 
+    it(`a turn that never began writes no journal row, and leaves none held for the next begin`, async () => {
+        const { turnFn, close } = crankedTurn();
+        const { writes, journalDeps, conversations } = journalledFleet();
+        startTurnRun(journalDeps, turnFn, turn(`c-never`), { journalled: true });
+        close();
+        await waitFor(() => expect(turnRunOf(conversations, `c-never`)!.done).toBe(true));
+
+        await conversations.send(`c-never`, { kind: `begin`, turn: { conversationId: `c-never`, isolated: false, prompt: `later`, profile: {} } }).settled;
+        expect(writes).toEqual([]);
+    });
+
     it(`caches each provider's published commands so a conversation that hasn't run a turn can read them`, async () => {
         resetCommands();
         const { turnFn, push, close } = crankedTurn();
-        startTurnRun(turnFn, { ...turn(`c-commands`), agent: `kimi` });
+        startTurnRun(deps, turnFn, { ...turn(`c-commands`), agent: `kimi` });
 
         const followed = collect(`c-commands`);
         push({ kind: `commands`, items: [{ name: `review`, description: `Review a PR` }] });
@@ -495,10 +526,10 @@ describe(`turn runs`, () => {
 
 describe(`the settle notice`, () => {
     it(`carries the turn's actor, its failure and its last words`, async () => {
-        const heard: TurnSettled[] = [];
-        const stop = onTurnSettled((settled) => heard.push(settled));
+        const heard: DomainEventMap["run.settled"][] = [];
+        const stop = deps.events.subscribe("run.settled", (settled) => heard.push(settled));
         const { turnFn, push, close } = crankedTurn();
-        startTurnRun(turnFn, { ...turn(`c-settle`), actor: `agent:parent-1` } as AgentTurn & { conversationId: string }, { opening });
+        startTurnRun(deps, turnFn, { ...turn(`c-settle`), actor: `agent:parent-1` }, { opening });
         push({ kind: `delta`, text: `first thought` });
         push({ kind: `text_end` });
         push({ kind: `delta`, text: `Ported all 12 tests.` });

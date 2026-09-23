@@ -1,3 +1,4 @@
+import { sandboxRef } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import type { Router } from "vue-router";
 import { chatFullDock } from "../../../shell/window/dockSlots";
@@ -27,8 +28,9 @@ export const chatParked = computed(() => floating.shows.value && chatOnRail.valu
 // What it turns on is the pane's own turns — never a second transcript.
 export const chatBarPeek = ref(false);
 
-// Last in-shell route before the chat, to return to; not router.back(), since history can start on /chat.
-export const lastSectionPath = ref(`/agents`);
+// Last in-shell route before the chat, to return to; not router.back(), since history can start on /chat. It names one
+// sandbox's file or agent, so a switch starts it over.
+export const lastSectionPath = sandboxRef(() => `/agents`);
 
 // Single source of truth for every dock/undock control. Docking to rail also navigates there; from floating it docks
 // first. Docking to the side only navigates away from the section the column replaces.

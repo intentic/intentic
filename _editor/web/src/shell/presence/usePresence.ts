@@ -1,6 +1,7 @@
 import type { MemberRole, PresenceUser } from "@intentic/sandbox-contract";
-import { computed, ref } from "vue";
-import { sandboxRequest } from "../../features/sandbox/client/sandboxClient";
+import { sandboxRef } from "@intentic/extension-api";
+import { computed } from "vue";
+import { sandboxRpc } from "../../features/sandbox/client/sandboxRpc";
 import { useAuth } from "../../features/auth/useAuth";
 
 // Live presence: who else is on the active sandbox and what they're doing. Module-level singleton with two
@@ -9,9 +10,9 @@ import { useAuth } from "../../features/auth/useAuth";
 
 const { user } = useAuth();
 
-// Roster (inbound).
+// Roster (inbound). The daemon it came from's own: the incoming sandbox's stream repaints it on connect.
 
-const users = ref<readonly PresenceUser[]>([]);
+const users = sandboxRef<readonly PresenceUser[]>(() => []);
 
 // One other member of the sandbox, aggregated across their open tabs.
 export interface PresenceMember {
@@ -78,7 +79,8 @@ export const presenceActivity = (member: PresenceMember): string => {
     return `Online`;
 };
 
-export const resetPresence = (): void => {
+// Clears the roster while the stream is down, where nobody's presence can be vouched for.
+export const clearPresence = (): void => {
     users.value = [];
 };
 
@@ -100,12 +102,13 @@ const send = (): void => {
         if (clientId === undefined) {
             return;
         }
-        const body = JSON.stringify({ clientId, ...report });
+        const presence = { clientId, ...report };
+        const body = JSON.stringify(presence);
         if (body === lastSent) {
             return;
         }
         lastSent = body;
-        void sandboxRequest(`/system/presence`, { method: `POST`, headers: { "content-type": `application/json` }, body }).catch(() => undefined);
+        void sandboxRpc.system.presence(presence).catch(() => undefined);
     }, DEBOUNCE_MS);
 };
 

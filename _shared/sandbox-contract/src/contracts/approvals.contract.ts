@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { ApprovalIdParamSchema, ApprovalsListSchema, ApprovalSummarySchema } from "../schemas/approvals.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -7,7 +7,7 @@ import { OkSchema } from "../schemas/shared.js";
 // edit / reschedule / retry (all a plain re-post with a field changed, like the automations enabled toggle),
 // `remove` is reject. The verbs are the same whatever the kind, which is the point of one queue.
 export const approvalsContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/approvals",
@@ -16,7 +16,7 @@ export const approvalsContract = {
                 "Everything an agent has prepared and would like to do: posts to publish, actions to carry out. Nothing here has happened yet.",
         })
         .output(ApprovalsListSchema),
-    upsert: oc
+    upsert: procedure
         .route({
             method: "POST",
             path: "/approvals",
@@ -25,7 +25,7 @@ export const approvalsContract = {
         })
         .input(ApprovalSummarySchema)
         .output(OkSchema),
-    remove: oc
+    remove: procedure
         .route({
             method: "DELETE",
             path: "/approvals/{id}",

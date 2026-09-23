@@ -2,7 +2,7 @@ import type { ChoreLedgerEntry, ProbeId, ProbeResult } from "@intentic/sandbox-c
 import { ChoreLedgerEntrySchema, ProbeResultSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
-import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { stateRelPath } from "../state-paths.js";
 
 // Persists two files under .intentic/records/chores/: a probe cache and a ledger of actions. In .intentic, not a repo,
 // since both are point-in-time evidence shared with isolated turns. One file each, not per-repo, since the rail badge

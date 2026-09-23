@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import sharp, { type ResizeOptions } from "sharp";
-import { statePath } from "../layout/state-paths.js";
+import { statePath } from "../../state-paths.js";
 
 // A picture re-encoded for the way it is drawn, rather than moved as the file it is. Reading originals moved a gigabyte
 // for a folder of screenshots and took seconds per picture on a slow link. Rendered once per version and kept on disk,

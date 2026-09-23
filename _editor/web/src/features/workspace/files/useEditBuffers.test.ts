@@ -1,11 +1,12 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { describe, it, expect, afterEach } from "bun:test";
-import { resetEditBuffers, useEditBuffers } from "./useEditBuffers";
+import { dropEditBuffers, useEditBuffers } from "./useEditBuffers";
 
 // The contract FileViewer's non-destructive re-read relies on: after a save, baseline == on-disk text, so the
 // file-watch echo of the user's OWN write reconciles to a no-op (no flicker, no false "changed on disk"), while a
 // genuine external edit (different bytes) is still detectable.
 describe(`useEditBuffers`, () => {
-    afterEach(() => resetEditBuffers());
+    afterEach(() => resetSandboxScope());
 
     it(`baselineOf returns the last-known-on-disk text, and a save makes it equal the saved value`, () => {
         const edit = useEditBuffers();
@@ -46,5 +47,29 @@ describe(`useEditBuffers`, () => {
 
     it(`baselineOf is undefined for an unopened path`, () => {
         expect(useEditBuffers().baselineOf(`never.ts`)).toBeUndefined();
+    });
+
+    // A path names a file in one sandbox's /work; the next sandbox's file at the same path is another file.
+    it(`a sandbox switch leaves no buffer behind, unsaved edits included`, () => {
+        const edit = useEditBuffers();
+        edit.setBaseline(`d.ts`, `disk\n`);
+        edit.setBuffer(`d.ts`, `edited\n`);
+
+        resetSandboxScope();
+
+        expect(edit.bufferOf(`d.ts`)).toBeUndefined();
+        expect(edit.baselineOf(`d.ts`)).toBeUndefined();
+        expect([...edit.dirtyPaths.value]).toEqual([]);
+    });
+
+    it(`dropping the buffers forgets every path at once, as a moved worktree needs`, () => {
+        const edit = useEditBuffers();
+        edit.setBaseline(`e.ts`, `one\n`);
+        edit.setBuffer(`f.ts`, `two\n`);
+
+        dropEditBuffers();
+
+        expect(edit.bufferOf(`e.ts`)).toBeUndefined();
+        expect(edit.bufferOf(`f.ts`)).toBeUndefined();
     });
 });

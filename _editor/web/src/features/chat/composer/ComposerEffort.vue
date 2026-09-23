@@ -17,7 +17,7 @@ const {
     labelClass?: string;
 }>();
 
-const { provider, model, thinking, effort, capabilities, auto } = conversation;
+const { provider, model, thinking, effort, capabilities, auto } = conversation.selection;
 
 // Nothing to offer when the runtime takes no effort at all (an ACP agent owns its own reasoning settings, and
 // OpenCode drops the field entirely), and nothing while Auto is armed: that ladder is the FALLBACK model's, and the
@@ -33,6 +33,6 @@ const efforts = computed(() =>
         :effort="effort"
         :disabled="disabled"
         :label-class="labelClass"
-        @pick="(level: string) => conversation.setEffort(level)"
+        @pick="(level: string) => conversation.selection.apply({ kind: `setEffort`, effort: level })"
     />
 </template>

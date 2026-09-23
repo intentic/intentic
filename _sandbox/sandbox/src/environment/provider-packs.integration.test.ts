@@ -9,6 +9,7 @@ import { fileCursorStore } from "../runtimes/cursor/cursor-credentials.js";
 import { createLogger } from "../logger.js";
 import { packFragment } from "./packs.js";
 import { providerPackFragments } from "./provider-packs.js";
+import { PROVIDER_MODULES } from "../runtimes/runtime-table.js";
 
 /* The provider-side fragment source: a pack rides the overlay exactly when its provider is CONNECTED. */
 
@@ -16,6 +17,8 @@ const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot:
 
 const services = (openaiApiKey: string, xai: boolean, authRoot: string): Services =>
     unstubbed<Services>("services", {
+        // The real module list: which packs a connected provider wants is each module's own answer.
+        providerModules: PROVIDER_MODULES,
         config: unstubbed<Services["config"]>("config", { openaiApiKey }),
         authRoot,
         openCode: unstubbed<Services["openCode"]>("openCode", { connected: async () => xai }),

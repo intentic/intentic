@@ -6,16 +6,21 @@ import { test, expect, afterEach, jest, mock } from "bun:test";
 import { stubEnv, unstubAllEnvs, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, runAgent } from "./agent.js";
+import { mcpConfigOffArgv, mergeHooks, type OauthRecoveryOptions, type HarnessRequest, runAgent } from "./agent.js";
 import type { AgentQuery, QueryFn } from "./sdk-stream.js";
-import { resolveRequest } from "../tools/agent-requests.js";
 import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { noteSubagentTask, resetSubagents } from "../subagents/subagents.js";
 import { backgroundJobOf, openBackgroundJob, settledBackgroundJobs } from "../tools/background-jobs.js";
 import { EDIT_TOOLS } from "../../rules/edit-tools.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
 mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }) }));
+
+// One fleet's actors for every turn here: the cards a turn parks, the children and commands it starts.
+const actors = memoryFleet().conversations;
+const cards = parkedCards(actors);
 
 // Fake QueryFn yielding canned SDK messages; runAgent reads only the fields exercised here.
 const fakeQuery = (...messages: unknown[]): QueryFn =>
@@ -43,9 +48,9 @@ const proseBlock = (text: string, sessionId?: string): SDKMessage[] => [
     } as SDKMessage,
 ];
 
-const collect = async (request: Parameters<typeof runAgent>[0], queryFn: QueryFn, usageFetch?: typeof fetch): Promise<AgentEvent[]> => {
+const collect = async (request: Parameters<typeof runAgent>[1], queryFn: QueryFn, usageFetch?: typeof fetch): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
-    for await (const event of runAgent(request, queryFn, usageFetch)) {
+    for await (const event of runAgent(actors, request, queryFn, usageFetch)) {
         events.push(event);
     }
     return events;
@@ -53,11 +58,13 @@ const collect = async (request: Parameters<typeof runAgent>[0], queryFn: QueryFn
 
 // browserOutputDir present is a browser-carrying turn; its absence is the core-image signal that strips browser
 // guidance.
-const request = {
-    prompt: "add a /ping route",
-    cwd: WORKSPACE_ROOT,
+const request: HarnessRequest = {
+    spec: { prompt: "add a /ping route", cwd: WORKSPACE_ROOT },
+    policy: {},
+    tools: { browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser` },
+    credential: { kind: "container" },
+    hooks: { cards },
     signal: new AbortController().signal,
-    browserOutputDir: `${WORKSPACE_ROOT}/${STATE_DIR}/records/artifacts/browser`,
 };
 
 // Forces the pre-tmux event shape: bash routing depends on whether the image bakes in the tmux wrapper
@@ -246,7 +253,7 @@ test("the SDK env always marks the sandbox and carries the per-turn oauth token 
     };
 
     // IS_SANDBOX is always set so the CLI accepts --dangerously-skip-permissions under root.
-    await collect({ ...request, oauthToken: "tok-xyz" }, capture);
+    await collect({ ...request, credential: { kind: "claude-oauth", token: "tok-xyz" } }, capture);
     expect(captured.at(-1)?.env?.["IS_SANDBOX"]).toBe("1");
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBe("tok-xyz");
 
@@ -271,12 +278,12 @@ test("the delegation ceilings reach the CLI only where the turn names one", asyn
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"));
 
     // Each ceiling is independent: raising one must not add env vars for the other two.
-    await collect({ ...request, subagentsAtOnce: 50 }, capture);
+    await collect({ ...request, policy: { ...request.policy, subagentsAtOnce: 50 } }, capture);
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBe("50");
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"));
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe(ambient("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"));
 
-    await collect({ ...request, subagentsAtOnce: 40, subagentsPerTurn: 500, subagentDepth: 5 }, capture);
+    await collect({ ...request, policy: { ...request.policy, subagentsAtOnce: 40, subagentsPerTurn: 500, subagentDepth: 5 } }, capture);
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS"]).toBe("40");
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION"]).toBe("500");
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH"]).toBe("5");
@@ -309,12 +316,12 @@ test("a native Claude turn hands the SDK a way to re-mint its token mid-turn", a
     };
 
     const refreshOauthToken = async (): Promise<string> => "tok-2";
-    await collect({ ...request, oauthToken: "tok-1", refreshOauthToken }, capture);
+    await collect({ ...request, credential: { kind: "claude-oauth", token: "tok-1", refresh: refreshOauthToken } }, capture);
     expect(await captured.at(-1)?.getOAuthToken?.({ signal: new AbortController().signal })).toBe("tok-2");
 
     // A routed turn and the container-env fallback have no refresh token to re-mint, so neither gets a getOAuthToken
     // callback.
-    await collect({ ...request, baseUrl: "http://127.0.0.1:8788", authToken: "router-key", refreshOauthToken }, capture);
+    await collect({ ...request, credential: { kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "router-key" } }, capture);
     expect(captured.at(-1)?.getOAuthToken).toBeUndefined();
 
     await collect(request, capture);
@@ -328,8 +335,15 @@ test("a custom endpoint points the SDK at ANTHROPIC_BASE_URL and withholds the s
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    // baseUrl always wins over oauthToken: the Anthropic subscription token must never reach a foreign endpoint.
-    await collect({ ...request, baseUrl: "http://127.0.0.1:8788", authToken: "router-key", oauthToken: "tok-xyz", model: "gpt-5-codex" }, capture);
+    // A routed credential carries no subscription token to leak: the Anthropic token can never reach a foreign endpoint.
+    await collect(
+        {
+            ...request,
+            spec: { ...request.spec, model: "gpt-5-codex" },
+            credential: { kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "router-key" },
+        },
+        capture,
+    );
     expect(captured.at(-1)?.env?.["ANTHROPIC_BASE_URL"]).toBe("http://127.0.0.1:8788");
     expect(captured.at(-1)?.env?.["ANTHROPIC_AUTH_TOKEN"]).toBe("router-key");
     expect(captured.at(-1)?.env?.["CLAUDE_CODE_OAUTH_TOKEN"]).toBeUndefined();
@@ -353,17 +367,17 @@ test("a request with no mode runs Intentic's prompt, and each mode reaches the S
     expect(intentic).toContain("TaskCreate");
     expect(intentic).toContain("mcp__web__browser_take_screenshot");
 
-    await collect({ ...request, systemPromptMode: "claude" }, capture);
+    await collect({ ...request, spec: { ...request.spec, systemPromptMode: "claude" } }, capture);
     const preset = captured.at(-1)?.systemPrompt as { type: string; preset: string; append: string };
     expect(preset).toMatchObject({ type: "preset", preset: "claude_code" });
     expect(preset.append).toContain("AskUserQuestion");
 
-    await collect({ ...request, systemPromptMode: "claude", systemAppend: "## Delegating\nUse codex exec." }, capture);
+    await collect({ ...request, spec: { ...request.spec, systemPromptMode: "claude", systemAppend: "## Delegating\nUse codex exec." } }, capture);
     const withAppend = captured.at(-1)?.systemPrompt as { append: string };
     expect(withAppend.append).toBe(`${preset.append}\n\n## Delegating\nUse codex exec.`);
 
     // A custom prompt replaces the harness prompt entirely (sent as a bare string), not merely prefixes it.
-    await collect({ ...request, systemPromptMode: "custom", systemPrompt: "You are a release-notes writer." }, capture);
+    await collect({ ...request, spec: { ...request.spec, systemPromptMode: "custom", systemPrompt: "You are a release-notes writer." } }, capture);
     expect(captured.at(-1)?.systemPrompt).toBe("You are a release-notes writer.");
 });
 
@@ -417,7 +431,7 @@ test("the code server rides the jsExecution field: present with a plan, absent w
     expect(captured.at(-1)?.mcpServers?.["code"]).toBeUndefined();
 
     const jsExecution = { cwd: WORKSPACE_ROOT, env: {}, readRoots: [WORKSPACE_ROOT], writeRoots: [WORKSPACE_ROOT], allowSpawn: true };
-    await collect({ ...request, jsExecution }, capture);
+    await collect({ ...request, tools: { ...request.tools, jsExecution } }, capture);
     expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("code");
 });
 
@@ -430,11 +444,14 @@ test("the request's tools become remote http MCP servers alongside the ui server
     const obs = { type: "http" as const, url: "https://signoz.example.com/mcp", headers: { Authorization: "Bearer tok" } };
     const tools = [{ name: "obs", url: "https://signoz.example.com/mcp", token: "tok" }];
 
-    await collect({ ...request, tools }, capture);
+    await collect({ ...request, tools: { ...request.tools, remote: tools } }, capture);
     expect(captured.at(-1)?.mcpServers?.["obs"]).toEqual(obs);
     expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("ui");
 
-    await collect({ ...request, permissionMode: "plan" as const, tools }, capture);
+    await collect(
+        { ...request, policy: { ...request.policy, permissionMode: "plan" as const }, tools: { ...request.tools, remote: tools } },
+        capture,
+    );
     expect(captured.at(-1)?.mcpServers?.["obs"]).toEqual(obs);
     expect(Object.keys(captured.at(-1)?.mcpServers ?? {})).toContain("ui");
     expect(captured.at(-1)?.permissionMode).toBe("plan");
@@ -450,7 +467,7 @@ test("plugin checkout dirs are passed to the SDK as local plugins", async () => 
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    await collect({ ...request, plugins: [`${WORKSPACE_ROOT}/${STATE_DIR}/records/plugins/x`] }, capture);
+    await collect({ ...request, tools: { ...request.tools, plugins: [`${WORKSPACE_ROOT}/${STATE_DIR}/records/plugins/x`] } }, capture);
     expect(captured.at(-1)?.plugins).toEqual([{ type: "local", path: "/work/.intentic/records/plugins/x" }]);
 
     await collect(request, capture);
@@ -462,7 +479,7 @@ test("plugin checkout dirs are passed to the SDK as local plugins", async () => 
 type DecidableCard = Extract<AgentEvent, { kind: "permission" | "plan" }>;
 
 const decide = async (
-    turn: Parameters<typeof runAgent>[0],
+    turn: Parameters<typeof runAgent>[1],
     call: { tool: string; input?: Record<string, unknown>; suggestions?: PermissionUpdate[]; prose?: string },
     answer: (event: DecidableCard) => AgentReply,
 ): Promise<{ result: PermissionResult; card: DecidableCard; frames: AgentEvent[] }> => {
@@ -482,11 +499,11 @@ const decide = async (
         result = await gate(call.tool, call.input ?? {}, { signal: turn.signal, suggestions: call.suggestions } as never);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    for await (const event of runAgent(turn, query)) {
+    for await (const event of runAgent(actors, turn, query)) {
         frames.push(event);
         if (event.kind === "permission" || event.kind === "plan") {
             card = event;
-            resolveRequest(answer(event));
+            cards.resolve(answer(event));
         }
     }
     return { result: result!, card: card!, frames };
@@ -500,7 +517,7 @@ test("'always' grants the whole tool for the session, alongside whatever the SDK
         destination: "localSettings",
     };
     const { result, card } = await decide(
-        { ...request, permissionMode: "default" },
+        { ...request, policy: { ...request.policy, permissionMode: "default" } },
         { tool: "Bash", input: { command: "pnpm install" }, suggestions: [suggestion] },
         (event) => ({ kind: "permission", requestId: event.requestId, decision: "always" }),
     );
@@ -516,11 +533,15 @@ test("'always' grants the whole tool for the session, alongside whatever the SDK
 });
 
 test("a card with no SDK suggestions still offers 'always', and 'once' persists nothing", async () => {
-    const { result, card } = await decide({ ...request, permissionMode: "default" }, { tool: "WebFetch" }, (event) => ({
-        kind: "permission",
-        requestId: event.requestId,
-        decision: "once",
-    }));
+    const { result, card } = await decide(
+        { ...request, policy: { ...request.policy, permissionMode: "default" } },
+        { tool: "WebFetch" },
+        (event) => ({
+            kind: "permission",
+            requestId: event.requestId,
+            decision: "once",
+        }),
+    );
 
     expect(card).toMatchObject({ alwaysLabel: "Don't ask again for WebFetch" });
     expect(result).toEqual({ behavior: "allow", updatedInput: {}, decisionClassification: "user_temporary" });
@@ -529,11 +550,15 @@ test("a card with no SDK suggestions still offers 'always', and 'once' persists 
 test("a decided card is recorded in the frame log, so a replay freezes it instead of re-offering it", async () => {
     // The frame log is what a reload replays; a decided card missing from it comes back live, with buttons on a
     // requestId the daemon no longer holds.
-    const { card, frames } = await decide({ ...request, permissionMode: "default" }, { tool: "WebFetch" }, (event) => ({
-        kind: "permission",
-        requestId: event.requestId,
-        decision: "once",
-    }));
+    const { card, frames } = await decide(
+        { ...request, policy: { ...request.policy, permissionMode: "default" } },
+        { tool: "WebFetch" },
+        (event) => ({
+            kind: "permission",
+            requestId: event.requestId,
+            decision: "once",
+        }),
+    );
 
     expect(frames.filter((frame) => frame.kind === "resolved")).toEqual([
         { kind: "resolved", requestId: card.requestId, reply: { kind: "permission", requestId: card.requestId, decision: "once" } },
@@ -548,7 +573,11 @@ test("an approved plan executes with permissions bypassed, whatever the turn pla
     // Approving a plan always executes with permissions bypassed, whatever mode the turn planned from; the container is
     // the isolation boundary either way.
     for (const permissionMode of PermissionModeSchema.options) {
-        const { result, frames } = await decide({ ...request, permissionMode }, { tool: "ExitPlanMode", prose: "# Plan" }, approve);
+        const { result, frames } = await decide(
+            { ...request, policy: { ...request.policy, permissionMode } },
+            { tool: "ExitPlanMode", prose: "# Plan" },
+            approve,
+        );
         expect(result).toMatchObject({ updatedPermissions: [{ type: "setMode", mode: "bypassPermissions", destination: "session" }] });
         // The mode frame tells the composer's pill the turn is no longer planning.
         expect(frames).toContainEqual({ kind: "mode", mode: "bypassPermissions" });
@@ -557,11 +586,15 @@ test("an approved plan executes with permissions bypassed, whatever the turn pla
 
 test("ExitPlanMode uses the adjacent prose as its plan because the current SDK call has no plan input", async () => {
     const plan = "# Make rollback quiet\n\n- Collapse the recovery controls.\n- Keep updates prominent.";
-    const { card } = await decide({ ...request, permissionMode: "plan" }, { tool: "ExitPlanMode", prose: plan }, (event) => ({
-        kind: "plan",
-        requestId: event.requestId,
-        approve: true,
-    }));
+    const { card } = await decide(
+        { ...request, policy: { ...request.policy, permissionMode: "plan" } },
+        { tool: "ExitPlanMode", prose: plan },
+        (event) => ({
+            kind: "plan",
+            requestId: event.requestId,
+            approve: true,
+        }),
+    );
 
     expect(card).toMatchObject({ kind: "plan", text: plan });
 });
@@ -569,7 +602,7 @@ test("ExitPlanMode uses the adjacent prose as its plan because the current SDK c
 test("ExitPlanMode refuses to raise an empty approval card", async () => {
     // `null` matches the SDK's own canUseTool return type, as widened by the `decide` helper above.
     let result: PermissionResult | null | undefined;
-    const frames = await collect({ ...request, permissionMode: "plan" }, async function* (args) {
+    const frames = await collect({ ...request, policy: { ...request.policy, permissionMode: "plan" } }, async function* (args) {
         result = await args.options.canUseTool!("ExitPlanMode", {}, { signal: request.signal } as never);
         yield { type: "result", subtype: "success" } as SDKMessage;
     });
@@ -584,7 +617,7 @@ test("ExitPlanMode refuses to raise an empty approval card", async () => {
 /* Drives the gate with nothing to answer, since these turns must ask nothing. A card raised anyway is denied rather
  * than left hanging, so a regression fails the assertion instead of parking the test until it times out. */
 const gated = async (
-    turn: Parameters<typeof runAgent>[0],
+    turn: Parameters<typeof runAgent>[1],
     calls: (gate: NonNullable<Options["canUseTool"]>) => Promise<void>,
     // What the CLI streams before those calls; a mode the CLI moves itself to arrives this way and no other.
     stream: SDKMessage[] = [],
@@ -595,10 +628,10 @@ const gated = async (
         await calls(args.options.canUseTool!);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    for await (const event of runAgent(turn, query)) {
+    for await (const event of runAgent(actors, turn, query)) {
         frames.push(event);
         if (event.kind === "permission") {
-            resolveRequest({ kind: "permission", requestId: event.requestId, decision: "deny" });
+            cards.resolve({ kind: "permission", requestId: event.requestId, decision: "deny" });
         }
     }
     return frames;
@@ -608,7 +641,7 @@ const asked = (frames: AgentEvent[]): AgentEvent[] => frames.filter((frame) => f
 
 test("a planning turn runs what it reaches for without asking anybody", async () => {
     let bash: PermissionResult | null | undefined;
-    const frames = await gated({ ...request, permissionMode: "plan" }, async (gate) => {
+    const frames = await gated({ ...request, policy: { ...request.policy, permissionMode: "plan" } }, async (gate) => {
         bash = await gate("Bash", { command: "git log -5" }, { signal: request.signal } as never);
     });
 
@@ -619,7 +652,7 @@ test("a planning turn runs what it reaches for without asking anybody", async ()
 
 test("a planning turn's write is refused to the model rather than raised at the user", async () => {
     let edit: PermissionResult | null | undefined;
-    const frames = await gated({ ...request, permissionMode: "plan" }, async (gate) => {
+    const frames = await gated({ ...request, policy: { ...request.policy, permissionMode: "plan" } }, async (gate) => {
         edit = await gate("Edit", { file_path: "src/app.ts" }, { signal: request.signal } as never);
     });
 
@@ -631,7 +664,7 @@ test("a planning turn's write is refused to the model rather than raised at the 
 test("the agent entering plan mode mid-turn puts the rest of the turn on the planning posture", async () => {
     const decisions: (PermissionResult | null)[] = [];
     // Starts in the mode that asks per tool: without the posture following the agent, the Bash call raises a card.
-    const frames = await gated({ ...request, permissionMode: "default" }, async (gate) => {
+    const frames = await gated({ ...request, policy: { ...request.policy, permissionMode: "default" } }, async (gate) => {
         decisions.push(await gate("EnterPlanMode", {}, { signal: request.signal } as never));
         decisions.push(await gate("Bash", { command: "rg todo" }, { signal: request.signal } as never));
         decisions.push(await gate("Write", { file_path: "src/new.ts" }, { signal: request.signal } as never));
@@ -654,7 +687,7 @@ test("a session the CLI moves into plan mode stops asking, though the gate was n
     const frames = await gated(
         // Launched on the mode that asks nothing, which is how the CLI comes to gate tools at all: it only started
         // consulting canUseTool because the session itself moved to plan.
-        { ...request, permissionMode: "bypassPermissions" },
+        { ...request, policy: { ...request.policy, permissionMode: "bypassPermissions" } },
         async (gate) => {
             decisions.push(await gate("Bash", { command: "rg todo" }, { signal: request.signal } as never));
             decisions.push(await gate("Write", { file_path: "src/new.ts" }, { signal: request.signal } as never));
@@ -672,7 +705,7 @@ test("a session the CLI moves into plan mode stops asking, though the gate was n
 test("Manual is the only posture that raises a card: the sandbox is the boundary in the others", async () => {
     const carded: PermissionMode[] = [];
     for (const permissionMode of PermissionModeSchema.options) {
-        const frames = await gated({ ...request, permissionMode }, async (gate) => {
+        const frames = await gated({ ...request, policy: { ...request.policy, permissionMode } }, async (gate) => {
             await gate("Bash", { command: "pnpm install" }, { signal: request.signal } as never);
         });
         if (asked(frames).length > 0) {
@@ -694,10 +727,13 @@ test("an approved plan rebases the branch and announces it to the transcript alo
     const { frames } = await decide(
         {
             ...request,
-            steering,
-            resync: async () => {
-                calls += 1;
-                return parkedSync;
+            spec: { ...request.spec, steering },
+            hooks: {
+                ...request.hooks,
+                resync: async () => {
+                    calls += 1;
+                    return parkedSync;
+                },
             },
         },
         { tool: "ExitPlanMode", prose: "# Plan" },
@@ -721,9 +757,12 @@ test("a rejected plan leaves the branch alone", async () => {
     await decide(
         {
             ...request,
-            resync: async () => {
-                calls += 1;
-                return parkedSync;
+            hooks: {
+                ...request.hooks,
+                resync: async () => {
+                    calls += 1;
+                    return parkedSync;
+                },
             },
         },
         { tool: "ExitPlanMode", prose: "# Plan" },
@@ -737,11 +776,15 @@ test("a rejected plan leaves the branch alone", async () => {
 test("an approved plan on a current branch says nothing", async () => {
     withoutTmux();
     const steering = new SteeringQueue();
-    const { frames } = await decide({ ...request, steering, resync: async () => undefined }, { tool: "ExitPlanMode", prose: "# Plan" }, (event) => ({
-        kind: "plan",
-        requestId: event.requestId,
-        approve: true,
-    }));
+    const { frames } = await decide(
+        { ...request, spec: { ...request.spec, steering }, hooks: { ...request.hooks, resync: async () => undefined } },
+        { tool: "ExitPlanMode", prose: "# Plan" },
+        (event) => ({
+            kind: "plan",
+            requestId: event.requestId,
+            approve: true,
+        }),
+    );
 
     expect(frames.some((frame) => frame.kind === "worktree")).toBe(false);
     expect(steering.delivered).toBe(0);
@@ -751,22 +794,25 @@ test("an approved plan on a current branch says nothing", async () => {
 // into the commit, so the rebase waits until it settles.
 test("a subagent still running holds the rebase off", async () => {
     withoutTmux();
-    resetSubagents();
+    resetSubagents(actors);
     const conversationId = "c-parked";
     let calls = 0;
     noteSubagentTask(
-        { conversationId, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+        { conversationId, conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
         { subtype: "task_started", task_id: "task-park", tool_use_id: "agent-1", description: "port the tests", subagent_type: "general-purpose" },
     );
 
     await decide(
         {
             ...request,
-            conversationId,
-            permissionMode: "bypassPermissions" as const,
-            resync: async () => {
-                calls += 1;
-                return parkedSync;
+            spec: { ...request.spec, conversationId },
+            policy: { ...request.policy, permissionMode: "bypassPermissions" as const },
+            hooks: {
+                ...request.hooks,
+                resync: async () => {
+                    calls += 1;
+                    return parkedSync;
+                },
             },
         },
         { tool: "ExitPlanMode", prose: "# Plan" },
@@ -776,17 +822,20 @@ test("a subagent still running holds the rebase off", async () => {
     expect(calls).toBe(0);
     // Once the subagent settles, the same approval takes the rebase it skipped before.
     noteSubagentTask(
-        { conversationId, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
+        { conversationId, conversations: actors, cwd: WORKSPACE_ROOT, sessionId: undefined, subagentsDir: undefined },
         { subtype: "task_updated", task_id: "task-park", patch: { status: "completed" } },
     );
     await decide(
         {
             ...request,
-            conversationId,
-            permissionMode: "bypassPermissions" as const,
-            resync: async () => {
-                calls += 1;
-                return parkedSync;
+            spec: { ...request.spec, conversationId },
+            policy: { ...request.policy, permissionMode: "bypassPermissions" as const },
+            hooks: {
+                ...request.hooks,
+                resync: async () => {
+                    calls += 1;
+                    return parkedSync;
+                },
             },
         },
         { tool: "ExitPlanMode", prose: "# Plan" },
@@ -802,9 +851,12 @@ test("a plan approval survives a sync that fails", async () => {
     const { result } = await decide(
         {
             ...request,
-            permissionMode: "bypassPermissions" as const,
-            resync: async () => {
-                throw new Error("git exploded");
+            policy: { ...request.policy, permissionMode: "bypassPermissions" as const },
+            hooks: {
+                ...request.hooks,
+                resync: async () => {
+                    throw new Error("git exploded");
+                },
             },
         },
         { tool: "ExitPlanMode", prose: "# Plan" },
@@ -822,10 +874,13 @@ test("a permission answer never moves the branch", async () => {
     await decide(
         {
             ...request,
-            permissionMode: "default" as const,
-            resync: async () => {
-                calls += 1;
-                return parkedSync;
+            policy: { ...request.policy, permissionMode: "default" as const },
+            hooks: {
+                ...request.hooks,
+                resync: async () => {
+                    calls += 1;
+                    return parkedSync;
+                },
             },
         },
         { tool: "Bash", input: { command: "pnpm test" } },
@@ -1042,7 +1097,7 @@ test("a retry storm short of the bound is still absorbed in place: the turn keep
 
 test("a free-trial retry ends immediately with trial-specific recovery instead of starting a long provider wait", async () => {
     const events = await collect(
-        { ...request, trial: true },
+        { ...request, credential: { kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" } },
         fakeQuery(
             {
                 type: "system",
@@ -1067,7 +1122,7 @@ test("a free-trial retry ends immediately with trial-specific recovery instead o
 
 test("a free-trial rate limit names the trial allowance and never Claude", async () => {
     const events = await collect(
-        { ...request, trial: true },
+        { ...request, credential: { kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" } },
         fakeQuery({
             type: "system",
             subtype: "api_retry",
@@ -1091,7 +1146,7 @@ test("a free-trial rate limit names the trial allowance and never Claude", async
 test("a deterministic free-trial model refusal keeps the upstream detail and suggests another model", async () => {
     const explained = `API Error: 400 This model only supports the Interactions API`;
     const events = await collect(
-        { ...request, trial: true },
+        { ...request, credential: { kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" } },
         fakeQuery({ type: "assistant", session_id: "s", error: "unknown", message: { content: [{ type: "text", text: explained }] } }),
     );
 
@@ -1156,9 +1211,14 @@ test("a routed usage-limit retry names the vendor that refused and takes its res
         const events = await collect(
             {
                 ...request,
-                allowance: {
-                    vendor,
-                    limit: async () => ({ pool, spent, withHeadroom: 0, reopensAt }),
+                credential: {
+                    kind: "routed",
+                    baseUrl: "http://127.0.0.1:8788",
+                    authToken: "local",
+                    allowance: {
+                        vendor,
+                        limit: async () => ({ pool, spent, withHeadroom: 0, reopensAt }),
+                    },
                 },
             },
             fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
@@ -1182,7 +1242,15 @@ test("a routed refusal with an account still holding headroom reads as a cooldow
     const spent = 30;
     const headroom = 1;
     const events = await collect(
-        { ...request, allowance: { vendor, limit: async () => ({ pool, spent, withHeadroom: headroom }) } },
+        {
+            ...request,
+            credential: {
+                kind: "routed",
+                baseUrl: "http://127.0.0.1:8788",
+                authToken: "local",
+                allowance: { vendor, limit: async () => ({ pool, spent, withHeadroom: headroom }) },
+            },
+        },
         fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
     );
     const failure = events.find((event) => event.kind === "error") as { message: string; code: string } | undefined;
@@ -1198,7 +1266,15 @@ test("a routed refusal with an account still holding headroom reads as a cooldow
 // retry into a still-closed window.
 test("a routed usage-limit retry with no quota reading on file carries no reset at all", async () => {
     const events = await collect(
-        { ...request, allowance: { vendor: "Google", limit: async () => ({ pool: "Claude and GPT models", spent: 0, withHeadroom: 0 }) } },
+        {
+            ...request,
+            credential: {
+                kind: "routed",
+                baseUrl: "http://127.0.0.1:8788",
+                authToken: "local",
+                allowance: { vendor: "Google", limit: async () => ({ pool: "Claude and GPT models", spent: 0, withHeadroom: 0 }) },
+            },
+        },
         fakeQuery({ ...retryFrame, retry_delay_ms: 620, error: "rate_limit" }),
     );
     expect(events).toEqual([
@@ -1217,9 +1293,14 @@ test("a routed refusal takes the translator's own reset_seconds over the recorde
         const events = await collect(
             {
                 ...request,
-                allowance: {
-                    vendor: "Google",
-                    limit: async () => ({ pool: "Claude and GPT models", spent: 31, withHeadroom: 0, reopensAt: 9_999_999 }),
+                credential: {
+                    kind: "routed",
+                    baseUrl: "http://127.0.0.1:8788",
+                    authToken: "local",
+                    allowance: {
+                        vendor: "Google",
+                        limit: async () => ({ pool: "Claude and GPT models", spent: 31, withHeadroom: 0, reopensAt: 9_999_999 }),
+                    },
                 },
             },
             fakeQuery({
@@ -1296,7 +1377,7 @@ test("a rate_limit_event with only a status omits the optional usage fields", as
 });
 
 // The turn ran on a stored account's OAuth token, so plan limits are readable at settle.
-const oauthRequest = { ...request, oauthToken: "oat-1" };
+const oauthRequest: HarnessRequest = { ...request, credential: { kind: "claude-oauth", token: "oat-1" } };
 // Fakes the OAuth usage endpoint; the daemon reads it directly since the CLI reports rate limits only for a profile it
 // signed in itself.
 const usageEndpoint = (body: unknown, ok = true): typeof fetch =>
@@ -1507,7 +1588,7 @@ test("a steering queue switches the turn to streaming input: initial prompt, the
     };
     const steering = new SteeringQueue();
     steering.push("also check the tests");
-    await collect({ ...request, steering }, capture);
+    await collect({ ...request, spec: { ...request.spec, steering } }, capture);
     // runAgent closed the queue when the turn settled, so the input stream terminates after the steer.
     const messages: SDKUserMessage[] = [];
     for await (const message of captured as AsyncIterable<SDKUserMessage>) {
@@ -1523,7 +1604,7 @@ test("a steered stream survives each turn's result: the queued message's own tur
     const steering = new SteeringQueue();
     steering.push("and 2+6?");
     const events = await collect(
-        { ...request, steering },
+        { ...request, spec: { ...request.spec, steering } },
         fakeQuery(
             { type: "stream_event", session_id: "s", event: { type: "content_block_delta", delta: { type: "text_delta", text: "5" } } },
             { type: "result", subtype: "success", total_cost_usd: 0.1 },
@@ -1552,7 +1633,7 @@ test("after the last result a steered stream settles: the grace window closes th
             drained.push(String(message.message.content));
         }
     };
-    const events = await withoutTheGraceWait(() => collect({ ...request, steering }, sdkLike));
+    const events = await withoutTheGraceWait(() => collect({ ...request, spec: { ...request.spec, steering } }, sdkLike));
     expect(events).toEqual([{ kind: "done" }]);
     expect(drained).toEqual(["add a /ping route", "absorbed mid-turn"]);
     expect(steering.push("too late")).toBe(false);
@@ -1593,7 +1674,7 @@ const finishedJob = (
     conversationId: string,
     toolUseId: string,
 ): { readonly id: string; readonly finish: () => void; readonly remove: () => void } => {
-    const job = openBackgroundJob({ conversationId, turn: {} }, { command: "pnpm build", session: "agent-x", toolUseId });
+    const job = openBackgroundJob({ conversationId, profile: {}, conversations: actors }, { command: "pnpm build", session: "agent-x", toolUseId });
     if (job === undefined) {
         throw new Error("the job dir could not be minted");
     }
@@ -1606,27 +1687,27 @@ const finishedJob = (
 
 test("a background command's completion notice read by a later request retires the job as seen", async () => {
     const job = finishedJob("c-bash-read", "tu-bash-read");
-    await collect({ ...request, conversationId: "c-bash-read" }, bashJobStream("tu-bash-read", "bsh-read", true));
-    expect(backgroundJobOf("c-bash-read", "bsh-read")?.id).toBe(job.id);
+    await collect({ ...request, spec: { ...request.spec, conversationId: "c-bash-read" } }, bashJobStream("tu-bash-read", "bsh-read", true));
+    expect(backgroundJobOf(actors, "c-bash-read", "bsh-read")?.id).toBe(job.id);
     job.finish();
-    expect(settledBackgroundJobs("c-bash-read")).toEqual({ running: [], unseen: [] });
+    expect(settledBackgroundJobs(actors, "c-bash-read")).toEqual({ running: [], unseen: [] });
     job.remove();
 });
 
 test("a background command whose notice arrived after the model's last request is still unseen", async () => {
     const job = finishedJob("c-bash-late", "tu-bash-late");
-    await collect({ ...request, conversationId: "c-bash-late" }, bashJobStream("tu-bash-late", "bsh-late", false));
+    await collect({ ...request, spec: { ...request.spec, conversationId: "c-bash-late" } }, bashJobStream("tu-bash-late", "bsh-late", false));
     job.finish();
-    expect(settledBackgroundJobs("c-bash-late").unseen.map((entry) => entry.id)).toEqual([job.id]);
+    expect(settledBackgroundJobs(actors, "c-bash-late").unseen.map((entry) => entry.id)).toEqual([job.id]);
     job.remove();
 });
 
 // A backgrounded child (task_type local_agent) keeps the stream open past the parent's first result until its wake
 // turn's frames arrive, instead of ending the stream and killing the child.
 test("a result with a backgrounded child in flight holds the stream open for the wake turn", async () => {
-    resetSubagents();
+    resetSubagents(actors);
     const events = await collect(
-        { ...request, conversationId: "c-hold" },
+        { ...request, spec: { ...request.spec, conversationId: "c-hold" } },
         fakeQuery(
             {
                 type: "system",
@@ -1674,9 +1755,9 @@ test("a result with a backgrounded child in flight holds the stream open for the
 
 // Neither is_backgrounded nor model rides a task_updated patch; both come off the Agent call's own input.
 test("the Agent call's run_in_background and model reach the frame that announces the child", async () => {
-    resetSubagents();
+    resetSubagents(actors);
     const events = await collect(
-        { ...request, conversationId: "c-bg" },
+        { ...request, spec: { ...request.spec, conversationId: "c-bg" } },
         fakeQuery(
             {
                 type: "assistant",
@@ -1718,7 +1799,7 @@ test("the Agent call's run_in_background and model reach the frame that announce
 // If every child settles with no wake turn inside the grace window, closing the input drains the stream, as with a
 // steered settle; the child's report still arrives first.
 test("children settled with no wake turn: the grace window closes the input so the stream drains", async () => {
-    resetSubagents();
+    resetSubagents(actors);
     const steering = new SteeringQueue();
     const drained: string[] = [];
     const sdkLike: QueryFn = async function* (args) {
@@ -1753,7 +1834,7 @@ test("children settled with no wake turn: the grace window closes the input so t
             drained.push(String(message.message.content));
         }
     };
-    const events = await withoutTheGraceWait(() => collect({ ...request, conversationId: "c-nowake", steering }, sdkLike));
+    const events = await withoutTheGraceWait(() => collect({ ...request, spec: { ...request.spec, conversationId: "c-nowake", steering } }, sdkLike));
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "subagent", id: "call-1", subagentKind: "subagent", agentType: "Explore", description: "audit chapter 4" },
@@ -1766,7 +1847,7 @@ test("children settled with no wake turn: the grace window closes the input so t
 
 // The CLI refuses a wake turn's first tool call ("The user doesn't want to take this action right now") once input closes.
 test("a wake turn slower than the grace window keeps its input open", async () => {
-    resetSubagents();
+    resetSubagents(actors);
     const steering = new SteeringQueue();
     const sdkLike: QueryFn = async function* (args) {
         const input = (args.prompt as AsyncIterable<SDKUserMessage>)[Symbol.asyncIterator]();
@@ -1792,7 +1873,9 @@ test("a wake turn slower than the grace window keeps its input open", async () =
         } as SDKMessage;
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    const events = await withoutTheGraceWait(() => collect({ ...request, conversationId: "c-slow-wake", steering }, sdkLike));
+    const events = await withoutTheGraceWait(() =>
+        collect({ ...request, spec: { ...request.spec, conversationId: "c-slow-wake", steering } }, sdkLike),
+    );
     expect(events).toContainEqual({ kind: "delta", text: "input open" });
 });
 
@@ -1856,7 +1939,7 @@ test("an instant empty result redelivers the prompt instead of ending the turn o
         }
     };
     const steering = new SteeringQueue();
-    const events = await withoutTheGraceWait(() => collect({ ...request, steering }, swallowing));
+    const events = await withoutTheGraceWait(() => collect({ ...request, spec: { ...request.spec, steering } }, swallowing));
     // The same words, delivered twice, and the empty result never reached the client: no zero-usage frame,
     // only the follow-up turn that actually answered.
     expect(drained).toEqual(["add a /ping route", "add a /ping route"]);
@@ -1881,7 +1964,7 @@ test("redelivery is once per turn: a second empty answer surfaces instead of loo
         }
     };
     const steering = new SteeringQueue();
-    const events = await withoutTheGraceWait(() => collect({ ...request, steering }, swallowingTwice));
+    const events = await withoutTheGraceWait(() => collect({ ...request, spec: { ...request.spec, steering } }, swallowingTwice));
     // One redelivery, not a loop, and the second empty answer is a different problem, so it is surfaced.
     expect(drained).toEqual(["add a /ping route", "add a /ping route"]);
     expect(events).toEqual([{ kind: "usage", inputTokens: 0, outputTokens: 0, numTurns: 0 }, { kind: "done" }]);
@@ -1905,7 +1988,7 @@ test("a local command's own num_turns-0 success is a real answer, not a swallowe
         }
     };
     const steering = new SteeringQueue();
-    const events = await collect({ ...request, steering }, localCommand);
+    const events = await collect({ ...request, spec: { ...request.spec, steering } }, localCommand);
     expect(drained).toEqual(["add a /ping route"]);
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
@@ -1929,7 +2012,7 @@ test("a thrown error from the SDK is reported as an error event, then done", asy
 });
 
 test("a thrown error from a free-trial SDK turn uses the refundable trial failure", async () => {
-    expect(await collect({ ...request, trial: true }, throwing)).toEqual([
+    expect(await collect({ ...request, credential: { kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" } }, throwing)).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "error", code: "trial-unavailable", message: expect.stringMatching(/failed messages|not counted|Free trial unavailable/i) },
         { kind: "done" },
@@ -2052,7 +2135,7 @@ test("fast speed is asked for per session, and only by the turn that wanted it",
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
 
-    await collect({ ...request, fast: true }, capture);
+    await collect({ ...request, spec: { ...request.spec, fast: true } }, capture);
     expect(captured.at(-1)?.settings).toMatchObject({ fastMode: true, fastModePerSessionOptIn: true });
 
     // Not `{fastMode: false}`: an absent ask must leave the lower-precedence settings layers alone.
@@ -2074,7 +2157,7 @@ test("the bundled CLI-only skills are hidden from the model on every turn, fast 
     await collect(request, capture);
     expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden });
 
-    await collect({ ...request, fast: true }, capture);
+    await collect({ ...request, spec: { ...request.spec, fast: true } }, capture);
     expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, fastMode: true, fastModePerSessionOptIn: true });
 });
 
@@ -2193,10 +2276,10 @@ const askAfterWriting = async (path: string, markdown: string, outcome: { is_err
         await askTool(args.options)({ questions: QUESTIONS });
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    for await (const event of runAgent(request, query)) {
+    for await (const event of runAgent(actors, request, query)) {
         frames.push(event);
         if (event.kind === "question") {
-            resolveRequest({ kind: "question", requestId: event.requestId, answers: { "How much of the fix?": ["All"] } });
+            cards.resolve({ kind: "question", requestId: event.requestId, answers: { "How much of the fix?": ["All"] } });
         }
     }
     return frames;
@@ -2247,10 +2330,10 @@ const planAfterWriting = async (markdown: string, plan: string | undefined, path
         await args.options.canUseTool!("ExitPlanMode", {}, { signal: request.signal } as never);
         yield { type: "result", subtype: "success" } as SDKMessage;
     };
-    for await (const event of runAgent(request, query)) {
+    for await (const event of runAgent(actors, request, query)) {
         frames.push(event);
         if (event.kind === "plan") {
-            resolveRequest({ kind: "plan", requestId: event.requestId, approve: true });
+            cards.resolve({ kind: "plan", requestId: event.requestId, approve: true });
         }
     }
     return frames;

@@ -2,13 +2,8 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { errorMessage } from "@intentic/base/errors";
 import type { BackendRouteHandler, ExtensionServerApi, ExtensionServerModule } from "@intentic/extension-api";
-import {
-    BACKEND_HOST_HEADER,
-    type BackendExtensionStatus,
-    type BackendDeviceConfig,
-    type BackendHostExtension,
-    EXTENSION_TOKEN_HEADER,
-} from "./backend-host-config.js";
+import { createDaemonApi } from "./backend-daemon.js";
+import { BACKEND_HOST_HEADER, type BackendExtensionStatus, type BackendDeviceConfig, type BackendHostExtension } from "./backend-host-config.js";
 
 // The backend host's whole runtime as a pure function of its config; testable without a spawn.
 // Runs in the child process: must not import the daemon's services, store, or logger; only stdout and /health talk
@@ -44,25 +39,7 @@ const loadOne = async (config: BackendDeviceConfig, extension: BackendHostExtens
                 mounted = handler;
             },
         },
-        daemon: {
-            request: (path, init) => {
-                const headers = new Headers(init?.headers);
-                headers.set(EXTENSION_TOKEN_HEADER, extension.daemonToken);
-                return fetch(`${config.daemonUrl}${path}`, { ...init, headers });
-            },
-            json: async <T>(path: string, init?: RequestInit): Promise<T> => {
-                const headers = new Headers(init?.headers);
-                headers.set(EXTENSION_TOKEN_HEADER, extension.daemonToken);
-                if (init?.body !== undefined && !headers.has("content-type")) {
-                    headers.set("content-type", "application/json");
-                }
-                const response = await fetch(`${config.daemonUrl}${path}`, { ...init, headers });
-                if (!response.ok) {
-                    throw new Error(`daemon answered ${response.status} for ${init?.method ?? "GET"} ${path}: ${await response.text()}`);
-                }
-                return (await response.json()) as T;
-            },
-        },
+        daemon: createDaemonApi(config.daemonUrl, extension),
     };
     try {
         const imported = (await import(pathToFileURL(join(extension.dir, extension.server)).href)) as Partial<ExtensionServerModule> & {

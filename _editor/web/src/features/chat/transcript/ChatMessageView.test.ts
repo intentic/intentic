@@ -35,8 +35,9 @@ const resume = hoisted(() => mock(async () => undefined));
 // The conversation's ask that the sandbox run a turn it kept, which is what a press on a sandbox-kept refusal is.
 const resendKept = hoisted(() => mock(async () => undefined));
 const beginEdit = hoisted(() => mock());
-// Hoisted rather than fresh per call, so a card's answer can be read back from the one the pane actually holds.
-const answerQuestion = hoisted(() => mock());
+// The one path every card's answer takes (CardReplies.reply); hoisted so a card's answer can be read back from the one
+// the pane actually holds.
+const reply = hoisted(() => mock(async () => true));
 // What useMarkdown hands the row under test (prose runs, figures); empty unless the test is about the answer body.
 const markdown = hoisted(() => ({
     parts: [] as { readonly kind: string; readonly html?: string; readonly figure?: { readonly kind: string } }[],
@@ -150,28 +151,26 @@ mock.module("../tools/ChatToolGroup.vue", () => ({ default: { render: () => unde
 mock.module("../panel/useChat-view", () => {
     const conversation = shallowRef({
         conversationId: `agent-1`,
-        providerRetry: ref(undefined),
-        resume,
-        resendKept,
-        turnStartedAt: {
-            get value(): number | undefined {
-                return clock.turnStartedAt;
+        turn: {
+            providerRetry: ref(undefined),
+            resume,
+            resendKept,
+            turnStartedAt: {
+                get value(): number | undefined {
+                    return clock.turnStartedAt;
+                },
             },
         },
+        // Nothing is ever in flight, so the card's buttons stay offered in every mount here.
+        requests: { reply, isReplying: () => false },
+        transcript: { beginEdit },
     });
     return {
         usePaneView: () => ({
             conversation,
-            decidePlan: mock(),
-            answerQuestion,
-            cancelQuestion: mock(),
-            decidePermission: mock(),
             streaming: computed(() => pane.streaming),
             awaitingDecision: ref(false),
-            // isDeciding always false, so the card's buttons stay offered in every mount here.
-            isDeciding: () => false,
             editing: computed(() => pane.editing),
-            beginEdit,
             messages: computed(() => pane.messages),
             queued: computed(() => pane.queued),
         }),
@@ -243,6 +242,7 @@ beforeEach(() => {
     pane.queued = [];
     resume.mockClear();
     resendKept.mockClear();
+    reply.mockClear();
     beginEdit.mockClear();
     resizers.length = 0;
 });
@@ -484,8 +484,9 @@ describe(`ChatMessageView question card`, () => {
 
         const submit = [...element.querySelectorAll<HTMLButtonElement>(`button`)].find((button) => button.textContent?.includes(`Submit`));
         submit?.click();
-        expect(answerQuestion).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }), {
-            "Which surfaces should the banner appear on?": [`Chat`, `Only the release notes page`],
+        expect(reply).toHaveBeenCalledWith(`req-multi`, {
+            kind: `question`,
+            answers: { "Which surfaces should the banner appear on?": [`Chat`, `Only the release notes page`] },
         });
     });
 
@@ -737,7 +738,7 @@ describe(`ChatMessageView sent time`, () => {
     });
 });
 
-// Edit pencil arms the composer against this message rather than committing anything (Conversation.editing); a click
+// Edit pencil arms the composer against this message rather than committing anything (TranscriptView.editing); a click
 // only arms it.
 describe(`ChatMessageView edit control`, () => {
     // Anchored (has a rewindIndex) and settled: the two conditions the edit control requires.

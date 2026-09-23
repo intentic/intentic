@@ -184,9 +184,10 @@ export interface IntenticApi {
     // The authenticated transport to the sandbox daemon; auth is injected host-side. Every door is gated
     // by the manifest's `permissions.sandbox` allowlist.
     readonly sandbox: {
-        // The daemon's contract, typed: a call names a procedure instead of a URL, checked at build time.
-        // Gated the same way as `request`/`json`, on the resolved method and path.
+        // The daemon's contract, typed: a call names a procedure, checked at build time, and its answer arrives parsed
+        // by the procedure's output schema. Gated like `request`/`json`, on the method and path the call resolves to.
         readonly rpc: ContractRouterClient<typeof sandboxContract>;
+        // For what the contract does not carry: bytes, uploads, and an extension's own `/x/<id>/` backend.
         request(path: string, init?: RequestInit): Promise<Response>;
         json<T>(path: string, init?: RequestInit): Promise<T>;
         // Reads through the host's cache from outside a component (e.g. a module-level badge timer);

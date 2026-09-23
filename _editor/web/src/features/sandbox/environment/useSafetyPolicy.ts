@@ -1,33 +1,26 @@
-import { type SafetyLogEntry, SafetyLogEntrySchema, type SafetyPolicy, SafetyPolicySchema } from "@intentic/api-contract";
+import type { SafetyLogEntry, SafetyPolicy } from "@intentic/api-contract";
 import { useMutation } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
-import { jsonBody } from "../client/jsonBody";
+import { rpcQuery } from "../client/rpcQuery";
+import { sandboxRpc } from "../client/sandboxRpc";
 import { queryClient } from "../../../lib/queryPersistence";
-import { SAFETY_LOG, SAFETY_POLICY } from "../../../lib/queryKeys";
+import { rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
-import { z } from "zod";
 
-// The safety policy (.intentic/config/safety.md) and its decision log, read and written via the daemon's /safety
+// The safety policy (.intentic/config/safety.md) and its decision log, read and written via the daemon's safety
 // routes. Kept out of useSandboxSettings on purpose: that composable optimistically patches a bag of flags, while this
 // is one prose document that wants an explicit save, not a write per keystroke.
 
-const POLICY_KEY = SAFETY_POLICY.of();
-const LOG_KEY = SAFETY_LOG.of();
-
 export function useSafetyPolicy() {
-    const { query, error } = useSandboxQuery({
-        queryKey: POLICY_KEY,
-        queryFn: async (): Promise<SafetyPolicy> => SafetyPolicySchema.parse(await sandboxJson(`/safety/policy`)),
-    });
+    const { query, error } = useSandboxQuery(rpcQuery(`safety.policy`));
 
     const save = useMutation(
         {
-            mutationFn: (text: string) => sandboxJson(`/safety/policy`, jsonBody(`POST`, { text })),
+            mutationFn: (text: string) => sandboxRpc.safety.setPolicy({ text }),
             // Reconciles from the daemon rather than writing optimistically: a save is an explicit act, not a toggle,
             // so there's no stale control to protect against.
             onSettled: async () => {
-                await queryClient.invalidateQueries({ queryKey: POLICY_KEY });
+                await queryClient.invalidateQueries({ queryKey: rpcKey(`safety.policy`) });
             },
         },
         queryClient,
@@ -50,9 +43,6 @@ export function useSafetyPolicy() {
 }
 
 export function useSafetyLog() {
-    const { query, error } = useSandboxQuery({
-        queryKey: LOG_KEY,
-        queryFn: async (): Promise<SafetyLogEntry[]> => z.array(SafetyLogEntrySchema).parse(await sandboxJson(`/safety/log`)),
-    });
+    const { query, error } = useSandboxQuery(rpcQuery(`safety.log`));
     return { entries: computed<SafetyLogEntry[]>(() => query.data.value ?? []), isLoading: query.isLoading, error };
 }

@@ -1,6 +1,5 @@
 import { FIRE_DAILY_MAX_DEFAULT } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import { presentedDoorToken } from "../auth/door-tokens.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
@@ -51,7 +50,7 @@ export const createAutomationFireRoute =
         }
         const payload = await c.req.text();
         // Webhook wakes surface like a Discord mention; origin has no author or channel since the sender is a system.
-        void fireAutomation(services, automation, streamAgent, {
+        void fireAutomation(services, automation, {
             ...(payload === "" ? {} : { payload }),
             origin: { automationId: automation.id, provider: "webhook" },
             title: `Webhook: ${automation.id}`,

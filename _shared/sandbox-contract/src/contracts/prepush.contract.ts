@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { z } from "zod";
 import { CommandRunSchema } from "../schemas/ci.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -28,7 +28,7 @@ export const PrepushRunSchema = z
 // tmux window, so watching it is the terminal's job. `cancel` kills that window; the run settles as `cancelled`
 // and the push it was gating does not go.
 export const prepushContract = {
-    state: oc
+    state: procedure
         .route({
             method: "GET",
             path: "/prepush/state",
@@ -37,7 +37,7 @@ export const prepushContract = {
                 "The verdict, or the progress so far. Nothing is addressed by id here, because there is one working tree and so exactly one check.",
         })
         .output(CommandRunSchema),
-    run: oc
+    run: procedure
         .route({
             method: "POST",
             path: "/prepush/run",
@@ -47,7 +47,7 @@ export const prepushContract = {
         })
         .input(PrepushRunSchema)
         .output(OkSchema),
-    cancel: oc
+    cancel: procedure
         .route({
             method: "POST",
             path: "/prepush/cancel",

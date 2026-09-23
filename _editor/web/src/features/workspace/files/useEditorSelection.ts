@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
 
 /* The live Monaco selection, as a module-level singleton (like useWorkspaceTabs): CodeView reports it, the chat composer's editor-context chip reads it. */
 
@@ -11,7 +11,8 @@ export interface EditorSelection {
     readonly text: string;
 }
 
-const current = ref<EditorSelection | undefined>();
+// A path in one sandbox's /work, so a switch empties the slot.
+const current = sandboxRef<EditorSelection | undefined>(() => undefined);
 
 const report = (selection: EditorSelection): void => {
     current.value = selection;

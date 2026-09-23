@@ -1,8 +1,7 @@
-import { type Rule, type RuleFirings, RuleFiringsSchema } from "@intentic/api-contract";
+import type { Rule, RuleFirings } from "@intentic/api-contract";
 import { computed } from "vue";
 import { NAMED_RULES } from "./rules";
-import { sandboxJson } from "../client/sandboxClient";
-import { RULE_FIRINGS } from "../../../lib/queryKeys";
+import { rpcQuery } from "../client/rpcQuery";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 import { useSandboxSettings } from "../overview/useSandboxSettings";
 
@@ -10,17 +9,12 @@ import { useSandboxSettings } from "../overview/useSandboxSettings";
 // the Agent tab are ordinary rules with well-known ids, so the toggle and the list can never disagree. Rules live in
 // the sandbox settings object, riding useSandboxSettings' read and write.
 
-const FIRINGS_KEY = RULE_FIRINGS.of();
-
 export function useRules() {
     const { settings, patch } = useSandboxSettings();
 
     // Its own read: a firing isn't an edit, and folding it into settings would turn every push into a write racing the
     // owner's own config.
-    const { query: firingsQuery } = useSandboxQuery({
-        queryKey: FIRINGS_KEY,
-        queryFn: async (): Promise<RuleFirings> => RuleFiringsSchema.parse(await sandboxJson(`/settings/rule-firings`)),
-    });
+    const { query: firingsQuery } = useSandboxQuery(rpcQuery(`settings.firings`));
 
     const rules = computed<Rule[]>(() => settings.value?.rules ?? []);
     const firings = computed<RuleFirings>(() => firingsQuery.data.value ?? {});

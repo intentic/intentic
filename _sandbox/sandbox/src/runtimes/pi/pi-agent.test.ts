@@ -2,11 +2,16 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { test, expect, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
-import type { AgentRequest } from "../../agent/run/agent.js";
-import { resolveRequest } from "../../agent/tools/agent-requests.js";
+import type { AgentRequest, ContainerCredential, TurnPolicy, TurnSpec } from "../../agent/providers/agent-request.js";
 import { SteeringQueue } from "../../agent/checkpoints/agent-steering.js";
-import { createPiAgent, type PiTimeouts } from "./pi-agent.js";
+import { createPiAgent } from "./pi-agent.js";
+import type { TurnTimeouts } from "../decorators/turn-watchdog.js";
 import type { PiEvent, PiProcessHandlers, PiResponse, PiSpawn } from "./pi-rpc.js";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // The Pi adapter over a scripted process (no spawn, no binary): a fake answers commands from a response table and
 // scripts what streams after each accepted prompt, exercising the adapter's real loop end to end.
@@ -89,11 +94,19 @@ const fakePi = (prompts: PiEvent[][] = [[{ type: "agent_settled" }]], responses:
     };
 };
 
-const request = (overrides: Partial<AgentRequest> = {}): AgentRequest => ({
-    prompt: "add a /ping route",
-    cwd: WORKSPACE_ROOT,
-    signal: new AbortController().signal,
-    ...overrides,
+const request = (
+    over: {
+        readonly spec?: Pick<TurnSpec, "sessionId" | "model" | "effort" | "steering">;
+        readonly policy?: Pick<TurnPolicy, "permissionMode">;
+        readonly signal?: AbortSignal;
+    } = {},
+): AgentRequest<ContainerCredential> => ({
+    spec: { prompt: "add a /ping route", cwd: WORKSPACE_ROOT, ...over.spec },
+    policy: { ...over.policy },
+    tools: {},
+    credential: { kind: "container" },
+    hooks: { cards },
+    signal: over.signal ?? new AbortController().signal,
 });
 
 const CONFIG = { command: "pi" };
@@ -109,7 +122,7 @@ const collect = async (
         events.push(event);
         if (event.kind === "plan" && onPlan !== undefined) {
             const decision = onPlan(event.requestId);
-            setTimeout(() => resolveRequest({ kind: "plan", requestId: event.requestId, ...decision }), 0);
+            setTimeout(() => cards.resolve({ kind: "plan", requestId: event.requestId, ...decision }), 0);
         }
     }
     return events;
@@ -146,11 +159,11 @@ test("a turn reports its session file, publishes commands, streams deltas, and s
 
 test("a resume loads the recorded session file; one Pi rejects is the coded self-heal", async () => {
     const pi = fakePi();
-    await collect(createPiAgent(pi.spawn)(CONFIG, request({ sessionId: SESSION_FILE })));
+    await collect(createPiAgent(pi.spawn)(CONFIG, request({ spec: { sessionId: SESSION_FILE } })));
     expect(pi.sent[0]).toMatchObject({ type: "switch_session", sessionPath: SESSION_FILE });
 
     const refusing = fakePi([], { switch_session: { success: false, error: "no such session" } });
-    const events = await collect(createPiAgent(refusing.spawn)(CONFIG, request({ sessionId: "/gone.jsonl" })));
+    const events = await collect(createPiAgent(refusing.spawn)(CONFIG, request({ spec: { sessionId: "/gone.jsonl" } })));
     expect(events).toEqual([
         { kind: "error", code: "session-not-found", message: "Pi no longer has this chat's session. Send again to start fresh." },
         { kind: "done" },
@@ -159,17 +172,17 @@ test("a resume loads the recorded session file; one Pi rejects is the coded self
 
 test("a deliberate model pin rides set_model as provider/model-id, and a rejected pin fails the turn honestly", async () => {
     const pi = fakePi();
-    await collect(createPiAgent(pi.spawn)(CONFIG, request({ model: "anthropic/claude-sonnet-5" })));
+    await collect(createPiAgent(pi.spawn)(CONFIG, request({ spec: { model: "anthropic/claude-sonnet-5" } })));
     expect(pi.sent).toContainEqual({ type: "set_model", provider: "anthropic", modelId: "claude-sonnet-5" });
 
     const refusing = fakePi([], { set_model: { success: false, error: "Model not found" } });
-    const events = await collect(createPiAgent(refusing.spawn)(CONFIG, request({ model: "anthropic/claude-nonexistent" })));
+    const events = await collect(createPiAgent(refusing.spawn)(CONFIG, request({ spec: { model: "anthropic/claude-nonexistent" } })));
     expect(events.map((event) => event.kind)).toEqual(["session", "error", "done"]);
 });
 
 test("effort rides set_thinking_level, and a tier the model lacks is tolerated rather than fatal", async () => {
     const pi = fakePi([[{ type: "agent_settled" }]], { set_thinking_level: { success: false, error: "not supported" } });
-    const events = await collect(createPiAgent(pi.spawn)(CONFIG, request({ effort: "high" })));
+    const events = await collect(createPiAgent(pi.spawn)(CONFIG, request({ spec: { effort: "high" } })));
     expect(pi.sent).toContainEqual({ type: "set_thinking_level", level: "high" });
     expect(events.some((event) => event.kind === "error")).toBe(false);
 });
@@ -184,7 +197,7 @@ test("steering messages are forwarded onto Pi's steer queue mid-turn", async () 
             return { success: true };
         },
     });
-    const turn = collect(createPiAgent(pi.spawn)(CONFIG, request({ steering })));
+    const turn = collect(createPiAgent(pi.spawn)(CONFIG, request({ spec: { steering } })));
     steering.push("also add a test");
     steering.close();
     await turn;
@@ -201,7 +214,7 @@ test("a steer Pi refuses (agent momentarily idle) is re-queued as a follow_up, n
             return { success: true };
         },
     });
-    const turn = collect(createPiAgent(pi.spawn)(CONFIG, request({ steering })));
+    const turn = collect(createPiAgent(pi.spawn)(CONFIG, request({ spec: { steering } })));
     steering.push("one more thing");
     steering.close();
     await turn;
@@ -213,7 +226,7 @@ test("plan mode holds the plan text back, parks on the plan card, and executes o
         [{ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "1. Add route\n2. Add test" } }, { type: "agent_settled" }],
         [{ type: "message_update", assistantMessageEvent: { type: "text_delta", delta: "Done." } }, { type: "agent_settled" }],
     ]);
-    const events = await collect(createPiAgent(pi.spawn)(CONFIG, request({ permissionMode: "plan" })), () => ({ approve: true }));
+    const events = await collect(createPiAgent(pi.spawn)(CONFIG, request({ policy: { permissionMode: "plan" } })), () => ({ approve: true }));
 
     const plan = events.find((event) => event.kind === "plan");
     expect(plan).toMatchObject({ text: "1. Add route\n2. Add test" });
@@ -257,7 +270,7 @@ test("a rejected prompt surfaces Pi's own reason", async () => {
 test("a silent agent trips the inactivity watchdog: the process is killed and the turn ends with an error", async () => {
     jest.useFakeTimers();
     try {
-        const timeouts: PiTimeouts = { inactivityMs: 50, maxTurnMs: 10_000 };
+        const timeouts: TurnTimeouts = { inactivityMs: 50, maxTurnMs: 10_000 };
         const pi = fakePi([[]]); // prompt accepted, then nothing — ever
         const turn = collect(createPiAgent(pi.spawn, timeouts)(CONFIG, request()));
         await advanceTimersByTimeAsync(200);

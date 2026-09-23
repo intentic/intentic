@@ -19,7 +19,7 @@ mock.module(`../sandbox/overview/activeSandbox`, () => ({
     activeSandboxId,
     sandboxKey: (...parts: unknown[]) => [...parts, activeSandboxId],
 }));
-mock.module(`../sandbox/client/sandboxClient`, () => ({ sandboxJson: mock(), sandboxRequestVia: mock() }));
+mock.module(`../sandbox/client/sandboxClient`, () => ({ sandboxJson: mock() }));
 mock.module(`../sandbox/client/useSandbox`, () => ({
     useSandbox: () => ({ reachable: ref(true), activeSandboxId }),
 }));
@@ -38,7 +38,6 @@ mock.module(`./terminalsQuery`, () => ({
     useTerminalsQuery: () => ({ sessions: ref([]), refetch: mock() }),
     addPendingTerminal: mock(),
     dropPendingTerminal: mock(),
-    clearPendingTerminals: mock(),
     listTerminals: mock(async () => []),
     refreshTerminals: mock(async () => undefined),
     removeTerminal: mock(),

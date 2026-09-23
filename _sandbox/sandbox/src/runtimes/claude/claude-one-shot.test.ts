@@ -15,8 +15,7 @@ mock.module("../../agent/providers/harness-credentials.js", async () => ({
     resolveHarnessCredentials: async () => ({ ok: true, credentials: {} }),
 }));
 
-// Loaded after the mocks, which the credential seam needs anyway: it is the edge back to the provider registry, and
-// entering the graph here rather than through the registry would leave claude-provider.js reading a half-built module.
+// Loaded after the mocks: mock.module binds at this point, and a static import would have evaluated the graph first.
 const { claudeOneShot } = await import("./claude-one-shot.js");
 
 const answering = (result: { readonly result: string; readonly is_error?: boolean }): void => {

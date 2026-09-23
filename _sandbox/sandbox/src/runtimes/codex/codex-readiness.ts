@@ -21,7 +21,7 @@ export type CodexReadiness =
           readonly code?: Extract<AgentEvent, { kind: "error" }>["code"];
       };
 
-export const codexReadiness = async (services: Services): Promise<CodexReadiness> => {
+export const codexReadiness = async (services: Pick<Services, "authRoot" | "cliProxy" | "config">): Promise<CodexReadiness> => {
     // Checked first: true for every credential path, and a core image carries the SDK but not the CLI it names.
     if ((await codexBinary()) === undefined) {
         return { ok: false, detail: CODEX_BINARY_MISSING };

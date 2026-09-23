@@ -14,7 +14,7 @@ import {
 import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { composeEnvironment, draftsDir } from "../environment/environment.js";
-import { repoGitDir } from "../history/history.js";
+import { repoGitDir } from "../workspace/layout/git-layout.js";
 import { isValidRepoId } from "../workspace/layout/repo-discovery.js";
 import { definitionDiff, deriveDefinition, emitDefinitionToml, parseDefinitionToml } from "./definition.js";
 import { adoptWorkspaceRemote, workspaceIsPristine, workspaceRemoteUrl } from "./workspace-repo.js";

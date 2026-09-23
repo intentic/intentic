@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { type RunnerSync, runnerGitUrl, runnerIncomingRef } from "@intentic/sandbox-contract";
 import type { AgentWorktrees } from "../agents/worktrees/worktrees.js";
-import { repoGitDir } from "../history/history.js";
+import { repoGitDir } from "../workspace/layout/git-layout.js";
 import type { RunnerIdentity } from "./runner-identity.js";
 
 // The runner's /work mirrors the parent's: fetched before a turn, pushed to refs/runner-incoming/<id> after. The token

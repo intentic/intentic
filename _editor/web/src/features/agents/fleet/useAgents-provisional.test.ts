@@ -1,5 +1,7 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The fleet store pulls useChat and the app shell at import time; these cut the edges that reach `window.env` (router,
 // analytics, sandbox client, diagnostics) without touching the merge under test. The same cuts as useAgents.test.ts.
@@ -7,12 +9,13 @@ mock.module("../../../router", () => ({ router: { push: mock() } }));
 mock.module("../../../app/analytics", () => ({ track: mock() }));
 mock.module("../../sandbox/client/useSandbox", () => ({ useSandbox: () => ({ activeSandboxId: ref<string | undefined>(undefined), reachable: ref(false) }) }));
 mock.module("../../sandbox/overview/activeSandbox", () => ({ sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`] }));
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
 mock.module("../../../app/clientDiagnostics", () => ({ reportClient: mock() }));
 
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { ref } from "vue";
-import { resetAgents, useAgents } from "./useAgents";
+import { useAgents } from "./useAgents";
 import { CEILING_MS, GRACE_MS, claim } from "./useAgents-provisional";
 import { setAgents } from "./useAgents-registry";
 
@@ -38,7 +41,7 @@ const laneOf = (id: string): string | undefined =>
     Object.entries(useAgents().lanes.value).find(([, cards]) => cards.some((agent) => agent.id === id))?.[0];
 
 beforeEach(() => {
-    resetAgents();
+    resetSandboxScope();
     rev = 0;
 });
 
@@ -187,7 +190,7 @@ describe("how a claim retires", () => {
         roster(card(`a1`, { status: `ready` }));
         claim(`a1`, undefined, `land`);
 
-        resetAgents();
+        resetSandboxScope();
         roster(card(`a1`, { status: `ready` }));
 
         expect(shown(`a1`)?.status).toBe(`ready`);

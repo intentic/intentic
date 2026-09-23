@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import { z } from "zod";
 import { listSubagentSessions, type SubagentWaitUntil } from "./subagents.js";
 import { waitForWork, workWaitAnswer } from "./work-wait.js";
-import { soleLiveConversation } from "../run/turn/turn-runs.js";
+import { soleLiveConversation } from "../../agents/actor/conversation-holdings.js";
 import type { AppEnv } from "../../app-env.js";
 import type { Services } from "../../composition.js";
 import { pendingQuestionOf, supervisorFor } from "./children.js";
@@ -12,9 +12,9 @@ import { spawnCatalogText, spawnableProviders } from "./spawn-catalog.js";
 // Scoped to the agent token; the real gate is the arming planTurn already recorded (children.ts armSupervisor), not the
 // token. Conversation comes from `x-intentic-conversation`, else the sole live turn.
 
-const conversationOf = (c: Context<AppEnv>): string | undefined => {
+const conversationOf = (services: Pick<Services, "conversations">, c: Context<AppEnv>): string | undefined => {
     const named = c.req.header("x-intentic-conversation");
-    return named !== undefined && named !== "" ? named : soleLiveConversation();
+    return named !== undefined && named !== "" ? named : soleLiveConversation(services.conversations);
 };
 
 const SpawnBodySchema = z.object({
@@ -56,11 +56,11 @@ const WaitBodySchema = z.object({
 export const createChildrenRoutes = (services: Services) => ({
     /** POST /children/spawn — start a child; answers `{ok:true,id}` the moment it is running. */
     spawn: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(c);
+        const conversationId = conversationOf(services, c);
         if (conversationId === undefined) {
             return c.json({ ok: false, message: "No conversation to file the child under: this shell carries no turn stamp and nothing is live." }, 400);
         }
-        const supervisor = supervisorFor(conversationId);
+        const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
             return c.json(
                 { ok: false, message: "This conversation may not spawn agents: no turn with full agency has run on it (or the daemon restarted since)." },
@@ -99,7 +99,7 @@ export const createChildrenRoutes = (services: Services) => ({
     },
     /** POST /children/wait — long-poll on this conversation's children and background commands. */
     wait: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(c);
+        const conversationId = conversationOf(services, c);
         if (conversationId === undefined) {
             return c.json({ outcome: "unknown-target", note: "No conversation: this shell carries no turn stamp and nothing is live." });
         }
@@ -108,21 +108,21 @@ export const createChildrenRoutes = (services: Services) => ({
             return c.json({ outcome: "unknown-target", note: "The wait's own arguments did not parse; fix them rather than retrying." }, 400);
         }
         const until: readonly SubagentWaitUntil[] = parsed.data.until ?? ["blocked", "finished"];
-        const result = await waitForWork(conversationId, {
+        const result = await waitForWork(services.conversations, conversationId, {
             ...(parsed.data.target !== undefined ? { target: parsed.data.target } : {}),
             until,
             timeoutMs: Math.round((parsed.data.timeoutSeconds ?? WAIT_DEFAULT_S) * 1000),
             signal: c.req.raw.signal,
         });
-        return c.json(workWaitAnswer(result, pendingQuestionOf));
+        return c.json(workWaitAnswer(result, (childId) => pendingQuestionOf(services.conversations, childId)));
     },
     /** POST /children/send — steer a working child, or run a follow-up turn on a settled one. */
     send: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(c);
+        const conversationId = conversationOf(services, c);
         if (conversationId === undefined) {
             return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
         }
-        const supervisor = supervisorFor(conversationId);
+        const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
             return c.json({ ok: false, message: "This conversation may not supervise agents: no turn with full agency has run on it." }, 403);
         }
@@ -135,11 +135,11 @@ export const createChildrenRoutes = (services: Services) => ({
     },
     /** POST /children/answer — settle a child's question; consent cards refuse, they are the owner's. */
     answer: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(c);
+        const conversationId = conversationOf(services, c);
         if (conversationId === undefined) {
             return c.json({ ok: false, message: "No conversation: this shell carries no turn stamp and nothing is live." }, 400);
         }
-        const supervisor = supervisorFor(conversationId);
+        const supervisor = supervisorFor(services.conversations, conversationId);
         if (supervisor === undefined) {
             return c.json({ ok: false, message: "This conversation may not supervise agents: no turn with full agency has run on it." }, 403);
         }
@@ -152,7 +152,7 @@ export const createChildrenRoutes = (services: Services) => ({
         const answers =
             parsed.data.answers ??
             ((): Record<string, string[]> => {
-                const first = pendingQuestionOf(child)?.questions?.[0]?.question;
+                const first = pendingQuestionOf(services.conversations, child)?.questions?.[0]?.question;
                 return { [first ?? ""]: [text ?? ""] };
             })();
         const result = await supervisor.answer(child, answers);
@@ -160,8 +160,11 @@ export const createChildrenRoutes = (services: Services) => ({
     },
     /** GET /children — this conversation's children, every kind, live first. */
     list: async (c: Context<AppEnv>): Promise<Response> => {
-        const conversationId = conversationOf(c);
-        const sessions = conversationId === undefined ? [] : listSubagentSessions().filter((session) => session.conversationId === conversationId);
+        const conversationId = conversationOf(services, c);
+        const sessions =
+            conversationId === undefined
+                ? []
+                : listSubagentSessions(services.conversations).filter((session) => session.conversationId === conversationId);
         return c.json({ sessions });
     },
 });

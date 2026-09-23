@@ -1,3 +1,4 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { it, expect, afterEach, mock, spyOn } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 
@@ -11,7 +12,7 @@ mock.module("./useSandbox", () => ({
 
 const { sandboxError, sandboxJson, sandboxRequest } = await import("./sandboxClient");
 const { SandboxTimeoutError } = await import("./sandboxAuthFetch");
-const { resetDaemonRoutes, setDaemonRoutes } = await import("../overview/useDaemonRoutes");
+const { setDaemonRoutes } = await import("../overview/useDaemonRoutes");
 const { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } = await import("@intentic/sandbox-contract");
 
 // A daemon that accepts but never answers; settles only when the caller's signal aborts, like real fetch.
@@ -92,7 +93,7 @@ it("lets a stream run past the deadline once its headers are in: a device flow t
 // Both extra branches only fire on positive route-drift evidence; with none, the daemon's own message is used.
 const json = (status: number, body: unknown): Response => new Response(JSON.stringify(body), { status });
 
-afterEach(() => resetDaemonRoutes());
+afterEach(() => resetSandboxScope());
 
 it("blames the image for a 404 on a route the daemon never advertised", async () => {
     setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => !name.startsWith(`vpn.`)));
@@ -111,6 +112,13 @@ it("passes an ordinary 400 through with the daemon's own words", async () => {
     setDaemonRoutes([...SANDBOX_ROUTE_NAMES], { ...SANDBOX_ROUTE_SHAPES });
     const error = await sandboxError(json(400, { message: `iqSearchHoldout must be between 0 and 1` }), { method: `POST`, path: `/settings` });
     expect(error.message).toBe(`iqSearchHoldout must be between 0 and 1`);
+});
+
+// A path the contract does not declare has no route name, so no drift reading: its refusal is the daemon's own.
+it("stays silent about drift for a path outside the contract, like /health", async () => {
+    setDaemonRoutes(SANDBOX_ROUTE_NAMES.filter((name) => !name.startsWith(`vpn.`)), { ...SANDBOX_ROUTE_SHAPES, "settings.get": `different` });
+    expect((await sandboxError(json(404, { message: `Not Found` }), { method: `GET`, path: `/health` })).message).toBe(`Not Found`);
+    expect((await sandboxError(json(400, { error: `bad path` }), { method: `GET`, path: `/health` })).message).toBe(`bad path`);
 });
 
 it("passes a 500 through untouched even on a drifted route", async () => {

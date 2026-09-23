@@ -34,7 +34,10 @@ export const dependencySpec = (pkg: string): string => (isDevBuild ? `link:${pac
 
 // Installs @intentic/graph and @intentic/sdk into /work/intent so `resolve`/`apply` can import deploy.config.ts. Runs
 // unconditionally: a presence gate would accept a half-finished install.
-export const ensureIntentInstallable = async (services: Services, session: string): Promise<void> => {
+export const ensureIntentInstallable = async (
+    services: Pick<Services, "files" | "logger" | "terminalRun" | "workspace">,
+    session: string,
+): Promise<void> => {
     const intent = services.workspace.repos.intent;
     services.logger.info("wiring the intent repo for provisioning (pnpm install)…");
     await services.files.write(join(intent, "package.json"), intentPackageJson(dependencySpec("@intentic/graph"), dependencySpec("@intentic/sdk")));

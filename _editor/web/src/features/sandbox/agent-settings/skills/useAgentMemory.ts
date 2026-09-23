@@ -1,18 +1,19 @@
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { MEMORY_FILE } from "@intentic/constants";
 import type { NoticeModel } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
-import { ref } from "vue";
 import { mergeMemory } from "../../../extensions/memoryImport";
 import { useWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 
-// Module-level: the memory editor and import group share one file's draft and reload after a merge.
-const draft = ref(``);
-const onDisk = ref<string | undefined>(undefined);
-const saving = ref(false);
-const editorError = ref<NoticeModel | undefined>(undefined);
-const importError = ref<NoticeModel | undefined>(undefined);
-const importText = ref(``);
-const importing = ref(false);
+// Module-level: the memory editor and import group share one file's draft and reload after a merge. Sandbox-scoped:
+// the file is one sandbox's, and a draft carried across a switch would be saved into the next one's.
+const draft = sandboxRef(() => ``);
+const onDisk = sandboxRef<string | undefined>(() => undefined);
+const saving = sandboxRef(() => false);
+const editorError = sandboxRef<NoticeModel | undefined>(() => undefined);
+const importError = sandboxRef<NoticeModel | undefined>(() => undefined);
+const importText = sandboxRef(() => ``);
+const importing = sandboxRef(() => false);
 
 export function useAgentMemory() {
     const { readFile, saveText } = useWorkspaceTree();
@@ -20,25 +21,38 @@ export function useAgentMemory() {
     const load = async (): Promise<void> => {
         editorError.value = undefined;
         onDisk.value = undefined;
+        const current = sandboxScopeGuard();
         try {
             const text = (await readFile(MEMORY_FILE)) ?? ``;
-            onDisk.value = text;
-            draft.value = text;
+            if (current()) {
+                onDisk.value = text;
+                draft.value = text;
+            }
         } catch (caught) {
-            editorError.value = noticeFrom(caught, `Couldn't read ${MEMORY_FILE}.`);
+            if (current()) {
+                editorError.value = noticeFrom(caught, `Couldn't read ${MEMORY_FILE}.`);
+            }
         }
     };
 
+    // A save or an import finishing after a switch wrote the box left behind: nothing of it is this box's to show.
     const commit = async (text: string): Promise<void> => {
         saving.value = true;
         editorError.value = undefined;
+        const current = sandboxScopeGuard();
         try {
             await saveText(MEMORY_FILE, text);
-            onDisk.value = text;
+            if (current()) {
+                onDisk.value = text;
+            }
         } catch (caught) {
-            editorError.value = noticeFrom(caught, `Couldn't save ${MEMORY_FILE}.`);
+            if (current()) {
+                editorError.value = noticeFrom(caught, `Couldn't save ${MEMORY_FILE}.`);
+            }
         } finally {
-            saving.value = false;
+            if (current()) {
+                saving.value = false;
+            }
         }
     };
 
@@ -49,15 +63,23 @@ export function useAgentMemory() {
         }
         importing.value = true;
         importError.value = undefined;
+        const current = sandboxScopeGuard();
         try {
-            const current = (await readFile(MEMORY_FILE)) ?? ``;
-            await saveText(MEMORY_FILE, mergeMemory(current, text));
+            const held = (await readFile(MEMORY_FILE)) ?? ``;
+            await saveText(MEMORY_FILE, mergeMemory(held, text));
+            if (!current()) {
+                return;
+            }
             importText.value = ``;
             await load();
         } catch (caught) {
-            importError.value = noticeFrom(caught, `Couldn't save memory.`);
+            if (current()) {
+                importError.value = noticeFrom(caught, `Couldn't save memory.`);
+            }
         } finally {
-            importing.value = false;
+            if (current()) {
+                importing.value = false;
+            }
         }
     };
 

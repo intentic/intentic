@@ -1,10 +1,9 @@
 import type { McpServerConfig as CursorMcpServer, SDKCustomTool, SDKJsonValue, ToolName } from "@cursor/sdk";
 import type { AgentEvent, AskQuestion } from "@intentic/sandbox-contract";
-import { createRequest } from "../../agent/tools/agent-requests.js";
-import type { AgentRequest } from "../../agent/run/agent.js";
+import type { AgentRequest, TurnHooks, TurnTools } from "../../agent/providers/agent-request.js";
 import { formatAnswers } from "../../agent/tools/question-answers.js";
 import type { SubagentWaitUntil } from "../../agent/subagents/subagents.js";
-import { waitForWork, workWaitAnswer } from "../../agent/subagents/work-wait.js";
+import { workWaitAnswer } from "../../agent/subagents/work-wait.js";
 import { type CommandGuard, consultWith, JS_SUBJECT } from "../../guard/command-guard.js";
 import { outsideSourceOf, sealResult } from "../../guard/outside-results.js";
 import type { TurnTaint } from "../../guard/turn-taint.js";
@@ -65,7 +64,11 @@ const askTool = (request: AgentRequest, push: (event: AgentEvent) => void): SDKC
             return "No questions were supplied, so nothing was asked.";
         }
         // Named with its conversation, like the Claude path: dismissing the card must name the turn it ends.
-        const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
+        const { id, wait } = request.hooks.cards.create(
+            "question",
+            { kind: "question", requestId: "", cancelled: true },
+            request.spec.conversationId,
+        );
         push({ kind: "question", requestId: id, questions });
         const { reply, resolved } = await wait(request.signal);
         // Picks belong in the frame log too, not just the result: what a replayed transcript freezes the card with.
@@ -79,7 +82,7 @@ export const TOOLS_WITHHELD: readonly ToolName[] = ["askQuestion"];
 
 // Same supervision calls the Claude Code loop mounts as an SDK MCP server (agent/subagent-wait.ts), through Cursor's
 // own seam. The gate arrives already set on the request, so children are indistinguishable across runtimes.
-const spawnTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
+const spawnTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "Start a full agent on any connected provider (claude, codex, grok, kimi, gemini, cursor) to work on a " +
         "task of its own. It runs as a separate conversation in its own isolated worktree and keeps working " +
@@ -139,7 +142,7 @@ const spawnTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTo
 });
 
 // Catalogue as its own tool, beside spawn: a required field is only fair if its answer is one call away.
-const providersTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
+const providersTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "What a child agent could be started on right now: every provider this sandbox has connected, its " +
         "models, and how much allowance each still has. Models whose every connected account is at its cap are " +
@@ -152,7 +155,7 @@ const providersTool = (children: NonNullable<AgentRequest["children"]>): SDKCust
 const WAIT_DEFAULT_S = 600;
 const WAIT_MAX_S = 1800;
 
-const sendTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
+const sendTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "Steer or continue an agent you started. A working child gets the message mid-turn (where its runtime " +
         "takes one); a finished child runs a follow-up turn on its own conversation, continuing its session, so " +
@@ -175,7 +178,7 @@ const sendTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomToo
     },
 });
 
-const answerTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomTool => ({
+const answerTool = (children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "Answer a QUESTION a child you started is parked on (the wait tool reports blocked and carries the " +
         "question). Pass your picks keyed by the question's own text, values as chosen option labels or your own " +
@@ -207,7 +210,7 @@ const answerTool = (children: NonNullable<AgentRequest["children"]>): SDKCustomT
     },
 });
 
-const waitTool = (request: AgentRequest): SDKCustomTool => ({
+const waitTool = (request: AgentRequest, children: NonNullable<TurnHooks["children"]>): SDKCustomTool => ({
     description:
         "Wait until an agent you started needs you. Blocks until the target is blocked on input or finishes, " +
         'whichever comes first, then returns its status and last report. Target a spawned child by its id, or "any" ' +
@@ -223,7 +226,7 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
         required: ["target"],
     },
     execute: async (args) => {
-        if (request.conversationId === undefined) {
+        if (request.spec.conversationId === undefined) {
             return JSON.stringify({ outcome: "unknown-target", note: "This turn has no conversation, so it has no children to wait on." });
         }
         const target = typeof args["target"] === "string" ? args["target"] : "any";
@@ -231,13 +234,13 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
             (entry): entry is SubagentWaitUntil => entry === "blocked" || entry === "finished",
         );
         const seconds = typeof args["timeoutSeconds"] === "number" ? Math.min(Math.max(args["timeoutSeconds"], 5), WAIT_MAX_S) : WAIT_DEFAULT_S;
-        const result = await waitForWork(request.conversationId, {
+        const result = await children.wait({
             ...(target !== "any" ? { target } : {}),
             until: until.length > 0 ? until : ["blocked", "finished"],
             timeoutMs: Math.round(seconds * 1000),
             signal: request.signal,
         });
-        return JSON.stringify(workWaitAnswer(result, (childId) => request.children?.pendingQuestion(childId)));
+        return JSON.stringify(workWaitAnswer(result, (childId) => children.pendingQuestion(childId)));
     },
 });
 
@@ -252,7 +255,7 @@ const waitTool = (request: AgentRequest): SDKCustomTool => ({
 // one judge cover both.
 const codeTool = (
     request: AgentRequest,
-    plan: NonNullable<AgentRequest["jsExecution"]>,
+    plan: NonNullable<TurnTools["jsExecution"]>,
     guard: CursorGuard,
     push: (event: AgentEvent) => void,
 ): SDKCustomTool => ({
@@ -282,9 +285,9 @@ const codeTool = (
         const output = await runJsTool(
             {
                 plan,
-                placement: request.isolation,
+                placement: request.spec.isolation,
                 signal: request.signal,
-                ...(request.secrets === undefined ? {} : { secrets: request.secrets }),
+                ...(request.tools.secrets === undefined ? {} : { secrets: request.tools.secrets }),
             },
             { code, ...(typeof args["timeoutSeconds"] === "number" ? { timeoutSeconds: args["timeoutSeconds"] } : {}) },
         );
@@ -302,16 +305,16 @@ const codeTool = (
 // unattended is the one condition that changes ask's answer: a card on an unwatched turn would deadlock, not just go
 // unused. The supervision set isn't card-shaped and rides unattended turns too; a child settles on its own clock.
 export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, push: (event: AgentEvent) => void): Record<string, SDKCustomTool> => ({
-    ...(request.unattended === true ? {} : { ask: askTool(request, push) }),
+    ...(request.policy.unattended === true ? {} : { ask: askTool(request, push) }),
     // Absent, not refused, when the persona's card withheld the backend: jsExecutionPlanOf answers undefined there.
-    ...(request.jsExecution === undefined ? {} : { code: codeTool(request, request.jsExecution, guard, push) }),
-    ...(request.children !== undefined
+    ...(request.tools.jsExecution === undefined ? {} : { code: codeTool(request, request.tools.jsExecution, guard, push) }),
+    ...(request.hooks.children !== undefined
         ? {
-              spawn: spawnTool(request.children),
-              providers: providersTool(request.children),
-              wait: waitTool(request),
-              send: sendTool(request.children),
-              answer: answerTool(request.children),
+              spawn: spawnTool(request.hooks.children),
+              providers: providersTool(request.hooks.children),
+              wait: waitTool(request, request.hooks.children),
+              send: sendTool(request.hooks.children),
+              answer: answerTool(request.hooks.children),
           }
         : {}),
 });
@@ -320,14 +323,14 @@ export const cursorCustomTools = (request: AgentRequest, guard: CursorGuard, pus
 // merging over an inherited one. In-process SDK instances are skipped: the gap behind mcp:"tools", not "full".
 export const cursorMcpServers = (request: AgentRequest): Record<string, CursorMcpServer> => {
     const servers: Record<string, CursorMcpServer> = {};
-    for (const tool of request.tools ?? []) {
+    for (const tool of request.tools.remote ?? []) {
         servers[tool.name] = {
             type: "http",
             url: tool.url,
             ...(tool.token !== undefined ? { headers: { Authorization: `Bearer ${tool.token}` } } : {}),
         };
     }
-    for (const [name, server] of Object.entries(request.sdkServers ?? {})) {
+    for (const [name, server] of Object.entries(request.tools.sdkServers ?? {})) {
         if (server.type !== undefined && server.type !== "stdio") {
             continue;
         }

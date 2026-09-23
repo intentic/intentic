@@ -16,35 +16,36 @@ import {
 } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
-import type { PersistedAgent } from "../../../agents/registry/agents-store.js";
+import { sqliteAgentsStore } from "../../../agents/registry/agents-store.js";
+import { conversationsDbPath, openConversationsDb } from "../../../store/conversations-db.js";
 import { fileHeldWakesStore } from "../../../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../../../automations/automations-store.js";
-import type { WakeFn } from "../../../automations/scheduler.js";
+import { resumeInterruptedFires } from "../../../automations/fire-resume.js";
 import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
 import type { TranscriptAgent } from "../../../sessions/agent-transcript.js";
 import { testMintedSlices } from "../../../harness/route-services.testing.js";
+import { conversationEntry, drivenBy, fleetStoreOver, memoryFleet, notedFleet } from "../../../testing.js";
 import { automationConfig } from "../../../harness/route-stores.testing.js";
 import { fileTranscriptRecord } from "../../../sessions/transcript-record.js";
 import { fileSandboxSettingsStore } from "../../../settings/settings-store.js";
-import { resolveRequest } from "../../tools/agent-requests.js";
-import { stopTurn } from "../../checkpoints/agent-steering.js";
 import { OUTAGE_MAX_ATTEMPTS, recordProviderFailure, recordProviderSuccess } from "../../providers/provider-health.js";
-import { fileTurnJournal, type JournalledTurn } from "./turn-journal.js";
-import { turnRunOf } from "./turn-runs.js";
+import { providerReadiness } from "../../providers/provider-registry.js";
+import { PROVIDER_MODULES } from "../../../runtimes/runtime-table.js";
+import { type JournalledTurn, sqliteTurnJournal, type TurnJournal } from "./turn-journal.js";
+import { turnRunOf } from "../../../agents/actor/conversation-holdings.js";
+import { createDomainEvents } from "../../../seams/domain-events.js";
+import type { TurnStarter } from "../../../seams/turn-starter.js";
 import {
-    clearPendingResume,
-    clearStopLadder,
+    type AuthFailure,
     createTurnResumeScheduler,
     fireHeldResume,
-    heldTurn,
-    pendingOutageFailure,
-    recordAuthFailure,
-    recordHeldTurn,
-    recordOutageFailure,
+    type HeldTurn,
+    type OutageFailure,
     resumeInterruptedTurns,
     startConversationTurn,
 } from "./turn-resume.js";
+import { parkedCards } from "../../../agents/actor/parked-cards.js";
 
 // `takes` answers each abandon attempt (false: the turn is still unwinding); `armed`/`limitArmed` are per-conversation
 // overrides for outage/limit resume, a missing id follows the sandbox default.
@@ -55,28 +56,43 @@ const fakeServices = (
     armed: ReadonlyMap<string, boolean> = new Map(),
     limitArmed: ReadonlyMap<string, boolean> = new Map(),
 ): Services => {
-    const record = fileTranscriptRecord(join(root, "transcripts"));
+    const record = fileTranscriptRecord(root);
+    // On the same database file the journal below is, so a turn this suite resumes journals where the boot pass reads.
+    const { conversations } = memoryFleet(fleetStoreOver(openConversationsDb(conversationsDbPath(root))));
     return unstubbed<Services>("services", {
+        // Parked with the same actors, so a restored card is the one a reply resolves.
+        cards: parkedCards(conversations),
         sandboxSettings: fileSandboxSettingsStore(join(root, "settings.json")),
         // Read as data by run-role health, so it has to be a real seam: the helpers below spread this object, and a
         // spread keeps only own keys, dropping unstubbed's throwing proxy. Empty ledger: no rung has a failing streak.
         usage: unstubbed<Services["usage"]>("usage", { turns: async () => [] }),
-        agents: unstubbed<Services["agents"]>("agents", {
-            abandonResume: async (id: string) => {
+        // Real actors hold the stranded records; only an abandon is answered here, `takes` saying whether the turn had
+        // unwound enough for it to land.
+        conversations: {
+            ...conversations,
+            send: (id, event, now) => {
+                if (event.kind !== "resume-abandoned") {
+                    return conversations.send(id, event, now);
+                }
                 abandoned.push(id);
-                return takes();
+                const reply = takes();
+                return { reply, settled: Promise.resolve(reply) } as never;
             },
+        },
+        agents: unstubbed<Services["agents"]>("agents", {
             entry: (id: string) =>
                 armed.has(id) || limitArmed.has(id)
-                    ? ({
+                    ? conversationEntry({
                           id,
-                          ...(armed.has(id) ? { outagePolicy: armed.get(id) === true ? "retry" : "wait" } : {}),
-                          ...(limitArmed.has(id) ? { limitPolicy: limitArmed.get(id) === true ? "resend" : "wait" } : {}),
-                      } as PersistedAgent)
+                          postures: {
+                              ...(armed.has(id) ? { outage: armed.get(id) === true ? "retry" : "wait" } : {}),
+                              ...(limitArmed.has(id) ? { limit: limitArmed.get(id) === true ? "resend" : "wait" } : {}),
+                          },
+                      })
                     : undefined,
         }),
-        // No device subscribed.
-        pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
+        // Heard by nobody: what reacts to a turn is composition's to subscribe, not this suite's.
+        events: createDomainEvents(() => {}),
         logger: unstubbed<Services["logger"]>("logger", { info: () => {}, warn: () => {}, error: () => {} }),
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", {
@@ -87,20 +103,32 @@ const fakeServices = (
     });
 };
 
-const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
-    async function* (_services, input) {
+// What a settlement tells the conversation it belongs to, sent the way it sends it, and what a pass reads back.
+const recordAuthFailure = (services: Services, failure: AuthFailure, now?: number): void =>
+    void services.conversations.send(failure.input.conversationId, { kind: "auth-refused", failure }, now);
+const recordOutageFailure = (services: Services, failure: OutageFailure, now?: number): void =>
+    void services.conversations.send(failure.input.conversationId, { kind: "outage-stranded", failure }, now);
+const recordHeldTurn = (services: Services, held: HeldTurn, now?: number): void =>
+    void services.conversations.send(held.input.conversationId, { kind: "turn-held", held }, now);
+const clearPendingResume = (services: Services, conversationId: string): void => void services.conversations.send(conversationId, { kind: "resume-superseded" });
+const clearStopLadder = (services: Services, conversationId: string): void => void services.conversations.send(conversationId, { kind: "turn-got-somewhere" });
+const pendingOutageFailure = (services: Services, conversationId: string): OutageFailure | undefined => services.conversations.state(conversationId)?.resume.outage;
+const heldTurn = (services: Services, conversationId: string): HeldTurn | undefined => services.conversations.state(conversationId)?.resume.held;
+
+const fakeWake = (prompts: string[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
+    async function* (input) {
         prompts.push(input.prompt);
         yield* events;
     };
 
 // Waits for a fire's detached run to finish; its wake lands after tick() returns, one I/O round-trip later.
-const settle = async (conversationId: string): Promise<void> => {
-    await turnRunOf(conversationId)?.waitUntilFinished();
+const settle = async (services: Pick<Services, "conversations">, conversationId: string): Promise<void> => {
+    await turnRunOf(services.conversations, conversationId)?.waitUntilFinished();
 };
 
 test("a started turn records its settled transcript, whatever provider ran it", async () => {
     const root = mkdtempSync(join(tmpdir(), "turn-resume-"));
-    const record = fileTranscriptRecord(join(root, "transcripts"));
+    const record = fileTranscriptRecord(root);
     const started = await startConversationTurn(fakeServices(root), fakeWake([], [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
         prompt: "ship it",
         conversationId: "tr-record",
@@ -118,37 +146,43 @@ test("a started turn records its settled transcript, whatever provider ran it", 
 });
 
 // `connected` names which providers are reachable, ordered (first entry is the head of the list); `routed` is the
-// cheapest fake for `harnessReadyProviders`.
+// cheapest fake behind the readiness sweep.
 const routed = (provider: string, connected: readonly string[]): { name: string; label: string }[] =>
     connected.includes(provider) ? [{ name: "acct", label: "Account" }] : [];
 
-const withProviders = (services: Services, connected: readonly string[]): Services => ({
-    ...services,
-    config: unstubbed<Services["config"]>("config", {
-        translator: { url: "http://translator.test", token: "tok" },
-        claudeCodeOauthToken: "",
-        anthropicApiKey: "",
-    }),
-    cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
-        accounts: async () => ({
-            codex: routed("codex", connected),
-            grok: routed("grok", connected),
-            kimi: routed("kimi", connected),
-            gemini: routed("gemini", connected),
+// The real readiness sweep over the real modules, asking these stores, as the daemon composes it.
+const withProviders = (services: Services, connected: readonly string[]): Services => {
+    const wired: Services = {
+        ...services,
+        providerModules: PROVIDER_MODULES,
+        providerReadiness: () => providerReadiness(wired),
+        config: unstubbed<Services["config"]>("config", {
+            translator: { url: "http://translator.test", token: "tok" },
+            claudeCodeOauthToken: "",
+            anthropicApiKey: "",
         }),
-    }),
-    claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
-        list: async () => (connected.includes("claude") ? [{ id: "acct", label: "Claude", connectedAt: 0 }] : []),
-    }),
-    // Cursor answers from a stored key, not the translator's map, so it can't ride `routed` like the others.
-    cursorStore: unstubbed<Services["cursorStore"]>("cursorStore", {
-        credentials: async () => (connected.includes("cursor") ? [{ id: "acct", apiKey: "key", connectedAt: 0 }] : []),
-    }),
-    // No model endpoints configured.
-    capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
-    // Present with nobody signed in: the sweep iterates every provider module, so a missing slice throws.
-    minted: testMintedSlices(),
-});
+        cliProxy: unstubbed<Services["cliProxy"]>("cliProxy", {
+            accounts: async () => ({
+                codex: routed("codex", connected),
+                grok: routed("grok", connected),
+                kimi: routed("kimi", connected),
+                gemini: routed("gemini", connected),
+            }),
+        }),
+        claudeStore: unstubbed<Services["claudeStore"]>("claudeStore", {
+            list: async () => (connected.includes("claude") ? [{ id: "acct", label: "Claude", connectedAt: 0 }] : []),
+        }),
+        // Cursor answers from a stored key, not the translator's map, so it can't ride `routed` like the others.
+        cursorStore: unstubbed<Services["cursorStore"]>("cursorStore", {
+            credentials: async () => (connected.includes("cursor") ? [{ id: "acct", apiKey: "key", connectedAt: 0 }] : []),
+        }),
+        // No model endpoints configured.
+        capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => [] }),
+        // Present with nobody signed in: the sweep iterates every provider module, so a missing slice throws.
+        minted: testMintedSlices(),
+    };
+    return wired;
+};
 
 // Shared role id for every agent-run test below; what's under test is the fill, so any real role name works.
 const ROLE = "pipeline-fix" as const;
@@ -163,13 +197,13 @@ const ranWith = async (
     const seen: AgentTurn[] = [];
     await startConversationTurn(
         services,
-        async function* (_services, input) {
+        async function* (input) {
             seen.push(input);
             yield { kind: "done" };
         },
         turn,
     );
-    await settle(turn.conversationId);
+    await settle(services, turn.conversationId);
     return seen[0]!;
 };
 
@@ -263,13 +297,13 @@ const ranAs = async (
     const seen: AgentTurn[] = [];
     await startConversationTurn(
         services,
-        async function* (_services, input) {
+        async function* (input) {
             seen.push(input);
             yield { kind: "done" };
         },
         turn,
     );
-    await settle(turn.conversationId);
+    await settle(services, turn.conversationId);
     return seen[0]!;
 };
 
@@ -371,9 +405,9 @@ const authServices = (root: string, claudeStore: Services["claudeStore"], abando
 test("a turn the API refused mid-flight is re-minted and re-run on the next pass", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
     const prompts: string[] = [];
-    recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-1", isolated: true }, account: "acct", refusedToken: "tok-1" });
-    await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
-    await settle("auth-1");
+    recordAuthFailure(services, { input: { prompt: "finish the report", conversationId: "auth-1", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick();
+    await settle(services, "auth-1");
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain("finish the report");
     expect(prompts[0]).toMatch(/renew/i);
@@ -384,8 +418,8 @@ test("no resume when the credential is genuinely dead, the error frame's reconne
     const abandoned: string[] = [];
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-1", revokedAt: 1 }), abandoned);
     const prompts: string[] = [];
-    recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-2", isolated: true }, account: "acct", refusedToken: "tok-1" });
-    await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    recordAuthFailure(services, { input: { prompt: "finish the report", conversationId: "auth-2", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick();
     expect(prompts).toHaveLength(0);
     expect(abandoned).toEqual(["auth-2"]);
 });
@@ -394,7 +428,7 @@ test("a resume that is itself refused is not resumed again: a dead credential mu
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
     const prompts: string[] = [];
     // The recorded prompt must match exactly what a fired resume builds, or the loop guard won't recognise it.
-    recordAuthFailure({
+    recordAuthFailure(services, {
         input: {
             prompt: withResumeNote("finish the report", RESUME_NOTES.auth),
             conversationId: "auth-3",
@@ -403,16 +437,16 @@ test("a resume that is itself refused is not resumed again: a dead credential mu
         account: "acct",
         refusedToken: "tok-1",
     });
-    await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick();
     expect(prompts).toHaveLength(0);
 });
 
 test("the next turn on the conversation supersedes a pending auth resume", async () => {
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), fakeStore({ accessToken: "tok-2" }));
     const prompts: string[] = [];
-    recordAuthFailure({ input: { prompt: "finish the report", conversationId: "auth-4", isolated: true }, account: "acct", refusedToken: "tok-1" });
-    clearPendingResume("auth-4");
-    await createTurnResumeScheduler(services, fakeWake(prompts)).tick();
+    recordAuthFailure(services, { input: { prompt: "finish the report", conversationId: "auth-4", isolated: true }, account: "acct", refusedToken: "tok-1" });
+    clearPendingResume(services, "auth-4");
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick();
     expect(prompts).toHaveLength(0);
 });
 
@@ -420,8 +454,8 @@ test("a re-mint that cannot be attempted keeps its place, then gives the card up
     const abandoned: string[] = [];
     const services = authServices(mkdtempSync(join(tmpdir(), "turn-resume-")), brokenStore(), abandoned);
     const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
-    recordAuthFailure(
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
+    recordAuthFailure(services, 
         { input: { prompt: "finish the report", conversationId: "auth-5", isolated: true }, account: "acct", refusedToken: "tok-1" },
         1_000,
     );
@@ -448,8 +482,8 @@ test("an abandon lost to a turn still unwinding is made good on the next pass", 
         () => unwound,
     );
     const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
-    recordAuthFailure(
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
+    recordAuthFailure(services, 
         { input: { prompt: "finish the report", conversationId: "auth-6", isolated: true }, account: "acct", refusedToken: "tok-1" },
         1_000,
     );
@@ -491,169 +525,185 @@ const outageServices = async (
 test("a stranded turn resumes once the provider's wait elapses, under a note saying why", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const { retryAt } = recordProviderFailure("out-fire", OUT_NOW);
-    recordOutageFailure(outage("out-1", "out-fire"), OUT_NOW);
+    recordOutageFailure(services, outage("out-1", "out-fire"), OUT_NOW);
     const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
 
     await scheduler.tick(retryAt - 1);
-    await settle("out-1");
+    await settle(services, "out-1");
     expect(prompts).toEqual([]);
 
     await scheduler.tick(retryAt);
-    await settle("out-1");
+    await settle(services, "out-1");
     expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain("finish the report");
     expect(prompts[0]).toMatch(/unavailable|outage/i);
-    expect(pendingOutageFailure("out-1")).toBeUndefined();
+    expect(pendingOutageFailure(services, "out-1")).toBeUndefined();
 });
 
 test("an outage costs ONE turn per window however many conversations are stranded on it", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const { retryAt } = recordProviderFailure("out-herd", OUT_NOW);
     for (const id of ["herd-1", "herd-2", "herd-3", "herd-4"]) {
-        recordOutageFailure(outage(id, "out-herd"), OUT_NOW);
+        recordOutageFailure(services, outage(id, "out-herd"), OUT_NOW);
     }
     const prompts: string[] = [];
-    await createTurnResumeScheduler(services, fakeWake(prompts)).tick(retryAt);
-    await settle("herd-1");
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(retryAt);
+    await settle(services, "herd-1");
 
     // Firing moves the breaker's clock, so the other three are refused within this same pass.
     expect(prompts).toHaveLength(1);
-    expect(pendingOutageFailure("herd-1")).toBeUndefined();
-    expect(pendingOutageFailure("herd-2")).toEqual(expect.any(Object));
-    expect(pendingOutageFailure("herd-4")).toEqual(expect.any(Object));
+    expect(pendingOutageFailure(services, "herd-1")).toBeUndefined();
+    expect(pendingOutageFailure(services, "herd-2")).toEqual(expect.any(Object));
+    expect(pendingOutageFailure(services, "herd-4")).toEqual(expect.any(Object));
     for (const id of ["herd-2", "herd-3", "herd-4"]) {
-        clearPendingResume(id);
+        clearPendingResume(services, id);
     }
 });
 
 test("evidence that the provider is back releases the stranded set without waiting out the backoff", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     recordProviderFailure("out-back", OUT_NOW);
-    recordOutageFailure(outage("back-1", "out-back"), OUT_NOW);
+    recordOutageFailure(services, outage("back-1", "out-back"), OUT_NOW);
     const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(OUT_NOW);
-    await settle("back-1");
+    await settle(services, "back-1");
     expect(prompts).toEqual([]);
 
     recordProviderSuccess("out-back");
     await scheduler.tick(OUT_NOW + 1);
-    await settle("back-1");
+    await settle(services, "back-1");
     expect(prompts).toHaveLength(1);
 });
 
 test("with the toggle off the turn is remembered, not resumed: turning it on arms that same turn", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), false);
     const { retryAt } = recordProviderFailure("out-toggle", OUT_NOW);
-    recordOutageFailure(outage("toggle-1", "out-toggle"), OUT_NOW);
+    recordOutageFailure(services, outage("toggle-1", "out-toggle"), OUT_NOW);
     const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
     await scheduler.tick(retryAt);
-    await settle("toggle-1");
+    await settle(services, "toggle-1");
     expect(prompts).toEqual([]);
-    expect(pendingOutageFailure("toggle-1")).toEqual(expect.any(Object));
+    expect(pendingOutageFailure(services, "toggle-1")).toEqual(expect.any(Object));
 
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, outagePolicy: "retry" });
     await scheduler.tick(retryAt);
-    await settle("toggle-1");
+    await settle(services, "toggle-1");
     expect(prompts).toHaveLength(1);
 });
 
 test("a conversation armed on its own resumes while the sandbox default leaves the rest alone", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), false, [], new Map([["own-armed", true]]));
     const { retryAt } = recordProviderFailure("out-own", OUT_NOW);
-    recordOutageFailure(outage("own-armed", "out-own"), OUT_NOW);
-    recordOutageFailure(outage("own-quiet", "out-own"), OUT_NOW + 1);
+    recordOutageFailure(services, outage("own-armed", "out-own"), OUT_NOW);
+    recordOutageFailure(services, outage("own-quiet", "out-own"), OUT_NOW + 1);
     const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
 
     await scheduler.tick(retryAt);
-    await settle("own-armed");
+    await settle(services, "own-armed");
     expect(prompts).toHaveLength(1);
     // Remembered without ever spending the breaker's window.
-    expect(pendingOutageFailure("own-quiet")).toEqual(expect.any(Object));
+    expect(pendingOutageFailure(services, "own-quiet")).toEqual(expect.any(Object));
     // Process-wide map: an uncleared entry here would leak into the next test's pass.
-    clearPendingResume("own-quiet");
+    clearPendingResume(services, "own-quiet");
 });
 
 test("a conversation that opted out stays stopped even though the sandbox default resumes", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), true, [], new Map([["own-off", false]]));
     const { retryAt } = recordProviderFailure("out-opt", OUT_NOW);
-    recordOutageFailure(outage("own-off", "out-opt"), OUT_NOW);
+    recordOutageFailure(services, outage("own-off", "out-opt"), OUT_NOW);
     const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
 
     await scheduler.tick(retryAt);
-    await settle("own-off");
+    await settle(services, "own-off");
     expect(prompts).toEqual([]);
-    expect(pendingOutageFailure("own-off")).toEqual(expect.any(Object));
-    clearPendingResume("own-off");
+    expect(pendingOutageFailure(services, "own-off")).toEqual(expect.any(Object));
+    clearPendingResume(services, "own-off");
 });
 
 test("a stranded turn nobody resumed within the hour is dropped rather than sprung back to life", async () => {
     const abandoned: string[] = [];
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")), true, abandoned);
-    recordOutageFailure(outage("stale-1", "out-stale"), OUT_NOW - 61 * 60_000);
+    recordOutageFailure(services, outage("stale-1", "out-stale"), OUT_NOW - 61 * 60_000);
     const prompts: string[] = [];
-    await createTurnResumeScheduler(services, fakeWake(prompts)).tick(OUT_NOW);
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(OUT_NOW);
     expect(prompts).toEqual([]);
-    expect(pendingOutageFailure("stale-1")).toBeUndefined();
+    expect(pendingOutageFailure(services, "stale-1")).toBeUndefined();
     expect(abandoned).toEqual(["stale-1"]);
 });
 
 test("once the attempt budget is spent the failure stands: the retrying is finite by design", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const prompts: string[] = [];
-    const scheduler = createTurnResumeScheduler(services, fakeWake(prompts));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, fakeWake(prompts)));
     let now = OUT_NOW;
     // Each iteration: a window releases one attempt, the attempt fails again, and the failure re-records the turn.
     for (let i = 0; i < OUTAGE_MAX_ATTEMPTS + 2; i += 1) {
         const { retryAt } = recordProviderFailure("out-spent", now);
-        recordOutageFailure(outage("spent-1", "out-spent"), now);
+        recordOutageFailure(services, outage("spent-1", "out-spent"), now);
         now = retryAt;
         await scheduler.tick(now);
         // Settles to avoid racing the next window's resume under the one-turn-per-conversation rule.
-        await settle("spent-1");
+        await settle(services, "spent-1");
     }
     expect(prompts).toHaveLength(OUTAGE_MAX_ATTEMPTS);
-    clearPendingResume("spent-1");
+    clearPendingResume(services, "spent-1");
 });
 
 test("the next turn on the conversation supersedes a pending outage resume", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     const { retryAt } = recordProviderFailure("out-super", OUT_NOW);
-    recordOutageFailure(outage("super-1", "out-super"), OUT_NOW);
-    clearPendingResume("super-1");
+    recordOutageFailure(services, outage("super-1", "out-super"), OUT_NOW);
+    clearPendingResume(services, "super-1");
     const prompts: string[] = [];
-    await createTurnResumeScheduler(services, fakeWake(prompts)).tick(retryAt);
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(retryAt);
     expect(prompts).toEqual([]);
 });
 
 test("one provider's outage never gates a conversation on another", async () => {
     const services = await outageServices(mkdtempSync(join(tmpdir(), "turn-resume-")));
     recordProviderFailure("out-claude", OUT_NOW);
-    recordOutageFailure(outage("iso-claude", "out-claude"), OUT_NOW);
-    recordOutageFailure(outage("iso-codex", "out-codex"), OUT_NOW);
+    recordOutageFailure(services, outage("iso-claude", "out-claude"), OUT_NOW);
+    recordOutageFailure(services, outage("iso-codex", "out-codex"), OUT_NOW);
     const prompts: string[] = [];
-    await createTurnResumeScheduler(services, fakeWake(prompts)).tick(OUT_NOW);
-    await settle("iso-codex");
+    await createTurnResumeScheduler(drivenBy(services, fakeWake(prompts))).tick(OUT_NOW);
+    await settle(services, "iso-codex");
     expect(prompts).toHaveLength(1);
-    expect(pendingOutageFailure("iso-codex")).toBeUndefined();
-    expect(pendingOutageFailure("iso-claude")).toEqual(expect.any(Object));
-    clearPendingResume("iso-claude");
+    expect(pendingOutageFailure(services, "iso-codex")).toBeUndefined();
+    expect(pendingOutageFailure(services, "iso-claude")).toEqual(expect.any(Object));
+    clearPendingResume(services, "iso-claude");
 });
 
 // Boot pass over the turn journal: every surviving entry is a turn or fire cut off by the daemon dying; each is
 // consumed exactly once.
 
-// Real journal on a temp dir. autoResumeOnRestart is opt-in and off by default, so a test expecting a re-run must set
-// it explicitly.
+// The real journal on a temp dir, filing each turn after the conversation row its begin would have written first: an
+// interrupted turn seeded the way a daemon that died under it left one.
+const journalOver = (root: string): TurnJournal => {
+    const db = openConversationsDb(conversationsDbPath(root));
+    const registry = sqliteAgentsStore(db);
+    const journal = sqliteTurnJournal(db);
+    return {
+        ...journal,
+        recordTurn: async (entry) => {
+            if (!registry.has(entry.turn.conversationId)) {
+                registry.save([conversationEntry({ id: entry.turn.conversationId })]);
+            }
+            await journal.recordTurn(entry);
+        },
+    };
+};
+
+// autoResumeOnRestart is opt-in and off by default, so a test expecting a re-run must set it explicitly.
 const journalServices = async (root: string, autoResumeOnRestart = true): Promise<Services> => {
     const services = unstubbed<Services>("services", {
         ...fakeServices(root),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: journalOver(root),
         automations: fileAutomationsStore(join(root, "automations.json"), join(root, "automation-runs.json")),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         activity: { append: async () => {}, list: async () => [] },
@@ -680,12 +730,12 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
     await services.turnJournal.recordTurn(journalled("rs-1", { sessionId: "s-partial" }));
     const prompts: string[] = [];
     const inputs: AgentTurn[] = [];
-    const capture: WakeFn = async function* (_services, input) {
+    const capture: TurnStarter["stream"] = async function* (input) {
         prompts.push(input.prompt);
         inputs.push(input);
         yield { kind: "done" };
     };
-    await resumeInterruptedTurns(services, capture, BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, capture), BOOT_AT);
 
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toMatch(/restarted/i);
@@ -695,7 +745,7 @@ test("an interrupted chat turn is re-run under the restart note, on the session 
 
 test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kills the daemon cannot loop the boot", async () => {
     const root = mkdtempSync(join(tmpdir(), "restart-"));
-    const real = fileTurnJournal(join(root, "turns"));
+    const real = journalOver(root);
     await real.recordTurn(journalled("rs-spend"));
     // The order log avoids a race with the resumed run's own fire-and-forget journal write.
     const order: string[] = [];
@@ -709,11 +759,11 @@ test("the attempt is spent on disk BEFORE the turn restarts, so a turn that kill
             },
         },
     });
-    const wake: WakeFn = async function* () {
+    const wake: TurnStarter["stream"] = async function* () {
         order.push(`wake`);
         yield { kind: "done" };
     };
-    await resumeInterruptedTurns(services, wake, BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, wake), BOOT_AT);
     await waitFor(() => expect(order).toContain(`wake`), SETTLES);
 
     expect(order[0]).toBe(`record:attempts=1`);
@@ -724,7 +774,7 @@ test("an entry whose attempt is already spent is dropped WITHOUT running: no boo
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.turnJournal.recordTurn(journalled("rs-spent", { attempts: 1 }));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     expect(prompts).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
 });
@@ -733,7 +783,7 @@ test("an entry older than the staleness cap is dropped: a sandbox off for the we
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     await services.turnJournal.recordTurn(journalled("rs-stale"));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), 10_000 + 7 * 60 * 60_000);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), 10_000 + 7 * 60 * 60_000);
     expect(prompts).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
 });
@@ -754,11 +804,13 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
     });
 
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    const driven = drivenBy(services, fakeWake(prompts));
+    await resumeInterruptedTurns(driven, BOOT_AT);
+    await resumeInterruptedFires(driven, BOOT_AT);
     expect(prompts).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
     // Written to the transcript with an explicit notice before the journal entry drains.
-    expect(await fileTranscriptRecord(join(root, "transcripts")).read("rs-off")).toEqual([
+    expect(await fileTranscriptRecord(root).read("rs-off")).toEqual([
         { role: "user", text: "finish the report", sentAt: 10_000 },
         {
             role: "notice",
@@ -785,9 +837,9 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
     });
     await services.turnJournal.recordTurn(journalled("rs-work", { sessionId: "s-partial" }));
 
-    await resumeInterruptedTurns(services, fakeWake([]), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
 
-    expect(await fileTranscriptRecord(join(root, "transcripts")).read("rs-work")).toEqual([
+    expect(await fileTranscriptRecord(root).read("rs-work")).toEqual([
         // sentAt is the turn's own start time, not the provider's, matching every other user row.
         { role: "user", text: "finish the report", sentAt: 10_000 },
         // Reads the session the journal recorded; the registry entry may predate it if the daemon died early.
@@ -813,7 +865,7 @@ test("a failed interrupted-transcript append retains the journal for a later boo
     });
     await services.turnJournal.recordTurn(journalled("rs-retry"));
 
-    await resumeInterruptedTurns(services, fakeWake([]), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
 
     expect((await services.turnJournal.list()).map((entry) => entry.kind === "turn" && entry.turn.conversationId)).toEqual(["rs-retry"]);
 });
@@ -836,7 +888,7 @@ test("an interrupted fire records `interrupted`, then re-fires with its snapshot
     });
 
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedFires(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await waitFor(async () => expect((await services.automations.get("hook"))?.runs).toHaveLength(2), SETTLES);
 
     const runs = (await services.automations.get("hook"))?.runs ?? [];
@@ -853,7 +905,7 @@ test("a re-fire skips the approval gate: the wake was already past it when the d
     await services.turnJournal.recordFire({ kind: "automation", automationId: "gated", conversationId: "a-gated-1", startedAt: 10_000, attempts: 0 });
 
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedFires(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await waitFor(() => expect(prompts).toEqual(["sweep"]), SETTLES);
     // Re-holding it would ask a question the owner has already answered.
     expect(await services.heldWakes.list()).toEqual([]);
@@ -872,7 +924,7 @@ test("an entry for an automation since deleted or disabled is consumed, not left
     });
 
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedFires(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     expect(prompts).toEqual([]);
     expect(await services.turnJournal.list()).toEqual([]);
     expect((await services.automations.get("off"))?.runs[0]?.outcome).toBe("interrupted");
@@ -881,7 +933,7 @@ test("an entry for an automation since deleted or disabled is consumed, not left
 test("an empty journal is a no-op: a clean shutdown reads the settings for nothing", async () => {
     const services = await journalServices(mkdtempSync(join(tmpdir(), "restart-")));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     expect(prompts).toEqual([]);
 });
 
@@ -892,17 +944,19 @@ const parkedServices = async (root: string): Promise<{ services: Services; obser
     const resuming: string[] = [];
     const services = unstubbed<Services>("services", {
         ...(await journalServices(root, false)),
-        agents: unstubbed<Services["agents"]>("agents", {
-            entry: () => undefined,
-            begin: async () => true,
-            observe: (_id: string, event: AgentEvent) => {
-                observed.push(event);
+        // The placeholder's frames are what the fleet would see; a promised resume is noted by conversation. On the
+        // journal's own database file, where the placeholder re-journals the turn it rehydrates.
+        ...notedFleet(
+            (id, event) => {
+                if (event.kind === "frame") {
+                    observed.push(event.frame);
+                }
+                if (event.kind === "resume-promised") {
+                    resuming.push(id);
+                }
             },
-            markResuming: (id: string) => {
-                resuming.push(id);
-            },
-            finish: async () => {},
-        }),
+            fleetStoreOver(openConversationsDb(conversationsDbPath(root))),
+        ),
     });
     return { services, observed, resuming };
 };
@@ -943,7 +997,7 @@ test("a parked turn is rehydrated at boot: the cards go back up as they stood, a
     const { services, observed, resuming } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-up", [planRequest("r-up")]));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await cardsUp(observed, "plan");
 
     // Session frame comes first, then the card verbatim: same id and text, so a saved answer draft still matches.
@@ -958,8 +1012,8 @@ test("a parked turn is rehydrated at boot: the cards go back up as they stood, a
 
     // Stopping a rehydrated park behaves like stopping a live turn: cards resolve without a reply and the journal entry
     // drains.
-    expect(stopTurn("pk-up")).toBe(true);
-    await settle("pk-up");
+    expect(services.conversations.abort("pk-up")).toBe(true);
+    await settle(services, "pk-up");
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-up" });
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
@@ -971,15 +1025,15 @@ test("approving the restored plan resumes the session in the posture a live appr
     await services.turnJournal.recordTurn(parkedEntry("pk-plan", [planRequest("r-plan")]));
     const prompts: string[] = [];
     const inputs: AgentTurn[] = [];
-    const capture: WakeFn = async function* (_services, input) {
+    const capture: TurnStarter["stream"] = async function* (input) {
         prompts.push(input.prompt);
         inputs.push(input);
         yield { kind: "done" };
     };
-    await resumeInterruptedTurns(services, capture, BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, capture), BOOT_AT);
     await cardsUp(observed, "plan");
 
-    expect(resolveRequest({ kind: "plan", requestId: "r-plan", approve: true })).toBe("settled");
+    expect(services.cards.resolve({ kind: "plan", requestId: "r-plan", approve: true })).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
     expect(prompts[0]).toMatch(/approved.*plan/i);
@@ -988,7 +1042,7 @@ test("approving the restored plan resumes the session in the posture a live appr
     expect(observed.map((event) => event.kind)).toContain("mode");
     // `resuming` holds the card out of Finished for the blink between placeholder and resumed turn.
     expect(resuming).toEqual(["pk-plan"]);
-    await settle("pk-plan");
+    await settle(services, "pk-plan");
 });
 
 test("rejecting the restored plan with feedback goes back into plan mode carrying it", async () => {
@@ -996,46 +1050,46 @@ test("rejecting the restored plan with feedback goes back into plan mode carryin
     await services.turnJournal.recordTurn(parkedEntry("pk-rej", [planRequest("r-rej")]));
     const prompts: string[] = [];
     const inputs: AgentTurn[] = [];
-    const capture: WakeFn = async function* (_services, input) {
+    const capture: TurnStarter["stream"] = async function* (input) {
         prompts.push(input.prompt);
         inputs.push(input);
         yield { kind: "done" };
     };
-    await resumeInterruptedTurns(services, capture, BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, capture), BOOT_AT);
     await cardsUp(observed, "plan");
 
     const feedback = "Use pnpm, not npm.";
-    expect(resolveRequest({ kind: "plan", requestId: "r-rej", approve: false, feedback })).toBe("settled");
+    expect(services.cards.resolve({ kind: "plan", requestId: "r-rej", approve: false, feedback })).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(feedback);
     expect(inputs[0]).toMatchObject({ permissionMode: "plan" });
-    await settle("pk-rej");
+    await settle(services, "pk-rej");
 });
 
 test("answering the restored question resumes with the picks, worded as a live answer is", async () => {
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-q", [questionRequest("r-q")]));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await cardsUp(observed, "question");
 
-    expect(resolveRequest({ kind: "question", requestId: "r-q", answers: { "Deploy now?": ["Yes"] } })).toBe("settled");
+    expect(services.cards.resolve({ kind: "question", requestId: "r-q", answers: { "Deploy now?": ["Yes"] } })).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     // formatAnswers' own wording, so a restart reads identically to a live answer.
     expect(prompts[0]).toMatch(/user answered/i);
     expect(prompts[0]).toContain("Yes");
-    await settle("pk-q");
+    await settle(services, "pk-q");
 });
 
 test("dismissing the restored question ends the turn quietly, exactly as a live dismissal does", async () => {
     const { services, observed, resuming } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-dis", [questionRequest("r-dis")]));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await cardsUp(observed, "question");
 
-    expect(resolveRequest({ kind: "question", requestId: "r-dis", cancelled: true })).toBe("settled");
-    await settle("pk-dis");
+    expect(services.cards.resolve({ kind: "question", requestId: "r-dis", cancelled: true })).toBe("settled");
+    await settle(services, "pk-dis");
     expect(prompts).toEqual([]);
     expect(resuming).toEqual([]);
     await waitFor(async () => expect(await services.turnJournal.list()).toEqual([]), SETTLES);
@@ -1045,36 +1099,36 @@ test("allowing the restored permission resumes the turn told to run the tool", a
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-allow", [permissionRequest("r-allow")]));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await cardsUp(observed, "permission");
 
-    expect(resolveRequest({ kind: "permission", requestId: "r-allow", decision: "once" })).toBe("settled");
+    expect(services.cards.resolve({ kind: "permission", requestId: "r-allow", decision: "once" })).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]?.startsWith(RESUME_NOTES.answered)).toBe(true);
     expect(prompts[0]).toMatch(/allowed Bash/i);
-    await settle("pk-allow");
+    await settle(services, "pk-allow");
 });
 
 test("denying the restored permission with feedback resumes as a redirection; a bare deny ends the turn", async () => {
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-redir", [permissionRequest("r-redir")]));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await cardsUp(observed, "permission");
     const feedback = "Read the file instead.";
-    expect(resolveRequest({ kind: "permission", requestId: "r-redir", decision: "deny", feedback })).toBe("settled");
+    expect(services.cards.resolve({ kind: "permission", requestId: "r-redir", decision: "deny", feedback })).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toContain(feedback);
-    await settle("pk-redir");
+    await settle(services, "pk-redir");
 
     // A bare deny is the user pulling the plug, as live: nothing resumes.
     const bare = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await bare.services.turnJournal.recordTurn(parkedEntry("pk-bare", [permissionRequest("r-bare")]));
     const barePrompts: string[] = [];
-    await resumeInterruptedTurns(bare.services, fakeWake(barePrompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(bare.services, fakeWake(barePrompts)), BOOT_AT);
     await cardsUp(bare.observed, "permission");
-    expect(resolveRequest({ kind: "permission", requestId: "r-bare", decision: "deny" })).toBe("settled");
-    await settle("pk-bare");
+    expect(bare.services.cards.resolve({ kind: "permission", requestId: "r-bare", decision: "deny" })).toBe("settled");
+    await settle(bare.services, "pk-bare");
     expect(barePrompts).toEqual([]);
     expect(bare.resuming).toEqual([]);
 });
@@ -1083,14 +1137,14 @@ test("one answer resumes a turn parked on several cards: the others freeze cance
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-multi", [questionRequest("r-mq"), permissionRequest("r-mp")]));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), BOOT_AT);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), BOOT_AT);
     await cardsUp(observed, "permission");
 
-    expect(resolveRequest({ kind: "permission", requestId: "r-mp", decision: "once" })).toBe("settled");
+    expect(services.cards.resolve({ kind: "permission", requestId: "r-mp", decision: "once" })).toBe("settled");
     await waitFor(() => expect(prompts).toHaveLength(1), SETTLES);
     expect(prompts[0]).toMatch(/allowed Bash/i);
     expect(observed).toContainEqual({ kind: "resolved", requestId: "r-mq" });
-    await settle("pk-multi");
+    await settle(services, "pk-multi");
 });
 
 test("rehydration answers to none of the resume gates: spent, stale and toggle-off all still restore the card", async () => {
@@ -1099,20 +1153,20 @@ test("rehydration answers to none of the resume gates: spent, stale and toggle-o
     const { services, observed } = await parkedServices(mkdtempSync(join(tmpdir(), "parked-")));
     await services.turnJournal.recordTurn(parkedEntry("pk-gates", [questionRequest("r-gates")], { attempts: 1, startedAt: 0 }));
     const prompts: string[] = [];
-    await resumeInterruptedTurns(services, fakeWake(prompts), 10_000 + 7 * 60 * 60_000);
+    await resumeInterruptedTurns(drivenBy(services, fakeWake(prompts)), 10_000 + 7 * 60 * 60_000);
     await cardsUp(observed, "question");
     expect(prompts).toEqual([]);
 
-    stopTurn("pk-gates");
-    await settle("pk-gates");
+    services.conversations.abort("pk-gates");
+    await settle(services, "pk-gates");
 });
 
 // A spent allowance is never auto-resumed; only a user press re-runs the held turn, and each press builds a fresh
 // prompt rather than replaying provider filler messages.
 
 // Captures whole turns, not just prompts: which session a re-run lands on is half of what these tests assert.
-const heldWake = (turns: AgentTurn[]): WakeFn =>
-    async function* (_services, input) {
+const heldWake = (turns: AgentTurn[]): TurnStarter["stream"] =>
+    async function* (input) {
         turns.push(input);
         yield { kind: "done" } as AgentEvent;
     };
@@ -1120,15 +1174,15 @@ const heldWake = (turns: AgentTurn[]): WakeFn =>
 test("a turn refused before it ran is sent again in full, and NOT onto the session it left behind", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-1", isolated: true },
         sessionId: "s-void",
         ran: false,
     });
 
-    expect(await fireHeldResume(services, heldWake(turns), "lim-1")).toEqual(expect.any(Object));
-    await settle("lim-1");
+    expect(await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-1")).toEqual(expect.any(Object));
+    await settle(services, "lim-1");
 
     expect(turns).toHaveLength(1);
     expect(turns[0]!.prompt).toContain("ship the parser");
@@ -1139,41 +1193,41 @@ test("a turn refused before it ran is sent again in full, and NOT onto the sessi
     // pair per press; a fresh session gets the same seeded handoff a provider switch does.
     expect(turns[0]!.sessionId).toBeUndefined();
 
-    clearPendingResume("lim-1");
+    clearPendingResume(services, "lim-1");
 });
 
 test("a limit reached mid-flight keeps the session holding its work, and says so", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-2", isolated: true },
         sessionId: "s-real",
         ran: true,
     });
 
-    await fireHeldResume(services, heldWake(turns), "lim-2");
-    await settle("lim-2");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-2");
+    await settle(services, "lim-2");
 
     expect(turns[0]!.sessionId).toBe("s-real");
     expect(turns[0]!.prompt).toMatch(/allowance ran out/i);
     expect(turns[0]!.prompt).toMatch(/continue from that point/i);
 
-    clearPendingResume("lim-2");
+    clearPendingResume(services, "lim-2");
 });
 
 test("a press on a switched account runs on it, and cannot take the old account's session with it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-moved", isolated: true, account: "spent-one" },
         sessionId: "s-real",
         ran: true,
     });
 
-    await fireHeldResume(services, heldWake(turns), "lim-moved", { agent: "claude", harness: "native", account: "with-room" });
-    await settle("lim-moved");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-moved", { agent: "claude", harness: "native", account: "with-room" });
+    await settle(services, "lim-moved");
 
     expect(turns[0]!.account).toBe("with-room");
     // A session belongs to the credential that minted it: switching accounts can't reuse it, so the re-run opens a
@@ -1183,7 +1237,7 @@ test("a press on a switched account runs on it, and cannot take the old account'
     expect(turns[0]!.prompt).toMatch(/sent again on a different account/i);
     expect(turns[0]!.prompt).toContain("ship the parser");
 
-    clearPendingResume("lim-moved");
+    clearPendingResume(services, "lim-moved");
 });
 
 // Same routing isn't a switch: the session survives. The held turn leaves provider/harness implicit (absent means
@@ -1191,49 +1245,49 @@ test("a press on a switched account runs on it, and cannot take the old account'
 test("a press that names the routing the turn already had resumes its session", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-same", isolated: true },
         sessionId: "s-real",
         ran: true,
     });
 
-    await fireHeldResume(services, heldWake(turns), "lim-same", { agent: "claude", harness: "native", model: "claude-sonnet-4-5" });
-    await settle("lim-same");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-same", { agent: "claude", harness: "native", model: "claude-sonnet-4-5" });
+    await settle(services, "lim-same");
 
     expect(turns[0]!.sessionId).toBe("s-real");
     expect(turns[0]!.prompt).toMatch(/continue from that point/i);
     // A same-provider model swap doesn't retire the session: the session outlives the model it was minted under.
     expect(turns[0]!.model).toBe("claude-sonnet-4-5");
 
-    clearPendingResume("lim-same");
+    clearPendingResume(services, "lim-same");
 });
 
 test("a press on a switched account still says nothing ran, when nothing ran", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-door", isolated: true, account: "spent-one", model: "claude-opus-4-1" },
         sessionId: "s-void",
         ran: false,
     });
 
-    await fireHeldResume(services, heldWake(turns), "lim-door", { agent: "claude", harness: "native", account: "with-room" });
-    await settle("lim-door");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-door", { agent: "claude", harness: "native", account: "with-room" });
+    await settle(services, "lim-door");
 
     expect(turns[0]!.account).toBe("with-room");
     expect(turns[0]!.prompt).toMatch(/no part of the request below/i);
     // No model in the press (unloaded catalog) leaves the refused turn's own model standing.
     expect(turns[0]!.model).toBe("claude-opus-4-1");
 
-    clearPendingResume("lim-door");
+    clearPendingResume(services, "lim-door");
 });
 
 test("a press that names no routing runs the turn exactly as it was", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "limit",
         input: {
             prompt: "ship the parser",
@@ -1247,58 +1301,58 @@ test("a press that names no routing runs the turn exactly as it was", async () =
         ran: true,
     });
 
-    await fireHeldResume(services, heldWake(turns), "lim-bare");
-    await settle("lim-bare");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-bare");
+    await settle(services, "lim-bare");
 
     expect(turns[0]).toMatchObject({ account: "spent-one", agent: "codex", harness: "claude-code", sessionId: "s-real" });
 
-    clearPendingResume("lim-bare");
+    clearPendingResume(services, "lim-bare");
 });
 
 test("pressing again after a re-run was refused too states the note once, not once per press", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
     const wake = heldWake(turns);
-    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-3", isolated: true }, ran: false });
+    recordHeldTurn(services, { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-3", isolated: true }, ran: false });
 
-    await fireHeldResume(services, wake, "lim-3");
-    await settle("lim-3");
+    await fireHeldResume(drivenBy(services, wake), "lim-3");
+    await settle(services, "lim-3");
     // Re-held using the prompt the last fire built, simulating a second refusal.
-    recordHeldTurn({ reason: "limit", input: { ...turns[0]!, conversationId: "lim-3" }, ran: false });
-    await fireHeldResume(services, wake, "lim-3");
-    await settle("lim-3");
+    recordHeldTurn(services, { reason: "limit", input: { ...turns[0]!, conversationId: "lim-3" }, ran: false });
+    await fireHeldResume(drivenBy(services, wake), "lim-3");
+    await settle(services, "lim-3");
 
     expect(turns).toHaveLength(2);
     expect(turns[1]!.prompt).toBe(turns[0]!.prompt);
     expect(turns[1]!.prompt.match(/no part of the request below/gu)).toHaveLength(1);
 
-    clearPendingResume("lim-3");
+    clearPendingResume(services, "lim-3");
 });
 
 test("a turn that ran before it was refused stops claiming nothing had been done", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
     const wake = heldWake(turns);
-    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-4", isolated: true }, ran: false });
-    await fireHeldResume(services, wake, "lim-4");
-    await settle("lim-4");
+    recordHeldTurn(services, { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-4", isolated: true }, ran: false });
+    await fireHeldResume(drivenBy(services, wake), "lim-4");
+    await settle(services, "lim-4");
 
     // This retry got partway before failing again, crossing to the ran:true arm.
-    recordHeldTurn({ reason: "limit", input: { ...turns[0]!, conversationId: "lim-4" }, sessionId: "s-partial", ran: true });
-    await fireHeldResume(services, wake, "lim-4");
-    await settle("lim-4");
+    recordHeldTurn(services, { reason: "limit", input: { ...turns[0]!, conversationId: "lim-4" }, sessionId: "s-partial", ran: true });
+    await fireHeldResume(drivenBy(services, wake), "lim-4");
+    await settle(services, "lim-4");
 
     // Keep resume notes idempotent so replacement reasons remain current.
     expect(turns[1]!.prompt).toMatch(/allowance ran out/i);
     expect(turns[1]!.prompt).not.toMatch(/no part of the request below/i);
     expect(turns[1]!.prompt).toContain("ship the parser");
 
-    clearPendingResume("lim-4");
+    clearPendingResume(services, "lim-4");
 });
 
 test("nothing held answers with nothing, so the press falls back to saying carry on", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
-    expect(await fireHeldResume(services, heldWake([]), "lim-none")).toBeUndefined();
+    expect(await fireHeldResume(drivenBy(services, heldWake([])), "lim-none")).toBeUndefined();
 });
 
 // A turn the sandbox started itself (a fix press, a peer's message, a re-run) has no composer holding its words. The
@@ -1307,15 +1361,16 @@ const TURNED_AWAY: AgentEvent[] = [{ kind: "error", code: "sandbox-memory-low", 
 
 test("a turn the sandbox started is kept when the door turns it away, its message recorded under the refusal", async () => {
     const root = mkdtempSync(join(tmpdir(), "door-"));
-    const record = fileTranscriptRecord(join(root, "transcripts"));
-    const started = await startConversationTurn(fakeServices(root), fakeWake([], TURNED_AWAY), {
+    const record = fileTranscriptRecord(root);
+    const services = fakeServices(root);
+    const started = await startConversationTurn(services, fakeWake([], TURNED_AWAY), {
         prompt: "fix the pipeline",
         conversationId: "door-kept",
         isolated: true,
     });
-    await settle("door-kept");
+    await settle(services, "door-kept");
 
-    expect(heldTurn("door-kept")).toMatchObject({ reason: "door", ran: false, run: started!.id, input: { prompt: "fix the pipeline", isolated: true } });
+    expect(heldTurn(services, "door-kept")).toMatchObject({ reason: "door", ran: false, run: started!.id, input: { prompt: "fix the pipeline", isolated: true } });
     await waitFor(async () => expect(await record.read("door-kept")).toHaveLength(2), SETTLES);
     expect(await record.read("door-kept")).toEqual([
         { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), run: started!.id },
@@ -1323,12 +1378,12 @@ test("a turn the sandbox started is kept when the door turns it away, its messag
     ]);
 
     // POST /agent's composer holds its own words and hands them back: a second copy kept here would be sent twice.
-    await startConversationTurn(fakeServices(root), fakeWake([], TURNED_AWAY), { prompt: "fix the pipeline", conversationId: "door-sent" }, { senderKeeps: true });
-    await settle("door-sent");
-    expect(heldTurn("door-sent")).toBeUndefined();
+    await startConversationTurn(services, fakeWake([], TURNED_AWAY), { prompt: "fix the pipeline", conversationId: "door-sent" }, { senderKeeps: true });
+    await settle(services, "door-sent");
+    expect(heldTurn(services, "door-sent")).toBeUndefined();
     expect(await record.read("door-sent")).toEqual([]);
 
-    clearPendingResume("door-kept");
+    clearPendingResume(services, "door-kept");
 });
 
 // Whether to go past a memory hold, a dead credential or a missing model is a person's call, never a clock's: the
@@ -1336,18 +1391,18 @@ test("a turn the sandbox started is kept when the door turns it away, its messag
 test("a turn the door turned away waits for a press, which sends it whole, on the session it already had", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "door-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "door",
         input: { prompt: "fix the pipeline", conversationId: "door-press", isolated: true, sessionId: "s-live", runRole: "pipeline-fix" },
         ran: false,
         run: "run-refused",
     });
 
-    await createTurnResumeScheduler(services, heldWake(turns)).tick(Date.now() + 24 * 60 * 60_000);
+    await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(Date.now() + 24 * 60 * 60_000);
     expect(turns).toEqual([]);
 
-    await fireHeldResume(services, heldWake(turns), "door-press");
-    await settle("door-press");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "door-press");
+    await settle(services, "door-press");
 
     expect(turns).toHaveLength(1);
     expect(turns[0]).toMatchObject({ isolated: true, sessionId: "s-live", runRole: "pipeline-fix" });
@@ -1355,43 +1410,42 @@ test("a turn the door turned away waits for a press, which sends it whole, on th
     // The refused run recorded these same words; a session seeded from the record must not read them twice.
     expect(turns[0]).toMatchObject({ unseenRuns: ["run-refused"] });
 
-    clearPendingResume("door-press");
+    clearPendingResume(services, "door-press");
 });
 
 // Pressed before its cause was fixed, the re-run is turned away too: every refused copy of the words stays unseen.
 test("a turn turned away again names every refused run before it, not only the last", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "door-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "door",
         input: { prompt: withResumeNote("fix the pipeline", RESUME_NOTES.door), conversationId: "door-again", unseenRuns: ["run-first"] },
         ran: false,
         run: "run-second",
     });
 
-    await fireHeldResume(services, heldWake(turns), "door-again");
-    await settle("door-again");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "door-again");
+    await settle(services, "door-again");
 
     expect(turns[0]).toMatchObject({ unseenRuns: ["run-first", "run-second"] });
     // One note however many presses it took.
     expect(turns[0]!.prompt).toBe(withResumeNote("fix the pipeline", RESUME_NOTES.door));
 
-    clearPendingResume("door-again");
+    clearPendingResume(services, "door-again");
 });
-
 
 test("a turn a dead runtime cut short is sent again on its own session, with no allowance in the note", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "stopped",
         input: { prompt: "ship the parser", conversationId: "stop-1", isolated: true },
         sessionId: "s-real",
         ran: true,
     });
 
-    await fireHeldResume(services, heldWake(turns), "stop-1");
-    await settle("stop-1");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-1");
+    await settle(services, "stop-1");
 
     expect(turns).toHaveLength(1);
     expect(turns[0]!.sessionId).toBe("s-real");
@@ -1401,35 +1455,35 @@ test("a turn a dead runtime cut short is sent again on its own session, with no 
     // The word itself is what this whole path exists to keep out of the record.
     expect(turns[0]!.prompt).not.toMatch(/allowance/i);
 
-    clearPendingResume("stop-1");
+    clearPendingResume(services, "stop-1");
 });
 
 test("a stopped turn whose provider never answered opens fresh, since its session holds nothing", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "stopped",
         input: { prompt: "ship the parser", conversationId: "stop-2", isolated: true },
         sessionId: "s-void",
         ran: false,
     });
 
-    await fireHeldResume(services, heldWake(turns), "stop-2");
-    await settle("stop-2");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-2");
+    await settle(services, "stop-2");
 
     expect(turns[0]!.sessionId).toBeUndefined();
     expect(turns[0]!.prompt).toMatch(/stopped before it finished/i);
 
-    clearPendingResume("stop-2");
+    clearPendingResume(services, "stop-2");
 });
 
 test("the next turn on the conversation supersedes the held one, whatever started it", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
-    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-5", isolated: true }, ran: false });
+    recordHeldTurn(services, { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-5", isolated: true }, ran: false });
     // Simulates the user typing instead of pressing: the pending hold must not survive their new message.
-    clearPendingResume("lim-5");
+    clearPendingResume(services, "lim-5");
 
-    expect(await fireHeldResume(services, heldWake([]), "lim-5")).toBeUndefined();
+    expect(await fireHeldResume(drivenBy(services, heldWake([])), "lim-5")).toBeUndefined();
 });
 
 // RECORDED is when the refusal happened; REOPENS is the window it named. Every test below pins some gate around that
@@ -1440,8 +1494,8 @@ const REOPENS = Math.round((RECORDED + 4 * 60 * 60 * 1000) / 1000);
 test("an armed conversation sends the held turn again once the window reopens, and not before", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-1", true]]));
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordHeldTurn(
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(services, 
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-1", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
@@ -1451,10 +1505,10 @@ test("an armed conversation sends the held turn again once the window reopens, a
     expect(turns).toHaveLength(0);
 
     await scheduler.tick(REOPENS * 1000 + 1);
-    await settle("lim-auto-1");
+    await settle(services, "lim-auto-1");
     expect(turns).toHaveLength(1);
     expect(turns[0]!.prompt).toContain("ship the parser");
-    clearPendingResume("lim-auto-1");
+    clearPendingResume(services, "lim-auto-1");
 });
 
 // The entry survives its own fire, unlike the outage pass's delete-then-fire, so a press still works after the
@@ -1462,37 +1516,37 @@ test("an armed conversation sends the held turn again once the window reopens, a
 test("an armed conversation fires exactly once per hold", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-2", true]]));
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordHeldTurn(
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(services, 
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-2", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
 
     await scheduler.tick(REOPENS * 1000 + 1);
-    await settle("lim-auto-2");
+    await settle(services, "lim-auto-2");
     await scheduler.tick(REOPENS * 1000 + 5_000);
     await scheduler.tick(REOPENS * 1000 + 10_000);
-    await settle("lim-auto-2");
+    await settle(services, "lim-auto-2");
 
     expect(turns).toHaveLength(1);
-    clearPendingResume("lim-auto-2");
+    clearPendingResume(services, "lim-auto-2");
 });
 
 // Unarmed waits indefinitely; the turn stays held, so a press still works.
 test("an unarmed conversation is never fired for, however long the window has been open", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordHeldTurn(
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(services, 
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-3", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
 
     await scheduler.tick(REOPENS * 1000 + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
-    expect(await fireHeldResume(services, heldWake(turns), "lim-auto-3")).toEqual(expect.any(Object));
-    await settle("lim-auto-3");
-    clearPendingResume("lim-auto-3");
+    expect(await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-auto-3")).toEqual(expect.any(Object));
+    await settle(services, "lim-auto-3");
+    clearPendingResume(services, "lim-auto-3");
 });
 
 test("the sandbox setting arms a conversation that has said nothing itself", async () => {
@@ -1500,15 +1554,15 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
     const settings = await services.sandboxSettings.get();
     await services.sandboxSettings.set({ ...settings, limitPolicy: "resend" });
     const turns: AgentTurn[] = [];
-    recordHeldTurn(
+    recordHeldTurn(services, 
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-4", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
 
-    await createTurnResumeScheduler(services, heldWake(turns)).tick(REOPENS * 1000 + 1);
-    await settle("lim-auto-4");
+    await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(REOPENS * 1000 + 1);
+    await settle(services, "lim-auto-4");
     expect(turns).toHaveLength(1);
-    clearPendingResume("lim-auto-4");
+    clearPendingResume(services, "lim-auto-4");
 });
 
 // Grok and Cursor publish no readable quota reset, so their refusals carry no instant to schedule against; armed or
@@ -1516,11 +1570,11 @@ test("the sandbox setting arms a conversation that has said nothing itself", asy
 test("a limit that named no reset instant is never fired for, armed or not", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-5", true]]));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({ reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-5", isolated: true }, ran: false }, RECORDED);
+    recordHeldTurn(services, { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-5", isolated: true }, ran: false }, RECORDED);
 
-    await createTurnResumeScheduler(services, heldWake(turns)).tick(RECORDED + 24 * 60 * 60 * 1000);
+    await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(RECORDED + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(0);
-    clearPendingResume("lim-auto-5");
+    clearPendingResume(services, "lim-auto-5");
 });
 
 // A stale reset instant must not read as "open now": firing on it would re-refuse, re-record the same instant, and loop
@@ -1529,14 +1583,14 @@ test("a reset instant that had already passed when the refusal happened is never
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")), [], () => true, new Map(), new Map([["lim-auto-6", true]]));
     const turns: AgentTurn[] = [];
     const stale = Math.round((RECORDED - 60 * 60 * 1000) / 1000);
-    recordHeldTurn(
+    recordHeldTurn(services, 
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-auto-6", isolated: true }, ran: false, reopensAt: stale },
         RECORDED,
     );
 
-    await createTurnResumeScheduler(services, heldWake(turns)).tick(RECORDED + 5_000);
+    await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(RECORDED + 5_000);
     expect(turns).toHaveLength(0);
-    clearPendingResume("lim-auto-6");
+    clearPendingResume(services, "lim-auto-6");
 });
 
 // A session is a file the daemon keeps; a credential is per-turn env. `carry` keeps the session across an account
@@ -1544,22 +1598,22 @@ test("a reset instant that had already passed when the refusal happened is never
 test("a press that carries keeps the session across the account change, and says so", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
     const turns: AgentTurn[] = [];
-    recordHeldTurn({
+    recordHeldTurn(services, {
         reason: "limit",
         input: { prompt: "ship the parser", conversationId: "lim-carry", isolated: true, account: "spent-one" },
         sessionId: "s-real",
         ran: true,
     });
 
-    await fireHeldResume(services, heldWake(turns), "lim-carry", { agent: "claude", harness: "native", account: "with-room", carry: true });
-    await settle("lim-carry");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "lim-carry", { agent: "claude", harness: "native", account: "with-room", carry: true });
+    await settle(services, "lim-carry");
 
     expect(turns[0]!.account).toBe("with-room");
     expect(turns[0]!.sessionId).toBe("s-real");
     expect(turns[0]!.prompt).toMatch(/in this same session/i);
     expect(turns[0]!.prompt).toContain("ship the parser");
 
-    clearPendingResume("lim-carry");
+    clearPendingResume(services, "lim-carry");
 });
 
 // A refused carry is tried once, then falls back fresh via `carryRefused` and a move to the account the turn's already
@@ -1567,8 +1621,8 @@ test("a press that carries keeps the session across the account change, and says
 test("a carry the other account refused re-runs fresh on that account, once", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordHeldTurn(
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(services, 
         {
             reason: "limit",
             input: { prompt: "ship the parser", conversationId: "lim-refused-carry", isolated: true, account: "with-room" },
@@ -1581,15 +1635,15 @@ test("a carry the other account refused re-runs fresh on that account, once", as
     );
 
     await scheduler.tick(RECORDED + 5_000);
-    await settle("lim-refused-carry");
+    await settle(services, "lim-refused-carry");
     await scheduler.tick(RECORDED + 10_000);
-    await settle("lim-refused-carry");
+    await settle(services, "lim-refused-carry");
 
     expect(turns).toHaveLength(1);
     expect(turns[0]!.account).toBe("with-room");
     expect(turns[0]!.sessionId).toBeUndefined();
     expect(turns[0]!.prompt).toMatch(/sent again on a different account/i);
-    clearPendingResume("lim-refused-carry");
+    clearPendingResume(services, "lim-refused-carry");
 });
 
 // A booked move (LimitFailure.move) fires on the very next pass, no instant needed, and only once: the entry keeps a
@@ -1597,8 +1651,8 @@ test("a carry the other account refused re-runs fresh on that account, once", as
 test("a booked move fires on the next pass, with the session the policy said to carry, and only once", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordHeldTurn(
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(services, 
         {
             reason: "limit",
             input: { prompt: "ship the parser", conversationId: "lim-move", isolated: true, account: "spent-one" },
@@ -1611,7 +1665,7 @@ test("a booked move fires on the next pass, with the session the policy said to 
     );
 
     await scheduler.tick(RECORDED + 5_000);
-    await settle("lim-move");
+    await settle(services, "lim-move");
     expect(turns).toHaveLength(1);
     expect(turns[0]!.account).toBe("with-room");
     expect(turns[0]!.sessionId).toBe("s-real");
@@ -1620,16 +1674,16 @@ test("a booked move fires on the next pass, with the session the policy said to 
     // One hold, one fire: neither the next pass nor the reset fires it again.
     await scheduler.tick(RECORDED + 10_000);
     await scheduler.tick(REOPENS * 1000 + 1);
-    await settle("lim-move");
+    await settle(services, "lim-move");
     expect(turns).toHaveLength(1);
-    clearPendingResume("lim-move");
+    clearPendingResume(services, "lim-move");
 });
 
 test("a held turn with no booked move and no arming stays held", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "limit-")));
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
-    recordHeldTurn(
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(services, 
         { reason: "limit", input: { prompt: "ship the parser", conversationId: "lim-unbooked", isolated: true }, ran: false, reopensAt: REOPENS },
         RECORDED,
     );
@@ -1637,7 +1691,7 @@ test("a held turn with no booked move and no arming stays held", async () => {
     await scheduler.tick(RECORDED + 5_000);
     await scheduler.tick(REOPENS * 1000 + 1);
     expect(turns).toHaveLength(0);
-    clearPendingResume("lim-unbooked");
+    clearPendingResume(services, "lim-unbooked");
 });
 
 // A turn that stopped short with nothing to repair: the ladder that re-runs it used to live in a browser tab, where it
@@ -1653,66 +1707,66 @@ const stopServices = async (root: string, retry: boolean, abandoned: string[] = 
     return services;
 };
 
-const stopHeld = (conversationId: string, at: number): void => {
-    recordHeldTurn({ reason: "stopped", input: { prompt: "ship the parser", conversationId, isolated: true }, ran: true }, at);
+const stopHeld = (services: Services, conversationId: string, at: number): void => {
+    recordHeldTurn(services, { reason: "stopped", input: { prompt: "ship the parser", conversationId, isolated: true }, ran: true }, at);
 };
 
 test("a stopped turn waits for a press unless this sandbox says otherwise", async () => {
     const services = await stopServices(mkdtempSync(join(tmpdir(), "stop-")), false);
     const turns: AgentTurn[] = [];
-    stopHeld("stop-1", RECORDED);
+    stopHeld(services, "stop-1", RECORDED);
 
-    await createTurnResumeScheduler(services, heldWake(turns)).tick(RECORDED + 60_000);
+    await createTurnResumeScheduler(drivenBy(services, heldWake(turns))).tick(RECORDED + 60_000);
     expect(turns).toHaveLength(0);
-    clearPendingResume("stop-1");
-    clearStopLadder("stop-1");
+    clearPendingResume(services, "stop-1");
+    clearStopLadder(services, "stop-1");
 });
 
 test("an armed stop climbs its ladder rung by rung, and re-runs the held turn rather than saying anything", async () => {
     const services = await stopServices(mkdtempSync(join(tmpdir(), "stop-")), true);
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
 
     // RETRY_LADDER_MS, read from the contract rather than transcribed, so a change to the rungs moves this with it.
     for (const [rung, delay] of RETRY_LADDER_MS.entries()) {
         const recordedAt = RECORDED + rung * 60_000;
-        stopHeld("stop-2", recordedAt);
+        stopHeld(services, "stop-2", recordedAt);
         // A second short of the rung: nothing fires, so the wait is the ladder's and not the poll interval's.
         await scheduler.tick(recordedAt + delay - 1);
         expect(turns, `rung ${rung}`).toHaveLength(rung);
         await scheduler.tick(recordedAt + delay);
-        await settle("stop-2");
+        await settle(services, "stop-2");
         expect(turns, `rung ${rung}`).toHaveLength(rung + 1);
         // The fire's own turn start would clear the entry; these fixtures never reach it.
-        clearPendingResume("stop-2");
+        clearPendingResume(services, "stop-2");
     }
     expect(turns).toHaveLength(RETRY_LADDER_TRIES);
     expect(turns[0]!.prompt).toContain("ship the parser");
-    clearStopLadder("stop-2");
+    clearStopLadder(services, "stop-2");
 });
 
 test("a spent ladder stands down and says so, rather than leaving the card promising a return", async () => {
     const abandoned: string[] = [];
     const services = await stopServices(mkdtempSync(join(tmpdir(), "stop-")), true, abandoned);
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
 
     for (const [rung, delay] of RETRY_LADDER_MS.entries()) {
         const recordedAt = RECORDED + rung * 60_000;
-        stopHeld("stop-3", recordedAt);
+        stopHeld(services, "stop-3", recordedAt);
         await scheduler.tick(recordedAt + delay);
-        await settle("stop-3");
-        clearPendingResume("stop-3");
+        await settle(services, "stop-3");
+        clearPendingResume(services, "stop-3");
     }
     expect(turns).toHaveLength(RETRY_LADDER_TRIES);
 
     // One more hold, with the ladder spent: nothing fires, and the conversation is told why.
     const lastAt = RECORDED + RETRY_LADDER_TRIES * 60_000;
-    stopHeld("stop-3", lastAt);
+    stopHeld(services, "stop-3", lastAt);
     await scheduler.tick(lastAt + 24 * 60 * 60 * 1000);
     expect(turns).toHaveLength(RETRY_LADDER_TRIES);
     expect(abandoned).toEqual(["stop-3"]);
-    clearStopLadder("stop-3");
+    clearStopLadder(services, "stop-3");
 });
 
 // The one proof the run is getting somewhere. Without it a run that keeps dying would climb forever, and with too
@@ -1720,23 +1774,23 @@ test("a spent ladder stands down and says so, rather than leaving the card promi
 test("a turn that settles with nothing held puts the ladder back at its first rung", async () => {
     const services = await stopServices(mkdtempSync(join(tmpdir(), "stop-")), true);
     const turns: AgentTurn[] = [];
-    const scheduler = createTurnResumeScheduler(services, heldWake(turns));
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
 
-    stopHeld("stop-4", RECORDED);
+    stopHeld(services, "stop-4", RECORDED);
     await scheduler.tick(RECORDED + RETRY_LADDER_MS[0]!);
-    await settle("stop-4");
-    clearPendingResume("stop-4");
+    await settle(services, "stop-4");
+    clearPendingResume(services, "stop-4");
     expect(turns).toHaveLength(1);
 
     // Second rung next, had nothing intervened.
     const afterProgress = RECORDED + 60_000;
-    clearStopLadder("stop-4");
-    stopHeld("stop-4", afterProgress);
+    clearStopLadder(services, "stop-4");
+    stopHeld(services, "stop-4", afterProgress);
     await scheduler.tick(afterProgress + RETRY_LADDER_MS[0]! - 1);
     expect(turns).toHaveLength(1);
     await scheduler.tick(afterProgress + RETRY_LADDER_MS[0]!);
-    await settle("stop-4");
+    await settle(services, "stop-4");
     expect(turns).toHaveLength(2);
-    clearPendingResume("stop-4");
-    clearStopLadder("stop-4");
+    clearPendingResume(services, "stop-4");
+    clearStopLadder(services, "stop-4");
 });

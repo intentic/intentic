@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { hostPresets, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./previews";
+import { answersSummary, hostPresets, hostGrantSummary, localModelMemorySummary, matchHostPreset, walletPolicySummary } from "./previews";
 
 /* The sentences the forms say back. Each is the actual thing being agreed to, so what it claims is pinned. */
 
@@ -53,4 +53,15 @@ test(`does the local model's RAM sum so the reader doesn't`, () => {
     );
     // A custom GGUF has no known weight: no figure beats a wrong one.
     expect(localModelMemorySummary({ model: `custom`, context: `65536` })).toBeUndefined();
+});
+
+// Only the kinds whose answers add up to something non-obvious get a sentence under the form, and it is theirs.
+test(`says the sentence a tile's answers add up to, for the kinds that have one`, () => {
+    const wallet = { perPaymentMaxUsd: `1.00`, dailyCapUsd: `5.00`, autoApproveUnderUsd: `0` };
+    const model = { model: `unsloth/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf`, context: `65536` };
+
+    expect(answersSummary(`wallet`, wallet)).toBe(`Every payment asks you in chat first · at most $1.00 each · $5.00 a day.`);
+    expect(answersSummary(`localmodel`, model)).toBe(`≈ 5.3 GB weights + 4 GB window: needs 9.3 GB of free RAM.`);
+    expect(answersSummary(`vpn`, wallet)).toBeUndefined();
+    expect(answersSummary(undefined, wallet)).toBeUndefined();
 });

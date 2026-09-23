@@ -2,16 +2,15 @@ import { WEBCHAT_DAILY_MAX_DEFAULT, type WebchatConfig, WebchatMessageSchema, ty
 import type { Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { z } from "zod";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { AutomationRecord } from "../automations/automations-store.js";
 import { createPublicDoor, type PublicDoor, type PublicDoorSpec } from "../automations/public-door.js";
-import { PAYLOAD_MAX, TITLE_MAX, type WakeFn } from "../automations/scheduler.js";
+import { PAYLOAD_MAX, TITLE_MAX } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
 import { type ThreadSession, WEBCHAT_SESSION_TTL_MS } from "../sessions/thread-sessions.js";
 import type { InstallsStore } from "../store/installs.js";
 import { rateWindow } from "../store/rate-window.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 import { createSseStream } from "./sse-stream.js";
 import { publicConfig, usableAntiBot } from "./webchat-config.js";
 import { resolveVisitor, SignInRequired, type VisitorIdentity } from "./webchat-identity.js";
@@ -144,7 +143,7 @@ const overCeiling = (
 const POLL_WINDOW_MS = 60_000;
 const POLL_MAX = 60;
 
-export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAgent, installs?: InstallsStore) => {
+export const createWebchatRoutes = (services: Services, installs?: InstallsStore) => {
     const door = createPublicDoor(services, WEBCHAT_DOOR, installs);
     const polls = rateWindow(POLL_WINDOW_MS);
     return {
@@ -218,7 +217,7 @@ export const createWebchatRoutes = (services: Services, wake: WakeFn = streamAge
                     await sse.writeSSE({ event: "pending", data: "Thanks, your request was received and a human will review it shortly." });
                 }
                 await enqueue(automation.id, async () => {
-                    await door.fireOnThread(automation, thread, ttlMs, wake, {
+                    await door.fireOnThread(automation, thread, ttlMs, {
                         payload,
                         // The queue above serializes this route's turns; this guards against everyone else's (approved
                         // wakes, restarts).

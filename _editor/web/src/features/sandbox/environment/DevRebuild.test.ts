@@ -24,7 +24,6 @@ mock.module(`../devices/useDevices`, () => ({
     useDevices: () => ({ devices: ref([]) }),
     runDeviceCommand,
 }));
-mock.module(`../client/sandboxClient`, () => ({ SandboxHttpError: class extends Error {} }));
 mock.module(`../client/useSandbox`, () => ({ useSandbox: () => ({ activeSandboxId: ref(`sbx-1`) }) }));
 // What the restart will interrupt, and whether it hands it back: both are read at the moment of asking, so both are
 // driven from here. `turnInFlight` stays real — what counts as mid-turn is not this card's opinion.

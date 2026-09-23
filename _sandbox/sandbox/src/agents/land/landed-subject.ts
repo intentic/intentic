@@ -13,7 +13,8 @@ import {
     sizedCommitMessagePrompt,
 } from "../../git/ops/commit-message.js";
 import { claimedContractShrink } from "../../git/changes/contract-shrink.js";
-import { publishRuntimeChange } from "../../system/runtime-watch.js";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
+import { reposOf } from "../registry/agents-store.js";
 
 // The commit subject read off the code at land time, not the frozen session title (which describes the ask, not the
 // change). Read through the same collectRepoDiff a real commit uses, so the two agree. Best-effort: nothing here may
@@ -99,7 +100,7 @@ export const describeLanding = async (services: Services, id: string): Promise<v
     const ended = (outcome: `written` | `failed`, reason?: string): void =>
         publish({ ...draft, outcome, ...(reason === undefined ? {} : { reason }), finishedAt: Date.now() });
     publish(draft);
-    const claims = (await Promise.all(entry.repos.slice(0, MAX_REPOS).map((composed) => claimedDiff(services, id, composed.repo)))).filter(
+    const claims = (await Promise.all(reposOf(entry).slice(0, MAX_REPOS).map((composed) => claimedDiff(services, id, composed.repo)))).filter(
         (claim) => claim !== undefined,
     );
     if (claims.length === 0) {

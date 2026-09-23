@@ -1,25 +1,36 @@
 import { HISTORY_ROOT } from "@intentic/constants";
-import type { TranscriptRow } from "@intentic/sandbox-contract";
+import type { TranscriptRow,SessionOwner } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { PersistedAgentSchema, type PersistedAgent } from "../registry/agents-store.js";
+import { conversationEntry } from "../../testing.js";
+import { endingStatus, PersistedAgentSchema, type PersistedAgent, type RepoRecord } from "../registry/agents-store.js";
 import { fleetMessages, fleetRecall, fleetRoster, resolveHandle, type FleetRecallDeps } from "./fleet-recall.js";
 
 // Pins the five spellings a handle can resolve through (id, branch, session id, prefix, title) and their order: an
 // exact identity always wins over a fuzzy match.
 
-// Built through the schema, not by hand, so a fixture cannot drift from what the store actually persists.
-const agentOf = (fields: Partial<PersistedAgent> & Pick<PersistedAgent, "id">): PersistedAgent =>
+// A worktree conversation on `agent/<id>`, named by what these tests read of it. Built through the schema, not by hand,
+// so a fixture cannot drift from what the store actually persists.
+const agentOf = (fields: {
+    readonly id: string;
+    readonly title?: string;
+    readonly sessionId?: string;
+    readonly updatedAt?: number;
+    readonly archivedAt?: number;
+    readonly repos?: readonly RepoRecord[];
+    readonly owner?: SessionOwner;
+    readonly startedBy?: string;
+}): PersistedAgent =>
     PersistedAgentSchema.parse({
-        provider: "claude",
-        harness: "native",
-        repos: [{ repo: "root", base: "a".repeat(40) }],
-        status: "idle",
-        costUsd: 0,
-        inputTokens: 0,
-        outputTokens: 0,
-        createdAt: 1,
-        updatedAt: 2,
-        ...fields,
+        ...conversationEntry({ id: fields.id, createdAt: 1, updatedAt: fields.updatedAt ?? 2 }),
+        placement: { kind: "worktree", branch: `agent/${fields.id}`, repos: fields.repos ?? [{ repo: "root", base: "a".repeat(40) }] },
+        identity: fields.startedBy === undefined ? {} : { startedBy: fields.startedBy },
+        social: {
+            reactions: [],
+            ...(fields.title === undefined ? {} : { title: { text: fields.title, source: "derived" } }),
+            ...(fields.owner === undefined ? {} : { owner: fields.owner }),
+        },
+        ...(fields.sessionId === undefined ? {} : { sessionId: fields.sessionId }),
+        ...(fields.archivedAt === undefined ? {} : { archivedAt: fields.archivedAt }),
     });
 
 // Fixture over a fixed roster; only the registry half matters for resolution, the rest serves the digest tests below.
@@ -30,8 +41,10 @@ const depsOver = (entries: readonly PersistedAgent[], messages: Record<string, T
             entry: (id: string) => entries.find((entry) => entry.id === id),
             get: (id: string) => {
                 const found = entries.find((entry) => entry.id === id);
-                return found === undefined ? undefined : { status: found.status };
+                return found === undefined ? undefined : { status: endingStatus(found.ending) };
             },
+        },
+        conversations: {
             running: () => false,
             sessionIdOf: (id: string) => entries.find((entry) => entry.id === id)?.sessionId,
         },
@@ -41,9 +54,9 @@ const depsOver = (entries: readonly PersistedAgent[], messages: Record<string, T
     }) as unknown as FleetRecallDeps;
 
 const ROSTER = [
-    agentOf({ id: "fair-sage-ey2r", branch: "agent/fair-sage-ey2r", title: "Last-commit pipeline autoopen", sessionId: "b3366e2e", updatedAt: 300 }),
-    agentOf({ id: "fair-sage-other", branch: "agent/fair-sage-other", title: "Pipeline autoopen follow-up", updatedAt: 200 }),
-    agentOf({ id: "clear-marsh-8c46", branch: "agent/clear-marsh-8c46", title: "npm publish workflow", updatedAt: 100 }),
+    agentOf({ id: "fair-sage-ey2r", title: "Last-commit pipeline autoopen", sessionId: "b3366e2e", updatedAt: 300 }),
+    agentOf({ id: "fair-sage-other", title: "Pipeline autoopen follow-up", updatedAt: 200 }),
+    agentOf({ id: "clear-marsh-8c46", title: "npm publish workflow", updatedAt: 100 }),
 ];
 
 test("every spelling of a conversation resolves to it: id, branch, session id, prefix, title", () => {
@@ -112,7 +125,7 @@ test("the digest keeps the opening prompts, the last word and the last notice, e
     expect(recall.digest.lastSaid?.length).toBe(240);
     expect(recall.digest.lastNotice).toBe("Claude usage limit reached.");
     expect(recall.worktree).toBe(`${HISTORY_ROOT}/worktrees/fair-sage-ey2r`);
-    expect(recall.record).toBe(`${HISTORY_ROOT}/transcripts/fair-sage-ey2r.jsonl`);
+    expect(recall.record).toBe(`${HISTORY_ROOT}/conversations/fair-sage-ey2r/transcript.jsonl`);
     // `diff: false` skips the git counts; only the registry's landed fact is used.
     expect(recall.repoStates).toEqual([{ repo: "root", base: "a".repeat(40), landed: false }]);
 });

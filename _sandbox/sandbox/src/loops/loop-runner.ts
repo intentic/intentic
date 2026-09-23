@@ -1,35 +1,48 @@
 import { mkdir } from "node:fs/promises";
-import type { AgentEvent, AgentTurn, Loop, LoopDocument, LoopIteration, LoopRecord, LoopState } from "@intentic/sandbox-contract";
-import { startTurnRun } from "../agent/run/turn/turn-runs.js";
-import type { TurnInput } from "../agent/run/turn/turn-actor.js";
+import {
+    type AgentTurn,
+    type Loop,
+    type LoopDocument,
+    type LoopIteration,
+    type LoopRecord,
+    type LoopState,
+    profileOf,
+} from "@intentic/sandbox-contract";
 import { sumUsage, type UsageFrame } from "../agent/run/turn/turn-usage.js";
+import type { ConversationActors } from "../agents/actor/conversation-actors.js";
+import type { Holding, Holdings } from "../agents/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
-import { openingRows, openTurnTranscript, recordTurnTranscript } from "../sessions/turn-transcript.js";
 import { briefForIteration, loopDirIn } from "./loop-brief.js";
 import { treeDigest } from "./loop-progress.js";
 import { evaluateStop } from "./loop-stop.js";
-import { loopProjection } from "./loop-state.js";
 
 // Runs a conversation's turn, checks whether the goal is met, and reruns it if not. Daemon-side so a loop survives a
 // closed browser; drives an ordinary AgentTurn so it gets the same fleet card, worktree, and cost ledger a composer's
 // turn does. Stops (checked each iteration, in order) on: user stop, spend ceiling, stall limit, or iteration budget.
 
-// Running loops, keyed by conversation; a singleton so routes, boot resume, and tests share one set.
-const running = new Map<string, { readonly abort: AbortController }>();
+// A conversation's running loop, held under its own id; a dispose presses the loop's Stop, so no loop drives a
+// conversation that is gone.
+const LOOPS: Holding<{ readonly abort: AbortController }> = { name: "loops", dropped: (loop) => loop.abort.abort(DISPOSED) };
+// The reason a dispose's Stop carries, which also keeps the stopped loop's last word off a card nobody has.
+const DISPOSED = "disposed";
 
-export const loopRunning = (conversationId: string): boolean => running.has(conversationId);
+export const loopRunning = (conversations: Pick<ConversationActors, "holdings">, conversationId: string): boolean =>
+    conversations.holdings(LOOPS).has(conversationId);
 
 // Stops a loop after its current iteration finishes; not a turn abort, so in-flight work is kept (use /agent/stop to
 // abandon it too). Returns false when nothing was looping.
-export const stopLoop = (conversationId: string): boolean => {
-    const live = running.get(conversationId);
+export const stopLoop = (conversations: Pick<ConversationActors, "holdings">, conversationId: string): boolean => {
+    const live = conversations.holdings(LOOPS).get(conversationId);
     live?.abort.abort();
     return live !== undefined;
 };
 
-// Injected turn generator matching streamAgent's shape; importing agent.routes directly here would close an import
-// cycle.
-export type TurnFn = (services: Services, input: TurnInput, signal: AbortSignal | undefined) => AsyncGenerator<AgentEvent>;
+// Lets go of this loop's entry, and only this loop's: one a dispose already took may have been replaced by another.
+const release = (loops: Holdings<{ readonly abort: AbortController }>, conversationId: string, abort: AbortController): void => {
+    if (loops.get(conversationId)?.abort === abort) {
+        loops.drop(conversationId);
+    }
+};
 
 // Tree an iteration works in: an isolated loop's own checkout, or the workspace itself. Also what the stall detector
 // digests, so the two never disagree on which tree is in play.
@@ -45,18 +58,12 @@ interface IterationOutcome {
 
 // Runs through the same detached turn-run pump a composer's turn uses, so /agent/attach can watch it; the pump folds a
 // failed turn into an error frame and persists the transcript. Reduces that stream to the four values the loop needs.
-const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { conversationId: string }, fn: TurnFn): Promise<IterationOutcome> => {
+const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { conversationId: string }): Promise<IterationOutcome> => {
     const report: string[] = [];
     let usage: UsageFrame | undefined;
     let sessionId: string | undefined;
     let failure: string | undefined;
-    // Transcript adoption starts before the provider runs, matching the send path's own order.
-    const opened = openTurnTranscript(services, turn);
-    const run = startTurnRun((input, signal) => fn(services, input, signal), turn, {
-        before: opened,
-        opening: (startedAt) => openingRows(turn, services.workspace.root, startedAt),
-        transcript: (rows, steerRows) => recordTurnTranscript(services, turn, rows, steerRows),
-    });
+    const run = services.turns.run(turn);
     if (run === undefined) {
         // Another turn is already live (a hand-sent message, or the previous iteration's pump not yet unwound); treated
         // as this iteration's failure rather than raced.
@@ -81,9 +88,16 @@ const runIteration = async (services: Services, loop: Loop, turn: AgentTurn & { 
 };
 
 // Publishes loop state to every fleet card; called at each iteration boundary and once more at the end, since nothing
-// else broadcasts after the last one.
-const publish = (loop: Loop, state: LoopState, iteration: number): void =>
-    loopProjection.set(loop.conversationId, { state, iteration, maxIterations: loop.maxIterations, goal: loop.goal });
+// else broadcasts after the last one. `stop` is the loop's own, when it has one.
+const publish = (services: Pick<Services, "conversations">, loop: Loop, state: LoopState, iteration: number, stop?: AbortSignal): void => {
+    if (stop?.reason === DISPOSED) {
+        return;
+    }
+    services.conversations.send(loop.conversationId, {
+        kind: "loop-shown",
+        loop: { state, iteration, maxIterations: loop.maxIterations, goal: loop.goal },
+    });
+};
 
 // How a loop ended, returned directly rather than re-read from the store (this is the one moment everything is already
 // in hand). A route may ignore it; a workflow step is built entirely from it.
@@ -101,13 +115,14 @@ export interface LoopSettlement {
 
 // Drives one loop to completion; never rejects, since a failed loop has its own error state and every caller would just
 // convert a rejection back into one.
-export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn): Promise<LoopSettlement> => {
+export const runLoop = async (services: Services, record: LoopRecord): Promise<LoopSettlement> => {
     const { conversationId } = record;
-    if (running.has(conversationId)) {
+    const loops = services.conversations.holdings(LOOPS);
+    if (loops.has(conversationId)) {
         return { state: "error", detail: "This agent is already looping.", iterations: record.iterations.length, report: "", costUsd: 0 };
     }
     const abort = new AbortController();
-    running.set(conversationId, { abort });
+    loops.hold(conversationId, conversationId, { abort });
     const tree = treeOf(services, record);
     // Creates the loop directory upfront so a `fresh` iteration isn't wasting its first move on mkdir.
     await mkdir(loopDirIn(services.workspace.root, conversationId), { recursive: true }).catch(() => undefined);
@@ -116,7 +131,7 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
     let spentUsd = record.iterations.reduce((total, entry) => total + (entry.costUsd ?? 0), 0);
     let stalls = 0;
     // Session to resume in `continue` mode; staying undefined in `fresh` mode is what makes it fresh.
-    let sessionId = record.context === "continue" ? services.agents.sessionIdOf(conversationId) : undefined;
+    let sessionId = record.context === "continue" ? services.conversations.sessionIdOf(conversationId) : undefined;
     // Kept across iterations: an exhausted loop's last iteration is often the one that produced the least.
     let report = "";
     let document: LoopDocument | undefined;
@@ -136,26 +151,22 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
                 break;
             }
             iteration += 1;
-            publish(record, "running", iteration);
+            publish(services, record, "running", iteration, abort.signal);
             const before = await treeDigest(tree);
             const turn: AgentTurn & { conversationId: string } = {
                 prompt: briefForIteration(record, iteration),
                 conversationId,
+                // The loop's own pick of runtime, persona and placement, the same for every round.
+                ...profileOf(record),
                 // Marks that nobody is at a composer for this turn (AgentTurn.unattended): changes model defaults and
                 // skips interactive prompt decorations.
                 unattended: true,
                 runRole: `loop-iteration`,
-                ...(record.isolated ? { isolated: true } : {}),
                 ...(sessionId !== undefined ? { sessionId } : {}),
-                ...(record.agent !== undefined ? { agent: record.agent } : {}),
-                ...(record.harness !== undefined ? { harness: record.harness } : {}),
-                ...(record.account !== undefined ? { account: record.account } : {}),
-                ...(record.model !== undefined ? { model: record.model } : {}),
-                ...(record.actsAs !== undefined ? { actsAs: record.actsAs } : {}),
                 ...(record.worktreeBase !== undefined ? { worktreeBase: record.worktreeBase } : {}),
                 ...(record.autoLand !== undefined ? { autoLand: record.autoLand } : {}),
             };
-            const outcome = await runIteration(services, record, turn, fn);
+            const outcome = await runIteration(services, record, turn);
             report = outcome.report;
             if (record.context === "continue") {
                 sessionId = outcome.sessionId ?? sessionId;
@@ -224,13 +235,13 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
         services.logger.error({ err: error, conversationId }, "loop failed");
     } finally {
         // Must run on every path: a leaked entry here blocks this conversation from ever looping again.
-        running.delete(conversationId);
+        release(loops, conversationId, abort);
     }
     const settled = ended ?? { state: "error" as const, detail: "loop ended without a verdict" };
     await services.loops
         .settle(conversationId, settled.state, Date.now(), settled.detail)
         .catch((error: unknown) => services.logger.warn({ err: error, conversationId }, "loop: settle failed"));
-    publish(record, settled.state, iteration);
+    publish(services, record, settled.state, iteration, abort.signal);
     return {
         state: settled.state,
         ...(settled.detail !== undefined ? { detail: settled.detail } : {}),
@@ -245,10 +256,10 @@ export const runLoop = async (services: Services, record: LoopRecord, fn: TurnFn
 // landed). RESUME_MAX caps repeat attempts, so a loop that reliably kills the daemon settles `error` instead.
 const RESUME_MAX = 2;
 
-export const resumeLoops = async (services: Services, fn: TurnFn, ownedByWorkflow: ReadonlySet<string> = new Set()): Promise<string[]> => {
+export const resumeLoops = async (services: Services, ownedByWorkflow: ReadonlySet<string> = new Set()): Promise<string[]> => {
     const resumed: string[] = [];
     for (const record of await services.loops.list()) {
-        if (record.state !== "running" || running.has(record.conversationId) || ownedByWorkflow.has(record.conversationId)) {
+        if (record.state !== "running" || loopRunning(services.conversations, record.conversationId) || ownedByWorkflow.has(record.conversationId)) {
             continue;
         }
         const counted = await services.loops.countResume(record.conversationId);
@@ -262,12 +273,12 @@ export const resumeLoops = async (services: Services, fn: TurnFn, ownedByWorkflo
                 Date.now(),
                 `Abandoned after the daemon died under this loop ${counted.resumed} times.`,
             );
-            publish(record, "error", record.iterations.length);
+            publish(services, record, "error", record.iterations.length);
             services.logger.warn({ conversationId: record.conversationId }, "loop: abandoned after repeated daemon deaths");
             continue;
         }
         resumed.push(record.conversationId);
-        void runLoop(services, counted, fn);
+        void runLoop(services, counted);
     }
     return resumed;
 };

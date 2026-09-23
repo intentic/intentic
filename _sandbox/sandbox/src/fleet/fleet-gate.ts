@@ -1,5 +1,5 @@
 import type { DeviceFlowLine, DeviceSandboxFlow } from "@intentic/sandbox-contract";
-import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../agent/run/offer-request.js";
+import { type CardDeps, cardRun, OFFER_DEADLINE_MS, raiseRequest, whyOf } from "../agents/actor/card-offers.js";
 import type { RelayedAnswer } from "../platform/platform-relay.js";
 import { answerError, type ProvisionedSandbox } from "./fleet-client.js";
 

@@ -1,9 +1,7 @@
 import type { Context } from "hono";
 import type { z } from "zod";
-import { enrollments, pairings, type Presented } from "../store/enrollment.js";
+import { enrollments, pairings, type Presented } from "./enrollment.js";
 import type { PeerStoreSpec } from "./peer.js";
-
-export type { Presented };
 
 // The bearer doors' half of the rule the socket is held to (peer-routes.ts): a token nobody holds is the caller's
 // problem, a manifest this daemon could not read is its own. They differ in who has to act, which is why answering

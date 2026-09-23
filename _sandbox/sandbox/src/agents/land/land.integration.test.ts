@@ -358,7 +358,7 @@ test("a user edit ELSEWHERE in the same file still lands (patch context, not pat
     await writeFile(join(grown.cwd, "app.ts"), body({ 1: "line 1 AGENT" }));
     await writeFile(join(work, "app.ts"), body({ 12: "line 12 USER" }));
 
-    const result = await landAgent(worktrees, { ...isolatedAgent(grown.repos), id: "c2", branch: "agent/c2" });
+    const result = await landAgent(worktrees, isolatedAgent(grown.repos, { id: "c2" }));
     expect(result.landed).toBe(true);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe(body({ 1: "line 1 AGENT", 12: "line 12 USER" }));
 });
@@ -378,7 +378,7 @@ test("a delta living only in a NESTED repo lands: root has nothing it can stage,
     expect(conversation.repos.map(({ repo }) => repo)).toEqual(["root", "inner"]);
     await writeFile(join(worktrees.worktreeDir("c2", "inner"), "lib.ts"), "inner one EDITED\ninner two\n");
 
-    const result = await landAgent(worktrees, { ...isolatedAgent(conversation.repos), id: "c2", branch: "agent/c2" });
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: "c2" }));
     expect(result.landed).toBe(true);
     expect(result.conflicts).toBeUndefined();
     expect(await readFile(join(inner, "lib.ts"), "utf8")).toBe("inner one EDITED\ninner two\n");
@@ -402,7 +402,7 @@ test("a conflict in one repository refuses the whole composition without advanci
     await writeFile(join(innerWorktree, "lib.ts"), "inner one AGENT\ninner two\n");
     await writeFile(join(inner, "lib.ts"), "inner one USER\ninner two\n");
 
-    const result = await landAgent(worktrees, { ...isolatedAgent(conversation.repos), id: "c2", branch: "agent/c2" });
+    const result = await landAgent(worktrees, isolatedAgent(conversation.repos, { id: "c2" }));
 
     expect(result.landed).toBe(false);
     expect(result.conflicts).toEqual([{ repo: "inner", paths: [{ path: "lib.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
@@ -415,11 +415,7 @@ test("a conflict in one repository refuses the whole composition without advanci
     ]);
 
     await writeFile(join(inner, "lib.ts"), "inner one\ninner two\n");
-    const recovered = await landAgent(worktrees, {
-        ...isolatedAgent(result.repos),
-        id: "c2",
-        branch: "agent/c2",
-    });
+    const recovered = await landAgent(worktrees, isolatedAgent(result.repos, { id: "c2" }));
     expect(recovered.landed).toBe(true);
     expect(await readFile(join(work, "app.ts"), "utf8")).toBe("line one AGENT\nline two\nline three\n");
     expect(await readFile(join(inner, "lib.ts"), "utf8")).toBe("inner one AGENT\ninner two\n");
@@ -557,7 +553,7 @@ test("measure still recognizes work that reached main by another road, instead o
     await sh(work, "add", "-A");
     await sh(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "the same work, by hand");
 
-    const result = await landAgent(worktrees, isolatedAgent(recorded.repos), "measure");
+    const result = await landAgent(worktrees, isolatedAgent(recorded.placement.repos), "measure");
 
     expect(result.held).toBeUndefined();
     expect(result).toMatchObject({ landed: true, changed: true });
@@ -584,7 +580,7 @@ test("measure re-judges a stored refusal, so a resolved conflict stops outliving
 
     // The cause goes away, as a resolve turn does; this is the only pass that runs at the end of it.
     await writeFile(join(work, "app.ts"), "line one\nline two\nline three\n");
-    const settled = await landAgent(worktrees, isolatedAgent(conversation.repos, { conflicts: refused.conflicts }), "measure");
+    const settled = await landAgent(worktrees, isolatedAgent(conversation.repos, { landing: { conflicts: refused.conflicts } }), "measure");
 
     // A verdict lets `recordLanded` replace the stored one; an empty verdict is what clears it.
     expect(settled.adjudicated).toBe(true);
@@ -600,7 +596,7 @@ test("a re-judged refusal that still stands is reported again, not quietly retir
     await writeFile(join(work, "app.ts"), "line one USER\nline two\nline three\n");
     const refused = await landAgent(worktrees, isolatedAgent(conversation.repos));
 
-    const settled = await landAgent(worktrees, isolatedAgent(conversation.repos, { conflicts: refused.conflicts }), "measure");
+    const settled = await landAgent(worktrees, isolatedAgent(conversation.repos, { landing: { conflicts: refused.conflicts } }), "measure");
 
     expect(settled.adjudicated).toBe(true);
     expect(settled.conflicts).toEqual([{ repo: "root", paths: [{ path: "app.ts", reason: "workspace" }], clean: 0, mainBranch: "main" }]);
@@ -919,7 +915,7 @@ test("a land leaves the checkout's scratch behind, and the review lists it apart
     expect(existsSync(join(work, "feature.ts"))).toBe(true);
     expect(existsSync(join(work, ".bench"))).toBe(false);
     expect(existsSync(join(work, "debug.log"))).toBe(false);
-    const review = await agentRepoReview(worktrees, agent, agent.repos[0]!);
+    const review = await agentRepoReview(worktrees, agent, agent.placement.repos[0]!);
     expect(review.changes.map((change) => change.path)).toEqual(["feature.ts"]);
     expect(review.scratch).toEqual([
         { path: ".bench/", reason: "hidden", files: 1, bytes: 10 },

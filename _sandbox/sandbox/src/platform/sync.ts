@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import type { DeviceReport } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 
 // Desktop enrollment for Mutagen: an ed25519 key lands here via a pairing token, then rides SSH for file sync of /work
 // and port mirroring of dev servers.

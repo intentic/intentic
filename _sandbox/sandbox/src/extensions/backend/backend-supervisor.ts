@@ -106,7 +106,8 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
         }
     };
 
-    // Keep backend extension reach on the daemon side.
+    // A backend's reach is enforced on the daemon side, by its token; the host is handed the same list only to refuse a
+    // typed call before sending it.
     const collect = async (): Promise<{
         runnable: BackendHostExtension[];
         reported: BackendStatus[];
@@ -134,8 +135,9 @@ export const createExtensionBackend = (services: () => ExtensionHost, daemonPort
                 continue;
             }
             const daemonToken = tokenFor(extension.id);
-            tokenReach.set(daemonToken, extension.manifest.permissions?.daemon ?? []);
-            runnable.push({ id: extension.id, dir: extension.dir, server, daemonToken });
+            const daemonPermissions = extension.manifest.permissions?.daemon ?? [];
+            tokenReach.set(daemonToken, daemonPermissions);
+            runnable.push({ id: extension.id, dir: extension.dir, server, daemonToken, daemonPermissions });
         }
         return { runnable, reported, tokenReach };
     };

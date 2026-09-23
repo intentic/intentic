@@ -6,9 +6,9 @@ import {
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
 import { judgeCommand } from "../agent/tools/command-judge.js";
-import { raiseRequest } from "../agent/run/offer-request.js";
-import { RoleModelUnsetError } from "../agent/models/role-model-unset.js";
-import { turnRunOf } from "../agent/run/turn/turn-runs.js";
+import { actorObserver, raiseRequest } from "../agents/actor/card-offers.js";
+import { RoleModelUnsetError } from "../seams/role-model-unset.js";
+import { turnRunOf } from "../agents/actor/conversation-holdings.js";
 import type { Services } from "../composition.js";
 import { commandRun } from "../guard/actions.js";
 import { guard } from "../guard/guard.js";
@@ -109,7 +109,7 @@ export const judgeHostCommand = async (
     }
     const at = Date.now();
     const conversationId = input.conversationId;
-    const run = conversationId === undefined ? undefined : turnRunOf(conversationId);
+    const run = conversationId === undefined ? undefined : turnRunOf(services.conversations, conversationId);
     // Same `live` discipline as the sandbox gate: a command merely mentioning a delete does not count as one.
     const hard = matches.find(
         (match) => guard(commandRun, { commandClass: match.commandClass, locus: DEVICE, live: match.live }).effect !== "allow",
@@ -165,7 +165,7 @@ export const judgeHostCommand = async (
     }
     record("asked");
     const { reply } = await raiseRequest(
-        { observe: services.agents.observe },
+        { observe: actorObserver(services.conversations), cards: services.cards },
         { conversationId, push: (event) => run.push(event) },
         {
             kind: "permission",

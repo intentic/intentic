@@ -3,20 +3,21 @@
 // for the same standing reads Attention, and every freshly opened chat passed through Active on its way to its
 // real lane.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { it, expect, beforeEach, afterEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { type App, createApp, h, nextTick } from "vue";
 import { laneOf, NO_ATTENTION, standingFrom } from "../../agents/fleet/agentStatus";
 import { agentSeed } from "../../agents/fleet/useAgents-actions";
-import { resetAgents } from "../../agents/fleet/useAgents";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { openAgentConversation } from "../panel/useChat-reveal";
 import { standingOf } from "./tabFacts";
 import { queryClient } from "../../../lib/queryPersistence";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
+import { runningTurn } from "../../../testing/runningTurn";
 
 hoisted(() => {
     globalThis.Element.prototype.scrollIntoView ??= (): void => {};
@@ -46,8 +47,7 @@ const mountList = async (): Promise<void> => {
 
 beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
-    resetChat();
-    resetAgents();
+    resetSandboxScope();
     await nextTick();
 });
 
@@ -69,7 +69,7 @@ it(`puts a refused turn where its standing does, not where its message count doe
     // Registered, so the join reads it as an agent this window's roster hasn't answered for, not a draft.
     conversation.registered.value = true;
     conversation.title.value = `Provider usage limits · audit`;
-    conversation.restoreMessages([{ role: `user`, text: `carry on` }]);
+    conversation.transcript.restoreMessages([{ role: `user`, text: `carry on` }]);
     conversation.error.value = `Usage limit reached`;
 
     await mountList();
@@ -89,7 +89,7 @@ it(`opens a chat straight into its own lane, with no pass through Active`, async
     const opened = openAgentConversation({ id: `settled`, provider: `claude`, harness: `native`, sessionId: `session-1`, branch: `agent/settled` });
     await nextTick();
 
-    expect(opened.messages.value).toHaveLength(0);
+    expect(opened.transcript.messages.value).toHaveLength(0);
     expect(standingOf(opened)).toBe(`resumed`);
     expect(laneOfRow(`settled`)).toBe(`Finished`);
 });
@@ -100,7 +100,7 @@ it(`keeps a chat with nothing in it in Active, where a fresh draft belongs`, asy
     expect(laneOfRow(useChat().active.value.conversationId)).toBe(`Active`);
 });
 
-// A spent allowance as the daemon files it (agents.json): an errored turn with the rate-limit code, which
+// A spent allowance as the daemon reports it: an errored turn with the rate-limit code, which
 // `blocked` counts, so the board's card sits in Attention.
 const limitHit = {
     id: `spent`,
@@ -132,7 +132,7 @@ it(`lets what this window can see outrank the account the card came in with`, as
     expect(laneOfRow(limitHit.id)).toBe(`Attention`);
 
     // The user sends again from here: a turn running in this window is newer than anything the card said.
-    opened.streaming.value = true;
+    runningTurn(opened.turn);
     await nextTick();
 
     expect(laneOfRow(limitHit.id)).toBe(`Active`);

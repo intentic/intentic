@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type JsonFile, jsonFile } from "../store/json-file.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 
 // Usage of each declared sandbox route (.intentic/records/extension-usage.json), by extension id then declared entry.
 // Answers whether a permissions.sandbox entry is used; keyed by the entry, not the path, so the file stays bounded.

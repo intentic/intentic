@@ -26,6 +26,8 @@ interface RecordedSurface {
     readonly workspaceApi?: readonly string[];
     /* api.chat's own members, recorded from 2.11.0 on: `openAgent` was added there. */
     readonly chatApi?: readonly string[];
+    // The backend api's `daemon` members (server.ts), recorded from 2.17.0 on: `rpc` was added there.
+    readonly daemonApi?: readonly string[];
     /* What the PACKAGE exports, recorded from 2.6.0 on: the third grain, and the last one that was still unrecorded. */
     readonly moduleExports?: readonly string[];
 }
@@ -52,11 +54,10 @@ const apiMembers = (): string[] => {
     return [...text.slice(open + 1, end).matchAll(/^ {4}readonly (\w+)\??:/gm)].map((match) => match[1] ?? ``).toSorted();
 };
 
-// Members of one nested block of IntenticApi (e.g. sandbox), found the same way as apiMembers but one indent level
-// deeper.
-// Column 8 is where a block's own members sit, since prettier holds the file at four-space indents.
-const nestedMembers = (block: string): string[] => {
-    const text = readFileSync(resolve(sdkRoot, `src/api.ts`), `utf8`);
+// Members of one nested block of an api interface (e.g. IntenticApi's sandbox), found the same way as apiMembers but one
+// indent level deeper. Column 8 is where a block's own members sit, since prettier holds the file at four-space indents.
+const nestedMembers = (block: string, file = `src/api.ts`): string[] => {
+    const text = readFileSync(resolve(sdkRoot, file), `utf8`);
     const start = text.indexOf(`readonly ${block}: {`);
     const open = text.indexOf(`{`, start);
     let depth = 0;
@@ -81,6 +82,7 @@ const liveSurface = (): RecordedSurface => ({
     sandboxApi: nestedMembers(`sandbox`),
     workspaceApi: nestedMembers(`workspace`),
     chatApi: nestedMembers(`chat`),
+    daemonApi: nestedMembers(`daemon`, `src/server.ts`),
     // The runtime exports only. Types are the api object's business (recorded above) and a package that
     // re-exports thirty interfaces would drown the one line that says a new FUNCTION arrived.
     moduleExports: Object.keys(sdkModule)

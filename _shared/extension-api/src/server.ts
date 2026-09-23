@@ -1,3 +1,6 @@
+import type { sandboxContract } from "@intentic/sandbox-contract";
+import type { ContractRouterClient } from "@orpc/contract";
+
 // Backend counterpart to `IntenticApi` (api.ts); a manifest `server` bundle's `activateServer` runs in a node process
 // shared by every enabled extension, separate from the daemon. Mediates only the extension's route namespace (mount)
 // and its reach into daemon routes (`daemon.*`, gated by `permissions.daemon`).
@@ -23,6 +26,10 @@ export interface ExtensionServerApi {
     // Authenticated transport to the daemon's own routes; every call is checked against the manifest's
     // `permissions.daemon` allowlist.
     readonly daemon: {
+        // The daemon's contract, typed: a call names a procedure and its answer arrives parsed by the procedure's output
+        // schema. Refused before anything is sent unless `permissions.daemon` covers the method and path it resolves to.
+        readonly rpc: ContractRouterClient<typeof sandboxContract>;
+        // For what the contract does not carry: bytes (`/workspace/raw`) and the daemon's hand-written routes.
         request(path: string, init?: RequestInit): Promise<Response>;
         json<T>(path: string, init?: RequestInit): Promise<T>;
     };

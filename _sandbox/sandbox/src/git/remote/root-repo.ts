@@ -4,7 +4,7 @@ import { pathExists } from "../../path-exists.js";
 import { STATE_DIR } from "@intentic/constants";
 import { REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { defaultGit, gitInit, gitStageAll, type GitRunner } from "@intentic/scaffold";
-import { repoGitDir, rootExcludes, syncRootExcludes } from "../../history/history.js";
+import { repoGitDir, rootExcludes, syncRootExcludes } from "../../workspace/layout/git-layout.js";
 import { discoverRepos } from "../../workspace/layout/repo-discovery.js";
 import type { WorkspacePaths } from "../../workspace/workspace.js";
 import { commitIndex, stageAll } from "../changes/changes-index.js";

@@ -30,6 +30,7 @@ import { createNetdiskRoutes } from "./netdisk/netdisk.routes.js";
 import { createPrepushRoutes } from "./prepush/prepush.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
+import { providerSecretEntries } from "./agent/providers/provider-registry.js";
 import { createSessionsRoutes } from "./sessions/sessions.routes.js";
 import { createSafetyRoutes } from "./safety/safety.routes.js";
 import { createSettingsRoutes } from "./settings/settings.routes.js";
@@ -80,7 +81,7 @@ export const createRouter = (services: Services) => ({
     providers: createProvidersRoutes(services),
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),
-    secrets: createSecretsRoutes(services),
+    secrets: createSecretsRoutes(services, () => providerSecretEntries(services)),
     // The device procedures live in hosts/devices.routes.ts, beside the devices they act on; merged here, above both,
     // so neither subsystem has to import the other's values.
     system: { ...createSystemRoutes(services), ...createDeviceSystemRoutes(services) },

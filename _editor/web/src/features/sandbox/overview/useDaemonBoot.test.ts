@@ -1,11 +1,12 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { BootProgress } from "@intentic/sandbox-contract";
 import { describe, it, expect, beforeEach } from "bun:test";
-import { bootStartedAt, bootSteps, daemonReady, resetDaemonBoot, setDaemonBoot } from "./useDaemonBoot";
+import { bootStartedAt, bootSteps, daemonReady, setDaemonBoot } from "./useDaemonBoot";
 
 const progress = (ready: boolean, ...steps: BootProgress["steps"]): BootProgress => ({ ready, startedAt: 1_000, steps });
 
 describe(`useDaemonBoot`, () => {
-    beforeEach(() => resetDaemonBoot());
+    beforeEach(() => resetSandboxScope());
 
     it(`assumes ready before the daemon has said anything`, () => {
         // The pre-connect state. Assuming NOT ready here would gate every query on a fact nobody has reported,
@@ -43,7 +44,7 @@ describe(`useDaemonBoot`, () => {
 
     it(`forgets the previous sandbox's boot on switch`, () => {
         setDaemonBoot(progress(false, { key: `registry`, label: `Loading conversations`, state: `running` }));
-        resetDaemonBoot();
+        resetSandboxScope();
         // Another sandbox is on its own clock: carrying this over would gate a daemon that is long since up.
         expect(daemonReady.value).toBe(true);
         expect(bootSteps.value).toEqual([]);

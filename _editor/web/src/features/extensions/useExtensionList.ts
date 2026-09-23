@@ -3,7 +3,7 @@ import { contributedEntryOf } from "@intentic/extension-manifest";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { CAPABILITIES, ENVIRONMENT, SECRETS_INVENTORY } from "../../lib/queryKeys";
+import { ENVIRONMENT, rpcKey } from "../../lib/queryKeys";
 import { extensionStatuses, loadedCommits } from "../../extension-host/loader";
 import { type ExtensionFacet, facetsOf, searchTextOf } from "./extensionFacets";
 import { backendState, type ExtensionState, extensionState } from "./extensionState";
@@ -39,8 +39,8 @@ export function useExtensionList() {
     const removeExtension = async (id: string) => {
         const removed = await remove(id);
         await Promise.all([
-            queryClient.invalidateQueries({ queryKey: CAPABILITIES.of() }),
-            queryClient.invalidateQueries({ queryKey: SECRETS_INVENTORY.of() }),
+            queryClient.invalidateQueries({ queryKey: rpcKey(`capabilities.list`) }),
+            queryClient.invalidateQueries({ queryKey: rpcKey(`secrets.inventory`) }),
             queryClient.invalidateQueries({ queryKey: ENVIRONMENT.of() }),
         ]);
         return removed;

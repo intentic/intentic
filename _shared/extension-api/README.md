@@ -7,8 +7,8 @@ One of the packages an extension may depend on, with `@intentic/extension-manife
 internals. See the extension system in [ARCHITECTURE.md](../../ARCHITECTURE.md) for how the host loads and
 gates extensions.
 
-It **does** name `@intentic/sandbox-contract` types, and that is deliberate: `api.sandbox.rpc` is the daemon's
-own contract as a typed client, which is the whole reason an extension no longer has to build a URL to reach
+It **does** name `@intentic/sandbox-contract` types, and that is deliberate: `api.sandbox.rpc` (and the backend's
+`api.daemon.rpc`) is the daemon's own contract as a typed client, which is the whole reason an extension no longer has to build a URL to reach
 it. The dependency is type-only, so nothing of the contract lands in an extension's runtime. This used to be
 forbidden: the contract imported the manifest schema from here, so depending back would have closed a cycle.
 `@intentic/extension-manifest` exists to break exactly that, and its README has the reasoning.
@@ -43,7 +43,7 @@ forbidden: the contract imported the manifest schema from here, so depending bac
 - **[server.ts](src/server.ts)**: `ExtensionServerApi`, the BACKEND half's surface. A manifest `server`
   bundle exports `activateServer(api, context)` and runs in the daemon's backend host (one separate
   supervised process shared by every enabled backend); `api.routes.mount` serves the extension's own
-  `/x/<id>/…` namespace, `api.daemon.request/json` reaches the daemon's routes under the manifest's
+  `/x/<id>/…` namespace, `api.daemon.rpc` reaches the daemon's routes under the manifest's
   `permissions.daemon` allowlist, and workspace files are plain `node:fs` under `api.workspaceRoot`: full
   trust, so paths rather than a file service. The extension's own namespace needs no `permissions.sandbox`
   entry on the UI side: its backend is its own.
@@ -56,9 +56,9 @@ packages, which is exactly the case a per-repo `detect()` cannot express. An off
 directory rather than an affordance every directory of its kind has says so (`evidence: true`), and the tree
 keeps its icon on the row instead of revealing it on hover: the difference between a reader seeing which
 packages have a page and a reader having to go looking for one.
-- **[scope.ts](src/scope.ts)**, `sandboxRef` and `sandboxScopeGuard`: how an extension keeps state that
-  belongs to ONE sandbox. See "Where state lives" below; this is the rule most easily got wrong, because
-  getting it wrong looks fine until somebody switches sandbox.
+- **[scope.ts](src/scope.ts)**, `sandboxRef` (with `sandboxShallowRef` and `sandboxValue`) and
+  `sandboxScopeGuard`: how an extension keeps state that belongs to ONE sandbox. See "Where state lives" below;
+  this is the rule most easily got wrong, because getting it wrong looks fine until somebody switches sandbox.
 - **[background.ts](src/background.ts)**, `sandboxPoll` and `sandboxLedger`: the work an extension does while
   none of it is on screen. A tile that badges has to be filled by something, and what has already been seen has
   to be written down somewhere; both were hand-written in six extensions before they were here.
@@ -72,11 +72,24 @@ no backend.
 
 ## The data plane
 
-An extension talks to the daemon over `api.sandbox.request/json(path)`: an authenticated transport (auth is
-injected host-side; the bundle never sees a token). **Its reach is not unrestricted:** every path is matched
-against the extension's manifest `permissions.sandbox` allowlist and an undeclared route throws. Responses
-are `sandbox-contract` schemas, parsed at the call site (`Schema.parse(await api.sandbox.json(path))`): the
-in-repo, compiled-together design means a wire change is a compiler error fixed atomically, so there is no
+An extension talks to the daemon through `api.sandbox.rpc`, the daemon's own contract as a typed client: a call
+names a procedure (`api.sandbox.rpc.ci.runs()`), its input is checked at build time, and its answer arrives parsed
+by the procedure's output schema, so there is no path to spell and no parse to write. Auth is injected host-side;
+the bundle never sees a token. **Its reach is not unrestricted:** the host resolves each call to the method and
+path it will send and matches that against the manifest's `permissions.sandbox` allowlist, the same gate
+`request`/`json` pass through, and an undeclared route throws before anything is sent.
+
+`request(path)` stays for what the contract does not carry: bytes (`/workspace/raw`), uploads, an extension's own
+`/x/<id>/` backend. `json(path)` stays in the published surface for extensions built against it; every extension
+in this repository calls a contract route through `rpc` (the `contract-paths` check holds them to it).
+
+A backend reaches the daemon the same way, through `api.daemon.rpc`: the same typed client, built by the daemon's
+backend host and handed to `activateServer`, so a server bundle carries no client of its own. It presents the
+extension's minted grant, and the host refuses a call before sending it unless the manifest's `permissions.daemon`
+covers the method and path it resolves to: the verdict the daemon's grant reaches for the same call through
+`api.daemon.request`, which stays for bytes (`/workspace/raw`), as `json` does for backends built against it.
+
+The in-repo, compiled-together design means a wire change is a compiler error fixed atomically, so there is no
 separate "stable data API" to promote. `facts.ts` stays the stable surface only for *detection*.
 
 ## Where state lives
@@ -94,7 +107,8 @@ Everything an extension holds is about one workspace, so a switch has to leave n
   the view being unmounted, because a badge you only see after opening the view is pointless. Declare it with
   `sandboxRef(() => initial)` and the host empties it on every switch. There is no subscription to remember
   and no teardown to write; `dispose` is there for state that owns an object URL or anything else the garbage
-  collector will not take back.
+  collector will not take back. A value replaced whole rather than edited in place (a map, an object with its
+  own methods) goes in `sandboxShallowRef` instead, the same lifetime without the deep proxy.
 
 For anything asynchronous in that third tier, take a `sandboxScopeGuard()` **before** the await and ask it
 **after**: a poll issued against the last sandbox otherwise resolves a moment later and writes its answer

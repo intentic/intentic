@@ -1,8 +1,7 @@
-import { type Persona, PersonasListSchema } from "@intentic/sandbox-contract";
-import { PERSONAS } from "../../../lib/queryKeys";
+import type { Persona } from "@intentic/sandbox-contract";
+import { rpcKey } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
-import { jsonBody } from "../client/jsonBody";
-import { sandboxJson } from "../client/sandboxClient";
+import { sandboxRpc } from "../client/sandboxRpc";
 
 // The persona a conversation started under a project wears when nothing else was chosen: opened in the project,
 // fenced to it (file tools refuse outside it), carrying its repository. One persona per project, made the first time
@@ -24,11 +23,11 @@ export const projectPersonaPersona = (project: string): Persona => ({
 // The persona's id, once it exists: reads the list first so an edited persona is never written over.
 export const ensureProjectPersona = async (project: string): Promise<string> => {
     const id = projectPersonaId(project);
-    const { personas } = PersonasListSchema.parse(await sandboxJson(`/personas`));
+    const { personas } = await sandboxRpc.personas.list();
     if (personas.some((persona) => persona.id === id)) {
         return id;
     }
-    await sandboxJson(`/personas`, jsonBody(`POST`, projectPersonaPersona(project)));
-    await queryClient.invalidateQueries({ queryKey: PERSONAS.of() });
+    await sandboxRpc.personas.save(projectPersonaPersona(project));
+    await queryClient.invalidateQueries({ queryKey: rpcKey(`personas.list`) });
     return id;
 };

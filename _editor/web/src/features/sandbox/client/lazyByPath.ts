@@ -1,5 +1,6 @@
-import { shallowRef, watch } from "vue";
-import { SandboxHttpError } from "./sandboxClient";
+import { sandboxScopeGuard, sandboxShallowRef, sandboxValue } from "@intentic/extension-api";
+import { watch } from "vue";
+import { SandboxHttpError } from "./sandboxHttpError";
 import { useEndpoint } from "../secrets/useEndpoint";
 
 // A value fetched per workspace path, on first ask, from a daemon that may not have an address yet. Shared by the
@@ -25,40 +26,52 @@ export interface LazyByPath<T> {
 }
 
 export const lazyByPath = <T>(load: (path: string) => Promise<T>): LazyByPath<T> => {
-    // shallowRef: entries are replaced wholesale, never mutated, so deep reactivity would only cost traversals.
-    const values = shallowRef<Record<string, T>>({});
+    // All of it one sandbox's: a path names a file on the daemon it was read from, so a switch starts the cache over,
+    // lets go of the chains sleeping for the old one, and drops whatever answer that one still sends.
+    // Shallow: entries are replaced wholesale, never mutated, so deep reactivity would only cost traversals.
+    const values = sandboxShallowRef<Record<string, T>>(() => ({}));
     // Every path anything has asked about, whatever came of it; the set a newly resolved address re-tries.
-    const asked = new Set<string>();
+    const asked = sandboxValue(() => new Set<string>());
     // Paths with an attempt chain running, including backoff sleeps; a path leaves only when its chain ends.
-    const loading = new Set<string>();
+    const loading = sandboxValue(() => new Set<string>());
     // The timer of a chain waiting out backoff, so a resolved address can cancel it and retry immediately.
-    const sleeping = new Map<string, ReturnType<typeof setTimeout>>();
+    const sleeping = sandboxValue(
+        () => new Map<string, ReturnType<typeof setTimeout>>(),
+        (timers) => timers.forEach((timer) => clearTimeout(timer)),
+    );
     // Paths the daemon refused for good; these stay parked and the caller keeps drawing whatever it has without one.
-    const refused = new Set<string>();
+    const refused = sandboxValue(() => new Set<string>());
 
     const attempt = (path: string, tries = 0): void => {
-        loading.add(path);
+        const here = sandboxScopeGuard();
+        loading.value.add(path);
         void load(path).then(
             (value) => {
-                loading.delete(path);
+                if (!here()) {
+                    return;
+                }
+                loading.value.delete(path);
                 values.value = { ...values.value, [path]: value };
             },
             (error: unknown) => {
+                if (!here()) {
+                    return;
+                }
                 if (isRefusal(error)) {
-                    loading.delete(path);
-                    refused.add(path);
+                    loading.value.delete(path);
+                    refused.value.add(path);
                     return;
                 }
                 const delay = RETRY_MS[tries];
                 if (delay === undefined) {
-                    loading.delete(path);
+                    loading.value.delete(path);
                     return;
                 }
                 // Still claimed while the chain sleeps: dropping it would let a re-render start a second chain beside it.
-                sleeping.set(
+                sleeping.value.set(
                     path,
                     setTimeout(() => {
-                        sleeping.delete(path);
+                        sleeping.value.delete(path);
                         attempt(path, tries + 1);
                     }, delay),
                 );
@@ -71,15 +84,15 @@ export const lazyByPath = <T>(load: (path: string) => Promise<T>): LazyByPath<T>
         if (base === undefined || base === ``) {
             return;
         }
-        for (const path of asked) {
-            if (values.value[path] !== undefined || refused.has(path)) {
+        for (const path of asked.value) {
+            if (values.value[path] !== undefined || refused.value.has(path)) {
                 continue;
             }
-            const timer = sleeping.get(path);
+            const timer = sleeping.value.get(path);
             if (timer !== undefined) {
                 clearTimeout(timer);
-                sleeping.delete(path);
-            } else if (loading.has(path)) {
+                sleeping.value.delete(path);
+            } else if (loading.value.has(path)) {
                 // A request already on the wire: its own handler carries the chain from here.
                 continue;
             }
@@ -93,26 +106,26 @@ export const lazyByPath = <T>(load: (path: string) => Promise<T>): LazyByPath<T>
             if (cached !== undefined) {
                 return cached;
             }
-            asked.add(path);
-            if (!loading.has(path) && !refused.has(path)) {
+            asked.value.add(path);
+            if (!loading.value.has(path) && !refused.value.has(path)) {
                 attempt(path);
             }
             return undefined;
         },
         cached: (path) => values.value[path],
         put: (path, value) => {
-            asked.add(path);
+            asked.value.add(path);
             values.value = { ...values.value, [path]: value };
         },
         drop: (path) => {
-            asked.delete(path);
+            asked.value.delete(path);
             // Every trace of the path, or the next ask answers from a parked refusal or a chain still mid-backoff.
-            refused.delete(path);
-            loading.delete(path);
-            const timer = sleeping.get(path);
+            refused.value.delete(path);
+            loading.value.delete(path);
+            const timer = sleeping.value.get(path);
             if (timer !== undefined) {
                 clearTimeout(timer);
-                sleeping.delete(path);
+                sleeping.value.delete(path);
             }
             const { [path]: _dropped, ...rest } = values.value;
             values.value = rest;

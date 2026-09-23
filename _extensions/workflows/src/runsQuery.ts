@@ -1,4 +1,4 @@
-import { type WorkflowRun, WorkflowRunsListSchema } from "@intentic/sandbox-contract";
+import type { WorkflowRun } from "@intentic/sandbox-contract";
 import type { HostQuery } from "@intentic/extension-api";
 import { host } from "./host";
 
@@ -13,6 +13,6 @@ export const workflowRunsQuery = (): HostQuery<WorkflowRun[]> => {
     const api = host();
     return {
         queryKey: api.sandbox.key(`workflow-runs`),
-        queryFn: async (): Promise<WorkflowRun[]> => WorkflowRunsListSchema.parse(await api.sandbox.json(`/workflows/runs`)).runs,
+        queryFn: async (): Promise<WorkflowRun[]> => (await api.sandbox.rpc.workflows.runs()).runs,
     };
 };

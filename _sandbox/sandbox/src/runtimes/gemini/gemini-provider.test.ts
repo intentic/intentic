@@ -32,7 +32,7 @@ const geminiServices = (models: readonly GeminiModel[] = OFFERED, served: { live
 test("sends the pinned model the channel offers", async () => {
     const plan = await planGeminiTurn(geminiServices(), turn({ model: "gemini-3.1-pro-low" }), context);
 
-    expect(plan).toMatchObject({ ok: true, request: { model: "gemini-3.1-pro-low" } });
+    expect(plan).toMatchObject({ ok: true, request: { spec: { model: "gemini-3.1-pro-low" } } });
 });
 
 test("opens on the catalog default when the turn names no model, empty id included", async () => {
@@ -40,7 +40,7 @@ test("opens on the catalog default when the turn names no model, empty id includ
     for (const model of [undefined, ""]) {
         const plan = await planGeminiTurn(geminiServices(), turn({ model }), context);
 
-        expect(plan).toMatchObject({ ok: true, request: { model: "claude-opus-4-6-thinking" } });
+        expect(plan).toMatchObject({ ok: true, request: { spec: { model: "claude-opus-4-6-thinking" } } });
     }
 });
 

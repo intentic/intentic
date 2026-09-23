@@ -30,8 +30,8 @@ export interface PickerEntry extends TurnPick {
 }
 
 // The picker's own row for "let a model choose", in the list's grammar so it can be searched and arrowed to like any
-// other. Never a provider a turn runs on: Conversation.selectModel turns this pick into its `auto` flag and nothing
-// downstream ever sees the id.
+// other. Never a provider a turn runs on: the `selectModel` pick (selectionReducer.ts) turns this into the `auto`
+// flag, and nothing downstream ever sees the id.
 export const AUTO_PROVIDER: AgentProvider = `auto`;
 export const AUTO_KEY = `${AUTO_PROVIDER}:`;
 

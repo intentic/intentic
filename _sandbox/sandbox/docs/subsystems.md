@@ -4,7 +4,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
 
 - [src/app.ts](../src/app.ts), the Hono HTTP API's composition root: the middleware stack (boot gate, CORS, the bearer check with its exemptions and role floor), `/health`, and every route the browser and the CLI reach the daemon through, mounted in one fixed order from the `*.routes.ts` module of the area that owns it. The order is behavior — Hono matches in registration order and the exemptions are keyed by path — so it stays in this one file while each handler lives beside the code it drives (`auth/members/members.routes.ts`, `auth/passkeys/passkeys.routes.ts`, `environment/environment.routes.ts`, `portability/arrival.routes.ts`, `platform/sync.routes.ts`, `extensions/backend/backend-proxy.routes.ts`, …).
 - [src/agent](../src/agent), **singular**: one conversation, split by what each part does — `run/` (the turn loop), `routes/`, `prompt/` (what the model is told), `tools/`, `providers/` (the runtime seam and the account doors), `models/` (what an account can run, and the helper roles), `verification/` (did the turn prove anything), `subagents/`, `anchors/` (what a message can go back to) and `context/`.
-- [src/agent/providers/provider-registry.ts](../src/agent/providers/provider-registry.ts): the provider list, once. Each native provider's directory exports one `ProviderModule` (its adapter row, turn arm, Services slice, catalog, readiness rung, boot tasks, pack wants, secrets rows and its ACCOUNT DOOR — src/agent/providers/provider-module.ts is the seam), and the shared surfaces DERIVE from the aggregation instead of each keeping its own enumeration. Adding a provider is its contract row (the one-row-per-provider table in `@intentic/sandbox-contract`'s provider-specs.ts), its directory, and one import line here; the registry throws at init on a missing or duplicate module, so forgetting the line fails every suite rather than shipping a provider whose secrets rows and readiness silently do not exist (which happened twice while these lists were hand-kept).
+- [src/runtimes/runtime-table.ts](../src/runtimes/runtime-table.ts): the provider list and the runtime → adapter table, once. Each native provider's directory exports one `ProviderModule` (its adapter row, turn arm, Services slice, catalog, readiness rung, boot tasks, pack wants, secrets rows and its ACCOUNT DOOR — src/agent/providers/provider-module.ts is the seam), and the shared surfaces DERIVE from the aggregation ([src/agent/providers/provider-registry.ts](../src/agent/providers/provider-registry.ts)) instead of each keeping its own enumeration. Adding a provider is its contract row (the one-row-per-provider table in `@intentic/sandbox-contract`'s provider-specs.ts), its directory, and one line in the table; the table throws at init on a missing or duplicate module, so forgetting the line fails every suite rather than shipping a provider whose secrets rows and readiness silently do not exist (which happened twice while these lists were hand-kept). Only composition imports the table, and hands it on as `Services.providerModules` and `Services.adapters`: every adapter and module names the narrow deps it reads, so nothing below the planner (`agent/run/turn/turn-plan.ts`) can reach back up through a registry, and the planner → adapters edge is the only one. The Claude Code loop's own arm, which no single provider owns, is [src/agent/run/harness/](../src/agent/run/harness); what the vendor loops share (the watchdog, plan-mode emulation, one rate-limit classifier, attachment loading, the turn gate) is [src/runtimes/decorators/](../src/runtimes/decorators).
 - [src/agent/routes/accounts.routes.ts](../src/agent/routes/accounts.routes.ts): the accounts this sandbox holds ITSELF, one route family with the provider in the path (`/accounts/{provider}`: start, complete, cancel, list, rename, disconnect). Four families used to serve this, each "the previous one's shape" with a verb renamed; the operations are the same six for every provider, so what differs is each module's `AccountDoor` (Anthropic's paste-back with the PKCE verifier now HELD in the door rather than round-tripped through the browser, Cursor's held verifier, xAI's device code through OpenCode, a minted key), and the route says the part no door owns: which provider was asked for and whether it has a door at all (a translator-only provider answers 404), how a door's own refusal reaches the wire (a 412 in its words), and the two answers a finishing call can give (the account, where the exchange ends there; nothing, where a mint follows and the row lands in the list).
 - [src/runtimes/minted/](../src/runtimes/minted): the providers whose SIGN-IN MINTS their key (Meta's Muse Code, Z.ai's GLM Coding Plan). The token their sign-in issues is not an inference credential — either vendor's model endpoint refuses it — so the flow has a second half the user never sees: mint the vendor's own API key from it and store that, which is exactly what those vendors' own CLIs do. Nobody pastes a key; a raw key against somebody's own gateway is still an `endpoint` capability and always was. The key then points the Claude Code loop straight at the vendor's Anthropic Messages endpoint — no translator hop, no adapter, no new runtime, the same road an `anthropic`-protocol endpoint capability takes. One store, one login machine, one catalog per ESTATE and one module FACTORY serve all of them: what differs between two minted providers is a login driver and a seed list, and Z.ai's two estates (api.z.ai and open.bigmodel.cn, whose hosts refuse each other's keys) differ only in a pair of URLs on the spec row. A third provider is a contract row, a seed and a driver.
 - [src/agent/models/model-catalog.ts](../src/agent/models/model-catalog.ts): "what can this account run", once, for all six providers that have to answer it (Claude, Codex, Cursor, Gemini, Kimi, Grok). The ladder is live discovery → the persisted last-known-good list → a compile-time seed floor, and the three properties each provider used to re-derive are true here instead: only a REAL answer is cached (so a seeded read retries on the next call, rather than pinning a placeholder row for a minute), a row the live source has stopped naming is still served for a grace window and persisted with the rest (a routed channel de-lists a model for as long as it is out of capacity for it, and a shrunk list moves every chat pinned to that model onto the catalog's default), and the file goes through [src/store/json-file.ts](../src/store/json-file.ts), read via the caller's schema and written atomically (so a self-heal write cannot be caught half-done by the read that falls back on it). A provider brings its own `discover`, what it keeps on disk, its floor, and how each rung renders; Cursor also keeps the raw vendor items, because a turn needs their parameter definitions to translate an effort tier. [src/agent/models/model-discovery.ts](../src/agent/models/model-discovery.ts) is the ASKING, shared by the four providers that ask an OpenAI-compatible endpoint: the bearer GET that answers `undefined` instead of throwing, the `{ data: [{ id }] }` unwrap, the id→label humanizer (one, where three had drifted over whether `gpt` is an acronym), and the "Did you mean: …" reader that is the only catalog some subscription accounts ever produce.
@@ -42,7 +42,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   image itself as the alternatives. Nobody writes that commit by hand: `.github/workflows/engines.yml` takes
   upstream's newest version once it has aged past the soak window, rewrites every pin
   (`_tools/scripts/engines/`), and opens one auto-merging pull request, so the fleet's default tracks upstream
-  at CI's pace instead of a maintainer's memory. [src/runtimes/claude/claude-sdk.ts](../src/runtimes/claude/claude-sdk.ts) is the loader that
+  at CI's pace instead of a maintainer's memory. [src/engines/claude-sdk.ts](../src/engines/claude-sdk.ts) is the loader that
   makes it real for the engine loaded IN this process: both halves of the Claude SDK come from one installed
   prefix, resolved at turn start so a version can never change under a turn already running. Its `/engines` routes are `engines.routes.ts`.
 - [src/agent/verification/agent-tests.ts](../src/agent/verification/agent-tests.ts): the `verify-tests` built-in, what a turn did to its tests,
@@ -82,8 +82,41 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   never cloned. Merged into the rule list at one point per moment (turn planning, `prepush.ts`), so the note, the Stop,
   the push gate and the firing stamps read one list; and a rule naming a repository runs IN it
   ([src/rules/rule-cwd.ts](../src/rules/rule-cwd.ts)), which is what a command spelled `cd x && …` was working around.
-- [src/agent/verification/turn-checks.ts](../src/agent/verification/turn-checks.ts): what the turn's own `turn.ending` command check said, kept
-  per conversation from the Stop that ran it to the land that reads it. The last run wins, which is what the
+- [src/agents/actor/](../src/agents/actor): one actor per conversation, the only writer of its in-memory life.
+  [conversation-decide.ts](../src/agents/actor/conversation-decide.ts) is the pure transition: an event and the state
+  it meets become the next state, the effects to run (entry writes, the roster broadcast, the transcript index) and the
+  answer owed. [conversation-actors.ts](../src/agents/actor/conversation-actors.ts) performs those effects through the
+  registry's books, holds each live turn's transport (its hard-cancel and steering queue, the land chain), indexes the
+  stranded resume records oldest first, and is the one `dispose` a purge or a discard goes through. The phase is
+  `idle`, `running` (the only place a card parks; a chosen ending outranks one) or `rewinding` (the turn mutex's other
+  holder); beside it sit the turn's readings and books, the land lease, the check verdict, the resume records and the
+  stop ladder, the steered flag and the steer checkpoint boxes, a restored card's grant, the nudge guard, and what the
+  card lists of its background jobs, watches, loop and workflow step. What a conversation holds that is no value
+  `decide` could own sits on its actor as holdings
+  ([conversation-holdings.ts](../src/agents/actor/conversation-holdings.ts)), each kind declared by the module whose
+  records they are: the conversation's detached run (attachable for a minute past its end), parked cards and their
+  waiters, spawned children and their seats, the subagent roster and each child's verification ledger, background jobs
+  and their endings, armed watches and their timers, a running loop's Stop, the turns it started on other
+  conversations this hour. The registry indexes
+  every item's id to its holder, so a door holding only an id finds it, keeps what no conversation holds (a card raised
+  outside any, the one poll for job exits) in a bucket no dispose reaches, and takes everything held by or filed about
+  a conversation on its dispose. Every door is handed the actors it files into (a turn's hooks, a runtime's deps, a
+  route's services), but for the watches, which reach theirs through the watcher runtime composition starts at boot.
+  The registry keeps the entries and
+  projects the card from both halves, by [conversation-status.ts](../src/agents/actor/conversation-status.ts)'s
+  precedence.
+- [src/store/conversations-db.ts](../src/store/conversations-db.ts) and
+  [src/store/conversation-units.ts](../src/store/conversation-units.ts): one storage unit per conversation, its rows
+  and its directory. The database (node:sqlite, WAL, foreign keys on) holds a table group per store, each behind its
+  own seam that runs as well on `:memory:` (`sqliteAgentsStore`, `sqliteTurnCheckpoints`, `sqliteTurnJournal`,
+  `sqliteWatchJournal`), and every per-conversation table is keyed to the `conversation` row with `ON DELETE CASCADE`,
+  so deleting that row is the whole of a purge's database half. `transaction` ([src/store/sqlite.ts](../src/store/sqlite.ts))
+  is what makes two facts one: the registry's persist writes a begin's entry with its staged journal row, and a land's
+  record with its repo rows. An export packs a `VACUUM INTO` snapshot, never the live file and its WAL; an arrival
+  `adopt`s one, replacing a conversation of the same id whole. The boot sweep removes directories no row owns, past an
+  hour's grace for a fork's copy made before its turn begins.
+- [src/agent/verification/turn-checks.ts](../src/agent/verification/turn-checks.ts): what the turn's own `turn.ending` command check said,
+  held by the conversation's actor (`check-ran`, `verdict-taken`) from the Stop that ran it to the land that takes it. The last run wins, which is what the
   re-measuring follow-up loop (rules/turn-ending.ts) is for; a turn whose check is still red lands as
   `outcome: "checks-failed"` and is held on its branch whatever the landing rule or the card's override says
   (rules/rules.ts landingVerdict), with the feed naming the check.
@@ -130,7 +163,8 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   [src/platform/boot/reaper.ts](../src/platform/boot/reaper.ts) reclaims everything a STOPPED conversation still holds, on
   one clock: how long since its turn settled. The provider CLI's MCP servers and headless browsers (three
   levels down, nothing here holds a handle on them) carry the conversation's stamp
-  ([src/platform/boot/leftovers.ts](../src/platform/boot/leftovers.ts)) and go a couple of minutes after the stop; the
+  ([src/seams/workload-stamp.ts](../src/seams/workload-stamp.ts), read by
+  [src/platform/boot/leftovers.ts](../src/platform/boot/leftovers.ts)) and go a couple of minutes after the stop; the
   conversation's `agent-*` tmux sessions: live panes included, so a left-behind dev server no longer outlives
   its turn by days: go minutes later unless somebody is attached, or unless the session still holds a BACKGROUND
   JOB ([src/agent/tools/background-jobs.ts](../src/agent/tools/background-jobs.ts)), whose whole contract is to
@@ -194,7 +228,8 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   [src/git/remote/ref-watch.ts](../src/git/remote/ref-watch.ts) (refs), and
   [src/system/runtime-watch.ts](../src/system/runtime-watch.ts): everything that is RUNNING rather than written:
   tmux sessions, panel dev servers, listening sockets, the agent's browsers and its subagents. The first three
-  start from a file; the fourth cannot, which is why it is announcements from the subsystems that do the thing,
+  start from a file; the fourth cannot, which is why it is announcements from the subsystems that do the thing
+  (published to [src/seams/runtime-feed.ts](../src/seams/runtime-feed.ts), below every one of them),
   plus one shared sampler that runs only while a browser is connected, plus the one announcement that arrives
   from outside the daemon: the image's zsh touches a file in `/run` on every preexec and precmd
   ([src/terminal/prompt-signal.ts](../src/terminal/prompt-signal.ts)), because a command starting and finishing
@@ -215,7 +250,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   Three doors, one shape, written once: the hub (which peers hold a socket right now, the typed client for
   each, a heartbeat that drops a lid that closed without a close frame, the facts a peer last reported kept for
   its card after it goes), the store (a single-use pairing bound to ONE id, redeemed once for a durable token
-  whose digest lives on /history, over `store/enrollment.ts`), the routes (the socket authenticated by its
+  whose digest lives on /history, over `peers/enrollment.ts`), the routes (the socket authenticated by its
   first frame, `enroll`, the owner's `pair`/roster/revoke, and the MCP bridge the agent's tools point at, a
   PIPE that parses no tool schema so a peer learns a tool without a daemon release), the capability handler,
   the tool builder and the one invariant (a live socket the store no longer vouches for). What a door declares
@@ -253,7 +288,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   - [src/runners](../src/runners), both halves, since a runner IS this daemon in another posture. Parent half:
     `runner-peer.ts` is the door (every pairing burned on redemption because it always ends up in a
     container's env; no grant and no bridge, the contract is typed end to end), a per-repo git door (stock
-    smart HTTP off the real git dirs), the turn dispatch the remote arm of agent.routes drives, plus the
+    smart HTTP off the real git dirs), the turn dispatch the runner placement (`agent/run/conversation/turn-placement.ts`) drives, plus the
     credential doors: per-turn access tokens and mid-turn re-mints resolved by the same code local turns use,
     and the translator re-served behind the runner's own bearer, so a remote turn spends THIS sandbox's model
     providers and no refresh token or auth file ever leaves. Runner half: identity, the outbound link serving
@@ -333,7 +368,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   ([src/agent/providers/adapter.ts](../src/agent/providers/adapter.ts); `claude/claude-one-shot.ts` on the harness's own credentials,
   `cursor/cursor-one-shot.ts`, `gemini/gemini-one-shot.ts`), so the walk asks the adapter the contract names for
   the provider exactly as a turn does, and a runtime with no helper is a refusal it steps over. AN UNSET JOB IS
-  REFUSED BEFORE ANYTHING IS READ ([src/agent/models/role-model-unset.ts](../src/agent/models/role-model-unset.ts)): a helper
+  REFUSED BEFORE ANYTHING IS READ ([src/seams/role-model-unset.ts](../src/seams/role-model-unset.ts)): a helper
   role whose list is empty used to derive a ladder from whatever was connected, so a sandbox nobody had
   configured spent an account on every landing, on a ranking this repo invented. Not set means not set, and
   because that is the owner's answer rather than a fault it is its own error class — the two callers that must
@@ -449,7 +484,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   name, and the `{{secret:name}}` reference language built on it: masking rewrites values to references in
   every tool result ([src/agent/tools/agent-redaction.ts](../src/agent/tools/agent-redaction.ts)) and in the terminal lane
   (`bin/cleaners.mjs`), and the two exits resolve them back: the shell rewrite inside the tmux wrapper
-  ([src/agent/tools/agent-secrets.ts](../src/agent/tools/agent-secrets.ts)) and the browser's `type_secret`
+  ([src/secrets/secret-access.ts](../src/secrets/secret-access.ts)) and the browser's `type_secret`
   ([src/browser/tools/secrets-tools.ts](../src/browser/tools/secrets-tools.ts)): each use landing on the ledger
   (`src/secrets/secret-uses.ts`) the inventory joins as "last used".
 - [src/secrets/credential-gate.ts](../src/secrets/credential-gate.ts), the release gate: the one consult every
@@ -457,7 +492,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   payment gate's shape (card raised from outside the turn generator, pushed into the live run, two different
   no's) with one difference that is the whole feature: the card is addressed to a NAMED LIST, so the waiter
   carries a `mayAnswer` the reply route checks against the verified identity on the request
-  ([src/agent/tools/agent-requests.ts](../src/agent/tools/agent-requests.ts)), and a stranger's click — yes or no — is
+  ([src/agents/actor/parked-cards.ts](../src/agents/actor/parked-cards.ts)), and a stranger's click — yes or no — is
   refused with the card left standing. The policy is a file off the workspace
   ([src/secrets/credential-gates.ts](../src/secrets/credential-gates.ts), which refuses an unreadable policy
   rather than reading it as "nothing gated"); the "rest of the conversation" releases are in memory
@@ -524,6 +559,6 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   never invented. It is REGENERATED and never stored, which is the whole argument for it being a mechanism
   instead of a paragraph: over the ten days that motivated it, this repo's two busiest top-level directories
   stopped existing and ten sessions went on naming them.
-- [src/auth/role-floor.ts](../src/auth/role-floor.ts): the minimum trust tier per route, in one table. [src/auth/auth.ts](../src/auth/auth.ts) resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches. The plain-Hono routes that gate on the owner share one pair of gates (`owner-gates.ts`: the maintainer-equivalent operating gate, and the ownership gate reserved for membership) and sit beside it: the roster (`members.routes.ts`), control tokens (`control-tokens.routes.ts`), and browser credentials — the WebSocket ticket, sign-out-everywhere and retirement (`access.routes.ts`). [src/auth/control-tokens.ts](../src/auth/control-tokens.ts) is the program's credential: hashed at rest with an optional expiry and a last-use mark, and its scopes (`read`/`drive`/`land`, plus the `editor` slice) are DERIVED from the same role floors a member is held to, so a route added tomorrow lands in the right rung by its floor. [src/auth/door-tokens.ts](../src/auth/door-tokens.ts) holds the credentials behind the public doors (an event automation's webhook, a workflow's release gate, a bug intake's key) in `.intentic/secrets/doors.json`, out of the versioned manifests that declare them, and hands each to an operator only ([src/auth/operator.ts](../src/auth/operator.ts)) through the route that lists the automation or workflow; a door takes its token as `?token=` or as a bearer header. [src/auth/grants.ts](../src/auth/grants.ts) is the one table of every non-bearer credential and what each reaches; a control token's admission hands back a principal ([src/auth/principal.ts](../src/auth/principal.ts)) that the turn it starts is attributed to ([src/agent/run/turn/turn-actor.ts](../src/agent/run/turn/turn-actor.ts): the activity log's `actor`, the agent card's `startedBy`).
+- [src/auth/role-floor.ts](../src/auth/role-floor.ts): the minimum trust tier per route, in one table. [src/auth/auth.ts](../src/auth/auth.ts) resolves who a caller is (owner TOFU, members with granted roles); the floor decides what that tier reaches. The plain-Hono routes that gate on the owner share one pair of gates (`owner-gates.ts`: the maintainer-equivalent operating gate, and the ownership gate reserved for membership) and sit beside it: the roster (`members.routes.ts`), control tokens (`control-tokens.routes.ts`), and browser credentials — the WebSocket ticket, sign-out-everywhere and retirement (`access.routes.ts`). [src/auth/control-tokens.ts](../src/auth/control-tokens.ts) is the program's credential: hashed at rest with an optional expiry and a last-use mark, and its scopes (`read`/`drive`/`land`, plus the `editor` slice) are DERIVED from the same role floors a member is held to, so a route added tomorrow lands in the right rung by its floor. [src/auth/door-tokens.ts](../src/auth/door-tokens.ts) holds the credentials behind the public doors (an event automation's webhook, a workflow's release gate, a bug intake's key) in `.intentic/secrets/doors.json`, out of the versioned manifests that declare them, and hands each to an operator only ([src/auth/operator.ts](../src/auth/operator.ts)) through the route that lists the automation or workflow; a door takes its token as `?token=` or as a bearer header. [src/auth/grants.ts](../src/auth/grants.ts) is the one table of every non-bearer credential and what each reaches; a control token's admission hands back a principal ([src/auth/principal.ts](../src/auth/principal.ts)) that the turn it starts is attributed to (`actorOf` there: the activity log's `actor`, the agent card's `startedBy`).
 - [src/workflows](../src/workflows): workflow scheduling, immutable run snapshots, restart recovery, run-ledger
   retention, and complete, resolved handoff artifacts; [src/loops](../src/loops) drives each individual step.

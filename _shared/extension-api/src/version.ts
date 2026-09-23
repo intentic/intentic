@@ -98,4 +98,13 @@
 // areas it was granted and ships none of them. No member was added, so the recorded surface has no entry for it. A
 // view that gates a WRITE affordance on `maintainer` now hides it from somebody the daemon would admit, which is the
 // one drift worth knowing about: gate on `writer` and up instead.
-export const extensionApiVersion = "2.15.0";
+// 2.16.0 adds `sandboxShallowRef`: `sandboxRef`'s lifetime with `shallowRef`'s reactivity. The editor now keeps its own
+// per-sandbox state (open chats, the fleet roster, the push flow) in the scope an extension's badge lives in, so one
+// switch empties both; a value that is a map or an object with its own methods (a conversation, a run watcher) must
+// not be deep-proxied, which is what `sandboxRef` does. Additive: `sandboxRef` and `sandboxValue` are unchanged.
+// 2.17.0 gives the backend half the typed daemon client its browser half has: `api.daemon.rpc`, created by the daemon's
+// backend host and handed to `activateServer`, so a server bundle carries no client of its own. It is gated like
+// `request`/`json`, by `permissions.daemon` on the method and path a call resolves to, and refused before anything is
+// sent. Additive, and the recorded surface grows a `daemonApi` member list (`api.daemon`'s own members, read from
+// server.ts): the backend half was the one surface no recorded grain could see.
+export const extensionApiVersion = "2.17.0";

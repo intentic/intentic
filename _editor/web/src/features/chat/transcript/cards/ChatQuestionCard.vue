@@ -277,7 +277,7 @@ const decidedOptions = (question: AskQuestion): DecidedOption[] => {
             <ChatDecisionButton tone="primary" icon="check" :disabled="!canSubmit || settling" @click="submitAnswers">{{
                 t(`chat.chatQuestionCard.submit`)
             }}</ChatDecisionButton>
-            <!-- Dismiss ends the turn (Conversation.cancelQuestion); the tooltip says so before the click. -->
+            <!-- Dismiss ends the turn (CardReplies.reply, afterReply); the tooltip says so before the click. -->
             <ChatDecisionButton
                 tone="secondary"
                 :disabled="settling"

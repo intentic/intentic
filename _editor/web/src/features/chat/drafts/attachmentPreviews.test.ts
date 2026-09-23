@@ -5,18 +5,16 @@ import { it, expect, beforeEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { nextTick, ref } from "vue";
 import { STATE_DIR } from "@intentic/constants";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 
 const blob = mock<(path: string) => Promise<Blob>>();
 // The resolved daemon address, exactly as useEndpoint hands it out: undefined until sandbox.list lands.
 const daemonBase = ref<string | undefined>(undefined);
 
-class HttpError extends Error {
-    constructor(readonly status: number) {
-        super(`http ${status}`);
-    }
-}
+// A daemon refusal, as the raw client throws it.
+const refusal = (status: number): SandboxHttpError => new SandboxHttpError(status, `Request failed (${status}).`);
 
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path), SandboxHttpError: HttpError }));
+mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxBlob: (path: string) => blob(path) }));
 mock.module("../../sandbox/secrets/useEndpoint", () => ({ useEndpoint: () => ({ daemonBase }) }));
 
 const { attachmentAudio, attachmentPreview, forgetMedia, rememberMedia } = await import("./attachmentPreviews");
@@ -81,7 +79,7 @@ it("recovers the thumbnail once an address resolves after the first ask failed u
 
 it("retries a daemon that is still booting until it answers", async () => {
     const path = freshPath();
-    blob.mockRejectedValueOnce(new HttpError(502)).mockResolvedValue(new Blob([`x`]));
+    blob.mockRejectedValueOnce(refusal(502)).mockResolvedValue(new Blob([`x`]));
 
     attachmentPreview(path);
     await settle();
@@ -96,7 +94,7 @@ it("retries a daemon that is still booting until it answers", async () => {
 
 it("stops asking for an attachment the daemon says is gone", async () => {
     const path = freshPath();
-    blob.mockRejectedValue(new HttpError(404));
+    blob.mockRejectedValue(refusal(404));
 
     attachmentPreview(path);
     await settle();
@@ -170,7 +168,7 @@ it("answers from the composer's own object URL, without asking the daemon at all
 // there now.
 it("asks again for a path that was refused before it was forgotten", async () => {
     const path = freshPath();
-    blob.mockRejectedValue(new HttpError(404));
+    blob.mockRejectedValue(refusal(404));
     attachmentPreview(path);
     await settle();
     expect(blob).toHaveBeenCalledTimes(1);

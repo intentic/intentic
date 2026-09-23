@@ -13,12 +13,10 @@ import {
 import type { Services } from "../../composition.js";
 import { endpointConfigOf } from "../../endpoints/local-model.js";
 import { mentionsSpentAllowance } from "../providers/failure-sentences.js";
-import { adapterFor } from "../providers/adapter-registry.js";
-import { harnessReadyProviders } from "../providers/harness-credentials.js";
 import { type DeclaredWindow, declaredWindow, helperOverflow, helperPromptRoom } from "../prompt/window/context-budget.js";
 import { type RoleAsk, readRoleAnswer, UnusableAnswerError } from "./role-answer.js";
 import { rungLimit, spentRung } from "./role-model-quota.js";
-import { RoleModelUnsetError } from "./role-model-unset.js";
+import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
 
 // Resolves what a role's chain actually runs on (connected accounts, catalogs, the walk itself); the contract
 // (model-pins.ts) decides the order, this file supplies the facts and executes it. Every ask names its own role and
@@ -53,7 +51,7 @@ const endpointSources = async (services: Services): Promise<ModelSource[]> => {
 // Every native provider plus every configured endpoint, whether each can run, and what it publishes; catalogs load
 // concurrently since they are independent cached reads.
 const modelSources = async (services: Services): Promise<ModelSource[]> => {
-    const ready = await harnessReadyProviders(services);
+    const ready = await services.providerReadiness();
     const [native, endpoints] = await Promise.all([
         Promise.all(
             NATIVE_PROVIDERS.map(async (provider) => ({
@@ -153,10 +151,10 @@ const chainWindows = async (services: Services, chain: readonly ModelChoice[]): 
 // The prompt as this rung would receive it: built to its room when the ask can size itself, taken whole when it cannot.
 const promptFor = <T>(ask: RoleAsk<T>, room: number): string => (typeof ask.prompt === `function` ? ask.prompt(room) : ask.prompt);
 
-// Runtime is decided by adapterFor/capabilitiesOf, never here, so a provider that refuses a harness always lands on its
+// Runtime is decided by the adapter table/capabilitiesOf, never here, so a provider that refuses a harness always lands on its
 // own regardless of the pin. Effort, thinking and fast ride along unchanged.
 const askRung = async (services: Services, pin: ModelPin, prompt: string, signal: AbortSignal): Promise<string> => {
-    const adapter = adapterFor(pin.provider, pin.harness ?? `claude-code`);
+    const adapter = services.adapters.for(pin.provider, pin.harness ?? `claude-code`);
     if (adapter.oneShot === undefined) {
         throw new Error(`${adapter.runtime} runs no helper, so there is nothing to ask it one line with.`);
     }

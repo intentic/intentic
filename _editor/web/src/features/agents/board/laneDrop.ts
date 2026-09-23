@@ -13,6 +13,22 @@ export type DropAction = "land" | "resolve" | "stop" | "discard" | "unwatch";
 // archive or restore is out. Kept as the action, not a boolean, so a card's own buttons can report their own progress.
 export type PendingAction = DropAction | "archive" | "restore" | "reland";
 
+// What a card is waiting on: its own press or drop in flight (`running`, keyed per card by useAgentDrag), or an archive
+// or restore batch, which names ids alone and is the active box's only, so another box's card is never in it.
+export const pendingOf = (
+    agent: Pick<FleetAgent, "id" | "sandboxId" | "archivedAt">,
+    running: PendingAction | undefined,
+    busy: readonly string[],
+): PendingAction | undefined => {
+    if (running !== undefined) {
+        return running;
+    }
+    if (agent.sandboxId !== undefined || !busy.includes(agent.id)) {
+        return undefined;
+    }
+    return agent.archivedAt !== undefined ? `restore` : `archive`;
+};
+
 // `resolve` sends a message, needing the conversation the chat singleton holds for one daemon; `unwatch` writes through
 // the local fleet store. Stop, land and discard are calls addressed by agent id and work on any sandbox.
 const NEEDS_THIS_BOX: ReadonlySet<DropAction> = new Set([`resolve`, `unwatch`]);
@@ -148,3 +164,14 @@ export const dropActionLabel = (action: DropAction): string =>
               action === `unwatch`
               ? `Stop watching`
               : `Discard this agent`;
+
+// What the ghost promises over a target: the action's verb, or the reason there isn't one.
+export const dropHint = (action: DropAction | undefined, dragged: FleetAgent | undefined, over: DropTarget | undefined): string | undefined => {
+    if (action !== undefined) {
+        return dropActionLabel(action);
+    }
+    if (dragged === undefined || over === undefined) {
+        return `Drop on a lane to act`;
+    }
+    return dropRejection(dragged, over);
+};

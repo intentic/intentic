@@ -1,19 +1,10 @@
-import {
-    type DoorToken,
-    DoorTokenSchema,
-    type Workflow,
-    type WorkflowRun,
-    type WorkflowSaved,
-    WorkflowSavedSchema,
-    type WorkflowSummary,
-    WorkflowsListSchema,
-} from "@intentic/sandbox-contract";
+import type { DoorToken, Workflow, WorkflowRun, WorkflowSaved, WorkflowSummary } from "@intentic/sandbox-contract";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
 import { host } from "./host";
 import { workflowRunsQuery } from "./runsQuery";
 
-// Workflow manifest and run ledger, via the daemon's /workflows routes. Not polled: both files ride the daemon's
+// Workflow manifest and run ledger, via the daemon's `workflows` procedures. Not polled: both files ride the daemon's
 // file-change push, which invalidates the `workflows`/`workflow-runs` keys directly, so there's nothing an interval
 // would discover between writes that the push hasn't already delivered.
 
@@ -28,7 +19,7 @@ export function useWorkflows() {
 
     const query = useQuery({
         queryKey,
-        queryFn: async (): Promise<WorkflowSummary[]> => WorkflowsListSchema.parse(await api.sandbox.json(`/workflows`)).workflows,
+        queryFn: async (): Promise<WorkflowSummary[]> => (await api.sandbox.rpc.workflows.list()).workflows,
         enabled,
     });
     const runsQuery = useQuery({ ...runs, enabled });
@@ -40,39 +31,26 @@ export function useWorkflows() {
 
     // Response includes the gate token when one exists; it's the designer's only way to learn the URL.
     const save = useMutation({
-        mutationFn: async ({ workflow, create }: { workflow: Workflow; create: boolean }): Promise<WorkflowSaved> =>
-            WorkflowSavedSchema.parse(
-                await api.sandbox.json(`/workflows`, {
-                    method: `POST`,
-                    headers: { "content-type": `application/json` },
-                    body: JSON.stringify({ workflow, create }),
-                }),
-            ),
+        mutationFn: (input: { workflow: Workflow; create: boolean }): Promise<WorkflowSaved> => api.sandbox.rpc.workflows.save(input),
         onSuccess: invalidate,
     });
     // Mints a fresh token and retires the old one at once; every wired pipeline must be re-taught.
     const rotateGateToken = useMutation({
-        mutationFn: async (id: string): Promise<DoorToken> =>
-            DoorTokenSchema.parse(await api.sandbox.json(`/workflows/${encodeURIComponent(id)}/gate/rotate`, { method: `POST` })),
+        mutationFn: (id: string): Promise<DoorToken> => api.sandbox.rpc.workflows.rotateGateToken({ id }),
         onSuccess: invalidate,
     });
     const remove = useMutation({
-        mutationFn: (id: string) => api.sandbox.json(`/workflows/${encodeURIComponent(id)}`, { method: `DELETE` }),
+        mutationFn: (id: string) => api.sandbox.rpc.workflows.remove({ id }),
         onSuccess: invalidate,
     });
     // Success means started, not finished; steps come back `pending` so the run view opens immediately.
     // `request` is what the user typed before Run, handed to every step on top of its own prompt.
     const start = useMutation({
-        mutationFn: async ({ id, request }: { id: string; request?: string }): Promise<WorkflowRun> =>
-            (await api.sandbox.json(`/workflows/${encodeURIComponent(id)}/run`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify(request === undefined ? {} : { request }),
-            })) as WorkflowRun,
+        mutationFn: (input: { id: string; request?: string }): Promise<WorkflowRun> => api.sandbox.rpc.workflows.run(input),
         onSuccess: invalidate,
     });
     const stop = useMutation({
-        mutationFn: (runId: string) => api.sandbox.json(`/workflows/runs/${encodeURIComponent(runId)}/stop`, { method: `POST` }),
+        mutationFn: (runId: string) => api.sandbox.rpc.workflows.stopRun({ runId }),
         onSuccess: invalidate,
     });
 

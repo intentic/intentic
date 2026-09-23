@@ -34,10 +34,10 @@ export const composeSession = (draft: SessionDraft): Conversation => {
     conversation.isolated.value = draft.isolated;
     const pinned = draft.model === undefined ? undefined : parsePinned(draft.model);
     if (pinned !== undefined) {
-        conversation.selectModel({ provider: pinned.provider, value: pinned.model });
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: pinned.provider, value: pinned.model } });
     }
     if (draft.effort !== undefined && draft.effort !== ``) {
-        conversation.setEffort(draft.effort);
+        conversation.selection.apply({ kind: `setEffort`, effort: draft.effort });
     }
     conversation.draft.value = draft.prompt;
     return conversation;

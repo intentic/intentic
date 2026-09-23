@@ -1,8 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { lstat, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { SESSION_STATE, sessionsDir, sessionsRoot } from "../../sessions/session-store.js";
-import { stateRelPath } from "../../workspace/layout/state-paths.js";
+import { SESSION_STATE, sessionsDir } from "../../sessions/session-store.js";
+import { conversationsRoot } from "../../store/conversation-units.js";
+import { stateRelPath } from "../../state-paths.js";
 import { MIRRORED_DIRS } from "@intentic/constants/mirror-roots";
 import { SHARED_STATE_PATHS } from "@intentic/sandbox-contract";
 import { IGNORED_DIRS } from "@intentic/workspace-ignore";
@@ -295,12 +296,16 @@ export const startAnchor = async (plan: IsolationPlan): Promise<IsolationAnchor>
     return { pid, cwd: plan.root, plan, dispose };
 };
 
+// Where the layout before conversation units kept every conversation's transcripts and fenced session stores. Nothing
+// reads or deletes them any more, so on a volume that still holds them they stay masked like the units.
+const PRE_UNIT_STORES = ["transcripts", "sessions"] as const;
+
 // What a fenced conversation's namespace hides, derived rather than configured: the worktrees root is this worktree's
-// own parent, and the other two are the daemon's account of every conversation — the transcripts it keeps and the
-// session stores fenced conversations write to.
+// own parent, and the conversation units are the daemon's account of every conversation — the transcripts it keeps and
+// the session stores fenced ones write to. Its own store is bound before the mask goes over them.
 const fencedPlacement = (historyRoot: string, worktree: string): FencedPlacement => ({
     sessions: sessionsDir(historyRoot, basename(worktree)),
-    hidden: [dirname(worktree), join(historyRoot, "transcripts"), sessionsRoot(historyRoot)],
+    hidden: [dirname(worktree), conversationsRoot(historyRoot), ...PRE_UNIT_STORES.map((name) => join(historyRoot, name))],
 });
 
 export interface TurnIsolation {

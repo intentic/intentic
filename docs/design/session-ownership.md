@@ -115,7 +115,7 @@ as today; ownership is a label with one press, and the phases below say when it 
 - Names are not authoritative. `owner.name` is whatever the assigning sign-in carried; a member assigned by
   address alone has no name until the board can read one off presence. Authorization reads emails only.
 - Ownership does not cross into the platform. The platform mirrors grants; who owns which session is the
-  sandbox's own record, in `agents.json`, like everything else about the fleet.
+  sandbox's own record, in its conversations database, like everything else about the fleet.
 - Not a lock. Two people may still drive one session; ownership says who answers for it, not who may type.
 
 ## Testing

@@ -54,12 +54,13 @@ Every surface this one process owns, and the reason each one lives here rather t
   the phrase index (src/agents/recall/fleet-recall.ts). `show <handle>` takes any spelling of a conversation — its
   id, its branch, an id prefix, its runtime session id, or words from its title — and answers what it was
   asked, where it got to, how it ended, its branch and worktree, its per-repo delta and whether that landed,
-  and where its record is, with the whole transcript one flag further. The measurement it was built from: one
-  in seven of this workspace's Claude sessions contains a hand-rolled hunt for exactly this, a median of three
-  shell calls and as many as thirty-five, ~2 600 tokens each, all of it re-deriving a layout the daemon has
-  always known. So the surface is a grant over COST, not over reach — every byte it answers was already
-  readable from the turn — which is why the routes are their own namespace rather than a widening of
-  `/agents`, whose neighbours land, discard and archive (auth/grants.ts states the bargain). The standing
+  and where its record is, with the whole transcript one flag further, and what the daemon keeps for it, raw, one
+  more (`--stored`: its row in every table of the conversations database and the files in its directory). The
+  measurement it was built from: one in seven of this workspace's Claude sessions contains a hand-rolled hunt for
+  exactly this, a median of three shell calls and as many as thirty-five, ~2 600 tokens each, all of it re-deriving
+  a layout the daemon has always known. So the surface is a grant over COST, not over reach — every byte it
+  answers was already readable from the turn — which is why the routes are their own namespace rather than a
+  widening of `/agents`, whose neighbours land, discard and archive (auth/grants.ts states the bargain). The standing
   prompt names the verb on every runtime (`FLEET_GUIDANCE` in src/agent/prompt/system-prompt.ts), and `iq sessions
   list` joins the same registry so a runtime session prints the conversation it belonged to instead of a bare
   uuid.
@@ -69,8 +70,8 @@ Every surface this one process owns, and the reason each one lives here rather t
   conversation exactly once: on the check passing or on the deadline, whichever first, with the check's own
   output: so the agent writes no sleep loop and holds no turn open. The CLI's own scheduling tools
   (ScheduleWakeup, the Cron family) are disallowed on every turn: they live in a process that dies with the
-  turn, so they accept schedules that can never fire. What is armed rides the fleet card
-  (src/agent/verification/watch-state.ts → `AgentSummary.watches`), which is what stops a watch from being a promise made
+  turn, so they accept schedules that can never fire. What is armed rides the fleet card (watchers.ts publishes it to the
+  conversation's actor, `watches-shown` → `AgentSummary.watches`), which is what stops a watch from being a promise made
   in silence: the conversation reads as finished on every screen, keeps a hosted machine awake, and then
   starts working by itself hours later. A card carrying one sits in the board's Active lane and wears the
   press that ends it beside the readout that announces it (`agents.stopWatching`): the arrangement is one the
@@ -306,7 +307,7 @@ Every surface this one process owns, and the reason each one lives here rather t
   An own skill is on exactly while its copy under `.agents/skills/` exists, and only the owner's own save, switch
   or delete moves that copy (src/settings/skills.ts); the settings `skills` list names baked tools alone, so no
   reconcile, boot or settings write can create or delete an owner's file. The loaded folder is the vendor-neutral one on
-  purpose (src/settings/loaded-skills.ts): Codex reads `.agents/skills/` natively, Claude Code reads it through
+  purpose (src/store/loaded-skills.ts): Codex reads `.agents/skills/` natively, Claude Code reads it through
   per-skill symlinks under `.claude/skills/`, and runtimes with no skill loader get the same name, description
   and file path as a disclosed note on the conversation's opening prompt. `AGENTS.md` remains entirely the
   user's file. The one skill about the product itself is image-baked beside the task skills
@@ -324,7 +325,7 @@ Every surface this one process owns, and the reason each one lives here rather t
   back as a pass over work it never saw.
 - Let an agent ask the owner, in chat, to connect a capability the task is missing: the same consent shape
   as the wallet's payment gate, pointed at setup instead of money (src/capabilities/capability-offer.ts). The
-  plumbing itself is src/agent/run/offer-request.ts, shared by every card a gate raises from outside the turn
+  plumbing itself is src/agents/actor/card-offers.ts, shared by every card a gate raises from outside the turn
   generator (a capability ask, a payment, a gated credential, a command headed for somebody's machine): find the
   live run the caller may draw in, push the raised and resolved frames into its log and the registry by hand,
   hold the call under a deadline, and tell an answer from the abort stand-in. The agent's

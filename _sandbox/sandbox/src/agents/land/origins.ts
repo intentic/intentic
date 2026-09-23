@@ -3,8 +3,9 @@ import type { OriginAgent } from "@intentic/sandbox-contract";
 import type { Logger } from "pino";
 import { headSha } from "../../git/changes/changes.js";
 import { materializedPaths } from "../../git/changes/changes-porcelain.js";
+import { opt } from "../../opt.js";
 import type { AgentsRegistry } from "../registry/agents-registry.js";
-import { landedMessageOf } from "../registry/agents-store.js";
+import { reposOf } from "../registry/agents-store.js";
 import { type ExpiryTracker, pathWeight } from "../registry/expiry.js";
 
 // Per-file attribution for the Changes panel, derived from git, never recorded separately: land patches landedTip's
@@ -100,12 +101,11 @@ export const createAgentOrigins = (
                 if (entry === undefined) {
                     continue;
                 }
-                const landed = landedMessageOf(entry);
                 identities[id] = {
-                    provider: entry.provider,
-                    ...(entry.title !== undefined ? { title: entry.title } : {}),
+                    provider: entry.profile.provider,
+                    ...opt("title", entry.social.title?.text),
                     // Written at land time from the diff, describing the change, not the ask the title names.
-                    ...(landed === undefined ? {} : { landedMessage: landed }),
+                    ...opt("landedMessage", entry.landing.message),
                 };
             }
             return identities;
@@ -115,7 +115,8 @@ export const createAgentOrigins = (
             const landings = agents
                 .ids()
                 .flatMap((id) => {
-                    const composed = agents.entry(id)?.repos.find((candidate) => candidate.repo === repo);
+                    const entry = agents.entry(id);
+                    const composed = entry === undefined ? undefined : reposOf(entry).find((candidate) => candidate.repo === repo);
                     if (composed?.landedTip === undefined || composed.landedHead === undefined) {
                         return [];
                     }

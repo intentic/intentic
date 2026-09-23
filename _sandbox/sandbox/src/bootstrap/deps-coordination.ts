@@ -1,6 +1,4 @@
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import { queueWhole } from "../agent/tools/agent-terminals.js";
-import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { DependencyOrigin } from "../workspace/deps/dependency-origin.js";
 import { queueVerify, type VerifyDeps } from "../workspace/deps/verify-deps.js";
@@ -32,14 +30,16 @@ const attribution = (origin: DependencyOrigin): { conversationId?: string; title
     return { ...(conversationId === undefined ? {} : { conversationId }), ...(title === undefined ? {} : { title }) };
 };
 
-export const wireDependencyCoordinator = (services: Services): void => {
+export const wireDependencyCoordinator = (
+    services: Pick<Services, "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "events" | "heavyCommands" | "dependencies">,
+): void => {
     const dependencyChecks: VerifyDeps = {
         workspace: services.workspace,
         processes: services.processes,
         logger: services.logger,
         verifyStore: services.verifyStore,
         activity: services.activity,
-        emit: (event) => emitWorkspaceEvent(services, event, streamAgent),
+        emit: (event) => services.events.publish("workspace", event),
         announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
     };

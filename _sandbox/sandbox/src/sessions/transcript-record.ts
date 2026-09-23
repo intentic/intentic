@@ -1,9 +1,13 @@
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { isConversationId, type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
+import { conversationUnit } from "../store/conversation-units.js";
 
-// One JSONL file per conversation, appended per settled turn, on the HISTORY volume. Not the live path; a running turn
-// is served from its frame log and lands here once it settles.
+// One JSONL file per conversation, in its unit on the HISTORY volume, appended per settled turn. Not the live path; a
+// running turn is served from its frame log and lands here once it settles.
+
+// Where one conversation's record lives; also what `agents show` names as the record's path.
+export const transcriptFile = (historyRoot: string, conversationId: string): string => join(conversationUnit(historyRoot, conversationId), "transcript.jsonl");
 
 // Ids are filename-safe by construction; a name that fails validation is never trusted into a path.
 // Window size is counted in user turns, not rows, so a page starts on a question rather than mid-answer. `maxRows` caps
@@ -146,12 +150,12 @@ export const windowOf = (
         { turns, maxRows, maxBytes },
     );
 
-export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
+export const fileTranscriptRecord = (historyRoot: string): TranscriptRecord => ({
     fork: async (conversationId, source, keep) => {
         if (!isConversationId(conversationId) || !isConversationId(source) || keep <= 0) {
             return;
         }
-        const path = join(dir, `${conversationId}.jsonl`);
+        const path = transcriptFile(historyRoot, conversationId);
         const opened = await stat(path).then(
             () => true,
             () => false,
@@ -160,11 +164,11 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
             return;
         }
         // Raw rows, so this keeps exactly the rows `count` and `truncate` would, torn or unparseable lines included.
-        const rows = (await rawRows(join(dir, `${source}.jsonl`))).slice(0, keep);
+        const rows = (await rawRows(transcriptFile(historyRoot, source))).slice(0, keep);
         if (rows.length === 0) {
             return;
         }
-        await mkdir(dir, { recursive: true });
+        await mkdir(dirname(path), { recursive: true });
         await writeFile(path, rows.map((line) => `${line}\n`).join(""), { flag: "wx" }).catch((error: unknown) => {
             if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
                 throw error;
@@ -175,21 +179,22 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         if (!isConversationId(conversationId) || messages.length === 0) {
             return;
         }
-        await mkdir(dir, { recursive: true });
-        await appendFile(join(dir, `${conversationId}.jsonl`), lines(messages));
+        const path = transcriptFile(historyRoot, conversationId);
+        await mkdir(dirname(path), { recursive: true });
+        await appendFile(path, lines(messages));
     },
     read: async (conversationId) => {
         if (!isConversationId(conversationId)) {
             return [];
         }
-        return (await rawRows(join(dir, `${conversationId}.jsonl`))).flatMap(row);
+        return (await rawRows(transcriptFile(historyRoot, conversationId))).flatMap(row);
     },
     window: async (conversationId, { before, turns = DEFAULT_WINDOW_TURNS, maxRows = MAX_WINDOW_ROWS, maxBytes = MAX_WINDOW_BYTES, fit }) => {
         if (!isConversationId(conversationId)) {
             return { rows: [], from: 0, more: false };
         }
         // Raw rows, the same position `count` and `truncate` use, so `from` addresses the same message a rewind would.
-        const raw = await rawRows(join(dir, `${conversationId}.jsonl`));
+        const raw = await rawRows(transcriptFile(historyRoot, conversationId));
         // Only the returned rows are parsed; splitting the file is cheap, JSON.parse is not.
         return scanBack(
             (index) => {
@@ -210,7 +215,7 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         if (!isConversationId(conversationId)) {
             return undefined;
         }
-        const raw = await rawRows(join(dir, `${conversationId}.jsonl`));
+        const raw = await rawRows(transcriptFile(historyRoot, conversationId));
         for (let index = raw.length - 1; index >= 0; index -= 1) {
             const found = row(raw[index] ?? "").find(match);
             if (found !== undefined) {
@@ -219,12 +224,12 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         }
         return undefined;
     },
-    count: async (conversationId) => (isConversationId(conversationId) ? (await rawRows(join(dir, `${conversationId}.jsonl`))).length : 0),
+    count: async (conversationId) => (isConversationId(conversationId) ? (await rawRows(transcriptFile(historyRoot, conversationId))).length : 0),
     size: async (conversationId) => {
         if (!isConversationId(conversationId)) {
             return undefined;
         }
-        return stat(join(dir, `${conversationId}.jsonl`)).then(
+        return stat(transcriptFile(historyRoot, conversationId)).then(
             (info) => info.size,
             () => undefined,
         );
@@ -233,7 +238,7 @@ export const fileTranscriptRecord = (dir: string): TranscriptRecord => ({
         if (!isConversationId(conversationId)) {
             return 0;
         }
-        const path = join(dir, `${conversationId}.jsonl`);
+        const path = transcriptFile(historyRoot, conversationId);
         const rows = await rawRows(path);
         if (rows.length <= keep) {
             return 0;

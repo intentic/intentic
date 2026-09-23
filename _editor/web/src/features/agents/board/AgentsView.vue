@@ -1,1144 +1,117 @@
 <script setup lang="ts">
-import type { Disposable } from "@intentic/extension-api";
-import { type AutomationApproval, isTrialProvider, type WorkflowRun } from "@intentic/sandbox-contract";
-import { Button, clipboardOf, ui, ContextMenu, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
-import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, onBeforeUpdate, onMounted, onUnmounted, onUpdated, provide, ref, watch } from "vue";
+import { Button, ui, ContextMenu, Modal, ProjectChip, SearchBar, SegmentedControl, useDevice, useNarrow } from "@intentic/ui";
+import { computed, provide, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { composeAgent, startAgent } from "../fleet/agentActions";
 import { usePanels } from "../../extensions/usePanels";
 import { useChanges } from "../../workspace/changes/useChanges";
-import { synthesizeSessions, synthesizing } from "../fleet/synthesizeSessions";
-import { dropActionLabel, dropRejection, type PendingAction } from "./laneDrop";
-import { bareBranch } from "./session/sessionChip";
+import { synthesizing } from "../fleet/synthesizeSessions";
+import { dropHint, pendingOf } from "./laneDrop";
 import { useAgentDrag } from "./useAgentDrag";
 import { useAgentFilter } from "./useAgentFilter";
 import { projectScope, setProjectScope } from "../../../app/projectScope";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
-import { agentInProject, heldWakeInProject, runInProject } from "./projectMembership";
-import { boardOwners, ownedBy, ownerFilter, sameAddress } from "./ownership";
 import { useAuth } from "../../auth/useAuth";
 import { useSandboxSharedAccess } from "../../sandbox/access/useSandboxSharedAccess";
-import { presenceOthers } from "../../../shell/presence/usePresence";
-import { type FleetLane, reviewAction, unregistered, watching } from "../fleet/agentStatus";
 import { useAgents } from "../fleet/useAgents";
-import { agentSeed } from "../fleet/useAgents-actions";
-import { canArchive, FINISHED_WINDOW, type FleetAgent, laneGroups, windowFinished } from "../fleet/useAgents-fleet";
-import { boxNameOf, fleetScope, isRemote, openInSandbox, otherFleet, partialAnswer, readingAcross, scopeOffered } from "../fleet/fleetScope";
-import { refreshAcross, subscribe as watchOtherBoxes } from "../../sandbox/live/fleetAcross";
-import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, runsNeedingYou, useWorkflowRuns } from "../fleet/useWorkflowRuns";
-import { hold } from "../../../shell/notifications/notifications";
+import type { FleetAgent } from "../fleet/useAgents-fleet";
+import { fleetScope, scopeOffered } from "../fleet/fleetScope";
+import { useWorkflowRuns } from "../fleet/useWorkflowRuns";
 import { relativeTime } from "../../chat/models/catalog";
-import { showingRunGraph } from "../../chat/run/chatRun";
 import { chatWide } from "../../chat/panel/chatPanelLayout";
 import { openRunInChat } from "../../chat/run/openRun";
-import { traceFocus } from "../../chat/run/focusTrace";
 import { summonChat } from "../../chat/run/summon";
-import { useChat } from "../../chat/run/useChat";
 import { chatStrip } from "../../chat/panel/useChat-strip";
-import { agentTabOf } from "../../chat/panel/useChat-reveal";
-import { publishContextKey } from "../../../shell/commands/contextKeys";
-import { AGENTS } from "../../../shell/commands/categories";
-import { commandShortcut, registerCommand } from "../../../shell/commands/useCommands";
 import MatchLine from "../../../components/MatchLine.vue";
-import { buildIdeas, buildPrompt } from "./buildIdeas";
 import AgentCard from "./cards/AgentCard.vue";
 import SandboxMetricsStrip from "../metrics/SandboxMetricsStrip.vue";
 import { LIVE_METRICS_KEY, useLiveMetrics } from "../metrics/liveMetrics";
 import HeldWakeCard from "./cards/HeldWakeCard.vue";
 import WorkflowRunCard from "./cards/WorkflowRunCard.vue";
-import { uuid } from "../../../lib/uuid";
+import { useArchiveDoor } from "./view/archiveDoor";
+import { useBoardCommands } from "./view/boardCommands";
+import { laneHeads, useBoardLanes } from "./view/boardLanes";
+import { useBoardPresses } from "./view/boardPresses";
+import { followAcross, useBoardScope } from "./view/boardScope";
+import { useBoardView } from "./view/boardView";
+import { useCardMenu } from "./view/cardMenu";
+import { useCardFocus, useCardRing } from "./view/cardSelection";
+import { boardStarters } from "./view/firstScreen";
+import { useLaneMotion } from "./view/laneMotion";
 import { useT } from "@intentic/ui/i18n";
 // Kanban across Attention/Active/Finished, pure projections of laneOf; a drop runs the action that causes a lane change
-// (laneDrop), never assigns status directly.
-// Board is sized by its own width, not the viewport's: below NARROW_BOARD_PX the three lanes stack instead of columns,
-// same lanes/order/drop targets either way.
-// Finished has no way out on its own, so it gets a window (FINISHED_WINDOW), a Clear, and an Archive view; archiving is
-// lossless (no confirm); the archive's own "Delete all" is bulk-only and confirms first.
+// (laneDrop), never assigns status directly. Template and wiring: what the lanes draw and cover, how the board is being
+// read, the selection, the menu, the motion and the commands are the headless modules in `view/`.
 const t = useT();
 
 const router = useRouter();
-const route = useRoute();
 const { mobile } = useDevice();
-const {
-    lanes,
-    fleet,
-    heldWakes,
-    releaseHeld,
-    refresh,
-    open,
-    markSeen,
-    archived,
-    archiveLoading,
-    loadArchived,
-    archive,
-    restore,
-    stopWatching,
-    purgeArchived,
-    undoArchive,
-    undoable,
-    archivedFlash,
-    notice,
-    dismissNotice,
-    busyIds,
-    agentById,
-} = useAgents();
-// Whole store, not a destructure: the first-screen connect offer acts on the focused chat, and the card is that
-// conversation's view as one object.
-const chat = useChat();
+const agents = useAgents();
+const { archived, archiveLoading, archive, restore, notice, dismissNotice } = agents;
 // Read only while this board is mounted and the reader opted in (liveMetrics.ts); the cards take theirs from here.
 const liveMetrics = useLiveMetrics();
 provide(LIVE_METRICS_KEY, liveMetrics);
-// A refusal lands on the board's notice strip, since a press with no visible effect reads as broken.
-const synthesize = async (): Promise<void> => {
-    const result = await synthesizeSessions();
-    if (!result.started) {
-        notice.value = result.why;
-    }
-};
-const {
-    dragged,
-    dragging,
-    draggedId,
-    over,
-    action,
-    accepts,
-    pendingOn,
-    ghostStyle,
-    begin,
-    consumeSuppressedOpen,
-    pendingResolve,
-    confirmResolve,
-    cancelResolve,
-    resolveNow,
-    landNow,
-    relandNow,
-    unwatchNow,
-} = useAgentDrag();
-// Resolve the target live so rename and status changes remain visible.
-const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agentById(pendingResolve.value)));
-// What a card is waiting on: an in-flight press/drop (useAgentDrag, self-naming) or an archive/restore batch addressed
-// by id alone.
-// An id in that batch is being filed away, unless already archived, in which case it's being restored.
-const pendingFor = (agent: FleetAgent): PendingAction | undefined => {
-    // Matched on the card, not the id: an agent id can repeat across sandboxes (a cloned workspace), so an id-only test
-    // would dim both cards for one action.
-    // useAgentDrag keys in-flight actions per card for the same reason.
-    const running = pendingOn(agent.id, agent.sandboxId);
-    if (running !== undefined) {
-        return running;
-    }
-    // Archive/restore are the active box's alone, so a card from elsewhere can never be in that busy set, whatever its
-    // id says.
-    if (agent.sandboxId !== undefined || !busyIds.value.includes(agent.id)) {
-        return undefined;
-    }
-    return agent.archivedAt !== undefined ? `restore` : `archive`;
-};
-// Matches the card's title and every later prompt in that agent's transcript; local for tabs this browser holds,
-// daemon-side for the rest (see useAgentFilter).
-// The field is always visible, not behind a glyph, so nobody has to learn the board is searchable; `Aa` is a preference
-// inside it, not part of the query.
-const {
-    query,
-    needle,
-    matchCase,
-    active: filtering,
-    matches,
-    snippetOf,
-    archivedMatches,
-    sessionMatches,
-    searching,
-    partial: searchPartial,
-} = useAgentFilter();
+const drag = useAgentDrag();
+const { dragged, dragging, draggedId, over, action, accepts, ghostStyle, pendingResolve, confirmResolve, cancelResolve } = drag;
+const { resolveNow, landNow, relandNow, unwatchNow } = drag;
+// Resolved live, so a rename or a status change stays visible while the dialog asks.
+const resolveTarget = computed(() => (pendingResolve.value === undefined ? undefined : agents.agentById(pendingResolve.value)));
+const hint = computed(() => dropHint(action.value, dragged.value, over.value));
+const pendingFor = (agent: FleetAgent) => pendingOf(agent, drag.pendingOn(agent.id, agent.sandboxId), agents.busyIds.value);
+// Its field is always on the header, not behind a glyph, so nobody has to learn the board is searchable.
+const filter = useAgentFilter();
+const { query, needle, matchCase, active: filtering, snippetOf, sessionMatches, searching, partial: searchPartial } = filter;
 const filterField = ref<InstanceType<typeof SearchBar> | undefined>(undefined);
-// Finished lane's two extra view states, held here rather than in the store: they're how this one board is being looked
-// at, not something a second surface should inherit.
-const showAllFinished = ref(false);
-const archiveOpen = ref(false);
-// The Finished window only applies while browsing its own recent tail; a filter or explicit expand lifts the cap (see
-// cardsFor).
-const windowed = computed(() => !archiveOpen.value && !filtering.value && !showAllFinished.value);
-
-const { runs: workflowRuns, stop: stopWorkflowRun, archive: archiveWorkflowRun, unarchive: unarchiveWorkflowRun } = useWorkflowRuns();
-// Read from the fleet, not the run ledger: "blocked" is a live fact about the conversation, and the ledger only knows
-// what the scheduler wrote.
-const needingYou = computed(() => runsNeedingYou(fleet.value));
-// A run under a query answers for its steps, since they have no cards of their own to answer with (runMatches).
-const runKept = (run: WorkflowRun): boolean => !filtering.value || runMatches(run, needle.value, fleet.value, matches);
-// Lanes group by the same rule (laneGroups) whether scope is `box` (this fleet) or `all` (plus every other box's
-// roster), so the two scopes can never order a column differently.
-// Sandbox is never a column or sort key: a column per box reproduces the exact problem the wider board exists to solve.
-const boxFleet = computed<FleetAgent[]>(() => (readingAcross.value ? [...fleet.value, ...otherFleet.value] : fleet.value));
-// The open project's conversations only (app/projectScope.ts, projectMembership.ts): a draft not yet sent stays, since
-// it was opened under this project and has no record to say so yet. Held wakes and live runs narrow by the same
-// evidence. The archive stays the sandbox's: its Delete all empties the whole pile, so its count must say the whole pile.
+const { view, move } = useBoardView(needle);
+const workflows = useWorkflowRuns();
 const { personas } = usePersonas();
-// The owner filter (ownership.ts) narrows the same way a project does; held wakes and runs are not narrowed, since
-// nobody owns them yet. A draft not yet sent has no owner on record and is about to be the reader's own, so it
-// survives Mine and everybody's, and goes under a colleague's chip, where it would never belong.
 const { user } = useAuth();
 const { sharedAccess } = useSandboxSharedAccess();
-watch(sharedAccess, (shared) => {
-    if (!shared) {
-        ownerFilter.value = undefined;
-    }
+const scope = useBoardScope({ agents, runs: workflows.runs, personas, me: computed(() => user.value?.email), sharedAccess });
+const { scopeOptions, ownerOptions, ownerScope, projectHidden, scopedHeld } = scope;
+followAcross();
+const ring = useCardRing({ mobile, strip: chatStrip, wide: chatWide, runs: workflows.runs });
+const { highlightId, inPane, peeked } = ring;
+const lanes = useBoardLanes({ view, scope, filter, drag, agents, selected: highlightId });
+const { cardsFor, runsFor, needingYou, archivedCards, archiveSize, archiveHidden, hiddenFinished, archivedHits, laneDropClass } = lanes;
+const { beyondVisible, beyondLabel, matchTally, noMatches, clearable, screen } = lanes;
+const { setCardEl, isMovingLane, revealCard } = useLaneMotion({ lanes: scope.boardLanes, filtering, drag });
+const focus = useCardFocus({
+    ring,
+    lanes,
+    filter,
+    agents,
+    drag,
+    move,
+    reveal: revealCard,
+    router,
+    route: useRoute(),
+    mobile,
+    strip: chatStrip,
+    summon: summonChat,
 });
-const scopedFleet = computed<FleetAgent[]>(() => {
-    const project = projectScope.value;
-    const owner = ownerFilter.value;
-    const keepsDrafts = owner === undefined || sameAddress(owner, user.value?.email);
-    return boxFleet.value.filter(
-        (agent) =>
-            (unregistered(agent.status) && keepsDrafts) ||
-            ((project === undefined || agentInProject(agent, project, personas.value)) && (owner === undefined || ownedBy(agent, owner))),
-    );
-});
-const scopedHeld = computed<AutomationApproval[]>(() => {
-    const project = projectScope.value;
-    return project === undefined
-        ? heldWakes.value
-        : heldWakes.value.filter((wake) => heldWakeInProject(wake, project, personas.value, boxFleet.value));
-});
-const scopedRuns = computed<WorkflowRun[]>(() => {
-    const project = projectScope.value;
-    return project === undefined
-        ? workflowRuns.value
-        : workflowRuns.value.filter((run) => runInProject(run, project, personas.value, boxFleet.value));
-});
-// Both halves of the ledger, kept in both list and filtered forms: an archived run is off the board like an archived
-// agent, shown in Finished's archive view instead.
-const boardRunRows = computed(() => scopedRuns.value.filter((run) => run.archivedAt === undefined));
-const liveRuns = computed(() => boardRunRows.value.filter(runKept));
-const archivedRunRows = computed(() => workflowRuns.value.filter((run) => run.archivedAt !== undefined));
-const archivedRuns = computed(() => archivedRunRows.value.filter(runKept));
-const runsFor = (lane: FleetLane): WorkflowRun[] => {
-    // The archive is a different list wearing Finished's shape: only its runs show; the other two lanes have nothing
-    // while it's open.
-    if (archiveOpen.value) {
-        return lane === `finished` ? archivedRuns.value : [];
-    }
-    // Window caps Finished while browsing, lifted by a filter or the lane's own expand, same rule as the agents' (a
-    // capped run hides its steps too).
-    return runsInLane(liveRuns.value, lane, windowed.value ? FINISHED_WINDOW : Number.POSITIVE_INFINITY, needingYou.value);
-};
-
-// A run's steps live inside its row, never as separate cards: otherwise a five-step workflow shows as one run card plus
-// five agent cards for the same work.
-// Gated on the ledger, not on the run being drawn: every reason a row is off-screen (filter, window, archive) must also
-// pull its conversations off the board.
-const BOARD_LANES = [`attention`, `active`, `finished`] as const;
-const ledgerRunIds = computed(() => runIdsInLedger(workflowRuns.value));
-
-// How many rows the project put out of sight, said on the chip so a quiet board is never mistaken for an empty fleet.
-// Rows, not conversations: a hidden run's steps hide with it and count once, as the run does on the wide board.
-const projectHidden = computed(() => {
-    if (projectScope.value === undefined) {
-        return 0;
-    }
-    const shown = new Set(scopedFleet.value.map((agent) => agent.id));
-    const agents = boxFleet.value.filter((agent) => !shown.has(agent.id) && !insideRun(agent, ledgerRunIds.value)).length;
-    const runs = workflowRuns.value.filter((run) => run.archivedAt === undefined).length - boardRunRows.value.length;
-    return agents + runs + heldWakes.value.length - scopedHeld.value.length;
-});
-const scopedLanes = computed<Record<FleetLane, FleetAgent[]>>(() =>
-    readingAcross.value || projectScope.value !== undefined || ownerFilter.value !== undefined ? laneGroups(scopedFleet.value) : lanes.value,
-);
-
-const boardLanes = computed<Record<FleetLane, FleetAgent[]>>(() => {
-    if (ledgerRunIds.value.size === 0) {
-        return scopedLanes.value;
-    }
-    const outside = (agent: FleetAgent): boolean => !insideRun(agent, ledgerRunIds.value);
-    return {
-        attention: scopedLanes.value.attention.filter(outside),
-        active: scopedLanes.value.active.filter(outside),
-        finished: scopedLanes.value.finished.filter(outside),
-    };
-});
-
-// The wider-board store runs only while the board is asking for it (scope `all` and the route visible); flipping the
-// scope starts and stops it.
-let releaseBoxes: (() => void) | undefined;
-watch(
-    readingAcross,
-    (across) => {
-        if (across) {
-            releaseBoxes ??= watchOtherBoxes();
-            return;
-        }
-        releaseBoxes?.();
-        releaseBoxes = undefined;
-    },
-    { immediate: true },
-);
-onUnmounted(() => {
-    releaseBoxes?.();
-    releaseBoxes = undefined;
-});
-
-// Says when the Attention lane's answer is only partial (some boxes haven't answered yet), since an empty lane is
-// otherwise a false claim that nothing needs the user.
-// Lives in the lane, not a page-wide strip, as a `condition`: true only while it holds, gone the moment it resolves, no
-// dismissal needed since nothing is owed.
-const releaseNotice = hold(`fleet-partial`, () => {
-    const partial = partialAnswer.value;
-    return partial === undefined
-        ? undefined
-        : {
-              kind: `condition`,
-              tone: `warning`,
-              title: partial.title,
-              detail: partial.detail,
-              actions: [{ label: t(`ui.action.tryAgain`), severity: `secondary` as const, run: refreshAcross }],
-          };
-});
-onUnmounted(releaseNotice);
-
-const SCOPE_OPTIONS = computed(() => [
-    { label: t(`agents.agentsView.sandbox`), value: `box` as const },
-    { label: t(`agents.agentsView.allSandboxes`), value: `all` as const },
-]);
-
-// Ownership as one exclusive choice rather than a lone toggle whose state had to be remembered: the lit segment names
-// whose board this is, and everybody else holding a conversation on it is one press away. Cards draw nothing for the
-// reader's own work, so this row is the one place "mine" is spelled out.
-const EVERYONE = `everyone`;
-const OWNER_OPTIONS = computed(() => {
-    const me = user.value?.email;
-    return [
-        { label: t(`agents.agentsView.everyone`), value: EVERYONE, title: t(`agents.agentsView.mineOff`) },
-        ...(me === undefined ? [] : [{ label: t(`agents.agentsView.mine`), value: me, title: t(`agents.agentsView.mineOnly`) }]),
-        // The board's own roster, not the sandbox's member list: a colleague with nothing here has nothing to filter to.
-        ...boardOwners(boxFleet.value, me, presenceOthers.value, ownerFilter.value).map((look) => ({
-            label: look.short,
-            value: look.email,
-            hue: look.hue,
-            title: t(`agents.agentsView.onlyOwnedBy`, { name: look.name }),
-        })),
-    ];
-});
-const ownerScope = computed<string>({
-    get: () => ownerFilter.value ?? EVERYONE,
-    set: (value) => {
-        ownerFilter.value = value === EVERYONE ? undefined : value;
-    },
-});
-// Excludes a run's steps, which are filed away with the run itself, or the archive would show one run row plus its five
-// conversations.
-const archivedCards = computed(() => archived.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
-// How many rows the archive would draw: a run with four steps counts as one row there, not five.
-const archiveSize = computed(() => archivedCards.value.length + archivedRunRows.value.length);
-// The archive isn't self-limiting like the live lanes, so it's paged rather than drawn whole, which used to build
-// thousands of cards in one frame on a large workspace.
-// Grows only (a page added, never dropped), since the archive is browsed and searched, unlike Finished's fixed
-// confirming window.
-const ARCHIVE_PAGE = 30;
-const archiveShown = ref(ARCHIVE_PAGE);
-// Filters the whole pile first, then pages the result, never the reverse, or a match nine hundred rows down reads as no
-// match.
-const archiveRows = computed(() => (filtering.value ? archivedCards.value.filter(matches) : archivedCards.value));
-const archiveHidden = computed(() => Math.max(0, archiveRows.value.length - archiveShown.value));
-
-// A run's design lives on the workflows page; this board only answers "what is it doing". Results off the board are
-// collapsed by default and reset on every new query.
-const showBeyond = ref(false);
-// A new query is a new list: an archive scrolled deep, or "show more" expanded, both describe a set that no longer
-// exists.
-watch(needle, () => {
-    showBeyond.value = false;
-    archiveShown.value = ARCHIVE_PAGE;
-});
-// Which card wears the ring: normally the docked chat's agent (desktop only), or briefly the one a link just focused
-// (flashId, cleared by its own timer).
-// Board-wide state, not a paint, since the Finished window and cross-board selections both need to read it too.
-const flashId = ref<string | undefined>(undefined);
-// Takes the ring off every agent while a run's diagram is on screen, since the chat is pointing at no single
-// conversation, not the run's own session cards.
-// Reads the panel's own predicate (showingRunGraph), not the mode alone, since a followed run can show its diagram too;
-// only on a wide chat surface, since the docked panel always shows the focused chat.
-const runGraphUp = computed(
-    () =>
-        chatWide.value &&
-        showingRunGraph(
-            workflowRuns.value.find((run) => run.runId === chatStrip.value.run?.runId),
-            chatStrip.value.run,
-            chatStrip.value.panes,
-        ),
-);
-// Reads the app-wide chat strip (useChat.chatStrip), never this window's own tab list, which is a stale shadow once the
-// chat is popped out.
-const highlightId = computed(() => flashId.value ?? (mobile.value || runGraphUp.value ? undefined : chatStrip.value.active));
-// Other panes get a fainter ring than the focused one, since a split is not a ranking, just chats read side by side.
-// Tied to `highlightId`'s own conditions (mobile, run graph), not the pane set alone, so the same two states clear
-// both.
-const inPane = (id: string): boolean => {
-    const { panes: shown } = chatStrip.value;
-    return !mobile.value && !runGraphUp.value && shown.length > 1 && shown.includes(id);
-};
-// Whether the chat is open only as a look (TabFacts.peek), read off the strip like the ring; desktop only, since a
-// phone's tab set is one deep.
-const peeked = (id: string): boolean => !mobile.value && chatStrip.value.tabs.some((tab) => tab.id === id && tab.peek);
-const finishedWindow = computed(() =>
-    windowFinished(boardLanes.value.finished, windowed.value ? highlightId.value : undefined, (agent) => agent.id),
-);
-// Finished shows its window, or the archive when open; the other two lanes show everything. A filter lifts Finished's
-// window, since a result set must not hide some of its own matches.
-// The archive keeps its own page under a filter instead, since its pile is unbounded; nothing is hidden, the tail row
-// just says how much more there is.
-const cardsFor = (lane: FleetLane): FleetAgent[] => {
-    if (lane === `finished` && archiveOpen.value) {
-        return archiveRows.value.slice(0, archiveShown.value);
-    }
-    const source = lane !== `finished` ? boardLanes.value[lane] : windowed.value ? finishedWindow.value.shown : boardLanes.value.finished;
-    return filtering.value ? source.filter(matches) : source;
-};
-// Rows the filter kept, not rows drawn: the archive draws only a page of its matches, so counting cards would report
-// the pager's state as the search's answer.
-const keptIn = (lane: FleetLane): number =>
-    (lane === `finished` && archiveOpen.value ? archiveRows.value.length : cardsFor(lane).length) + runsFor(lane).length;
-// What the tail row collapses: the window's own count, plus the runs the same window capped, since a hidden run hides
-// its steps with it.
-const hiddenRuns = computed(
-    () => runsInLane(liveRuns.value, `finished`, Number.POSITIVE_INFINITY, needingYou.value).length - runsFor(`finished`).length,
-);
-const hiddenFinished = computed(() => finishedWindow.value.hidden + hiddenRuns.value);
-// What a query found off the board: archived agents and conversations no agent owns; otherwise a filter answers
-// "nothing" for a hit one click away.
-// Steps stay excluded: the archived run row they belong to already lists them.
-const archivedHits = computed(() => archivedMatches.value.filter((agent) => !insideRun(agent, ledgerRunIds.value)));
-const beyondCount = computed(() => archivedHits.value.length + sessionMatches.value.length);
-// Suppressed while the archive is the Finished column, since those cards are already on screen there.
-const beyondVisible = computed(() => filtering.value && !archiveOpen.value && beyondCount.value > 0);
-const beyondLabel = computed(() => {
-    const parts: string[] = [];
-    if (archivedHits.value.length > 0) {
-        parts.push(`${archivedHits.value.length} in the archive`);
-    }
-    if (sessionMatches.value.length > 0) {
-        parts.push(`${sessionMatches.value.length} in earlier chats`);
-    }
-    return parts.join(` · `);
-});
-// A never-carded conversation opens as an ordinary tab; the board itself is outside the panel, so the open is a summons
-// to every window.
-const openSession = (id: string): void => {
-    const conversationId = uuid();
-    summonChat({
-        kind: `reveal`,
-        verb: `show`,
-        entries: [{ conversationId, sessionRef: id, title: sessionMatches.value.find((session) => session.id === id)?.title }],
-        focus: conversationId,
-        caret: false,
-    });
-};
-// What the board tells a screen reader, since neither visual report (the counter pulse, the receipt pill) conveys
-// anything on its own.
-const announcement = ref(``);
-// The board's one irreversible action, so it's the one that stops and asks; sits in the archive header's slot Finished
-// uses for Clear (same position, opposite weight).
-// Bulk-only, never per-card: a per-card delete would sit a pixel from Restore on the same hover row; a single agent's
-// Discard lives on its review panel instead, beside its diff.
-// The dialog names the branch count and says what survives, since the archive's whole promise up to that point is
-// "nothing is lost".
-const pendingPurge = ref(false);
-const purging = ref(false);
-// Whether THIS visit emptied the archive: an empty list otherwise reads as "nothing archived yet", a lie to someone who
-// just deleted twelve agents.
-const purged = ref(false);
-const confirmPurge = async (): Promise<void> => {
-    pendingPurge.value = false;
-    purging.value = true;
-    const aimedAt = archived.value.length;
-    try {
-        await purgeArchived();
-        purged.value = true;
-        // The one report here that can't be re-derived from anything on screen, since what it's about is now gone.
-        announcement.value = `${aimedAt - archived.value.length} archived agents deleted`;
-    } finally {
-        purging.value = false;
-    }
-};
-const toggleArchive = async (): Promise<void> => {
-    archiveOpen.value = !archiveOpen.value;
-    purged.value = false;
-    if (archiveOpen.value) {
-        // Resets to one page on every opening, so the door costs the same the tenth time as the first.
-        archiveShown.value = ARCHIVE_PAGE;
-        await loadArchived();
-    }
-};
-/* --- Saying that an archive happened -------------------------------------------------------------------- */
-// A sweep's receipt is raised by the store and drawn by the app's one shared notification lane
-// (shell/NotificationHost.vue), including its dwell, hover-pause, and Undo.
-// The archive counter is the whole receipt for a single card: long enough to catch the eye following the card out of
-// the lane, short enough to read as a move, not a new state.
-const PULSE_MS = 1_100;
-const pulsing = ref(false);
-let pulseTimer: ReturnType<typeof setTimeout> | undefined;
-// One archive, one reaction: the pulse and the screen-reader line are the same event said twice from one place, not two
-// watchers.
-watch(archivedFlash, () => {
-    pulsing.value = true;
-    clearTimeout(pulseTimer);
-    pulseTimer = setTimeout(() => (pulsing.value = false), PULSE_MS);
-    announcement.value = `${undoable.value.length} agent${undoable.value.length === 1 ? `` : `s`} archived`;
-});
-// Another surface can hand off a just-started agent via /agents?focus=<id> for the board, not the drill-in, since a
-// fresh turn has no diff yet to review.
-// The id can arrive before its card does, so a watcher (not a mount-time read) resolves once the fleet has the agent;
-// one-shot, so a reload or Back doesn't re-focus a card the user has since moved off.
-// Mirrors a click (dock points at it, ring, marks read, scrolls into view) and additionally opens whatever's hiding the
-// card (a filter, the archive); the Finished window instead keeps the selected card by itself.
-const FOCUS_FLASH_MS = 4_000;
-let flashTimer: ReturnType<typeof setTimeout> | undefined;
-const cardEls = new Map<string, HTMLElement>();
-// AgentCard is a component, so the ref returns its instance, not an element; `$el` is its root div.
-const setCardEl = (id: string, el: unknown): void => {
-    const root = (el as { $el?: unknown } | null)?.$el;
-    if (root instanceof HTMLElement) {
-        cardEls.set(id, root);
-    } else {
-        const existing = cardEls.get(id);
-        if (existing && !existing.isConnected) {
-            cardEls.delete(id);
-        }
-    }
-};
-
-interface CardSnapshot {
-    rect: DOMRect;
-    lane: FleetLane;
-}
-
-const prevCardSnapshots = new Map<string, CardSnapshot>();
-
-const laneOfAgentId = (id: string): FleetLane | undefined => {
-    if (boardLanes.value.attention.some((a) => a.id === id)) {
-        return `attention`;
-    }
-    if (boardLanes.value.active.some((a) => a.id === id)) {
-        return `active`;
-    }
-    if (boardLanes.value.finished.some((a) => a.id === id)) {
-        return `finished`;
-    }
-    return undefined;
-};
-
-// Moving between lanes bypasses CSS transition so the card flies from its previous coordinates without ghosting.
-const isMovingLane = (id: string): boolean => {
-    const el = cardEls.get(id);
-    if (!el || !el.isConnected) {
-        return false;
-    }
-    const prevLane = el.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`] as FleetLane | undefined;
-    const nextLane = laneOfAgentId(id);
-    return prevLane !== undefined && nextLane !== undefined && prevLane !== nextLane;
-};
-
-onBeforeUpdate(() => {
-    prevCardSnapshots.clear();
-
-    for (const [id, el] of cardEls) {
-        if (!el.isConnected) {
-            cardEls.delete(id);
-            continue;
-        }
-        const laneEl = el.closest<HTMLElement>(`section[data-lane]`);
-        const currentLane = laneEl?.dataset[`lane`] as FleetLane | undefined;
-        if (!currentLane) {
-            continue;
-        }
-
-        prevCardSnapshots.set(id, {
-            rect: el.getBoundingClientRect(),
-            lane: currentLane,
-        });
-
-        const nextLane = laneOfAgentId(id);
-        if (nextLane !== undefined && nextLane !== currentLane) {
-            el.style.opacity = `0`;
-            el.style.pointerEvents = `none`;
-        }
-    }
-});
-
-// Animates cross-lane flight with elevation and a brief landing pulse.
-const animateCardFlight = (el: HTMLElement, dx: number, dy: number): void => {
-    const animation = el.animate(
-        [
-            {
-                transform: `translate3d(${dx}px, ${dy}px, 0) scale(1.02)`,
-                boxShadow: `0 12px 28px -4px rgba(0, 0, 0, 0.28), 0 8px 10px -4px rgba(0, 0, 0, 0.2)`,
-                zIndex: 40,
-            },
-            {
-                transform: `translate3d(0, 0, 0) scale(1)`,
-                boxShadow: `none`,
-                zIndex: 40,
-            },
-        ],
-        {
-            duration: 260,
-            easing: `cubic-bezier(0.2, 0, 0, 1)`,
-        },
-    );
-    animation.onfinish = () => {
-        el.animate(
-            [
-                { outline: `2px solid color-mix(in srgb, var(--color-primary-500) 70%, transparent)`, outlineOffset: `1px` },
-                { outline: `2px solid transparent`, outlineOffset: `1px` },
-            ],
-            {
-                duration: 600,
-                easing: `cubic-bezier(0.2, 0, 0, 1)`,
-            },
-        );
-    };
-};
-
-// Sibling reflow within the same lane smoothly closes ranks.
-const animateCardReflow = (el: HTMLElement, dy: number): void => {
-    el.animate([{ transform: `translate3d(0, ${dy}px, 0)` }, { transform: `translate3d(0, 0, 0)` }], {
-        duration: 220,
-        easing: `cubic-bezier(0.2, 0, 0, 1)`,
-    });
-};
-
-const canAnimateCard = (id: string, el: HTMLElement): boolean =>
-    el.isConnected && !(draggedId.value === id && dragging.value) && typeof el.animate === `function`;
-
-const applyCardAnimation = (id: string, el: HTMLElement): void => {
-    if (!canAnimateCard(id, el)) {
-        return;
-    }
-    const prev = prevCardSnapshots.get(id);
-    const lane = el.closest<HTMLElement>(`section[data-lane]`)?.dataset[`lane`] as FleetLane | undefined;
-    if (!prev || !lane) {
-        return;
-    }
-    const currentRect = el.getBoundingClientRect();
-    const dx = prev.rect.left - currentRect.left;
-    const dy = prev.rect.top - currentRect.top;
-    if (dx === 0 && dy === 0) {
-        return;
-    }
-    if (prev.lane !== lane) {
-        animateCardFlight(el, dx, dy);
-        return;
-    }
-    if (!filtering.value) {
-        animateCardReflow(el, dy);
-    }
-};
-
-onUpdated(() => {
-    const prefersReducedMotion = typeof window !== `undefined` && window.matchMedia?.(`(prefers-reduced-motion: reduce)`).matches;
-    if (!prefersReducedMotion) {
-        for (const [id, el] of cardEls) {
-            applyCardAnimation(id, el);
-        }
-    }
-    prevCardSnapshots.clear();
-});
-// Awaited, since the card may not be rendered on the tick it's asked for (the window pins it, the focus flow uncovers
-// it); `nearest` leaves an already-visible card alone.
-const revealCard = async (id: string): Promise<void> => {
-    await nextTick();
-    cardEls.get(id)?.scrollIntoView({ block: `nearest` });
-};
-// A selection made off the board (a chat tab, History) scrolls the board to match, since a ring outside the scrollport
-// looks like the click did nothing.
-// A selection made on the board scrolls nothing: `selectedHere` marks it so this watch stands down.
-let selectedHere: string | undefined;
-watch(highlightId, (id) => {
-    // Consumed on sight: the mark is about the one selection just made, not a standing claim, or a card clicked once
-    // would never scroll again from elsewhere.
-    const ours = id === selectedHere;
-    selectedHere = undefined;
-    if (id === undefined || ours) {
-        return;
-    }
-    void revealCard(id);
-});
-const requestedFocus = ref<string | undefined>(undefined);
-watch(
-    () => route.query[`focus`],
-    (value) => {
-        if (typeof value === `string` && value !== ``) {
-            requestedFocus.value = value;
-        }
-    },
-    { immediate: true },
-);
-watch(
-    () => (requestedFocus.value === undefined ? undefined : agentById(requestedFocus.value)),
-    async (agent) => {
-        if (agent === undefined) {
-            return;
-        }
-        requestedFocus.value = undefined;
-        void router.replace({ query: { ...route.query, focus: undefined } });
-        // Uncovers the card: the filter and archive are lifted by hand, but the Finished window only lifts itself where
-        // a ring exists to pin the card.
-        // On a phone the ring vanishes with the flash, so the window would close over the very card the link was for;
-        // there, the whole lane opens instead. Whether it would is asked of the window itself rather than the card's
-        // index, since a ring already pinned into the window moves nothing.
-        if (filtering.value && !matches(agent)) {
-            query.value = ``;
-        }
-        if (agent.archivedAt !== undefined) {
-            archiveOpen.value = true;
-        } else if (mobile.value && !finishedWindow.value.shown.some((candidate) => candidate.id === agent.id)) {
-            showAllFinished.value = true;
-        }
-        open(agent);
-        flashId.value = agent.id;
-        clearTimeout(flashTimer);
-        flashTimer = setTimeout(() => (flashId.value = undefined), FOCUS_FLASH_MS);
-        // Called explicitly, not via the selection watch above: a link may name the agent the dock already points at,
-        // so the ring never moves for that watch to catch.
-        await revealCard(agent.id);
-    },
-    { immediate: true },
-);
-// Undo also lives on Mod+Z, since an archive that says nothing has to be reversible by reflex; the `when` gate hands it
-// back whenever there's nothing to undo or a field owns its own undo.
-const undoShortcut = computed(() => commandShortcut(`agents.undoArchive`));
-let boardCommands: readonly Disposable[] = [];
-// One class string per state, not composed flags, since two ring widths or min-heights in one list would resolve by
-// Tailwind's emit order, not by intent.
-const laneDropClass = (lane: FleetLane): string => {
-    if (!dragging.value) {
-        return ``;
-    }
-    // The archive has no `data-drop` while it occupies the Finished column, since it isn't a lane and must not
-    // advertise being one.
-    if (!accepts(lane) || (lane === `finished` && archiveOpen.value)) {
-        return `min-h-24 opacity-40`;
-    }
-    return over.value === lane ? `min-h-24 bg-primary-600/5 ring-2 ring-primary-500/60` : `min-h-24 ring-1 ring-line-strong/60`;
-};
-// What the ghost promises over a target: the action's verb, or the reason there isn't one.
-const hint = computed(() => {
-    if (action.value !== undefined) {
-        return dropActionLabel(action.value);
-    }
-    if (dragged.value === undefined || over.value === undefined) {
-        return `Drop on a lane to act`;
-    }
-    return dropRejection(dragged.value, over.value);
-});
-// A shared width measurement (useNarrow), not a CSS container query: `container-type` would make this a containing
-// block for the fixed-position drag ghost, breaking its viewport coordinates.
-const NARROW_BOARD_REM = 48;
-const boardEl = ref<HTMLElement | undefined>(undefined);
-const narrow = useNarrow(boardEl, NARROW_BOARD_REM);
-onMounted(() => {
-    void refresh();
-    // Worth the one request at mount: without a count, Finished can only offer an archive the user has no reason to
-    // believe holds anything.
-    void loadArchived();
-    boardCommands = [
-        // Published only while the board is mounted, so Mod+Z hands itself back the moment the fleet leaves the screen.
-        publishContextKey(
-            `agentsUndoable`,
-            computed(() => undoable.value.length > 0),
-        ),
-        registerCommand({
-            owner: `builtin`,
-            command: `agents.undoArchive`,
-            title: t(`agents.agentsView.undoArchive`),
-            category: AGENTS,
-            icon: `history`,
-            keybinding: `Mod+Z`,
-            when: `agentsUndoable && !editableTarget`,
-            handler: undoArchive,
-        }),
-        // An accelerator, not the only way in, since the field is already on the header; deliberately unbound, since
-        // Mod+F belongs to the browser and this registry is global to every window the app owns.
-        // A binding claimed while this board is mounted would swallow Mod+F in the floating chat too, where the board
-        // isn't even on screen.
-        registerCommand({
-            owner: `builtin`,
-            command: `agents.filter`,
-            title: t(`agents.agentsView.filter`),
-            category: AGENTS,
-            icon: `search`,
-            // Focus and select, so a chord typed over a stale query starts fresh instead of needing the old text
-            // cleared first.
-            handler: () => filterField.value?.focus(true),
-        }),
-    ];
-});
-onUnmounted(() => {
-    clearTimeout(pulseTimer);
-    clearTimeout(flashTimer);
-    for (const disposable of boardCommands) {
-        disposable.dispose();
-    }
-    boardCommands = [];
-});
-const LANES = computed((): readonly { key: FleetLane; label: string; dot: string; empty: string }[] => [
-    { key: `attention`, label: t(`agents.agentsView.attention`), dot: `bg-warning`, empty: t(`agents.agentsView.nothingNeedsRightNow`) },
-    { key: `active`, label: t(`agents.agentsView.active`), dot: `bg-success`, empty: t(`agents.agentsView.noAgentsWorkingStart`) },
-    { key: `finished`, label: t(`agents.agentsView.finished`), dot: `bg-line-strong`, empty: t(`agents.agentsView.finishedAgentsLandWork`) },
-]);
-// The board's own total counts what's on screen: a run's steps count once, as their row, not again beside it.
-// Held wakes count toward having something to show, so a fresh workspace with only a hold doesn't hide behind the
-// empty-board splash.
-const total = computed(
-    () => LANES.value.reduce((sum, lane) => sum + boardLanes.value[lane.key].length, 0) + boardRunRows.value.length + scopedHeld.value.length,
-);
-// A different question from `total`: whether anything has EVER happened here, which is what the first-run screen turns
-// on. A never-registered conversation is a `draft` card, and an untouched draft doesn't count as started.
-// Anything else does, archive included: agents that ran and were filed away are a history, not an empty workspace.
-const started = computed(
-    () =>
-        LANES.value.reduce((sum, lane) => sum + boardLanes.value[lane.key].filter((agent) => agent.status !== `draft`).length, 0) +
-            boardRunRows.value.length +
-            scopedHeld.value.length +
-            archiveSize.value >
-        0,
-);
-// Filter tally totals from the same cards and runs as the lanes.
-const kept = computed(() => LANES.value.reduce((sum, lane) => sum + keptIn(lane.key), 0));
-// Must not claim more than it knows: "n of 40" asserts all forty were checked, which is false while the daemon's half
-// of the filter is still outstanding.
-// While the answer is partial, the tally says so instead of counting, so a half-finished search isn't mistaken for a
-// complete one.
-const matchTally = computed(() => (searchPartial.value ? `searching the rest…` : `${kept.value} of ${total.value}`));
-// The filter's own empty state (agents exist, none matched), distinct from an empty fleet; never true while the answer
-// is still partial.
-const noMatches = computed(() => filtering.value && !searchPartial.value && !archiveOpen.value && kept.value === 0 && beyondCount.value === 0);
-// "Clear" only appears when it would do something; Finished holds exactly the archivable set by construction.
-const clearable = computed(() => lanes.value.finished.length);
-
-// Asks for a task; it is not a second composer (there is exactly one composer in the app, the chat) and it no longer
-// shows a sign-in wall when nothing can send (that used to read as a broken sign-in or a paywall).
-// A suggestion fills the composer for the user to edit and send, it never sends itself.
-// Suggestions are about work with no code yet (building something): getting existing code in is the workspace pane's
-// job, not this board's.
-// Workspace facts the suggestions turn on, already fetched for the rail elsewhere; the board adds no fetch of its own.
-const { panels: workspaceRepos } = usePanels();
-const workspaceChanges = useChanges();
-// Whether there's anything to work ON: repos, or uncommitted changes (files dropped in without a git of their own still
-// count).
-const hasWork = computed(() => workspaceRepos.value.length > 0 || workspaceChanges.count.value > 0);
-// Concrete sentences to press, not feature names ("Explain this codebase", not "code understanding"); phrased as a
-// ladder: understand, then a small safe change with a stop before anything's written.
-const starters = computed<readonly { readonly label: string; readonly prompt: string }[]>(() => {
-    // Nothing to point an agent at yet, so only the one task needing no code is offered: build something and get a
-    // public link (lands in the outbox, shown as the Preview area's Public site target).
-    if (!hasWork.value) {
-        return buildIdeas().map((example) => ({ label: example.label, prompt: buildPrompt(example.idea) }));
-    }
-    return [
-        // Uncommitted work leads the list when it exists, since it's the most urgent thing on a workspace that has any.
-        ...(workspaceChanges.count.value > 0
-            ? [{ label: t(`agents.agentsView.reviewMyChanges`), prompt: t(`agents.agentsView.reviewMyUncommittedChanges`) }]
-            : []),
-        {
-            label: t(`agents.agentsView.explainCodebase`),
-            prompt: t(`agents.agentsView.explainCodebaseWhatDoes`),
-        },
-        {
-            label: t(`agents.agentsView.findSomethingToImprove`),
-            prompt: t(`agents.agentsView.suggestThreeSmallSafe`),
-        },
-    ];
-});
-// A card click focuses, it doesn't navigate: on desktop it only points the chat dock (and every window's floating chat)
-// at the agent and rings the card.
-// Cheap and reversible, so clicking down a lane is skimming; the review detail is a separate, deliberate act
-// (reviewAgent). Mobile has no dock, so a tap there navigates instead.
-// Same gestures as the chat rail's tab list (ChatTabList.onRowClick): at N panes, what's selected IS what's on screen,
-// so picking a card here gives that chat a column there.
-// Alt (not bare Ctrl) means "in addition", since Ctrl+click is macOS's secondary click and a card is also a drag
-// source; Ctrl/Cmd and Shift work too, for muscle memory from the strips.
-// An unmodified click is the reset: it collapses any split, since a selection you can't replace by clicking elsewhere
-// isn't one. Every gesture here is a summons, since the panel it composes may be another window's.
-const paneOrder = computed<FleetAgent[]>(() => LANES.value.flatMap((lane) => cardsFor(lane.key)));
-const paneAnchor = ref<string>();
-const summonCards = (verb: `show` | `beside` | `panes`, cards: readonly FleetAgent[], focus: string): void => {
-    summonChat({ kind: `reveal`, verb, entries: cards.map((card) => agentTabOf(agentSeed(card))), focus, caret: false });
-    for (const card of cards) {
-        markSeen(card.id);
-    }
-};
-const paneGesture = (agent: FleetAgent, event: MouseEvent): boolean => {
-    if (event.shiftKey) {
-        const order = paneOrder.value;
-        const from = order.findIndex((card) => card.id === (paneAnchor.value ?? chatStrip.value.active));
-        const to = order.findIndex((card) => card.id === agent.id);
-        const run = from === -1 ? [agent] : order.slice(Math.min(from, to), Math.max(from, to) + 1);
-        summonCards(`panes`, run, agent.id);
-        return true;
-    }
-    if (!event.altKey && !event.ctrlKey && !event.metaKey) {
-        return false;
-    }
-    paneAnchor.value = agent.id;
-    // Ctrl/Cmd toggles a pane; Alt only ever adds, which is what makes Alt the safe one-shot gesture.
-    if ((event.ctrlKey || event.metaKey) && !event.altKey && chatStrip.value.panes.includes(agent.id) && chatStrip.value.panes.length > 1) {
-        summonChat({ kind: `reveal`, verb: `unpane`, entries: [], focus: agent.id, caret: false });
-        return true;
-    }
-    summonCards(`beside`, [agent], agent.id);
-    return true;
-};
-
-const focusAgent = (agent: FleetAgent, event?: MouseEvent): void => {
-    // A drag's pointerup arrives here as a click on the card it started from; it must not also open the agent.
-    if (consumeSuppressedOpen()) {
-        return;
-    }
-    // A click on a card from another box opens its review instead of doing nothing, since pointing the docked chat at
-    // it (the normal click) can't work across sandboxes.
-    // The crossing that would let you talk to it lives on that page instead.
-    if (isRemote(agent)) {
-        reviewAgent(agent);
-        return;
-    }
-    // The user is pointing the board somewhere themselves, so whatever a deep link was highlighting is over.
-    flashId.value = undefined;
-    // This board made the selection itself, so the reveal watch must not also scroll to it.
-    selectedHere = agent.id;
-    // The click itself, before anything downstream can move it: the head of the focus trace (focusTrace.ts).
-    traceFocus(`board-click`, { id: agent.id, status: agent.status });
-    // A modified click asks for a column, not focus, and says so itself; desktop only, since panes live in the floating
-    // window and mobile just navigates.
-    if (event !== undefined && !mobile.value && paneGesture(agent, event)) {
-        return;
-    }
-    paneAnchor.value = agent.id;
-    // An unmodified click is the reset those modifiers are defined against: `show` collapses any split, and the split
-    // is one Alt+click away again (the rail keeps the rest).
-    // Also a look (useAgents.open's peek mode): the tab is the reader's only while they're reading it, and closes on
-    // the next card; anything they do in it keeps it (Conversation.keep).
-    open(agent, `peek`);
-    if (mobile.value) {
-        void router.push(`/agents/${encodeURIComponent(agent.id)}`);
-    }
-};
-// The deliberate view-change: focuses the dock AND swaps to the review detail; only offered for a registered agent, so
-// there's always a detail to land on.
-const agentHref = (agent: FleetAgent): string =>
-    router.resolve(
-        isRemote(agent)
-            ? { path: `/agents/${encodeURIComponent(agent.id)}`, query: { sandbox: agent.sandboxId } }
-            : `/agents/${encodeURIComponent(agent.id)}`,
-    ).href;
-// Keeps a chat this board only opened for a look. A summons, like the close below: the tab lives in whichever window is
-// drawing the chat, often not this one.
-// Promoted locally alone, a popped-out chat would sweep the tab on its next focus move, losing exactly the thing this
-// press meant to keep.
-const keepAgent = (agent: FleetAgent): void => {
-    summonChat({ kind: `keep`, conversationIds: [agent.id] });
-};
-
-const reviewAgent = (agent: FleetAgent): void => {
-    // A card from another box opens its review without minting a tab, since `open()` files into the chat singleton
-    // pointed at THIS daemon, which has never heard of that agent.
-    // The review page reads `?sandbox=` instead and addresses that box directly.
-    if (isRemote(agent)) {
-        void router.push({ path: `/agents/${encodeURIComponent(agent.id)}`, query: { sandbox: agent.sandboxId } });
-        return;
-    }
-    open(agent);
-    // Walking to the agent's own page is a decision about it, not a glance, so a tab a click opened for a look stops
-    // being one.
-    keepAgent(agent);
-    void router.push(`/agents/${encodeURIComponent(agent.id)}`);
-};
-// The only exit for a card with no registry entry: closes the conversation itself (not `archive`, since there's nothing
-// daemon-side to file).
-// Differs from the chat rail's ×: the rail only removes a chat from its own operating surface (words set aside, card
-// stays); the board's × ends the conversation everywhere, words and all, in one press.
-// A summons, like every gesture here, since the chat this closes may live in another window's floating panel.
-const closeAgent = (agent: FleetAgent): void => {
-    summonChat({ kind: `close`, conversationIds: [agent.id] });
-};
-
-// One shared menu (like the chat rail's tab menu) for every card, so forty cards cost one node and only one is ever
-// open.
-// Exists because a card's surface is otherwise all press-and-drag, so occasional actions (the session name used to be a
-// small button, mis-hit constantly) need somewhere else to live.
-// Adds no new actions, only a place to find the ones the card already offers, including glyphs that only appear on
-// hover.
-const cardMenu = ref<{ show: (event: Event) => void } | undefined>();
-const menuAgent = ref<FleetAgent>();
-
-// Copies through the pressed card's own document (clipboardOf), not this module's `navigator`, so the app's clipboard
-// accessor asks the element the gesture happened in.
-const menuAnchor = ref<Element>();
-// Hands over the bare name (`sleek-arrow-uzgj`), not the branch: that is the handle `agents show`, Quick Open and the
-// worktree path all take, while `agent/` is only how git spells it. The branch itself is a labelled row on the agent's
-// own page.
-const copySessionName = async (branch: string): Promise<void> => {
-    try {
-        await clipboardOf(menuAnchor.value).writeText(bareBranch(branch));
-    } catch {
-        // Clipboard may be unavailable (insecure context); the name is still on the card either way.
-    }
-};
-
-// Groups, not a flat list with inline separators: almost every row is conditional, so a separator written inline would
-// draw a line under a group that turned out empty.
-// No longer the only way off a watch: the card's own readout carries that press now, beside the fact it's about.
-// Stays here for the verb+count form ("Stop watching (3)"), which the card has no room for beside its own truncating
-// note.
-// One row for however many are armed, since the daemon disarms them together (agents.stopWatching).
-// Stops a chat opened for a look from going (`peeked`, mirrors AgentCard's pin); a row-builder like the two below, so
-// the menu stays a list of groups.
-const keepRow = (agent: FleetAgent): MenuItem[] =>
-    peeked(agent.id) ? [{ label: t(`agents.agentsView.keepOpen`), icon: `pin`, command: () => keepAgent(agent) }] : [];
-
-const watchRow = (agent: FleetAgent, here: boolean): MenuItem[] => {
-    const armed = agent.watches?.length ?? 0;
-    if (!watching(agent) || !here) {
-        return [];
-    }
-    return [{ label: armed === 1 ? `Stop watching` : `Stop watching (${armed})`, icon: `eye`, command: () => void stopWatching(agent.id) }];
-};
-
-// Filing away, restoring, or closing a never-registered card: the first two are the active box's alone (write through
-// the fleet store); the third is just this browser's tab.
-const filingRow = (agent: FleetAgent, here: boolean): MenuItem[] => {
-    const filing = !here
-        ? []
-        : agent.archivedAt !== undefined
-          ? [{ label: t(`agents.agentsView.restore`), icon: `history`, command: () => restore([agent.id]) }]
-          : canArchive(agent)
-            ? [{ label: t(`agents.agentsView.archive`), icon: `box`, command: () => archive([agent.id]) }]
-            : [];
-    return [...filing, ...(unregistered(agent.status) ? [{ label: t(`ui.action.close`), icon: `times`, command: () => closeAgent(agent) }] : [])];
-};
-
-const cardMenuItems = computed<MenuItem[]>(() => {
-    const agent = menuAgent.value;
-    if (agent === undefined) {
-        return [];
-    }
-    const review = mobile.value ? undefined : reviewAction(agent);
-    const branch = agent.branch;
-    // What a remote card's menu can offer: opening, reviewing and copying its session name work at a distance; ending a
-    // watch, archiving and restoring don't, since those write through the active daemon's own roster.
-    // Dropped rather than shown disabled: a menu of greyed-out verbs teaches nothing; the review page (this menu's own
-    // second row) carries the crossing that reaches them.
-    const here = !isRemote(agent);
-    const groups: MenuItem[][] = [
-        [
-            { label: t(`ui.action.open`), icon: `arrow-right`, command: () => focusAgent(agent) },
-            // For a card whose chat is open only as a look, the press that stops it going; the chat rail's menu carries
-            // the identical row for the identical state.
-            ...keepRow(agent),
-            // The agent's page has an address, so this row is also a link: hoverable, and Ctrl/Cmd-clickable into its
-            // own tab; a plain click still goes through `reviewAgent`, which also points the chat dock.
-            ...(review === undefined ? [] : [{ label: review, icon: `copy`, url: agentHref(agent), command: () => reviewAgent(agent) }]),
-        ],
-        // Hands over the name the card prints; the name's other forms (branch, link) are already labelled on the
-        // agent's own page.
-        branch === undefined ? [] : [{ label: t(`agents.agentsView.copySessionName`), icon: `code`, command: () => void copySessionName(branch) }],
-        // The crossing to another box, named after the destination rather than called "Switch": it's the one press here
-        // that costs the whole shell (chat, tree, every extension), so it says where it's taking you first.
-        // Also here, not just on the review page, since this menu is where the board keeps decisions made ABOUT a card.
-        here || agent.sandboxId === undefined
-            ? []
-            : [
-                  {
-                      label: `Open in ${boxNameOf.value.get(agent.sandboxId) ?? `its sandbox`}`,
-                      icon: `arrow-right`,
-                      command: () => openInSandbox(agent.sandboxId!, agent.id),
-                  },
-              ],
-        watchRow(agent, here),
-        filingRow(agent, here),
-    ];
-    const items: MenuItem[] = [];
-    for (const group of groups.filter((candidate) => candidate.length > 0)) {
-        if (items.length > 0) {
-            items.push({ separator: true });
-        }
-        items.push(...group);
-    }
-    return items;
-});
-
-const openCardMenu = (agent: FleetAgent, event: MouseEvent): void => {
-    menuAgent.value = agent;
-    menuAnchor.value = event.currentTarget instanceof Element ? event.currentTarget : undefined;
-    cardMenu.value?.show(event);
-};
-// A run is not an agent (see WorkflowRunCard), so it's a second list rendered into the same lanes rather than a `fleet`
-// row; it sits atop its lane, since a container belongs above its own contents.
-// Finished caps runs at the same window as agents and offers no "show earlier" of its own; run history lives on the
-// workflows page instead.
-const openRunGraph = (run: WorkflowRun): void => {
-    void router.push({ name: `extension`, params: { ext: `workflows` }, query: { run: run.runId } });
-};
-
-// Opens the run's sessions in the chat panel, one column each (shared with the rail's row so the two doors can't
-// drift); does not navigate, since several live transcripts is what a person actually wants from a running workflow.
-const openRun = (run: WorkflowRun): void => void openRunInChat(run);
-
-// Runs asked to stop but not yet settled: the abort reaches every turn at once, but the ledger only confirms once each
-// step unwinds, which is on a poll; without this mark a stop looks untouched until then.
-const stoppingRuns = ref(new Set<string>());
-const forgetStopping = (runId: string): void => {
-    const rest = new Set(stoppingRuns.value);
-    rest.delete(runId);
-    stoppingRuns.value = rest;
-};
-const stopRun = async (run: WorkflowRun): Promise<void> => {
-    stoppingRuns.value = new Set([...stoppingRuns.value, run.runId]);
-    try {
-        await stopWorkflowRun.mutateAsync(run.runId);
-    } catch {
-        // Usually means it ended between render and press; either way, a stop that didn't take must not leave the card
-        // stuck disabled.
-        forgetStopping(run.runId);
-    }
-};
-// Files an ended run away, sessions and all, with no confirmation: archiving is lossless and the way back is the
-// archive itself.
-const archiveRun = async (run: WorkflowRun): Promise<void> => {
-    await archiveWorkflowRun.mutateAsync(run.runId).catch(() => undefined);
-};
-const restoreRun = async (run: WorkflowRun): Promise<void> => {
-    await unarchiveWorkflowRun.mutateAsync(run.runId).catch(() => undefined);
-};
-// Held until the ledger says the run has actually stopped, not until the request returns, since in-flight steps keep
-// finishing for minutes after the ask.
-watch(workflowRuns, (list) => {
-    for (const runId of stoppingRuns.value) {
-        if (list.find((run) => run.runId === runId)?.state !== `running`) {
-            forgetStopping(runId);
-        }
-    }
-});
-
-// The approvals queue's rows, Attention lane only: a hold means only "waiting on you", with no conversation yet to
-// place elsewhere. A row leaves on its own press (releaseHeld), so it can't collect a second one, and comes back only
-// if the daemon refused it.
-const releaseWake = async (id: string, verb: `approve` | `reject`): Promise<void> => {
-    try {
-        await releaseHeld(id, verb);
-    } catch {
-        // Usually the countdown or another device beat this press to it; refresh repaints the truth either way.
-        void refresh();
-    }
-};
-
+const { focusAgent, reviewAgent, keepAgent, closeAgent, openSession } = focus;
+const { cardMenu, cardMenuItems, openCardMenu } = useCardMenu({ mobile, peeked, focus, agents });
+const { announcement, pendingPurge, purging, pulsing, toggleArchive, confirmPurge } = useArchiveDoor({ view, move, agents });
+const { stoppingRuns, stopRun, archiveRun, restoreRun, openRunGraph, releaseWake, synthesize } = useBoardPresses({ workflows, agents, router });
+useBoardCommands({ agents, filterField });
 // A filtered board is a result set wearing the lanes' shape, so it doesn't drag: half the lanes may read "no matches"
 // and a drop would act on a lane the user isn't really seeing.
 const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): void => {
     if (filtering.value) {
         return;
     }
-    begin(event, agent, card);
+    drag.begin(event, agent, card);
 };
+// The board's own width, measured (useNarrow): a container query's `container-type` would contain the fixed drag ghost.
+const NARROW_BOARD_REM = 48;
+const boardEl = ref<HTMLElement | undefined>(undefined);
+const narrow = useNarrow(boardEl, NARROW_BOARD_REM);
+const LANES = computed(laneHeads);
+// Workspace facts the starters turn on, already fetched for the rail elsewhere: the board adds no fetch of its own.
+const { panels: workspaceRepos } = usePanels();
+const workspaceChanges = useChanges();
+const starters = computed(() => boardStarters(workspaceRepos.value.length, workspaceChanges.count.value));
 </script>
 <!-- `relative` positions the lane-drop affordances only; the fixed drag ghost and the app's notification lane need no containing block here. -->
 <!-- Kept outside the template: a comment inside it makes this multi-root, and dev patches a multi-root subtree
@@ -1149,9 +122,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         <div class="view-header view-header-wrap flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
             <div class="flex min-w-0 flex-1 basis-0 items-center gap-2">
                 <!-- Drawn only when more than one sandbox exists (scopeOffered): a switch whose two settings look identical teaches the reader to ignore controls. -->
-                <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="SCOPE_OPTIONS" class="shrink-0" />
+                <SegmentedControl v-if="scopeOffered" v-model="fleetScope" :options="scopeOptions" class="shrink-0" />
                 <!-- Whose sessions the board shows; hidden when access names only one person, since Everyone and Mine say the same thing. -->
-                <SegmentedControl v-if="user !== null && sharedAccess" v-model="ownerScope" :options="OWNER_OPTIONS" size="xs" wrap class="shrink-0" />
+                <SegmentedControl v-if="user !== null && sharedAccess" v-model="ownerScope" :options="ownerOptions" size="xs" wrap class="shrink-0" />
                 <!-- The open project, and the way out of it: the same scope the workspace chip clears, so both say the same thing. -->
                 <ProjectChip :project="projectScope" :hidden="projectHidden" noun="agents" @clear="setProjectScope(undefined)" />
             </div>
@@ -1200,9 +173,9 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
         <!-- What the counter's pulse can't tell a screen reader; covers every archive so the visual pill stays purely visual. -->
         <span class="sr-only" aria-live="polite">{{ announcement }}</span>
         <!-- Nothing on the board AND nothing archived is the only true empty state; an archive behind it would otherwise be a dead end with no door to it. -->
-        <div v-if="(!started || total === 0) && !archiveOpen" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
+        <div v-if="screen !== 'lanes'" class="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-4 text-center">
             <!-- One heading, one sentence, nothing waiting on a daemon read: it used to swap its lower half once accounts loaded. -->
-            <template v-if="!started">
+            <template v-if="screen === 'first'">
                 <div class="flex w-full max-w-xl flex-col gap-2">
                     <h2 class="text-sm font-semibold text-content">{{ t(`agents.agentsView.startFirstAgent`) }}</h2>
                     <p class="text-2xs text-muted">
@@ -1218,7 +191,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                 </p>
             </template>
             <!-- Tasks read off the actual workspace (see `starters`), filling the composer rather than dispatching, so the user sends their own first turn. -->
-            <div v-if="!started && starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
+            <div v-if="screen === 'first' && starters.length > 0" class="flex max-w-xl flex-wrap items-center justify-center gap-1.5">
                 <button v-for="starter in starters" :key="starter.label" type="button" class="ui-chip" @click="composeAgent(starter.prompt)">
                     {{ starter.label }}
                 </button>
@@ -1245,13 +218,13 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     v-for="lane in LANES"
                     :key="lane.key"
                     :data-lane="lane.key"
-                    :data-drop="lane.key === 'finished' && archiveOpen ? undefined : lane.key"
+                    :data-drop="lane.key === 'finished' && view.archive ? undefined : lane.key"
                     class="flex min-w-0 flex-col rounded-xl transition-colors"
                     :class="[!dragging && !narrow ? 'min-h-0' : '', laneDropClass(lane.key)]"
                 >
                     <!-- Finished's header doubles as the archive's window, swapping its dot/label and growing a way back; pinned while scrolling stacked. -->
                     <header class="flex h-8 shrink-0 items-center gap-2.5 px-1" :class="narrow ? 'sticky top-0 z-10 rounded-t-xl bg-canvas' : ''">
-                        <template v-if="lane.key === 'finished' && archiveOpen">
+                        <template v-if="lane.key === 'finished' && view.archive">
                             <button
                                 type="button"
                                 :aria-label="t(`agents.agentsView.backToFinishedAgents`)"
@@ -1269,7 +242,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             <span class="text-2xs font-semibold uppercase tracking-wide text-muted">{{ lane.label }}</span>
                         </template>
                         <span class="flex-1"></span>
-                        <template v-if="lane.key === 'finished' && !archiveOpen">
+                        <template v-if="lane.key === 'finished' && !view.archive">
                             <!-- Archive feedback highlights the destination counter. -->
                             <button
                                 v-if="archiveSize > 0"
@@ -1298,7 +271,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         </template>
                         <!-- Retired-agent danger appears on hover; the dialog is the actionable warning. -->
                         <Button
-                            v-if="lane.key === 'finished' && archiveOpen && archiveSize > 0 && !filtering"
+                            v-if="lane.key === 'finished' && view.archive && archiveSize > 0 && !filtering"
                             size="small"
                             severity="danger"
                             :text="true"
@@ -1312,7 +285,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         </Button>
                     </header>
                     <!-- Held wakes lead the lane, since a hold is wholly waiting on the user, more than anything running below it; Attention lane only. -->
-                    <div v-if="lane.key === 'attention' && !archiveOpen && scopedHeld.length > 0" class="flex flex-col gap-2.5 pb-2.5">
+                    <div v-if="lane.key === 'attention' && !view.archive && scopedHeld.length > 0" class="flex flex-col gap-2.5 pb-2.5">
                         <HeldWakeCard
                             v-for="entry in scopedHeld"
                             :key="entry.id"
@@ -1332,7 +305,7 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                             :selected="chatStrip.run?.runId === run.runId"
                             :needs-you="needingYou.has(run.runId)"
                             :stopping="stoppingRuns.has(run.runId)"
-                            @open="openRun(run)"
+                            @open="openRunInChat(run)"
                             @graph="openRunGraph(run)"
                             @stop="stopRun(run)"
                             @archive="archiveRun(run)"
@@ -1340,10 +313,10 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                         />
                     </div>
                     <p
-                        v-if="lane.key === 'finished' && archiveOpen && archivedCards.length === 0 && runsFor('finished').length === 0"
+                        v-if="lane.key === 'finished' && view.archive && archivedCards.length === 0 && runsFor('finished').length === 0"
                         class="px-1 pb-3 text-2xs text-subtle"
                     >
-                        {{ purged ? t(`agents.agentsView.archiveEmptiedFinishedAgents`) : t(`agents.agentsView.nothingArchivedYetFinished`) }}
+                        {{ view.purged ? t(`agents.agentsView.archiveEmptiedFinishedAgents`) : t(`agents.agentsView.nothingArchivedYetFinished`) }}
                     </p>
                     <!-- An emptied lane keeps its header rather than collapsing: three columns shrinking to one mid-keystroke would jump the whole board under the cursor. -->
                     <p
@@ -1401,20 +374,20 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
                     </div>
                     <!-- The lane's tail, not a pager: the count is the point, and the row keeps them one press away instead of gone; hidden while filtering. -->
                     <button
-                        v-if="lane.key === 'finished' && !archiveOpen && !filtering && hiddenFinished > 0"
+                        v-if="lane.key === 'finished' && !view.archive && !filtering && hiddenFinished > 0"
                         type="button"
                         :class="ui.addTile(`mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
-                        @click="showAllFinished = !showAllFinished"
+                        @click="move({ kind: 'expand' })"
                     >
-                        <Icon :name="showAllFinished ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
-                        {{ showAllFinished ? t(`agents.agentsView.showFewer`) : t(`agents.agentsView.earlier`, { hiddenFinished }) }}
+                        <Icon :name="view.all ? 'chevron-up' : 'chevron-down'" class="text-2xs" />
+                        {{ view.all ? t(`agents.agentsView.showFewer`) : t(`agents.agentsView.earlier`, { hiddenFinished }) }}
                     </button>
                     <!-- One-way, unlike the lane's toggle: this pile has no "fewer" worth offering, since collapsing it back would lose the reader's place mid-search. -->
                     <button
-                        v-if="lane.key === 'finished' && archiveOpen && archiveHidden > 0"
+                        v-if="lane.key === 'finished' && view.archive && archiveHidden > 0"
                         type="button"
                         :class="ui.addTile(`mb-2.5 gap-1.5 rounded-lg py-2 text-2xs`)"
-                        @click="archiveShown += ARCHIVE_PAGE"
+                        @click="move({ kind: 'more' })"
                     >
                         <Icon name="chevron-down" class="text-2xs" />
                         {{ archiveHidden }} {{ t(`agents.agentsView.more`) }}
@@ -1437,15 +410,15 @@ const grabCard = (event: PointerEvent, agent: FleetAgent, card: HTMLElement): vo
             <button
                 type="button"
                 class="flex w-full shrink-0 items-center gap-2 rounded-lg px-1 py-1 text-2xs text-muted transition-colors hover:text-content"
-                :aria-expanded="showBeyond"
-                @click="showBeyond = !showBeyond"
+                :aria-expanded="view.beyond"
+                @click="move({ kind: 'beyond' })"
             >
                 <Icon name="search" class="shrink-0 text-2xs text-subtle" />
                 <span class="min-w-0 flex-1 truncate text-left">{{ beyondLabel }}</span>
-                <span class="shrink-0 font-medium text-link">{{ showBeyond ? t(`agents.agentsView.hide`) : t(`agents.agentsView.show`) }}</span>
-                <Icon :name="showBeyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
+                <span class="shrink-0 font-medium text-link">{{ view.beyond ? t(`agents.agentsView.hide`) : t(`agents.agentsView.show`) }}</span>
+                <Icon :name="view.beyond ? 'chevron-up' : 'chevron-down'" class="shrink-0 text-2xs" />
             </button>
-            <div v-if="showBeyond" class="mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
+            <div v-if="view.beyond" class="mt-2 flex min-h-0 flex-col gap-3 overflow-auto">
                 <section v-if="archivedHits.length > 0" class="flex min-w-0 flex-col gap-2.5">
                     <div class="flex items-center gap-2 px-1">
                         <Icon name="box" class="shrink-0 text-2xs text-subtle" />

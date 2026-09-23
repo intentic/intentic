@@ -4,9 +4,10 @@ import { computed, ref } from "vue";
 import { type PlanOrphan, type PlanStep, readPlanSteps } from "../../features/extensions/reconcileStatus";
 import { useSecretKeys } from "../../features/capabilities/connect/useSecrets";
 import { readIntenticLines } from "../../lib/intenticStream";
-import { sandboxRequest } from "../../features/sandbox/client/sandboxClient";
+import { SandboxHttpError } from "../../features/sandbox/client/sandboxHttpError";
+import { sandboxRpc } from "../../features/sandbox/client/sandboxRpc";
 import { useTerminalPanel } from "../../features/terminal/useTerminalPanel";
-import { SECRETS, WORKSPACE_STATE } from "../../lib/queryKeys";
+import { rpcKey, WORKSPACE_STATE } from "../../lib/queryKeys";
 import { describeProvisionError } from "./provisionError";
 
 // Runs `intentic deploy resolve` then `plan` in the sandbox (read+diff, nothing mutated), exposing
@@ -53,20 +54,13 @@ export function usePlanPreview() {
         controller?.abort(new DOMException(`preview cancelled`, `AbortError`));
     };
 
-    // resolve (SSE): rewrites desired-state.json and reports required env secrets. Throws on kind:"error".
+    // resolve (streamed): rewrites desired-state.json and reports required env secrets. Throws on kind:"error".
     const resolve = async (signal: AbortSignal): Promise<void> => {
         activity.value = `Resolving your configuration…`;
-        const response = await sandboxRequest(`/intentic`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ args: [`deploy`, `resolve`] }),
-            signal,
+        const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `resolve`] }, { signal }).catch((failure: unknown) => {
+            throw failure instanceof SandboxHttpError ? new Error(failure.said.error ?? `Resolve failed (${failure.status}).`) : failure;
         });
-        if (!response.ok || !response.body) {
-            const detail = (await response.json().catch(() => null)) as { error?: string } | null;
-            throw new Error(detail?.error ?? `Resolve failed (${response.status}).`);
-        }
-        for await (const line of readIntenticLines(response.body)) {
+        for await (const line of readIntenticLines(lines)) {
             // Heartbeats only prove the daemon's tail is alive, not the CLI; arming on them would neuter the watchdog.
             if (line[`kind`] !== `heartbeat`) {
                 armStall();
@@ -84,24 +78,17 @@ export function usePlanPreview() {
             }
         }
         // Refreshes the graph and secrets queries after resolve rewrote desired-state.json and named its secrets.
-        await queryClient.refetchQueries({ queryKey: SECRETS.of() });
+        await queryClient.refetchQueries({ queryKey: rpcKey(`secrets.list`) });
         void queryClient.invalidateQueries({ queryKey: WORKSPACE_STATE.of() });
     };
 
-    // plan (SSE): per-resource create/update/noop verdicts plus the orphan list, narrating as it reads.
+    // plan (streamed): per-resource create/update/noop verdicts plus the orphan list, narrating as it reads.
     const runPlan = async (signal: AbortSignal): Promise<void> => {
         activity.value = `Reading your live infrastructure…`;
-        const response = await sandboxRequest(`/intentic`, {
-            method: `POST`,
-            headers: { "content-type": `application/json` },
-            body: JSON.stringify({ args: [`deploy`, `plan`] }),
-            signal,
+        const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `plan`] }, { signal }).catch((failure: unknown) => {
+            throw failure instanceof SandboxHttpError ? new Error(failure.said.error ?? `Plan failed (${failure.status}).`) : failure;
         });
-        if (!response.ok || !response.body) {
-            const detail = (await response.json().catch(() => null)) as { error?: string } | null;
-            throw new Error(detail?.error ?? `Plan failed (${response.status}).`);
-        }
-        const result = await readPlanSteps(response.body, (progress) => {
+        const result = await readPlanSteps(lines, (progress) => {
             armStall();
             if (progress.terminal !== undefined) {
                 // The plan runs visibly in the check session; open its tab (own surfacing when resolve was skipped).

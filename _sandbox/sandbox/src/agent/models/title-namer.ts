@@ -100,9 +100,9 @@ export const nameAgentTitle = async (services: Services, conversationId: string,
         return;
     }
     // A stolen title (failure sentence, tool-call stand-in, self-identity reply) counts as no name and heals here.
-    const poisoned =
-        entry.title !== undefined && (isFailureSentence(entry.title) || isToolCallStandIn(entry.title) || isSelfIdentityAnswer(entry.title));
-    if ((entry.titleSource ?? "derived") !== "derived" && !poisoned) {
+    const held = entry.social.title;
+    const poisoned = held !== undefined && (isFailureSentence(held.text) || isToolCallStandIn(held.text) || isSelfIdentityAnswer(held.text));
+    if (held !== undefined && held.source !== "derived" && !poisoned) {
         return;
     }
     const { value: named } = await askRoleModel(

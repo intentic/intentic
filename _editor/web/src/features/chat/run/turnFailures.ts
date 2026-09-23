@@ -2,10 +2,11 @@ import type { AgentProvider, TurnFact } from "@intentic/sandbox-contract";
 import { ref, type Ref } from "vue";
 import type { PickUp } from "./pickUp";
 import { markAccountReauth } from "../accounts/providerAccounts";
-import type { TranscriptClock } from "../transcript/transcriptClock";
 import type { SessionRef } from "./turnRequest";
-import type { SentMessage, TurnContext } from "./turnStream";
+import type { TurnContext } from "./turnStream";
 import { bindingWindow, usageStatusFor } from "../session/usageStatus";
+import type { TranscriptView } from "../session/transcriptView";
+import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../router/staleChunk";
 
 // Maps a turn failure's code to what this window does: whether the user is needed (red line) or merely informed,
@@ -29,29 +30,22 @@ const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const
 
 // The subset of a conversation a failure can touch or act on.
 export interface FailureHost {
-    // Where a failure's notice line goes.
-    readonly transcript: TranscriptClock;
-    readonly provider: Ref<AgentProvider>;
-    readonly account: Ref<string | undefined>;
+    // Where a failure's notice line goes, mirrored once written: it is part of the conversation.
+    readonly transcript: Pick<TranscriptView, "messages" | "notice" | "persist">;
+    readonly provider: Readonly<Ref<AgentProvider>>;
+    readonly account: Readonly<Ref<string | undefined>>;
     // The model this chat is on; a refusal's fallback reset reads off the pool this model spends.
-    readonly model: Ref<string>;
+    readonly model: Readonly<Ref<string>>;
     // Dropped when the daemon no longer has the session behind this chat.
     readonly session: Ref<SessionRef | undefined>;
     // The red line: this needs the user.
     readonly error: Ref<string | null>;
     // This turn died mid-work with nothing left to fix; one press continues it (pickUp.ts).
     readonly pickUp: Ref<PickUp | undefined>;
-    // A probe stands down while a turn is live, the run it was hunting is already here.
-    readonly streaming: Ref<boolean>;
-    // Queues the undelivered message again; takes the words, since the daemon has already retracted its row.
-    requeue(sent: SentMessage | undefined): void;
-    // Holds the queue in place: a message behind a killed turn must not race the daemon's resume to POST /agent
-    // and lose.
-    hold(): void;
-    // Attach to a run the daemon restarted; whether one was found.
-    reattach(): Promise<boolean>;
-    // Mirror the transcript to the local cache, a notice this raised is part of the conversation.
-    persist(): void;
+    // The runs: a probe stands down while one is live (the run it was hunting is already here); an undelivered message
+    // goes back to the queue with its own words, since the daemon has already retracted its row; a message behind a
+    // killed turn is held, so it cannot race the daemon's resume and lose; a restarted run is attached to.
+    readonly turn: Pick<TurnClient, "streaming" | "requeueUndelivered" | "hold" | "reattach">;
 }
 
 export class TurnFailures {
@@ -72,7 +66,7 @@ export class TurnFailures {
         switch (code) {
             case `claude-reauth`:
                 // Credential dead, nothing ran: message isn't in the conversation; return it to the queue.
-                this.host.requeue(turn.sent);
+                this.host.turn.requeueUndelivered(turn.sent);
                 // No red line: the composer already shows a reauth banner with the one-click fix.
                 this.markReauth(message);
                 return;
@@ -86,15 +80,15 @@ export class TurnFailures {
                 return;
             case `unknown-command`:
                 // Unrecognized command, nothing ran: message goes back to the held queue, not flushed.
-                this.host.requeue(turn.sent);
+                this.host.turn.requeueUndelivered(turn.sent);
                 return;
             case `context-window-too-small`:
                 // Model can't hold this turn: message held until a bigger model is picked.
-                this.host.requeue(turn.sent);
+                this.host.turn.requeueUndelivered(turn.sent);
                 return;
             case `sandbox-memory-low`:
                 // Held once so the person can decide; never auto-resent, since the next send is them saying go ahead.
-                this.host.requeue(turn.sent);
+                this.host.turn.requeueUndelivered(turn.sent);
                 return;
             case `session-not-found`:
                 // Session vanished mid-turn: drop the dead id so the next send starts fresh. No red line.
@@ -113,7 +107,7 @@ export class TurnFailures {
             case `trial-model-unavailable`:
             case `trial-exhausted`:
                 // Message undelivered and refunded; held for explicit retry, not the outage auto-resume loop.
-                this.host.requeue(turn.sent);
+                this.host.turn.requeueUndelivered(turn.sent);
                 importOrReload(
                     () => import(`../models/useChat-catalog`),
                     async (chat) => {
@@ -151,14 +145,14 @@ export class TurnFailures {
                 () => import(`../models/useChat-catalog`),
                 (chat) => chat.loadProviderModels(this.host.provider.value),
             );
-            this.host.requeue(turn.sent);
+            this.host.turn.requeueUndelivered(turn.sent);
             this.host.error.value = message;
             return;
         }
         if (code === `engine-version-floor`) {
             // Nothing ran (old engine refused): message held for retry. Error text adds where to install a newer
             // engine, since the daemon's own message can't say that.
-            this.host.requeue(turn.sent);
+            this.host.turn.requeueUndelivered(turn.sent);
             const floor = error.engine?.floor;
             // Where to install is all this adds; that the message is held is the transcript notice's line to say.
             this.host.error.value =
@@ -200,7 +194,7 @@ export class TurnFailures {
     private applyOutageError(error: TurnError, turn: TurnContext): void {
         const { message, outage } = error;
         if (outage === undefined) {
-            this.host.requeue(turn.sent);
+            this.host.turn.requeueUndelivered(turn.sent);
             this.host.error.value = message;
             return;
         }
@@ -220,7 +214,7 @@ export class TurnFailures {
             this.markReauth(error.message);
             return;
         }
-        this.host.hold();
+        this.host.turn.hold();
         // Wait opens here; armRenewalProbe (armed once this turn's stream ends) is what closes it.
         this.credentialRenewal.value = { since: Date.now() };
     }
@@ -263,12 +257,12 @@ export class TurnFailures {
         clearTimeout(this.timer);
         let attempts = 0;
         const probe = (): void => {
-            if (this.host.streaming.value) {
+            if (this.host.turn.streaming.value) {
                 return;
             }
             attempts += 1;
-            void this.host.reattach().then((attached) => {
-                if (attached || this.host.streaming.value) {
+            void this.host.turn.reattach().then((attached) => {
+                if (attached || this.host.turn.streaming.value) {
                     return;
                 }
                 if (attempts < profile.tries) {
@@ -279,6 +273,17 @@ export class TurnFailures {
             });
         };
         this.timer = setTimeout(probe, Math.max(0, dueAt + profile.delayMs - Date.now()));
+    }
+
+    // How the last turn ended, as the daemon has it (AgentTranscriptSchema.ending), for a tab that never watched it
+    // happen; arms the same pick-up a watching window would, down to the countdown and what the press does. Refused
+    // when the record shows no ending, a turn is already live, a pick-up is already held, or the transcript is empty.
+    adoptEnding(ending: PickUp | undefined): void {
+        const { turn, pickUp, transcript } = this.host;
+        if (ending === undefined || turn.streaming.value || pickUp.value !== undefined || transcript.messages.value.length === 0) {
+            return;
+        }
+        pickUp.value = ending;
     }
 
     // Called on a send or on losing the tab/sandbox; the daemon's own resume still fires independently and
@@ -297,6 +302,6 @@ export class TurnFailures {
         const detail = `Claude sign-in could not be renewed: reconnect the account.`;
         this.markReauth(detail);
         this.host.transcript.notice(`${detail} This turn stopped where it was; sending again picks the conversation back up.`);
-        this.host.persist();
+        this.host.transcript.persist();
     }
 }

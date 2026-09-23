@@ -7,6 +7,14 @@ import { JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contra
 
 const execFileAsync = promisify(execFile);
 
+// A panel's session (processes/managed-processes.ts). Wire data: session names reach the browser and are string-built
+// there; never rename this prefix.
+export const PANEL_SESSION_PREFIX = "panel-";
+
+// A supervised service's (processes/service-processes.ts): its own prefix so terminal.ts knows to tail its log, not
+// attach a tmux session; none exists for it.
+export const SERVICE_SESSION_PREFIX = "svc-";
+
 // Ids are manifest-unique and already match the session-name charset, so no sanitizing here.
 export const capabilityJobSession = (id: string): string => `${JOB_SESSION_PREFIX}capability-${id}`;
 

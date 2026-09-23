@@ -3,9 +3,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { SHELL } from "../terminal/pane-state.js";
 import { watchPromptSignals } from "../terminal/prompt-signal.js";
+import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import { freePort } from "./free-port.js";
 
 const execFileAsync = promisify(execFile);
@@ -20,9 +21,6 @@ export interface ProcessSpec {
     // A one-shot job reports done once its shell returns to prompt; default panels run until session end.
     readonly oneShot?: true;
 }
-
-// Wire data: session names reach the browser and are string-built there; never rename this prefix.
-export const PANEL_SESSION_PREFIX = "panel-";
 
 // launching: session exists, shell hasn't run the command yet
 // installing: node_modules was missing at start, so pnpm install runs first, until its completion file appears

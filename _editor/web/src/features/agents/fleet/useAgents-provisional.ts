@@ -1,5 +1,5 @@
+import { sandboxShallowRef } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
-import { shallowRef } from "vue";
 import { otherBoxes } from "../../sandbox/live/fleetAcross";
 import { awaitingUser, NO_ATTENTION, turnInFlight } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
@@ -36,7 +36,8 @@ export const CEILING_MS = 120_000;
 // be two cards from two boxes.
 const keyOf = (id: string, at: string | undefined): string => JSON.stringify([at ?? null, id]);
 
-const claims = shallowRef<ReadonlyMap<string, Claim>>(new Map());
+// Sandbox-scoped: a switch re-points the unqualified ids they are keyed by at another daemon's agents.
+const claims = sandboxShallowRef<ReadonlyMap<string, Claim>>(() => new Map());
 
 // The daemon's own entry for a card, never the drawn one: a claim is measured against what the daemon said.
 const rosterEntry = (id: string, at: string | undefined): AgentSummary | undefined =>
@@ -184,7 +185,3 @@ export const claimedCard = <T extends FleetAgent>(card: T, entry: AgentSummary, 
     return drawn(card, held);
 };
 
-// Drops every claim: a sandbox switch re-points the unqualified ids they are keyed by at another daemon's agents.
-export const forgetClaims = (): void => {
-    claims.value = new Map();
-};

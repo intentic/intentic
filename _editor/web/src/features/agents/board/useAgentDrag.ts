@@ -1,3 +1,4 @@
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { computed, ref } from "vue";
 import { errorMessage } from "@intentic/ui/async";
 import { askAgentToResolve, discardAgent, invalidateAgentAction, landAgent, nothingLanded, stopAgent } from "../fleet/agentActions";
@@ -29,9 +30,9 @@ const pointer = ref({ x: 0, y: 0 });
 const over = ref<DropTarget | undefined>(undefined);
 // Keyed by (sandboxId, id) as JSON, never by id alone, since the same id can sit on two cards from two boxes and a
 // literal-delimiter key risks colliding with a sandbox name. A press claims only its own card and releases only what it
-// claimed.
+// claimed; sandbox-scoped, since a switch re-points every unqualified key at another daemon's cards.
 const cardKey = (id: string, at?: string): string => JSON.stringify([at ?? null, id]);
-const inFlight = ref<ReadonlyMap<string, PendingAction>>(new Map());
+const inFlight = sandboxRef<ReadonlyMap<string, PendingAction>>(() => new Map());
 const pendingOn = (id: string, at?: string): PendingAction | undefined => inFlight.value.get(cardKey(id, at));
 const ghostWidth = ref(0);
 
@@ -151,24 +152,30 @@ const perform = async (id: string, chosen: PendingAction, at?: string): Promise<
     }
     inFlight.value = new Map(inFlight.value).set(key, chosen);
     notice.value = undefined;
+    // After a switch the mark and the strip are the next sandbox's, which this press never touched.
+    const current = sandboxScopeGuard();
     try {
         await runAction(id, chosen, at);
         // The action's own roster frame is already on its way; this just closes the gap on a quiet stream. Another box
         // has no stream to close, so its re-read is the only thing that moves the card.
         await (at === undefined ? refresh() : Promise.resolve(refreshAcross()));
     } catch (caught) {
-        notice.value = errorMessage(caught, `That didn't work.`);
+        if (current()) {
+            notice.value = errorMessage(caught, `That didn't work.`);
+        }
     } finally {
-        const next = new Map(inFlight.value);
-        next.delete(key);
-        inFlight.value = next;
+        if (current()) {
+            const next = new Map(inFlight.value);
+            next.delete(key);
+            inFlight.value = next;
+        }
     }
 };
 
 // Stop, land, discard and unwatch act on state this browser already has and are reversible or already confirmed
 // elsewhere; `resolve` spends a turn on unseen work from an easily-accidental gesture, so it confirms first. The review
 // panel's own button doesn't ask, since a deliberate press there is already the answer.
-const pendingResolve = ref<string | undefined>(undefined);
+const pendingResolve = sandboxRef<string | undefined>(() => undefined);
 
 const confirmResolve = (): void => {
     const id = pendingResolve.value;

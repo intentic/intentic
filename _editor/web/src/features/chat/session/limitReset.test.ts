@@ -1,11 +1,14 @@
 import type { LimitResetStatus } from "@intentic/sandbox-contract";
 import { it, expect, beforeEach, mock } from "bun:test";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Pins what the strip may ask and how often: once per account, never on a timer, and a failure isn't cached as an
 // answer. The daemon's probe rate-limits reads hard enough to cost neighboring meters their freshness.
 
+// The ask and the claim, as the daemon answers each.
 const answers = mock();
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJsonVia: (...args: unknown[]) => answers(...args) }));
+const claims = mock();
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ usage: { limitReset: answers, claimLimitReset: claims } }) }));
 
 const { askLimitReset, claimLimitReset, limitResetFor, limitResetNote } = await import("./limitReset");
 
@@ -17,6 +20,7 @@ const fresh = (): string => `account-${++next}`;
 
 beforeEach(() => {
     answers.mockReset();
+    claims.mockReset();
 });
 
 it(`asks once per account however many strips want the answer, and shares it`, async () => {
@@ -28,7 +32,7 @@ it(`asks once per account however many strips want the answer, and shares it`, a
     await askLimitReset(account);
 
     expect(answers).toHaveBeenCalledTimes(1);
-    expect(answers.mock.calls[0]?.[1]).toBe(`/usage/limit-reset/${account}`);
+    expect(answers).toHaveBeenCalledWith({ account }, { context: { at: undefined } });
 });
 
 it(`asks the sandbox the conversation is homed in, not the one in front of the user`, async () => {
@@ -38,7 +42,7 @@ it(`asks the sandbox the conversation is homed in, not the one in front of the u
     await askLimitReset(account, `sb-elsewhere`);
     expect(limitResetFor(account)).toEqual(AVAILABLE);
 
-    expect(answers.mock.calls[0]?.[0]).toBe(`sb-elsewhere`);
+    expect(answers).toHaveBeenCalledWith({ account }, { context: { at: `sb-elsewhere` } });
 });
 
 it(`leaves a failed ask unanswered, so an unreachable daemon never becomes a durable "no"`, async () => {
@@ -64,19 +68,20 @@ it(`retires the offer on an answer about the account, and keeps it when the clai
     };
 
     await offered();
-    answers.mockResolvedValue({ result: `reset` });
+    claims.mockResolvedValue({ result: `reset` });
     expect(await claimLimitReset(account)).toEqual({ result: `reset` });
+    expect(claims).toHaveBeenCalledWith({ account }, { context: { at: undefined } });
     expect(limitResetFor(account)).toBeUndefined();
 
     for (const result of [`already_used`, `ineligible`, `not_limited`]) {
         await offered();
-        answers.mockResolvedValue({ result });
+        claims.mockResolvedValue({ result });
         await claimLimitReset(account);
         expect(limitResetFor(account)).toBeUndefined();
     }
 
     await offered();
-    answers.mockRejectedValue(new Error(`unreachable`));
+    claims.mockRejectedValue(new Error(`unreachable`));
     expect(await claimLimitReset(account)).toMatchObject({ result: `error` });
     expect(limitResetFor(account)).toEqual(AVAILABLE);
 });

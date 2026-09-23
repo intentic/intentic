@@ -349,7 +349,7 @@ export interface Run {
     readonly startedAt: number;
     resolve: (requestId: string, reply: AgentReply) => void;
     /** Attach a consumer: rows so far, then live until the run ends or it goes away. */
-    attach: (sink: StreamSink) => void;
+    attach: (sink: StreamSink<AttachFrame>) => void;
     stop: () => void;
 }
 
@@ -372,7 +372,7 @@ const createRun = (conversationId: string, prompt: string, beats: Beat[], now: n
     // Facts replayed to every attach, so a late-joining window still learns model and spend.
     const facts: Entry[] = [];
     let seq = 0;
-    const sinks = new Set<StreamSink>();
+    const sinks = new Set<StreamSink<AttachFrame>>();
     let ended = false;
     const id = `run_${conversationId}`;
 

@@ -1,42 +1,34 @@
 <script setup lang="ts">
-import {
-    Button,
-    clipboardOf,
-    ui,
-    ConfirmDialog,
-    ContextMenu,
-    Icon,
-    type IconName,
-    Modal,
-    ResizeSeam,
-    useDevice,
-    vAction,
-    vMiddleclick,
-} from "@intentic/ui";
+import { Button, ConfirmDialog, ContextMenu, Icon, Modal, ResizeSeam, ui, useDevice, vMiddleclick } from "@intentic/ui";
 import type { Disposable } from "@intentic/extension-api";
-import type { TerminalScrollback } from "@intentic/sandbox-contract";
-import type { MenuItem } from "primevue/menuitem";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, type VNode, watch } from "vue";
+import { useT } from "@intentic/ui/i18n";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { TERMINAL } from "../../shell/commands/categories";
+import { registerCommand, withShortcut } from "../../shell/commands/useCommands";
+import { postTurnControl } from "../chat/run/turnStream";
+import { useSandbox } from "../sandbox/client/useSandbox";
 import BackgroundProcesses from "./BackgroundProcesses.vue";
 import WorkTerminals from "./WorkTerminals.vue";
-import { TERMINAL } from "../../shell/commands/categories";
-import { commandShortcut, type CommandRegistration, registerCommand, withShortcut } from "../../shell/commands/useCommands";
-import { useSandbox } from "../sandbox/client/useSandbox";
-import { showWorkTerminals } from "./useWorkTerminals";
-import { KIND_ICONS, setTerminalMeta, TERMINAL_COLORS, TERMINAL_ICONS, type TerminalColor, terminalMeta } from "./terminalMeta";
-import { useTerminalsQuery } from "./terminalsQuery";
-import { inactiveTerminals } from "./terminalSweep";
-import { fetchScrollback } from "./terminalScrollback";
-import { copySelection, pasteIntoTerminal } from "./terminalSession";
-import { createTerminalTabs, type TerminalTab, type TerminalTabsSource, terminalSessionOf } from "./useTerminal";
-import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type TerminalRequest } from "./useTerminalPanel";
+import { TERMINAL_ICONS, terminalMeta } from "./terminalMeta";
 import { useTerminalFloating } from "./terminalFloating";
-import { postTurnControl } from "../chat/run/turnStream";
-import { useT } from "@intentic/ui/i18n";
+import { fetchScrollback } from "./terminalScrollback";
+import { useTerminalsQuery } from "./terminalsQuery";
+import { createTerminalTabs, type TerminalTabsSource, terminalSessionOf } from "./useTerminal";
+import { clearTerminalRequest, consumeSpawnRequest, registerTerminalSpawn, type TerminalRequest } from "./useTerminalPanel";
+import { panelCommands } from "./panel/panelCommands";
+import { segmentColor } from "./panel/stripSegments";
+import { groupKey } from "./panel/stripSelection";
+import { DEFAULT_HEIGHT, MIN_HEIGHT, usePanelHeight } from "./panel/usePanelHeight";
+import { usePanelWait } from "./panel/usePanelWait";
+import { useScrollbackView } from "./panel/useScrollbackView";
+import { useTerminalFind } from "./panel/useTerminalFind";
+import { useTerminalHelp } from "./panel/useTerminalHelp";
+import { useTerminalStrip } from "./panel/useTerminalStrip";
+import { useTouchKeys } from "./panel/useTouchKeys";
 
 // Terminal panel, mounted once below every view: each tab is a tmux session in the shared cache, so scrollback survives
-// unmount, navigation, and reload. Tabs arrange into split groups (VSCode-style); Shift/Ctrl+click multi-selects pills,
-// right-click opens split/join/kill and rename/color/icon. Poppable into its own window, bar moving to the left edge.
+// unmount, navigation and reload. Template and wiring over ./panel: the strip and its selection, find, the scrollback
+// view, the touch keys, the handover ask and the empty panel's wait; poppable into its own window, bar on the left edge.
 
 const t = useT();
 
@@ -57,907 +49,101 @@ const {
 const emit = defineEmits<{ close: [] }>();
 
 const tabs = createTerminalTabs(source, storageKey, () => emit(`close`));
-const { order, groups, answer, activeName, switchTab, joinTabs, unsplit, newTab, splitTab, killTabs, restart } = tabs;
+const { order, groups, answer, activeName, pending, unsplit, newTab, splitTab, killTabs, restart } = tabs;
 
-// Skeleton of the strip's last-known shape while its list is in flight: unlabeled and inert, since which terminals
-// return is the daemon's to say. Capped so a heavily-split sandbox doesn't spend rows on decoration.
+// Skeleton of the strip's last-known shape while its list is in flight: unlabelled and inert, since which terminals
+// return is the daemon's to say. Capped so a heavily split sandbox does not spend rows on decoration.
 const PLACEHOLDER_LIMIT = 6;
-const placeholders = computed(() =>
-    answer.value === `waiting` && groups.value.length === 0 ? tabs.remembered.value.slice(0, PLACEHOLDER_LIMIT) : [],
-);
-// Whether Restart applies: a fresh shell replaces a killed one; meaningless for a dev-server tab.
+const placeholders = computed(() => (answer.value === `waiting` && groups.value.length === 0 ? tabs.remembered.value.slice(0, PLACEHOLDER_LIMIT) : []));
+// Whether Restart applies: a fresh shell replaces a killed one, which means nothing for a dev-server tab.
 const activeShell = computed(() => order.value.find((tab) => tab.name === activeName.value)?.kind === `shell`);
 const floating = useTerminalFloating();
-// Bar becomes a left rail while the panel has its own floating window.
+// The bar becomes a left rail while the panel has a window of its own.
 const vertical = computed(() => floating.here.value);
+const floatHint = computed(() => withShortcut(floating.floats.value ? `Dock panel back` : `Move panel into new window`, `terminal.toggleFloating`));
+// Dismissal, not a kill: sessions outlive every view; docked it hides the panel, floating it closes the window.
+const closeHint = computed(() =>
+    withShortcut(floating.here.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`, `terminal.toggle`),
+);
 
-// Sessions can finish with no client action; watching the shared list catches what imperative relists miss.
+// Sessions can finish with no client action; watching the shared list catches what imperative relists miss. A dropped
+// refresh is the strip's own to retry, and nothing here awaits it.
 const listed = useTerminalsQuery();
 watch(
     () => listed.sessions.value.map((session) => `${session.name}:${session.running}`).join(`\n`),
-    // Absorbed: a dropped refresh is the strip's own to retry, and nothing here awaits this.
     () => void tabs.refresh().catch(() => undefined),
 );
-
-// Reachability regaining catches an outage longer than the refused-list retries cover, since an unreachable daemon
-// reports no session changes at all.
+// Reachability regained catches an outage longer than the refused-list retries cover: an unreachable daemon reports no
+// session change at all.
 watch(useSandbox().reachable, (isReachable) => {
     if (isReachable) {
         void tabs.refresh().catch(() => undefined);
     }
 });
 
-// Terminal-handover ask: whichever tab is active shows the ask meant for that session, since the pane needing an answer
-// is the one right below it; a non-active ask still reaches the owner via chat and notification.
-const help = computed(() => listed.sessions.value.find((session) => session.name === activeName.value)?.help);
-const helpNote = ref(``);
-watch(activeName, () => (helpNote.value = ``));
-const replying = ref(false);
-const resolveHelp = async (helped: boolean): Promise<void> => {
-    const open = help.value;
-    // The ask is cleared by the daemon, not locally, so until the reply lands `help` still reads as open.
-    if (open === undefined || replying.value) {
-        return;
-    }
-    replying.value = true;
-    const note = helpNote.value.trim();
-    // `undefined`: replies go to this sandbox's own daemon, which is the one that raised the ask.
-    try {
-        await postTurnControl(undefined, `/agent/reply`, {
-            kind: `terminal_help`,
-            requestId: open.requestId,
-            helped,
-            ...(note === `` ? {} : { note }),
-        });
-        helpNote.value = ``;
-    } finally {
-        replying.value = false;
-    }
-};
-
-// Tab strip: segments, numbering, cosmetics.
-const tabByName = computed(() => new Map(order.value.map((tab) => [tab.name, tab])));
-// Unlabeled shells show their 1-based position in the strip's reading order across groups.
-const stripIndex = computed(() => {
-    const index = new Map<string, number>();
-    let position = 0;
-    for (const group of groups.value) {
-        for (const name of group) {
-            position += 1;
-            index.set(name, position);
-        }
-    }
-    return index;
+const { help, helpNote, resolveHelp } = useTerminalHelp({
+    sessions: listed.sessions,
+    activeName,
+    reply: (body) => postTurnControl(undefined, `reply`, body),
 });
-// Pop-out button's label and tooltip, matching the strip menu and palette row wording.
-const floatHint = computed(() => withShortcut(floating.floats.value ? `Dock panel back` : `Move panel into new window`, `terminal.toggleFloating`));
-// Dismissal, not a kill: sessions outlive every view; docked it hides the panel, floating it closes the window.
-const closeHint = computed(() =>
-    withShortcut(
-        floating.here.value ? `Close the window, the terminals keep running` : `Hide the panel, the terminals keep running`,
-        `terminal.toggle`,
-    ),
-);
-const segmentIcon = (name: string): IconName => terminalMeta(name).icon ?? KIND_ICONS[tabByName.value.get(name)?.kind ?? `shell`];
-const segmentColor = (name: string): string | undefined => {
-    const color = terminalMeta(name).color;
-    return color === undefined ? undefined : TERMINAL_COLORS[color];
-};
-const segmentLabel = (name: string): string =>
-    terminalMeta(name).label ?? tabByName.value.get(name)?.label ?? String(stripIndex.value.get(name) ?? ``);
-const segmentTooltip = (name: string): string | undefined => {
-    const tab = tabByName.value.get(name);
-    if (tab === undefined) {
-        return undefined;
-    }
-    if (tab.kind === `process`) {
-        return `Background process: read-only logs`;
-    }
-    // What's running leads, since on a crowded strip the command is the only thing naming the terminal to close.
-    const doing = tab.command === undefined ? undefined : `Running ${tab.command}`;
-    if (tab.kind === `agent`) {
-        return doing ?? (tab.running === false ? `AI terminal, finished` : `AI terminal`);
-    }
-    if (tab.kind === `job`) {
-        return doing ?? `Job terminal`;
-    }
-    return doing ?? (tab.running === false ? `finished` : undefined);
-};
-
-// Multi-selection (VSCode-style): Shift extends, Ctrl toggles, click activates; selection is per-group, keyed by its
-// first session, feeding only the context menu's mass actions.
-const selectedKeys = ref<string[]>([]);
-const anchor = ref<number | undefined>(undefined);
-const groupKey = (group: string[]): string => group[0] ?? ``;
-const isSelected = (group: string[]): boolean => selectedKeys.value.includes(groupKey(group));
-const selectedGroups = computed(() => groups.value.filter((group) => isSelected(group)));
-// Flattened in strip order, so a joined pane reads left-to-right as the strip did.
-const selectedNames = computed(() => selectedGroups.value.flat());
-const activeGroupIndex = computed(() => groups.value.findIndex((group) => activeName.value !== undefined && group.includes(activeName.value)));
-
-const onSegmentClick = (event: MouseEvent, groupIndex: number, name: string): void => {
-    if (event.shiftKey) {
-        const from = anchor.value ?? (activeGroupIndex.value === -1 ? groupIndex : activeGroupIndex.value);
-        const [lo, hi] = from < groupIndex ? [from, groupIndex] : [groupIndex, from];
-        selectedKeys.value = groups.value.slice(lo, hi + 1).map(groupKey);
-        return;
-    }
-    if (event.ctrlKey || event.metaKey) {
-        const key = groupKey(groups.value[groupIndex] ?? []);
-        selectedKeys.value = isSelected(groups.value[groupIndex] ?? []) ? selectedKeys.value.filter((k) => k !== key) : [...selectedKeys.value, key];
-        anchor.value = groupIndex;
-        return;
-    }
-    selectedKeys.value = [];
-    anchor.value = groupIndex;
-    switchTab(name);
-};
-
-// Killing.
-// Every kill confirms when there's something to lose: a busy session, or two-or-more live ones at once.
-const killable = computed(() => order.value.filter((tab) => tab.kind !== `process`).map((tab) => tab.name));
-// Sweep's clock, stamped when a menu opens or a sweep fires, not ticked, so the count and the kill agree without a
-// per-second re-render.
-const sweepNow = ref(Date.now());
-const inactive = computed(() => inactiveTerminals(order.value, { now: sweepNow.value, focused: activeName.value }));
-const sweepInactive = (): void => {
-    if (killTabs === undefined) {
-        return;
-    }
-    sweepNow.value = Date.now();
-    const names = inactive.value.map((tab) => tab.name);
-    if (names.length === 0) {
-        return;
-    }
-    killTabs(names);
-    selectedKeys.value = [];
-};
-// What a dialog stands over: a busy session, or a bulk kill the gesture never named.
-const pendingKill = ref<string[]>();
-const runningIn = (names: string[]): TerminalTab[] => order.value.filter((tab) => names.includes(tab.name) && tab.running);
-// Tabs with work in them; a process's × closes a view, not a session, so it never asks this question.
-const busyIn = (names: string[]): TerminalTab[] =>
-    order.value.filter((tab) => names.includes(tab.name) && tab.kind !== `process` && tab.command !== undefined);
-const isBusy = (name: string): boolean => {
-    const tab = tabByName.value.get(name);
-    return tab !== undefined && tab.kind !== `process` && tab.command !== undefined;
-};
-// What the dialog lists: busy sessions if that's why it opened, else the live ones a kill ends; never both.
-const pendingKillBusy = computed(() => (pendingKill.value === undefined ? [] : busyIn(pendingKill.value)));
-const pendingKillItems = computed(() => {
-    const names = pendingKill.value;
-    if (names === undefined) {
-        return [];
-    }
-    const busy = pendingKillBusy.value;
-    return busy.length > 0 ? busy : runningIn(names);
-});
-const killHeader = computed(() => {
-    const busy = pendingKillBusy.value;
-    if (busy.length === 1) {
-        // The command IS the question; truncated since a session can be running something with a long name.
-        return `Kill the terminal running ${(busy[0]?.command ?? ``).slice(0, 24)}?`;
-    }
-    if (busy.length > 1) {
-        return `Kill ${busy.length} busy terminals?`;
-    }
-    const count = pendingKillItems.value.length;
-    return count === 1 ? `Kill the running terminal?` : `Kill ${count} running terminals?`;
-});
-const killBody = computed(() =>
-    pendingKillBusy.value.length > 0
-        ? `This stops what ${pendingKillBusy.value.length === 1 ? `it is` : `they are`} doing. Scrollback goes with it, and there is no undo.`
-        : `Killing these ends whatever they are running. Scrollback goes with them.`,
-);
-const requestKill = (names: string[]): void => {
-    if (killTabs === undefined || names.length === 0) {
-        return;
-    }
-    // Nothing running and nothing bulk: the click is the whole decision.
-    if (busyIn(names).length === 0 && (names.length === 1 || runningIn(names).length === 0)) {
-        killTabs(names);
-        selectedKeys.value = [];
-        return;
-    }
-    pendingKill.value = names;
-};
-const confirmKill = (): void => {
-    const names = pendingKill.value;
-    if (names !== undefined) {
-        killTabs?.(names);
-        selectedKeys.value = [];
-    }
-    pendingKill.value = undefined;
-};
-
-// Pill label edits in place, like a chat tab or workspace file: Enter commits, Esc cancels, blur commits, and an empty
-// name resets to the default.
-const renamingName = ref<string | undefined>(undefined);
-const renameDraft = ref(``);
-const beginRename = (name: string): void => {
-    renameDraft.value = terminalMeta(name).label ?? ``;
-    renamingName.value = name;
-};
-const commitRename = (): void => {
-    const name = renamingName.value;
-    renamingName.value = undefined;
-    if (name === undefined) {
-        return; // Enter already committed this; the unmount blur must not commit again.
-    }
-    const trimmed = renameDraft.value.trim();
-    setTerminalMeta(name, { label: trimmed === `` ? undefined : trimmed });
-};
-const cancelRename = (): void => {
-    renamingName.value = undefined;
-};
-// Middle-click on a segment is its × pressed: the same confirmation for a busy session, nothing at all where the
-// host gave the strip no kill (a read-only panel draws no × either) or while that segment is being renamed.
-const middleKill = (name: string): void => {
-    if (killTabs !== undefined && renamingName.value !== name) {
-        requestKill([name]);
-    }
-};
-// Focuses and selects the field the moment it mounts (the @vue:mounted trick).
-const focusRename = (vnode: VNode): void => {
-    const el = vnode.el as HTMLInputElement;
-    el.focus();
-    el.select();
-};
-// Fallback label a cleared name resets to; shown as the input's placeholder so 'empty resets' is visible.
-const defaultLabel = (name: string): string => tabByName.value.get(name)?.label ?? `Terminal ${stripIndex.value.get(name) ?? ``}`;
-
-// Color/icon overrides live in a dialog: a swatch grid is a picker, not a text field, with nowhere to sit in a pill.
-const customize = ref<{ name: string; mode: `color` | `icon` } | undefined>(undefined);
-const openCustomize = (name: string, mode: `color` | `icon`): void => {
-    customize.value = { name, mode };
-};
-const applyColor = (color: TerminalColor | undefined): void => {
-    if (customize.value === undefined) {
-        return;
-    }
-    setTerminalMeta(customize.value.name, { color });
-    customize.value = undefined;
-};
-const applyIcon = (icon: IconName | undefined): void => {
-    if (customize.value === undefined) {
-        return;
-    }
-    setTerminalMeta(customize.value.name, { icon });
-    customize.value = undefined;
-};
-const colorOptions = Object.entries(TERMINAL_COLORS) as [TerminalColor, string][];
-const customizeHeader = computed(() =>
-    customize.value === undefined ? `` : { color: `Terminal color`, icon: `Terminal icon` }[customize.value.mode],
-);
-
-// Context menu (right-click a pill).
-const menu = ref<{ show: (event: Event) => void } | undefined>();
-const menuTarget = ref<{ groupIndex: number; name: string } | undefined>(undefined);
-const openTabMenu = (event: MouseEvent, groupIndex: number, name: string): void => {
-    // Sweep's clock, read the moment its row is about to be drawn.
-    sweepNow.value = Date.now();
-    const group = groups.value[groupIndex] ?? [];
-    // Right-click outside the current selection retargets it (VSCode's list behavior).
-    if (!isSelected(group)) {
-        selectedKeys.value = [groupKey(group)];
-        anchor.value = groupIndex;
-    }
-    menuTarget.value = { groupIndex, name };
-    menu.value?.show(event);
-};
-
-// Rows naming no particular pill: strip-wide kills, the sweep, and pop-out; also the whole menu a right-click on empty
-// bar space opens. Each row is absent when it would be a no-op.
-const stripItems = computed<MenuItem[]>(() => {
-    const items: MenuItem[] = [];
-    // Above kill-all as the narrower option; absent when there's nothing for it to find.
-    if (killTabs !== undefined && inactive.value.length > 0) {
-        items.push({
-            label: `Kill ${inactive.value.length} inactive ${inactive.value.length === 1 ? `terminal` : `terminals`}`,
-            shortcut: commandShortcut(`terminal.killInactive`),
-            command: sweepInactive,
-        });
-    }
-    if (killTabs !== undefined && killable.value.length > 0) {
-        items.push({
-            label: t(`terminal.terminalPanel.killAllTerminals`),
-            shortcut: commandShortcut(`terminal.killAll`),
-            command: () => requestKill(killable.value),
-        });
-    }
-    items.push(
-        ...(items.length > 0 ? [{ separator: true }] : []),
-        // The one checked row here: whether work terminals tab at all, same preference as the popover and Settings.
-        {
-            label: t(`terminal.terminalPanel.showWorkTerminals`),
-            checked: showWorkTerminals.value,
-            shortcut: commandShortcut(`terminal.toggleWorkTerminals`),
-            command: () => (showWorkTerminals.value = !showWorkTerminals.value),
-        },
-        {
-            label: floating.floats.value ? `Dock panel back` : `Move panel into new window`,
-            shortcut: commandShortcut(`terminal.toggleFloating`),
-            command: floating.toggle,
-        },
-    );
-    return items;
-});
-
-const menuItems = computed<MenuItem[]>(() => {
-    const target = menuTarget.value;
-    if (target === undefined) {
-        return stripItems.value;
-    }
-    const { name } = target;
-    const group = groups.value[target.groupIndex] ?? [name];
-    // Multi-selection gets mass actions, a single pill gets per-terminal ones, each showing its shortcut.
-    if (selectedGroups.value.length > 1) {
-        const names = selectedNames.value;
-        const items: MenuItem[] = [
-            {
-                label: t(`terminal.terminalPanel.joinTabs`, { count: selectedGroups.value.length }),
-                shortcut: commandShortcut(`terminal.join`),
-                command: () => {
-                    joinTabs(names);
-                    selectedKeys.value = [];
-                },
-            },
-        ];
-        if (killTabs !== undefined) {
-            items.push(
-                { separator: true },
-                {
-                    label: t(`terminal.terminalPanel.killTerminals`, { count: names.length }),
-                    shortcut: commandShortcut(`terminal.kill`),
-                    command: () => requestKill(names),
-                },
-            );
-        }
-        return [...items, ...stripItems.value];
-    }
-    const items: MenuItem[] = [];
-    if (splitTab !== undefined) {
-        items.push({ label: t(`terminal.terminalPanel.splitTerminal`), shortcut: commandShortcut(`terminal.split`), command: () => splitTab(name) });
-    }
-    if (group.length > 1) {
-        items.push({
-            label: t(`terminal.terminalPanel.unsplitTerminal`),
-            shortcut: commandShortcut(`terminal.unsplit`),
-            command: () => unsplit(name),
-        });
-    }
-    if (items.length > 0) {
-        items.push({ separator: true });
-    }
-    items.push(
-        { label: t(`ui.action.rename`), shortcut: commandShortcut(`terminal.rename`), command: () => beginRename(name) },
-        {
-            label: t(`terminal.terminalPanel.changeColor`),
-            shortcut: commandShortcut(`terminal.changeColor`),
-            command: () => openCustomize(name, `color`),
-        },
-        {
-            label: t(`terminal.terminalPanel.changeIcon`),
-            shortcut: commandShortcut(`terminal.changeIcon`),
-            command: () => openCustomize(name, `icon`),
-        },
-    );
-    if (killTabs !== undefined) {
-        items.push(
-            { separator: true },
-            {
-                label: tabByName.value.get(name)?.kind === `process` ? `Close log view` : `Kill terminal`,
-                shortcut: commandShortcut(`terminal.kill`),
-                // Routed through requestKill like any kill; a menu row knows no more about a busy session than the ×.
-                command: () => requestKill([name]),
-            },
-        );
-    }
-    return [...items, ...stripItems.value];
-});
-
-// Pane's history as selectable plain text. `pending` is its own state, not a spinner over stale text, since showing the
-// previous terminal's scrollback while the next loads would be the worst lie here.
-const scrollback = ref<TerminalScrollback | undefined>(undefined);
-const scrollbackName = ref<string | undefined>(undefined);
-const scrollbackFailed = ref(false);
-const scrollbackPending = computed(() => scrollbackName.value !== undefined && scrollback.value === undefined && !scrollbackFailed.value);
-const scrollbackText = ref<HTMLElement>();
-
-const openScrollback = async (name: string): Promise<void> => {
-    scrollbackName.value = name;
-    scrollback.value = undefined;
-    scrollbackFailed.value = false;
-    try {
-        const captured = await fetchScrollback(name);
-        // Superseded while in flight: the dialog closed, or another terminal was asked for.
-        if (scrollbackName.value === name) {
-            scrollback.value = captured;
-        }
-    } catch {
-        // Session ended between the click and the read, or the daemon went away; say so rather than spin forever.
-        if (scrollbackName.value === name) {
-            scrollbackFailed.value = true;
-        }
-    }
-};
-
-const closeScrollback = (): void => {
-    scrollbackName.value = undefined;
-    scrollback.value = undefined;
-    scrollbackFailed.value = false;
-};
-
-// Through the dialog's own element, so a floating panel writes from the window the user is actually in.
-const copyScrollback = async (): Promise<void> => {
-    const text = scrollback.value?.text;
-    if (text !== undefined) {
-        await clipboardOf(scrollbackText.value).writeText(text);
-    }
-};
-
-// Grid right-click: clipboard verbs plus scrollback beyond what attach replayed; tmux never sees it, since the client
-// is control-mode. Targets the session under the pointer, not the focused one.
-const gridMenu = ref<{ show: (event: Event) => void } | undefined>();
-const gridTarget = ref<string | undefined>(undefined);
-// Sampled at open, not read live: `disabled` renders once, and xterm clears selection losing focus.
-const gridHasSelection = ref(false);
-
-const onGridContextMenu = (event: MouseEvent): void => {
-    const cell = event.target instanceof Element ? event.target.closest<HTMLElement>(`.term-cell`) : null;
-    const name = cell?.dataset[`session`];
-    if (name === undefined || terminalSessionOf(name) === undefined) {
-        return;
-    }
-    event.preventDefault();
-    gridTarget.value = name;
-    gridHasSelection.value = terminalSessionOf(name)?.term.hasSelection() === true;
-    gridMenu.value?.show(event);
-};
-
-const gridItems = computed<MenuItem[]>(() => {
-    const name = gridTarget.value;
-    const session = name === undefined ? undefined : terminalSessionOf(name);
-    if (name === undefined || session === undefined) {
-        return [];
-    }
-    // Copy/Paste carry no shortcut hint, since Ctrl+Shift+C/V are the browser's own and plain Ctrl+V already pastes.
-    // Both hand focus back to the terminal so the next keystroke doesn't land nowhere.
-    const items: MenuItem[] = [
-        {
-            label: t(`ui.action.copy`),
-            disabled: !gridHasSelection.value,
-            command: () => {
-                copySelection(session);
-                session.term.focus();
-            },
-        },
-        { label: t(`terminal.terminalPanel.paste`), command: () => pasteIntoTerminal(session) },
-        { separator: true },
-        { label: t(`terminal.terminalPanel.fullScrollback`), command: () => void openScrollback(name) },
-    ];
-    if (splitTab !== undefined) {
-        items.push(
-            { separator: true },
-            { label: t(`terminal.terminalPanel.splitTerminal`), shortcut: commandShortcut(`terminal.split`), command: () => splitTab(name) },
-        );
-    }
-    return items;
-});
-
-// Ctrl+F over the active session's whole buffer, like a local terminal: matches paint in place and on the scrollbar,
-// Enter walks them. Decorations clear when the bar closes or the tab changes.
-const finding = ref(false);
-const findQuery = ref(``);
-const findInput = ref<HTMLInputElement>();
-// Addon's own match count, -1 past its 1000-match ceiling; undefined until a query has run.
-const findResults = ref<{ index: number; count: number } | undefined>(undefined);
-// Session whose decorations are up and events bound, so switching tabs clears one before painting the next.
-let findBound: { search: { clearDecorations: () => void }; results: { dispose: () => void } } | undefined;
-
-// Yellow, the palette's 'look here' color; the active match saturates so it stands out among the rest.
-const FIND_DECORATIONS = {
-    matchBackground: `#facc1540`,
-    matchBorder: `#facc1580`,
-    matchOverviewRuler: `#facc15`,
-    activeMatchBackground: `#facc15a0`,
-    activeMatchBorder: `#facc15`,
-    activeMatchColorOverviewRuler: `#fde047`,
-};
-
-const activeSession = () => (activeName.value === undefined ? undefined : terminalSessionOf(activeName.value));
-
-const unbindFind = (): void => {
-    findBound?.results.dispose();
-    findBound?.search.clearDecorations();
-    findBound = undefined;
-    findResults.value = undefined;
-};
-
-const bindFind = (): void => {
-    unbindFind();
-    const session = activeSession();
-    if (session === undefined) {
-        return;
-    }
-    findBound = {
-        search: session.search,
-        results: session.search.onDidChangeResults(({ resultIndex, resultCount }) => {
-            findResults.value = { index: resultIndex, count: resultCount };
-        }),
-    };
-};
-
-const runFind = (incremental: boolean): void => {
-    const session = activeSession();
-    if (session === undefined) {
-        return;
-    }
-    if (findBound?.search !== session.search) {
-        bindFind();
-    }
-    if (findQuery.value === ``) {
-        session.search.clearDecorations();
-        findResults.value = undefined;
-        return;
-    }
-    session.search.findNext(findQuery.value, { incremental, decorations: FIND_DECORATIONS });
-};
-const findNext = (): void => runFind(false);
-const findPrevious = (): void => {
-    const session = activeSession();
-    if (session !== undefined && findQuery.value !== ``) {
-        session.search.findPrevious(findQuery.value, { decorations: FIND_DECORATIONS });
-    }
-};
-
-const openFind = (): void => {
-    if (activeName.value === undefined) {
-        return;
-    }
-    finding.value = true;
-    void nextTick(() => {
-        findInput.value?.focus();
-        findInput.value?.select();
-    });
-    if (findQuery.value !== ``) {
-        runFind(true);
-    }
-};
-
-// Esc, or the ×: hands the keyboard back to the terminal and clears the highlights.
-const closeFind = (): void => {
-    finding.value = false;
-    unbindFind();
-    activeSession()?.term.focus();
-};
-
-const findLabel = computed((): string => {
-    const results = findResults.value;
-    if (results === undefined) {
-        return ``;
-    }
-    if (results.count === 0) {
-        return `No results`;
-    }
-    return `${String(results.index + 1)} of ${results.count < 0 ? `many` : String(results.count)}`;
-});
-
-// A find follows the active tab: highlights leave the one that lost focus, rerunning on the one that gained it.
-watch(activeName, () => {
-    if (finding.value) {
-        runFind(true);
-    }
+const strip = useTerminalStrip({ tabs, floating });
+const {
+    tabByName,
+    segmentIcon,
+    segmentLabel,
+    segmentTooltip,
+    defaultLabel,
+    isBusy,
+    isSelected,
+    activeGroupIndex,
+    onSegmentClick,
+    pendingKill,
+    killPrompt,
+    requestKill,
+    confirmKill,
+    renamingName,
+    renameDraft,
+    beginRename,
+    commitRename,
+    cancelRename,
+    focusRename,
+    middleKill,
+    customize,
+    applyColor,
+    applyIcon,
+    colorOptions,
+    customizeHeader,
+    menu,
+    menuItems,
+    openTabMenu,
+    onBarContextMenu,
+} = strip;
+const { scrollbackName, scrollback, scrollbackFailed, scrollbackPending, scrollbackText, closeScrollback, copyScrollback, gridMenu, gridItems, onGridContextMenu } =
+    useScrollbackView({ sessionOf: terminalSessionOf, read: fetchScrollback, splitTab });
+const { finding, findQuery, findInput, findLabel, runFind, findNext, findPrevious, openFind, closeFind, unbindFind } = useTerminalFind({
+    activeName,
+    sessionOf: terminalSessionOf,
 });
 onBeforeUnmount(unbindFind);
-
-// Height persists per surface, clamped between a floor and ~80% of viewport. No collapsed state: the toolbar's ×
-// already unmounts without killing sessions.
-const HEIGHT_KEY = `ui-${storageKey}-terminal-height`;
-const DEFAULT_HEIGHT = 240;
-const MIN_HEIGHT = 96;
-const clampHeight = (px: number): number => Math.round(Math.max(MIN_HEIGHT, Math.min(px, window.innerHeight * 0.8)));
-const readHeight = (): number => {
-    try {
-        const parsed = Number.parseInt(localStorage.getItem(HEIGHT_KEY) ?? ``, 10);
-        return Number.isFinite(parsed) ? clampHeight(parsed) : DEFAULT_HEIGHT;
-    } catch {
-        return DEFAULT_HEIGHT;
-    }
-};
-const write = (key: string, value: string): void => {
-    try {
-        localStorage.setItem(key, value);
-    } catch {
-        // Storage may be unavailable (private mode); the in-memory ref still holds.
-    }
-};
-
-const height = ref(readHeight());
-const setHeight = (px: number): void => {
-    height.value = clampHeight(px);
-    write(HEIGHT_KEY, String(height.value));
-};
-
-// Alt+PageDown/Up walk every session in reading order, splits included, wrapping at the ends.
-const cycleTab = (delta: number): void => {
-    const names = groups.value.flat();
-    if (names.length < 2) {
-        return;
-    }
-    // oxlint-disable-next-line unicorn/prefer-array-index-of -- indexOf rejects string | undefined.
-    const index = names.findIndex((name) => name === activeName.value);
-    const next = names[(index + delta + names.length) % names.length];
-    if (next !== undefined) {
-        switchTab(next);
-    }
-};
-
-// Every strip action is a registered command, live only while this panel is mounted. Tab-family chords match the
-// workspace/chat strips, gated on this panel's focus; the panel's own verbs keep private, ungated chords. Defaults are
-// Ctrl+Shift+<key>, dodging bare Ctrl (the shell's) and Ctrl+Alt (AltGr); everything is rebindable per surface.
-let commandDisposables: readonly Disposable[] = [];
-const registerPanelCommands = (): void => {
-    const entries: Omit<CommandRegistration, `owner`>[] = [
-        {
-            command: `terminal.rename`,
-            title: t(`ui.action.rename`),
-            icon: `pencil`,
-            // F2, gated to a keystroke from inside this panel; outside it the chord stays free for other surfaces.
-            keybinding: `F2`,
-            when: `tabSurface == 'terminal'`,
-            handler: (): void => {
-                if (renamingName.value !== undefined) {
-                    return; // already editing (F2 lands in the field); restarting would wipe the draft
-                }
-                if (activeName.value !== undefined) {
-                    beginRename(activeName.value);
-                }
-            },
-        },
-        {
-            command: `terminal.changeColor`,
-            title: t(`terminal.terminalPanel.changeColor2`),
-            icon: `palette`,
-            handler: (): void => {
-                if (activeName.value !== undefined) {
-                    openCustomize(activeName.value, `color`);
-                }
-            },
-        },
-        {
-            command: `terminal.changeIcon`,
-            title: t(`terminal.terminalPanel.changeIcon2`),
-            icon: `star`,
-            handler: (): void => {
-                if (activeName.value !== undefined) {
-                    openCustomize(activeName.value, `icon`);
-                }
-            },
-        },
-        {
-            command: `terminal.join`,
-            title: t(`terminal.terminalPanel.joinSelected`),
-            icon: `code`,
-            keybinding: `Ctrl+Shift+G`,
-            handler: (): void => {
-                if (selectedGroups.value.length > 1) {
-                    joinTabs(selectedNames.value);
-                    selectedKeys.value = [];
-                }
-            },
-        },
-        {
-            command: `terminal.unsplit`,
-            title: t(`terminal.terminalPanel.unsplit`),
-            icon: `code`,
-            keybinding: `Ctrl+Shift+U`,
-            handler: (): void => {
-                if (activeName.value !== undefined) {
-                    unsplit(activeName.value);
-                }
-            },
-        },
-        {
-            // Unbound by default, like the cosmetic pickers: already has two clickable homes.
-            command: `terminal.toggleWorkTerminals`,
-            title: t(`terminal.terminalPanel.toggleWorkTerminals`),
-            icon: `sparkles`,
-            handler: (): void => {
-                showWorkTerminals.value = !showWorkTerminals.value;
-            },
-        },
-        {
-            command: `terminal.find`,
-            title: t(`terminal.terminalPanel.find`),
-            icon: `search`,
-            // Cmd+F on Mac, Ctrl+F elsewhere, gated to this panel so the page find keeps the chord elsewhere.
-            keybinding: `Mod+F`,
-            when: `tabSurface == 'terminal'`,
-            handler: openFind,
-        },
-        {
-            command: `terminal.nextTab`,
-            title: t(`ui.action.next`),
-            keybinding: `Alt+PageDown`,
-            when: `tabSurface == 'terminal'`,
-            handler: () => cycleTab(1),
-        },
-        {
-            command: `terminal.previousTab`,
-            title: t(`terminal.terminalPanel.previous`),
-            keybinding: `Alt+PageUp`,
-            when: `tabSurface == 'terminal'`,
-            handler: () => cycleTab(-1),
-        },
-    ];
-    if (splitTab !== undefined) {
-        entries.push({
-            command: `terminal.split`,
-            title: t(`terminal.terminalPanel.split`),
-            icon: `code`,
-            keybinding: `Ctrl+Shift+5`,
-            handler: (): void => {
-                if (activeName.value !== undefined) {
-                    splitTab(activeName.value);
-                }
-            },
-        });
-    }
-    if (killTabs !== undefined) {
-        entries.push({
-            command: `terminal.kill`,
-            title: t(`terminal.terminalPanel.kill`),
-            icon: `trash`,
-            keybinding: `Ctrl+Shift+X`,
-            when: `tabSurface == 'terminal'`,
-            handler: (): void => {
-                // Selection first, else the focused session; the chord has the least aim of the three kill gestures.
-                if (selectedNames.value.length > 0) {
-                    requestKill(selectedNames.value);
-                    return;
-                }
-                if (activeName.value !== undefined) {
-                    requestKill([activeName.value]);
-                }
-            },
-        });
-        entries.push({
-            command: `terminal.killAll`,
-            title: t(`terminal.terminalPanel.killAll`),
-            icon: `trash`,
-            keybinding: `Ctrl+Shift+Backspace`,
-            when: `tabSurface == 'terminal'`,
-            handler: () => requestKill(killable.value),
-        });
-        entries.push({
-            command: `terminal.killInactive`,
-            title: t(`terminal.terminalPanel.killInactive`),
-            icon: `trash`,
-            // Unbound: tidying is occasional, and a chord for it would sit one slip from the one that kills your shell.
-            handler: sweepInactive,
-        });
-    }
-    // One family for the whole list, stated here rather than on every entry.
-    commandDisposables = entries.map((entry) => registerCommand({ owner: `builtin`, category: TERMINAL, ...entry }));
-};
-
-// Right-click on empty bar space (not a pill or button) opens the strip-wide menu: sweep, kill all, pop out.
-const onBarContextMenu = (event: MouseEvent): void => {
-    if (event.target instanceof Element && event.target.closest(`button, [data-term-tab]`) !== null) {
-        return;
-    }
-    event.preventDefault();
-    sweepNow.value = Date.now();
-    menuTarget.value = undefined;
-    menu.value?.show(event);
-};
-
-// Touch extra-keys row: a soft keyboard has no Esc/Tab/Ctrl/arrows, so a scrollable row injects them directly. Desktop
-// never renders it.
+const { height, seamHeight, maxHeight } = usePanelHeight(storageKey);
 const { coarse } = useDevice();
-
-// Control code for a printable char (c to \x03, d to \x04, ...); non-letters pass through.
-const controlCode = (ch: string): string => {
-    const code = ch.toUpperCase().charCodeAt(0);
-    return code >= 64 && code <= 95 ? String.fromCharCode(code - 64) : ch;
-};
-
-// Ctrl arms, then the next printable keydown sends its control code, the only reliable way to reach Ctrl+C/D/Z with no
-// physical modifier.
-const ctrlArmed = ref(false);
-const onArmedKeydown = (event: KeyboardEvent): void => {
-    if (event.key.length !== 1) {
-        return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    tabs.sendInput(controlCode(event.key));
-    ctrlArmed.value = false;
-};
-watch(ctrlArmed, (armed) => {
-    if (armed) {
-        window.addEventListener(`keydown`, onArmedKeydown, true);
-    } else {
-        window.removeEventListener(`keydown`, onArmedKeydown, true);
-    }
-});
-
-// One class string for both the Ctrl toggle and the keys below, matching the kit's own style (lib/ui.ts). 44px: these
-// only exist on a coarse pointer, the most repeatedly pressed controls the app has on a phone, at the screen's bottom
-// edge where thumb accuracy is worst.
+const { ctrlArmed, EXTRA_KEYS } = useTouchKeys(tabs.sendInput);
+// One class for the Ctrl toggle and the keys beside it, in the kit's own style (lib/ui.ts). 44px: they exist only on a
+// coarse pointer, the most repeatedly pressed controls on a phone, at the screen's bottom edge where aim is worst.
 const KEY_CLASS = `inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-md border border-line bg-canvas px-[0.6rem] font-mono text-[0.8125rem] text-content active:bg-overlay`;
-
-const EXTRA_KEYS = computed((): readonly { label: string; data: string }[] => [
-    { label: t(`terminal.terminalPanel.esc`), data: `\x1b` },
-    { label: t(`terminal.terminalPanel.tab`), data: `\t` },
-    { label: `/`, data: `/` },
-    { label: `-`, data: `-` },
-    { label: `|`, data: `|` },
-    { label: `~`, data: `~` },
-    { label: `↑`, data: `\x1b[A` },
-    { label: `↓`, data: `\x1b[B` },
-    { label: `←`, data: `\x1b[D` },
-    { label: `→`, data: `\x1b[C` },
-]);
-// pointerdown, not click, with preventDefault: keeps the xterm textarea focused so the soft keyboard stays up.
-const pressKey = (data: string): void => tabs.sendInput(data);
+const { about, waited, named, emptyHint, openRequested } = usePanelWait({ tabs, initial });
 
 const container = ref<HTMLElement>();
-
-// Spawn-hook disposer, registered before the relist awaits, so a rejected list can't break 'New Terminal'.
+let commandDisposables: readonly Disposable[] = [];
+// The spawn hook's disposer, registered before the relist awaits, so a rejected list cannot break New Terminal.
 let disposeSpawn: (() => void) | undefined;
-// Panel can be torn down and reopened by a v-if, so async code must check it's still live before acting.
+// A v-if can tear the panel down and reopen it, so async work checks it is still live before acting.
 let live = true;
 
-// What the panel is waiting for and what it says about it: `tabs.pending` is the wait itself, held until the session
-// lists; `waited` flips after a delay so the panel admits defeat instead of spinning forever.
-const about = ref<TerminalRequest | undefined>(initial);
-const awaiting = computed(() => tabs.pending.value);
-// How long the panel holds itself empty for an on-the-way session: long enough for a slow start, short enough to not
-// look stuck.
-const WAIT_MS = 6_000;
-const waited = ref(false);
-let waitTimer: ReturnType<typeof setTimeout> | undefined;
-watch(
-    awaiting,
-    (name) => {
-        clearTimeout(waitTimer);
-        waited.value = false;
-        if (name !== undefined) {
-            waitTimer = setTimeout(() => (waited.value = true), WAIT_MS);
-        }
-    },
-    { immediate: true },
-);
-
-// What the panel calls itself while empty: a caller's own sentence, else the session name as its id.
-const named = computed(() => awaiting.value ?? about.value?.name ?? ``);
-const emptyHint = computed(() => {
-    if (awaiting.value !== undefined) {
-        // The wait still stands; it only stopped holding the panel empty, unlike a bare spinner with nothing behind it.
-        return `It hasn't appeared yet: the sandbox is probably still starting it. This panel keeps looking and shows it the moment it's listed.`;
-    }
-    if (answer.value === `refused`) {
-        // The one case where it's the asking that failed, not the sandbox that's empty.
-        return `This sandbox didn't answer when asked what it was running. Anything already going is still going: try again from the refresh button.`;
-    }
-    return about.value === undefined
-        ? `Open one to run something here.`
-        : `Nothing in this sandbox runs under that name, it was started outside it, or it has already stopped.`;
-});
-
-// Takes the request and spends it: standing in module state lets it open a panel not yet mounted, but left standing it
-// would replay on the next mount, hours later.
-const openRequested = async (request: TerminalRequest): Promise<void> => {
-    about.value = request;
-    clearTerminalRequest();
-    // A dropped list isn't a failed open: focus records the wait first, so the tab still arrives when listed.
-    await tabs.focus(request.name).catch(() => undefined);
-};
-
 onMounted(async () => {
-    registerPanelCommands();
+    commandDisposables = panelCommands({ activeName, strip, unsplit, splitTab, canKill: killTabs !== undefined, openFind }).map((entry) =>
+        registerCommand({ owner: `builtin`, category: TERMINAL, ...entry }),
+    );
     const pane = container.value;
     if (pane === undefined) {
         // Nothing to attach to: both requests are module state, spent here rather than handed to the next mount.
@@ -965,14 +151,14 @@ onMounted(async () => {
         clearTerminalRequest();
         return;
     }
-    // `initial` at mount means the panel opened FOR that session; attach skips the empty-panel shell for it.
+    // `initial` at mount means the panel opened FOR that session: the attach skips the empty panel's shell for it.
     const attaching = tabs.attach(pane, initial?.name);
     if (newTab !== undefined) {
         disposeSpawn = registerTerminalSpawn(newTab);
     }
     const autoCreated = await attaching;
-    // Spends the spawn request regardless of outcome, read before any skippable branch: a raced press opens into
-    // whatever panel comes up next, and the auto-created empty-panel shell already IS that terminal.
+    // Spent whatever the outcome, and read before any skippable branch: a raced press opens into whatever panel comes
+    // up next, and the empty panel's auto-created shell already IS that terminal.
     const spawnAsked = consumeSpawnRequest();
     if (live && newTab !== undefined && spawnAsked && !autoCreated) {
         newTab();
@@ -983,9 +169,7 @@ onMounted(async () => {
 });
 onBeforeUnmount(() => {
     live = false;
-    clearTimeout(waitTimer);
     tabs.detach();
-    window.removeEventListener(`keydown`, onArmedKeydown, true);
     for (const disposable of commandDisposables) {
         disposable.dispose();
     }
@@ -1002,7 +186,7 @@ watch(
         }
     },
 );
-// Parent-driven surface request (agent started Bash): relists without focusing; meaningless once closed.
+// Parent-driven surfacing (the agent started Bash): relists without focusing; meaningless once closed.
 watch(
     () => surfaced,
     (request) => {
@@ -1011,15 +195,6 @@ watch(
         }
     },
 );
-
-// This height is the one dimension already in screen pixels (compared to innerHeight; the terminal paints from a
-// number), so unlike other ResizeSeam callers there's no unit conversion here.
-const seamHeight = computed<number>({
-    get: () => height.value,
-    set: setHeight,
-});
-// Read at render, not stored: the cap is a share of a viewport the reader can resize underneath it.
-const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
 </script>
 
 <template>
@@ -1272,7 +447,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
             </div>
             <!-- State explicitly when the selected session has no terminals. -->
             <div
-                v-if="order.length === 0 && awaiting !== undefined && !waited"
+                v-if="order.length === 0 && pending !== undefined && !waited"
                 class="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center"
             >
                 <Icon name="spinner" spin class="text-lg text-subtle" />
@@ -1302,7 +477,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <p v-if="about?.title" class="text-sm text-muted">{{ about.title }}</p>
                 <p v-else-if="about" class="text-sm text-muted">
                     <span class="font-mono text-content">{{ named }}</span>
-                    {{ awaiting === undefined ? t(`terminal.terminalPanel.isntRunning`) : `` }}
+                    {{ pending === undefined ? t(`terminal.terminalPanel.isntRunning`) : `` }}
                 </p>
                 <!-- 'Nothing runs here' and 'this sandbox never answered' are different sentences; only one is about the terminals. -->
                 <p v-else class="text-sm text-muted">
@@ -1329,7 +504,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 >
                     {{ t(`terminal.terminalPanel.ctrl`) }}
                 </button>
-                <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" :class="KEY_CLASS" @pointerdown.prevent="pressKey(key.data)">
+                <button v-for="key in EXTRA_KEYS" :key="key.label" type="button" :class="KEY_CLASS" @pointerdown.prevent="tabs.sendInput(key.data)">
                     {{ key.label }}
                 </button>
             </div>
@@ -1377,10 +552,10 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
         <!-- Confirm shown only when there's something to lose: a busy session, or a bulk kill the gesture never named. -->
         <ConfirmDialog
             :open="pendingKill !== undefined"
-            :header="killHeader"
+            :header="killPrompt.header"
             :confirm-label="t(`terminal.terminalPanel.killAnyway`)"
             confirm-icon="trash"
-            :items="pendingKillItems"
+            :items="killPrompt.items"
             @cancel="pendingKill = undefined"
             @confirm="confirmKill"
         >
@@ -1389,7 +564,7 @@ const maxHeight = computed(() => Math.round(window.innerHeight * 0.8));
                 <span class="shrink-0 text-content">{{ segmentLabel(item.name) }}</span>
                 <span v-if="item.command" class="truncate font-mono text-xs text-muted">{{ item.command }}</span>
             </template>
-            <p class="mt-3 text-xs text-muted">{{ killBody }}</p>
+            <p class="mt-3 text-xs text-muted">{{ killPrompt.body }}</p>
         </ConfirmDialog>
 
         <!-- One dialog for both pickers (color, icon); a leading default swatch clears the override. Rename stays inline in the strip. -->

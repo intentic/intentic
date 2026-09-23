@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import {
     CommitResultSchema,
     CommitSchema,
@@ -52,7 +52,7 @@ import { OkSchema, RepoParamSchema } from "../schemas/shared.js";
 // root-relative dir, URL-encoded. Unknown {repo} throws NOT_FOUND, an escaping path throws BAD_REQUEST. `changes` is
 // the workspace-wide review set; commit/discard take optional `paths`.
 export const gitContract = {
-    changes: oc
+    changes: procedure
         .route({
             method: "GET",
             path: "/git/changes",
@@ -62,7 +62,7 @@ export const gitContract = {
         })
         .output(GitChangesSchema),
     // Read-only: repo list, commit log, lazy per-commit diff; commit/discard on the tree are a separate write path.
-    repos: oc
+    repos: procedure
         .route({
             method: "GET",
             path: "/git/repos",
@@ -72,7 +72,7 @@ export const gitContract = {
         })
         .output(GitReposSchema),
     // Same repos with the remote's host and `owner/name`; kept off `repos` since it costs a lookup per repo.
-    remoteRepos: oc
+    remoteRepos: procedure
         .route({
             method: "GET",
             path: "/git/remote-repos",
@@ -81,7 +81,7 @@ export const gitContract = {
                 "The same repo list, but with the forge host and `owner/name` each one's remote points at. Use it to recognise a workspace repo in a list of names that came from somewhere else, such as a set of pull requests. Costs a remote lookup per repo, which is why it is separate from the plain repo list.",
         })
         .output(GitRemoteReposSchema),
-    log: oc
+    log: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/log",
@@ -91,7 +91,7 @@ export const gitContract = {
         })
         .input(GitLogQuerySchema)
         .output(GitLogSchema),
-    commitDiff: oc
+    commitDiff: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/commit-diff",
@@ -101,7 +101,7 @@ export const gitContract = {
         })
         .input(GitCommitDiffQuerySchema)
         .output(GitCommitDiffSchema),
-    commitFileDiff: oc
+    commitFileDiff: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/commit-file-diff",
@@ -113,7 +113,7 @@ export const gitContract = {
         .output(FileDiffSchema),
     // Non-destructive writes return Ok; HEAD-moving ops return a GitActionResult, a conflict is a value not 500.
     // `abort` is git's own `--abort`, the only way out of what `operation` reports; daemon verbs self-abort.
-    operation: oc
+    operation: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/operation",
@@ -123,7 +123,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitOperationStateSchema),
-    abort: oc
+    abort: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/abort",
@@ -134,7 +134,7 @@ export const gitContract = {
         .input(RepoParamSchema)
         .output(GitActionResultSchema),
     // Moves the branch ref via reflog; requires `previousSha` from the matching read as a concurrency token.
-    undoable: oc
+    undoable: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/undo",
@@ -144,7 +144,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitUndoStateSchema),
-    undo: oc
+    undo: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/undo",
@@ -155,7 +155,7 @@ export const gitContract = {
         .input(GitUndoSchema)
         .output(GitActionResultSchema),
     // A stash entry is a commit, read like the log/diff pair; only `drop` is unrecoverable and checkpoints first.
-    stashes: oc
+    stashes: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/stashes",
@@ -165,7 +165,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(StashListSchema),
-    stashDiff: oc
+    stashDiff: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/stash-diff",
@@ -175,7 +175,7 @@ export const gitContract = {
         })
         .input(StashDiffQuerySchema)
         .output(GitCommitDiffSchema),
-    stashPush: oc
+    stashPush: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/stash",
@@ -185,7 +185,7 @@ export const gitContract = {
         })
         .input(StashPushSchema)
         .output(GitActionResultSchema),
-    stashApply: oc
+    stashApply: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/stash/apply",
@@ -195,7 +195,7 @@ export const gitContract = {
         })
         .input(StashApplySchema)
         .output(GitActionResultSchema),
-    stashDrop: oc
+    stashDrop: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/stash/drop",
@@ -205,7 +205,7 @@ export const gitContract = {
         })
         .input(StashRefParamSchema)
         .output(OkSchema),
-    createBranch: oc
+    createBranch: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/branch",
@@ -214,7 +214,7 @@ export const gitContract = {
         })
         .input(GitBranchCreateSchema)
         .output(OkSchema),
-    createTag: oc
+    createTag: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/tag",
@@ -223,7 +223,7 @@ export const gitContract = {
         })
         .input(GitTagCreateSchema)
         .output(OkSchema),
-    deleteTag: oc
+    deleteTag: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/tag/delete",
@@ -232,7 +232,7 @@ export const gitContract = {
         })
         .input(GitTagDeleteSchema)
         .output(OkSchema),
-    pushTag: oc
+    pushTag: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/tag/push",
@@ -242,7 +242,7 @@ export const gitContract = {
         })
         .input(GitTagPushSchema)
         .output(GitActionResultSchema),
-    checkout: oc
+    checkout: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/checkout",
@@ -252,7 +252,7 @@ export const gitContract = {
         })
         .input(GitCheckoutSchema)
         .output(GitActionResultSchema),
-    cherryPick: oc
+    cherryPick: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/cherry-pick",
@@ -262,7 +262,7 @@ export const gitContract = {
         })
         .input(GitCommitActionSchema)
         .output(GitActionResultSchema),
-    revert: oc
+    revert: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/revert",
@@ -272,7 +272,7 @@ export const gitContract = {
         })
         .input(GitCommitActionSchema)
         .output(GitActionResultSchema),
-    drop: oc
+    drop: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/drop",
@@ -282,7 +282,7 @@ export const gitContract = {
         })
         .input(GitCommitActionSchema)
         .output(GitActionResultSchema),
-    merge: oc
+    merge: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/merge",
@@ -292,7 +292,7 @@ export const gitContract = {
         })
         .input(GitCommitActionSchema)
         .output(GitActionResultSchema),
-    rebase: oc
+    rebase: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/rebase",
@@ -302,7 +302,7 @@ export const gitContract = {
         })
         .input(GitCommitActionSchema)
         .output(GitActionResultSchema),
-    reset: oc
+    reset: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/reset",
@@ -312,7 +312,7 @@ export const gitContract = {
         })
         .input(GitResetSchema)
         .output(GitActionResultSchema),
-    fileDiff: oc
+    fileDiff: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/file-diff",
@@ -322,7 +322,7 @@ export const gitContract = {
         })
         .input(GitFileDiffQuerySchema)
         .output(FileDiffSchema),
-    status: oc
+    status: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/status",
@@ -332,7 +332,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitStatusSchema),
-    commit: oc
+    commit: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/commit",
@@ -342,7 +342,7 @@ export const gitContract = {
         })
         .input(CommitSchema)
         .output(CommitResultSchema),
-    discard: oc
+    discard: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/discard",
@@ -353,7 +353,7 @@ export const gitContract = {
         .input(DiscardSchema)
         .output(OkSchema),
     // Take a scope, not a path list, so it covers files the caller never enumerated; the worktree is untouched.
-    stage: oc
+    stage: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/stage",
@@ -363,7 +363,7 @@ export const gitContract = {
         })
         .input(GitIndexMoveSchema)
         .output(OkSchema),
-    unstage: oc
+    unstage: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/unstage",
@@ -374,7 +374,7 @@ export const gitContract = {
         .input(GitIndexMoveSchema)
         .output(OkSchema),
     // `branches` includes per-branch ahead/behind, so the switcher renders sync state without a call per branch.
-    branches: oc
+    branches: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/branches",
@@ -384,7 +384,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitBranchesSchema),
-    createBranchAt: oc
+    createBranchAt: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/branches",
@@ -394,7 +394,7 @@ export const gitContract = {
         })
         .input(GitBranchCreateAtSchema)
         .output(OkSchema),
-    deleteBranch: oc
+    deleteBranch: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/branches/delete",
@@ -405,7 +405,7 @@ export const gitContract = {
         .input(GitBranchDeleteSchema)
         .output(OkSchema),
     // Reflects the last fetch, not a live check; writes below report a GitActionResult, not a throw, on failure.
-    remote: oc
+    remote: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/remote",
@@ -415,7 +415,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitRemoteStateSchema),
-    fetch: oc
+    fetch: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/fetch",
@@ -425,7 +425,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitActionResultSchema),
-    pull: oc
+    pull: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/pull",
@@ -436,7 +436,7 @@ export const gitContract = {
         .input(RepoParamSchema)
         .output(GitActionResultSchema),
     // Starts the push and returns at once; poll `pushState` for the verdict, since it runs the pre-push hook.
-    push: oc
+    push: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/push",
@@ -446,7 +446,7 @@ export const gitContract = {
         })
         .input(PushSchema)
         .output(OkSchema),
-    pushState: oc
+    pushState: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/push",
@@ -456,7 +456,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(PushRunSchema),
-    pushCancel: oc
+    pushCancel: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/push/cancel",
@@ -465,7 +465,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(OkSchema),
-    files: oc
+    files: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/files",
@@ -475,7 +475,7 @@ export const gitContract = {
         })
         .input(RepoParamSchema)
         .output(GitFilesSchema),
-    readFile: oc
+    readFile: procedure
         .route({
             method: "GET",
             path: "/git/{repo}/file",
@@ -484,7 +484,7 @@ export const gitContract = {
         })
         .input(GitFileQuerySchema)
         .output(GitFileSchema),
-    writeFile: oc
+    writeFile: procedure
         .route({
             method: "PUT",
             path: "/git/{repo}/file",
@@ -495,7 +495,7 @@ export const gitContract = {
         .input(GitFileWriteSchema)
         .output(OkSchema),
     // Writes, commits only this path, and pushes in one call; no remote, no credentials, wrong branch are reported.
-    publishFile: oc
+    publishFile: procedure
         .route({
             method: "POST",
             path: "/git/{repo}/publish-file",

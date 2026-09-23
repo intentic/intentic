@@ -9,8 +9,8 @@ import SecretField from "../../capabilities/connect/SecretField.vue";
 import { useCapabilities } from "../../capabilities/connect/useCapabilities";
 import { useExtensions } from "../../extensions/useExtensions";
 import { readIntenticLines } from "../../../lib/intenticStream";
-import { sandboxRequest } from "../client/sandboxClient";
-import { jsonBody } from "../client/jsonBody";
+import { SandboxHttpError } from "../client/sandboxHttpError";
+import { sandboxRpc } from "../client/sandboxRpc";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSecretInventory } from "../../capabilities/connect/useSecrets";
 import { matchesSecret, type SecretGroup, type SecretRow, secretRows } from "./secretRows";
@@ -127,11 +127,10 @@ const pushToCi = async (): Promise<void> => {
     pushing.value = true;
     pushError.value = undefined;
     try {
-        const response = await sandboxRequest(`/intentic`, jsonBody(`POST`, { args: [`deploy`, `secrets`, `push`] }));
-        if (!response.ok || !response.body) {
-            throw new Error(`Could not push secrets to CI (${response.status}).`);
-        }
-        for await (const line of readIntenticLines(response.body)) {
+        const lines = await sandboxRpc.intentic.run({ args: [`deploy`, `secrets`, `push`] }).catch((failure: unknown) => {
+            throw failure instanceof SandboxHttpError ? new Error(`Could not push secrets to CI (${failure.status}).`) : failure;
+        });
+        for await (const line of readIntenticLines(lines)) {
             if (line[`kind`] === `error` && typeof line[`message`] === `string`) {
                 throw new Error(line[`message`]);
             }

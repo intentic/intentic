@@ -17,14 +17,9 @@ mock.module("../client/useSandbox", () => {
 mock.module("../client/sandboxClient", () => ({
     sandboxJson: mock(),
     sandboxRequest: mock(),
-    sandboxRequestVia: mock(),
-    sandboxJsonAt: mock(),
-    sandboxJsonQuietly: mock(),
-    sandboxJsonVia: mock(),
     sandboxBlob: mock(),
     sandboxUpload: mock(),
     sandboxError: mock(async () => new Error(`unused`)),
-    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 
 import { STATE_DIR } from "@intentic/constants";
@@ -99,6 +94,17 @@ it(`wakes the file-backed background state on a new connection, not just the mou
     } finally {
         views.unmount();
     }
+});
+
+// The daemon's table names a cache entry; the app files its own read of that route under the route's name, which the same
+// push has to reach, and nothing else in that group.
+it(`reaches the app's own read of the route a pushed name stands for`, () => {
+    applySystemEvent({ kind: `workspaceChanged`, paths: [`${STATE_DIR}/config/settings.json`] }, SANDBOX);
+
+    expect(invalidated).toContainEqual([`settings`]);
+    expect(invalidated).toContainEqual([`settings.get`]);
+    expect(invalidated).toContainEqual([`system.manifestProblems`]);
+    expect(invalidated).not.toContainEqual([`settings.savings`]);
 });
 
 it(`leaves an extension that claimed a different path alone`, () => {

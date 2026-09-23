@@ -1,20 +1,7 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
 import { describe, it, expect, beforeEach } from "bun:test";
-import {
-    appBehind,
-    comparedRouteCount,
-    daemonBehind,
-    daemonDrifted,
-    driftedRouteReason,
-    driftedRoutes,
-    driftScope,
-    missingRoutes,
-    resetDaemonRoutes,
-    setDaemonRoutes,
-    staleDaemonReason,
-    supportsRoute,
-    unknownDaemonRoutes,
-} from "./useDaemonRoutes";
+import { appBehind, comparedRouteCount, daemonBehind, daemonDrifted, driftedRouteReason, driftedRoutes, driftScope, missingRoutes, setDaemonRoutes, staleDaemonReason, supportsRoute, unknownDaemonRoutes } from "./useDaemonRoutes";
 import { resetContractFreshness } from "./contractFreshness";
 
 // This browser's full route set, and the same set with vpn routes removed (an older daemon).
@@ -26,7 +13,7 @@ const SHAPES = { ...SANDBOX_ROUTE_SHAPES };
 const reshaped = (...names: string[]): Record<string, string> => ({ ...SHAPES, ...Object.fromEntries(names.map((name) => [name, `different`])) });
 
 describe(`useDaemonRoutes`, () => {
-    beforeEach(() => resetDaemonRoutes());
+    beforeEach(() => resetSandboxScope());
 
     it(`assumes every route is supported before the daemon has said anything`, () => {
         expect(supportsRoute(`vpn.list`)).toBe(true);
@@ -78,13 +65,13 @@ describe(`useDaemonRoutes`, () => {
     it(`forgets the previous sandbox's surface on switch`, () => {
         setDaemonRoutes(withoutVpn);
         expect(supportsRoute(`vpn.list`)).toBe(false);
-        resetDaemonRoutes();
+        resetSandboxScope();
         expect(supportsRoute(`vpn.list`)).toBe(true);
     });
 });
 
 describe(`driftedRoutes`, () => {
-    beforeEach(() => resetDaemonRoutes());
+    beforeEach(() => resetSandboxScope());
 
     it(`reports no drift before the daemon has said anything`, () => {
         expect(driftedRoutes.value).toEqual([]);
@@ -164,41 +151,36 @@ describe(`driftedRoutes`, () => {
     it(`forgets the previous sandbox's shapes on switch`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
         expect(daemonDrifted.value).toBe(true);
-        resetDaemonRoutes();
+        resetSandboxScope();
         expect(daemonDrifted.value).toBe(false);
     });
 });
 
 describe(`driftedRouteReason`, () => {
     beforeEach(() => {
-        resetDaemonRoutes();
+        resetSandboxScope();
         resetContractFreshness();
     });
 
     it(`explains a call that reached a route the daemon shapes differently`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
-        expect(driftedRouteReason(`GET`, `/settings`)).toContain(`settings.get`);
+        expect(driftedRouteReason(`settings.get`)).toContain(`settings.get`);
     });
 
     it(`stays silent for a route both sides agree on`, () => {
         setDaemonRoutes(LEVEL, SHAPES);
-        expect(driftedRouteReason(`GET`, `/settings`)).toBeUndefined();
-    });
-
-    it(`stays silent for non-contract paths`, () => {
-        setDaemonRoutes(LEVEL, reshaped(`settings.get`));
-        expect(driftedRouteReason(`GET`, `/health`)).toBeUndefined();
+        expect(driftedRouteReason(`settings.get`)).toBeUndefined();
     });
 
     it(`offers reloading the page too, because drift never says which side moved`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
-        expect(driftedRouteReason(`GET`, `/settings`)).toMatch(/reload this page/i);
+        expect(driftedRouteReason(`settings.get`)).toMatch(/reload this page/i);
     });
 
     it(`names the stale sandbox as the cause, and rules the page reload out`, () => {
         setDaemonRoutes(LEVEL, reshaped(`settings.get`));
         resetContractFreshness([`settings.get`]);
-        const reason = driftedRouteReason(`GET`, `/settings`);
+        const reason = driftedRouteReason(`settings.get`);
         expect(reason).toMatch(/older than this checkout/i);
         expect(reason).toMatch(/dev-restart\.sh/);
         // The page is the fresher of the two here, so offering its reload sends the reader the wrong way.
@@ -209,35 +191,30 @@ describe(`driftedRouteReason`, () => {
 
     it(`blames this page when the daemon offers routes it has never heard of`, () => {
         setDaemonRoutes([...LEVEL, `future.feature`], reshaped(`settings.get`));
-        expect(driftedRouteReason(`GET`, `/settings`)).toMatch(/page is running older code/i);
+        expect(driftedRouteReason(`settings.get`)).toMatch(/page is running older code/i);
     });
 });
 
 describe(`staleDaemonReason`, () => {
-    beforeEach(() => resetDaemonRoutes());
+    beforeEach(() => resetSandboxScope());
 
     it(`explains a 404 on a route the daemon positively lacks`, () => {
         setDaemonRoutes(withoutVpn);
-        expect(staleDaemonReason(`GET`, `/vpn`)).toContain(`vpn.list`);
+        expect(staleDaemonReason(`vpn.list`)).toContain(`vpn.list`);
     });
 
     it(`stays silent for a route the daemon advertises: that 404 is a real 404`, () => {
         setDaemonRoutes(LEVEL);
-        expect(staleDaemonReason(`GET`, `/vpn`)).toBeUndefined();
-    });
-
-    it(`stays silent for non-contract paths like /health and file reads`, () => {
-        setDaemonRoutes(withoutVpn);
-        expect(staleDaemonReason(`GET`, `/health`)).toBeUndefined();
+        expect(staleDaemonReason(`vpn.list`)).toBeUndefined();
     });
 
     it(`stays silent while the daemon's surface is unknown`, () => {
-        expect(staleDaemonReason(`GET`, `/vpn`)).toBeUndefined();
+        expect(staleDaemonReason(`vpn.list`)).toBeUndefined();
     });
 
     it(`names the daemon as the older side, which a missing route proves`, () => {
         setDaemonRoutes(withoutVpn);
-        const reason = staleDaemonReason(`GET`, `/vpn`);
+        const reason = staleDaemonReason(`vpn.list`);
         expect(reason).toMatch(/sandbox/i);
         expect(reason).not.toMatch(/reload this page/i);
     });

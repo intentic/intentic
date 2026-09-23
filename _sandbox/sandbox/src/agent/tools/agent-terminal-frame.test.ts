@@ -3,9 +3,15 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { test, expect, afterEach, mock } from "bun:test";
 import { stubEnv, unstubAllEnvs } from "@intentic/testing/bun";
-import { runAgent } from "../run/agent.js";
+import { type HarnessRequest, runAgent } from "../run/agent.js";
 import type { QueryFn } from "../run/sdk-stream.js";
 import * as fsOriginal from "node:fs";
+import { parkedCards } from "../../agents/actor/parked-cards.js";
+import { memoryFleet } from "../../testing.js";
+
+// One fleet's actors, and the cards a turn here parks in them.
+const actors = memoryFleet().conversations;
+const cards = parkedCards(actors);
 
 // Stands in for the installed CLI's preset, so a turn here never spawns one to read it.
 mock.module("../prompt/preset-prompt.js", () => ({ presetSystemPrompt: async () => ({ text: "For actions that are hard to reverse, confirm first.", version: "2.1.0" }) }));
@@ -35,7 +41,15 @@ const fakeQuery = (...messages: unknown[]): QueryFn =>
 
 const collect = async (queryFn: QueryFn): Promise<AgentEvent[]> => {
     const events: AgentEvent[] = [];
-    for await (const event of runAgent({ prompt: "run ls", cwd: WORKSPACE_ROOT, signal: new AbortController().signal }, queryFn)) {
+    const request: HarnessRequest = {
+        spec: { prompt: "run ls", cwd: WORKSPACE_ROOT },
+        policy: {},
+        tools: {},
+        credential: { kind: "container" },
+        hooks: { cards },
+        signal: new AbortController().signal,
+    };
+    for await (const event of runAgent(actors, request, queryFn)) {
         events.push(event);
     }
     return events;

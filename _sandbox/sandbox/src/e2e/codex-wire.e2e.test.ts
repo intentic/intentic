@@ -7,10 +7,15 @@ import { hasTool, type ResponsesRequest, systemInstructions, toolOutputs, userMe
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { e2eTier } from "@intentic/testing/e2e";
 import { describe, test, expect, beforeAll } from "bun:test";
-import type { AgentRequest } from "../agent/run/agent.js";
+import type { AgentRequest, CodexCredential, TurnPolicy, TurnSpec, TurnTools } from "../agent/providers/agent-request.js";
 import { createCodexAgent } from "../runtimes/codex/codex-agent.js";
 import { writeCodexConfig } from "../runtimes/codex/codex-config.js";
 import { codexBinary } from "../runtimes/codex/codex-path.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
+import { memoryFleet } from "../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Real Codex CLI and adapter against a scripted model, parameterized across two model families whose wire formats
 // differ; a missing binary fails the suite instead of skipping it.
@@ -44,7 +49,14 @@ interface TurnResult {
 
 // One real Codex turn against a scripted model; the adapter has no runner override, so it spawns and speaks JSON-RPC
 // exactly as a live turn does.
-const runTurn = async (modelId: string, script: readonly ScriptedStep[], overrides: Partial<AgentRequest> = {}): Promise<TurnResult> => {
+// What a scenario changes about the turn, group by group; everything else is the plain turn below.
+interface TurnOverrides {
+    readonly spec?: Partial<Pick<TurnSpec, "prompt" | "systemPrompt" | "systemAppend">>;
+    readonly policy?: Pick<TurnPolicy, "unattended">;
+    readonly tools?: Pick<TurnTools, "cliEnv">;
+}
+
+const runTurn = async (modelId: string, script: readonly ScriptedStep[], overrides: TurnOverrides = {}): Promise<TurnResult> => {
     const { cwd, codexHome } = await scratch();
     const model = await startFakeModel({ script, requireKey: AUTH_TOKEN });
     const controller = new AbortController();
@@ -52,13 +64,12 @@ const runTurn = async (modelId: string, script: readonly ScriptedStep[], overrid
     try {
         const agent = createCodexAgent({ codexHome });
         for await (const event of agent({
-            prompt: "do the thing",
-            cwd,
+            spec: { prompt: "do the thing", cwd, model: modelId, ...overrides.spec },
+            policy: { ...overrides.policy },
+            tools: { ...overrides.tools },
+            credential: { kind: "codex-endpoint", baseUrl: model.baseUrl, authToken: AUTH_TOKEN },
+            hooks: { cards },
             signal: controller.signal,
-            codexHome,
-            codexEndpoint: { baseUrl: model.baseUrl, authToken: AUTH_TOKEN },
-            model: modelId,
-            ...overrides,
         })) {
             events.push(event);
         }
@@ -126,7 +137,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             const { events, requests, cwd } = await runTurn(
                 MODEL,
                 [{ shell: `/bin/echo ${marker} > proof.txt && /bin/echo ${marker}` }, { text: "ran it" }],
-                { prompt: "run the marker" },
+                { spec: { prompt: "run the marker" } },
             );
 
             const outputs = requests.flatMap((request) => [...toolOutputs(request).values()]);
@@ -147,7 +158,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             const stock = systemInstructions(plain.requests[0]!);
             expect(stock, "codex normally sends a base prompt of its own").toMatch(/You are (a coding agent|Codex)/);
 
-            const replaced = await runTurn(MODEL, [{ text: "ok" }], { systemPrompt: OWN_PROMPT });
+            const replaced = await runTurn(MODEL, [{ text: "ok" }], { spec: { systemPrompt: OWN_PROMPT } });
             expect(systemInstructions(replaced.requests[0]!)).toBe(OWN_PROMPT);
             expect(
                 JSON.stringify(replaced.requests[0]),
@@ -157,7 +168,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
         test("systemAppend adds an instruction while Codex keeps its own base prompt", async () => {
             const APPENDED = "CONFORMANCE-APPEND-SENTINEL";
-            const { requests } = await runTurn(MODEL, [{ text: "ok" }], { systemAppend: APPENDED });
+            const { requests } = await runTurn(MODEL, [{ text: "ok" }], { spec: { systemAppend: APPENDED } });
             const request = requests[0]!;
             expect(systemInstructions(request), "an append must leave the base prompt in place").toMatch(/You are (a coding agent|Codex)/);
             expect(JSON.stringify(request), "the appended text must reach the model").toContain(APPENDED);
@@ -170,7 +181,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             expect(attended.requests.length, "a config Codex refuses never reaches the model at all").toBeGreaterThan(0);
             expect(hasTool(attended.requests[0]!, "request_user_input")).toBe(true);
 
-            const unattended = await runTurn(MODEL, [{ text: "ok" }], { unattended: true });
+            const unattended = await runTurn(MODEL, [{ text: "ok" }], { policy: { unattended: true } });
             expect(unattended.requests.length).toBeGreaterThan(0);
             expect(hasTool(unattended.requests[0]!, "request_user_input"), "an unattended turn must not be offered a way to park on a card").toBe(
                 false,
@@ -191,16 +202,16 @@ describe.skipIf(!tier.runs)(tier.title, () => {
             const controller = new AbortController();
             try {
                 const agent = createCodexAgent({ codexHome });
-                const base = {
-                    cwd,
+                const base: Omit<AgentRequest<CodexCredential>, "spec"> = {
+                    policy: {},
+                    tools: {},
+                    credential: { kind: "codex-endpoint", baseUrl: model.baseUrl, authToken: AUTH_TOKEN },
+                    hooks: { cards },
                     signal: controller.signal,
-                    codexHome,
-                    codexEndpoint: { baseUrl: model.baseUrl, authToken: AUTH_TOKEN },
-                    model: MODEL,
                 };
 
                 let sessionId: string | undefined;
-                for await (const event of agent({ ...base, prompt: "remember the word banana" })) {
+                for await (const event of agent({ ...base, spec: { cwd, model: MODEL, prompt: "remember the word banana" } })) {
                     if (event.kind === "session") {
                         sessionId = event.sessionId;
                     }
@@ -209,7 +220,10 @@ describe.skipIf(!tier.runs)(tier.title, () => {
 
                 const before = model.requests.length;
                 // Spread: an explicit undefined differs from absent here and would silently start a new thread.
-                for await (const _ of agent({ ...base, prompt: "what was the word?", ...(sessionId === undefined ? {} : { sessionId }) })) {
+                for await (const _ of agent({
+                    ...base,
+                    spec: { cwd, model: MODEL, prompt: "what was the word?", ...(sessionId === undefined ? {} : { sessionId }) },
+                })) {
                     // Drained only; the assertion is about the resumed request.
                 }
                 expect(model.requests.length).toBeGreaterThan(before);
@@ -238,7 +252,7 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         // on this path.
         test("a custom prompt is written into the turn's CODEX_HOME under a content-addressed name", async () => {
             const OWN_PROMPT = "content addressed conformance prompt";
-            const { codexHome } = await runTurn(MODEL, [{ text: "ok" }], { systemPrompt: OWN_PROMPT });
+            const { codexHome } = await runTurn(MODEL, [{ text: "ok" }], { spec: { systemPrompt: OWN_PROMPT } });
             const digest = createHash("sha256").update(OWN_PROMPT).digest("hex");
             expect(await readFile(join(codexHome, "instructions", `${digest}.md`), "utf8")).toBe(OWN_PROMPT);
         });
@@ -246,8 +260,8 @@ describe.skipIf(!tier.runs)(tier.title, () => {
         // Proved from inside the process (the command prints the value) rather than trusting the adapter's env object.
         test("cliEnv reaches the spawned app-server's shell", async () => {
             const { requests } = await runTurn(MODEL, [{ shell: `/bin/echo "seen:$CONFORMANCE_TOKEN"` }, { text: "done" }], {
-                prompt: "print the token",
-                cliEnv: { CONFORMANCE_TOKEN: "env-projection-works" },
+                spec: { prompt: "print the token" },
+                tools: { cliEnv: { CONFORMANCE_TOKEN: "env-projection-works" } },
             });
             const outputs = requests.flatMap((request) => [...toolOutputs(request).values()]);
             expect(outputs.join("\n")).toContain("seen:env-projection-works");

@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import {
     CiFixParamSchema,
     CiFixResponseSchema,
@@ -14,7 +14,7 @@ import { OkSchema } from "../schemas/shared.js";
 // (/ci/webhook/:host) is a plain Hono route, vendors can't do Google ID tokens, so it lives outside this
 // contract, like /automations/{id}/fire.
 export const ciContract = {
-    runs: oc
+    runs: procedure
         .route({
             method: "GET",
             path: "/ci/runs",
@@ -23,7 +23,7 @@ export const ciContract = {
                 "What the forges are reporting for every workspace repo that has a remote, served from a cache and filled in on demand. Repos whose notifications are not wired up say so.",
         })
         .output(CiRunsResponseSchema),
-    rerun: oc
+    rerun: procedure
         .route({
             method: "POST",
             path: "/ci/runs/rerun",
@@ -32,7 +32,7 @@ export const ciContract = {
         })
         .input(CiRunParamSchema)
         .output(OkSchema),
-    cancel: oc
+    cancel: procedure
         .route({
             method: "POST",
             path: "/ci/runs/cancel",
@@ -41,7 +41,7 @@ export const ciContract = {
         })
         .input(CiRunParamSchema)
         .output(OkSchema),
-    jobs: oc
+    jobs: procedure
         .route({
             method: "POST",
             path: "/ci/runs/jobs",
@@ -50,7 +50,7 @@ export const ciContract = {
         })
         .input(CiRunParamSchema)
         .output(CiJobsResponseSchema),
-    fix: oc
+    fix: procedure
         .route({
             method: "POST",
             path: "/ci/fix",

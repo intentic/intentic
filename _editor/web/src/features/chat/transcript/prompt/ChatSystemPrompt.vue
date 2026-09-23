@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { type ConversationPrompt, ConversationPromptSchema, type PromptSection } from "@intentic/sandbox-contract";
+import type { ConversationPrompt, PromptSection } from "@intentic/sandbox-contract";
 import { CopyButton, MarkdownDocument, Modal, Notice } from "@intentic/ui";
 import { formatTokens, timeAgo } from "@intentic/ui/format";
 import { computed, ref } from "vue";
-import { AGENT_SYSTEM_PROMPT } from "../../../../lib/queryKeys";
-import { sandboxJson } from "../../../sandbox/client/sandboxClient";
+import { rpcQuery } from "../../../sandbox/client/rpcQuery";
 import { useSandboxQuery } from "../../../sandbox/client/useSandboxQuery";
 import { useT } from "@intentic/ui/i18n";
 
@@ -25,9 +24,7 @@ const open = ref(false);
 // Fetched on the press, never with the transcript: a composed prompt is tens of kilobytes, and most readers never
 // ask for it.
 const { query, error } = useSandboxQuery<ConversationPrompt>({
-    queryKey: computed(() => AGENT_SYSTEM_PROMPT.of(props.conversationId)),
-    queryFn: async (): Promise<ConversationPrompt> =>
-        ConversationPromptSchema.parse(await sandboxJson(`/agents/${encodeURIComponent(props.conversationId)}/system-prompt`)),
+    ...rpcQuery(`agents.systemPrompt`, () => ({ id: props.conversationId })),
     enabled: computed(() => open.value),
 });
 

@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { tmpdir } from "node:os";
 import { expect, test } from "bun:test";
 import { sleep } from "@intentic/base/async";
-import { WORKLOAD_ENV } from "../boot/leftovers.js";
+import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { createLiveMetrics } from "./live-metrics.js";
 
 // Reads this machine's real procfs, which only Linux has.

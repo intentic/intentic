@@ -1,6 +1,7 @@
 // Pins the way back from a turn that stopped, through the real composer and the DOM: the strip and its button,
 // Enter-to-continue, and their absence where continuing would be wrong.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
@@ -8,7 +9,7 @@ import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { providerAccounts, setAccountUsage } from "../accounts/providerAccounts";
 import { CONTINUATIONS } from "../transcript/transcript";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { SANDBOX_BUSY_AFTER_MS } from "../../sandbox/overview/availability";
 import { useLayout } from "../../../shell/window/useLayout";
@@ -163,7 +164,7 @@ const composer = (): HTMLTextAreaElement => document.querySelector<HTMLTextAreaE
 const stoppedChat = (): Conversation => {
     const chat = useChat();
     const conversation = chat.active.value;
-    conversation.restoreMessages([
+    conversation.transcript.restoreMessages([
         { role: `user`, text: `clean the sandbox` },
         { role: `assistant`, text: `starting` },
     ]);
@@ -177,7 +178,7 @@ beforeEach(async () => {
     // Clears both: tabs live in sessionStorage, seeded from localStorage; else a pick-up leaks into the next test.
     localStorage.clear();
     sessionStorage.clear();
-    resetChat();
+    resetSandboxScope();
     sandboxReachable.value = true;
     sandboxConnection.value = { ...ONLINE_CONNECTION };
     // `connected` is the composer's own gate; with no account the box goes inert.
@@ -207,7 +208,7 @@ afterEach(() => {
 
 it(`offers the stopped turn a way on, and sends the sentence when it is pressed`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Turn stopped short · work kept`);
@@ -221,7 +222,7 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
 
 it(`makes Enter on an empty composer continue, and says so under the box`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Enter to continue`);
@@ -233,7 +234,7 @@ it(`makes Enter on an empty composer continue, and says so under the box`, async
 
 it(`stands down the moment the user types something of their own`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
     expect(continueButton()).toEqual(expect.any(Object));
 
@@ -307,7 +308,7 @@ it(`offers only the answers this ending can take`, async () => {
 // An unheld allowance means the daemon has no copy of the refused turn, so nothing can be resumed before it resets.
 it(`counts an unheld allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000 };
     await mountPanel();
 
@@ -322,8 +323,8 @@ it(`counts an unheld allowance down instead of going quiet, and keeps the press 
 
 it(`offers a held allowance the press straight away, and re-runs the turn instead of saying anything`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
-    const rerun = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const rerun = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 8 * 3_600_000, held: { ran: false } };
     await mountPanel();
 
@@ -352,7 +353,7 @@ it(`tells a mid-turn allowance failure apart from one that refused the turn outr
 
 it(`hands the press over once the allowance has reset`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() - 1_000 };
     await mountPanel();
 
@@ -390,7 +391,7 @@ it(`leaves the outage waiting until somebody answers for it`, async () => {
 
 it(`says nothing on a chat whose turn finished`, async () => {
     const chat = useChat();
-    chat.active.value.restoreMessages([
+    chat.active.value.transcript.restoreMessages([
         { role: `user`, text: `clean the sandbox` },
         { role: `assistant`, text: `done` },
     ]);
@@ -461,8 +462,8 @@ const twoAccounts = (spentPercent: number, roomPercent: number): void => {
 
 const limitChat = (): Conversation => {
     const conversation = useChat().active.value;
-    conversation.restoreMessages([{ role: `user`, text: `clean the sandbox` }]);
-    conversation.account.value = `acc-1`;
+    conversation.transcript.restoreMessages([{ role: `user`, text: `clean the sandbox` }]);
+    conversation.selection.apply({ kind: `set`, picks: { account: `acc-1` } });
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: false } };
     return conversation;
 };
@@ -470,7 +471,7 @@ const limitChat = (): Conversation => {
 it(`offers the other account by name on a spent allowance, and re-runs the held turn on it`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();
@@ -480,7 +481,7 @@ it(`offers the other account by name on a spent allowance, and re-runs the held 
     offer?.click();
     await settle();
 
-    expect(conversation.account.value).toBe(`acc-2`);
+    expect(conversation.selection.account.value).toBe(`acc-2`);
     expect(resume).toHaveBeenCalledTimes(1);
 });
 
@@ -519,7 +520,7 @@ it(`keeps the press's variants behind the caret, and every automation on the que
 it(`shows one copy of a checklist restored by failed retries in an older transcript`, async () => {
     const conversation = limitChat();
     const todos = [{ content: `Build the picker`, status: `pending` as const }];
-    conversation.restoreMessages([
+    conversation.transcript.restoreMessages([
         { role: `user`, text: `fix the picker` },
         { role: `assistant`, text: ``, todos },
         { role: `notice`, text: `Claude usage limit reached.` },
@@ -530,7 +531,7 @@ it(`shows one copy of a checklist restored by failed retries in an older transcr
     await mountPanel();
     expect(document.body.textContent?.match(/Build the picker/g)).toHaveLength(1);
     expect(document.body.textContent?.match(/Claude usage limit reached\./g)).toHaveLength(2);
-    expect(conversation.messages.value).toHaveLength(6);
+    expect(conversation.transcript.messages.value).toHaveLength(6);
 });
 
 it(`offers the reset in the row when the provider is granting one, and re-runs the held turn on it`, async () => {
@@ -538,7 +539,7 @@ it(`offers the reset in the row when the provider is granting one, and re-runs t
     claimReset.mockResolvedValue({ result: `reset` });
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     const reset = button(`Reset limit now`);
@@ -572,7 +573,7 @@ it(`says why nothing happened when a claim changes nothing, and does not re-run 
     });
     twoAccounts(99, 10);
     const conversation = limitChat();
-    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     button(`Reset limit now`)?.click();
@@ -607,7 +608,7 @@ it(`offers the other account twice when the session is worth carrying, each with
         readyAt: Date.now() + 3_600_000,
         held: { ran: true, contextTokens: 85_000, handoffTokens: 6_000 },
     };
-    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();
@@ -620,7 +621,7 @@ it(`offers the other account twice when the session is worth carrying, each with
 
     rows[0]?.click();
     await settle();
-    expect(conversation.account.value).toBe(`acc-2`);
+    expect(conversation.selection.account.value).toBe(`acc-2`);
     expect(resume).toHaveBeenCalledWith({ carry: true });
 });
 
@@ -628,7 +629,7 @@ it(`offers only the fresh session when nothing ran`, async () => {
     twoAccounts(99, 10);
     const conversation = limitChat();
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000, held: { ran: false, handoffTokens: 6_000 } };
-    const resume = spyOn(conversation, `resumeHeldTurn`).mockResolvedValue(true);
+    const resume = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     await mountPanel();
 
     await openWays();

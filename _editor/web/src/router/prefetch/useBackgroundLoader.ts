@@ -25,7 +25,7 @@ const gates: LoaderGates = {
     // Paused when this window isn't visible, or the daemon is unreachable (reachable).
     paused: () => !onScreen.value || !toValue(reachable),
     // Busy when any query is fetching (something on screen is waiting) or a conversation is streaming.
-    busy: () => queryClient.isFetching() > 0 || conversations.value.some((conversation) => conversation.streaming.value),
+    busy: () => queryClient.isFetching() > 0 || conversations.value.some((conversation) => conversation.turn.streaming.value),
 };
 
 let running = false;

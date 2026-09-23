@@ -239,7 +239,7 @@ const resolveHelp = async (helped: boolean): Promise<void> => {
     // undefined targets this box: a browser session belongs to the machine it runs on, and this view only lists the
     // active sandbox's (see postTurnControl).
     try {
-        await postTurnControl(undefined, `/agent/reply`, {
+        await postTurnControl(undefined, `reply`, {
             kind: `browser_help`,
             requestId: help.requestId,
             helped,

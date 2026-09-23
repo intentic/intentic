@@ -15,12 +15,10 @@ import {
     type TurnEnding,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import { withBaseText } from "../agent/prompt/prompt-disclosure.js";
-import { type HeldTurn, heldTurn } from "../agent/run/turn/turn-resume.js";
-import { opt } from "../agent/run/opt.js";
+import type { HeldTurn } from "../agent/run/turn/turn-resume.js";
+import { opt } from "../opt.js";
 import { cancelWatcher, cancelWatchersFor } from "../agent/verification/watchers.js";
-import { emitWorkspaceEvent } from "../automations/workspace-events.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
 import { deliverToListenerChannel } from "../extensions/listener-deliver.js";
@@ -31,12 +29,12 @@ import { pruneEmptiedDirs } from "../git/changes/changes-index.js";
 import { scratchScopeOf } from "../git/changes/scratch.js";
 import { agentRepoReview, agentRepoModules, checkpointOf, presentInMain } from "./land/agent-changes.js";
 import { commitsCarrying, historySpanStart } from "./land/landed-history.js";
-import { type IsolatedAgent, isIsolated, type PersistedAgent } from "./registry/agents-store.js";
+import { type IsolatedAgent, isIsolated, type PersistedAgent, type RepoRecord } from "./registry/agents-store.js";
 import { MAX_REACTION_KINDS } from "./registry/agents-registry.js";
-import { archivable, archiveAgents, purgeArchived } from "./registry/archive.js";
+import { archivable, archiveAgents, forgetConversations, purgeArchived } from "./registry/archive.js";
 import { landAgent, outstandingConflicts } from "./land/land.js";
 import { assignVerdict, fenceVerdict, isMemberAddress } from "./ownership.js";
-import { refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
+import { provenanceOf, refuseUnlessVisible, visibleTo } from "../auth/fleet-scope.js";
 import { syncBeforeLand } from "./land/sync.js";
 import { verifyLandedTree } from "./land/verify-landed.js";
 import { settleLandingInBackground } from "./land/version-landed.js";
@@ -55,7 +53,7 @@ export const createAgentsRoutes = (services: Services) => {
     // The same lookup for a route a guest may reach: theirs, or FORBIDDEN (auth/fleet-scope.ts).
     const entryFor = (id: string, context: OrpcContext): PersistedAgent => {
         const entry = entryOf(id);
-        refuseUnlessVisible(context.identity, entry);
+        refuseUnlessVisible(context.identity, provenanceOf(entry));
         return entry;
     };
     // Branch-only half of the registry, for routes that act on a worktree; a workspace conversation can't answer these,
@@ -68,7 +66,7 @@ export const createAgentsRoutes = (services: Services) => {
         return entry;
     };
     const notRunning = (id: string): void => {
-        if (services.agents.running(id)) {
+        if (services.conversations.running(id)) {
             throw new ORPCError("CONFLICT", { message: "the agent's turn is running, wait for it to finish" });
         }
     };
@@ -83,10 +81,10 @@ export const createAgentsRoutes = (services: Services) => {
         const entry = isolatedEntryOf(input.id);
         notRunning(input.id);
         // Refused like a second land press, not queued behind the lease: a land reads this very index.
-        if (services.agents.landing(input.id)) {
+        if (services.conversations.landing(input.id)) {
             throw new ORPCError("CONFLICT", { message: "this agent is landing, wait for it to finish" });
         }
-        if (!entry.repos.some((composed) => composed.repo === input.repo)) {
+        if (!entry.placement.repos.some((composed) => composed.repo === input.repo)) {
             throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
         }
         if (!(await services.agentWorktrees.attached(entry.id, input.repo))) {
@@ -104,14 +102,14 @@ export const createAgentsRoutes = (services: Services) => {
     // Softer than notRunning: a land only reads the checkout, so it asks whether anyone is mid-sentence, not whether
     // the turn is alive. Parked on a question passes; genuine mid-write needs an explicit `force`.
     const landable = (id: string, force: boolean): void => {
-        if (services.agents.writing(id) && !force) {
+        if (services.conversations.writing(id) && !force) {
             throw new ORPCError("CONFLICT", { message: "the agent is still writing, land again to apply its work as it stands" });
         }
     };
     // Recorded from the turn's `session` frame, not re-derived from where it ran: an isolated worktree is the workspace
     // root, so its path has no session. `sessionIdOf`, not `entry.sessionId`, flushed only at finish.
-    const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "provider" | "harness">): string | undefined =>
-        capabilitiesOf(agent.provider, agent.harness).runtime === "claude-code" ? services.agents.sessionIdOf(agent.id) : undefined;
+    const sdkSessionIdOf = (agent: Pick<PersistedAgent, "id" | "profile">): string | undefined =>
+        capabilitiesOf(agent.profile.provider, agent.profile.harness).runtime === "claude-code" ? services.conversations.sessionIdOf(agent.id) : undefined;
     // Off the projected `get` status, never raw `entry.status`, which stays `interrupted` through a running turn. Adds
     // reasons stop/kill don't cover (a spent allowance, an outage); repair failures are excluded.
     // Whether the held turn ran, what each way of moving on costs, and where a policy is sending it.
@@ -123,7 +121,7 @@ export const createAgentsRoutes = (services: Services) => {
     });
     // The live hold, never a summary flag: a restart clears the hold, so only it backs a re-run rather than a message.
     const heldOn = (id: string): Pick<TurnEnding, "held"> => {
-        const held = heldTurn(id);
+        const held = services.conversations.state(id)?.resume.held;
         return held === undefined ? {} : { held: heldEnding(held) };
     };
     const failureEnding = (id: string, summary: AgentSummary): TurnEnding | undefined => {
@@ -155,12 +153,18 @@ export const createAgentsRoutes = (services: Services) => {
     };
     // The composition a manual land applies: the same pre-land rebase as auto-land, with `base` moved onto what each
     // repo now sits on. A git fault here lands on the old base instead of failing the land.
-    const syncedComposition = async (entry: IsolatedAgent): Promise<PersistedAgent["repos"]> => {
+    const syncedComposition = async (entry: IsolatedAgent): Promise<RepoRecord[]> => {
         try {
-            return [...(await syncBeforeLand(services.agentWorktrees, entry, services.agents.recordWorktree))];
+            return [
+                ...(await syncBeforeLand(
+                    services.agentWorktrees,
+                    { id: entry.id, title: entry.social.title?.text, repos: entry.placement.repos },
+                    services.agents.recordWorktree,
+                )),
+            ];
         } catch (error) {
             services.logger.warn({ err: error, id: entry.id }, "agents: pre-land sync failed, landing on the old base");
-            return [...entry.repos];
+            return [...entry.placement.repos];
         }
     };
     // What a land that reached the tree sets in motion: the commit-box chip's draft (not awaited), the user-write
@@ -168,18 +172,14 @@ export const createAgentsRoutes = (services: Services) => {
     const announceLanded = (entry: IsolatedAgent, span: readonly { repo: string; from: string; dir: string }[]): void => {
         settleLandingInBackground(services, entry.id);
         services.history.notifyUserWrite();
-        emitWorkspaceEvent(
-            services,
-            {
-                event: "agent.landed",
-                agentId: entry.id,
-                ...(entry.title !== undefined ? { title: entry.title } : {}),
-                branch: entry.branch,
-                outcome: "landed",
-                repos: [...span],
-            },
-            streamAgent,
-        );
+        services.events.publish("workspace", {
+            event: "agent.landed",
+            agentId: entry.id,
+            ...opt("title", entry.social.title?.text),
+            branch: entry.placement.branch,
+            outcome: "landed",
+            repos: [...span],
+        });
     };
     // `i.router()`, not a plain object: typechecked against agentsContract, so a dropped handler fails the build.
     return i.router({
@@ -245,9 +245,9 @@ export const createAgentsRoutes = (services: Services) => {
                 ...(sessionId !== undefined
                     ? {
                           sessionId,
-                          provider: agent.provider,
-                          harness: agent.harness,
-                          ...(agent.account !== undefined ? { account: agent.account } : {}),
+                          provider: agent.profile.provider,
+                          harness: agent.profile.harness,
+                          ...opt("account", agent.profile.account),
                       }
                     : {}),
                 // How the last turn ended, so any tab opened later can offer the press the prior window kept to itself.
@@ -276,8 +276,8 @@ export const createAgentsRoutes = (services: Services) => {
         //   every other provider to its gateway); a failed delivery refuses the whole place
         place: i.place.handler(async ({ input }) => {
             const agent = entryOf(input.id);
-            const origin = agent.origin;
-            const outcome = await services.agents.withRewindLease(input.id, async () => {
+            const origin = agent.identity.origin;
+            const outcome = await services.conversations.withRewindLease(input.id, async () => {
                 if (origin?.channelId !== undefined) {
                     let delivered: "delivered" | "no-gateway";
                     try {
@@ -295,14 +295,14 @@ export const createAgentsRoutes = (services: Services) => {
                                 channelId: origin.channelId,
                                 content: input.text,
                                 conversationId: agent.id,
-                                ...(agent.title !== undefined ? { title: agent.title } : {}),
+                                ...opt("title", agent.social.title?.text),
                                 origin,
                             })
                             .catch((error: unknown) => services.logger.warn({ err: error }, "activity append failed"));
                     }
                 }
                 await services.transcripts.append(agent, [{ role: "assistant", text: input.text, placed: true }]);
-                await services.agents.clearSession(input.id);
+                await services.conversations.send(input.id, { kind: "session-cleared" }).settled;
                 return true;
             });
             if (outcome === undefined) {
@@ -364,7 +364,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (context.identity === undefined) {
                 throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to assign on behalf of" });
             }
-            const verdict = assignVerdict(entry.owner, context.identity);
+            const verdict = assignVerdict(entry.social.owner, context.identity);
             if (verdict.kind === "forbidden") {
                 throw new ORPCError("FORBIDDEN", { message: verdict.message });
             }
@@ -373,7 +373,7 @@ export const createAgentsRoutes = (services: Services) => {
                 throw new ORPCError("BAD_REQUEST", { message: `${input.to} is not a member of this sandbox` });
             }
             // The recipient's own fence, as the roster holds it; the sandbox owner is on no row and is unfenced.
-            const fenced = fenceVerdict(entry.areas, members.find((member) => member.email === input.to)?.areas, input.to);
+            const fenced = fenceVerdict(entry.identity.areas, members.find((member) => member.email === input.to)?.areas, input.to);
             if (fenced.kind === "forbidden") {
                 throw new ORPCError("FORBIDDEN", { message: fenced.message });
             }
@@ -394,7 +394,7 @@ export const createAgentsRoutes = (services: Services) => {
             if (context.identity === undefined) {
                 throw new ORPCError("UNAUTHORIZED", { message: "no verified identity to attribute the reaction to" });
             }
-            const kinds = new Set((entry.reactions ?? []).map((mark) => mark.emoji));
+            const kinds = new Set(entry.social.reactions.map((mark) => mark.emoji));
             if (input.on && !kinds.has(input.emoji) && kinds.size >= MAX_REACTION_KINDS) {
                 throw new ORPCError("BAD_REQUEST", { message: `this conversation already carries ${MAX_REACTION_KINDS} different reactions` });
             }
@@ -452,7 +452,7 @@ export const createAgentsRoutes = (services: Services) => {
             const repos: AgentRepoChanges[] = [];
             const scratch: NonNullable<AgentChanges["scratch"]> = [];
             let absorbed = 0;
-            for (const composed of entry.repos) {
+            for (const composed of entry.placement.repos) {
                 try {
                     // Same reading agent-changes.ts uses for the land's totals, so the two cannot disagree.
                     const review = await agentRepoReview(services.agentWorktrees, entry, composed);
@@ -478,7 +478,7 @@ export const createAgentsRoutes = (services: Services) => {
                     }
                     // Reads the worktree's own layout; /workspace/modules walks /work, missing a new package.
                     const modules = await agentRepoModules(services.agentWorktrees, entry, composed.repo);
-                    repos.push({ repo: composed.repo, branch: entry.branch, changes: flagged, modules });
+                    repos.push({ repo: composed.repo, branch: entry.placement.branch, changes: flagged, modules });
                 } catch (error) {
                     // One broken worktree (mid-repair, deleted dir) must not 500 the whole review.
                     services.logger.warn({ err: error, repo: composed.repo, id: entry.id }, "agents diff: repo skipped");
@@ -487,14 +487,14 @@ export const createAgentsRoutes = (services: Services) => {
             // Re-derived, not replayed: the stored refusal is from land time, rows may since be committed. Served as stored
             // while a land holds one of its repos, since re-deriving would queue this read behind that land.
             const conflicts =
-                entry.conflicts === undefined
+                entry.landing.conflicts === undefined
                     ? []
-                    : entry.repos.some(({ repo }) => services.agentWorktrees.repoBusy(repo))
-                      ? entry.conflicts
+                    : entry.placement.repos.some(({ repo }) => services.agentWorktrees.repoBusy(repo))
+                      ? entry.landing.conflicts
                       : await outstandingConflicts(services.agentWorktrees, entry);
             // Asked of the whole composition, not of the repos that produced rows: a conversation that did all its work
             // on a branch of its own leaves `agent/<id>` empty, which is the case with no row to hang this on.
-            const elsewhere = await services.agentWorktrees.elsewhere(entry.id, entry.repos);
+            const elsewhere = await services.agentWorktrees.elsewhere(entry.id, entry.placement.repos);
             // Tells apart an agent that wrote nothing from one whose every file is committed (AgentChangesSchema).
             return {
                 repos,
@@ -510,7 +510,7 @@ export const createAgentsRoutes = (services: Services) => {
             const entry = isolatedEntryOf(input.id);
             const repos: AgentRepoHistory[] = [];
             let unaccounted = 0;
-            for (const composed of entry.repos) {
+            for (const composed of entry.placement.repos) {
                 try {
                     const { changes } = await agentRepoReview(services.agentWorktrees, entry, composed);
                     if (changes.length === 0) {
@@ -535,7 +535,7 @@ export const createAgentsRoutes = (services: Services) => {
                     }
                     // Anchor read only when the recorded head can't serve: rare, saves a merge-base spawn.
                     const landed = composed.landedHead === undefined ? undefined : await historySpanStart(main, composed.landedHead, head);
-                    const from = landed ?? (await checkpointOf(main, main, entry.branch, undefined, composed.base));
+                    const from = landed ?? (await checkpointOf(main, main, entry.placement.branch, undefined, composed.base));
                     const byPath = new Map(absorbed.map((change) => [change.path, change]));
                     const commits: AgentHistoryCommit[] = [];
                     let placed = 0;
@@ -580,7 +580,7 @@ export const createAgentsRoutes = (services: Services) => {
         // lands, and another agent's synced-in work can't appear as this one's.
         fileDiff: i.fileDiff.handler(async ({ input }) => {
             const entry = isolatedEntryOf(input.id);
-            const composed = entry.repos.find((repo) => repo.repo === input.repo);
+            const composed = entry.placement.repos.find((repo) => repo.repo === input.repo);
             if (composed === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "repo not in this agent's composition" });
             }
@@ -590,14 +590,14 @@ export const createAgentsRoutes = (services: Services) => {
                 if (resolveWithin(main, input.path) === undefined) {
                     throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
                 }
-                const anchor = await checkpointOf(main, main, entry.branch, undefined, composed.base);
-                return services.git.refFileDiff(main, input.path, anchor, entry.branch);
+                const anchor = await checkpointOf(main, main, entry.placement.branch, undefined, composed.base);
+                return services.git.refFileDiff(main, input.path, anchor, entry.placement.branch);
             }
             const dir = services.agentWorktrees.worktreeDir(entry.id, input.repo);
             if (resolveWithin(dir, input.path) === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "invalid path" });
             }
-            return services.git.fileDiff(dir, input.path, await checkpointOf(dir, main, entry.branch, undefined, composed.base));
+            return services.git.fileDiff(dir, input.path, await checkpointOf(dir, main, entry.placement.branch, undefined, composed.base));
         }),
         includeScratch: i.includeScratch.handler(async ({ input }) => {
             const { dir, named } = await scratchNamed(input);
@@ -628,12 +628,12 @@ export const createAgentsRoutes = (services: Services) => {
             landable(input.id, input.force === true);
             // A second press while one is in flight would rebase the worktree the first is reading; the card already
             // reads `landing`, so a refusal is all it needs.
-            if (services.agents.landing(input.id)) {
+            if (services.conversations.landing(input.id)) {
                 throw new ORPCError("CONFLICT", { message: "this agent is already landing, wait for it to finish" });
             }
             const mode = input.mode ?? "check";
             const rung = input.span ?? "outstanding";
-            return services.agents.withLandLease(input.id, async () => {
+            return services.conversations.withLandLease(input.id, async () => {
                 const composition = await syncedComposition(entry);
                 // Snapshotted after the sync: a rebase orphans the sha a stale span would name.
                 const span = composition.map(({ repo, base, landedTip }) => ({
@@ -642,23 +642,23 @@ export const createAgentsRoutes = (services: Services) => {
                     dir: services.agentWorktrees.worktreeDir(entry.id, repo),
                 }));
                 const result = await services.perf.track("agent.land", { id: entry.id, mode, span: rung }, () =>
-                    landAgent(services.agentWorktrees, { ...entry, repos: composition }, mode, rung),
+                    landAgent(services.agentWorktrees, { ...entry, placement: { ...entry.placement, repos: composition } }, mode, rung),
                 );
                 // Stores the tips and conflict report, re-derives standing, and clears the prior ending without a turn.
                 await services.agents.recordLanded(input.id, result);
                 // Only on a resting agent: a running turn would have its mutex freed and its ending overwritten.
-                if (!services.agents.running(input.id)) {
-                    await services.agents.finish(input.id, Date.now());
+                if (!services.conversations.running(input.id)) {
+                    await services.conversations.send(input.id, { kind: "settle" }).settled;
                 }
                 if (result.landed && result.changed) {
                     announceLanded(entry, span);
                     // The whole repository's check, the same one an auto-land queues; the Land button used to skip it, which
                     // is how a week of lands produced a dozen verdicts.
-                    void verifyLandedTree(services, (event) => emitWorkspaceEvent(services, event, streamAgent), {
+                    void verifyLandedTree(services, {
                         kind: "land",
                         agentId: entry.id,
-                        ...(entry.title !== undefined ? { title: entry.title } : {}),
-                        branch: entry.branch,
+                        ...opt("title", entry.social.title?.text),
+                        branch: entry.placement.branch,
                         repos: [...span],
                     }).catch((error: unknown) => services.logger.warn({ err: error, id: entry.id }, "agents: land verify could not be queued"));
                 }
@@ -681,8 +681,8 @@ export const createAgentsRoutes = (services: Services) => {
             await cancelWatchersFor(entry.id);
             // Resources before worktree: a running shell or dev server must not be mid-write in a tree being deleted.
             await services.reaper.reapConversation(entry.id, { force: true });
-            await services.agentWorktrees.remove(entry.id, entry.repos);
-            await services.agents.remove([entry.id]);
+            await services.agentWorktrees.remove(entry.id, entry.placement.repos);
+            await forgetConversations(services, [entry]);
             return { ok: true } as const;
         }),
         // Named ids archive what the user pointed at; no ids clears the whole Finished lane. Answers with what moved,

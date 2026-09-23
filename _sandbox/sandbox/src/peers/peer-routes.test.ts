@@ -6,7 +6,8 @@ import type { Services } from "../composition.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerHub } from "./peer-hub.js";
 import { admitPeer, createPeerRoutes } from "./peer-routes.js";
-import type { PeerStore, Presented } from "./peer-store.js";
+import type { Presented } from "./enrollment.js";
+import type { PeerStore } from "./peer-store.js";
 
 // The two files a door keeps on /history, spelled the way the doors spell them.
 const peerFiles =

@@ -1,6 +1,7 @@
 import type { Rule } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { landingOutcome, recordCheckVerdict, takeCheckVerdict } from "./turn-checks.js";
+import { memoryFleet } from "../../testing.js";
+import { checkRunOf, landingOutcome } from "./turn-checks.js";
 
 const CHECK: Rule = {
     id: "pre-land",
@@ -10,22 +11,44 @@ const CHECK: Rule = {
     enabled: true,
 };
 
+// The verdict travels as a conversation event and is taken by one: the Stop records, the land takes.
+const record = (conversations: ReturnType<typeof memoryFleet>["conversations"], conversationId: string, rule: Rule, status: "passed" | "failed") =>
+    conversations.send(conversationId, { kind: "check-ran", check: checkRunOf(rule, { status, output: "" }) }, 7);
+
 test(`the last run wins, and a take clears it: a repaired check is a turn that passed`, () => {
-    recordCheckVerdict("c1", CHECK, { status: "failed", exitCode: 1, output: "1 failed" });
-    recordCheckVerdict("c1", CHECK, { status: "passed", exitCode: 0, output: "" });
-    expect(takeCheckVerdict("c1")).toMatchObject({ ruleId: "pre-land", label: "Verify before you finish", command: "pnpm verify", status: "passed" });
-    expect(takeCheckVerdict("c1")).toBeUndefined();
+    const { conversations } = memoryFleet();
+    record(conversations, "c1", CHECK, "failed");
+    record(conversations, "c1", CHECK, "passed");
+    expect(conversations.send("c1", { kind: "verdict-taken" }).reply).toStrictEqual({
+        ruleId: "pre-land",
+        label: "Verify before you finish",
+        command: "pnpm verify",
+        status: "passed",
+        at: 7,
+    });
+    expect(conversations.send("c1", { kind: "verdict-taken" }).reply).toBeUndefined();
 });
 
 test(`conversations do not share a verdict`, () => {
-    recordCheckVerdict("c2", CHECK, { status: "failed", exitCode: 1, output: "" });
-    expect(takeCheckVerdict("c3")).toBeUndefined();
-    expect(takeCheckVerdict("c2")?.status).toBe("failed");
+    const { conversations } = memoryFleet();
+    record(conversations, "c2", CHECK, "failed");
+    expect(conversations.send("c3", { kind: "verdict-taken" }).reply).toBeUndefined();
+    expect(conversations.send("c2", { kind: "verdict-taken" }).reply?.status).toBe("failed");
 });
 
 test(`only a command rule records anything`, () => {
-    recordCheckVerdict("c4", { ...CHECK, action: { kind: "instruct", text: "say hi" } }, { status: "failed", output: "" });
-    expect(takeCheckVerdict("c4")).toBeUndefined();
+    const { conversations } = memoryFleet();
+    record(conversations, "c4", { ...CHECK, action: { kind: "instruct", text: "say hi" } }, "failed");
+    expect(conversations.send("c4", { kind: "verdict-taken" }).reply).toBeUndefined();
+});
+
+test(`a run names its command only when its rule is one`, () => {
+    expect(checkRunOf(CHECK, { status: "error", output: "" })).toStrictEqual({ ruleId: "pre-land", label: "Verify before you finish", command: "pnpm verify", status: "error" });
+    expect(checkRunOf({ ...CHECK, action: { kind: "instruct", text: "say hi" } }, { status: "failed", output: "" })).toStrictEqual({
+        ruleId: "pre-land",
+        label: "Verify before you finish",
+        status: "failed",
+    });
 });
 
 test(`only a settled failure holds the land; a run that measured nothing reads as clean`, () => {

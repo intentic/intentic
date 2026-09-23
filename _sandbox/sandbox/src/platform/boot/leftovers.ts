@@ -1,22 +1,11 @@
 import { readFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
+import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { parseProcStat } from "../resources/proc-stat.js";
 
 // A leftover is a finished turn's process nobody still holds. Group membership (kernel-assigned, inherited,
 // unspoofable) decides which processes are this daemon's; an env stamp then says whose conversation they belong to.
 // Anything under a live tmux pane is exempt: its session retires it, not this sweep.
-
-// The stamp naming whose work a process is; identity itself is the process group, not this env var.
-export const WORKLOAD_ENV = "INTENTIC_TURN_OWNER";
-
-// Env to spread into a spawned workload's environment; owner is a conversation id or one of the two reserved names
-// below.
-export const workloadStamp = (owner: string): Record<string, string> => ({ [WORKLOAD_ENV]: owner });
-
-// The two owners that are not conversations: `daemon` for pooled ACP processes kept alive across turns, and `one-shot`
-// for toolless maxTurns-1 helper calls nothing will ever report live.
-export const DAEMON_OWNER = "daemon";
-export const ONE_SHOT_OWNER = "one-shot";
 
 // One process as the sweep sees it; `pgrp` decides ownership, `ppid` is only used to walk upward looking for a pane.
 export interface ScannedProcess {

@@ -1,11 +1,11 @@
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { type App, createApp, h, nextTick } from "vue";
 import { queryClient } from "../../../lib/queryPersistence";
-import { resetAgents } from "../fleet/useAgents";
 import { setAgents } from "../fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
@@ -59,7 +59,7 @@ const agent = (id: string, status: AgentSummary["status"], attention = NO_ATTENT
 
 beforeEach(() => {
     animations.length = 0;
-    resetAgents();
+    resetSandboxScope();
 
     globalThis.Element.prototype.animate = function (
         this: Element,

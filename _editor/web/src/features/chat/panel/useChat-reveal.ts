@@ -55,10 +55,17 @@ const loadSession = async (conversation: Conversation, sessionRef: string, title
     try {
         const restored = await fetchTranscript(conversation, sessionRef);
         if (restored !== undefined) {
-            conversation.loadTranscript(restored, sessionRef, title);
+            // A past conversation, its session armed to resume; unlike a replay, this seeds the chat's identity too,
+            // since the tab it lands in is a fresh one.
+            conversation.transcript.restoreMessages(restored);
+            // History-menu sessions live in the main tree's session namespace; resuming one in a worktree would miss it.
+            conversation.isolated.value = false;
+            conversation.selection.apply({ kind: `resumeHistory`, sessionId: sessionRef });
+            conversation.title.value = title;
+            conversation.activeModel.value = null;
         }
     } finally {
-        conversation.loading.value = false;
+        conversation.transcript.loading.value = false;
     }
 };
 
@@ -97,7 +104,7 @@ const adoptTab = (existing: Conversation, entry: StoredTab): void => {
     }
     // Re-opening re-hydrates even an already-shown tab, since it may be a stub from a dead attach; skipped while
     // streaming, since the tab IS the stream.
-    if (!existing.streaming.value) {
+    if (!existing.turn.streaming.value) {
         hydrateOnce(existing);
     }
 };
@@ -126,7 +133,7 @@ const resolveEntry = (entry: RevealEntry, additions: Conversation[], kept: Reado
         // A history row names a session, not a composer, so kept drafts are the only record of what was waiting to
         // send.
         restoreKept(conversation, kept.get(entry.conversationId));
-        conversation.loading.value = true;
+        conversation.transcript.loading.value = true;
         void loadSession(conversation, entry.sessionRef, entry.title ?? null);
         additions.push(conversation);
         return conversation;
@@ -275,7 +282,7 @@ export const draftConversation = (): Conversation => {
     }
     // Re-seeds the handed-back draft with current picks, so it matches what a fresh one would have been; safe since the
     // draft is untouched by definition.
-    open.seedPicks();
+    open.selection.apply({ kind: `seed` });
     // A blank the panel was only standing on has no board card; a New agent press on it turns it into a chat the user
     // actually started.
     open.standIn.value = false;
@@ -286,7 +293,7 @@ export const draftConversation = (): Conversation => {
 // focused chat (no transcript, no session, not on the fleet), else a suggestion opens its own draft.
 export const composingConversation = (): Conversation => {
     const focused = active.value;
-    return !focused.registered.value && focused.messages.value.length === 0 && focused.session.value === undefined ? focused : draftConversation();
+    return !focused.registered.value && focused.transcript.messages.value.length === 0 && focused.session.value === undefined ? focused : draftConversation();
 };
 
 // Opens a past conversation from the panel's own history rows, focusing an existing tab on that session or loading a

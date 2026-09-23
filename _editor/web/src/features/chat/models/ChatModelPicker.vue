@@ -21,7 +21,10 @@ const emit = defineEmits<{ selected: [] }>();
 const { conversation } = defineProps<{ conversation: Conversation }>();
 
 // Destructured once; every host remounts this component (v-if) rather than swapping the prop in place.
-const { provider, harness, model, thinking, fast, effort, fastMode, streaming, generating, account, capabilities, box, auto, messages } = conversation;
+const { provider, harness, model, thinking, fast, effort, account, capabilities, auto } = conversation.selection;
+const { fastMode, box } = conversation;
+const { streaming, generating } = conversation.turn;
+const { messages } = conversation.transcript;
 
 // Gated by no setting: which model a chat runs on is a per-chat question, and a mode that only appears once you have
 // found a switch on a settings page is a mode nobody finds. Which model does the reading IS a setting (the
@@ -45,13 +48,13 @@ const { hasContent: runSettingsShown } = usePickerRunSettings(provider, model, h
 // open. Effort cannot arrive while the meter row is off, and is bound anyway so the two can never disagree.
 const applyRun = (patch: RunSettingsPatch): void => {
     if (patch.effort !== undefined) {
-        conversation.setEffort(patch.effort);
+        conversation.selection.apply({ kind: `setEffort`, effort: patch.effort });
     }
     if (patch.thinking !== undefined) {
-        conversation.setThinking(patch.thinking);
+        conversation.selection.apply({ kind: `setThinking`, thinking: patch.thinking });
     }
     if (patch.fast !== undefined) {
-        conversation.setFast(patch.fast);
+        conversation.selection.apply({ kind: `setFast`, fast: patch.fast });
     }
 };
 
@@ -64,7 +67,7 @@ const accountsShown = computed(() => hasContent.value && box.value === undefined
 const unpickable = (entry: PickerEntry): boolean => streaming.value && entry.provider !== provider.value;
 
 const pick = (entry: PickerEntry): void => {
-    conversation.selectModel(entry);
+    conversation.selection.apply({ kind: `selectModel`, pick: entry });
     emit(`selected`);
 };
 
@@ -144,8 +147,8 @@ const footerVisible = computed(() => (auto.value ? true : accountsShown.value ||
                     :account="account"
                     :accounts-locked="generating"
                     :harness-locked="streaming"
-                    @select-account="conversation.selectAccount($event)"
-                    @select-harness="conversation.selectHarness($event)"
+                    @select-account="conversation.selection.apply({ kind: `selectAccount`, account: $event })"
+                    @select-harness="conversation.selection.apply({ kind: `selectHarness`, harness: $event })"
                     @navigate="emit(`selected`)"
                 />
 

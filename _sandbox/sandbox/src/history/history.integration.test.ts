@@ -8,7 +8,8 @@ import { test, expect, afterEach, spyOn, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createLogger } from "../logger.js";
 import { workspacePaths } from "../workspace/workspace.js";
-import { createWorkspaceHistory, type HistoryGitRunner, repoGitDir } from "./history.js";
+import { createWorkspaceHistory, type HistoryGitRunner } from "./history.js";
+import { repoGitDir } from "../workspace/layout/git-layout.js";
 
 const exec = promisify(execFile);
 const logger = createLogger({ logLevel: "silent", logPretty: false, historyRoot: "" });

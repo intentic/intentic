@@ -1,12 +1,16 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import type { SandboxMetrics } from "@intentic/sandbox-contract";
 import { type ComputedRef, shallowRef } from "vue";
+import type { SandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 /* Whether the board asks at all is the whole promise of the preference: off must mean no request, so the daemon (which
  * measures only when asked) measures nothing. The query layer is stood in for, so what is pinned is what this module
  * hands it: when it may run, how often, and what it asks for. */
 
 interface CapturedOptions {
+    readonly queryKey: ComputedRef<unknown[]>;
     readonly enabled: ComputedRef<boolean>;
     readonly refetchInterval: (query: { readonly state: { readonly status: string } }) => number | false;
     readonly queryFn: () => Promise<SandboxMetrics>;
@@ -21,12 +25,7 @@ const reading: SandboxMetrics = {
     sessions: {},
     roles: {},
 };
-const sandboxJson = mock(async (path: string): Promise<SandboxMetrics> => {
-    if (path !== `/system/metrics`) {
-        throw new Error(`unexpected read of ${path}`);
-    }
-    return reading;
-});
+const measure = mock<SandboxRpc[`system`][`metrics`]>(async () => reading);
 
 mock.module("../../sandbox/client/useSandboxQuery", () => ({
     useSandboxQuery: (options: CapturedOptions) => {
@@ -34,10 +33,12 @@ mock.module("../../sandbox/client/useSandboxQuery", () => ({
         return { query: { data }, error: { value: undefined } };
     },
 }));
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson }));
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ system: { metrics: measure } }) }));
 
 const { heaviestRoles, LIVE_METRICS_POLL_MS, showLiveMetrics, useLiveMetrics } = await import("./liveMetrics");
-const { resetDaemonRoutes, setDaemonRoutes } = await import("../../sandbox/overview/useDaemonRoutes");
+const { setDaemonRoutes } = await import("../../sandbox/overview/useDaemonRoutes");
+const { activeSandboxId } = await import("../../sandbox/overview/activeSandbox");
+const { UNPERSISTED } = await import("../../../lib/queryPersistence");
 
 const optionsOf = (): CapturedOptions => {
     if (captured.options === undefined) {
@@ -49,8 +50,8 @@ const optionsOf = (): CapturedOptions => {
 afterEach(() => {
     showLiveMetrics.value = false;
     data.value = undefined;
-    resetDaemonRoutes();
-    sandboxJson.mockClear();
+    resetSandboxScope();
+    measure.mockClear();
 });
 
 describe("useLiveMetrics", () => {
@@ -89,11 +90,13 @@ describe("useLiveMetrics", () => {
         expect(optionsOf().enabled.value).toBe(true);
     });
 
-    it("reads the daemon's /system/metrics and holds it to the contract", async () => {
+    it("reads the daemon's system.metrics, for the active sandbox", async () => {
         showLiveMetrics.value = true;
         useLiveMetrics();
         expect(await optionsOf().queryFn()).toEqual(reading);
-        expect(sandboxJson.mock.calls).toEqual([[`/system/metrics`]]);
+        expect(measure.mock.calls).toEqual([[undefined, { context: {} }]]);
+        // Kept in memory alone: a reading is superseded every few seconds, so a disk copy would only ever be stale.
+        expect(optionsOf().queryKey.value).toEqual([`system.metrics`, UNPERSISTED, activeSandboxId]);
     });
 });
 

@@ -1,11 +1,8 @@
-import { AppsListSchema } from "@intentic/api-contract";
-import type { PortForwardResult } from "@intentic/sandbox-contract";
 import { useQueryClient } from "@tanstack/vue-query";
 import { computed, type Ref } from "vue";
 import { usePanels } from "../extensions/usePanels";
 import { APPS, PORTS } from "../../lib/queryKeys";
-import { jsonBody } from "../sandbox/client/jsonBody";
-import { sandboxJson } from "../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../sandbox/client/sandboxRpc";
 import { usePorts } from "../sandbox/environment/usePorts";
 import { useSandboxQuery } from "../sandbox/client/useSandboxQuery";
 import { usePublicOutbox } from "../workspace/push/usePublicOutbox";
@@ -29,7 +26,7 @@ export function usePreviewTargets(active: Ref<boolean>) {
         queryFn: async () => {
             const lists = await Promise.all(
                 monorepos.value.map(async (repo) => {
-                    const { apps } = AppsListSchema.parse(await sandboxJson(`/workspace/repos/${encodeURIComponent(repo)}/apps`));
+                    const { apps } = await sandboxRpc.workspace.appsList({ repo });
                     return { repo, apps };
                 }),
             );
@@ -55,9 +52,8 @@ export function usePreviewTargets(active: Ref<boolean>) {
             return;
         }
         if (target.kind === `app` && target.repo !== undefined && target.app !== undefined) {
-            await sandboxJson(`/workspace/repos/${encodeURIComponent(target.repo)}/apps/${encodeURIComponent(target.app)}/${verb}`, {
-                method: `POST`,
-            });
+            const input = { repo: target.repo, app: target.app };
+            await (verb === `start` ? sandboxRpc.workspace.startApp(input) : sandboxRpc.workspace.stopApp(input));
             await queryClient.invalidateQueries({ queryKey: APPS.every });
         }
     };
@@ -67,7 +63,7 @@ export function usePreviewTargets(active: Ref<boolean>) {
     // Forwards one port of a multi-port repo and returns the target it becomes, without leaving for the Ports view.
     // Waits for the refetch since the target doesn't exist until the ports read lands.
     const forward = async (port: number): Promise<string | undefined> => {
-        const { previewUrl } = await sandboxJson<PortForwardResult>(`/ports/forward`, jsonBody(`POST`, { port }));
+        const { previewUrl } = await sandboxRpc.ports.forward({ port });
         await queryClient.invalidateQueries({ queryKey: PORTS.every });
         return previewUrl === undefined ? undefined : portTargetId(port);
     };

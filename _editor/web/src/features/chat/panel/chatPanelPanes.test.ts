@@ -1,13 +1,14 @@
 // Pins what the panel draws against the real DOM, not the store: a correctly picked chat, a run that releases cleanly,
 // and no column drawn for a chat that never arrived.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { WorkflowRun } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import { chatRun, showRun } from "../run/chatRun";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { draftConversation, reveal } from "./useChat-reveal";
 // The store half of "New agent", as summons applies it (agentActions.startAgent); the fixture these suites use to open
 // extra tabs.
@@ -75,7 +76,7 @@ const onScreen = (): string[] =>
 const namedChat = (name: string, id?: string) => {
     const chat = useChat();
     const conversation = id === undefined ? newChat() : chat.active.value;
-    conversation.restoreMessages([{ role: `user`, text: `shows-${name}` }]);
+    conversation.transcript.restoreMessages([{ role: `user`, text: `shows-${name}` }]);
     return conversation;
 };
 
@@ -92,7 +93,7 @@ beforeEach(async () => {
     app?.unmount();
     app = undefined;
     localStorage.clear();
-    resetChat();
+    resetSandboxScope();
     chatRun.value = undefined;
     runs.value = [];
     // Wide enough for the docked panel to draw its whole pane set.

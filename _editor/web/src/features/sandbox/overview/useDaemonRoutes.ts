@@ -1,5 +1,6 @@
-import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES, sandboxRouteName } from "@intentic/sandbox-contract";
-import { computed, ref } from "vue";
+import { sandboxRef } from "@intentic/extension-api";
+import { SANDBOX_ROUTE_NAMES, SANDBOX_ROUTE_SHAPES } from "@intentic/sandbox-contract";
+import { computed } from "vue";
 import { z } from "zod";
 import { contractUncompiled } from "./contractFreshness";
 
@@ -8,23 +9,18 @@ import { contractUncompiled } from "./contractFreshness";
 // by breaking. Two kinds of gap: a route the daemon lacks, or one it shapes differently; both are non-blocking.
 
 // Route names the daemon advertises; undefined means unknown (not connected, or predates the hello field) and is
-// read as fully supported.
-const advertised = ref<ReadonlySet<string> | undefined>(undefined);
+// read as fully supported. Sandbox-scoped, not dropped with a connection, so one sandbox's surface isn't attributed to
+// another.
+const advertised = sandboxRef<ReadonlySet<string> | undefined>(() => undefined);
 
 // Per-route shape fingerprint from the daemon's build; undefined (route or whole map) means no evidence, not
 // mismatch.
-const advertisedShapes = ref<Readonly<Record<string, string>> | undefined>(undefined);
+const advertisedShapes = sandboxRef<Readonly<Record<string, string>> | undefined>(() => undefined);
 
 // Called on every hello frame; nothing advertised leaves the assume-supported state.
 export const setDaemonRoutes = (routes: readonly string[] | undefined, shapes?: Readonly<Record<string, string>>): void => {
     advertised.value = routes === undefined ? undefined : new Set(routes);
     advertisedShapes.value = shapes;
-};
-
-// Cleared on a sandbox switch, not a dropped connection, so one sandbox's surface isn't attributed to another.
-export const resetDaemonRoutes = (): void => {
-    advertised.value = undefined;
-    advertisedShapes.value = undefined;
 };
 
 // An unknown daemon or route answers true; a feature only hides on positive evidence it's missing.
@@ -123,11 +119,10 @@ const eitherSideOlderRemedy = (): string => {
         : `Reload this page, or update the sandbox to a newer image.`;
 };
 
-// Why a request to `path` failed because this daemon predates the route; undefined for a non-contract path or one
-// the daemon advertises. A missing route is directional: only a daemon behind lacks a name this app has.
-export const staleDaemonReason = (method: string, path: string): string | undefined => {
-    const name = sandboxRouteName(method, path);
-    if (name === undefined || supportsRoute(name)) {
+// Why a call to route `name` failed because this daemon predates it; undefined for one the daemon advertises. A
+// missing route is directional: only a daemon behind lacks a name this app has.
+export const staleDaemonReason = (name: string): string | undefined => {
+    if (supportsRoute(name)) {
         return undefined;
     }
     return `This sandbox's daemon doesn't provide '${name}'. ${daemonOlderRemedy()}`;
@@ -141,11 +136,10 @@ export const readFailure = (error: unknown): string => {
     return error instanceof Error ? error.message : String(error);
 };
 
-// Why a request that reached its route still failed: the daemon has it, shaped differently, so it answers rather
+// Why a call that reached route `name` still failed: the daemon has it, shaped differently, so it answers rather
 // than 404s. Separate from staleDaemonReason since nothing in the HTTP status routes to this.
-export const driftedRouteReason = (method: string, path: string): string | undefined => {
-    const name = sandboxRouteName(method, path);
-    if (name === undefined || !driftedRoutes.value.includes(name)) {
+export const driftedRouteReason = (name: string): string | undefined => {
+    if (!driftedRoutes.value.includes(name)) {
         return undefined;
     }
     return `This sandbox's daemon has '${name}' but exchanges different fields for it than this app expects. ${eitherSideOlderRemedy()}`;

@@ -1,13 +1,14 @@
 import type { GitChange, MatchSnippet, SessionOwner, TranscriptRow } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
 import { agentRepoReview } from "../land/agent-changes.js";
-import { isIsolated, type PersistedAgent } from "../registry/agents-store.js";
+import { transcriptFile } from "../../sessions/transcript-record.js";
+import { type Ending, endingStatus, isIsolated, type PersistedAgent, reposOf } from "../registry/agents-store.js";
 
 // The join behind `agents ls|show|find`: everything about one conversation in a single answer, from a handle alone.
 // Read-only; steering is `agents send`, landing, archiving and discarding are the board's own actions. Returns data,
 // not text; the CLI renders it.
 
-export type FleetRecallDeps = Pick<Services, "agents" | "agentWorktrees" | "transcripts" | "saidIndex">;
+export type FleetRecallDeps = Pick<Services, "agents" | "conversations" | "agentWorktrees" | "transcripts" | "saidIndex">;
 
 // Five spellings resolve to a handle, in this order, first hit wins, exact before fuzzy so an id is never shadowed by a
 // prefix:
@@ -45,8 +46,19 @@ const allEntries = (deps: FleetRecallDeps): PersistedAgent[] =>
 const exactly = (deps: FleetRecallDeps, entries: readonly PersistedAgent[], wanted: string): PersistedAgent | undefined =>
     deps.agents.entry(wanted) ??
     (wanted.startsWith("agent/") ? deps.agents.entry(wanted.slice("agent/".length)) : undefined) ??
-    entries.find((entry) => entry.branch === wanted) ??
-    entries.find((entry) => entry.sessionId === wanted || deps.agents.sessionIdOf(entry.id) === wanted);
+    entries.find((entry) => entry.placement.kind === "worktree" && entry.placement.branch === wanted) ??
+    entries.find((entry) => entry.sessionId === wanted || deps.conversations.sessionIdOf(entry.id) === wanted);
+
+// Whether its name holds the folded needle.
+const titled = (entry: PersistedAgent, needle: string): boolean => entry.social.title !== undefined && foldOf(entry.social.title.text).includes(needle);
+
+// One of several conversations a handle matched, as the refusal names it.
+export const candidateOf = (entry: PersistedAgent): { id: string; title?: string; status: string; updatedAt: number } => ({
+    id: entry.id,
+    ...present({ title: entry.social.title?.text }),
+    status: endingStatus(entry.ending),
+    updatedAt: entry.updatedAt,
+});
 
 // Turns fuzzy candidates into a resolution: one hit is `found`, several are `ambiguous` and named rather than picked.
 // Ranked newest first before truncating to `AMBIGUITY_LIMIT`.
@@ -75,7 +87,7 @@ export const resolveHandle = (deps: FleetRecallDeps, handle: string): HandleReso
     const needle = foldOf(wanted);
     return (
         narrowed(entries.filter((entry) => entry.id.startsWith(wanted))) ??
-        narrowed(entries.filter((entry) => entry.title !== undefined && foldOf(entry.title).includes(needle))) ?? { kind: "unknown" }
+        narrowed(entries.filter((entry) => titled(entry, needle))) ?? { kind: "unknown" }
     );
 };
 
@@ -105,13 +117,21 @@ export interface FleetRow {
 const rowOf = (deps: FleetRecallDeps, entry: PersistedAgent, snippet?: MatchSnippet): FleetRow => ({
     id: entry.id,
     // Projected status when available, matching the board, so the CLI and fleet view never disagree.
-    status: deps.agents.get(entry.id)?.status ?? entry.status,
-    provider: entry.provider,
+    status: deps.agents.get(entry.id)?.status ?? endingStatus(entry.ending),
+    provider: entry.profile.provider,
     updatedAt: entry.updatedAt,
     archived: entry.archivedAt !== undefined,
-    running: deps.agents.running(entry.id),
-    repos: entry.repos.map((repo) => repo.repo),
-    ...present({ title: entry.title, model: entry.model, branch: entry.branch, turns: entry.turns, owner: entry.owner, startedBy: entry.startedBy, snippet }),
+    running: deps.conversations.running(entry.id),
+    repos: reposOf(entry).map((repo) => repo.repo),
+    turns: entry.totals.turns,
+    ...present({
+        title: entry.social.title?.text,
+        model: entry.profile.model,
+        branch: entry.placement.kind === "worktree" ? entry.placement.branch : undefined,
+        owner: entry.social.owner,
+        startedBy: entry.identity.startedBy,
+        snippet,
+    }),
 });
 
 export interface RosterOptions {
@@ -127,7 +147,7 @@ export interface RosterOptions {
 const ROSTER_LIMIT = 30;
 
 const ownedBy = (entry: PersistedAgent, owner: string | undefined): boolean =>
-    owner === undefined || (entry.owner !== undefined && foldOf(entry.owner.email).includes(foldOf(owner)));
+    owner === undefined || (entry.social.owner !== undefined && foldOf(entry.social.owner.email).includes(foldOf(owner)));
 
 // Entries for a roster or search, newest activity first: live only unless `all`, scoped to `repo` and `owner` when
 // given.
@@ -136,7 +156,7 @@ const scopedEntries = (deps: FleetRecallDeps, options: RosterOptions): Persisted
         .filter(
             (entry) =>
                 (options.all === true || entry.archivedAt === undefined) &&
-                (options.repo === undefined || entry.repos.some((repo) => repo.repo === options.repo)) &&
+                (options.repo === undefined || reposOf(entry).some((repo) => repo.repo === options.repo)) &&
                 ownedBy(entry, options.owner),
         )
         .sort((left, right) => right.updatedAt - left.updatedAt);
@@ -152,7 +172,7 @@ export const fleetSearch = async (deps: FleetRecallDeps, query: string, options:
     const needle = foldOf(query);
     const said = await deps.saidIndex.search(query, "conversation", false);
     const matched = scopedEntries(deps, options).flatMap((entry) => {
-        if (entry.title !== undefined && foldOf(entry.title).includes(needle)) {
+        if (titled(entry, needle)) {
             return [rowOf(deps, entry)];
         }
         const snippet = said.get(entry.id);
@@ -183,7 +203,7 @@ const statOf = (changes: readonly GitChange[]): Pick<FleetRepo, "files" | "addit
 
 const repoStates = async (deps: FleetRecallDeps, entry: PersistedAgent, diff: boolean): Promise<readonly FleetRepo[]> =>
     Promise.all(
-        entry.repos.map(async (composed): Promise<FleetRepo> => {
+        reposOf(entry).map(async (composed): Promise<FleetRepo> => {
             const landed = {
                 repo: composed.repo,
                 base: composed.base,
@@ -256,7 +276,17 @@ export interface RecallOptions {
     readonly diff?: boolean;
 }
 
-export const recordPathOf = (historyRoot: string, id: string): string => `${historyRoot}/transcripts/${id}.jsonl`;
+// The last turn's failure as the board reports it, a spent allowance under the rate limit's own code.
+const failureOf = (ending: Ending): Pick<FleetRecall, "failure" | "failureCode" | "limitResetsAt"> => {
+    switch (ending.kind) {
+        case "failed":
+            return present({ failure: ending.failure, failureCode: ending.code });
+        case "limited":
+            return present({ failure: ending.failure, failureCode: "rate_limit", limitResetsAt: ending.resetsAt });
+        default:
+            return {};
+    }
+};
 
 export const fleetRecall = async (
     deps: FleetRecallDeps,
@@ -268,29 +298,28 @@ export const fleetRecall = async (
         repoStates(deps, entry, options.diff !== false),
         deps.transcripts.read(entry).catch((): TranscriptRow[] => []),
     ]);
+    const { placement, totals } = entry;
     return {
         ...rowOf(deps, entry),
-        harness: entry.harness,
-        record: recordPathOf(historyRoot, entry.id),
-        costUsd: entry.costUsd,
-        inputTokens: entry.inputTokens,
-        outputTokens: entry.outputTokens,
+        harness: entry.profile.harness,
+        record: transcriptFile(historyRoot, entry.id),
+        costUsd: totals.costUsd,
+        inputTokens: totals.inputTokens,
+        outputTokens: totals.outputTokens,
+        toolUses: totals.toolUses,
+        subagents: totals.subagents,
         createdAt: entry.createdAt,
         ...present({
-            effort: entry.effort,
-            account: entry.account,
+            effort: entry.profile.effort,
+            account: entry.profile.account,
             // Live session id, not the persisted column, which lags for a running first turn.
-            sessionId: deps.agents.sessionIdOf(entry.id),
-            runner: entry.runner,
-            worktree: entry.branch === undefined ? undefined : deps.agentWorktrees.conversationDir(entry.id),
-            toolUses: entry.toolUses,
-            subagents: entry.subagents,
+            sessionId: deps.conversations.sessionIdOf(entry.id),
+            runner: placement.kind === "worktree" ? placement.runner : undefined,
+            worktree: placement.kind === "worktree" ? deps.agentWorktrees.conversationDir(entry.id) : undefined,
             archivedAt: entry.archivedAt,
-            failure: entry.failure,
-            failureCode: entry.failureCode,
-            limitResetsAt: entry.limitResetsAt,
-            landedSubject: entry.landedSubject,
+            landedSubject: entry.landing.message?.subject,
         }),
+        ...failureOf(entry.ending),
         repoStates: repos,
         digest: digestOf(messages),
     };

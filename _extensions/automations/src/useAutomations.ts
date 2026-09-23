@@ -1,4 +1,4 @@
-import { type Automation, type AutomationSummary, AutomationsListSchema, type SenderSeen } from "@intentic/sandbox-contract";
+import type { Automation, AutomationSummary, SenderSeen } from "@intentic/sandbox-contract";
 import { asZone, UTC, type Zone } from "@intentic/sandbox-contract/time";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, type ComputedRef, type Ref } from "vue";
@@ -91,7 +91,7 @@ export function useSandboxZone(): ComputedRef<Zone> {
     const api = host();
     const query = useQuery({
         queryKey: api.sandbox.key(`sandbox-timezone`),
-        queryFn: async (): Promise<string> => ((await api.sandbox.json(`/settings`)) as { timezone?: string }).timezone ?? ``,
+        queryFn: async (): Promise<string> => (await api.sandbox.rpc.settings.get()).timezone ?? ``,
         enabled: computed(() => api.sandbox.reachable()),
     });
     return computed<Zone>(() => asZone(query.data.value) ?? UTC);
@@ -105,42 +105,32 @@ export function useAutomations() {
 
     const query = useQuery({
         queryKey,
-        queryFn: async (): Promise<AutomationSummary[]> => AutomationsListSchema.parse(await api.sandbox.json(`/automations`)).automations,
+        queryFn: async (): Promise<AutomationSummary[]> => (await api.sandbox.rpc.automations.list()).automations,
         enabled,
     });
     const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey });
 
     const save = useMutation({
-        mutationFn: (automation: Automation) =>
-            api.sandbox.json(`/automations`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify(automation),
-            }),
+        mutationFn: (automation: Automation) => api.sandbox.rpc.automations.upsert(automation),
         onSuccess: invalidate,
     });
     const setEnabled = useMutation({
-        mutationFn: ({ id, enabled: next }: { id: string; enabled: boolean }) =>
-            api.sandbox.json(`/automations/${encodeURIComponent(id)}/enabled`, {
-                method: `POST`,
-                headers: { "content-type": `application/json` },
-                body: JSON.stringify({ enabled: next }),
-            }),
+        mutationFn: (input: { id: string; enabled: boolean }) => api.sandbox.rpc.automations.setEnabled(input),
         onSuccess: invalidate,
     });
     const remove = useMutation({
-        mutationFn: (id: string) => api.sandbox.json(`/automations/${encodeURIComponent(id)}`, { method: `DELETE` }),
+        mutationFn: (id: string) => api.sandbox.rpc.automations.remove({ id }),
         onSuccess: invalidate,
     });
     // A fresh webhook token (or intake key), the old one retired at once; the list re-reads to show the new URL.
     const rotateToken = useMutation({
-        mutationFn: (id: string) => api.sandbox.json(`/automations/${encodeURIComponent(id)}/rotate-token`, { method: `POST` }),
+        mutationFn: (id: string) => api.sandbox.rpc.automations.rotateToken({ id }),
         onSuccess: invalidate,
     });
     // Fires now without waiting for cron, webhook, or a Discord mention. The daemon acks immediately and runs detached,
     // so success means "started", not "finished"; a second invalidation lands a few seconds later for the outcome.
     const run = useMutation({
-        mutationFn: (id: string) => api.sandbox.json(`/automations/${encodeURIComponent(id)}/run`, { method: `POST` }),
+        mutationFn: (id: string) => api.sandbox.rpc.automations.run({ id }),
         onSuccess: async () => {
             await invalidate();
             setTimeout(() => void invalidate(), RUN_SETTLE_POLL_MS);

@@ -1,3 +1,4 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { type AgentSummary, type CommandRun, fixAttemptId, type PushRun, pushFixConversationId } from "@intentic/sandbox-contract";
 import { test, expect, beforeEach, mock, jest } from "bun:test";
 import { computed, ref, shallowRef } from "vue";
@@ -77,7 +78,7 @@ mock.module(`./usePushRun`, () => {
     const sessions = new Map<string, string>();
     return {
         usePushRun: (repo: string) => ({ terminal: computed(() => sessions.get(repo)), showTerminal: mock() }),
-        resetPushRuns: () => sessions.clear(),
+        clearPushTerminals: () => sessions.clear(),
         // Sets where a repo's push is running, as the daemon would name it.
         pushTerminal: (repo: string, session: string | undefined): void => {
             if (session === undefined) {
@@ -126,9 +127,7 @@ mock.module(`../../sandbox/client/useSandbox`, () => {
 mock.module(`../../agents/fleet/sessionSuggestion`, () => ({
     composeSession: mock((draft: { prompt: string }) => ({
         draft,
-        selectModel: mock(),
-        account: { value: undefined },
-        harness: { value: undefined },
+        selection: { apply: mock(), account: { value: undefined }, harness: { value: undefined } },
     })),
     startSession: mock(),
 }));
@@ -164,9 +163,9 @@ const load = async () => {
     const changes = await import(`../changes/useChanges`);
     const pushRuns = (await import(`./usePushRun`)) as unknown as {
         pushTerminal: (repo: string, session: string | undefined) => void;
-        resetPushRuns: () => void;
+        clearPushTerminals: () => void;
     };
-    pushRuns.resetPushRuns();
+    pushRuns.clearPushTerminals();
     const suggestion = await import(`../../agents/fleet/sessionSuggestion`);
     const live = (await import(`../changes/live/useWorkspaceLive`)) as unknown as { writeToTree: () => void; quietTree: () => void };
     // As with the seams above: the stamp is the mock's own, so each case opens on a tree nobody has written to.
@@ -232,6 +231,33 @@ test(`a green check sends the push with nobody watching`, async () => {
     expect(flow.stage.value).toBeUndefined();
     // The only thing a success says, and it says it where the click was.
     expect(flow.pushed.value?.what).toBe(`3 commits`);
+});
+
+// A staged push names commits in one workspace, and offering to send them from another box is the most consequential
+// thing a new scope (a switch, or the workspace replaced under the same id) could carry over.
+test(`a new sandbox scope leaves nothing of a refused push to send, reprint or answer`, async () => {
+    const { flow, finish } = await load();
+    flow.askSync(`Push`, `3 commits`, PUSH);
+    finish({ status: `failed`, exitCode: 1, output: `2 tests failed` });
+    await flush();
+    const staged = { pending: flow.pending.value?.what, asked: flow.question.value?.kind, fix: flow.proposedFix.value !== undefined };
+
+    resetSandboxScope();
+
+    expect(staged).toEqual({ pending: `3 commits`, asked: `checks`, fix: true });
+    expect({
+        pending: flow.pending.value,
+        stage: flow.stage.value,
+        question: flow.question.value,
+        fix: flow.proposedFix.value,
+        held: flow.held.value,
+    }).toEqual({
+        pending: undefined,
+        stage: undefined,
+        question: undefined,
+        fix: undefined,
+        held: undefined,
+    });
 });
 
 // The case the rewrite is for: a verdict lands on a flow whose panel is long gone, and a second caller
@@ -503,8 +529,8 @@ test(`starting a fix with a picked model re-points the session before starting`,
     await flush();
 
     await flow.startFix({ provider: `cursor`, model: `composer-2.5`, label: `Composer 2.5` });
-    const composed = mocked(suggestion.composeSession).mock.results[0]?.value as { selectModel: ReturnType<typeof mock> };
-    expect(composed.selectModel).toHaveBeenCalledWith({ provider: `cursor`, value: `composer-2.5` });
+    const composed = mocked(suggestion.composeSession).mock.results[0]?.value as { selection: { apply: ReturnType<typeof mock> } };
+    expect(composed.selection.apply).toHaveBeenCalledWith({ kind: `selectModel`, pick: { provider: `cursor`, value: `composer-2.5` } });
     expect(suggestion.startSession).toHaveBeenCalledWith(composed);
     expect(flow.question.value).toBeUndefined();
     expect(flow.pending.value).toBeUndefined();

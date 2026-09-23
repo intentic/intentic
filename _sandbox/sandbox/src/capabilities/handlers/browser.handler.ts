@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import type { BrowserConfig } from "@intentic/sandbox-contract";
 import { clearMarker, clearSession, hasSession, moveMarker, moveSession } from "../../browser/sessions/session-store.js";
 import { packFragment } from "../../environment/packs.js";
-import { loadedSkillFile } from "../../settings/loaded-skills.js";
+import { loadedSkillFile } from "../../store/loaded-skills.js";
 import { accountGroupOf, accountSkillNames, convergeAccountSkills } from "../account-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { browserUrls, contributionKey, contributionRegistry, hostOf } from "../contributions.js";

@@ -38,9 +38,15 @@ const hostStub = () => {
         sandbox: {
             reachable: () => true,
             key: (...parts) => [...parts, `sandbox-test`],
-            json: async (path) => {
-                registered.requested.push(path);
-                return { path, content: JSON.stringify({ notes: [{ at: `2026-01-01T00:00:00.000Z`, text: `hello` }] }) };
+            // The typed client, holding only the procedure `GET /workspace/file` grants; the file it reads is recorded.
+            rpc: {
+                workspace: {
+                    file: async ({ path }) => {
+                        registered.requested.push(path);
+                        const content = JSON.stringify({ notes: [{ at: `2026-01-01T00:00:00.000Z`, text: `hello` }] });
+                        return { present: true, path, content, size: content.length, offset: 0, bytes: content.length, shared: true };
+                    },
+                },
             },
         },
         workspace: {
@@ -97,7 +103,7 @@ test(`the badge stays quiet until there is something unread, and clears the time
 
     // The badge's own scan fetches this, independent of the view being open.
     await new Promise((resolve) => setImmediate(resolve));
-    assert.ok(registered.requested.some((path) => path.startsWith(`/workspace/file?path=`)));
+    assert.deepEqual(registered.requested, declaredFiles);
     assert.equal(view.badge(view.detect([], [])[0])?.count, 1);
 
     for (const subscription of context.subscriptions) {

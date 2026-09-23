@@ -14,15 +14,15 @@ import {
     type SafetyLogEntry,
     type SafetyVerdict,
 } from "@intentic/sandbox-contract";
-import { createRequest } from "../agent/tools/agent-requests.js";
 import type { JudgeFacts } from "../agent/tools/command-judge.js";
-import { RoleModelUnsetError } from "../agent/models/role-model-unset.js";
+import { RoleModelUnsetError } from "../seams/role-model-unset.js";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { commandRun } from "./actions.js";
 import { createCredentialOracle } from "./credential-files.js";
 import { guard } from "./guard.js";
 import { excerptProgram } from "../safety/safety-log.js";
 import type { TurnTaint } from "./turn-taint.js";
+import type { ParkedCards } from "../agents/actor/parked-cards.js";
 
 // Second layer under the admission floor (guard/actions.ts sessionStart): what an already-running session's commands
 // may do. Four tiers run in `consult`: triage, an un-waivable hard rule, a judge, then a person; only the last
@@ -43,6 +43,8 @@ export interface CommandGuardOptions {
     readonly canPark?: boolean;
     // The turn's own signal, so a parked card settles when the turn is stopped instead of holding it open.
     readonly signal: AbortSignal;
+    // Where a held command's card is parked, so the owner's answer finds it.
+    readonly cards: Pick<ParkedCards, "create">;
     // Where the command will run, so a credential-shaped path can be resolved and checked rather than assumed.
     readonly cwd?: string;
     // Whether that cwd is the conversation's OWN copy, which only an isolated turn has. Absent reads as a tree shared
@@ -302,7 +304,7 @@ export const createCommandGuard = (options: CommandGuardOptions): CommandGuard =
                 record({ ...entry, outcome: "refused" }, at);
                 return unaskable;
             }
-            const { id, wait } = createRequest("permission", {
+            const { id, wait } = options.cards.create("permission", {
                 kind: "permission",
                 requestId: "",
                 decision: "deny",

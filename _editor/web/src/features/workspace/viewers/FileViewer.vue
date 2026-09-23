@@ -3,7 +3,8 @@ import type { WorkspaceFileWindow, WorkspaceTreeEntry } from "@intentic/api-cont
 import { Button, CopyButton, ui, useDevice } from "@intentic/ui";
 import { errorMessage } from "@intentic/ui/async";
 import { computed, ref, shallowRef, watch, type Component } from "vue";
-import { sandboxBlob, SandboxHttpError } from "../../sandbox/client/sandboxClient";
+import { sandboxBlob } from "../../sandbox/client/sandboxClient";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
 import { isArchiveContent } from "../files/archiveEntries";
 import { sha256Hex } from "../files/contentHash";
 import { readFileWindow } from "../files/fileWindow";

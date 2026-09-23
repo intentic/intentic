@@ -1,20 +1,12 @@
-import { type DayWindowQuery, type SavingsReport, SavingsReportSchema } from "@intentic/sandbox-contract";
+import type { DayWindowQuery, SavingsReport } from "@intentic/sandbox-contract";
 import { computed, type MaybeRefOrGetter, toValue } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
-import { SANDBOX_SAVINGS } from "../../../lib/queryKeys";
+import { rpcQuery } from "../client/rpcQuery";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-/* What each of this sandbox's token-reduction mechanisms was worth, from the daemon's /settings/savings route. */
+/* What each of this sandbox's token-reduction mechanisms was worth, from the daemon's savings read over one window. */
 
 export function useSavings(window: MaybeRefOrGetter<DayWindowQuery>) {
-    const { query, error } = useSandboxQuery({
-        queryKey: computed(() => SANDBOX_SAVINGS.of(toValue(window).from ?? `all`, toValue(window).to)),
-        queryFn: async (): Promise<SavingsReport> => {
-            const { from, to } = toValue(window);
-            const params = new URLSearchParams({ ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) });
-            return SavingsReportSchema.parse(await sandboxJson(`/settings/savings?${params.toString()}`));
-        },
-    });
+    const { query, error } = useSandboxQuery(rpcQuery(`settings.savings`, () => toValue(window)));
 
     return {
         savings: computed<SavingsReport | undefined>(() => query.data.value),

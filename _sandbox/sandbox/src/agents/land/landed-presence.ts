@@ -125,7 +125,7 @@ export const createLandedPresences = (
             for (const entry of entries) {
                 let landed = 0;
                 let present = 0;
-                for (const composed of entry.repos) {
+                for (const composed of entry.placement.repos) {
                     const { repo, base, landedTip, landedHead, absorbed } = composed;
                     // Nothing of this agent's landed into this repo through the one door that records it.
                     if (landedTip === undefined || landedHead === undefined) {

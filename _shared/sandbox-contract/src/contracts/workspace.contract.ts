@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { WorkspaceHealthQuerySchema, WorkspaceHealthSchema } from "../schemas/codebase-health.js";
 import { WorkspaceModulesSchema } from "../schemas/git/git.js";
 import { OkSchema } from "../schemas/shared.js";
@@ -44,7 +44,7 @@ import {
 // External MCP tools live in the capabilities manifest (mcp kind), not here.
 export const workspaceContract = {
     // `agent` picks whose workspace copy to read (WorkspaceScopeSchema); omitted means the shared /work tree.
-    tree: oc
+    tree: procedure
         .route({
             method: "GET",
             path: "/workspace/tree",
@@ -52,10 +52,11 @@ export const workspaceContract = {
             description:
                 "Every folder and file under the workspace root, as one walk. Name a conversation to read its own private copy of the tree instead of the shared one. Folders the daemon skips, such as installed packages, come back without their contents; ask for those separately.",
         })
+        .meta({ guest: true })
         .input(WorkspaceScopeSchema)
         .output(WorkspaceTreeSchema),
     // Lazy-loads a folder's children the tree walk skipped (node_modules, .git…) to bound its entry budget.
-    children: oc
+    children: procedure
         .route({
             method: "GET",
             path: "/workspace/children",
@@ -63,10 +64,11 @@ export const workspaceContract = {
             description:
                 "The entries inside a folder as one flat list. Direct children are the default, which is how the explorer opens a folder the full tree walk left closed; callers that need a small subtree can ask for up to five levels without a request per directory.",
         })
+        .meta({ guest: true })
         .input(WorkspaceChildrenQuerySchema)
         .output(WorkspaceChildrenSchema),
     // One window of a file's text plus its size, never the whole file: an unbounded read can stall the daemon.
-    file: oc
+    file: procedure
         .route({
             method: "GET",
             path: "/workspace/file",
@@ -74,10 +76,11 @@ export const workspaceContract = {
             description:
                 "A window of one file's text, plus how large the whole file is. Never the entire file: an unbounded read is how a single enormous log stalls the daemon for everyone, so ask for the slice you mean to show and page through if you need more.",
         })
+        .meta({ guest: true })
         .input(WorkspaceFileReadQuerySchema)
         .output(WorkspaceFileSchema),
     // The markdown shadow fileq keeps of a binary file; the read is a plain file read, no derivation triggered.
-    derived: oc
+    derived: procedure
         .route({
             method: "GET",
             path: "/workspace/derived",
@@ -85,10 +88,11 @@ export const workspaceContract = {
             description:
                 "What a document, picture, recording or archive says, as text, from the shadow the sandbox keeps beside it. This is the same rendering an agent reads instead of the bytes, so it is also the way to check what one is working from. Nothing is derived here: a file with no shadow yet answers that it has none, and whether it could have one.",
         })
+        .meta({ guest: true })
         .input(WorkspaceDerivedQuerySchema)
         .output(WorkspaceDerivedSchema),
     // The lazy path, on demand: same convergence the background sweep runs, for one file someone is looking at.
-    derive: oc
+    derive: procedure
         .route({
             method: "POST",
             path: "/workspace/derive",
@@ -96,10 +100,12 @@ export const workspaceContract = {
             description:
                 "Renders one file to text and answers with the result, for when its shadow is missing or you want it rebuilt. The same work the background pass does when that setting is on, so this is how a reader gets the text without turning it on for the whole workspace. Costs a parse of exactly one file; a format nothing can read says so rather than failing.",
         })
+        // Rendering one file as text is reading it: a regenerable cache entry, one parse of a readable file.
+        .meta({ floor: "viewer", guest: true })
         .input(WorkspaceDerivedQuerySchema)
         .output(WorkspaceDerivedSchema),
     // Where the background pass stands, with no file in hand: what the setting's own row reports about itself.
-    derivedStatus: oc
+    derivedStatus: procedure
         .route({
             method: "GET",
             path: "/workspace/derived-status",
@@ -107,9 +113,10 @@ export const workspaceContract = {
             description:
                 "Whether documents, pictures, recordings and archives are being rendered to text in the background, how many are waiting, which are being read right now, and how many shadows the last whole-tree pass counted. Ask this to tell a file nothing can read from a file whose turn has not come.",
         })
+        .meta({ guest: true })
         .output(SidecarStatusSchema),
     // Mints the ticket GET /workspace/media (a plain Hono byte-range route, no oRPC shape) requires to stream.
-    mediaTicket: oc
+    mediaTicket: procedure
         .route({
             method: "POST",
             path: "/workspace/media-ticket",
@@ -117,10 +124,12 @@ export const workspaceContract = {
             description:
                 "Mints the short-lived ticket a video or audio element hands to the streaming route, which serves byte ranges and so cannot carry an ordinary header. Minting it here means a caller can tell whether this sandbox streams media at all, rather than discovering it mid-playback.",
         })
+        // Opening a media file is a read, and the ticket is strictly narrower than the bearer.
+        .meta({ floor: "viewer", guest: true })
         .input(WorkspaceMediaTicketQuerySchema)
         .output(WorkspaceMediaTicketSchema),
     // Matches a prose-written path, often just a suffix, against the tree rather than trusting it as root-relative.
-    resolve: oc
+    resolve: procedure
         .route({
             method: "GET",
             path: "/workspace/resolve",
@@ -128,10 +137,11 @@ export const workspaceContract = {
             description:
                 "Matches a path somebody wrote in prose against the real tree and says which file it means. A path mentioned in a message is often only the tail of the real one, so this is the lookup behind every clickable file reference rather than a plain existence check.",
         })
+        .meta({ guest: true })
         .input(WorkspaceResolveQuerySchema)
         .output(WorkspaceResolveSchema),
     // `mode` narrows the search to one kind; default fuses text, structure, meaning and history in one pass.
-    search: oc
+    search: procedure
         .route({
             method: "GET",
             path: "/workspace/search",
@@ -139,10 +149,11 @@ export const workspaceContract = {
             description:
                 "Ranked results across the whole workspace, grouped, each carrying why it matched and how fresh it is. Left alone it blends plain text, structure, meaning and history in one pass; narrow it to a single kind of search when you already know which you want. Long result sets resume from the cursor it hands back.",
         })
+        .meta({ guest: true, control: "editor" })
         .input(WorkspaceSearchQuerySchema)
         .output(WorkspaceSearchResultSchema),
     // Per-file churn × complexity, index totals, top modules; scoped to a repo, not the whole /work drop.
-    health: oc
+    health: procedure
         .route({
             method: "GET",
             path: "/workspace/health",
@@ -153,7 +164,7 @@ export const workspaceContract = {
         .input(WorkspaceHealthQuerySchema)
         .output(WorkspaceHealthSchema),
     // Deterministic, no-LLM classification into coarse buckets; read-only, applied only via the move route.
-    classify: oc
+    classify: procedure
         .route({
             method: "GET",
             path: "/workspace/classify",
@@ -163,16 +174,18 @@ export const workspaceContract = {
         })
         .output(WorkspaceClassificationSchema),
     // Delete sends `{path}` in the body, not the query: oRPC's OpenAPI codec reads non-GET input from the body.
-    mkdir: oc
+    mkdir: procedure
         .route({
             method: "POST",
             path: "/workspace/dir",
             summary: "Create a folder",
             description: "Makes a folder, and any missing folders above it.",
         })
+        // Editing the shared tree is the writer grant; each file route resolves its path inside the caller's fence.
+        .meta({ floor: "writer" })
         .input(WorkspaceDirSchema)
         .output(OkSchema),
-    delete: oc
+    delete: procedure
         .route({
             method: "DELETE",
             path: "/workspace/entry",
@@ -180,27 +193,30 @@ export const workspaceContract = {
             description:
                 "Removes one entry and everything under it. The path travels in the body rather than the address, the same as every other write in this group.",
         })
+        .meta({ floor: "writer" })
         .input(WorkspaceFileQuerySchema)
         .output(OkSchema),
-    move: oc
+    move: procedure
         .route({
             method: "POST",
             path: "/workspace/move",
             summary: "Move or rename something",
             description: "Moves one entry to a new path, which is also how you rename it.",
         })
+        .meta({ floor: "writer" })
         .input(WorkspaceMoveSchema)
         .output(OkSchema),
-    copy: oc
+    copy: procedure
         .route({
             method: "POST",
             path: "/workspace/copy",
             summary: "Copy a file or folder",
             description: "Duplicates one entry at a new path, recursively for a folder.",
         })
+        .meta({ floor: "writer" })
         .input(WorkspaceMoveSchema)
         .output(OkSchema),
-    extract: oc
+    extract: procedure
         .route({
             method: "POST",
             path: "/workspace/extract",
@@ -208,10 +224,11 @@ export const workspaceContract = {
             description:
                 "Unpacks a zip or tar already in the workspace into a new folder beside it, named after the archive. An archive that is one folder of its own name lands as that folder rather than as it twice, and a .gz, .bz2, .xz or .zst holding a single file lands as that file. Nothing is ever written over: the answer says where it landed. Formats with no tool here, such as .7z and .rar, are refused.",
         })
+        .meta({ floor: "writer" })
         .input(WorkspaceFileQuerySchema)
         .output(WorkspaceExtractSchema),
     // An imported project lacks node_modules/.venv; until this says ready, its type checks and tests can mislead.
-    setup: oc
+    setup: procedure
         .route({
             method: "GET",
             path: "/workspace/setup",
@@ -220,7 +237,7 @@ export const workspaceContract = {
                 "Per project, whether its dependencies are actually present. A project that arrives by import comes without them, so files landing is not the same as the project working: until this says a project is ready, its type checks and tests can only mislead you.",
         })
         .output(WorkspaceSetupSchema),
-    install: oc
+    install: procedure
         .route({
             method: "POST",
             path: "/workspace/setup/install",
@@ -230,15 +247,16 @@ export const workspaceContract = {
         })
         .input(WorkspaceInstallSchema)
         .output(WorkspaceInstallResultSchema),
-    repos: oc
+    repos: procedure
         .route({
             method: "GET",
             path: "/workspace/repos",
             summary: "Repos in the workspace",
             description: "Every git repo the daemon found in the workspace, with where each one sits and what it is called.",
         })
+        .meta({ guest: true })
         .output(ReposListSchema),
-    addRepo: oc
+    addRepo: procedure
         .route({
             method: "POST",
             path: "/workspace/repos",
@@ -247,7 +265,7 @@ export const workspaceContract = {
         })
         .input(CloneRepoSchema)
         .output(CloneResultSchema),
-    createRepo: oc
+    createRepo: procedure
         .route({
             method: "POST",
             path: "/workspace/repos/new",
@@ -258,7 +276,7 @@ export const workspaceContract = {
         .input(CreateRepoSchema)
         .output(CloneResultSchema),
     // Mutates the tree (fetch + fast-forward), which is why this is POST rather than GET.
-    sync: oc
+    sync: procedure
         .route({
             method: "POST",
             path: "/workspace/sync",
@@ -268,7 +286,7 @@ export const workspaceContract = {
         })
         .output(WorkspaceSyncSchema),
     // The source repo's templates.json app types; drives the apps extension's Add-app picker.
-    templates: oc
+    templates: procedure
         .route({
             method: "GET",
             path: "/workspace/templates",
@@ -277,7 +295,7 @@ export const workspaceContract = {
         })
         .output(TemplatesListSchema),
     // Runs as a one-shot tmux job named `panel-<repo>--add_apps`, executing `intentic scaffold add-app`.
-    addApps: oc
+    addApps: procedure
         .route({
             method: "POST",
             path: "/workspace/repos/{repo}/apps",
@@ -287,7 +305,7 @@ export const workspaceContract = {
         })
         .input(AddAppsSchema)
         .output(OkSchema),
-    appsList: oc
+    appsList: procedure
         .route({
             method: "GET",
             path: "/workspace/repos/{repo}/apps",
@@ -297,7 +315,7 @@ export const workspaceContract = {
         .input(RepoAppsParamSchema)
         .output(AppsListSchema),
     // The monorepo's package dependency graph, from pnpm-workspace.yaml globs and each package.json's deps.
-    packageGraph: oc
+    packageGraph: procedure
         .route({
             method: "GET",
             path: "/workspace/repos/{repo}/graph",
@@ -307,7 +325,7 @@ export const workspaceContract = {
         .input(RepoAppsParamSchema)
         .output(WorkspaceGraphSchema),
     // Every repo's package dirs in one call, since a review spans repos and per-repo would fan out per open.
-    modules: oc
+    modules: procedure
         .route({
             method: "GET",
             path: "/workspace/modules",
@@ -316,7 +334,7 @@ export const workspaceContract = {
                 "The named packages in the whole workspace, which is what a review list groups changed files under when a reader wants packages rather than paths. Whole-workspace in one answer, because a review spans repos and asking per repo would be a fan-out on every open.",
         })
         .output(WorkspaceModulesSchema),
-    startApp: oc
+    startApp: procedure
         .route({
             method: "POST",
             path: "/workspace/repos/{repo}/apps/{app}/start",
@@ -325,7 +343,7 @@ export const workspaceContract = {
         })
         .input(AppParamSchema)
         .output(OkSchema),
-    stopApp: oc
+    stopApp: procedure
         .route({
             method: "POST",
             path: "/workspace/repos/{repo}/apps/{app}/stop",
@@ -335,7 +353,7 @@ export const workspaceContract = {
         .input(AppParamSchema)
         .output(OkSchema),
     // Runs tests for the named dirs in a one-shot tmux panel; mirrors addApps: an ack, terminal as result surface.
-    runTests: oc
+    runTests: procedure
         .route({
             method: "POST",
             path: "/workspace/repos/{repo}/tests",

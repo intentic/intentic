@@ -22,7 +22,7 @@ const props = defineProps<{
     cut: number;
 }>();
 
-const { conversation, messages, forkAt, beginEdit, editing, streaming: conversationStreaming } = usePaneView();
+const { conversation, messages, forkAt, editing, streaming: conversationStreaming } = usePaneView();
 const { mobile } = useDevice();
 const queryClient = useQueryClient();
 const { fleet, agentById } = useAgents();
@@ -85,7 +85,7 @@ const rewind = async (): Promise<void> => {
     rewinding.value = true;
     try {
         // The workspace views are reading the tree this just rewrote.
-        if (await conversation.value.rewindTo(target)) {
+        if (await conversation.value.transcript.rewindTo(target)) {
             await invalidateWorkspace(queryClient);
         }
     } finally {
@@ -161,7 +161,7 @@ const editRow = computed<MenuItem[]>(() => {
                   : `Ask it differently, replaces this and everything below`,
             disabled: !anchored.value || filesBusy.value,
             command: () => {
-                beginEdit(target);
+                conversation.value.transcript.beginEdit(target);
             },
         },
     ];

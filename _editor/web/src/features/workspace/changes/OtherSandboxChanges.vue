@@ -4,6 +4,7 @@ import { computed, onUnmounted, ref } from "vue";
 import {
     dismissPushError,
     hasOtherSandboxes,
+    ledgerKey,
     type LedgerRow,
     ledgerRows,
     outgoingAcross,
@@ -63,7 +64,6 @@ const openWorkspaceIn = (sandboxId: string): void => {
     useSandbox().select(sandboxId);
 };
 
-const rowKey = (row: LedgerRow): string => `${row.sandboxId}:${row.repo}`;
 const sendable = (row: LedgerRow): boolean => !row.unreadable && (row.ahead > 0 || row.publish);
 // Publish for a branch never pushed, Push otherwise; a branch that's both is sent by one ordinary push.
 const sendVerb = (row: LedgerRow): string => (row.publish && row.ahead === 0 ? `Publish` : `Push`);
@@ -123,7 +123,7 @@ const detail = (row: LedgerRow): string => {
                 </button>
             </p>
 
-            <div v-for="row in rows" :key="rowKey(row)" class="flex min-w-0 items-center gap-1.5 py-1 pl-4 pr-1">
+            <div v-for="row in rows" :key="ledgerKey(row)" class="flex min-w-0 items-center gap-1.5 py-1 pl-4 pr-1">
                 <div class="min-w-0 flex-1">
                     <!-- Box names lead repository names so the machine context is clear. -->
                     <p class="min-w-0 truncate text-2xs text-content">
@@ -138,7 +138,7 @@ const detail = (row: LedgerRow): string => {
                     severity="secondary"
                     class="shrink-0"
                     :disabled="pushingRow !== undefined"
-                    :label="pushingRow === rowKey(row) ? t(`workspace.otherSandboxChanges.sending`) : sendVerb(row)"
+                    :label="pushingRow === ledgerKey(row) ? t(`workspace.otherSandboxChanges.sending`) : sendVerb(row)"
                     v-tooltip.top="t(`workspace.otherSandboxChanges.straightHereOwnPre`, { row: sendVerb(row) })"
                     @click="pushRow(row)"
                 />

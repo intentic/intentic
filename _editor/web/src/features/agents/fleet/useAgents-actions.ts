@@ -1,10 +1,10 @@
 import type { AgentSummary, TurnBreak, TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { triggerRef } from "vue";
 import { standingFrom, unregistered } from "./agentStatus";
 import { useChat } from "../../chat/run/useChat";
 import { agentTabOf, type AgentTabSeed } from "../../chat/panel/useChat-reveal";
 import { summonChat } from "../../chat/run/summon";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { jsonBody } from "../../sandbox/client/jsonBody";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import type { FleetAgent } from "./useAgents-fleet";
 import { underClaim } from "./useAgents-provisional";
 import { markSeen, registry } from "./useAgents-registry";
@@ -22,15 +22,17 @@ export const rename = async (id: string, title: string): Promise<void> => {
     if (conversation !== undefined) {
         conversation.title.value = trimmed;
     }
-    const post = (): Promise<AgentSummary> =>
-        sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/rename`, jsonBody(`POST`, { title: trimmed }));
+    const post = (): Promise<AgentSummary> => sandboxRpc.agents.rename({ id, title: trimmed });
     const previous = registry.value.find((agent) => agent.id === id);
     if (previous === undefined) {
         void post().catch(() => undefined);
         return;
     }
     const revertTitle = previous.title;
-    previous.title = trimmed; // registry is a deep ref: the in-place write repaints the fleet
+    // In place, then triggered: the roster is a shallow ref, and a card whose chat has no tab here repaints off nothing
+    // else.
+    previous.title = trimmed;
+    triggerRef(registry);
     try {
         const summary = await post();
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
@@ -39,6 +41,7 @@ export const rename = async (id: string, title: string): Promise<void> => {
         const target = registry.value.find((agent) => agent.id === id);
         if (target !== undefined) {
             target.title = revertTitle;
+            triggerRef(registry);
         }
         if (conversation !== undefined) {
             conversation.title.value = previousTitle;
@@ -56,7 +59,7 @@ export const setAutoLand = async (id: string, autoLand: boolean | null): Promise
         previous.autoLand = autoLand ?? undefined;
     }
     try {
-        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/auto-land`, jsonBody(`POST`, { autoLand }));
+        const summary = await sandboxRpc.agents.autoLand({ id, autoLand });
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } catch (error) {
         const target = registry.value.find((agent) => agent.id === id);
@@ -78,7 +81,7 @@ export const setBreakPolicy = async (id: string, ending: TurnBreak, policy: Turn
         Object.assign(previous, policyPatch(ending, policy ?? undefined));
     }
     try {
-        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/break-policy`, jsonBody(`POST`, { ending, policy }));
+        const summary = await sandboxRpc.agents.breakPolicy({ id, ending, policy });
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } catch (error) {
         const target = registry.value.find((agent) => agent.id === id);
@@ -107,7 +110,7 @@ const policyPatch = (ending: TurnBreak, policy: TurnBreakPolicy | undefined): Pa
 // press (useAgents-provisional) and goes back where it was if the daemon answers that it holds no such turn.
 export const resumeHeldTurn = (id: string): Promise<void> =>
     underClaim(id, undefined, `turn`, async () => {
-        await sandboxJson<{ run: string }>(`/agent/resume`, jsonBody(`POST`, { conversationId: id }));
+        await sandboxRpc.agent.resume({ conversationId: id });
     });
 
 // Disarms outside conditions this conversation is parked on: all of them, or the one named. Optimistic, since dropping
@@ -122,8 +125,7 @@ export const stopWatching = async (id: string, watchId?: string): Promise<void> 
         previous.watches = kept.length > 0 ? kept : undefined;
     }
     try {
-        const body = watchId === undefined ? {} : { watchId };
-        const summary = await sandboxJson<AgentSummary>(`/agents/${encodeURIComponent(id)}/stop-watching`, jsonBody(`POST`, body));
+        const summary = await sandboxRpc.agents.stopWatching({ id, watchId });
         registry.value = registry.value.map((agent) => (agent.id === id ? summary : agent));
     } catch (error) {
         const target = registry.value.find((agent) => agent.id === id);

@@ -2,7 +2,7 @@ import type { ArrivalItem, Automation, Capability, SkillDraft } from "@intentic/
 import { asZone, AutomationSchema, CapabilitySchema, SkillDraftSchema } from "@intentic/sandbox-contract";
 import { Cron } from "croner";
 import { isBakedSkill } from "../settings/skills.js";
-import { parseSkillFile } from "../settings/skill-file.js";
+import { parseSkillFile } from "../skill-file.js";
 
 // Shared across every source adapter: tolerant readers, name shaping, and the one translation both ecosystems spell
 // identically (a SKILL.md folder). An adapter's own judgment stays out of here; two adapters disagreeing on a valid id

@@ -3,8 +3,7 @@ import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-
 import type { BrowserPage, BrowserSession } from "@intentic/sandbox-contract";
 import { browserSessionName } from "@intentic/sandbox-contract/session-names";
 import type { Browser, BrowserContext, Dialog, Page } from "playwright";
-import { resolveRequest } from "../../agent/tools/agent-requests.js";
-import { publishRuntimeChange } from "../../system/runtime-watch.js";
+import { publishRuntimeChange } from "../../seams/runtime-feed.js";
 import { releaseDisplay } from "../cast/display.js";
 import { placeWindow } from "../cast/region.js";
 import { ROUTED_BROWSER_SERVER } from "../tools/browser-tools.js";
@@ -59,6 +58,8 @@ interface BrowserSessionRecord {
     finishedAt: number | undefined;
     // Parked help request the agent is blocked on; cleared when the waiter settles or the session finishes.
     help: { readonly requestId: string; readonly message: string; readonly requestedAt: number } | undefined;
+    // Settles that request as not-helped, bound by whoever raised it; what a closing browser owes its waiter.
+    abandonHelp: ((note: string) => void) | undefined;
     browser: Browser | undefined;
     context: BrowserContext | undefined;
     // In-flight attach; a second tool call doesn't start another one, and the view route can await it.
@@ -188,15 +189,9 @@ const finish = (record: BrowserSessionRecord): void => {
     }
     record.finishedAt = Date.now();
     // Settles any parked help request as not-helped; idempotent against a racing turn-abort settle.
-    if (record.help !== undefined) {
-        resolveRequest({
-            kind: "browser_help",
-            requestId: record.help.requestId,
-            helped: false,
-            note: "the browser closed before anyone could help",
-        });
-        record.help = undefined;
-    }
+    record.abandonHelp?.("the browser closed before anyone could help");
+    record.help = undefined;
+    record.abandonHelp = undefined;
     record.browser = undefined;
     record.context = undefined;
     record.attaching = undefined;
@@ -211,12 +206,14 @@ const finish = (record: BrowserSessionRecord): void => {
 export const raiseBrowserHelp = (
     account: string,
     help: { readonly requestId: string; readonly message: string; readonly requestedAt: number },
+    abandon: (note: string) => void,
 ): string | undefined => {
     const record = [...sessions.values()].find((candidate) => candidate.server === account && candidate.finishedAt === undefined);
     if (record === undefined) {
         return undefined;
     }
     record.help = help;
+    record.abandonHelp = abandon;
     publishRuntimeChange("browsers");
     return record.name;
 };
@@ -226,6 +223,7 @@ export const clearBrowserHelp = (requestId: string): void => {
     for (const record of sessions.values()) {
         if (record.help?.requestId === requestId) {
             record.help = undefined;
+            record.abandonHelp = undefined;
             publishRuntimeChange("browsers");
         }
     }
@@ -295,6 +293,7 @@ export const openBrowserSession = (input: {
         lastPageId: undefined,
         finishedAt: undefined,
         help: undefined,
+        abandonHelp: undefined,
         browser: undefined,
         context: undefined,
         attaching: undefined,

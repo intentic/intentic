@@ -1,8 +1,12 @@
 import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { it, expect } from "bun:test";
-import { resolveRequest } from "../agent/tools/agent-requests.js";
 import { type AskDeps, type AskedCapability, type AskInstance, createCapabilityGate } from "./capability-offer.js";
+import { parkedCards } from "../agents/actor/parked-cards.js";
+import { memoryFleet } from "../testing.js";
+
+// Where a turn here parks its cards: one fleet's actors.
+const cards = parkedCards(memoryFleet().conversations);
 
 // Setup gate, driven end to end with a fake catalog and live turn: nothing is watched for until a reply accepts.
 // Every other ending (skip, expiry, dead caller, unknown/connected entry) answers with a sentence, without nagging
@@ -34,6 +38,7 @@ const fake = (over: Partial<AskDeps> = {}): Fake => {
     const manifest: AskInstance[] = [];
     const states = new Map<string, "active" | "pending" | "error" | "inactive">();
     const deps: AskDeps = {
+        cards,
         entries: async () => [NOTION],
         list: async () => [...manifest],
         status: async (instance) => ({ state: states.get(instance.id) ?? "pending" }),
@@ -65,7 +70,7 @@ const answerEntry = async (frames: AgentEvent[], connect: boolean): Promise<void
     if (raised.kind !== "capability_offer") {
         throw new Error(`expected a capability_offer frame, got ${raised.kind}`);
     }
-    resolveRequest({ kind: "capability_offer", requestId: raised.requestId, connect });
+    cards.resolve({ kind: "capability_offer", requestId: raised.requestId, connect });
 };
 
 it("a yes parks the call on the setup, and the connection coming live answers it connected", async () => {
@@ -116,7 +121,7 @@ it("a decline in one conversation does not silence the ask in another", async ()
         await new Promise((resolve) => setTimeout(resolve, 1));
     }
     const raised = frames.findLast((frame) => frame.kind === "capability_offer")!;
-    resolveRequest({ kind: "capability_offer", requestId: (raised as { requestId: string }).requestId, connect: false });
+    cards.resolve({ kind: "capability_offer", requestId: (raised as { requestId: string }).requestId, connect: false });
     expect((await second).status).toBe(403);
 });
 
@@ -135,7 +140,7 @@ it("an ask nobody answers expires without connecting, and may be asked again lat
         await new Promise((resolve) => setTimeout(resolve, 1));
     }
     const raised = frames.findLast((frame) => frame.kind === "capability_offer")!;
-    resolveRequest({ kind: "capability_offer", requestId: (raised as { requestId: string }).requestId, connect: false });
+    cards.resolve({ kind: "capability_offer", requestId: (raised as { requestId: string }).requestId, connect: false });
     await again;
     expect(frames.filter((frame) => frame.kind === "capability_offer")).toHaveLength(2);
 });

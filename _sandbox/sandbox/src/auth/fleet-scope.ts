@@ -1,5 +1,6 @@
 import { type Fence, fenceAllows, fenceReaches, type SandboxMetrics, type SystemEvent } from "@intentic/sandbox-contract";
 import { ORPCError } from "@orpc/server";
+import type { PersistedAgent } from "../agents/registry/agents-store.js";
 import type { Caller } from "./auth.js";
 
 // What a caller may see of the fleet, on two independent narrowings. A GUEST sees the conversations they own or
@@ -17,6 +18,13 @@ export interface Provenance {
     // The fence the conversation was born with, as area ids. Absent means it was started by someone unfenced.
     readonly areas?: readonly string[] | undefined;
 }
+
+// A registry entry's provenance, read off its latched identity and whoever answers for it now.
+export const provenanceOf = ({ identity, social }: Pick<PersistedAgent, "identity" | "social">): Provenance => ({
+    startedBy: identity.startedBy,
+    owner: social.owner,
+    areas: identity.areas,
+});
 
 const sameEmail = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 

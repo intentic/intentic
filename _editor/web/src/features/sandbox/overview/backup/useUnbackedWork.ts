@@ -1,7 +1,6 @@
 import type { GitRemoteRepo } from "@intentic/sandbox-contract";
 import { computed } from "vue";
-import { GIT_REMOTE_REPOS } from "../../../../lib/queryKeys";
-import { sandboxJson } from "../../client/sandboxClient";
+import { rpcQuery } from "../../client/rpcQuery";
 import { useSandboxQuery } from "../../client/useSandboxQuery";
 import { fetchWorkspaceTree } from "../../../workspace/explorer/useWorkspaceTree";
 import { workspaceTreeKey } from "../../../workspace/health/workspaceTreeKey";
@@ -14,12 +13,7 @@ import { workspaceTreeKey } from "../../../workspace/health/workspaceTreeKey";
 const REMOTES_POLL_MS = 5 * 60_000;
 
 export function useUnbackedWork() {
-    const { query } = useSandboxQuery({
-        queryKey: GIT_REMOTE_REPOS.of(),
-        queryFn: async (): Promise<{ repos: GitRemoteRepo[] }> => sandboxJson(`/git/remote-repos`),
-        refetchInterval: REMOTES_POLL_MS,
-        staleTime: REMOTES_POLL_MS,
-    });
+    const { query } = useSandboxQuery({ ...rpcQuery(`git.remoteRepos`), refetchInterval: REMOTES_POLL_MS, staleTime: REMOTES_POLL_MS });
 
     // Undefined while unread: "no repository has a remote" and "nobody has looked" are the difference between a
     // standing warning and a lie, and this one draws a warning.

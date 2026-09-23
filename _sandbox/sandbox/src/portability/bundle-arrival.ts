@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { chmod, mkdir, readdir, rm, symlink, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import { type ArrivalItem, type ArrivalReport, BundleManifestSchema, type BundleManifest, type NeedsAction } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
 import { extract, type Headers } from "tar-stream";
-import { repoGitDir } from "../history/history.js";
+import { pathExists } from "../path-exists.js";
+import { conversationsDbPath } from "../store/conversations-db.js";
+import { repoGitDir } from "../workspace/layout/git-layout.js";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { writeStreamCounted } from "../workspace/files/workspace-files-upload.js";
 import { setWorkspaceMtime } from "../workspace/files/workspace-files.js";
@@ -309,15 +311,46 @@ const healGitPointers = async (
     return healed;
 };
 
+// Where an entry lands: its path under the root it names, or, for the conversations database, the spool it is adopted
+// from. Undefined refuses it: outside its root, or a live database's sidecar, which nothing here would ever write.
+const destinationOf = (
+    placed: Placed,
+    header: Headers,
+    roots: { readonly workspaceRoot: string; readonly historyRoot: string },
+    arrivedDatabase: string,
+): string | undefined => {
+    const database = basename(conversationsDbPath(roots.historyRoot));
+    if (placed.root === "history" && placed.relPath.startsWith(database)) {
+        return placed.relPath === database && header.type === "file" ? arrivedDatabase : undefined;
+    }
+    return resolveWithin(placed.root === "workspace" ? roots.workspaceRoot : roots.historyRoot, placed.relPath);
+};
+
+// The conversations the bundle carried, into this sandbox's own database once every file of theirs is down.
+const adoptArrived = async (arrived: string, adopt: (snapshot: string) => Promise<void>): Promise<void> => {
+    if (!(await pathExists(arrived))) {
+        return;
+    }
+    try {
+        await adopt(arrived);
+    } finally {
+        await rm(arrived, { force: true });
+    }
+};
+
 // Writes the ticked rows from the spooled bundle, re-applying every safety the index pass used, plus the one thing the
 // index couldn't decide: whether the owner consented to this bundle's credential values.
+// The conversations database arrives as a snapshot and lands row by row through `adoptConversations`, never as a file
+// written over the live one, whose WAL a byte copy would tear.
 export const applyBundle = async (
     held: HeldBundle,
     roots: { readonly workspaceRoot: string; readonly historyRoot: string },
     selection: { readonly items: readonly string[]; readonly includeSecrets: boolean },
     limit: number,
+    adoptConversations: (snapshot: string) => Promise<void>,
 ): Promise<ArrivalReport> => {
     const wanted = new Set(selection.items);
+    const arrivedDatabase = `${held.spool}.db`;
     const applied: ArrivalReport["applied"] = [];
     const failed: ArrivalReport["failed"] = [];
     const refused: string[] = [...held.index.refused];
@@ -368,7 +401,7 @@ export const applyBundle = async (
                 withheld += 1;
                 return skip();
             }
-            const target = resolveWithin(placed.root === "workspace" ? roots.workspaceRoot : roots.historyRoot, placed.relPath);
+            const target = destinationOf(placed, header, roots, arrivedDatabase);
             if (target === undefined) {
                 refuse(header.name);
                 return skip();
@@ -382,6 +415,7 @@ export const applyBundle = async (
         },
     );
 
+    await adoptArrived(arrivedDatabase, adoptConversations);
     const repos = [...landed].flatMap((item) => (item.startsWith("repo:") ? [item.slice("repo:".length)] : []));
     // Workspace repo's pointer heals with the workspace files, the row its git dir travels under (see `place`).
     const healed = await healGitPointers(roots.workspaceRoot, roots.historyRoot, new Set(landed.has(FILES_ITEM) ? [...repos, "root"] : repos));

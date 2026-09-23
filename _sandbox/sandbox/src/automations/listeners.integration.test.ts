@@ -5,15 +5,18 @@ import { type AgentTurn, type Automation, SandboxSettingsSchema, type ListenerMe
 import { test, expect } from "bun:test";
 import { SETTLES, waitFor } from "@intentic/testing/bun";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, fileThreadSessionsStore, threadKey } from "../sessions/thread-sessions.js";
 import { unstubbed } from "@intentic/testing";
 import { fileAutomationsStore } from "./automations-store.js";
 import { fileHeldWakesStore } from "./held-wakes-store.js";
 import { createMessageBatcher, dispatchListenerMessage, type MessageContext, reportListenerFailure } from "./listeners.js";
-import { PAYLOAD_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
+import { PAYLOAD_MAX, type TurnStream } from "./scheduler.js";
 import { fileSendersStore } from "./senders-store.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { drivenBy } from "../testing.js";
 
 // The listener paths touch automations/capabilities/activity/workspace/logger, the senders roster, and on a hold the
 // held-wakes queue and push; `unstubbed` keeps the fake small.
@@ -26,15 +29,15 @@ const fakeServices = (root: string): Services =>
         senders: fileSendersStore(join(root, "senders.json")),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         pushSender: unstubbed<Services["pushSender"]>("pushSender", { notifyIfAway: async () => ({ delivered: 0, failed: 0 }) }),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
 
-const fakeWake = (prompts: string[]): WakeFn =>
-    async function* (_services, input) {
+const fakeWake = (prompts: string[]): TurnStarter["stream"] =>
+    async function* (input) {
         prompts.push(input.prompt);
         yield { kind: "done" };
     };
@@ -152,7 +155,7 @@ test("dispatch routes by provider and channelId and wakes with the JSON line as 
     await services.automations.upsert(listenerAutomation("one-channel", { trigger: { kind: "listener", provider: "discord", channelId: "c2" } }));
     await services.automations.upsert(listenerAutomation("off", { enabled: false }));
     const prompts: string[] = [];
-    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message(), 5);
     await eventually(async () => expect((await services.automations.get("all-channels"))?.runs).toHaveLength(1));
     // JSON payload rides sealed byte-identical inside the untrusted-content envelope.
     const sealed =
@@ -168,11 +171,11 @@ test("a dispatched message opens an isolated conversation stamped with where it 
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(listenerAutomation("support"));
     const turns: AgentTurn[] = [];
-    const capture: WakeFn = async function* (_services, input) {
+    const capture: TurnStarter["stream"] = async function* (input) {
         turns.push(input);
         yield { kind: "done" };
     };
-    await dispatchListenerMessage(services, message({ content: "can you look at the build?\nthanks" }), capture, 5);
+    await dispatchListenerMessage(drivenBy(services, capture), message({ content: "can you look at the build?\nthanks" }), 5);
     await eventually(() => expect(turns).toHaveLength(1));
     const turn = turns[0] as AgentTurn;
     expect(turn.isolated).toBe(true);
@@ -185,8 +188,8 @@ test("a dispatched message opens an isolated conversation stamped with where it 
 // Threading: a channel is one continuous conversation, not a series of strangers.
 
 // A wake that also mints a provider session, so the next fire has something to resume.
-const captureWithSession = (turns: AgentTurn[], sessionId: string): WakeFn =>
-    async function* (_services, input) {
+const captureWithSession = (turns: AgentTurn[], sessionId: string): TurnStarter["stream"] =>
+    async function* (input) {
         turns.push(input);
         yield { kind: "session", sessionId };
         yield { kind: "done" };
@@ -205,11 +208,11 @@ test("a follow-up message in the same channel reuses the conversation and resume
     // Distinct id per test: the batcher map is a singleton keyed by automation id; reuse reuses the prior batcher.
     await services.automations.upsert(listenerAutomation("thread-follow-up"));
     const turns: AgentTurn[] = [];
-    await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-1")), message(), 5);
     await eventually(() => expect(turns).toHaveLength(1));
     // Session to resume is set once the first turn settles; an earlier follow-up would have nothing to resume.
     await settledThread(services, threadKey("discord", "thread-follow-up", "c1"));
-    await dispatchListenerMessage(services, message({ id: "m2", content: "and one more thing" }), captureWithSession(turns, "sess-1"), 5);
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-1")), message({ id: "m2", content: "and one more thing" }), 5);
     await eventually(() => expect(turns).toHaveLength(2));
     const [first, second] = turns as [AgentTurn, AgentTurn];
     expect(second.conversationId).toBe(first.conversationId);
@@ -221,9 +224,9 @@ test("two channels of one automation get two conversations", async () => {
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(listenerAutomation("thread-two-channels"));
     const turns: AgentTurn[] = [];
-    await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-1")), message(), 5);
     await eventually(() => expect(turns).toHaveLength(1));
-    await dispatchListenerMessage(services, message({ id: "m2", channelId: "c2" }), captureWithSession(turns, "sess-2"), 5);
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-2")), message({ id: "m2", channelId: "c2" }), 5);
     await eventually(() => expect(turns).toHaveLength(2));
     const [first, second] = turns as [AgentTurn, AgentTurn];
     expect(second.conversationId).not.toBe(first.conversationId);
@@ -235,7 +238,7 @@ test("a channel quiet past the TTL starts a fresh conversation on the next messa
     const services = fakeServices(root);
     await services.automations.upsert(listenerAutomation("thread-ttl"));
     const turns: AgentTurn[] = [];
-    await dispatchListenerMessage(services, message(), captureWithSession(turns, "sess-1"), 5);
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-1")), message(), 5);
     await eventually(() => expect(turns).toHaveLength(1));
     // Ages the record on disk rather than mocking the clock; must wait for the settle write before rewriting it.
     const key = threadKey("discord", "thread-ttl", "c1");
@@ -245,7 +248,7 @@ test("a channel quiet past the TTL starts a fresh conversation on the next messa
     (aged[key] as { lastAt: number }).lastAt = Date.now() - CHANNEL_SESSION_TTL_MS - 1;
     writeFileSync(path, JSON.stringify(aged));
 
-    await dispatchListenerMessage(services, message({ id: "m2", content: "new topic" }), captureWithSession(turns, "sess-2"), 5);
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-2")), message({ id: "m2", content: "new topic" }), 5);
     await eventually(() => expect(turns).toHaveLength(2));
     const [first, second] = turns as [AgentTurn, AgentTurn];
     expect(second.conversationId).not.toBe(first.conversationId);
@@ -256,10 +259,10 @@ test("dispatch honors eventType: a message-only listener ignores voice transcrip
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(listenerAutomation("msg-only", { trigger: { kind: "listener", provider: "discord", eventType: "message" } }));
     const prompts: string[] = [];
-    await dispatchListenerMessage(services, message({ type: "voice_transcript", id: "v1" }), fakeWake(prompts), 5);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message({ type: "voice_transcript", id: "v1" }), 5);
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect((await services.automations.get("msg-only"))?.runs).toEqual([]);
-    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message(), 5);
     await eventually(async () => expect((await services.automations.get("msg-only"))?.runs).toHaveLength(1));
 });
 
@@ -269,10 +272,10 @@ test("dispatch honors mentioned: a mention-only listener skips plain messages an
         listenerAutomation("mentions", { trigger: { kind: "listener", provider: "discord", eventType: "message", mentioned: true } }),
     );
     const prompts: string[] = [];
-    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message(), 5);
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect((await services.automations.get("mentions"))?.runs).toEqual([]);
-    await dispatchListenerMessage(services, message({ id: "m2", mentioned: true }), fakeWake(prompts), 5);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message({ id: "m2", mentioned: true }), 5);
     await eventually(async () => expect((await services.automations.get("mentions"))?.runs).toHaveLength(1));
 });
 
@@ -309,7 +312,7 @@ test("a sender no rule names wakes nothing under `others: ignore`, and is still 
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(frontLine("senders-ignore"));
     const prompts: string[] = [];
-    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message(), 5);
     await new Promise((resolve) => setTimeout(resolve, 30));
     expect(prompts).toEqual([]);
     expect((await services.automations.get("senders-ignore"))?.runs).toEqual([]);
@@ -321,13 +324,12 @@ test("two people one channel answers as different agents get two conversations, 
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(frontLine("senders-lanes"));
     const turns: AgentTurn[] = [];
-    await dispatchListenerMessage(services, message({ author: mark, content: "deploy it" }), captureWithSession(turns, "sess-mark"), 5);
+    await dispatchListenerMessage(drivenBy(services, captureWithSession(turns, "sess-mark")), message({ author: mark, content: "deploy it" }), 5);
     await eventually(() => expect(turns).toHaveLength(1));
     await settledThread(services, threadKey("discord", "senders-lanes", "c1"));
     await dispatchListenerMessage(
-        services,
+        drivenBy(services, captureWithSession(turns, "sess-martha")),
         message({ id: "m2", author: martha, content: "where is my order?" }),
-        captureWithSession(turns, "sess-martha"),
         5,
     );
     await eventually(() => expect(turns).toHaveLength(2));
@@ -344,13 +346,13 @@ test("a burst from two lanes becomes two wakes, neither carrying the other's lin
     const services = fakeServices(mkdtempSync(join(tmpdir(), "listen-")));
     await services.automations.upsert(frontLine("senders-burst"));
     const turns: AgentTurn[] = [];
-    const capture: WakeFn = async function* (_services, input) {
+    const capture: TurnStarter["stream"] = async function* (input) {
         turns.push(input);
         yield { kind: "done" };
     };
     // Inside one debounce window: without lanes these would coalesce into one payload under one persona.
-    await dispatchListenerMessage(services, message({ author: mark, content: "mark's line" }), capture, 5);
-    await dispatchListenerMessage(services, message({ id: "m2", author: martha, content: "martha's line" }), capture, 5);
+    await dispatchListenerMessage(drivenBy(services, capture), message({ author: mark, content: "mark's line" }), 5);
+    await dispatchListenerMessage(drivenBy(services, capture), message({ id: "m2", author: martha, content: "martha's line" }), 5);
     await eventually(() => expect(turns).toHaveLength(2));
     const byPersona = new Map(turns.map((turn) => [turn.actsAs, turn.prompt]));
     expect(byPersona.get(undefined)).toContain("mark's line");
@@ -367,7 +369,7 @@ test("a rule that holds its people parks the wake with the lane's persona and th
         }),
     );
     const prompts: string[] = [];
-    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message(), 5);
     await eventually(async () => expect(await services.heldWakes.list()).toHaveLength(1));
     expect((await services.heldWakes.list())[0]).toMatchObject({
         automationId: "senders-hold",
@@ -385,7 +387,7 @@ test("`others: hold` parks a stranger wearing the automation's own persona", asy
         listenerAutomation("senders-others-hold", { actsAs: "guest", senders: { rules: [{ ids: [mark.id] }], others: "hold" } }),
     );
     const prompts: string[] = [];
-    await dispatchListenerMessage(services, message(), fakeWake(prompts), 5);
+    await dispatchListenerMessage(drivenBy(services, fakeWake(prompts)), message(), 5);
     await eventually(async () => expect(await services.heldWakes.list()).toHaveLength(1));
     expect((await services.heldWakes.list())[0]).toMatchObject({ automationId: "senders-others-hold", actsAs: "guest" });
     expect(prompts).toEqual([]);

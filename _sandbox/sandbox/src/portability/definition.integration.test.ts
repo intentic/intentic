@@ -15,7 +15,7 @@ import { workspacePaths } from "../workspace/workspace.js";
 import { applyDefinitionItems } from "./apply-definition.js";
 import { createArrivals } from "./arrival.js";
 import { deriveDefinition, parseDefinitionToml } from "./definition.js";
-import { rootExcludes } from "../history/history.js";
+import { rootExcludes } from "../workspace/layout/git-layout.js";
 import { ROOT_BASELINE_CONFIG, ROOT_FRESH_CONFIG } from "../git/remote/root-repo.js";
 import { workspaceRemoteUrl } from "./workspace-repo.js";
 

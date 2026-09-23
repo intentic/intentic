@@ -1,8 +1,7 @@
 import type { AgentOrigin, ListenerMessage, Trigger } from "@intentic/sandbox-contract";
-import { streamAgent } from "../agent/routes/agent.routes.js";
 import type { Services } from "../composition.js";
 import { CHANNEL_SESSION_TTL_MS, threadKey } from "../sessions/thread-sessions.js";
-import { fireAutomation, mintConversationId, PAYLOAD_MAX, TITLE_MAX, type TurnStream, type WakeFn } from "./scheduler.js";
+import { fireAutomation, mintConversationId, PAYLOAD_MAX, TITLE_MAX, type TurnStream } from "./scheduler.js";
 import { type SenderLane, senderLane } from "./senders.js";
 
 // Provider sources hold a live connection (Discord gateway) and dispatch normalized messages here; listener automations
@@ -124,7 +123,6 @@ const triggerAdmits = (trigger: Extract<Trigger, { kind: "listener" }>, message:
 export const dispatchListenerMessage = async (
     services: Services,
     message: ListenerMessage,
-    wake: WakeFn = streamAgent,
     debounceMs = DEBOUNCE_MS,
     // Builds a live reply sink per matched automation; undefined or no return means the agent replies normally.
     makeStream?: (automationId: string) => TurnStream | undefined,
@@ -166,7 +164,7 @@ export const dispatchListenerMessage = async (
                         CHANNEL_SESSION_TTL_MS,
                         openedAt,
                     );
-                    const settled = await fireAutomation(services, fresh, wake, {
+                    const settled = await fireAutomation(services, fresh, {
                         payload,
                         // Queues rather than drops: the blocking run may be an approved wake or a restart's re-fire,
                         // not the batcher's.

@@ -1,11 +1,12 @@
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach, mock, spyOn } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref } from "vue";
 import type { Conversation } from "../session/conversation";
 import { providerAccounts } from "../accounts/providerAccounts";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { queryClient } from "../../../lib/queryPersistence";
 import { useLayout } from "../../../shell/window/useLayout";
 import { router } from "../../../router";
@@ -96,7 +97,7 @@ const struck = (): number => document.querySelectorAll(`.chat-doomed`).length;
 // Rows the transcript has struck through: what an armed edit would spend.
 const editableChat = (): Conversation => {
     const conversation = useChat().active.value;
-    conversation.restoreMessages([
+    conversation.transcript.restoreMessages([
         { role: `user`, text: `fix the bug`, checkpointId: `cp-0`, rewindIndex: 0 },
         { role: `assistant`, text: `fixed it` },
         { role: `user`, text: `now ship it`, checkpointId: `cp-2`, rewindIndex: 2 },
@@ -109,7 +110,7 @@ beforeEach(async () => {
     app?.unmount();
     app = undefined;
     localStorage.clear();
-    resetChat();
+    resetSandboxScope();
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acc-1`, email: `a@b.c` }] as never };
     useLayout().setChatWidth(2000);
     await nextTick();
@@ -125,14 +126,14 @@ afterEach(() => {
 // network. A message with no anchor (the assistant rows) offers no edit.
 it(`loads the old prompt into the box and destroys nothing`, async () => {
     const conversation = editableChat();
-    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
 
-    conversation.beginEdit(conversation.messages.value[0]!);
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
     await settle();
 
     expect(composer().value).toBe(`fix the bug`);
-    expect(conversation.messages.value).toHaveLength(4);
+    expect(conversation.transcript.messages.value).toHaveLength(4);
     expect(enqueue).not.toHaveBeenCalled();
 });
 
@@ -142,7 +143,7 @@ it(`strikes what the send would replace and names the cost over the box`, async 
     const conversation = editableChat();
     await mountPanel();
 
-    conversation.beginEdit(conversation.messages.value[0]!);
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
     await settle();
 
     // The cost shows in two places: struck rows near the target, and a count over the box for an edit
@@ -161,7 +162,7 @@ it(`lifts the strikes and returns the displaced draft on cancel`, async () => {
     conversation.draft.value = `something half-written`;
     await mountPanel();
 
-    conversation.beginEdit(conversation.messages.value[2]!);
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[2]!);
     await settle();
     expect(struck()).toBe(2);
 
@@ -170,7 +171,7 @@ it(`lifts the strikes and returns the displaced draft on cancel`, async () => {
 
     expect(struck()).toBe(0);
     expect(composer().value).toBe(`something half-written`);
-    expect(conversation.messages.value).toHaveLength(4);
+    expect(conversation.transcript.messages.value).toHaveLength(4);
 });
 
 // Cancel keeps the promise that arming costs nothing: strikes lift and the composer restores whatever
@@ -179,24 +180,24 @@ it(`abandons the edit on Escape`, async () => {
     const conversation = editableChat();
     await mountPanel();
 
-    conversation.beginEdit(conversation.messages.value[0]!);
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
     await settle();
 
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true }));
     await settle();
 
-    expect(conversation.editing.value).toBeUndefined();
+    expect(conversation.transcript.editing.value).toBeUndefined();
     expect(struck()).toBe(0);
 });
 
 // Escape leaves free, since arming costs nothing: no turn to stop, no transcript to put back.
 it(`sends the replacement through the edit path, not as a new message`, async () => {
     const conversation = editableChat();
-    const submitEdit = spyOn(conversation, `submitEdit`).mockResolvedValue(true);
-    const enqueue = spyOn(conversation, `enqueue`).mockResolvedValue(undefined);
+    const submitEdit = spyOn(conversation.transcript, `submitEdit`).mockResolvedValue(true);
+    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
     await mountPanel();
 
-    conversation.beginEdit(conversation.messages.value[0]!);
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
     await settle();
     conversation.draft.value = `fix the OTHER bug`;
     await settle();
@@ -213,10 +214,10 @@ it(`sends the replacement through the edit path, not as a new message`, async ()
 // turns it's meant to replace.
 it(`refuses to spend an edit on an empty box`, async () => {
     const conversation = editableChat();
-    const submitEdit = spyOn(conversation, `submitEdit`).mockResolvedValue(true);
+    const submitEdit = spyOn(conversation.transcript, `submitEdit`).mockResolvedValue(true);
     await mountPanel();
 
-    conversation.beginEdit(conversation.messages.value[0]!);
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
     await settle();
     conversation.draft.value = ``;
     await settle();
@@ -225,7 +226,7 @@ it(`refuses to spend an edit on an empty box`, async () => {
     await settle();
 
     expect(submitEdit).not.toHaveBeenCalled();
-    expect(conversation.editing.value).toEqual(expect.any(Object));
+    expect(conversation.transcript.editing.value).toEqual(expect.any(Object));
 });
 
 // An empty box would drop the turns and ask nothing, an unrequested rewind wearing an edit's
@@ -235,7 +236,7 @@ it(`clears the other things that rewrite what Send means`, async () => {
     conversation.workflowId.value = `wf-1`;
     await mountPanel();
 
-    conversation.beginEdit(conversation.messages.value[0]!);
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
     await settle();
 
     expect(conversation.workflowId.value).toBeUndefined();
@@ -249,7 +250,7 @@ it(`hands the half-typed replacement to a fork instead, keeping this chat whole`
     const conversation = editableChat();
     await mountPanel();
 
-    conversation.beginEdit(conversation.messages.value[2]!);
+    conversation.transcript.beginEdit(conversation.transcript.messages.value[2]!);
     await settle();
     conversation.draft.value = `ship it to staging first`;
     await settle();
@@ -262,6 +263,6 @@ it(`hands the half-typed replacement to a fork instead, keeping this chat whole`
     const fork = chat.conversations.value.at(-1)!;
     expect(fork.draft.value).toBe(`ship it to staging first`);
     // This one is untouched: every turn intact, nothing struck, no edit armed.
-    expect(conversation.messages.value).toHaveLength(4);
-    expect(conversation.editing.value).toBeUndefined();
+    expect(conversation.transcript.messages.value).toHaveLength(4);
+    expect(conversation.transcript.editing.value).toBeUndefined();
 });

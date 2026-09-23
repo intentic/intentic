@@ -2,6 +2,7 @@ import { unstubbed } from "@intentic/testing";
 import type { UsageWindow } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 import type { Services } from "../../composition.js";
+import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
 import type { TurnLimit } from "../../usage/fleet-limit.js";
 import { spentRung } from "./role-model-quota.js";
 
@@ -11,8 +12,10 @@ import { spentRung } from "./role-model-quota.js";
 const NOW = 1_700_000_000_000;
 const SECONDS = Math.floor(NOW / 1000);
 
+// Every provider's own module, as composition hands them in: only one keeping its own reading answers for itself.
 const routed = (limit: TurnLimit): Services =>
     unstubbed<Services>(`services`, {
+        providerModules: PROVIDER_MODULES,
         cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, { turnLimit: async () => limit }),
     });
 
@@ -52,6 +55,7 @@ test("asks a routed rung that nothing has measured", async () => {
 
 test("asks the rung when the reading itself cannot be taken", async () => {
     const broken = unstubbed<Services>(`services`, {
+        providerModules: PROVIDER_MODULES,
         cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
             turnLimit: async () => {
                 throw new Error(`management API unreachable`);
@@ -97,12 +101,15 @@ test("asks Claude when an account has no reading at all", async () => {
 });
 
 test("says nothing about a rung on a user's own endpoint", async () => {
-    await expect(spentRung(unstubbed<Services>(`services`, {}), { provider: `endpoint/local`, model: `qwen` }, NOW)).resolves.toBeUndefined();
+    await expect(
+        spentRung(unstubbed<Services>(`services`, { providerModules: PROVIDER_MODULES }), { provider: `endpoint/local`, model: `qwen` }, NOW),
+    ).resolves.toBeUndefined();
 });
 
 // Cursor publishes no allowance, so its rung is read off what it has already refused, per account and per model.
 const cursor = (accounts: Record<string, readonly string[]>): Services =>
     unstubbed<Services>(`services`, {
+        providerModules: PROVIDER_MODULES,
         cursorStore: unstubbed<Services[`cursorStore`]>(`cursorStore`, {
             credentials: async () => Object.keys(accounts).map((id) => ({ id, apiKey: `k`, connectedAt: 0 })),
         }),

@@ -1,21 +1,22 @@
-import { type SandboxSettings, SandboxSettingsSchema } from "@intentic/api-contract";
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
+import type { SandboxSettings } from "@intentic/api-contract";
 import { useMutation } from "@tanstack/vue-query";
-import { computed, ref } from "vue";
-import { sandboxJson } from "../client/sandboxClient";
-import { jsonBody } from "../client/jsonBody";
+import { computed } from "vue";
+import { rpcQuery } from "../client/rpcQuery";
+import { sandboxRpc } from "../client/sandboxRpc";
 import { queryClient } from "../../../lib/queryPersistence";
-import { SANDBOX_SETTINGS } from "../../../lib/queryKeys";
+import { rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../client/useSandboxQuery";
 
-// Active sandbox's agent settings (.intentic/config/settings.json), read/written via the daemon's /settings routes. All
+// Active sandbox's agent settings (.intentic/config/settings.json), read/written via the daemon's settings routes. All
 // per-sandbox agent toggles; `save` overwrites the whole object, and the next turn's streamAgent reads it to gate
 // behavior.
 
-const QUERY_KEY = SANDBOX_SETTINGS.of();
+const QUERY_KEY = rpcKey(`settings.get`);
 
 // Module-level, not per-caller: the Agent tab is several separately-mounted groups over one settings object, and any of
-// them can trigger this.
-const dropped = ref<string | undefined>(undefined);
+// them can trigger this. It names one daemon's schema, so a switch clears it.
+const dropped = sandboxRef<string | undefined>(() => undefined);
 
 // Names a field the daemon's POST accepted but didn't keep (an older schema predates it): compares what was sent
 // against what a successful write actually stored.
@@ -35,14 +36,11 @@ const droppedFieldsReason = (sent: SandboxSettings, stored: SandboxSettings): st
 };
 
 export function useSandboxSettings() {
-    const { query, error } = useSandboxQuery({
-        queryKey: QUERY_KEY,
-        queryFn: async (): Promise<SandboxSettings> => SandboxSettingsSchema.parse(await sandboxJson(`/settings`)),
-    });
+    const { query, error } = useSandboxQuery(rpcQuery(`settings.get`));
 
     const save = useMutation(
         {
-            mutationFn: (settings: SandboxSettings) => sandboxJson(`/settings`, jsonBody(`POST`, settings)),
+            mutationFn: (settings: SandboxSettings) => sandboxRpc.settings.set(settings),
             // Writes into the cache before the request lands, since every control on the page reads its value and
             // disabled state from this object; otherwise a click shows the old value until the round-trip completes.
             onMutate: async (settings) => {
@@ -63,9 +61,11 @@ export function useSandboxSettings() {
             // Reconciles with what the daemon actually stored either way; a dropped field snaps back silently, so name
             // it once the reconciling read lands (droppedFieldsReason).
             onSettled: async (_data, saveError, settings) => {
+                const current = sandboxScopeGuard();
                 await queryClient.invalidateQueries({ queryKey: QUERY_KEY });
                 const stored = queryClient.getQueryData<SandboxSettings>(QUERY_KEY);
-                if (saveError !== null || stored === undefined) {
+                // Read after a switch, `stored` is the next box's settings, which this save never touched.
+                if (saveError !== null || stored === undefined || !current()) {
                     return;
                 }
                 dropped.value = droppedFieldsReason(settings, stored);

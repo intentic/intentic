@@ -1,16 +1,16 @@
 // Pins the persona rail: rows are people (ChatPersonaRail), not sessions. Mounted via ChatTabList since the
 // lane/persona switch is part of what's tested.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
-import { resetAgents } from "../../agents/fleet/useAgents";
 import { useChatGrouping } from "../transcript/chatGrouping";
-import { resetChat, useChat } from "../run/useChat";
+import { useChat } from "../run/useChat";
 import { openAgentConversation } from "../panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
-import { PERSONAS } from "../../../lib/queryKeys";
+import { rpcKey } from "../../../lib/queryKeys";
 import { router } from "../../../router";
 import ChatTabList from "./ChatTabList.vue";
 import { IconStub } from "@intentic/ui/testing";
@@ -43,14 +43,13 @@ const mountList = async (): Promise<HTMLElement> => {
 
 // Seeds the persona cache the rail reads from; `connected` decides whether a card can post (marked when it can't).
 const withPersonas = (personas: { id: string; label?: string; capabilities: string[] }[], connected: string[] = []): void => {
-    queryClient.setQueryData(PERSONAS.of(), { personas, connected });
+    queryClient.setQueryData(rpcKey(`personas.list`), { personas, connected });
 };
 
 beforeEach(async () => {
     localStorage.clear();
     selected = [];
-    resetChat();
-    resetAgents();
+    resetSandboxScope();
     useChatGrouping().set(`persona`);
     withPersonas([
         { id: `work`, label: `Work`, capabilities: [`reddit-work`] },
@@ -96,7 +95,7 @@ it("opens the persona's group rather than a chat when the card is pressed", asyn
     const el = await mountList();
     rowFor(el, `Work`)?.click();
     await settle();
-    expect(useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`)).toHaveLength(0);
+    expect(useChat().conversations.value.filter((conversation) => conversation.selection.actsAs.value === `work`)).toHaveLength(0);
     expect(selected).toEqual([]);
     expect(el.textContent).toContain(`New chat as Work`);
 });
@@ -116,7 +115,7 @@ it("starts a chat pinned to the persona from inside the group", async () => {
     await settle();
     [...el.querySelectorAll(`button`)].find((button) => button.textContent?.includes(`New chat as Work`))?.click();
     await settle();
-    expect(useChat().conversations.value.filter((conversation) => conversation.actsAs.value === `work`)).toHaveLength(1);
+    expect(useChat().conversations.value.filter((conversation) => conversation.selection.actsAs.value === `work`)).toHaveLength(1);
 });
 
 it("spells no capability ids or account counts under a persona's name", async () => {
@@ -145,7 +144,7 @@ const pinTo = async (persona: string, ids: string[]): Promise<void> => {
     for (const id of ids) {
         const conversation = useChat().conversations.value.find((candidate) => candidate.conversationId === id);
         if (conversation !== undefined) {
-            conversation.actsAs.value = persona;
+            conversation.selection.apply({ kind: `set`, picks: { actsAs: persona } });
         }
     }
     await settle();

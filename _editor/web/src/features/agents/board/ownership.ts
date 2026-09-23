@@ -1,5 +1,5 @@
+import { sandboxRef } from "@intentic/extension-api";
 import type { SessionOwner } from "@intentic/sandbox-contract";
-import { ref } from "vue";
 import { identityHue } from "../../../lib/identityHue";
 
 // Whose a conversation is, as the board draws and filters it. Pure over the summary's `owner` and `startedBy`, so the
@@ -81,9 +81,9 @@ export const mayAssign = (owner: SessionOwner | undefined, me: string | undefine
     owner === undefined || sameAddress(owner.email, me) || canShip;
 
 // The board's owner filter: one address, the reader's own for Mine, `undefined` for everybody's. Module-level so the
-// choice survives leaving and returning to the board within one page; deliberately not persisted, since it hides
-// other people's work.
-export const ownerFilter = ref<string | undefined>(undefined);
+// choice survives leaving and returning to the board within one page; per sandbox, since the address can name a member
+// of this board only; deliberately not persisted, since it hides other people's work.
+export const ownerFilter = sandboxRef<string | undefined>(() => undefined);
 
 // Everyone but the reader holding a conversation on this board: one chip each in the header, plus whoever `chosen`
 // names even after their last card has left it, since a filter that named somebody must keep naming them or the row

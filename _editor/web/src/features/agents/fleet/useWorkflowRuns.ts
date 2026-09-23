@@ -1,9 +1,9 @@
-import { type Workflow, type WorkflowRun, WorkflowRunSchema, WorkflowRunsListSchema, WorkflowsListSchema } from "@intentic/sandbox-contract";
+import type { Workflow, WorkflowRun } from "@intentic/sandbox-contract";
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { WORKFLOW_DESIGNS, WORKFLOW_RUNS } from "../../../lib/queryKeys";
+import { rpcQuery } from "../../sandbox/client/rpcQuery";
+import { type ProcedureOutput, sandboxRpc } from "../../sandbox/client/sandboxRpc";
+import { pushedKeys, rpcKey } from "../../../lib/queryKeys";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { blocked, type FleetLane } from "./agentStatus";
 import type { FleetAgent } from "./useAgents-fleet";
@@ -12,9 +12,8 @@ import type { FleetAgent } from "./useAgents-fleet";
 // row, not a sixth agent, since it has no transcript, worktree or turn. Pushed via the daemon's `workflow-runs`
 // file-change key (core's, not the extension's, so the board still renders when workflows is off), never polled.
 
-// Shared keys so every caller lands on one cached fetch; the daemon's push invalidates by these exact names.
-const runsKey = WORKFLOW_RUNS.every;
-const designsKey = WORKFLOW_DESIGNS.every;
+// The ledger's own entry, which the writes below seed and file ahead of the daemon.
+const runsKey = rpcKey(`workflows.runs`);
 
 // Same three lanes as an agent, decided from the run's own state. `overspent`/`error` count as attention, not
 // finished, since those need a person's action.
@@ -63,50 +62,50 @@ export const spentOn = (run: WorkflowRun): number => run.steps.reduce((total, st
 
 export function useWorkflowRuns() {
     const queryClient = useQueryClient();
-    const invalidate = (): Promise<void> => queryClient.invalidateQueries({ queryKey: runsKey });
+    // Everything the daemon's `workflow-runs` push reaches, the workflows extension's own entries included, so a write
+    // here refreshes that page as the push would.
+    const invalidate = async (): Promise<void> => {
+        await Promise.all(pushedKeys([`workflow-runs`]).map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+    };
 
     // Every run the ledger holds, newest first; kept fresh by the ledger's file-change push.
-    const { query: runsQuery } = useSandboxQuery<WorkflowRun[]>({
-        queryKey: runsKey,
-        queryFn: async () => WorkflowRunsListSchema.parse(await sandboxJson(`/workflows/runs`)).runs,
-    });
+    const { query: runsQuery } = useSandboxQuery(rpcQuery(`workflows.runs`));
 
     // Saved designs for the composer's picker; not polled, a stale entry costs a picker row, not a wrong run.
-    const { query: designsQuery } = useSandboxQuery<Workflow[]>({
-        queryKey: designsKey,
-        queryFn: async () => WorkflowsListSchema.parse(await sandboxJson(`/workflows`)).workflows,
-    });
+    const { query: designsQuery } = useSandboxQuery(rpcQuery(`workflows.list`));
 
     // Starts a run; resolves with the run as opened, its steps already `pending`. Seeds the runs cache (not just
     // invalidates), so followers see it before the refetch lands.
     const start = useMutation({
-        mutationFn: async ({ id, request }: { id: string; request?: string }): Promise<WorkflowRun> =>
-            WorkflowRunSchema.parse(
-                await sandboxJson(`/workflows/${encodeURIComponent(id)}/run`, jsonBody(`POST`, request === undefined ? {} : { request })),
-            ),
+        mutationFn: (input: { id: string; request?: string }): Promise<WorkflowRun> => sandboxRpc.workflows.run(input),
         onSuccess: (run) => {
-            queryClient.setQueryData<WorkflowRun[]>(runsKey, (held) => [run, ...(held ?? []).filter((entry) => entry.runId !== run.runId)]);
+            queryClient.setQueryData<ProcedureOutput<`workflows.runs`>>(runsKey, (held) => ({
+                ...held,
+                runs: [run, ...(held?.runs ?? []).filter((entry) => entry.runId !== run.runId)],
+            }));
             return invalidate();
         },
     });
 
-    // Stops a run: unstarted steps never start; running steps are aborted like /agent/stop and settle `stopped`.
+    // Stops a run: unstarted steps never start; running steps are aborted like agent.stop and settle `stopped`.
     // Unlike stopping a loop, this aborts the step's whole turn rather than waiting for the round to finish.
     const stop = useMutation({
-        mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}/stop`, { method: `POST` }),
+        mutationFn: (runId: string) => sandboxRpc.workflows.stopRun({ runId }),
         onSuccess: invalidate,
     });
 
     // Files one run in the cached ledger ahead of the daemon. A refusal puts back only that run's filing date: a
     // whole-ledger snapshot put back would also undo whatever the ledger's own push brought in meanwhile.
     const refile = (runId: string, archivedAt: number | undefined): void => {
-        queryClient.setQueryData<WorkflowRun[]>(runsKey, (held) => held?.map((run) => (run.runId === runId ? { ...run, archivedAt } : run)));
+        queryClient.setQueryData<ProcedureOutput<`workflows.runs`>>(runsKey, (held) =>
+            held === undefined ? undefined : { ...held, runs: held.runs.map((run) => (run.runId === runId ? { ...run, archivedAt } : run)) },
+        );
     };
     // The row moves on the press. A ledger read already in flight would paint it back from before the press, so it is
     // cancelled first; the read after the answer replaces the guess either way.
     const fileOnPress = async (runId: string, archivedAt: number | undefined): Promise<{ readonly was: number | undefined }> => {
         await queryClient.cancelQueries({ queryKey: runsKey });
-        const was = queryClient.getQueryData<WorkflowRun[]>(runsKey)?.find((run) => run.runId === runId)?.archivedAt;
+        const was = queryClient.getQueryData<ProcedureOutput<`workflows.runs`>>(runsKey)?.runs.find((run) => run.runId === runId)?.archivedAt;
         refile(runId, archivedAt);
         return { was };
     };
@@ -114,14 +113,14 @@ export function useWorkflowRuns() {
     // Archives an ended run with its sessions (a step has no card of its own to archive separately). Lossless, like
     // an agent's archive; restore brings run and sessions back together.
     const archive = useMutation({
-        mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}/archive`, { method: `POST` }),
+        mutationFn: (runId: string) => sandboxRpc.workflows.archiveRun({ runId }),
         onMutate: (runId: string) => fileOnPress(runId, Date.now()),
         onError: (_error, runId, pressed) => refile(runId, pressed?.was),
         onSettled: invalidate,
     });
 
     const unarchive = useMutation({
-        mutationFn: (runId: string) => sandboxJson(`/workflows/runs/${encodeURIComponent(runId)}/unarchive`, { method: `POST` }),
+        mutationFn: (runId: string) => sandboxRpc.workflows.unarchiveRun({ runId }),
         onMutate: (runId: string) => fileOnPress(runId, undefined),
         onError: (_error, runId, pressed) => refile(runId, pressed?.was),
         onSettled: invalidate,
@@ -129,8 +128,8 @@ export function useWorkflowRuns() {
 
     return {
         // Every run the ledger holds, newest first, archived included; the caller decides what draws it.
-        runs: computed<WorkflowRun[]>(() => runsQuery.data.value ?? []),
-        designs: computed<Workflow[]>(() => designsQuery.data.value ?? []),
+        runs: computed<WorkflowRun[]>(() => runsQuery.data.value?.runs ?? []),
+        designs: computed<Workflow[]>(() => designsQuery.data.value?.workflows ?? []),
         start,
         stop,
         archive,

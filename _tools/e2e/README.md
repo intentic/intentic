@@ -10,7 +10,8 @@ hand-mirrored `api-contract` schema that drifts from the daemon fails here.
 
 - **Auth-adjacent plumbing without Google**: a Prisma-seeded user + session with a self-signed Better Auth
   cookie (verified against `/api/auth/get-session` before any spec runs), and a cached fake Google ID token in
-  `localStorage` so `sandboxClient` calls the daemon (the loopback daemon ignores the bearer).
+  `localStorage` so the app's daemon clients (`sandboxRpc` and the raw byte-route client) reach the daemon (the loopback
+  daemon ignores the bearer).
 - **Workspace upload journey**: picker → upload-diff → XHR upload → tree refetch → daemon disk read-back.
 - **Automations journey**: create-dialog form → daemon manifest → listed back (the mirrored-schema drift guard).
 - **Desktop-sync journey**: Enable → `/system/sync/pair` → the agent one-liner renders.

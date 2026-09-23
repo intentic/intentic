@@ -8,6 +8,7 @@ import { it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { waitFor, hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
 import { IconStub } from "@intentic/ui/testing";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 hoisted(() => {
     // jsdom has no ResizeObserver; AnchoredOverlay throws on open without one, as an unhandled rejection off the
@@ -65,14 +66,16 @@ mock.module(`./usePersonaKit`, () => {
 // A real small tree, not empty, since "the picker lists your folders" is the actual claim under test; the file is here
 // to be filtered out.
 const tree = ref<WorkspaceTreeEntry[]>([]);
-// Every name the graph imports from the daemon client, since bun links an ESM import against exactly what this
-// factory returns; only sandboxJson is ever called.
+// <FolderPicker>'s lazy listing, the one daemon call the page itself makes.
+mock.module(`../client/sandboxRpc`, () => ({
+    sandboxRpc: fakeSandboxRpc({ workspace: { children: mock(async () => ({ entries: [], hidden: 0 })) } }),
+}));
+// Every name the graph imports from the raw client, since bun links an ESM import against exactly what this factory
+// returns; nothing here calls it.
 mock.module(`../client/sandboxClient`, () => ({
-    sandboxJson: mock().mockResolvedValue({ entries: [], hidden: 0 }),
+    sandboxJson: mock(),
     sandboxRequest: mock(),
-    sandboxRequestVia: mock(),
     sandboxError: mock(async () => new Error(`unused`)),
-    SandboxHttpError: class SandboxHttpError extends Error {},
 }));
 // The named parts of the workspace: the persona editor reads them to say which of them gain the persona being written.
 // Holds the `docs` folder of the tree below, so a persona starting there is one this area hands over.

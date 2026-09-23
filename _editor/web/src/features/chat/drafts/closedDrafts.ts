@@ -1,4 +1,5 @@
-import { computed, type ComputedRef, shallowRef, watch } from "vue";
+import { sandboxShallowRef } from "@intentic/extension-api";
+import { computed, type ComputedRef } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { onChatNote, postChatNote } from "../run/chatChannel";
 import { readStoredTabs, type StoredTab } from "../tabs/tabSnapshot";
@@ -37,16 +38,14 @@ const write = (sandboxId: string | undefined, tabs: readonly StoredTab[]): void 
     }
 };
 
-// The set this window is holding, newest first, for the sandbox it is pointed at.
-const kept = shallowRef<readonly StoredTab[]>([]);
+const { activeSandboxId } = useSandbox();
+
+// The set this window is holding, newest first, for the sandbox it is pointed at: drafts are per-sandbox and must not
+// leak across boxes, so each switch reads the incoming one's back.
+const kept = sandboxShallowRef<readonly StoredTab[]>(() => read(activeSandboxId.value));
 
 /** The chats closed with words still in them, newest first; the board draws them like any open tab's draft. */
 export const closedDrafts: ComputedRef<readonly StoredTab[]> = computed(() => kept.value);
-
-const { activeSandboxId } = useSandbox();
-
-// Reloads on every sandbox switch; drafts are per-sandbox and must not leak across boxes.
-watch(activeSandboxId, (sandboxId) => (kept.value = read(sandboxId)), { immediate: true });
 
 // Publishes the whole set, never a patch: the last note wins, so a window that missed one is corrected by
 // the next.

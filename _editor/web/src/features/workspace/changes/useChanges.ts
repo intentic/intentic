@@ -1,8 +1,8 @@
+import { sandboxRef, sandboxScopeGuard } from "@intentic/extension-api";
 import { errorMessage } from "@intentic/ui/async";
 import type {
     CommitResult,
     FileDiffResponse,
-    GitActionResult,
     GitChangesResponse,
     GitDiffSide,
     GitTarget,
@@ -11,13 +11,12 @@ import type {
     RepoTarget,
 } from "@intentic/api-contract";
 import type { PushRun } from "@intentic/sandbox-contract";
-import { computed, ref, watch } from "vue";
+import { computed, watch } from "vue";
 import { withinScope } from "../../../app/projectScope";
 import { useChat } from "../../chat/run/useChat";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
 import { throttleTrailing } from "../../../lib/throttleTrailing";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
-import { jsonBody } from "../../sandbox/client/jsonBody";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
 import { useRole } from "../../sandbox/secrets/useRole";
 import { refusalSummary } from "../health/fixProposal";
@@ -25,9 +24,9 @@ import { outgoingWork } from "../push/outgoingWork";
 import { landingLine, landingNow } from "./landing";
 import { spliceRepoChanges } from "./spliceRepoChanges";
 import { truncatedTotal } from "./truncation";
-import { resetEditBuffers } from "../files/useEditBuffers";
+import { dropEditBuffers } from "../files/useEditBuffers";
 import { usePushRun } from "../push/usePushRun";
-import { AGENT_DIFF, GIT_CHANGES, GIT_LOG, HISTORY_SNAPSHOTS, WORKSPACE_TREE } from "../../../lib/queryKeys";
+import { agentReviewPrefixes, GIT_LOG, rpcKey, rpcPrefix, workingReviewKeys } from "../../../lib/queryKeys";
 import { t } from "@intentic/ui/i18n";
 
 // VSCode's SCM model over real repos: `staged` is index-vs-HEAD, `unstaged` is worktree-vs-index; a path can be on
@@ -40,16 +39,18 @@ import { t } from "@intentic/ui/i18n";
 // Refreshes the review and timeline when any turn ends, across every conversation, not just the active tab's.
 // Kept at module scope, not inside useChanges(), since a watch there dies when the shell component unmounts.
 const { conversations } = useChat();
-const turnsRunning = computed(() => conversations.value.filter((conversation) => conversation.streaming.value).length);
+const turnsRunning = computed(() => conversations.value.filter((conversation) => conversation.turn.streaming.value).length);
 // Throttled: several agents ending turns at once would otherwise trigger a rescan each, collapsed into one.
 // Same window as the file-watcher's own refresh (systemEvents).
 const TURN_END_REFRESH_MS = 1000;
 const refreshReviewable = throttleTrailing(() => {
     // The timeline is cheap and a land's own commits belong on it; the review is neither, so it waits (see below).
     if (!landingNow.value) {
-        void queryClient.invalidateQueries({ queryKey: GIT_CHANGES.every });
+        for (const queryKey of workingReviewKeys) {
+            void queryClient.invalidateQueries({ queryKey });
+        }
     }
-    void queryClient.invalidateQueries({ queryKey: HISTORY_SNAPSHOTS.every });
+    void queryClient.invalidateQueries({ queryKey: rpcPrefix(`history.list`) });
 }, TURN_END_REFRESH_MS);
 watch(turnsRunning, (now, was) => {
     if (now < was) {
@@ -84,13 +85,14 @@ interface ScopedTask {
     readonly run: () => Promise<void>;
 }
 
-const actionBusy = ref(false);
-const failures = ref<ReadonlyMap<string, ActionFailure>>(new Map());
+// A busy span and per-repo failures over one sandbox's repositories; a switch starts the panel clean.
+const actionBusy = sandboxRef(() => false);
+const failures = sandboxRef<ReadonlyMap<string, ActionFailure>>(() => new Map());
 // Signed-in member's tier on the active sandbox, read once for the module; runBatch checks it before sending.
 const { canShip } = useRole();
 
 // Repos this tab is committing right now, set before the request leaves; unioned with the daemon's own answer below.
-const committingHere = ref<readonly string[]>([]);
+const committingHere = sandboxRef<readonly string[]>(() => []);
 
 const dismissFailure = (scope: string): void => {
     if (!failures.value.has(scope)) {
@@ -123,45 +125,46 @@ const runBatch = async (tasks: readonly ScopedTask[], settle: () => Promise<unkn
     // first's failure.
     const scopes = new Set(tasks.map((task) => task.scope));
     failures.value = new Map([...failures.value].filter(([scope]) => !scopes.has(scope)));
+    // A batch outlasting a switch reports to nobody: its failures, its busy span and its settling (dropping buffers,
+    // rescanning) were the outgoing sandbox's.
+    const current = sandboxScopeGuard();
     try {
         await Promise.all(
             tasks.map(async (task) => {
                 try {
                     await task.run();
                 } catch (caught) {
-                    failures.value = new Map(failures.value).set(task.scope, {
-                        action: task.action,
-                        detail: errorMessage(caught, `git gave no reason.`),
-                        ...(caught instanceof PushRefused ? { run: caught.run } : {}),
-                    });
+                    if (current()) {
+                        failures.value = new Map(failures.value).set(task.scope, {
+                            action: task.action,
+                            detail: errorMessage(caught, `git gave no reason.`),
+                            ...(caught instanceof PushRefused ? { run: caught.run } : {}),
+                        });
+                    }
                 }
             }),
         );
     } finally {
-        actionBusy.value = false;
+        if (current()) {
+            actionBusy.value = false;
+        }
     }
-    void settle();
+    if (current()) {
+        void settle();
+    }
 };
 
 // One row's diff: `side` is required since a partially staged file has different staged/unstaged content.
-// Filed under the change list's own key, so any invalidation that refreshes the list drops its diffs too —
-// staleTime is Infinity because only a write can make a diff wrong, not time. Unpersisted: two full file texts.
+// Goes stale only with the change list (workingReviewKeys invalidates both together) — staleTime is Infinity because
+// only a write can make a diff wrong, not time. Unpersisted: two full file texts.
 const FILE_DIFF_GC_MS = 5 * 60 * 1000;
 
-export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] => [
-    ...GIT_CHANGES.of(),
-    UNPERSISTED,
-    `file-diff`,
-    repo,
-    side,
-    path,
-];
+export const fileDiffKey = (repo: string, path: string, side: GitDiffSide): unknown[] => rpcKey(`git.fileDiff`, { repo, path, side }, UNPERSISTED);
 
 // Named apart from the fetcher below so a background loader can be handed the query object directly.
 export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => ({
     queryKey: fileDiffKey(repo, path, side),
-    queryFn: (): Promise<FileDiffResponse> =>
-        sandboxJson<FileDiffResponse>(`/git/${encodeURIComponent(repo)}/file-diff?path=${encodeURIComponent(path)}&side=${side}`),
+    queryFn: (): Promise<FileDiffResponse> => sandboxRpc.git.fileDiff({ repo, path, side }),
     staleTime: Infinity,
     gcTime: FILE_DIFF_GC_MS,
     // No retry: a daemon hiccup during read-ahead would otherwise multiply requests; a failed read simply isn't cached.
@@ -172,19 +175,15 @@ export const fileDiffQuery = (repo: string, path: string, side: GitDiffSide) => 
 const fileDiff = (repo: string, path: string, side: GitDiffSide): Promise<FileDiffResponse> =>
     queryClient.fetchQuery(fileDiffQuery(repo, path, side));
 
-// Named apart from the composable that reads it, so the loader can warm the same cache entry (also the diff keys'
-// shared prefix).
-export const changesKey = (): unknown[] => GIT_CHANGES.of();
+// Named apart from the composable that reads it, so the loader can warm the same cache entry.
+export const changesKey = (): unknown[] => rpcKey(`git.changes`);
 
-export const fetchChanges = (): Promise<GitChangesResponse> => sandboxJson<GitChangesResponse>(`/git/changes`);
+export const fetchChanges = (): Promise<GitChangesResponse> => sandboxRpc.git.changes();
 
-// Invalidates the change list and every agent-diff query, since committing or discarding changes what an
-// agent's review reads even though no ref moved. Fired directly, not left to the throttled file-watcher pass.
+// Invalidates the change list, its file diffs, and every agent's review: committing or discarding changes what a review
+// reads though no ref moved. Fired directly, not left to the throttled file-watcher pass.
 const invalidateChanges = (): Promise<void> =>
-    Promise.all([
-        queryClient.invalidateQueries({ queryKey: changesKey() }),
-        queryClient.invalidateQueries({ predicate: (query) => AGENT_DIFF.matches(query.queryKey) }),
-    ]).then(() => undefined);
+    Promise.all([...workingReviewKeys, ...agentReviewPrefixes].map((queryKey) => queryClient.invalidateQueries({ queryKey }))).then(() => undefined);
 
 // A land applying to the tree is the one moment a rescan is both wrong and expensive: the patch is half in, and the
 // scan it would run fights the land for git subprocesses. Both refresh paths park on `landingNow`, and this is what
@@ -195,12 +194,9 @@ watch(landingNow, (now, was) => {
     }
 });
 
-const post = <T>(repo: string, action: string, body: Record<string, unknown>): Promise<T> =>
-    sandboxJson<T>(`/git/${encodeURIComponent(repo)}/${action}`, jsonBody(`POST`, body));
-
 // Two target shapes: `paths` are rows the user picked (limited to what's rendered); `scope` is a description
 // the daemon resolves itself. Bulk verbs send a scope, so a truncated review can still act on all of it.
-const targetBody = (target: GitTarget): Record<string, unknown> => ({
+const targetBody = (target: GitTarget): GitTarget => ({
     ...(target.paths !== undefined ? { paths: target.paths } : {}),
     ...(target.scope !== undefined ? { scope: target.scope } : {}),
 });
@@ -224,7 +220,8 @@ const commitRepos = async (groups: readonly RepoTarget[], message: string, stage
                 scope: COMMIT_SCOPE,
                 action: `Commit failed`,
                 run: async (): Promise<void> => {
-                    const result = await post<CommitResult>(group.repo, `commit`, {
+                    const result = await sandboxRpc.git.commit({
+                        repo: group.repo,
                         message,
                         ...(stageFirst ? { stage: targetBody(group) } : {}),
                     });
@@ -246,14 +243,14 @@ const discardGroups = (groups: readonly RepoTarget[]): Promise<void> =>
             scope: group.repo,
             action: `Discard failed`,
             run: async (): Promise<void> => {
-                await post(group.repo, `discard`, targetBody(group));
+                await sandboxRpc.git.discard({ repo: group.repo, ...targetBody(group) });
             },
         })),
         () => {
-            // Stale edit buffers would resurrect discarded files on save; `.every` since the tree's keys don't
-            // prefix-match under `.of()`.
-            resetEditBuffers();
-            return Promise.all([queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }), invalidateChanges()]);
+            // Stale edit buffers would resurrect discarded files on save; the tree's whole prefix, since its scope is
+            // part of its key.
+            dropEditBuffers();
+            return Promise.all([queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) }), invalidateChanges()]);
         },
     );
 
@@ -266,13 +263,13 @@ const abortOperation = (repo: string): Promise<void> =>
                 scope: repo,
                 action: `Abort failed`,
                 run: async (): Promise<void> => {
-                    await post(repo, `abort`, {});
+                    await sandboxRpc.git.abort({ repo });
                 },
             },
         ],
         () => {
-            resetEditBuffers();
-            return Promise.all([queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every }), invalidateChanges()]);
+            dropEditBuffers();
+            return Promise.all([queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) }), invalidateChanges()]);
         },
     );
 
@@ -286,7 +283,8 @@ const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<vo
                 scope: group.repo,
                 action: staged ? `Stage failed` : `Unstage failed`,
                 run: async (): Promise<void> => {
-                    await post(group.repo, staged ? `stage` : `unstage`, targetBody(group));
+                    const target = { repo: group.repo, ...targetBody(group) };
+                    await (staged ? sandboxRpc.git.stage(target) : sandboxRpc.git.unstage(target));
                 },
             })),
         invalidateChanges,
@@ -295,8 +293,8 @@ const stageGroups = (groups: readonly RepoTarget[], staged: boolean): Promise<vo
 // Pull is the only sync verb that touches the worktree, so only it resets buffers and refetches the tree.
 // Fetch and push move refs the worktree never sees, so they need neither.
 const afterPull = async (): Promise<void> => {
-    resetEditBuffers();
-    await queryClient.invalidateQueries({ queryKey: WORKSPACE_TREE.every });
+    dropEditBuffers();
+    await queryClient.invalidateQueries({ queryKey: rpcPrefix(`workspace.tree`) });
 };
 
 // Fetches every repo with a remote in one busy span, each failing on its own GitActionResult rather than a
@@ -307,7 +305,7 @@ const fetchRepos = (repos: readonly string[]): Promise<void> =>
             scope: repo,
             action: `Fetch failed`,
             run: async (): Promise<void> => {
-                const result = await post<GitActionResult>(repo, `fetch`, {});
+                const result = await sandboxRpc.git.fetch({ repo });
                 if (!result.ok) {
                     // git's own condensed reason; empty falls through to runBatch's generic fallback message.
                     throw new Error(result.reason);
@@ -334,7 +332,7 @@ const syncAll = (targets: readonly SyncTarget[]): Promise<void> =>
             action: `${target.pull && target.push ? `Sync` : target.push ? `Push` : `Pull`} failed`,
             run: async (): Promise<void> => {
                 if (target.pull) {
-                    const pulled = await post<GitActionResult>(target.repo, `pull`, {});
+                    const pulled = await sandboxRpc.git.pull({ repo: target.repo });
                     if (!pulled.ok) {
                         throw new Error(pulled.reason);
                     }

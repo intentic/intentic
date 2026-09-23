@@ -1,7 +1,7 @@
 import { AGENT_SESSION_PREFIX, JOB_SESSION_PREFIX, WEB_SESSION_PREFIX } from "@intentic/sandbox-contract/session-names";
 import { DOCKER_PANEL_KEY } from "../capabilities/handlers/docker.handler.js";
 import { LOCAL_MODEL_PREFIX } from "../capabilities/handlers/localmodel.handler.js";
-import { PANEL_SESSION_PREFIX } from "../processes/managed-processes.js";
+import { PANEL_SESSION_PREFIX } from "../terminal/terminal-session.js";
 import type { ListeningPort } from "./port-scan.js";
 
 // Turns scan evidence (argv, cwd, session) into a name, sentence and origin for each listener. Lives here, not in the

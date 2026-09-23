@@ -97,7 +97,7 @@ const retryTrial = async (): Promise<void> => {
         return;
     }
     await loadTrialStatus();
-    await conversation.value.resume();
+    await conversation.value.turn.resume();
 };
 
 // This account's credential can no longer refresh; surfaced pre-send, before an opaque mid-turn failure.

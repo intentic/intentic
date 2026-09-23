@@ -125,166 +125,167 @@ export const ForkedFromSchema = z.object({
     files: z.enum(["then", "now"]),
 });
 export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
-export const AgentTurnSchema = z
-    .object({
-        prompt: z.string().describe("What to say to the agent. May be empty if you are only attaching files."),
-        // Seeds a fresh registry entry's title; an existing entry's title always wins over this.
-        title: z
-            .string()
-            .max(80)
-            .optional()
-            .describe("A title for a conversation this turn is opening. Ignored for a conversation that already has one."),
-        // Already uploaded via /workspace/upload; Claude reads them via Read, Codex gets images as native input.
-        attachments: z
-            .array(z.string().min(1))
-            .max(20)
-            .optional()
-            .describe("Files to hand the agent along with the prompt, as workspace paths. Upload them first."),
-        // Read out of the prompt's own `@path` tokens rather than chosen: a tokenizer over pasted text guesses, so a
-        // miss here is dropped and only a chosen attachment can refuse the turn.
-        mentions: z
-            .array(z.string().min(1))
-            .max(MENTION_LIMIT)
-            .optional()
-            .describe(
-                "Workspace paths the prompt mentions with `@`. Unlike attachments, one that escapes the workspace or names no file is ignored rather than refused.",
-            ),
-        // Which provider serves the turn, absent = claude; a sessionId resumes only on the provider that minted it.
-        agent: AgentProviderSchema.optional().describe("Which model provider serves this turn. Leave it out for Claude."),
-        // Which agentic loop runs the turn, absent = provider's own; "claude-code" forces the SDK loop for any
-        // provider.
-        harness: AgentHarnessSchema.optional().describe("Which agentic loop runs the turn. Leave it out to use each provider's own."),
-        // Which connected account of that provider serves the turn; absent = the provider's first account.
-        account: z.string().optional().describe("Which of that provider's connected accounts pays for the turn. Leave it out for the first one."),
-        // Distinct from `account` (who pays): whose name the turn posts as; absent means something different for each
-        // mode.
-        actsAs: entryId.optional().describe("Which persona the turn speaks as out in the world. Not the same as which account pays for it."),
-        sessionId: z.string().optional().describe("Resume this provider session instead of starting a fresh one."),
-        // Stable id surviving provider/account/harness switches; keys the registry entry, the turn run, and the
-        // worktree when isolated.
-        conversationId: ConversationIdSchema.optional().describe(
-            "The conversation this turn belongs to. You choose it, it survives model switches, and it is how you address the conversation later. Naming one that does not exist opens it.",
+// The turn's fields before the cross-field refinements below, so a subset (TurnProfileSchema) can be picked from them.
+const AgentTurnFieldsSchema = z.object({
+    prompt: z.string().describe("What to say to the agent. May be empty if you are only attaching files."),
+    // Seeds a fresh registry entry's title; an existing entry's title always wins over this.
+    title: z
+        .string()
+        .max(80)
+        .optional()
+        .describe("A title for a conversation this turn is opening. Ignored for a conversation that already has one."),
+    // Already uploaded via /workspace/upload; Claude reads them via Read, Codex gets images as native input.
+    attachments: z
+        .array(z.string().min(1))
+        .max(20)
+        .optional()
+        .describe("Files to hand the agent along with the prompt, as workspace paths. Upload them first."),
+    // Read out of the prompt's own `@path` tokens rather than chosen: a tokenizer over pasted text guesses, so a
+    // miss here is dropped and only a chosen attachment can refuse the turn.
+    mentions: z
+        .array(z.string().min(1))
+        .max(MENTION_LIMIT)
+        .optional()
+        .describe(
+            "Workspace paths the prompt mentions with `@`. Unlike attachments, one that escapes the workspace or names no file is ignored rather than refused.",
         ),
-        // Runs in the conversation's own git worktree (created lazily) instead of shared /work; requires
-        // conversationId.
-        isolated: z
-            .boolean()
-            .optional()
-            .describe(
-                "Work in this conversation's own private copy of the repos rather than the shared tree, so several agents can work at once. Needs a conversation id.",
-            ),
-        // Decided like `isolated`: the first turn's choice, latched. A persona's own start folder wins over it.
-        startIn: z
-            .string()
-            .max(200)
-            .optional()
-            .describe(
-                "Which folder the conversation opens in, relative to the workspace root; the project it belongs to. Decided on the first turn. A persona that names its own start folder wins.",
-            ),
-        // Decided like `isolated`: the request's choice on the first turn, the registry's after. `runner` implies
-        // isolation; absent means local.
-        placement: AgentPlacementSchema.optional().describe(
-            "Where this conversation runs: this sandbox (leave it out), or a paired runner by id. Decided on the first turn; later turns follow the conversation.",
+    // Which provider serves the turn, absent = claude; a sessionId resumes only on the provider that minted it.
+    agent: AgentProviderSchema.optional().describe("Which model provider serves this turn. Leave it out for Claude."),
+    // Which agentic loop runs the turn, absent = provider's own; "claude-code" forces the SDK loop for any
+    // provider.
+    harness: AgentHarnessSchema.optional().describe("Which agentic loop runs the turn. Leave it out to use each provider's own."),
+    // Which connected account of that provider serves the turn; absent = the provider's first account.
+    account: z.string().optional().describe("Which of that provider's connected accounts pays for the turn. Leave it out for the first one."),
+    // Distinct from `account` (who pays): whose name the turn posts as; absent means something different for each
+    // mode.
+    actsAs: entryId.optional().describe("Which persona the turn speaks as out in the world. Not the same as which account pays for it."),
+    sessionId: z.string().optional().describe("Resume this provider session instead of starting a fresh one."),
+    // Stable id surviving provider/account/harness switches; keys the registry entry, the turn run, and the
+    // worktree when isolated.
+    conversationId: ConversationIdSchema.optional().describe(
+        "The conversation this turn belongs to. You choose it, it survives model switches, and it is how you address the conversation later. Naming one that does not exist opens it.",
+    ),
+    // Runs in the conversation's own git worktree (created lazily) instead of shared /work; requires
+    // conversationId.
+    isolated: z
+        .boolean()
+        .optional()
+        .describe(
+            "Work in this conversation's own private copy of the repos rather than the shared tree, so several agents can work at once. Needs a conversation id.",
         ),
-        // Pins a new isolated conversation's worktree to these commits; a workflow step's candidates share one snapshot
-        // and skip the ordinary rebase.
-        worktreeBase: z
-            .array(RepoBaseSchema)
-            .min(1)
-            .max(50)
-            .optional()
-            .describe(
-                "Pin a new private copy to these exact commits instead of today's workspace. Used when several agents must start from identical files.",
-            ),
-        // Overrides landing for this turn only; a workflow step sets false so candidates can't leak in before synthesis
-        // compares them.
-        autoLand: z
-            .boolean()
-            .optional()
-            .describe(
-                "Whether this turn's work merges into the workspace when it finishes. Overrides the conversation's own setting for this turn only.",
-            ),
-        // Which per-job model list answers when nobody named a model or provider (turn-resume.ts); names the job, not a
-        // tier, and never overrides an explicit pick.
-        runRole: ModelRoleSchema.optional().describe(
-            "What started this turn, when it was not a person typing: which of the sandbox's per-job model lists answers for it. Only used when the turn names no model of its own.",
+    // Decided like `isolated`: the first turn's choice, latched. A persona's own start folder wins over it.
+    startIn: z
+        .string()
+        .max(200)
+        .optional()
+        .describe(
+            "Which folder the conversation opens in, relative to the workspace root; the project it belongs to. Decided on the first turn. A persona that names its own start folder wins.",
         ),
-        // Set only by the daemon's own dispatchers, never a client; requires conversationId to record it on.
-        origin: AgentOriginSchema.optional().describe(
-            "Set by the sandbox alone: this turn opened a conversation on behalf of a message from outside rather than a person.",
+    // Decided like `isolated`: the request's choice on the first turn, the registry's after. `runner` implies
+    // isolation; absent means local.
+    placement: AgentPlacementSchema.optional().describe(
+        "Where this conversation runs: this sandbox (leave it out), or a paired runner by id. Decided on the first turn; later turns follow the conversation.",
+    ),
+    // Pins a new isolated conversation's worktree to these commits; a workflow step's candidates share one snapshot
+    // and skip the ordinary rebase.
+    worktreeBase: z
+        .array(RepoBaseSchema)
+        .min(1)
+        .max(50)
+        .optional()
+        .describe(
+            "Pin a new private copy to these exact commits instead of today's workspace. Used when several agents must start from identical files.",
         ),
-        // No `history` field: a provider/account/harness switch carries no transcript over the wire; the daemon seeds
-        // the new session from its own conversationId-keyed record.
-        // Where a fork was cut from, on its first turn only; requires conversationId, and files:"then" implies
-        // isolated.
-        forkOf: z
-            .object({
-                conversationId: ConversationIdSchema.describe("The conversation this one was cut from."),
-                keep: z.number().int().nonnegative().describe("How many of that conversation's messages to copy in before this turn runs."),
-                files: z
-                    .enum(["then", "now"])
-                    .describe(
-                        'Which files the fork opens on: "now" is the workspace as it stands, "then" is the files as they were at the cut, which needs a private copy.',
-                    ),
-            })
-            .optional()
-            .describe("Where this conversation was cut from, on its first turn only. Only the client knows this, so only the client can say it."),
-        // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
-        model: z.string().optional().describe("Which model to use. Leave it out for the provider's default."),
-        // Audience only, never model routing: `runRole` is what fills a model in. A run somebody pressed and is
-        // watching leaves this off, however little of it a person typed.
-        unattended: z
-            .boolean()
-            .optional()
-            .describe(
-                "Nobody is watching this turn: a schedule, a queue or another agent started it and no chat is open on it. A card that needs a person is refused rather than raised, plan mode and the terminal hand-off are withheld, and the sandbox's signed-in accounts stay out of it unless a persona carries them.",
-            ),
-        // Outside content caused this turn, naming the source; distinct from `unattended` (whether anyone is watching).
-        outsideWake: z
-            .string()
-            .min(1)
-            .optional()
-            .describe(
-                "Content from outside caused this turn, and what to call the source. It is what makes the sandbox treat the turn as carrying somebody else's words.",
-            ),
-        // How tool calls are gated for this turn (the SDK's permissionMode, verbatim):
-        // plan: propose → approve → execute; the proposing half asks nothing, it only withholds writes
-        // default: prompts per tool on the permission side channel, the one mode that interrupts anybody
-        // bypassPermissions: runs everything
-        // The agent can move itself between modes mid-turn, riding back as a `mode` frame.
-        permissionMode: PermissionModeSchema.optional().describe(
-            "How tool calls are gated: ask before each tool, propose a plan first, or run everything. The agent can move itself between these mid-turn.",
+    // Overrides landing for this turn only; a workflow step sets false so candidates can't leak in before synthesis
+    // compares them.
+    autoLand: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether this turn's work merges into the workspace when it finishes. Overrides the conversation's own setting for this turn only.",
         ),
-        // Narrows the turn to these tool names (the SDK option, not the daemon's MCP `tools`/servers); absent means
-        // everything the runtime has.
-        allowedTools: z
-            .array(z.string().min(1))
-            .optional()
-            .describe(
-                "Narrow the turn to these tools. Leave it out for everything the runtime has. For a turn driven by an outside message this list is the real boundary, because prompt wording is only advice.",
-            ),
-        effort: z.string().optional().describe("How hard the model should think, where the provider offers a choice."),
-        thinking: z.boolean().optional().describe("Whether to show the model's reasoning as it works."),
-        // Requests the harness serve this turn faster at a higher price; a request, not a promise, the `fast_mode`
-        // frame reports what happened.
-        fast: z
-            .boolean()
-            .optional()
-            .describe(
-                "Ask for the same work at a higher rate for a higher price. A request rather than a promise: the answer says what actually happened.",
-            ),
-        // Set by the composer on the one turn whose model the Auto judge chose; the daemon only records it.
-        autoPicked: z
-            .boolean()
-            .optional()
-            .describe(
-                "Whether this turn's model was chosen for you by reading the conversation's opening message, rather than picked by hand. Recorded so the choice can be judged later against what you did next.",
-            ),
-        // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
-        editorContext: EditorContextSchema.optional().describe(
-            'What the user has open in their editor, folded into the prompt so that pointing words like "this" resolve.',
+    // Which per-job model list answers when nobody named a model or provider (turn-resume.ts); names the job, not a
+    // tier, and never overrides an explicit pick.
+    runRole: ModelRoleSchema.optional().describe(
+        "What started this turn, when it was not a person typing: which of the sandbox's per-job model lists answers for it. Only used when the turn names no model of its own.",
+    ),
+    // Set only by the daemon's own dispatchers, never a client; requires conversationId to record it on.
+    origin: AgentOriginSchema.optional().describe(
+        "Set by the sandbox alone: this turn opened a conversation on behalf of a message from outside rather than a person.",
+    ),
+    // No `history` field: a provider/account/harness switch carries no transcript over the wire; the daemon seeds
+    // the new session from its own conversationId-keyed record.
+    // Where a fork was cut from, on its first turn only; requires conversationId, and files:"then" implies
+    // isolated.
+    forkOf: z
+        .object({
+            conversationId: ConversationIdSchema.describe("The conversation this one was cut from."),
+            keep: z.number().int().nonnegative().describe("How many of that conversation's messages to copy in before this turn runs."),
+            files: z
+                .enum(["then", "now"])
+                .describe(
+                    'Which files the fork opens on: "now" is the workspace as it stands, "then" is the files as they were at the cut, which needs a private copy.',
+                ),
+        })
+        .optional()
+        .describe("Where this conversation was cut from, on its first turn only. Only the client knows this, so only the client can say it."),
+    // The browser sends the chosen model per turn; the provider token is the sandbox's own stored credential.
+    model: z.string().optional().describe("Which model to use. Leave it out for the provider's default."),
+    // Audience only, never model routing: `runRole` is what fills a model in. A run somebody pressed and is
+    // watching leaves this off, however little of it a person typed.
+    unattended: z
+        .boolean()
+        .optional()
+        .describe(
+            "Nobody is watching this turn: a schedule, a queue or another agent started it and no chat is open on it. A card that needs a person is refused rather than raised, plan mode and the terminal hand-off are withheld, and the sandbox's signed-in accounts stay out of it unless a persona carries them.",
         ),
-    })
+    // Outside content caused this turn, naming the source; distinct from `unattended` (whether anyone is watching).
+    outsideWake: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+            "Content from outside caused this turn, and what to call the source. It is what makes the sandbox treat the turn as carrying somebody else's words.",
+        ),
+    // How tool calls are gated for this turn (the SDK's permissionMode, verbatim):
+    // plan: propose → approve → execute; the proposing half asks nothing, it only withholds writes
+    // default: prompts per tool on the permission side channel, the one mode that interrupts anybody
+    // bypassPermissions: runs everything
+    // The agent can move itself between modes mid-turn, riding back as a `mode` frame.
+    permissionMode: PermissionModeSchema.optional().describe(
+        "How tool calls are gated: ask before each tool, propose a plan first, or run everything. The agent can move itself between these mid-turn.",
+    ),
+    // Narrows the turn to these tool names (the SDK option, not the daemon's MCP `tools`/servers); absent means
+    // everything the runtime has.
+    allowedTools: z
+        .array(z.string().min(1))
+        .optional()
+        .describe(
+            "Narrow the turn to these tools. Leave it out for everything the runtime has. For a turn driven by an outside message this list is the real boundary, because prompt wording is only advice.",
+        ),
+    effort: z.string().optional().describe("How hard the model should think, where the provider offers a choice."),
+    thinking: z.boolean().optional().describe("Whether to show the model's reasoning as it works."),
+    // Requests the harness serve this turn faster at a higher price; a request, not a promise, the `fast_mode`
+    // frame reports what happened.
+    fast: z
+        .boolean()
+        .optional()
+        .describe(
+            "Ask for the same work at a higher rate for a higher price. A request rather than a promise: the answer says what actually happened.",
+        ),
+    // Set by the composer on the one turn whose model the Auto judge chose; the daemon only records it.
+    autoPicked: z
+        .boolean()
+        .optional()
+        .describe(
+            "Whether this turn's model was chosen for you by reading the conversation's opening message, rather than picked by hand. Recorded so the choice can be judged later against what you did next.",
+        ),
+    // The opt-in editor context chip: what the user is looking at, folded into the prompt daemon-side.
+    editorContext: EditorContextSchema.optional().describe(
+        'What the user has open in their editor, folded into the prompt so that pointing words like "this" resolve.',
+    ),
+});
+export const AgentTurnSchema = AgentTurnFieldsSchema
     // An attachment-only send (no text) is legal; an entirely empty turn is not.
     .refine((turn) => turn.prompt.trim().length > 0 || (turn.attachments?.length ?? 0) > 0, {
         message: "prompt or attachments required",
@@ -306,6 +307,35 @@ export const AgentTurnSchema = z
         message: 'forkOf.files "then" requires isolated',
     });
 export type AgentTurn = z.infer<typeof AgentTurnSchema>;
+// Which turn this is, as opposed to what it says: who serves it and how (agent, harness, account, model and its knobs),
+// as whom (actsAs), where (isolated), whether anyone watches (unattended) and for which job (runRole). A turn that
+// continues another (a resume, a wake, a nudge, a child's follow-up) carries this whole, never a hand-picked part.
+export const TurnProfileSchema = AgentTurnFieldsSchema.pick({
+    agent: true,
+    harness: true,
+    account: true,
+    model: true,
+    effort: true,
+    thinking: true,
+    fast: true,
+    actsAs: true,
+    isolated: true,
+    unattended: true,
+    runRole: true,
+});
+export type TurnProfile = z.infer<typeof TurnProfileSchema>;
+const PROFILE_KEYS = Object.keys(TurnProfileSchema.shape) as readonly (keyof TurnProfile)[];
+// Read as `=== true` everywhere, so false and absent are one value; carrying a false would state a placement or an
+// audience the turn never named.
+const TRUE_ONLY: ReadonlySet<keyof TurnProfile> = new Set(["isolated", "unattended"]);
+/* THE PROFILE A TURN STATES: absent stays absent (no `undefined` keys), and a `=== true` flag travels only when set. */
+export const profileOf = (turn: TurnProfile): TurnProfile =>
+    Object.fromEntries(
+        PROFILE_KEYS.flatMap((key) => {
+            const value = turn[key];
+            return value === undefined || (TRUE_ONLY.has(key) && value !== true) ? [] : [[key, value]];
+        }),
+    ) as TurnProfile;
 /* A MODEL CHOSEN FOR ONE SURFACE-STARTED RUN, what the caret on the shared run button (<AgentRunButton>) sends along with the click that starts it. */
 export const AgentRunPickSchema = z
     .object({

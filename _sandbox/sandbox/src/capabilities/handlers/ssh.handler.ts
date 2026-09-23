@@ -1,6 +1,6 @@
 import type { SshConfig } from "@intentic/sandbox-contract";
 import { readFile, writeFile } from "node:fs/promises";
-import { removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
+import { removeLoadedSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
 import type { CapabilityHandler } from "../capability.js";
 import { hostConfPath, hostKeyPath, hostPassPath, removeSshHost, writeSshHost } from "../ssh-hosts.js";
 

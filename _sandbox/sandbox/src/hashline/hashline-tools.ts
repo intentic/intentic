@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { errorMessage } from "@intentic/base/errors";
-import { sdk } from "../runtimes/claude/claude-sdk.js";
+import { sdk } from "../engines/claude-sdk.js";
 import { z } from "zod";
 import { resolveWithin } from "../workspace/files/workspace-files-paths.js";
 import { applyEdit, type HashlineOp, renderForRead } from "./hashline.js";

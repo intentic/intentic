@@ -13,16 +13,18 @@ import {
 import { unstubbed } from "@intentic/testing";
 import { Hono } from "hono";
 import { test, expect } from "bun:test";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import { fileHeldWakesStore } from "../automations/held-wakes-store.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import { memoryDoorTokens } from "../auth/door-tokens.js";
 import type { Services } from "../composition.js";
 import { fileThreadSessionsStore } from "../sessions/thread-sessions.js";
 import { createIntakeRoutes } from "./intake.routes.js";
 import { fileIssuesStore, type IssuesStore } from "./issues-store.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { drivenBy } from "../testing.js";
 
 // Public ingest end to end: one of two doors a stranger can reach. What matters is the refusals and the arithmetic of
 // waking, a crash loop must cost file writes, not agent turns.
@@ -35,7 +37,7 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         doorTokens: memoryDoorTokens(),
         heldWakes: fileHeldWakesStore(join(root, "approvals")),
         threadSessions: fileThreadSessionsStore(join(root, "thread-sessions.json")),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async (event) => void appends.push(event as ActivityEvent), list: async () => [] },
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
@@ -53,8 +55,8 @@ const fakeServices = (root: string, appends: ActivityEvent[]): Services =>
         }),
     });
 
-const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): WakeFn =>
-    async function* (_services, input) {
+const fakeWake = (turns: AgentTurn[], events: AgentEvent[] = [{ kind: "done" }]): TurnStarter["stream"] =>
+    async function* (input) {
         turns.push(input);
         yield* events;
     };
@@ -69,8 +71,8 @@ const crash = (over: Partial<IssueReport> = {}): IssueReport => ({
     ...over,
 });
 
-const appFor = (services: Services, wake: WakeFn, issues: IssuesStore): Hono => {
-    const routes = createIntakeRoutes(services, wake, issues);
+const appFor = (services: Services, wake: TurnStarter["stream"], issues: IssuesStore): Hono => {
+    const routes = createIntakeRoutes(drivenBy(services, wake), issues);
     return new Hono()
         .get("/intake/:id/config", routes.config)
         .get("/intake/:id/challenge", routes.challenge)

@@ -15,8 +15,13 @@ import {
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
 import { toRaw, watch } from "vue";
 import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
-import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync, mocked, hoisted } from "@intentic/testing/bun";
+import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
+import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import type { SandboxCallContext } from "../../sandbox/client/sandboxRpc";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import { Conversation } from "./conversation";
+import { planFeedback } from "./cardReplies";
+import { seedFork } from "./forkSeed";
 import { providerAccounts, selectedAccountId, usageByAccount } from "../accounts/providerAccounts";
 import { turnDefaults } from "../run/turnDefaults";
 import { AUTO_PROVIDER } from "../models/modelPickerState";
@@ -36,27 +41,42 @@ import {
 } from "../transcript/transcript";
 import type { AttachHead } from "../run/turnStream";
 
-// sandboxError mocks the real one's refusal-message parsing, without sandboxClient's app-wide singletons. reachSpy
-// records which sandbox each call targeted, since that argument is invisible in the request path.
-const { reachSpy } = hoisted(() => ({ reachSpy: mock<(at: string | undefined, path: string) => void>() }));
-mock.module("../../sandbox/client/sandboxClient", () => {
-    const sandboxRequest = mock();
-    return {
-        sandboxRequest,
-        // sandboxRequestVia on the real client's terms: `undefined` reach is the active box. Delegates to the shared
-        // spy
-        // and records the reach.
-        sandboxRequestVia: (at: string | undefined, path: string, init?: RequestInit) => {
-            reachSpy(at, path);
-            return init === undefined ? sandboxRequest(path) : sandboxRequest(path, init);
+// How a call was aimed and paced, as the typed client hands it to a procedure.
+interface CallOptions {
+    readonly signal?: AbortSignal;
+    readonly context?: SandboxCallContext;
+}
+
+// The daemon as this suite models it: one handler over each procedure's route name, since a turn's protocol spans
+// several (start, attach, stop, reply) and a test swaps the whole of it at once. The box a call went to rides its context.
+const { daemon } = hoisted(() => ({ daemon: mock<(procedure: string, input: unknown, options?: CallOptions) => Promise<unknown>>() }));
+// Each procedure a conversation calls, served by the model above; the answer is the model's to shape, so the client's
+// own answer type is waived here and nowhere else.
+const procedureOf =
+    (name: string) =>
+    (input: unknown, options?: CallOptions): never =>
+        daemon(name, input, options) as never;
+mock.module("../../sandbox/client/sandboxRpc", () => ({
+    sandboxRpc: fakeSandboxRpc({
+        agent: {
+            run: procedureOf(`agent.run`),
+            attach: procedureOf(`agent.attach`),
+            reply: procedureOf(`agent.reply`),
+            steer: procedureOf(`agent.steer`),
+            stop: procedureOf(`agent.stop`),
+            resume: procedureOf(`agent.resume`),
+            rewind: procedureOf(`agent.rewind`),
         },
-        sandboxError: async (response: Response) => new Error(((await response.json()) as { message: string }).message),
-    };
-});
-const { sandboxRequest } = await import("../../sandbox/client/sandboxClient");
-const sandboxRequestMock = mocked(sandboxRequest);
-// Every path this conversation addressed at a given box, in order.
-const pathsAimedAt = (at: string | undefined): string[] => reachSpy.mock.calls.filter(([box]) => box === at).map(([, path]) => path);
+        agents: { place: procedureOf(`agents.place`), transcript: procedureOf(`agents.transcript`) },
+    }),
+}));
+// Every procedure this conversation called at a given box, in order.
+const proceduresAimedAt = (at: string | undefined): string[] =>
+    daemon.mock.calls.filter(([, , options]) => options?.context?.at === at).map(([procedure]) => procedure);
+// A refusal, in the daemon's words: the status's own fallback when it said none.
+const daemonRefusal = (status: number, message = `Request failed (${status}).`): SandboxHttpError => new SandboxHttpError(status, message);
+// A call's input as the daemon receives it: JSON, so nothing undefined arrives.
+const wire = (input: unknown): Record<string, unknown> => JSON.parse(JSON.stringify(input)) as Record<string, unknown>;
 
 // Stubs useChat-catalog's reload so a model-invalid error doesn't pull in the whole chat store. hoisted so the
 // mock factory can see the spy.
@@ -94,29 +114,28 @@ afterEach(() => {
     selectedAccountId.value = { ...accountPicks };
 });
 
-// One `data:` SSE frame, as the daemon's attach stream emits envelopes.
-const encoder = new TextEncoder();
-const sseFrame = (payload: unknown): Uint8Array => encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+// One attach frame as it comes off the wire: parsed afresh, never an object the fixture still holds.
+const frameOf = (payload: unknown): AttachFrame => JSON.parse(JSON.stringify(payload)) as AttachFrame;
 
 // Run id counter shared across every fake daemon in a test, so runs from different fakes get different ids; reset
 // each test.
 let runsMinted = 0;
 
-// Mocks the daemon's turn protocol (ack, attach replay via TranscriptFold, stop/reply) for `sandboxRequest`.
+// Models the daemon's turn protocol (ack, attach replay via TranscriptFold, stop/reply) behind the procedures above.
 // `head`, a thunk read per attach, overrides a resumed run's id, prompt and start time.
 interface LiveRun {
-    readonly controller: ReadableStreamDefaultController<Uint8Array>;
+    readonly controller: ReadableStreamDefaultController<AttachFrame>;
     readonly fold: TranscriptFold;
     seq: number;
     readonly queue: AgentEvent[];
     // Stamped onto every row this run emits, head and patches alike, as TurnRun does (turn-runs.ts).
     readonly run: string;
 }
-const sseResponse = (
+const turnDaemon = (
     events: AgentEvent[],
     options?: { stayOpen?: boolean; head?: () => Partial<{ run: string; prompt: string; rows: TranscriptRow[]; startedAt: number }> },
-): ((path: string, init?: RequestInit) => Promise<Response>) => {
-    // The turn the last POST /agent asked for: the head's opening row is built from it.
+): ((procedure: string, input: unknown, call?: CallOptions) => Promise<unknown>) => {
+    // The turn the last `agent.run` asked for: the head's opening row is built from it.
     let requested: { readonly prompt: string; readonly attachments: readonly string[] } | undefined;
     // A stop that landed after the ack and before the attach: the run is over by the time its head goes out.
     let stopRequested = false;
@@ -133,17 +152,18 @@ const sseResponse = (
         served = undefined;
         stopRequested = false;
     };
-    const ok = (): Promise<Response> => Promise.resolve({ ok: true, json: () => Promise.resolve({ run: runId }) } as Response);
+    const ok = (): Promise<{ ok: true }> => Promise.resolve({ ok: true });
+    const started = (): Promise<{ run: string }> => Promise.resolve({ run: runId });
     const emit = (state: LiveRun, patches: ReturnType<TranscriptFold[`apply`]>): void => {
         for (const patch of patches) {
             const stamped = patch.op === `append` || patch.op === `replace` ? { ...patch, row: { ...patch.row, run: state.run } } : patch;
-            state.controller.enqueue(sseFrame({ kind: `patch`, seq: (state.seq += 1), patch: stamped }));
+            state.controller.enqueue(frameOf({ kind: `patch`, seq: (state.seq += 1), patch: stamped }));
         }
     };
     const end = (state: LiveRun, ending: `settled` | `stopped`): void => {
         live = undefined;
         emit(state, state.fold.finish(ending));
-        state.controller.enqueue(sseFrame({ kind: `end` }));
+        state.controller.enqueue(frameOf({ kind: `end` }));
         state.controller.close();
     };
     // Stream the queued events until they run out, or a card parks the turn on the user.
@@ -152,7 +172,7 @@ const sseResponse = (
             const event = state.queue.shift()!;
             emit(state, state.fold.apply(event));
             if (isTurnFact(event)) {
-                state.controller.enqueue(sseFrame({ kind: `fact`, seq: (state.seq += 1), fact: event }));
+                state.controller.enqueue(frameOf({ kind: `fact`, seq: (state.seq += 1), fact: event }));
             }
             const last = state.fold.rows.at(-1);
             if (last !== undefined && isAwaitingDecision(last) && !state.queue.some((next) => next.kind === `resolved`)) {
@@ -165,31 +185,30 @@ const sseResponse = (
             end(state, `settled`);
         }
     };
-    return (path, init) => {
-        const body = typeof init?.body === `string` ? (JSON.parse(init.body) as Record<string, unknown>) : undefined;
-        if (path === `/agent`) {
+    return (procedure, input, call) => {
+        const body = input === undefined ? undefined : wire(input);
+        if (procedure === `agent.run`) {
             startTurn();
             requested = { prompt: String(body?.[`prompt`] ?? ``), attachments: (body?.[`attachments`] as string[] | undefined) ?? [] };
-            return ok();
+            return started();
         }
         // Resume runs the held turn as a new turn on its own prompt copy; the head that follows opens its own run
-        // rather
-        // than replacing the refused attempt's rows.
-        if (path === `/agent/resume`) {
+        // rather than replacing the refused attempt's rows.
+        if (procedure === `agent.resume`) {
             startTurn();
-            return ok();
+            return started();
         }
-        if (path === `/agent/stop`) {
+        if (procedure === `agent.stop`) {
             if (live !== undefined) {
                 end(live, `stopped`);
             } else if (requested !== undefined) {
                 stopRequested = true;
             } else {
-                return Promise.resolve({ ok: false, status: 404 } as Response);
+                return Promise.reject(daemonRefusal(404));
             }
             return ok();
         }
-        if (path === `/agent/reply` && live !== undefined) {
+        if (procedure === `agent.reply` && live !== undefined) {
             const state = live;
             const reply = body as unknown as AgentReply;
             const dismissed = reply.kind === `question` && reply.cancelled === true;
@@ -210,7 +229,7 @@ const sseResponse = (
             }
             return ok();
         }
-        if (path !== `/agent/attach`) {
+        if (procedure !== `agent.attach`) {
             return ok();
         }
         const overrides = options?.head?.() ?? {};
@@ -221,18 +240,18 @@ const sseResponse = (
             (overrides.prompt === undefined
                 ? openingOf(requested?.prompt ?? `hi`, startedAt, requested?.attachments ?? [])
                 : openingOf(overrides.prompt, startedAt));
-        const stream = new ReadableStream<Uint8Array>({
+        const stream = new ReadableStream<AttachFrame>({
             start(controller) {
                 // Re-attach to a served run: the head already carries its rows, so nothing is left to fold in.
                 const replay = served === undefined;
                 const fold = served ?? new TranscriptFold(opening);
                 served = fold;
                 controller.enqueue(
-                    sseFrame({ kind: `attached`, run, startedAt, seq: 0, rows: structuredClone(fold.rows).map((row) => ({ ...row, run })) }),
+                    frameOf({ kind: `attached`, run, startedAt, seq: 0, rows: structuredClone(fold.rows).map((row) => ({ ...row, run })) }),
                 );
                 const state: LiveRun = { controller, fold, seq: 0, queue: replay ? [...events] : [], run };
                 live = state;
-                init?.signal?.addEventListener(`abort`, () => {
+                call?.signal?.addEventListener(`abort`, () => {
                     if (live === state) {
                         live = undefined;
                     }
@@ -241,7 +260,7 @@ const sseResponse = (
                 serve(state);
             },
         });
-        return Promise.resolve({ ok: true, body: stream } as Response);
+        return Promise.resolve(stream);
     };
 };
 
@@ -289,12 +308,12 @@ const liveRun = (
 
 // Delivers one chunk per pull, then closes or errors, modeling a drop after the chunks arrived (erroring in
 // `start()` would discard queued chunks).
-const chunkStream = (chunks: unknown[], end: `close` | `error`): ReadableStream<Uint8Array> => {
+const chunkStream = (chunks: unknown[], end: `close` | `error`): ReadableStream<AttachFrame> => {
     let next = 0;
-    return new ReadableStream<Uint8Array>({
+    return new ReadableStream<AttachFrame>({
         pull(controller) {
             if (next < chunks.length) {
-                controller.enqueue(sseFrame(chunks[next]));
+                controller.enqueue(frameOf(chunks[next]));
                 next += 1;
                 return;
             }
@@ -307,12 +326,10 @@ const chunkStream = (chunks: unknown[], end: `close` | `error`): ReadableStream<
     });
 };
 
-// Parsed bodies of the turn-start (`/agent`) calls; attach/control posts interleave, so assert through this
-// rather than raw call indexes.
+// Inputs of the turn-start (`agent.run`) calls, as the daemon receives them; attach/control calls interleave, so assert
+// through this rather than raw call indexes.
 const turnBodies = (): Record<string, unknown>[] =>
-    sandboxRequestMock.mock.calls
-        .filter(([path]) => path === `/agent`)
-        .map(([, init]) => JSON.parse(init!.body as string) as Record<string, unknown>);
+    daemon.mock.calls.filter(([procedure]) => procedure === `agent.run`).map(([, input]) => wire(input));
 
 const settings = {
     agent: `claude`,
@@ -329,8 +346,8 @@ const settings = {
 describe(`Conversation`, () => {
     it(`streams deltas into the assistant bubble and captures session, model, and title`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `init`, model: `claude-opus` },
                 { kind: `delta`, text: `Hello ` },
@@ -339,37 +356,37 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`Hi there`, settings);
+        await conversation.turn.send(`Hi there`, settings);
 
-        expect(conversation.messages.value).toHaveLength(2);
-        expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: `Hi there` });
-        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Hello world` });
+        expect(conversation.transcript.messages.value).toHaveLength(2);
+        expect(conversation.transcript.messages.value[0]).toMatchObject({ role: `user`, text: `Hi there` });
+        expect(conversation.transcript.messages.value[1]).toMatchObject({ role: `assistant`, text: `Hello world` });
         expect(conversation.session.value).toEqual({ id: `s-1`, provider: `claude`, account: undefined, harness: `native` });
         expect(conversation.activeModel.value).toBe(`claude-opus`);
         expect(conversation.title.value).toBe(`Hi there`);
-        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.turn.streaming.value).toBe(false);
     });
 
     it(`adopts the account the daemon served an unpinned turn on, so the next send resumes the session`, async () => {
         const conversation = new Conversation(`c-unpinned`);
-        expect(conversation.account.value).toBeUndefined();
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1`, account: `with-room` }, { kind: `done` }]));
+        expect(conversation.selection.account.value).toBeUndefined();
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1`, account: `with-room` }, { kind: `done` }]));
 
-        await conversation.send(`hi`, settings);
+        await conversation.turn.send(`hi`, settings);
 
         expect(conversation.session.value).toEqual({ id: `s-1`, provider: `claude`, account: `with-room`, harness: `native` });
-        expect(conversation.account.value).toBe(`with-room`);
+        expect(conversation.selection.account.value).toBe(`with-room`);
     });
 
     it(`leaves a pin the user made alone when the daemon reports the session on another account`, async () => {
         const conversation = new Conversation(`c-pinned`);
-        conversation.account.value = `acct-1`;
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1`, account: `acct-2` }, { kind: `done` }]));
+        conversation.selection.apply({ kind: `set`, picks: { account: `acct-1` } });
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1`, account: `acct-2` }, { kind: `done` }]));
 
-        await conversation.send(`hi`, { ...settings, account: `acct-1` });
+        await conversation.turn.send(`hi`, { ...settings, account: `acct-1` });
 
         expect(conversation.session.value?.account).toBe(`acct-2`);
-        expect(conversation.account.value).toBe(`acct-1`);
+        expect(conversation.selection.account.value).toBe(`acct-1`);
     });
 
     // Driven off a stalled clock rather than the file's synchronous RAF stub, and tool calls rather than deltas, since
@@ -380,9 +397,9 @@ describe(`Conversation`, () => {
             const conversation = new Conversation(`c1`);
             let writes = 0;
             // messages is what the renderer reads; `flush: sync` counts actual writes, not batched scheduler passes.
-            const stop = watch(conversation.messages, () => (writes += 1), { flush: `sync` });
-            sandboxRequestMock.mockImplementation(
-                sseResponse([
+            const stop = watch(conversation.transcript.messages, () => (writes += 1), { flush: `sync` });
+            daemon.mockImplementation(
+                turnDaemon([
                     ...Array.from({ length: calls }, (_, index): AgentEvent => ({
                         kind: `tool_call`,
                         id: `t${index}`,
@@ -393,9 +410,9 @@ describe(`Conversation`, () => {
                     { kind: `done` },
                 ]),
             );
-            await conversation.send(`Hi`, settings);
+            await conversation.turn.send(`Hi`, settings);
             stop();
-            return { writes, tools: conversation.messages.value.reduce((total, message) => total + (message.tools?.length ?? 0), 0) };
+            return { writes, tools: conversation.transcript.messages.value.reduce((total, message) => total + (message.tools?.length ?? 0), 0) };
         };
 
         const few = await runWith(4);
@@ -408,9 +425,9 @@ describe(`Conversation`, () => {
 
     it(`replays the captured session id on the next turn and omits it on the first`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`first`, settings);
-        await conversation.send(`second`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
+        await conversation.turn.send(`second`, settings);
 
         const [firstBody, secondBody] = turnBodies();
         expect(`sessionId` in firstBody!).toBe(false);
@@ -420,26 +437,26 @@ describe(`Conversation`, () => {
     it(`switches provider mid-conversation: retires the session and carries no transcript up the wire`, async () => {
         const conversation = new Conversation(`c1`);
         // The selection and the turn settings move together (useChat builds settings from the selection).
-        conversation.selectProvider(`codex`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `thr-1` },
                 { kind: `delta`, text: `sure` },
             ]),
         );
-        await conversation.send(`first`, { ...settings, agent: `codex`, model: `` });
+        await conversation.turn.send(`first`, { ...settings, agent: `codex`, model: `` });
         const firstBody = turnBodies()[0]!;
         expect(firstBody[`agent`]).toBe(`codex`);
         // Codex's ChatGPT-account auth rejects a named model: an empty selection is omitted from the wire.
         expect(`model` in firstBody).toBe(false);
 
-        conversation.selectProvider(`claude`);
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
+        expect(conversation.transcript.messages.value.at(-1)!.role).toBe(`notice`);
 
         // An omitted sessionId is the whole signal that this is a fresh session; the daemon reseeds the replacement
         // itself.
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`second`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`second`, settings);
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`agent`]).toBe(`claude`);
         expect(`sessionId` in secondBody).toBe(false);
@@ -447,22 +464,22 @@ describe(`Conversation`, () => {
 
         // The new runtime's session is captured with its own provider; the next turn resumes it.
         expect(conversation.session.value).toMatchObject({ id: `s-1`, provider: `claude` });
-        await conversation.send(`third`, settings);
+        await conversation.turn.send(`third`, settings);
         const thirdBody = turnBodies()[2]!;
         expect(thirdBody[`sessionId`]).toBe(`s-1`);
     });
 
     it(`switching away and back before sending keeps the session and removes the notice`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`first`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
 
-        conversation.selectProvider(`grok`);
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
-        conversation.selectProvider(`claude`);
-        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+        conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
+        expect(conversation.transcript.messages.value.at(-1)!.role).toBe(`notice`);
+        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
+        expect(conversation.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
 
-        await conversation.send(`second`, settings);
+        await conversation.turn.send(`second`, settings);
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`sessionId`]).toBe(`s-1`);
         expect(`history` in secondBody).toBe(false);
@@ -470,16 +487,16 @@ describe(`Conversation`, () => {
 
     it(`says what a same-provider model swap costs, where it used to say nothing at all`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`first`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
 
-        conversation.selectModel({ provider: `claude`, value: `haiku` });
-        const notice = conversation.messages.value.at(-1)!;
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
+        const notice = conversation.transcript.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
         expect(notice.text).toContain(`Switched to`);
         expect(notice.text).not.toContain(`fresh session`);
 
-        await conversation.send(`second`, { ...settings, model: `haiku` });
+        await conversation.turn.send(`second`, { ...settings, model: `haiku` });
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`sessionId`]).toBe(`s-1`);
         expect(secondBody[`model`]).toBe(`haiku`);
@@ -488,61 +505,61 @@ describe(`Conversation`, () => {
     it(`says nothing about a model picked before the chat has run anything`, async () => {
         const conversation = new Conversation(`c1`);
         // No turn sent yet, so no cost exists for a divider to report.
-        conversation.selectModel({ provider: `claude`, value: `haiku` });
-        expect(conversation.messages.value).toEqual([]);
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
+        expect(conversation.transcript.messages.value).toEqual([]);
     });
 
     it(`arms Auto without routing anywhere: the chat keeps somewhere to run if the reading never lands`, () => {
         const conversation = new Conversation(`c1`);
-        conversation.selectModel({ provider: `claude`, value: `haiku` });
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
 
-        conversation.selectModel({ provider: AUTO_PROVIDER, value: `` });
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
 
-        expect(conversation.auto.value).toBe(true);
+        expect(conversation.selection.auto.value).toBe(true);
         // The mode is not a route: provider and model stand exactly as they were.
-        expect(conversation.provider.value).toBe(`claude`);
-        expect(conversation.model.value).toBe(`haiku`);
+        expect(conversation.selection.provider.value).toBe(`claude`);
+        expect(conversation.selection.model.value).toBe(`haiku`);
     });
 
     it(`treats naming a model as the answer to the question Auto was armed to ask`, () => {
         const conversation = new Conversation(`c1`);
-        conversation.selectModel({ provider: AUTO_PROVIDER, value: `` });
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
 
-        conversation.selectModel({ provider: `claude`, value: `haiku` });
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
 
-        expect(conversation.auto.value).toBe(false);
+        expect(conversation.selection.auto.value).toBe(false);
         // And for the next new chat too: the owner just answered it by hand.
         expect(turnDefaults.auto.value).toBe(false);
     });
 
     it(`disarms Auto when a model is worn, whoever named it`, () => {
         const conversation = new Conversation(`c1`);
-        conversation.selectModel({ provider: AUTO_PROVIDER, value: `` });
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
 
         // What a persona's card and Auto's own answer both do; either way the model is now named.
-        conversation.wearModel({ provider: `claude`, model: `claude-opus-5`, effort: `high` });
+        conversation.selection.apply({ kind: `wearModel`, pin: { provider: `claude`, model: `claude-opus-5`, effort: `high` } });
 
-        expect(conversation.auto.value).toBe(false);
-        expect(conversation.model.value).toBe(`claude-opus-5`);
-        expect(conversation.effortPick.value).toBe(`high`);
+        expect(conversation.selection.auto.value).toBe(false);
+        expect(conversation.selection.model.value).toBe(`claude-opus-5`);
+        expect(conversation.selection.effortPick.value).toBe(`high`);
     });
 
     it(`opens a new chat on Auto when that was the last pick`, () => {
-        new Conversation(`c1`).selectModel({ provider: AUTO_PROVIDER, value: `` });
+        new Conversation(`c1`).selection.apply({ kind: `selectModel`, pick: { provider: AUTO_PROVIDER, value: `` } });
 
-        expect(new Conversation(`c2`).auto.value).toBe(true);
+        expect(new Conversation(`c2`).selection.auto.value).toBe(true);
     });
 
     it(`retracts the model divider once the pick goes back to what the last turn ran on`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`first`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
 
-        conversation.selectModel({ provider: `claude`, value: `haiku` });
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
+        expect(conversation.transcript.messages.value.at(-1)!.role).toBe(`notice`);
         // Landing back on the original pick costs nothing, so it says nothing, the same rule as the provider divider.
-        conversation.selectModel({ provider: `claude`, value: `opus` });
-        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `opus` } });
+        expect(conversation.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
     });
 
     // A catalog read that no longer lists this chat's pick moves it off (useChat-catalog); the pick is the user's, so
@@ -550,52 +567,52 @@ describe(`Conversation`, () => {
     // of a conversation whenever a routed channel de-listed a model it was out of capacity for.
     it(`owes back the model a thin catalog moved this chat off, and hands it back when it returns`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.selectModel({ provider: `claude`, value: `opus` });
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`first`, settings);
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `opus` } });
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
 
-        conversation.displaceModel(`haiku`);
-        expect(conversation.model.value).toBe(`haiku`);
-        expect(conversation.displacedModel.value).toBe(`opus`);
+        conversation.selection.apply({ kind: `displaceModel`, model: `haiku` });
+        expect(conversation.selection.model.value).toBe(`haiku`);
+        expect(conversation.selection.displacedModel.value).toBe(`opus`);
         // Said out loud like any other swap: the next message would run on a model the user never picked.
-        expect(conversation.messages.value.at(-1)!.text).toContain(`Switched to`);
+        expect(conversation.transcript.messages.value.at(-1)!.text).toContain(`Switched to`);
 
-        conversation.restoreModel();
-        expect(conversation.model.value).toBe(`opus`);
-        expect(conversation.displacedModel.value).toBeUndefined();
+        conversation.selection.apply({ kind: `restoreModel` });
+        expect(conversation.selection.model.value).toBe(`opus`);
+        expect(conversation.selection.displacedModel.value).toBeUndefined();
         // Back on what the last turn ran, so the divider it raised goes with it.
-        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+        expect(conversation.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
     });
 
     it(`drops the debt the moment the user picks a model of their own`, () => {
         const conversation = new Conversation(`c1`);
-        conversation.selectModel({ provider: `claude`, value: `opus` });
-        conversation.displaceModel(`haiku`);
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `opus` } });
+        conversation.selection.apply({ kind: `displaceModel`, model: `haiku` });
 
-        conversation.selectModel({ provider: `claude`, value: `sonnet` });
-        expect(conversation.displacedModel.value).toBeUndefined();
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `sonnet` } });
+        expect(conversation.selection.displacedModel.value).toBeUndefined();
 
-        conversation.restoreModel();
+        conversation.selection.apply({ kind: `restoreModel` });
         // A restore has nothing to give back once the user has chosen: their pick stands.
-        expect(conversation.model.value).toBe(`sonnet`);
+        expect(conversation.selection.model.value).toBe(`sonnet`);
     });
 
     it(`forgets a displaced model when the chat moves to another provider`, () => {
         const conversation = new Conversation(`c1`);
-        conversation.selectModel({ provider: `claude`, value: `opus` });
-        conversation.displaceModel(`haiku`);
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `opus` } });
+        conversation.selection.apply({ kind: `displaceModel`, model: `haiku` });
 
         // The owed id belongs to Claude's catalog; nothing on Codex can honour it.
-        conversation.selectProvider(`codex`);
-        expect(conversation.displacedModel.value).toBeUndefined();
+        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        expect(conversation.selection.displacedModel.value).toBeUndefined();
     });
 
     it(`names the allowance the new model spends, when the plan meters it and we have a reading`, async () => {
         usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
-        conversation.account.value = `acct-1`;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        conversation.selection.apply({ kind: `set`, picks: { account: `acct-1` } });
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 // The per-model usage pools a Claude plan publishes, keyed by model.
                 {
@@ -609,38 +626,40 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`first`, { ...settings, account: `acct-1` });
+        await conversation.turn.send(`first`, { ...settings, account: `acct-1` });
 
-        conversation.selectModel({ provider: `claude`, value: `claude-opus-4-6` });
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `claude-opus-4-6` } });
         // Rounded once, by the same projection the usage meters use.
-        expect(conversation.messages.value.at(-1)!.text).toContain(`Opus 61% used`);
+        expect(conversation.transcript.messages.value.at(-1)!.text).toContain(`Opus 61% used`);
     });
 
     it(`holds a divider for a model swapped mid-turn until the turn settles`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
-        const turn = conversation.send(`go`, settings);
-        await waitFor(() => expect(conversation.streaming.value).toBe(true));
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+        const turn = conversation.turn.send(`go`, settings);
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
 
         // Allowed mid-stream (retires nothing), but the transcript tail belongs to the streaming turn; a divider there
         // would read as part of the answer.
-        conversation.selectModel({ provider: `claude`, value: `haiku` });
-        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+        conversation.selection.apply({ kind: `selectModel`, pick: { provider: `claude`, value: `haiku` } });
+        expect(conversation.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
 
-        conversation.stop();
+        conversation.turn.stop();
         await turn;
         // Settled: the tail is the composer's again, so the notice now describes the next message.
-        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`Switched to`))).toBe(true);
+        expect(conversation.transcript.messages.value.some((message) => message.role === `notice` && message.text.includes(`Switched to`))).toBe(
+            true,
+        );
     });
 
     it(`ignores a provider switch while a turn is streaming`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `x` }], { stayOpen: true }));
-        const turn = conversation.send(`go`, settings);
-        await waitFor(() => expect(conversation.streaming.value).toBe(true));
-        conversation.selectProvider(`grok`);
-        expect(conversation.provider.value).toBe(`claude`);
-        conversation.stop();
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `x` }], { stayOpen: true }));
+        const turn = conversation.turn.send(`go`, settings);
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
+        conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
+        expect(conversation.selection.provider.value).toBe(`claude`);
+        conversation.turn.stop();
         await turn;
     });
 
@@ -649,8 +668,8 @@ describe(`Conversation`, () => {
     it(`takes an account switch while a turn waits on a card, and holds its divider until the turn settles`, async () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
-        sandboxRequestMock.mockImplementation(
-            sseResponse(
+        daemon.mockImplementation(
+            turnDaemon(
                 [
                     { kind: `session`, sessionId: `s-1` },
                     { kind: `question`, requestId: `q1`, questions },
@@ -658,24 +677,26 @@ describe(`Conversation`, () => {
                 { stayOpen: true },
             ),
         );
-        const turn = conversation.send(`ask me`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const turn = conversation.turn.send(`ask me`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
-        conversation.selectAccount(`with-room`);
-        expect(conversation.account.value).toBe(`with-room`);
+        conversation.selection.apply({ kind: `selectAccount`, account: `with-room` });
+        expect(conversation.selection.account.value).toBe(`with-room`);
         // Nothing drawn yet: the tail belongs to the card; a divider there would sit between the question and the
         // answer.
-        expect(conversation.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+        expect(conversation.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
 
-        conversation.stop();
+        conversation.turn.stop();
         await turn;
 
         // Settled: the tail is the composer's again; the notice says the next message starts a fresh session (a new
         // account is serving).
-        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`fresh session`))).toBe(true);
+        expect(conversation.transcript.messages.value.some((message) => message.role === `notice` && message.text.includes(`fresh session`))).toBe(
+            true,
+        );
 
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
-        await conversation.send(`go on`, conversation.turnSettings());
+        daemon.mockImplementation(turnDaemon([{ kind: `done` }]));
+        await conversation.turn.send(`go on`, conversation.selection.turnSettings());
         const secondBody = turnBodies()[1]!;
         expect(secondBody[`account`]).toBe(`with-room`);
         expect(`sessionId` in secondBody).toBe(false);
@@ -685,14 +706,14 @@ describe(`Conversation`, () => {
     // the turn being watched.
     it(`ignores an account switch while the model is generating`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
-        const turn = conversation.send(`go`, settings);
-        await waitFor(() => expect(conversation.streaming.value).toBe(true));
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+        const turn = conversation.turn.send(`go`, settings);
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
 
-        conversation.selectAccount(`with-room`);
-        expect(conversation.account.value).toBeUndefined();
+        conversation.selection.apply({ kind: `selectAccount`, account: `with-room` });
+        expect(conversation.selection.account.value).toBeUndefined();
 
-        conversation.stop();
+        conversation.turn.stop();
         await turn;
     });
 
@@ -837,48 +858,47 @@ describe(`Conversation`, () => {
     // clamp the effective posture (like effort), not the pick itself.
     it(`a permission mode the runtime can't hold reads as the one it runs, and the pick survives`, () => {
         const conversation = new Conversation(`c-modes`);
-        conversation.modePick.value = `default`;
+        conversation.selection.apply({ kind: `set`, picks: { modePick: `default` } });
 
-        conversation.selectProvider(`codex`);
-        expect(conversation.mode.value).toBe(`bypassPermissions`);
+        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        expect(conversation.selection.mode.value).toBe(`bypassPermissions`);
 
         // Claude Code honours modes directly; the pick was never overwritten, so it returns untouched.
-        conversation.selectHarness(`claude-code`);
-        expect(conversation.mode.value).toBe(`default`);
-        expect(conversation.capabilities.value.permissions).toBe(`modes`);
+        conversation.selection.apply({ kind: `selectHarness`, harness: `claude-code` });
+        expect(conversation.selection.mode.value).toBe(`default`);
+        expect(conversation.selection.capabilities.value.permissions).toBe(`modes`);
 
         // Native reads as autonomous again; `plan`, which every runtime has (emulated or not), rides through unchanged.
-        conversation.selectHarness(`native`);
-        expect(conversation.mode.value).toBe(`bypassPermissions`);
-        conversation.modePick.value = `plan`;
-        conversation.selectProvider(`grok`);
-        expect(conversation.mode.value).toBe(`plan`);
+        conversation.selection.apply({ kind: `selectHarness`, harness: `native` });
+        expect(conversation.selection.mode.value).toBe(`bypassPermissions`);
+        conversation.selection.apply({ kind: `set`, picks: { modePick: `plan` } });
+        conversation.selection.apply({ kind: `selectProvider`, provider: `grok` });
+        expect(conversation.selection.mode.value).toBe(`plan`);
     });
 
     it(`selectProvider re-scopes model + effort and prevents a Claude alias reaching Codex`, async () => {
         const conversation = new Conversation(`c1`);
         // Seeded from the Claude defaults.
-        expect(conversation.provider.value).toBe(`claude`);
-        expect(conversation.model.value).toBe(`opus`);
+        expect(conversation.selection.provider.value).toBe(`claude`);
+        expect(conversation.selection.model.value).toBe(`opus`);
 
         // Switching to Codex clears a Claude-only model to the account default and clamps a Claude-only effort.
-        conversation.model.value = `haiku`;
-        conversation.effortPick.value = `max`;
-        conversation.selectProvider(`codex`);
-        expect(conversation.provider.value).toBe(`codex`);
-        expect(conversation.model.value).toBe(``);
-        expect(conversation.effort.value).toBe(`xhigh`);
+        conversation.selection.apply({ kind: `set`, picks: { model: `haiku`, effortPick: `max` } });
+        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        expect(conversation.selection.provider.value).toBe(`codex`);
+        expect(conversation.selection.model.value).toBe(``);
+        expect(conversation.selection.effort.value).toBe(`xhigh`);
 
         // The turn sends Codex with no model (empty = the account default).
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `thr-1` }]));
-        await conversation.send(`hi`, {
-            agent: conversation.provider.value,
-            harness: conversation.harness.value,
-            account: conversation.account.value,
-            actsAs: conversation.actsAs.value,
-            startIn: conversation.startIn.value,
-            model: conversation.model.value,
-            effort: conversation.effort.value,
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `thr-1` }]));
+        await conversation.turn.send(`hi`, {
+            agent: conversation.selection.provider.value,
+            harness: conversation.selection.harness.value,
+            account: conversation.selection.account.value,
+            actsAs: conversation.selection.actsAs.value,
+            startIn: conversation.selection.startIn.value,
+            model: conversation.selection.model.value,
+            effort: conversation.selection.effort.value,
             thinking: false,
             fast: false,
         });
@@ -887,22 +907,22 @@ describe(`Conversation`, () => {
         expect(`model` in body).toBe(false);
 
         // A mid-chat pick switches the selection (no lock) and marks the pending cut with a notice.
-        conversation.selectProvider(`claude`);
-        expect(conversation.provider.value).toBe(`claude`);
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
+        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
+        expect(conversation.selection.provider.value).toBe(`claude`);
+        expect(conversation.transcript.messages.value.at(-1)!.role).toBe(`notice`);
     });
 
     // The persona is resolved per turn (turnSettings), not fixed at conversation start, so one chat can send as
     // nobody then as a named persona. An attended chat sends no `actsAs` at all.
     it(`sends the persona a turn is acting as, and nothing at all when the chat is nobody`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+        daemon.mockImplementation(turnDaemon([{ kind: `done` }]));
 
-        await conversation.send(`check our mentions`, conversation.turnSettings());
+        await conversation.turn.send(`check our mentions`, conversation.selection.turnSettings());
         expect(`actsAs` in turnBodies()[0]!).toBe(false);
 
-        conversation.actsAs.value = `work`;
-        await conversation.send(`reply to the top one`, conversation.turnSettings());
+        conversation.selection.apply({ kind: `set`, picks: { actsAs: `work` } });
+        await conversation.turn.send(`reply to the top one`, conversation.selection.turnSettings());
         expect(turnBodies()[1]![`actsAs`]).toBe(`work`);
     });
 
@@ -910,20 +930,20 @@ describe(`Conversation`, () => {
         // The user picked Haiku for Claude (the composer's model facade persists this per provider).
         turnDefaults.models.value = { ...turnDefaults.models.value, claude: `haiku` };
         const conversation = new Conversation(`c1`);
-        conversation.selectProvider(`claude`);
-        expect(conversation.model.value).toBe(`haiku`);
+        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
+        expect(conversation.selection.model.value).toBe(`haiku`);
         // Codex has no remembered pick → its account default (empty).
-        conversation.selectProvider(`codex`);
-        expect(conversation.model.value).toBe(``);
+        conversation.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        expect(conversation.selection.model.value).toBe(``);
         // Back to Claude: the remembered Haiku returns, not the hardcoded Opus.
-        conversation.selectProvider(`claude`);
-        expect(conversation.model.value).toBe(`haiku`);
+        conversation.selection.apply({ kind: `selectProvider`, provider: `claude` });
+        expect(conversation.selection.model.value).toBe(`haiku`);
     });
 
     it(`merges updates into the matching tool by id and drops updates with no match`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `tool_call`, id: `t1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `ls` },
                 // Interim snapshot (live output), then the terminal status: content replaces each time.
                 { kind: `tool_call_update`, id: `t1`, content: [{ type: `text`, text: `fi` }] },
@@ -932,9 +952,9 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`run it`, settings);
+        await conversation.turn.send(`run it`, settings);
 
-        const assistant = conversation.messages.value[1]!;
+        const assistant = conversation.transcript.messages.value[1]!;
         expect(assistant.tools).toEqual([
             {
                 id: `t1`,
@@ -949,8 +969,8 @@ describe(`Conversation`, () => {
 
     it(`nests a sub-agent's calls and thinking under its Agent card, keeping its prose out of the parent bubble`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `tool_call`, id: `agent1`, name: `Agent`, category: `other`, status: `in_progress`, target: `explore` },
                 // Frames produced INSIDE the sub-agent carry the Agent tool's id as their parent.
                 { kind: `thinking`, text: `sub-thinking`, parentToolUseId: `agent1` },
@@ -962,9 +982,9 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`explore it`, settings);
+        await conversation.turn.send(`explore it`, settings);
 
-        const assistant = conversation.messages.value[1]!;
+        const assistant = conversation.transcript.messages.value[1]!;
         // The sub-agent's own prose never leaks into the parent bubble: only the main agent's own delta types in.
         expect(assistant.text).toBe(`main answer`);
         expect(assistant.tools).toEqual([
@@ -983,8 +1003,8 @@ describe(`Conversation`, () => {
 
     it(`surfaces thinking, todos, and end-of-turn usage on the assistant bubble`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `thinking`, text: `pondering` },
                 { kind: `todos`, items: [{ content: `step 1`, status: `in_progress`, activeForm: `Stepping` }] },
                 { kind: `delta`, text: `answer` },
@@ -992,9 +1012,9 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`plan it`, settings);
+        await conversation.turn.send(`plan it`, settings);
 
-        const assistant = conversation.messages.value[1]!;
+        const assistant = conversation.transcript.messages.value[1]!;
         expect(assistant.thinking).toBe(`pondering`);
         expect(assistant.todos).toEqual([{ content: `step 1`, status: `in_progress`, activeForm: `Stepping` }]);
         expect(assistant.usage).toMatchObject({ costUsd: 0.5, numTurns: 1 });
@@ -1002,8 +1022,8 @@ describe(`Conversation`, () => {
 
     it(`splits a turn's prose at each text_end, so tool cards sit under the block that introduced them`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `delta`, text: `Reading the router.` },
                 { kind: `text_end` },
                 { kind: `tool_call`, id: `b1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `ls` },
@@ -1016,12 +1036,12 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`fix the router`, settings);
+        await conversation.turn.send(`fix the router`, settings);
 
         // One bubble per prose block, carrying the tools that ran after it, so cards sit inline instead of all hoisted
         // above one paragraph.
-        const [, first, second, third] = conversation.messages.value;
-        expect(conversation.messages.value).toHaveLength(4);
+        const [, first, second, third] = conversation.transcript.messages.value;
+        expect(conversation.transcript.messages.value).toHaveLength(4);
         expect(first).toMatchObject({ role: `assistant`, text: `Reading the router.` });
         expect(first!.tools).toBeUndefined();
         expect(second).toMatchObject({ role: `assistant`, text: `Found it — fixing.` });
@@ -1032,8 +1052,8 @@ describe(`Conversation`, () => {
 
     it(`ignores a text_end that closed no prose, so an empty block leaves no stranded bubble`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 // An empty text block opened and closed before the model went straight to its first tool.
                 { kind: `text_end` },
                 { kind: `tool_call`, id: `b1`, name: `Bash`, category: `execute`, status: `in_progress`, target: `ls` },
@@ -1042,17 +1062,17 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`list them`, settings);
+        await conversation.turn.send(`list them`, settings);
 
-        expect(conversation.messages.value).toHaveLength(2);
-        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Listed them.` });
-        expect(conversation.messages.value[1]!.tools?.map((tool) => tool.id)).toEqual([`b1`]);
+        expect(conversation.transcript.messages.value).toHaveLength(2);
+        expect(conversation.transcript.messages.value[1]).toMatchObject({ role: `assistant`, text: `Listed them.` });
+        expect(conversation.transcript.messages.value[1]!.tools?.map((tool) => tool.id)).toEqual([`b1`]);
     });
 
     it(`ignores a sub-agent's text_end: its blocks never split the parent turn's bubble`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `tool_call`, id: `agent1`, name: `Agent`, category: `other`, status: `in_progress`, target: `explore` },
                 { kind: `delta`, text: `sub prose`, parentToolUseId: `agent1` },
                 { kind: `text_end`, parentToolUseId: `agent1` },
@@ -1060,17 +1080,17 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`explore it`, settings);
+        await conversation.turn.send(`explore it`, settings);
 
-        expect(conversation.messages.value).toHaveLength(2);
-        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `main answer` });
+        expect(conversation.transcript.messages.value).toHaveLength(2);
+        expect(conversation.transcript.messages.value[1]).toMatchObject({ role: `assistant`, text: `main answer` });
     });
 
     it(`opens a fresh bubble per turn: a stream carrying several turns splits at each usage boundary`, async () => {
         const conversation = new Conversation(`c1`);
         // A steered conversation's stream carries one turn per queued message; usage is each turn's boundary.
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `delta`, text: `first answer` },
                 { kind: `usage`, costUsd: 0.1 },
                 { kind: `thinking`, text: `next` },
@@ -1080,10 +1100,10 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`two things`, settings);
+        await conversation.turn.send(`two things`, settings);
 
-        expect(conversation.messages.value).toHaveLength(3);
-        const [, first, second] = conversation.messages.value;
+        expect(conversation.transcript.messages.value).toHaveLength(3);
+        const [, first, second] = conversation.transcript.messages.value;
         expect(first).toMatchObject({ role: `assistant`, text: `first answer`, usage: { costUsd: 0.1 } });
         expect(second).toMatchObject({ role: `assistant`, text: `second answer`, thinking: `next`, usage: { costUsd: 0.2 } });
     });
@@ -1093,58 +1113,58 @@ describe(`Conversation`, () => {
     it(`steers mid-turn: the message lands where the turn took it and the answer opens below it`, async () => {
         const conversation = new Conversation(`c1`);
         const run = liveRun({ prompt: `2+3?` });
-        let controller!: ReadableStreamDefaultController<Uint8Array>;
-        const body = new ReadableStream<Uint8Array>({
+        let controller!: ReadableStreamDefaultController<AttachFrame>;
+        const body = new ReadableStream<AttachFrame>({
             start(c) {
                 controller = c;
-                controller.enqueue(sseFrame(run.head()));
+                controller.enqueue(frameOf(run.head()));
             },
         });
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path === `/agent`) {
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        daemon.mockImplementation((procedure: string) => {
+            if (procedure === `agent.run`) {
+                return Promise.resolve({ run: `r1` });
             }
-            return Promise.resolve(path === `/agent/attach` ? ({ ok: true, body } as Response) : ({ ok: true } as Response));
+            return Promise.resolve(procedure === `agent.attach` ? body : { ok: true });
         });
         const emit = (event: AgentEvent): void => {
             for (const frame of run.frames(event)) {
-                controller.enqueue(sseFrame(frame));
+                controller.enqueue(frameOf(frame));
             }
         };
 
-        const turn = conversation.send(`2+3?`, settings);
+        const turn = conversation.turn.send(`2+3?`, settings);
         emit({ kind: `delta`, text: `5` });
-        await waitFor(() => expect(conversation.messages.value[1]?.text).toBe(`5`));
+        await waitFor(() => expect(conversation.transcript.messages.value[1]?.text).toBe(`5`));
 
-        await conversation.enqueue(`2+6?`);
+        await conversation.turn.enqueue(`2+6?`);
         // The daemon took it, so it left the queue, and the run's own frame is what draws it.
-        expect(conversation.queued.value).toHaveLength(0);
+        expect(conversation.turn.queued.value).toHaveLength(0);
         emit({ kind: `steer`, text: `2+6?`, sentAt: 1_767_225_600_000 });
-        await waitFor(() => expect(conversation.messages.value).toHaveLength(3));
+        await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(3));
 
         // Absorbed mid-turn: no usage boundary, so the model's words open a new bubble below.
         emit({ kind: `delta`, text: `8` });
-        await waitFor(() => expect(conversation.messages.value[3]?.text).toBe(`8`));
+        await waitFor(() => expect(conversation.transcript.messages.value[3]?.text).toBe(`8`));
         emit({ kind: `usage`, costUsd: 0.1 });
         emit({ kind: `done` });
-        controller.enqueue(sseFrame({ kind: `end` }));
+        controller.enqueue(frameOf({ kind: `end` }));
         controller.close();
         await turn;
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `2+3?` },
             { role: `assistant`, text: `5` },
             { role: `user`, text: `2+6?` },
             { role: `assistant`, text: `8` },
         ]);
         // The daemon's stamp, not this window's clock: the bubble must not jump when the record replaces it.
-        expect(conversation.messages.value[2]!.sentAt).toBe(1_767_225_600_000);
+        expect(conversation.transcript.messages.value[2]!.sentAt).toBe(1_767_225_600_000);
     });
 
     it(`draws a steer that another window sent, off the run's own frames`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `delta`, text: `looking` },
                 { kind: `steer`, text: `check the tests too`, sentAt: 1_767_225_600_000 },
                 { kind: `delta`, text: `will do` },
@@ -1152,22 +1172,22 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`have a look`, settings);
+        await conversation.turn.send(`have a look`, settings);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `have a look` },
             { role: `assistant`, text: `looking` },
             { role: `user`, text: `check the tests too` },
             { role: `assistant`, text: `will do` },
         ]);
         // Nothing was typed here, so nothing was queued here either.
-        expect(conversation.queued.value).toHaveLength(0);
+        expect(conversation.turn.queued.value).toHaveLength(0);
     });
 
     it(`sends a steered message's attachments and editor context with it, so a mid-turn file isn't a lesser message`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse(
+        daemon.mockImplementation(
+            turnDaemon(
                 [
                     { kind: `delta`, text: `working` },
                     {
@@ -1181,28 +1201,28 @@ describe(`Conversation`, () => {
             ),
         );
 
-        const turn = conversation.send(`start`, settings);
-        await waitFor(() => expect(conversation.streaming.value).toBe(true));
-        await conversation.enqueue(`look at this`, [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }], {
+        const turn = conversation.turn.send(`start`, settings);
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
+        await conversation.turn.enqueue(`look at this`, [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }], {
             file: `src/app.ts`,
         });
 
-        const steer = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent/steer`);
-        expect(JSON.parse(steer![1]!.body as string)).toMatchObject({
+        const steer = daemon.mock.calls.find(([procedure]) => procedure === `agent.steer`);
+        expect(wire(steer![1])).toMatchObject({
             text: `look at this`,
             attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
             editorContext: { file: `src/app.ts` },
         });
         // Name attachment chips from the restored frame path.
         await waitFor(() =>
-            expect(conversation.messages.value.at(-1)).toMatchObject({
+            expect(conversation.transcript.messages.value.at(-1)).toMatchObject({
                 role: `user`,
                 text: `look at this`,
                 attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
             }),
         );
 
-        conversation.stop();
+        conversation.turn.stop();
         await turn;
     });
 
@@ -1211,13 +1231,15 @@ describe(`Conversation`, () => {
     // the rest ride a field the daemon may drop from.
     it(`sends @-mentioned paths apart from the staged chips, and never one from outside the workspace`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `ok` }]));
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `ok` }]));
 
         const chip = `${STATE_DIR}/records/artifacts/attachments/u1/shot.png`;
-        await conversation.send(`check @src/app.ts against: curl --data-binary @/tmp/probe/req.json`, settings, [{ name: `shot.png`, path: chip }]);
+        await conversation.turn.send(`check @src/app.ts against: curl --data-binary @/tmp/probe/req.json`, settings, [
+            { name: `shot.png`, path: chip },
+        ]);
 
-        const started = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent`);
-        expect(JSON.parse(started![1]!.body as string)).toMatchObject({ attachments: [chip], mentions: [`src/app.ts`] });
+        const started = daemon.mock.calls.find(([procedure]) => procedure === `agent.run`);
+        expect(wire(started![1])).toMatchObject({ attachments: [chip], mentions: [`src/app.ts`] });
     });
 
     // The queue rides the tab snapshot, so what is still in it is what a reload brings back. A window can die between
@@ -1225,91 +1247,91 @@ describe(`Conversation`, () => {
     // the words nowhere and no turn anywhere.
     it(`holds a message in the queue until the daemon has the turn`, async () => {
         const conversation = new Conversation(`c1`);
-        let ack!: (response: Response) => void;
-        sandboxRequestMock.mockImplementation((path: string) =>
-            path === `/agent`
-                ? new Promise<Response>((resolve) => {
+        let ack!: (started: { run: string }) => void;
+        daemon.mockImplementation((procedure: string) =>
+            procedure === `agent.run`
+                ? new Promise<{ run: string }>((resolve) => {
                       ack = resolve;
                   })
-                : Promise.resolve({ ok: true } as Response),
+                : Promise.resolve({ ok: true }),
         );
 
-        const sending = conversation.enqueue(`fix the failing check`);
+        const sending = conversation.turn.enqueue(`fix the failing check`);
         await waitFor(() => expect(turnBodies()).toHaveLength(1));
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`fix the failing check`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`fix the failing check`]);
 
-        ack({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        ack({ run: `r1` });
         await sending;
 
-        expect(conversation.queued.value).toHaveLength(0);
+        expect(conversation.turn.queued.value).toHaveLength(0);
     });
 
     it(`keeps a message the running turn can't take, then sends it as the next turn once that one settles`, async () => {
         const conversation = new Conversation(`c1`);
-        let controller!: ReadableStreamDefaultController<Uint8Array>;
-        const body = new ReadableStream<Uint8Array>({
+        let controller!: ReadableStreamDefaultController<AttachFrame>;
+        const body = new ReadableStream<AttachFrame>({
             start(c) {
                 controller = c;
-                c.enqueue(sseFrame(head()));
+                c.enqueue(frameOf(head()));
             },
         });
         // A native codex/grok/ACP turn has no steering queue, so the daemon answers 404; the message must survive and
         // go
         // out on its own.
-        const followUp = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
+        const followUp = turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
         let attaches = 0;
-        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent/attach`) {
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
+            if (procedure === `agent.attach`) {
                 attaches += 1;
-                return attaches === 1 ? Promise.resolve({ ok: true, body } as Response) : followUp(path, init);
+                return attaches === 1 ? Promise.resolve(body) : followUp(procedure, input, options);
             }
-            if (path === `/agent/steer`) {
-                return Promise.resolve({ ok: false, status: 404 } as Response);
+            if (procedure === `agent.steer`) {
+                return Promise.reject(daemonRefusal(404));
             }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            return Promise.resolve({ run: `r1` });
         });
 
-        const turn = conversation.send(`start`, settings);
-        await conversation.enqueue(`also update the tests`);
-        expect(toRaw(conversation.queued.value)).toMatchObject([{ text: `also update the tests` }]);
+        const turn = conversation.turn.send(`start`, settings);
+        await conversation.turn.enqueue(`also update the tests`);
+        expect(toRaw(conversation.turn.queued.value)).toMatchObject([{ text: `also update the tests` }]);
         expect(turnBodies()).toHaveLength(1);
 
         // The turn ends on its own: the queue goes out as the next turn.
-        controller.enqueue(sseFrame({ kind: `end` }));
+        controller.enqueue(frameOf({ kind: `end` }));
         controller.close();
         await turn;
 
-        await waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)?.text).toBe(`on it`));
         expect(turnBodies()[1]).toMatchObject({ prompt: `also update the tests` });
-        expect(conversation.queued.value).toHaveLength(0);
+        expect(conversation.turn.queued.value).toHaveLength(0);
     });
 
     it(`carries several queued messages into ONE follow-up turn, in the order they were written`, async () => {
         const conversation = new Conversation(`c1`);
-        let controller!: ReadableStreamDefaultController<Uint8Array>;
-        const body = new ReadableStream<Uint8Array>({
+        let controller!: ReadableStreamDefaultController<AttachFrame>;
+        const body = new ReadableStream<AttachFrame>({
             start(c) {
                 controller = c;
-                c.enqueue(sseFrame(head()));
+                c.enqueue(frameOf(head()));
             },
         });
-        const followUp = sseResponse([{ kind: `done` }]);
+        const followUp = turnDaemon([{ kind: `done` }]);
         let attaches = 0;
-        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent/attach`) {
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
+            if (procedure === `agent.attach`) {
                 attaches += 1;
-                return attaches === 1 ? Promise.resolve({ ok: true, body } as Response) : followUp(path, init);
+                return attaches === 1 ? Promise.resolve(body) : followUp(procedure, input, options);
             }
-            if (path === `/agent/steer`) {
-                return Promise.resolve({ ok: false, status: 404 } as Response);
+            if (procedure === `agent.steer`) {
+                return Promise.reject(daemonRefusal(404));
             }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            return Promise.resolve({ run: `r1` });
         });
 
-        const turn = conversation.send(`start`, settings);
-        await conversation.enqueue(`also the tests`, [{ name: `spec.md`, path: `${STATE_DIR}/records/artifacts/attachments/u1/spec.md` }]);
-        await conversation.enqueue(`and the docs`);
-        controller.enqueue(sseFrame({ kind: `end` }));
+        const turn = conversation.turn.send(`start`, settings);
+        await conversation.turn.enqueue(`also the tests`, [{ name: `spec.md`, path: `${STATE_DIR}/records/artifacts/attachments/u1/spec.md` }]);
+        await conversation.turn.enqueue(`and the docs`);
+        controller.enqueue(frameOf({ kind: `end` }));
         controller.close();
         await turn;
 
@@ -1323,73 +1345,72 @@ describe(`Conversation`, () => {
 
     it(`holds the queue when the user stops the turn, then sends it with their next message`, async () => {
         const conversation = new Conversation(`c1`);
-        const followUp = sseResponse([{ kind: `done` }]);
-        const parked = sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true });
+        const followUp = turnDaemon([{ kind: `done` }]);
+        const parked = turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true });
         // One fake per turn: a stop must reach the run it's stopping, since the daemon ending that run's stream is what
         // the window waits for.
         let turns = 0;
-        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent/steer`) {
-                return Promise.resolve({ ok: false, status: 404 } as Response);
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
+            if (procedure === `agent.steer`) {
+                return Promise.reject(daemonRefusal(404));
             }
-            if (path === `/agent`) {
+            if (procedure === `agent.run`) {
                 turns += 1;
             }
-            return turns <= 1 ? parked(path, init) : followUp(path, init);
+            return turns <= 1 ? parked(procedure, input, options) : followUp(procedure, input, options);
         });
 
-        const turn = conversation.send(`start`, settings);
-        await waitFor(() => expect(conversation.streaming.value).toBe(true));
-        await conversation.enqueue(`and the docs`);
-        conversation.stop();
+        const turn = conversation.turn.send(`start`, settings);
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
+        await conversation.turn.enqueue(`and the docs`);
+        conversation.turn.stop();
         await turn;
 
         // Stopping the agent is not a request for another turn: the message waits where the user can see it.
         expect(turnBodies()).toHaveLength(1);
-        expect(toRaw(conversation.queued.value)).toMatchObject([{ text: `and the docs` }]);
+        expect(toRaw(conversation.turn.queued.value)).toMatchObject([{ text: `and the docs` }]);
 
         // Their next message takes it along.
-        await conversation.enqueue(`actually, start with the docs`);
+        await conversation.turn.enqueue(`actually, start with the docs`);
         await waitFor(() => expect(turnBodies()).toHaveLength(2));
         expect(turnBodies()[1]).toMatchObject({ prompt: `and the docs\n\nactually, start with the docs` });
-        expect(conversation.queued.value).toHaveLength(0);
+        expect(conversation.turn.queued.value).toHaveLength(0);
     });
 
     it(`waits for the stopped daemon run to release its lock before starting the next message`, async () => {
         const conversation = new Conversation(`c1`);
-        const parked = sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true });
-        const completed = sseResponse([{ kind: `done` }]);
+        const parked = turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true });
+        const completed = turnDaemon([{ kind: `done` }]);
         let attaches = 0;
-        let releaseStop: (response: Response) => void = () => {};
-        const stopped = new Promise<Response>((resolve) => {
+        let releaseStop: (answer: { ok: true }) => void = () => {};
+        const stopped = new Promise<{ ok: true }>((resolve) => {
             releaseStop = resolve;
         });
-        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent/stop`) {
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
+            if (procedure === `agent.stop`) {
                 // The stop's two halves held apart: the daemon cancels the run (ending the attach) at once, but only
-                // confirms
-                // /agent/stop when released.
-                void parked(path, init);
+                // confirms the stop when released.
+                void parked(procedure, input, options);
                 return stopped;
             }
             const serving = attaches === 0 ? parked : completed;
-            if (path === `/agent/attach`) {
+            if (procedure === `agent.attach`) {
                 attaches += 1;
             }
-            return serving(path, init);
+            return serving(procedure, input, options);
         });
 
-        const first = conversation.send(`start`, settings);
-        await waitFor(() => expect(conversation.streaming.value).toBe(true));
-        conversation.stop();
+        const first = conversation.turn.send(`start`, settings);
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
+        conversation.turn.stop();
         await first;
 
-        const next = conversation.enqueue(`try again`);
+        const next = conversation.turn.enqueue(`try again`);
         await Promise.resolve();
-        // The local attach is already gone, but /agent/stop has not yet confirmed daemon-side settlement.
+        // The local attach is already gone, but the stop has not yet confirmed daemon-side settlement.
         expect(turnBodies()).toHaveLength(1);
 
-        releaseStop({ ok: true } as Response);
+        releaseStop({ ok: true });
         await next;
         expect(turnBodies()).toHaveLength(2);
         expect(turnBodies()[1]).toMatchObject({ prompt: `try again` });
@@ -1398,57 +1419,58 @@ describe(`Conversation`, () => {
 
     it(`parks the turn on a plan card and streams the continuation into a fresh bubble`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `delta`, text: `intro` },
                 { kind: `plan`, requestId: `d1`, text: `the plan` },
                 { kind: `delta`, text: `after approval` },
             ]),
         );
 
-        const turn = conversation.send(`make a plan`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const turn = conversation.turn.send(`make a plan`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
-        const [, planMessage] = conversation.messages.value;
+        const [, planMessage] = conversation.transcript.messages.value;
         expect(planMessage).toMatchObject({ text: `intro`, plan: { requestId: `d1`, text: `the plan`, status: `pending` } });
 
-        await conversation.decidePlan(planMessage!, true);
-        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
+        expect(await conversation.requests.reply(`d1`, { kind: `plan`, approve: true })).toBe(true);
+        expect(daemon).toHaveBeenLastCalledWith(`agent.reply`, { kind: `plan`, requestId: `d1`, approve: true }, { context: { at: undefined } });
         await turn;
 
         // The verdict is the daemon's own line; what comes next opens a fresh bubble rather than typing into the
         // card's.
-        expect(conversation.messages.value.slice(1).map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.slice(1).map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `assistant`, text: `intro` },
             { role: `notice`, text: `Plan approved.` },
             { role: `assistant`, text: `after approval` },
         ]);
-        expect(conversation.messages.value[1]?.plan).toMatchObject({ status: `approved` });
-        expect(conversation.awaitingDecision.value).toBe(false);
+        expect(conversation.transcript.messages.value[1]?.plan).toMatchObject({ status: `approved` });
+        expect(conversation.transcript.awaitingDecision.value).toBe(false);
     });
 
     // Files staged against a plan card travel as `@`-paths in the reply's single text field, same as against a
     // message.
     it(`sends a plan rejection's staged files as @-paths and keeps them on the feedback bubble`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
-        const turn = conversation.send(`make a plan`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
-        const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
+        daemon.mockImplementation(turnDaemon([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
+        const turn = conversation.turn.send(`make a plan`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
-        await conversation.decidePlan(planMessage!, false, `this bit is wrong`, [
-            { name: `shot.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/shot.png` },
-        ]);
+        await conversation.requests.reply(`d1`, {
+            kind: `plan`,
+            approve: false,
+            feedback: planFeedback(`this bit is wrong`, [{ name: `shot.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/shot.png` }]),
+        });
 
-        const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
-        expect(JSON.parse(String(body.body))).toMatchObject({
+        const [, reply] = daemon.mock.calls.at(-1)!;
+        expect(wire(reply)).toMatchObject({
             kind: `plan`,
             approve: false,
             feedback: `this bit is wrong\n@.intentic/records/artifacts/attachments/a1/shot.png`,
         });
         await turn;
         // The feedback is the daemon's row: the user's words as sent, with the upload's chip on them.
-        expect(conversation.messages.value.at(-1)).toMatchObject({
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({
             role: `user`,
             text: `this bit is wrong\n@.intentic/records/artifacts/attachments/a1/shot.png`,
             attachments: [`.intentic/records/artifacts/attachments/a1/shot.png`],
@@ -1458,19 +1480,20 @@ describe(`Conversation`, () => {
     // A screenshot with nothing typed is a whole answer on its own.
     it(`sends an attachment-only plan rejection`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
-        const turn = conversation.send(`make a plan`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
-        const planMessage = conversation.messages.value.find((message) => message.plan !== undefined);
+        daemon.mockImplementation(turnDaemon([{ kind: `plan`, requestId: `d1`, text: `the plan` }]));
+        const turn = conversation.turn.send(`make a plan`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
-        await conversation.decidePlan(planMessage!, false, ``, [
-            { name: `shot.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/shot.png` },
-        ]);
+        await conversation.requests.reply(`d1`, {
+            kind: `plan`,
+            approve: false,
+            feedback: planFeedback(``, [{ name: `shot.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/shot.png` }]),
+        });
 
-        const [, body] = sandboxRequestMock.mock.calls.at(-1) as [string, RequestInit];
-        expect(JSON.parse(String(body.body))).toMatchObject({ feedback: `@.intentic/records/artifacts/attachments/a1/shot.png` });
+        const [, reply] = daemon.mock.calls.at(-1)!;
+        expect(wire(reply)).toMatchObject({ feedback: `@.intentic/records/artifacts/attachments/a1/shot.png` });
         await turn;
-        expect(conversation.messages.value.at(-1)).toMatchObject({
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({
             role: `user`,
             text: `@.intentic/records/artifacts/attachments/a1/shot.png`,
             attachments: [`.intentic/records/artifacts/attachments/a1/shot.png`],
@@ -1480,23 +1503,23 @@ describe(`Conversation`, () => {
     it(`keeps the user's posture when the AGENT enters plan mode mid-turn`, async () => {
         const conversation = new Conversation(`c1`);
         // An isolated conversation (its own worktree in the sandbox container) runs unattended by default.
-        expect(conversation.mode.value).toBe(`bypassPermissions`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        expect(conversation.selection.mode.value).toBe(`bypassPermissions`);
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `mode`, mode: `plan` },
                 { kind: `delta`, text: `planning` },
             ]),
         );
 
-        await conversation.send(`something big`, settings);
+        await conversation.turn.send(`something big`, settings);
 
         // The composer follows the running turn, but the pick for the next turn is untouched; an agent entering plan
         // mode
         // must not cost the user their permissions.
-        expect(conversation.liveMode.value).toBe(`plan`);
-        expect(conversation.mode.value).toBe(`bypassPermissions`);
+        expect(conversation.turn.liveMode.value).toBe(`plan`);
+        expect(conversation.selection.mode.value).toBe(`bypassPermissions`);
 
-        await conversation.send(`carry on`, settings);
+        await conversation.turn.send(`carry on`, settings);
         const [first, second] = turnBodies();
         expect(first![`permissionMode`]).toBe(`bypassPermissions`);
         expect(second![`permissionMode`]).toBe(`bypassPermissions`);
@@ -1505,51 +1528,57 @@ describe(`Conversation`, () => {
     it(`parks the turn on a question card and submits answers over the side channel`, async () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `question`, requestId: `q1`, questions }]));
+        daemon.mockImplementation(turnDaemon([{ kind: `question`, requestId: `q1`, questions }]));
 
-        const turn = conversation.send(`ask me`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const turn = conversation.turn.send(`ask me`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
-        const questionMessage = conversation.messages.value[1]!;
+        const questionMessage = conversation.transcript.messages.value[1]!;
         expect(questionMessage.question).toMatchObject({ requestId: `q1`, status: `pending` });
 
-        await conversation.answerQuestion(questionMessage, { "Which?": [`A`] });
-        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
+        await conversation.requests.reply(`q1`, { kind: `question`, answers: { "Which?": [`A`] } });
+        expect(daemon).toHaveBeenLastCalledWith(
+            `agent.reply`,
+            { kind: `question`, requestId: `q1`, answers: { "Which?": [`A`] } },
+            { context: { at: undefined } },
+        );
         await turn;
-        expect(conversation.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { "Which?": [`A`] } });
+        expect(conversation.transcript.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { "Which?": [`A`] } });
     });
 
     it(`dismissing a question stops the turn: the fork the agent could not call is not one it may now guess at`, async () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `question`, requestId: `q1`, questions }], { stayOpen: true }));
+        daemon.mockImplementation(turnDaemon([{ kind: `question`, requestId: `q1`, questions }], { stayOpen: true }));
 
-        const turn = conversation.send(`ask me`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const turn = conversation.turn.send(`ask me`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
         // Queued behind the card: a stopped turn must not fire it, the way an answered one would.
-        await conversation.enqueue(`and then the docs`);
-        await conversation.cancelQuestion(conversation.messages.value.find((message) => message.question !== undefined)!);
+        await conversation.turn.enqueue(`and then the docs`);
+        await conversation.requests.reply(`q1`, { kind: `question`, cancelled: true });
         await turn;
 
-        const paths = sandboxRequestMock.mock.calls.map(([path]) => path);
-        expect(paths).toContain(`/agent/reply`);
+        const procedures = daemon.mock.calls.map(([procedure]) => procedure);
+        expect(procedures).toContain(`agent.reply`);
         // The dismissal request ends the turn without a separate stop request.
-        expect(paths).not.toContain(`/agent/stop`);
-        expect(conversation.messages.value.find((message) => message.question !== undefined)!.question).toMatchObject({ status: `cancelled` });
-        expect(conversation.streaming.value).toBe(false);
+        expect(procedures).not.toContain(`agent.stop`);
+        expect(conversation.transcript.messages.value.find((message) => message.question !== undefined)!.question).toMatchObject({
+            status: `cancelled`,
+        });
+        expect(conversation.turn.streaming.value).toBe(false);
         expect(conversation.error.value).toBeNull();
-        expect(conversation.messages.value.slice(-2)).toMatchObject([
+        expect(conversation.transcript.messages.value.slice(-2)).toMatchObject([
             { role: `notice`, text: `Question dismissed.` },
             { role: `notice`, text: `Stopped.` },
         ]);
         expect(turnBodies()).toHaveLength(1);
-        expect(toRaw(conversation.queued.value)).toMatchObject([{ text: `and then the docs` }]);
+        expect(toRaw(conversation.turn.queued.value)).toMatchObject([{ text: `and then the docs` }]);
     });
 
     it(`denying a permission stops the turn, and allowing one leaves it running`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse(
+        daemon.mockImplementation(
+            turnDaemon(
                 [
                     { kind: `permission`, requestId: `p1`, toolName: `Bash` },
                     { kind: `permission`, requestId: `p2`, toolName: `Write` },
@@ -1558,25 +1587,25 @@ describe(`Conversation`, () => {
             ),
         );
 
-        const turn = conversation.send(`run it`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const turn = conversation.turn.send(`run it`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
         // Re-read per assertion: deciding a card replaces its message rather than mutating it.
-        const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
+        const cards = (): ChatMessage[] => conversation.transcript.messages.value.filter((message) => message.permission !== undefined);
         // An allow is the turn carrying on with the user's blessing: nothing to stop.
-        await conversation.decidePermission(cards()[0]!, `once`);
-        expect(conversation.streaming.value).toBe(true);
-        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).not.toContain(`/agent/stop`);
+        await conversation.requests.reply(`p1`, { kind: `permission`, decision: `once` });
+        expect(conversation.turn.streaming.value).toBe(true);
+        expect(daemon.mock.calls.map(([procedure]) => procedure)).not.toContain(`agent.stop`);
 
         // The turn was parked on the first card and only asks the second once that answer un-parks it.
         await waitFor(() => expect(cards()).toHaveLength(2));
-        await conversation.decidePermission(cards()[1]!, `deny`);
+        await conversation.requests.reply(`p2`, { kind: `permission`, decision: `deny` });
         await turn;
 
-        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).toContain(`/agent/stop`);
+        expect(daemon.mock.calls.map(([procedure]) => procedure)).toContain(`agent.stop`);
         expect(cards().map((card) => card.permission!.status)).toEqual([`allowed`, `denied`]);
-        expect(conversation.streaming.value).toBe(false);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
+        expect(conversation.turn.streaming.value).toBe(false);
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
     });
 
     // A card answered twice in quick succession (allow then deny) must send one reply: the daemon un-parks on
@@ -1588,40 +1617,41 @@ describe(`Conversation`, () => {
         const inFlight = new Promise<void>((resolve) => {
             release = () => resolve();
         });
-        const stream = sseResponse([{ kind: `permission`, requestId: `p1`, toolName: `Bash` }], { stayOpen: true });
-        sandboxRequestMock.mockImplementation(async (path, init) => {
-            if (path === `/agent/reply`) {
+        const stream = turnDaemon([{ kind: `permission`, requestId: `p1`, toolName: `Bash` }], { stayOpen: true });
+        daemon.mockImplementation(async (procedure, input, options) => {
+            if (procedure === `agent.reply`) {
                 await inFlight;
-                return { ok: true } as Response;
+                return { ok: true };
             }
-            return stream(path, init);
+            return stream(procedure, input, options);
         });
 
-        const turn = conversation.send(`run it`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
-        const card = conversation.messages.value.find((message) => message.permission !== undefined)!;
+        const turn = conversation.turn.send(`run it`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
-        const allow = conversation.decidePermission(card, `once`);
+        const allow = conversation.requests.reply(`p1`, { kind: `permission`, decision: `once` });
         // Not awaited between the two: the first reply has not come back yet.
-        const deny = conversation.decidePermission(card, `deny`);
+        const deny = conversation.requests.reply(`p1`, { kind: `permission`, decision: `deny` });
+        expect(conversation.requests.isReplying(`p1`)).toBe(true);
         release();
-        await Promise.all([allow, deny]);
+        expect(await Promise.all([allow, deny])).toEqual([true, false]);
+        expect(conversation.requests.isReplying(`p1`)).toBe(false);
 
-        const replies = sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/reply`);
+        const replies = daemon.mock.calls.filter(([procedure]) => procedure === `agent.reply`);
         expect(replies).toHaveLength(1);
         expect(conversation.error.value).toBeNull();
         // The card reads as the first press said (allow); the turn carries on.
-        expect(conversation.messages.value.find((message) => message.permission !== undefined)?.permission?.status).toBe(`allowed`);
+        expect(conversation.transcript.messages.value.find((message) => message.permission !== undefined)?.permission?.status).toBe(`allowed`);
 
-        conversation.stop();
+        conversation.turn.stop();
         await turn;
     });
 
     // The press-lock guard covers only the window a reply is in flight for, not a card's whole life.
     it(`lets a fresh card be answered after the one before it has landed`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse(
+        daemon.mockImplementation(
+            turnDaemon(
                 [
                     { kind: `permission`, requestId: `p1`, toolName: `Bash` },
                     { kind: `permission`, requestId: `p2`, toolName: `Write` },
@@ -1630,19 +1660,19 @@ describe(`Conversation`, () => {
             ),
         );
 
-        const turn = conversation.send(`run it`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
-        const cards = (): ChatMessage[] => conversation.messages.value.filter((message) => message.permission !== undefined);
+        const turn = conversation.turn.send(`run it`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
+        const cards = (): ChatMessage[] => conversation.transcript.messages.value.filter((message) => message.permission !== undefined);
 
-        await conversation.decidePermission(cards()[0]!, `once`);
+        await conversation.requests.reply(`p1`, { kind: `permission`, decision: `once` });
         // The second card is the turn carrying on past the first answer, so it only exists once that one landed.
         await waitFor(() => expect(cards()).toHaveLength(2));
-        await conversation.decidePermission(cards()[1]!, `once`);
+        await conversation.requests.reply(`p2`, { kind: `permission`, decision: `once` });
 
-        expect(sandboxRequestMock.mock.calls.filter(([path]) => path === `/agent/reply`)).toHaveLength(2);
+        expect(daemon.mock.calls.filter(([procedure]) => procedure === `agent.reply`)).toHaveLength(2);
         expect(cards().map((card) => card.permission!.status)).toEqual([`allowed`, `allowed`]);
 
-        conversation.stop();
+        conversation.turn.stop();
         await turn;
     });
 
@@ -1659,20 +1689,24 @@ describe(`Conversation`, () => {
             approvers: [`bob@corp.com`],
             scope: `use` as const,
         };
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `credential_offer`, requestId: `c1`, offer }], { stayOpen: true }));
+        daemon.mockImplementation(turnDaemon([{ kind: `credential_offer`, requestId: `c1`, offer }], { stayOpen: true }));
 
-        const turn = conversation.send(`migrate the db`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const turn = conversation.turn.send(`migrate the db`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
-        const card = (): ChatMessage => conversation.messages.value.find((message) => message.credentialOffer !== undefined)!;
+        const card = (): ChatMessage => conversation.transcript.messages.value.find((message) => message.credentialOffer !== undefined)!;
         expect(card().credentialOffer).toMatchObject({ requestId: `c1`, status: `pending`, offer: { approvers: [`bob@corp.com`] } });
 
-        await conversation.decideCredentialOffer(card(), true);
-        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
+        await conversation.requests.reply(`c1`, { kind: `credential_offer`, approve: true });
+        expect(daemon).toHaveBeenLastCalledWith(
+            `agent.reply`,
+            { kind: `credential_offer`, requestId: `c1`, approve: true },
+            { context: { at: undefined } },
+        );
         expect(card().credentialOffer).toMatchObject({ status: `approved` });
         // Releasing is not an ending: the exit the turn was parked on carries on.
-        expect(conversation.streaming.value).toBe(true);
-        await conversation.stop();
+        expect(conversation.turn.streaming.value).toBe(true);
+        await conversation.turn.stop();
         await turn;
     });
 
@@ -1685,83 +1719,87 @@ describe(`Conversation`, () => {
             approvers: [`bob@corp.com`],
             scope: `conversation` as const,
         };
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `credential_offer`, requestId: `c1`, offer },
                 { kind: `resolved`, requestId: `c1`, reply: { kind: `credential_offer`, requestId: `c1`, approve: true } },
                 { kind: `credential_receipt`, requestId: `c1`, outcome: `released`, approvedBy: `bob@corp.com` },
             ]),
         );
 
-        await conversation.send(`post it`, settings);
+        await conversation.turn.send(`post it`, settings);
 
-        const card = conversation.messages.value.find((message) => message.credentialOffer !== undefined)!;
+        const card = conversation.transcript.messages.value.find((message) => message.credentialOffer !== undefined)!;
         expect(card.credentialOffer).toMatchObject({ status: `approved`, receipt: { outcome: `released`, approvedBy: `bob@corp.com` } });
     });
 
     // Connect does not predict the outcome: the card moves to `connecting` and a capability_outcome frame says how it
-    // ended. "Not now" leaves the turn running; both travel the same /agent/reply channel.
+    // ended. "Not now" leaves the turn running; both travel the same `agent.reply` channel.
     it(`parks the turn on a capability card; Connect moves it to connecting and the outcome patches on`, async () => {
         const conversation = new Conversation(`c1`);
         const offer = { entry: `notion`, name: `Notion`, why: `I'll create a page there for each research writeup` };
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
+        daemon.mockImplementation(turnDaemon([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
 
-        const turn = conversation.send(`write it up in notion`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
+        const turn = conversation.turn.send(`write it up in notion`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
 
-        const card = (): ChatMessage => conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
+        const card = (): ChatMessage => conversation.transcript.messages.value.find((message) => message.capabilityOffer !== undefined)!;
         expect(card().capabilityOffer).toMatchObject({ requestId: `k1`, status: `pending`, offer: { entry: `notion`, name: `Notion` } });
 
-        await conversation.decideCapabilityOffer(card(), true);
-        expect(sandboxRequestMock).toHaveBeenLastCalledWith(`/agent/reply`, expect.objectContaining({ method: `POST` }));
+        await conversation.requests.reply(`k1`, { kind: `capability_offer`, connect: true });
+        expect(daemon).toHaveBeenLastCalledWith(
+            `agent.reply`,
+            { kind: `capability_offer`, requestId: `k1`, connect: true },
+            { context: { at: undefined } },
+        );
         // Connecting is not an ending: the agent's command is still parked, watching for the connection.
         expect(card().capabilityOffer).toMatchObject({ status: `connecting` });
         expect(card().capabilityOffer?.outcome).toBeUndefined();
-        expect(conversation.streaming.value).toBe(true);
-        await conversation.stop();
+        expect(conversation.turn.streaming.value).toBe(true);
+        await conversation.turn.stop();
         await turn;
     });
 
     it(`"Not now" on a capability card connects nothing and leaves the turn running`, async () => {
         const conversation = new Conversation(`c1`);
         const offer = { entry: `notion`, name: `Notion` };
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
+        daemon.mockImplementation(turnDaemon([{ kind: `capability_offer`, requestId: `k1`, offer }], { stayOpen: true }));
 
-        const turn = conversation.send(`write it up in notion`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
-        const card = (): ChatMessage => conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
-        await conversation.decideCapabilityOffer(card(), false);
+        const turn = conversation.turn.send(`write it up in notion`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
+        const card = (): ChatMessage => conversation.transcript.messages.value.find((message) => message.capabilityOffer !== undefined)!;
+        await conversation.requests.reply(`k1`, { kind: `capability_offer`, connect: false });
 
         expect(card().capabilityOffer).toMatchObject({ status: `skipped` });
-        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).not.toContain(`/agent/stop`);
-        expect(conversation.streaming.value).toBe(true);
-        await conversation.stop();
+        expect(daemon.mock.calls.map(([procedure]) => procedure)).not.toContain(`agent.stop`);
+        expect(conversation.turn.streaming.value).toBe(true);
+        await conversation.turn.stop();
         await turn;
     });
 
     it(`a replayed capability card freezes from the resolved frame and wears its outcome`, async () => {
         const conversation = new Conversation(`c1`);
         const offer = { entry: `notion`, name: `Notion` };
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `capability_offer`, requestId: `k1`, offer },
                 { kind: `resolved`, requestId: `k1`, reply: { kind: `capability_offer`, requestId: `k1`, connect: true } },
                 { kind: `capability_outcome`, requestId: `k1`, outcome: `connected`, id: `notion` },
             ]),
         );
 
-        await conversation.send(`write it up in notion`, settings);
+        await conversation.turn.send(`write it up in notion`, settings);
 
-        const card = conversation.messages.value.find((message) => message.capabilityOffer !== undefined)!;
+        const card = conversation.transcript.messages.value.find((message) => message.capabilityOffer !== undefined)!;
         expect(card.capabilityOffer).toMatchObject({ status: `connecting`, outcome: { outcome: `connected`, id: `notion` } });
     });
 
     it(`surfaces daemon error facts and ignores unfamiliar frames`, async () => {
         const conversation = new Conversation(`c1`);
         const run = liveRun();
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path !== `/agent/attach`) {
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        daemon.mockImplementation((procedure: string) => {
+            if (procedure !== `agent.attach`) {
+                return Promise.resolve({ run: `r1` });
             }
             const frames = [
                 run.head(),
@@ -1769,34 +1807,34 @@ describe(`Conversation`, () => {
                 ...run.frames({ kind: `error`, message: `boom` }),
                 { kind: `end` },
             ];
-            return Promise.resolve({ ok: true, body: chunkStream(frames, `close`) } as Response);
+            return Promise.resolve(chunkStream(frames, `close`));
         });
 
-        await conversation.send(`hi`, settings);
+        await conversation.turn.send(`hi`, settings);
 
         expect(conversation.error.value).toBe(`boom`);
         expect(conversation.status.value).toBe(`error`);
         // The unknown frame left no trace: the user's row and the daemon's line about the failure.
-        expect(conversation.messages.value.map((message) => message.role)).toEqual([`user`, `notice`]);
+        expect(conversation.transcript.messages.value.map((message) => message.role)).toEqual([`user`, `notice`]);
     });
 
     // An uncoded failure names nothing to fix, so continuing is simply the rest of the work. A named code means
     // something needs fixing first, so no continue offer rides under it.
     it(`offers to continue after a failure nobody can act on, and never after one that names a fix`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, message: `agent did not complete (error_during_execution)` }]));
-        await conversation.send(`ship the parser`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `error`, message: `agent did not complete (error_during_execution)` }]));
+        await conversation.turn.send(`ship the parser`, settings);
         expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
 
         // The offer stands down at the start of the next turn, not its end, so it can't be pressed twice into two
         // turns.
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
-        await conversation.send(CONTINUATIONS.plain, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]));
+        await conversation.turn.send(CONTINUATIONS.plain, settings);
         expect(conversation.pickUp.value).toBeUndefined();
 
         for (const code of [`subscription-required`, `agent-busy`, `claude-not-entitled`] as const) {
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code, message: `nope` }]));
-            await conversation.send(`again`, settings);
+            daemon.mockImplementation(turnDaemon([{ kind: `error`, code, message: `nope` }]));
+            await conversation.turn.send(`again`, settings);
             expect(conversation.error.value, code).toBe(`nope`);
             expect(conversation.pickUp.value, code).toBeUndefined();
         }
@@ -1810,18 +1848,15 @@ describe(`Conversation`, () => {
     // must also fold into the turn, so pressing it matches typing the words.
     it(`arms the continue offer when a denied tool stops the turn, with the sentence that names the refusal`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `permission`, requestId: `p1`, toolName: `Bash` }], { stayOpen: true }));
+        daemon.mockImplementation(turnDaemon([{ kind: `permission`, requestId: `p1`, toolName: `Bash` }], { stayOpen: true }));
 
-        const turn = conversation.send(`clean the sandbox`, settings);
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
-        await conversation.decidePermission(
-            conversation.messages.value.find((message) => message.permission !== undefined)!,
-            `deny`,
-        );
+        const turn = conversation.turn.send(`clean the sandbox`, settings);
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
+        await conversation.requests.reply(`p1`, { kind: `permission`, decision: `deny` });
         await turn;
 
         expect(conversation.pickUp.value).toEqual({ reason: `stopped` });
-        const text = continuationFor(conversation.messages.value);
+        const text = continuationFor(conversation.transcript.messages.value);
         expect(text).toBe(CONTINUATIONS.afterDenial);
         // Allowing the same tool instead leaves the ordinary sentence: there is no refusal to carry on without.
         expect(continuationFor([{ id: 1, role: `user`, text: `hi`, permission: { requestId: `p1`, toolName: `Bash`, status: `allowed` } }])).toBe(
@@ -1832,29 +1867,29 @@ describe(`Conversation`, () => {
         for (const sentence of Object.values(CONTINUATIONS)) {
             expect(foldsIntoTurn({ id: 1, role: `user`, text: sentence }), sentence).toBe(true);
         }
-        expect(turnsOf([...conversation.messages.value, { id: 99, role: `user`, text }]).map((group) => group.id)).toEqual([
-            conversation.messages.value[0]!.id,
+        expect(turnsOf([...conversation.transcript.messages.value, { id: 99, role: `user`, text }]).map((group) => group.id)).toEqual([
+            conversation.transcript.messages.value[0]!.id,
         ]);
     });
 
     it(`self-heals a dead session id: drops it on a session-not-found error and notices instead of erroring`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`first`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`first`, settings);
 
         // The daemon reseeds a lost session itself when it can; this path fires only for the one runtime whose sessions
         // it can't see.
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `error`, code: `session-not-found`, message: `The agent restarted and cannot resume this chat's session.` },
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`second`, settings);
+        await conversation.turn.send(`second`, settings);
 
         expect(conversation.session.value).toBeUndefined();
         // Shows the runtime's own sentence rather than guessing a cause it cannot know.
-        expect(conversation.messages.value.at(-1)).toMatchObject({
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({
             role: `notice`,
             text: `The agent restarted and cannot resume this chat's session.`,
         });
@@ -1863,8 +1898,8 @@ describe(`Conversation`, () => {
 
         // The next send carries no dead session id; the daemon reseeds the replacement from its own record of this
         // conversation.
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
-        await conversation.send(`third`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-2` }]));
+        await conversation.turn.send(`third`, settings);
         const thirdBody = turnBodies()[2]!;
         expect(`sessionId` in thirdBody).toBe(false);
         expect(`history` in thirdBody).toBe(false);
@@ -1874,32 +1909,30 @@ describe(`Conversation`, () => {
     it(`surfaces an unrecoverable grok-model-invalid error and reloads the catalog`, async () => {
         loadProviderModelsMock.mockClear();
         const conversation = new Conversation(`c1`);
-        conversation.provider.value = `grok`;
-        conversation.model.value = `grok-code-fast-1`;
+        conversation.selection.apply({ kind: `set`, picks: { provider: `grok`, model: `grok-code-fast-1` } });
         // Reaches the client only when the daemon's in-turn self-heal failed too: xAI rejected the model and named no
         // alternative.
         const xaiMessage = `xAI returned no available models for your account.`;
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code: `grok-model-invalid`, message: xaiMessage }, { kind: `done` }]));
-        await conversation.send(`hi`, { ...settings, agent: `grok`, model: `grok-code-fast-1` });
+        daemon.mockImplementation(turnDaemon([{ kind: `error`, code: `grok-model-invalid`, message: xaiMessage }, { kind: `done` }]));
+        await conversation.turn.send(`hi`, { ...settings, agent: `grok`, model: `grok-code-fast-1` });
         // The catalog reload is a fire-and-forget dynamic import; let its microtasks drain before asserting it.
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         // The daemon's message surfaces both as the error ref and as a transcript notice; the catalog reload refreshes
         // the picker.
         expect(conversation.error.value).toBe(xaiMessage);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: xaiMessage });
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `notice`, text: xaiMessage });
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`grok`);
     });
 
     it(`surfaces a codex-model-invalid error and reloads the Codex catalog`, async () => {
         loadProviderModelsMock.mockClear();
         const conversation = new Conversation(`c1`);
-        conversation.provider.value = `codex`;
-        conversation.model.value = `gpt-5-codex`;
+        conversation.selection.apply({ kind: `set`, picks: { provider: `codex`, model: `gpt-5-codex` } });
         // Codex has no in-turn self-heal, so the rejection always lands here; the reload repoints the picker to the
         // daemon's live default.
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `error`,
                     code: `codex-model-invalid`,
@@ -1908,7 +1941,7 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hi`, { ...settings, agent: `codex`, model: `gpt-5-codex` });
+        await conversation.turn.send(`hi`, { ...settings, agent: `codex`, model: `gpt-5-codex` });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(conversation.error.value).toContain(`not supported`);
@@ -1920,28 +1953,27 @@ describe(`Conversation`, () => {
     it(`holds the message and reloads the catalog when the plan does not cover the model`, async () => {
         loadProviderModelsMock.mockClear();
         const conversation = new Conversation(`c1`);
-        conversation.provider.value = `kimi`;
-        conversation.model.value = `kimi-k2.7-code-highspeed`;
+        conversation.selection.apply({ kind: `set`, picks: { provider: `kimi`, model: `kimi-k2.7-code-highspeed` } });
         const refusal = `Your current subscription does not have access to kimi-for-coding-highspeed. Upgrade to higher-tier Kimi Code plans.`;
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `error`, code: `model-unavailable`, message: refusal }, { kind: `done` }]));
-        await conversation.send(`hi`, { ...settings, agent: `kimi`, model: `kimi-k2.7-code-highspeed` });
+        daemon.mockImplementation(turnDaemon([{ kind: `error`, code: `model-unavailable`, message: refusal }, { kind: `done` }]));
+        await conversation.turn.send(`hi`, { ...settings, agent: `kimi`, model: `kimi-k2.7-code-highspeed` });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
         expect(conversation.error.value).toContain(`does not have access`);
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`kimi`);
         // The prompt returns to the queue rather than sitting unanswered in the transcript, as any refusal that ran
         // nothing does.
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`hi`]);
-        expect(conversation.messages.value.some((message) => message.role === `user`)).toBe(false);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`hi`]);
+        expect(conversation.transcript.messages.value.some((message) => message.role === `user`)).toBe(false);
     });
 
     it(`renders a codex-advisory as a muted notice under the answer the turn actually produced`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.provider.value = `codex`;
+        conversation.selection.apply({ kind: `set`, picks: { provider: `codex` } });
         // Codex warns when its CLI has no metadata for a model the subscription serves, then runs the turn anyway; this
         // is not a failure.
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `error`,
                     code: `codex-advisory`,
@@ -1952,25 +1984,27 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hi`, { ...settings, agent: `codex`, model: `gpt-5.6-sol` });
+        await conversation.turn.send(`hi`, { ...settings, agent: `codex`, model: `gpt-5.6-sol` });
 
-        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`fallback metadata`))).toBe(true);
+        expect(
+            conversation.transcript.messages.value.some((message) => message.role === `notice` && message.text.includes(`fallback metadata`)),
+        ).toBe(true);
         // The turn's own answer still arrives: the advisory annotates it rather than replacing it.
-        expect(conversation.messages.value.some((message) => message.role === `assistant` && message.text === `ok`)).toBe(true);
+        expect(conversation.transcript.messages.value.some((message) => message.role === `assistant` && message.text === `ok`)).toBe(true);
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
     });
 
     it(`renders a rate_limit error as a muted notice, not the red error ref`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached — try again shortly.` }, { kind: `done` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached — try again shortly.` }, { kind: `done` }]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
         // The subscription's usage cap is not a crash: a notice, no error ref, no error status.
-        expect(conversation.messages.value.at(-1)!.role).toBe(`notice`);
-        expect(conversation.messages.value.at(-1)!.text).toContain(`usage limit`);
+        expect(conversation.transcript.messages.value.at(-1)!.role).toBe(`notice`);
+        expect(conversation.transcript.messages.value.at(-1)!.text).toContain(`usage limit`);
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
     });
@@ -1980,8 +2014,8 @@ describe(`Conversation`, () => {
     it(`names the reset instant on a usage limit, and leaves the turn pickable from it`, async () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 // `available`: the daemon would fire the held turn at reset, but this conversation hasn't armed that;
                 // this is the
                 // default.
@@ -1989,9 +2023,9 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
-        const notice = conversation.messages.value.at(-1)!;
+        const notice = conversation.transcript.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
         // The daemon's line says what happened; when it reopens is `pickUp.readyAt`, read in the viewer's own time
         // zone.
@@ -2009,8 +2043,8 @@ describe(`Conversation`, () => {
     it(`reports a scheduled send when the conversation is armed for the reset`, async () => {
         const conversation = new Conversation(`c1`);
         const resetsAt = Math.floor(Date.now() / 1000) + 3_600;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `error`,
                     code: `rate_limit`,
@@ -2023,7 +2057,7 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
         expect(conversation.pickUp.value).toEqual({
             reason: `limit`,
@@ -2035,63 +2069,61 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
         // The row states the provider's own sentence and nothing more: what happens next, and the way to change it,
         // are the card's above the composer, said once.
-        expect(conversation.messages.value.at(-1)!.text).toBe(`Claude usage limit reached.`);
+        expect(conversation.transcript.messages.value.at(-1)!.text).toBe(`Claude usage limit reached.`);
     });
 
     // An allowance the daemon can't date still offers the press immediately: there's nothing to wait for and the
     // provider's own sentence already says to retry. A guessed countdown would be worse than none.
     it(`offers an undated usage limit straight away`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Kimi usage limit reached.` }, { kind: `done` }]),
-        );
-        await conversation.send(`hello`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `error`, code: `rate_limit`, message: `Kimi usage limit reached.` }, { kind: `done` }]));
+        await conversation.turn.send(`hello`, settings);
 
         expect(conversation.pickUp.value).toEqual({ reason: `limit` });
     });
 
     it(`re-runs the held turn on a press instead of appending anything to the chat`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: false } }, { kind: `done` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: false } }, { kind: `done` }]),
         );
-        await conversation.send(`ship the parser`, settings);
+        await conversation.turn.send(`ship the parser`, settings);
 
         expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false } });
 
         // The re-run's own run: the same words, behind a note explaining why they're back.
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
                 head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.refused), startedAt: Date.now() }),
             }),
         );
         // Undefined: nothing was said, so there is nothing for the composer's recall ring to take.
-        await expect(conversation.continueTurn()).resolves.toBeUndefined();
+        await expect(conversation.turn.continueTurn()).resolves.toBeUndefined();
 
-        expect(sandboxRequestMock.mock.calls.map(([path]) => path)).toContain(`/agent/resume`);
-        // No second turn started: /agent is what saying something costs, and nothing was said.
+        expect(daemon.mock.calls.map(([procedure]) => procedure)).toContain(`agent.resume`);
+        // No second turn started: `agent.run` is what saying something costs, and nothing was said.
         expect(turnBodies()).toHaveLength(1);
         // One user row, still their own words: the note came off and the bubble was reused, not repeated.
-        expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
+        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
     it(`keeps one user row through four presses against an allowance that keeps refusing`, async () => {
         const conversation = new Conversation(`c1`);
-        const refuse = (prompt?: string): ReturnType<typeof sseResponse> =>
-            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: false } }, { kind: `done` }], {
+        const refuse = (prompt?: string): ReturnType<typeof turnDaemon> =>
+            turnDaemon([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: false } }, { kind: `done` }], {
                 head: () => ({ startedAt: Date.now(), ...(prompt === undefined ? {} : { prompt }) }),
             });
-        sandboxRequestMock.mockImplementation(refuse());
-        await conversation.send(`ship the parser`, settings);
+        daemon.mockImplementation(refuse());
+        await conversation.turn.send(`ship the parser`, settings);
 
-        sandboxRequestMock.mockImplementation(refuse(withResumeNote(`ship the parser`, RESUME_NOTES.refused)));
+        daemon.mockImplementation(refuse(withResumeNote(`ship the parser`, RESUME_NOTES.refused)));
         for (let press = 0; press < 4; press += 1) {
-            await conversation.continueTurn();
+            await conversation.turn.continueTurn();
         }
 
         expect(turnBodies()).toHaveLength(1);
-        expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
         // Still offering the press, because the turn is still held: a re-run refused is a re-run to make again.
         expect(conversation.pickUp.value).toEqual({ reason: `limit`, held: { ran: false } });
     });
@@ -2100,18 +2132,16 @@ describe(`Conversation`, () => {
     // dead: it falls back to sending an ordinary "carry on" turn.
     it(`falls back to saying carry on when the held turn has gone`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: true } }, { kind: `done` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: true } }, { kind: `done` }]),
         );
-        await conversation.send(`ship the parser`, settings);
+        await conversation.turn.send(`ship the parser`, settings);
 
-        const refusedResume = sseResponse([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]);
-        sandboxRequestMock.mockImplementation((path, init) =>
-            path === `/agent/resume`
-                ? Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ message: `no held turn` }) } as Response)
-                : refusedResume(path, init),
+        const refusedResume = turnDaemon([{ kind: `delta`, text: `carrying on` }, { kind: `done` }]);
+        daemon.mockImplementation((procedure, input, options) =>
+            procedure === `agent.resume` ? Promise.reject(daemonRefusal(404, `no held turn`)) : refusedResume(procedure, input, options),
         );
-        await expect(conversation.continueTurn()).resolves.toBe(CONTINUATIONS.plain);
+        await expect(conversation.turn.continueTurn()).resolves.toBe(CONTINUATIONS.plain);
 
         expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
     });
@@ -2120,30 +2150,28 @@ describe(`Conversation`, () => {
     // words were never in this window, so the press asks the sandbox to run that turn and sends nothing of its own.
     it(`runs a turn the sandbox kept on a press, as it was started, sending nothing of its own`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
                 head: () => ({ prompt: withResumeNote(`fix the pipeline`, RESUME_NOTES.door), startedAt: Date.now() }),
             }),
         );
-        await conversation.resendKept({ text: `fix the pipeline`, attachments: [] });
+        await conversation.turn.resendKept({ text: `fix the pipeline`, attachments: [] });
 
-        const press = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent/resume`)!;
+        const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
         // No routing: whatever this window's composer holds is not what the sandbox started the turn on.
-        expect(JSON.parse(press[1]!.body as string)).toEqual({ conversationId: `c1` });
+        expect(wire(press[1])).toEqual({ conversationId: `c1` });
         expect(turnBodies()).toHaveLength(0);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
     // A restart since the refusal drops the sandbox's copy; the words are still on screen, so the press sends those.
     it(`sends the kept message's own words when the sandbox no longer keeps the turn`, async () => {
         const conversation = new Conversation(`c1`);
-        const run = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
-        sandboxRequestMock.mockImplementation((path, init) =>
-            path === `/agent/resume`
-                ? Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({ message: `no held turn` }) } as Response)
-                : run(path, init),
+        const run = turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
+        daemon.mockImplementation((procedure, input, options) =>
+            procedure === `agent.resume` ? Promise.reject(daemonRefusal(404, `no held turn`)) : run(procedure, input, options),
         );
-        await conversation.resendKept({ text: `fix the pipeline`, attachments: [] });
+        await conversation.turn.resendKept({ text: `fix the pipeline`, attachments: [] });
 
         expect(turnBodies().map((body) => body[`prompt`])).toEqual([`fix the pipeline`]);
     });
@@ -2152,26 +2180,26 @@ describe(`Conversation`, () => {
     // allowance is one account's problem and the switcher is how the user moves off it.
     it(`re-runs the held turn on the account the composer has switched to`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `error`, code: `rate_limit`, message: `Claude usage limit reached.`, held: { ran: true } },
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`ship the parser`, settings);
+        await conversation.turn.send(`ship the parser`, settings);
         expect(conversation.session.value).toMatchObject({ id: `s-1` });
 
-        conversation.selectAccount(`with-room`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+        conversation.selection.apply({ kind: `selectAccount`, account: `with-room` });
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
                 head: () => ({ prompt: withResumeNote(`ship the parser`, RESUME_NOTES.switched), startedAt: Date.now() }),
             }),
         );
-        await expect(conversation.continueTurn()).resolves.toBeUndefined();
+        await expect(conversation.turn.continueTurn()).resolves.toBeUndefined();
 
-        const press = sandboxRequestMock.mock.calls.find(([path]) => path === `/agent/resume`)!;
-        expect(JSON.parse(press[1]!.body as string)).toEqual({
+        const press = daemon.mock.calls.find(([procedure]) => procedure === `agent.resume`)!;
+        expect(wire(press[1])).toEqual({
             conversationId: `c1`,
             routing: { agent: `claude`, harness: `native`, account: `with-room`, model: `opus` },
         });
@@ -2179,8 +2207,8 @@ describe(`Conversation`, () => {
         expect(conversation.session.value).toBeUndefined();
         // Still one turn and one user row: a press is the same request again, not a new message.
         expect(turnBodies()).toHaveLength(1);
-        expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
+        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `on it` });
     });
 
     // What an armed chat does through a spent allowance is the daemon's appointment now (runLimitRung), fired at the
@@ -2192,8 +2220,8 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         // Far-future so the re-attach probe this arms stays parked for the test's lifetime.
         const retryAt = Math.floor(Date.now() / 1000) + 3_600;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `error`,
                     code: `provider-outage`,
@@ -2204,9 +2232,9 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
-        const notice = conversation.messages.value.at(-1)!;
+        const notice = conversation.transcript.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
         expect(notice.text).toContain(`attempt 2 of 6`);
         // No second switch on the row: what happens next is one question, asked once, on the card above the composer.
@@ -2214,15 +2242,15 @@ describe(`Conversation`, () => {
         expect(conversation.failures.outageResume.value).toEqual({ retryAt, attempt: 2, maxAttempts: 6, scheduled: true });
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
-        conversation.abort();
+        conversation.turn.abort();
     });
 
     // A rotated credential is re-minted and re-run by the daemon within a scheduler pass; the wait must be visible
     // and armed to catch the resumption, not just promised.
     it(`reads a rotated credential as a wait it is actually watching`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `error`,
                     code: `claude-token-refused`,
@@ -2232,9 +2260,9 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
-        const notice = conversation.messages.value.at(-1)!;
+        const notice = conversation.transcript.messages.value.at(-1)!;
         expect(notice.role).toBe(`notice`);
         expect(notice.text).toContain(`being renewed`);
         // The notice names which wait it describes (`noticeWait`), and the conversation tracks that the wait is on.
@@ -2243,7 +2271,7 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBeNull();
         // Not a reauth: the account is fine, and lighting its badge would send the user to fix nothing.
         expect(providerAccounts.value[`claude`]?.some((account) => account.needsReauth === true)).not.toBe(true);
-        conversation.abort();
+        conversation.turn.abort();
     });
 
     // Attach streams are pull: a resumed run only reaches a window that goes looking for it. The wait above must arm
@@ -2252,17 +2280,17 @@ describe(`Conversation`, () => {
         jest.useFakeTimers();
         try {
             const conversation = new Conversation(`c1`);
-            sandboxRequestMock.mockImplementation(
-                sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
+            daemon.mockImplementation(
+                turnDaemon([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
             );
-            await conversation.send(`refactor the store`, settings);
+            await conversation.turn.send(`refactor the store`, settings);
             expect(conversation.failures.credentialRenewal.value).toEqual(expect.any(Object));
 
             // The resumed request runs behind the resume note, on its own run id; the renewal notice above stays since
             // it
             // belongs to the run that failed.
-            sandboxRequestMock.mockImplementation(
-                sseResponse([{ kind: `delta`, text: `Picking it back up.` }], {
+            daemon.mockImplementation(
+                turnDaemon([{ kind: `delta`, text: `Picking it back up.` }], {
                     head: () => ({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) }),
                 }),
             );
@@ -2270,7 +2298,7 @@ describe(`Conversation`, () => {
 
             // The resumed answer lands under the original question once the wait ends.
             expect(conversation.failures.credentialRenewal.value).toBeUndefined();
-            expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
                 { role: `user`, text: `refactor the store` },
                 { role: `notice`, text: expect.stringContaining(`being renewed`) },
                 // The resumed run opens on the daemon's line for the restart, never on the words again.
@@ -2284,14 +2312,14 @@ describe(`Conversation`, () => {
 
     it(`stops the renewal spinner when the resumed turn lands`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked`, autoResume: `scheduled` }, { kind: `done` }]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
         expect(conversation.failures.credentialRenewal.value).toEqual(expect.any(Object));
 
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `back` }, { kind: `done` }]));
-        await conversation.send(`again`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `back` }, { kind: `done` }]));
+        await conversation.turn.send(`again`, settings);
         expect(conversation.failures.credentialRenewal.value).toBeUndefined();
     });
 
@@ -2299,14 +2327,12 @@ describe(`Conversation`, () => {
     // happening.
     it(`asks for a reconnect when no renewal is armed`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.account.value = `acct-1`;
+        conversation.selection.apply({ kind: `set`, picks: { account: `acct-1` } });
         providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `acct-1`, label: `Claude`, connectedAt: 0 }] };
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked` }, { kind: `done` }]),
-        );
-        await conversation.send(`hello`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `error`, code: `claude-token-refused`, message: `401 revoked` }, { kind: `done` }]));
+        await conversation.turn.send(`hello`, settings);
 
-        const notice = conversation.messages.value.at(-1)!;
+        const notice = conversation.transcript.messages.value.at(-1)!;
         expect(notice.text).toContain(`Reconnect`);
         expect(notice.noticeWait).toBeUndefined();
         expect(conversation.failures.credentialRenewal.value).toBeUndefined();
@@ -2316,32 +2342,32 @@ describe(`Conversation`, () => {
     it(`hands the message back and says so plainly once the retries are spent`, async () => {
         const conversation = new Conversation(`c1`);
         // No `outage` block: the daemon's attempts are gone, so nothing is coming back.
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `provider-outage`, message: `API Error: 500 Internal server error.` }, { kind: `done` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, code: `provider-outage`, message: `API Error: 500 Internal server error.` }, { kind: `done` }]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
         // The red line is honest here, and the typed words return to the queue rather than being lost.
         expect(conversation.error.value).toContain(`500`);
         expect(conversation.failures.outageResume.value).toBeUndefined();
-        expect(conversation.queued.value.some((message) => message.text === `hello`)).toBe(true);
+        expect(conversation.turn.queued.value.some((message) => message.text === `hello`)).toBe(true);
     });
 
     it(`holds and refunds a failed free-trial message without arming generic outage recovery`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.provider.value = `endpoint/free-trial`;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        conversation.selection.apply({ kind: `set`, picks: { provider: `endpoint/free-trial` } });
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable, failed messages aren't counted.` },
                 { kind: `done` },
             ]),
         );
 
-        await conversation.send(`hello`, { ...settings, agent: `endpoint/free-trial` });
+        await conversation.turn.send(`hello`, { ...settings, agent: `endpoint/free-trial` });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        expect(conversation.queued.value.map((message) => message.text)).toContain(`hello`);
-        expect(conversation.messages.value.at(-1)?.role).toBe(`notice`);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toContain(`hello`);
+        expect(conversation.transcript.messages.value.at(-1)?.role).toBe(`notice`);
         expect(conversation.error.value).toBeNull();
         expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(loadTrialStatusMock).toHaveBeenCalledTimes(1);
@@ -2351,41 +2377,41 @@ describe(`Conversation`, () => {
     // held message rather than stacking another copy in front of it.
     it(`retries the held nudge on a second Continue instead of stacking another copy of it`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.provider.value = `endpoint/free-trial`;
+        conversation.selection.apply({ kind: `set`, picks: { provider: `endpoint/free-trial` } });
         const trialSettings = { ...settings, agent: `endpoint/free-trial` } as const;
         let turns = 0;
         // Built once, not per call: a fake minted inside the mock implementation would miss the POST that started the
         // run
         // it serves.
-        const refused = sseResponse([
+        const refused = turnDaemon([
             { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable, failed messages aren't counted.` },
             { kind: `done` },
         ]);
-        const landed = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
-        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent`) {
+        const landed = turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
+            if (procedure === `agent.run`) {
                 turns += 1;
             }
-            return turns <= 2 ? refused(path, init) : landed(path, init);
+            return turns <= 2 ? refused(procedure, input, options) : landed(procedure, input, options);
         });
 
-        await conversation.send(`Continue`, trialSettings);
+        await conversation.turn.send(`Continue`, trialSettings);
         await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`Continue`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`Continue`]);
 
         // A repeat press retries the held message rather than adding a second one; the queue doesn't grow while it
         // keeps
         // bouncing.
-        await conversation.enqueue(`Continue`);
+        await conversation.turn.enqueue(`Continue`);
         await new Promise((resolve) => setTimeout(resolve, 0));
         expect(turnBodies()[1]).toMatchObject({ prompt: `Continue` });
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`Continue`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`Continue`]);
 
         // A third press lands the turn, still on the one word.
-        await conversation.enqueue(`Continue`);
-        await waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        await conversation.turn.enqueue(`Continue`);
+        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)?.text).toBe(`on it`));
         expect(turnBodies()[2]).toMatchObject({ prompt: `Continue` });
-        expect(conversation.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `Continue` }]);
+        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `Continue` }]);
     });
 
     // A press landing while the turn is failing meets the words coming back from the other side, since the flush
@@ -2393,65 +2419,65 @@ describe(`Conversation`, () => {
     it(`hands back a refused nudge as the one already pressed, not as a second copy in front of it`, async () => {
         const conversation = new Conversation(`c1`);
         const run = liveRun({ prompt: `Continue` });
-        let controller!: ReadableStreamDefaultController<Uint8Array>;
-        const body = new ReadableStream<Uint8Array>({
+        let controller!: ReadableStreamDefaultController<AttachFrame>;
+        const body = new ReadableStream<AttachFrame>({
             start(c) {
                 controller = c;
-                c.enqueue(sseFrame(run.head()));
+                c.enqueue(frameOf(run.head()));
             },
         });
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path === `/agent/attach`) {
-                return Promise.resolve({ ok: true, body } as Response);
+        daemon.mockImplementation((procedure: string) => {
+            if (procedure === `agent.attach`) {
+                return Promise.resolve(body);
             }
-            if (path === `/agent/steer`) {
-                return Promise.resolve({ ok: false, status: 404 } as Response);
+            if (procedure === `agent.steer`) {
+                return Promise.reject(daemonRefusal(404));
             }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            return Promise.resolve({ run: `r1` });
         });
 
-        const turn = conversation.send(`Continue`, settings);
+        const turn = conversation.turn.send(`Continue`, settings);
         // Pressed again while it hangs: unsteerable, so it waits in the queue.
-        await conversation.enqueue(`Continue`);
-        expect(conversation.queued.value).toHaveLength(1);
+        await conversation.turn.enqueue(`Continue`);
+        expect(conversation.turn.queued.value).toHaveLength(1);
         for (const frame of run.frames({ kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` })) {
-            controller.enqueue(sseFrame(frame));
+            controller.enqueue(frameOf(frame));
         }
-        controller.enqueue(sseFrame({ kind: `end` }));
+        controller.enqueue(frameOf({ kind: `end` }));
         controller.close();
         await turn;
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`Continue`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`Continue`]);
     });
 
     // A held message plus a follow-up nudge are two separate things said; the queue carries both.
     it(`keeps a nudge written behind a real message that never left`, async () => {
         const conversation = new Conversation(`c1`);
         let turns = 0;
-        const refused = sseResponse([{ kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` }, { kind: `done` }]);
-        const landed = sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
-        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent`) {
+        const refused = turnDaemon([{ kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` }, { kind: `done` }]);
+        const landed = turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
+            if (procedure === `agent.run`) {
                 turns += 1;
             }
-            return turns <= 1 ? refused(path, init) : landed(path, init);
+            return turns <= 1 ? refused(procedure, input, options) : landed(procedure, input, options);
         });
 
-        await conversation.send(`fix the tests`, settings);
+        await conversation.turn.send(`fix the tests`, settings);
         await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`fix the tests`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`fix the tests`]);
 
-        await conversation.enqueue(`go ahead`);
-        await waitFor(() => expect(conversation.messages.value.at(-1)?.text).toBe(`on it`));
+        await conversation.turn.enqueue(`go ahead`);
+        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)?.text).toBe(`on it`));
         expect(turnBodies()[1]).toMatchObject({ prompt: `fix the tests\n\ngo ahead` });
     });
 
     it(`offers turning outage auto-resume on when the daemon only remembered the turn`, async () => {
         const conversation = new Conversation(`c1`);
         const retryAt = Math.floor(Date.now() / 1000) + 3_600;
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `error`,
                     code: `provider-outage`,
@@ -2462,44 +2488,44 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
         expect(conversation.failures.outageResume.value).toEqual({ retryAt, attempt: 1, maxAttempts: 6, scheduled: false });
 
         // Answering `retry` starts this window watching for the run the daemon will bring back; answering `wait`
         // stands that watch down. Nothing is written to the transcript either way — a toggle's state belongs on the
         // toggle, and six notices about arming and disarming were six rows nobody could act on.
-        const rows = conversation.messages.value.length;
+        const rows = conversation.transcript.messages.value.length;
         conversation.failures.watchOutage(true);
         expect(conversation.failures.outageResume.value?.scheduled).toBe(true);
         conversation.failures.watchOutage(false);
         expect(conversation.failures.outageResume.value?.scheduled).toBe(false);
-        expect(conversation.messages.value).toHaveLength(rows);
-        conversation.abort();
+        expect(conversation.transcript.messages.value).toHaveLength(rows);
+        conversation.turn.abort();
     });
 
     // The turn is alive here: a status, never a transcript line, and it must not outlive the turn it describes.
     it(`shows an in-turn provider retry as live status and drops it when the turn settles`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `provider_retry`, attempt: 3, maxAttempts: 300, nextAttemptAt: Date.now() + 45_000, status: 529 },
                 { kind: `delta`, text: `back` },
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
-        expect(conversation.providerRetry.value).toBeUndefined();
-        expect(conversation.messages.value.some((message) => message.role === `notice` && message.text.includes(`retry`))).toBe(false);
+        expect(conversation.turn.providerRetry.value).toBeUndefined();
+        expect(conversation.transcript.messages.value.some((message) => message.role === `notice` && message.text.includes(`retry`))).toBe(false);
         expect(conversation.error.value).toBeNull();
     });
 
     it(`stores an account_usage frame against its account, stamped so staleness is comparable`, async () => {
         usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `account_usage`,
                     account: `acct-1`,
@@ -2511,7 +2537,7 @@ describe(`Conversation`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
         // Keyed by the serving account, not the conversation, and stamped with `measuredAt` so a later load can tell it
         // from the daemon's persisted reading.
@@ -2529,10 +2555,10 @@ describe(`Conversation`, () => {
     it(`ignores an account_usage frame the daemon could not attribute to an account`, async () => {
         usageByAccount.value = {};
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `account_usage`, windows: [{ kind: `seven_day`, utilization: 5, gates: `all` }] }, { kind: `done` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `account_usage`, windows: [{ kind: `seven_day`, utilization: 5, gates: `all` }] }, { kind: `done` }]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
         // An env-token turn has no account to key the snapshot by: better unknown than misattributed.
         expect(usageByAccount.value).toEqual({});
@@ -2544,29 +2570,29 @@ describe(`Conversation`, () => {
         // rate_limit_info names only the one window the provider treated as binding for that request; writing it into
         // the
         // headroom map would misattribute the account's overall usage.
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `rate_limit_info`, account: `acct-1`, status: `allowed`, utilization: 1, rateLimitType: `seven_day` },
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`hello`, settings);
+        await conversation.turn.send(`hello`, settings);
 
         expect(usageByAccount.value).toEqual({});
     });
 
     it(`stop() records a notice and aborts without surfacing the abort as an error`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `partial` }], { stayOpen: true }));
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `partial` }], { stayOpen: true }));
 
-        const turn = conversation.send(`long task`, settings);
-        await waitFor(() => expect(conversation.messages.value[1]?.text).toBe(`partial`));
-        conversation.stop();
+        const turn = conversation.turn.send(`long task`, settings);
+        await waitFor(() => expect(conversation.transcript.messages.value[1]?.text).toBe(`partial`));
+        conversation.turn.stop();
         await turn;
 
         expect(conversation.error.value).toBeNull();
-        expect(conversation.streaming.value).toBe(false);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
+        expect(conversation.turn.streaming.value).toBe(false);
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `notice`, text: `Stopped.` });
     });
 
     it(`stop() cancels the cards a parked turn was waiting on, so the composer isn't wedged on a dead run`, async () => {
@@ -2576,77 +2602,77 @@ describe(`Conversation`, () => {
         // be
         // open when stop cancels them all through the run's own fold.
         const run = liveRun({ prompt: `go` });
-        let controller!: ReadableStreamDefaultController<Uint8Array>;
-        const body = new ReadableStream<Uint8Array>({
+        let controller!: ReadableStreamDefaultController<AttachFrame>;
+        const body = new ReadableStream<AttachFrame>({
             start(c) {
                 controller = c;
-                c.enqueue(sseFrame(run.head()));
+                c.enqueue(frameOf(run.head()));
             },
         });
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path === `/agent/attach`) {
-                return Promise.resolve({ ok: true, body } as Response);
+        daemon.mockImplementation((procedure: string) => {
+            if (procedure === `agent.attach`) {
+                return Promise.resolve(body);
             }
-            if (path === `/agent/stop`) {
+            if (procedure === `agent.stop`) {
                 for (const frame of run.ending(`stopped`)) {
-                    controller.enqueue(sseFrame(frame));
+                    controller.enqueue(frameOf(frame));
                 }
-                controller.enqueue(sseFrame({ kind: `end` }));
+                controller.enqueue(frameOf({ kind: `end` }));
                 controller.close();
-                return Promise.resolve({ ok: true } as Response);
+                return Promise.resolve({ ok: true });
             }
-            return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+            return Promise.resolve({ run: `r1` });
         });
 
-        const turn = conversation.send(`go`, settings);
+        const turn = conversation.turn.send(`go`, settings);
         for (const event of [
             { kind: `plan`, requestId: `d1`, text: `the plan` },
             { kind: `question`, requestId: `q1`, questions },
             { kind: `permission`, requestId: `p1`, toolName: `Bash` },
         ] satisfies AgentEvent[]) {
             for (const frame of run.frames(event)) {
-                controller.enqueue(sseFrame(frame));
+                controller.enqueue(frameOf(frame));
             }
         }
-        await waitFor(() => expect(conversation.awaitingDecision.value).toBe(true));
-        conversation.stop();
+        await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
+        conversation.turn.stop();
         await turn;
 
-        expect(conversation.awaitingDecision.value).toBe(false);
-        expect(conversation.pendingPlanMessage.value).toBeUndefined();
+        expect(conversation.transcript.awaitingDecision.value).toBe(false);
+        expect(conversation.transcript.pendingPlanMessage.value).toBeUndefined();
         expect(conversation.status.value).toBe(`idle`);
-        const cards = conversation.messages.value.flatMap((message) =>
+        const cards = conversation.transcript.messages.value.flatMap((message) =>
             [message.plan?.status, message.question?.status, message.permission?.status].filter((status) => status !== undefined),
         );
         expect(cards).toEqual([`cancelled`, `cancelled`, `cancelled`]);
     });
 
-    it(`forkFrom copies the turns above the cut and seeds a fresh session from them`, async () => {
+    it(`a fork copies the turns above the cut and seeds a fresh session from them`, async () => {
         const source = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `delta`, text: `one` },
                 { kind: `context_usage`, tokens: 500, contextWindow: 1000 },
             ]),
         );
-        await source.send(`first`, settings);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `two` }]));
-        await source.send(`second`, settings);
-        const index = source.messages.value.findIndex((message) => message.text === `second`);
+        await source.turn.send(`first`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `two` }]));
+        await source.turn.send(`second`, settings);
+        const index = source.transcript.messages.value.findIndex((message) => message.text === `second`);
 
         const fork = new Conversation(`c2`);
-        fork.forkFrom(source, index, `now`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        seedFork(fork, source, index, `now`);
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-2` },
                 { kind: `delta`, text: `redone` },
             ]),
         );
-        await fork.send(`second, revised`, settings);
+        await fork.turn.send(`second, revised`, settings);
 
         // The fork carries the turns above the cut, then its own first turn and the answer to it.
-        expect(fork.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
+        expect(fork.transcript.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second, revised`, `redone`]);
         // A fork is a new conversation daemon-side (no session id rides); it sends where it was cut from (`forkOf`,
         // record row count), and the daemon copies that prefix before running. The bubbles themselves never go up.
         const body = turnBodies()[2]!;
@@ -2656,10 +2682,10 @@ describe(`Conversation`, () => {
         expect(fork.session.value).toMatchObject({ id: `s-2`, provider: `claude` });
         expect(fork.conversationId).not.toBe(source.conversationId);
         // Named once. The copy has happened, so a later turn is an ordinary turn on an ordinary conversation.
-        await fork.send(`again`, settings);
+        await fork.turn.send(`again`, settings);
         expect(`forkOf` in turnBodies()[3]!).toBe(false);
         // The point of forking: the source keeps its own transcript and session, untouched.
-        expect(source.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
+        expect(source.transcript.messages.value.map((message) => message.text)).toEqual([`first`, `one`, `second`, `two`]);
         expect(source.session.value).toMatchObject({ id: `s-1` });
         expect(source.contextUsage.value).toMatchObject({ tokens: 500, contextWindow: 1000 });
     });
@@ -2668,28 +2694,28 @@ describe(`Conversation`, () => {
     // persisted in the tab snapshot and must survive a refused send rather than being spent.
     it(`keeps the fork linkage through a refused first send and spends it on the ack`, async () => {
         const source = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `delta`, text: `one` },
             ]),
         );
-        await source.send(`first`, settings);
+        await source.turn.send(`first`, settings);
 
         const fork = new Conversation(`c2`);
-        fork.forkFrom(source, 2, `now`);
+        seedFork(fork, source, 2, `now`);
         // Where the tab snapshot reads it (snapshotTab) and a rebuilt tab puts it back (restoreTab).
         expect(fork.pendingForkOf.value).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
 
         // Refused at the door: nothing ran daemon-side, so the linkage isn't spent; the words are held and the retry
         // still names the source.
-        sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `nope` }), { status: 400 }));
-        await fork.send(`carry on differently`, settings);
+        daemon.mockRejectedValue(daemonRefusal(400, `nope`));
+        await fork.turn.send(`carry on differently`, settings);
         expect(fork.pendingForkOf.value).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
 
         // The user sends again; the held words ride the fresh turn, and the cut rides with them.
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
-        await fork.enqueue(``);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-2` }]));
+        await fork.turn.enqueue(``);
         const retry = turnBodies().at(-1)!;
         expect(retry[`forkOf`]).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
         // The ack is what spends it: from here the fork's record stands on its own.
@@ -2698,20 +2724,20 @@ describe(`Conversation`, () => {
 
     it(`a fork taken at the first message starts empty and names itself from its own first message`, async () => {
         const source = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `delta`, text: `hi!` },
             ]),
         );
-        await source.send(`original topic`, settings);
+        await source.turn.send(`original topic`, settings);
         expect(source.title.value).toBe(`Original topic`);
 
         const fork = new Conversation(`c2`);
-        fork.forkFrom(source, 0, `now`);
-        expect(fork.messages.value).toEqual([]);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
-        await fork.send(`new topic`, settings);
+        seedFork(fork, source, 0, `now`);
+        expect(fork.transcript.messages.value).toEqual([]);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-2` }]));
+        await fork.turn.send(`new topic`, settings);
 
         // Each tab is findable by its own name rather than two tabs sharing one.
         expect(fork.title.value).toBe(`New topic`);
@@ -2726,7 +2752,7 @@ describe(`Conversation`, () => {
     // wrote (a refusal, a self-resume) is a record row like any other and must be counted.
     it(`a fork counts the notices the daemon recorded and skips the ones drawn locally`, async () => {
         const source = new Conversation(`c1`);
-        source.restoreMessages([
+        source.transcript.restoreMessages([
             { role: `user`, text: `ship the parser` },
             { role: `assistant`, text: `on it` },
             { role: `notice`, text: `Failed to authenticate. API Error: 401.` },
@@ -2734,37 +2760,37 @@ describe(`Conversation`, () => {
             { role: `assistant`, text: `picking back up` },
         ]);
         // …and one this window wrote itself, which the record knows nothing about.
-        source.selectProvider(`codex`);
-        expect(source.messages.value.at(-1)!.role).toBe(`notice`);
+        source.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        expect(source.transcript.messages.value.at(-1)!.role).toBe(`notice`);
 
         const fork = new Conversation(`c2`);
-        fork.forkFrom(source, source.messages.value.length, `now`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-2` }]));
-        await fork.send(`carry on`, { ...settings, agent: `codex`, model: `` });
+        seedFork(fork, source, source.transcript.messages.value.length, `now`);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-2` }]));
+        await fork.turn.send(`carry on`, { ...settings, agent: `codex`, model: `` });
         // Five recorded rows: the switch notice at the end is this window's own and is not one of them.
         expect(turnBodies()[0]![`forkOf`]).toEqual({ conversationId: `c1`, keep: 5, files: `now` });
     });
 
     it(`a fork carries the source's provider selection and drops its pending switch notice`, async () => {
         const source = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `delta`, text: `sure` },
             ]),
         );
-        await source.send(`first`, settings);
-        source.selectProvider(`codex`);
-        expect(source.messages.value.at(-1)!.role).toBe(`notice`);
+        await source.turn.send(`first`, settings);
+        source.selection.apply({ kind: `selectProvider`, provider: `codex` });
+        expect(source.transcript.messages.value.at(-1)!.role).toBe(`notice`);
 
         // Branching before the notice leaves it behind: it belongs to the source's segment cut, not the fork.
         const fork = new Conversation(`c2`);
-        fork.forkFrom(source, 0, `now`);
-        expect(fork.provider.value).toBe(`codex`);
-        expect(fork.messages.value.every((message) => message.role !== `notice`)).toBe(true);
+        seedFork(fork, source, 0, `now`);
+        expect(fork.selection.provider.value).toBe(`codex`);
+        expect(fork.transcript.messages.value.every((message) => message.role !== `notice`)).toBe(true);
 
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `thr-1` }]));
-        await fork.send(`first, revised`, { ...settings, agent: `codex`, model: `` });
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `thr-1` }]));
+        await fork.turn.send(`first, revised`, { ...settings, agent: `codex`, model: `` });
         const body = turnBodies()[1]!;
         expect(body[`agent`]).toBe(`codex`);
         expect(`sessionId` in body).toBe(false);
@@ -2773,11 +2799,11 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         const attachBodies: Record<string, unknown>[] = [];
         const run = liveRun();
-        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            if (path === `/agent`) {
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
+            if (procedure === `agent.run`) {
+                return Promise.resolve({ run: `r1` });
             }
-            attachBodies.push(JSON.parse(init!.body as string) as Record<string, unknown>);
+            attachBodies.push(wire(input));
             const body =
                 attachBodies.length === 1
                     ? // Two patches, then the connection breaks mid-run (no `end`).
@@ -2787,16 +2813,16 @@ describe(`Conversation`, () => {
                       )
                     : // The resumed attach's head carries the rows whole, and the stream carries on from there.
                       chunkStream([run.head(), ...run.frames({ kind: `delta`, text: `ld` }), { kind: `end` }], `close`);
-            return Promise.resolve({ ok: true, body } as Response);
+            return Promise.resolve(body);
         });
 
-        await conversation.send(`Hi`, settings);
+        await conversation.turn.send(`Hi`, settings);
 
         expect(attachBodies).toEqual([
             { conversationId: conversation.conversationId, run: `r1` },
             { conversationId: conversation.conversationId, run: `r1` },
         ]);
-        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `Hello world` });
+        expect(conversation.transcript.messages.value[1]).toMatchObject({ role: `assistant`, text: `Hello world` });
         expect(conversation.error.value).toBeNull();
     });
 
@@ -2805,9 +2831,9 @@ describe(`Conversation`, () => {
         let attaches = 0;
         const first = liveRun();
         const other = liveRun({ run: `r2`, prompt: `someone else's turn` });
-        sandboxRequestMock.mockImplementation((path: string) => {
-            if (path === `/agent`) {
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({ run: `r1` }) } as Response);
+        daemon.mockImplementation((procedure: string) => {
+            if (procedure === `agent.run`) {
+                return Promise.resolve({ run: `r1` });
             }
             attaches += 1;
             const body =
@@ -2815,62 +2841,62 @@ describe(`Conversation`, () => {
                     ? chunkStream([first.head(), ...first.frames({ kind: `delta`, text: `partial` })], `error`)
                     : // A newer turn is live by the time the tab reconnects: its rows must not land here.
                       chunkStream([other.head(), ...other.frames({ kind: `delta`, text: `other` }), { kind: `end` }], `close`);
-            return Promise.resolve({ ok: true, body } as Response);
+            return Promise.resolve(body);
         });
 
-        await conversation.send(`Hi`, settings);
+        await conversation.turn.send(`Hi`, settings);
 
-        expect(conversation.messages.value[1]).toMatchObject({ role: `assistant`, text: `partial` });
-        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.transcript.messages.value[1]).toMatchObject({ role: `assistant`, text: `partial` });
+        expect(conversation.turn.streaming.value).toBe(false);
     });
 
     it(`reattach renders a daemon-side run it never initiated: its rows from the head, its facts replayed`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation((path: string, init?: RequestInit) => {
-            expect(path).toBe(`/agent/attach`);
-            const request = JSON.parse(init!.body as string) as Record<string, unknown>;
+        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
+            expect(procedure).toBe(`agent.attach`);
+            const request = wire(input);
             expect(request).toEqual({ conversationId: conversation.conversationId });
-            const body = new ReadableStream<Uint8Array>({
+            const body = new ReadableStream<AttachFrame>({
                 start(controller) {
                     const rows: TranscriptRow[] = [userRow(`refactor the parser`, 1234, []), { role: `assistant`, text: `On it.` }];
-                    controller.enqueue(sseFrame(head({ startedAt: 1234, seq: 2, rows })));
+                    controller.enqueue(frameOf(head({ startedAt: 1234, seq: 2, rows })));
                     // A fact is replayed to every attach of the run; its words are not, the head holds them.
-                    controller.enqueue(sseFrame({ kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s-9` } }));
-                    controller.enqueue(sseFrame({ kind: `end` }));
+                    controller.enqueue(frameOf({ kind: `fact`, seq: 1, fact: { kind: `session`, sessionId: `s-9` } }));
+                    controller.enqueue(frameOf({ kind: `end` }));
                     controller.close();
                 },
             });
-            return Promise.resolve({ ok: true, body } as Response);
+            return Promise.resolve(body);
         });
 
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the parser` },
             { role: `assistant`, text: `On it.` },
         ]);
         // The replayed fact armed the session exactly as it would have for the initiating window.
         expect(conversation.session.value).toMatchObject({ id: `s-9` });
-        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.turn.streaming.value).toBe(false);
     });
 
     // A send's own bubble is the row the run's head later replaces, so re-attaching to a run this window started is
     // idempotent, the same as for one it merely found (transcriptState.attachRun).
     it(`redraws a run its own send opened when attached to it again, rather than stacking a second copy`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `On it.` }, { kind: `done` }]));
-        await conversation.send(`refactor the parser`, settings);
-        const ids = conversation.messages.value.map((message) => message.id);
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `On it.` }, { kind: `done` }]));
+        await conversation.turn.send(`refactor the parser`, settings);
+        const ids = conversation.transcript.messages.value.map((message) => message.id);
 
         // The same run served again, as a reload's reattach does.
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the parser` },
             { role: `assistant`, text: `On it.` },
         ]);
         // The same rows, under the same ids: nothing about them was redrawn from this window's point of view.
-        expect(conversation.messages.value.map((message) => message.id)).toEqual(ids);
+        expect(conversation.transcript.messages.value.map((message) => message.id)).toEqual(ids);
     });
 
     // The daemon settles a card's status on the row itself (request-status.ts), live and in the record alike, so a
@@ -2888,18 +2914,18 @@ describe(`Conversation`, () => {
                 ],
             },
         ];
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `choose` },
             { role: `assistant`, text: ``, question: { requestId: `q1`, questions, status: `answered`, answers: { "Which?": [`A`, `B`] } } },
             { role: `assistant`, text: `Here is the plan.`, plan: { requestId: `p1`, text: `1. do it`, status: `cancelled` } },
             { role: `assistant`, text: ``, permission: { requestId: `perm1`, toolName: `Bash`, explain: `Runs the tests.`, status: `always` } },
         ]);
-        const [, asked, planned, permitted] = conversation.messages.value;
+        const [, asked, planned, permitted] = conversation.transcript.messages.value;
         expect(asked?.question).toEqual({ requestId: `q1`, questions, status: `answered`, answers: { "Which?": [`A`, `B`] } });
         expect(planned?.plan).toEqual({ requestId: `p1`, text: `1. do it`, status: `cancelled` });
         expect(permitted?.permission).toEqual({ requestId: `perm1`, toolName: `Bash`, explain: `Runs the tests.`, status: `always` });
         // A record row per bubble, cards included: the count a fork copies a prefix of agrees with the daemon's.
-        expect(recordedRows(conversation.messages.value)).toBe(4);
+        expect(recordedRows(conversation.transcript.messages.value)).toBe(4);
     });
 
     it(`restoreMessages keeps the task checklist on an assistant bubble`, () => {
@@ -2908,25 +2934,25 @@ describe(`Conversation`, () => {
             { content: `step 1`, status: `completed` as const },
             { content: `step 2`, status: `in_progress` as const, activeForm: `Running step 2` },
         ];
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `run tasks` },
             { role: `assistant`, text: `Working on it`, todos },
         ]);
-        expect(conversation.messages.value[1]?.todos).toEqual(todos);
+        expect(conversation.transcript.messages.value[1]?.todos).toEqual(todos);
     });
 
     // Attaching to a live run must add to a transcript already restored, not replace it.
     it(`reattach adds the live turn to the history already on screen instead of replacing it`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `start the migration` },
             { role: `assistant`, text: `Done with step one.` },
         ]);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `Step two.` }], { head: () => ({ prompt: `Continue` }) }));
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `Step two.` }], { head: () => ({ prompt: `Continue` }) }));
 
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `start the migration` },
             { role: `assistant`, text: `Done with step one.` },
             { role: `user`, text: `Continue` },
@@ -2938,15 +2964,15 @@ describe(`Conversation`, () => {
     // tests".
     it(`reattach appends when the transcript's last prompt only looks like the running one`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `Continue with the tests` },
             { role: `assistant`, text: `All green.` },
         ]);
-        sandboxRequestMock.mockImplementation(sseResponse([], { head: () => ({ prompt: `Continue` }) }));
+        daemon.mockImplementation(turnDaemon([], { head: () => ({ prompt: `Continue` }) }));
 
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `Continue with the tests` },
             { role: `assistant`, text: `All green.` },
             { role: `user`, text: `Continue` },
@@ -2957,16 +2983,16 @@ describe(`Conversation`, () => {
     // matches the existing bubble so the run continues under the original question.
     it(`reattach continues the original prompt when the daemon resumed the turn`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.restoreMessages([{ role: `user`, text: `refactor the store` }]);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `delta`, text: `Picking it back up.` }], {
+        conversation.transcript.restoreMessages([{ role: `user`, text: `refactor the store` }]);
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `delta`, text: `Picking it back up.` }], {
                 head: () => ({ prompt: withResumeNote(`refactor the store`, RESUME_NOTES.auth) }),
             }),
         );
 
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the store` },
             { role: `notice`, text: expect.stringContaining(`sign-in renewed`) },
             { role: `assistant`, text: `Picking it back up.` },
@@ -2977,16 +3003,14 @@ describe(`Conversation`, () => {
     // reattaching to a run twice must redraw its answer, not duplicate it.
     it(`reattaching to a resumed park's run redraws its answer instead of stacking a second copy`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.restoreMessages([{ role: `user`, text: `which shape should it be?` }]);
+        conversation.transcript.restoreMessages([{ role: `user`, text: `which shape should it be?` }]);
         const carried = withResumeNote(`The user answered: a mode of the board.`, RESUME_NOTES.answered);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `delta`, text: `That settles it.` }], { head: () => ({ run: `r2`, prompt: carried }) }),
-        );
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `That settles it.` }], { head: () => ({ run: `r2`, prompt: carried }) }));
 
-        await expect(conversation.reattach()).resolves.toBe(true);
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `which shape should it be?` },
             // The answer the daemon carried in as its own bubble; the transcript hadn't shown it, and only one copy
             // survives.
@@ -2999,20 +3023,20 @@ describe(`Conversation`, () => {
     // twice must replace only its own answer, not truncate to the bubble.
     it(`reattaching to a re-run replaces only its own answer, keeping the dead run's work above it`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `refactor the store` },
             { role: `assistant`, text: `Got as far as the reducer.` },
         ]);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `delta`, text: `Picking it back up.` }], {
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `delta`, text: `Picking it back up.` }], {
                 head: () => ({ run: `r2`, prompt: withResumeNote(`refactor the store`, RESUME_NOTES.restart) }),
             }),
         );
 
-        await expect(conversation.reattach()).resolves.toBe(true);
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `refactor the store` },
             { role: `assistant`, text: `Got as far as the reducer.` },
             { role: `notice`, text: expect.stringContaining(`sandbox came back`) },
@@ -3029,12 +3053,12 @@ describe(`Conversation`, () => {
             { ...userRow(`fix the limit reset`, 1_000, []), run: `r1` },
             { role: `assistant`, text: `Tracing the retries.`, run: `r1` },
         ];
-        conversation.restoreMessages(rows);
-        sandboxRequestMock.mockImplementation(sseResponse([], { head: () => ({ rows: structuredClone(rows) }) }));
+        conversation.transcript.restoreMessages(rows);
+        daemon.mockImplementation(turnDaemon([], { head: () => ({ rows: structuredClone(rows) }) }));
 
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `fix the limit reset` },
             { role: `assistant`, text: `Tracing the retries.` },
         ]);
@@ -3048,14 +3072,12 @@ describe(`Conversation`, () => {
             { ...userRow(`fix the limit reset`, 1_000, []), run: `r1` },
             { role: `assistant`, text: `Tracing the retries.`, run: `r1` },
         ];
-        conversation.restoreMessages(shown);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([], { head: () => ({ rows: [...structuredClone(shown), { role: `assistant`, text: `Found it.` }] }) }),
-        );
+        conversation.transcript.restoreMessages(shown);
+        daemon.mockImplementation(turnDaemon([], { head: () => ({ rows: [...structuredClone(shown), { role: `assistant`, text: `Found it.` }] }) }));
 
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `fix the limit reset` },
             { role: `assistant`, text: `Tracing the retries.` },
             { role: `assistant`, text: `Found it.` },
@@ -3069,11 +3091,11 @@ describe(`Conversation`, () => {
         const conversation = new Conversation(`c1`);
         for (const answer of [`Tracing the retries.`, `Tracing the retries. Found it.`, `Tracing the retries. Found it. Fixed.`]) {
             const rows: TranscriptRow[] = [userRow(`fix the limit reset`, 1_000, []), { role: `assistant`, text: answer }];
-            sandboxRequestMock.mockImplementation(sseResponse([], { head: () => ({ rows: structuredClone(rows) }) }));
-            await expect(conversation.reattach()).resolves.toBe(true);
+            daemon.mockImplementation(turnDaemon([], { head: () => ({ rows: structuredClone(rows) }) }));
+            await expect(conversation.turn.reattach()).resolves.toBe(true);
         }
 
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `user`, text: `fix the limit reset` },
             { role: `assistant`, text: `Tracing the retries. Found it. Fixed.` },
         ]);
@@ -3082,11 +3104,11 @@ describe(`Conversation`, () => {
     /* The daemon refused the turn before running any of it, so the message was never part of the conversation. */
     it(`holds an undelivered message in the queue when the Claude credential is revoked`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `claude-reauth`, message: `Claude sign-in was revoked, reconnect the account.` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, code: `claude-reauth`, message: `Claude sign-in was revoked, reconnect the account.` }]),
         );
 
-        await conversation.send(`land the branch`, {
+        await conversation.turn.send(`land the branch`, {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
@@ -3098,8 +3120,8 @@ describe(`Conversation`, () => {
             account: `acct-dead`,
         });
 
-        expect(conversation.messages.value.map((message) => message.role)).toEqual([`notice`]);
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`land the branch`]);
+        expect(conversation.transcript.messages.value.map((message) => message.role)).toEqual([`notice`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`land the branch`]);
         // Muted, not the red error line: the fix is one click away on the banner this raises.
         expect(conversation.error.value).toBeNull();
     });
@@ -3108,8 +3130,8 @@ describe(`Conversation`, () => {
     // daemon has no record; this window's bubble is the only copy, held like a revoked credential.
     it(`holds the message when the harness ate it as an unknown slash command`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `error`,
                     code: `unknown-command`,
@@ -3118,7 +3140,7 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`/workspace view does not remember the file tree`, {
+        await conversation.turn.send(`/workspace view does not remember the file tree`, {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
@@ -3130,9 +3152,9 @@ describe(`Conversation`, () => {
             fast: false,
         });
 
-        expect(conversation.messages.value.map((message) => message.role)).toEqual([`notice`]);
+        expect(conversation.transcript.messages.value.map((message) => message.role)).toEqual([`notice`]);
         // Held verbatim, leading slash and all: retyping it is exactly what the user should not have to do.
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`/workspace view does not remember the file tree`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`/workspace view does not remember the file tree`]);
         // Muted: sending again is the fix, and the daemon now knows the command list well enough to let it past.
         expect(conversation.error.value).toBeNull();
     });
@@ -3141,8 +3163,8 @@ describe(`Conversation`, () => {
     // window; held and muted like the refusals above.
     it(`holds the message when the model's own window cannot hold the turn`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 {
                     kind: `error`,
                     code: `context-window-too-small`,
@@ -3151,7 +3173,7 @@ describe(`Conversation`, () => {
             ]),
         );
 
-        await conversation.send(`Are you there?`, {
+        await conversation.turn.send(`Are you there?`, {
             agent: `endpoint/tiny`,
             harness: `native`,
             actsAs: undefined,
@@ -3163,8 +3185,8 @@ describe(`Conversation`, () => {
             fast: false,
         });
 
-        expect(conversation.messages.value.map((message) => message.role)).toEqual([`notice`]);
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`Are you there?`]);
+        expect(conversation.transcript.messages.value.map((message) => message.role)).toEqual([`notice`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`Are you there?`]);
         expect(conversation.error.value).toBeNull();
     });
 
@@ -3172,9 +3194,9 @@ describe(`Conversation`, () => {
     // as the error, and the words held in the queue rather than lost or re-sent blindly.
     it(`says why the daemon refused the turn, and takes the undelivered message back`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `invalid attachment path: ../../etc/passwd` }), { status: 400 }));
+        daemon.mockRejectedValue(daemonRefusal(400, `invalid attachment path: ../../etc/passwd`));
 
-        await conversation.send(`redesign the settings page`, {
+        await conversation.turn.send(`redesign the settings page`, {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
@@ -3189,18 +3211,18 @@ describe(`Conversation`, () => {
         expect(conversation.error.value).toBe(
             `invalid attachment path: ../../etc/passwd Your message is held below: send it again once that's sorted.`,
         );
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`redesign the settings page`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`redesign the settings page`]);
         // Out of the transcript entirely: nothing about this send is part of the conversation, here or daemon-side.
-        expect(conversation.messages.value).toEqual([]);
+        expect(conversation.transcript.messages.value).toEqual([]);
     });
 
     // A 409 means a turn is already running, so these words belong to it as steering; the queue must stay free to
     // flush once it settles.
     it(`leaves the queue alone when the refusal is that a turn is already running`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockResolvedValue(new Response(JSON.stringify({ message: `a turn is already running` }), { status: 409 }));
+        daemon.mockRejectedValue(daemonRefusal(409, `a turn is already running`));
 
-        await conversation.send(`and the docs`, {
+        await conversation.turn.send(`and the docs`, {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
@@ -3214,7 +3236,7 @@ describe(`Conversation`, () => {
 
         expect(conversation.error.value).toContain(`turn`);
         expect(conversation.error.value).toContain(`running`);
-        expect(conversation.queued.value).toEqual([]);
+        expect(conversation.turn.queued.value).toEqual([]);
     });
 
     // A request that never completed (unreachable daemon, dropped tunnel) is neither a status nor a frame, and must
@@ -3222,56 +3244,58 @@ describe(`Conversation`, () => {
     it(`hands the words back when the request never reached the daemon`, async () => {
         const conversation = new Conversation(`c1`);
         const shot = { name: `setup.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/setup.png` };
-        sandboxRequestMock.mockRejectedValue(new Error(`Your sandbox isn't reachable yet, finish setup so it registers its address.`));
+        daemon.mockRejectedValue(new Error(`Your sandbox isn't reachable yet, finish setup so it registers its address.`));
 
-        await conversation.send(`the setup view is too scary`, settings, [shot]);
+        await conversation.turn.send(`the setup view is too scary`, settings, [shot]);
 
         expect(conversation.error.value).toBe(
             `Your sandbox isn't reachable yet, finish setup so it registers its address. Your message is held below, send it again to deliver it.`,
         );
         // Held whole, attachment and all: the queue is the only place this survives.
-        expect(conversation.queued.value.map((message) => [message.text, message.attachments])).toEqual([[`the setup view is too scary`, [shot]]]);
+        expect(conversation.turn.queued.value.map((message) => [message.text, message.attachments])).toEqual([
+            [`the setup view is too scary`, [shot]],
+        ]);
         // And out of the transcript: no daemon anywhere has a record of it.
-        expect(conversation.messages.value).toEqual([]);
+        expect(conversation.transcript.messages.value).toEqual([]);
     });
 
     // A Stop on a send that never became a turn must not arm the continue offer: nothing is behind it to resume, and
     // it must not open a fresh session on the bare word "Continue".
     it(`stands the continue offer down when the stopped send never became a turn`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation((path, init) => {
+        daemon.mockImplementation((procedure, input, options) => {
             // No run to cancel since the send never became one; the daemon's 404 is what sends the stop back to this
             // window.
-            if (path === `/agent/stop`) {
-                return Promise.resolve({ ok: false, status: 404 } as Response);
+            if (procedure === `agent.stop`) {
+                return Promise.reject(daemonRefusal(404));
             }
-            if (path !== `/agent`) {
-                return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+            if (procedure !== `agent.run`) {
+                return Promise.resolve({});
             }
             // Hangs exactly as a send into a stalled daemon does, and dies the way fetch does when Stop aborts it.
-            return new Promise<Response>((_resolve, reject) => {
-                init?.signal?.addEventListener(`abort`, () => reject(new DOMException(`aborted`, `AbortError`)));
+            return new Promise<never>((_resolve, reject) => {
+                options?.signal?.addEventListener(`abort`, () => reject(new DOMException(`aborted`, `AbortError`)));
             });
         });
 
-        const turn = conversation.send(`the setup view is too scary`, settings);
-        expect(conversation.streaming.value).toBe(true);
-        conversation.stop();
+        const turn = conversation.turn.send(`the setup view is too scary`, settings);
+        expect(conversation.turn.streaming.value).toBe(true);
+        conversation.turn.stop();
         await turn;
 
         expect(conversation.pickUp.value).toBeUndefined();
-        expect(conversation.queued.value.map((message) => message.text)).toEqual([`the setup view is too scary`]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`the setup view is too scary`]);
         // A Stop is the user's own doing, so it says so and nothing more: no red line over a send they cancelled.
-        expect(conversation.messages.value.map((message) => [message.role, message.text])).toEqual([[`notice`, `Stopped.`]]);
+        expect(conversation.transcript.messages.value.map((message) => [message.role, message.text])).toEqual([[`notice`, `Stopped.`]]);
         expect(conversation.error.value).toBeNull();
     });
 
     it(`replays the held message once the account is reconnected`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `error`, code: `claude-reauth`, message: `Claude sign-in was revoked, reconnect the account.` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `error`, code: `claude-reauth`, message: `Claude sign-in was revoked, reconnect the account.` }]),
         );
-        await conversation.send(`land the branch`, {
+        await conversation.turn.send(`land the branch`, {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
@@ -3284,12 +3308,12 @@ describe(`Conversation`, () => {
         });
 
         // The reconnect: a new credential id, and the hold released.
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `Landed.` }]));
-        conversation.rebindAccount(`acct-new`);
-        await conversation.resume();
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `Landed.` }]));
+        conversation.selection.apply({ kind: `rebindAccount`, account: `acct-new` });
+        await conversation.turn.resume();
 
-        expect(conversation.queued.value).toEqual([]);
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+        expect(conversation.turn.queued.value).toEqual([]);
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `notice`, text: expect.stringContaining(`revoked`) as unknown as string },
             { role: `user`, text: `land the branch` },
             { role: `assistant`, text: `Landed.` },
@@ -3300,8 +3324,8 @@ describe(`Conversation`, () => {
     // and retire a session that still resumes fine.
     it(`keeps the session resumable across a reconnect`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }]));
-        await conversation.send(`hi`, {
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }]));
+        await conversation.turn.send(`hi`, {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
@@ -3313,8 +3337,8 @@ describe(`Conversation`, () => {
             account: `acct-dead`,
         });
 
-        conversation.rebindAccount(`acct-new`);
-        await conversation.send(`again`, {
+        conversation.selection.apply({ kind: `rebindAccount`, account: `acct-new` });
+        await conversation.turn.send(`again`, {
             agent: `claude`,
             harness: `native`,
             actsAs: undefined,
@@ -3326,7 +3350,7 @@ describe(`Conversation`, () => {
             account: `acct-new`,
         });
 
-        const body = JSON.parse(sandboxRequestMock.mock.calls.at(-2)![1]!.body as string) as Record<string, unknown>;
+        const body = wire(daemon.mock.calls.at(-2)![1]);
         expect(body[`sessionId`]).toBe(`s-1`);
     });
 
@@ -3336,8 +3360,8 @@ describe(`Conversation`, () => {
         // it comes back pending and offers Submit on an already-resolved requestId.
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
-        sandboxRequestMock.mockImplementation(
-            sseResponse(
+        daemon.mockImplementation(
+            turnDaemon(
                 [
                     { kind: `question`, requestId: `q1`, questions },
                     { kind: `resolved`, requestId: `q1`, reply: { kind: `question`, requestId: `q1`, answers: { Which: [`A`] } } },
@@ -3347,67 +3371,67 @@ describe(`Conversation`, () => {
             ),
         );
 
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { Which: [`A`] } });
+        expect(conversation.transcript.messages.value[1]!.question).toMatchObject({ status: `answered`, answers: { Which: [`A`] } });
         // Nothing is parked, so the composer is free and no card is asking for an answer that was already given.
-        expect(conversation.awaitingDecision.value).toBe(false);
+        expect(conversation.transcript.awaitingDecision.value).toBe(false);
     });
 
     it(`reattach reports false when nothing is running, leaving the transcript untouched`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockResolvedValue({ ok: false, status: 404 } as Response);
+        daemon.mockRejectedValue(daemonRefusal(404));
 
-        await expect(conversation.reattach()).resolves.toBe(false);
+        await expect(conversation.turn.reattach()).resolves.toBe(false);
 
-        expect(conversation.messages.value).toHaveLength(0);
-        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.transcript.messages.value).toHaveLength(0);
+        expect(conversation.turn.streaming.value).toBe(false);
         expect(conversation.error.value).toBeNull();
     });
 
     it(`surfaces a genuine 409 start without claiming which window owns the turn`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockResolvedValue({ ok: false, status: 409 } as Response);
+        daemon.mockRejectedValue(daemonRefusal(409));
 
-        await conversation.send(`Hi`, settings);
+        await conversation.turn.send(`Hi`, settings);
 
         expect(conversation.error.value).toContain(`turn`);
         expect(conversation.error.value).toContain(`running`);
-        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.turn.streaming.value).toBe(false);
     });
 
     it(`ignores empty prompts and re-entrant sends while streaming`, async () => {
         const conversation = new Conversation(`c1`);
-        await conversation.send(`   `, settings);
-        expect(conversation.messages.value).toHaveLength(0);
-        expect(sandboxRequestMock).not.toHaveBeenCalled();
+        await conversation.turn.send(`   `, settings);
+        expect(conversation.transcript.messages.value).toHaveLength(0);
+        expect(daemon).not.toHaveBeenCalled();
 
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `x` }], { stayOpen: true }));
-        const turn = conversation.send(`real`, settings);
-        await waitFor(() => expect(conversation.streaming.value).toBe(true));
-        await conversation.send(`while busy`, settings);
-        expect(conversation.messages.value.filter((message) => message.role === `user`)).toHaveLength(1);
-        conversation.stop();
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `x` }], { stayOpen: true }));
+        const turn = conversation.turn.send(`real`, settings);
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
+        await conversation.turn.send(`while busy`, settings);
+        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toHaveLength(1);
+        conversation.turn.stop();
         await turn;
     });
 
     it(`redraws a restored transcript with its thinking and tool cards`, () => {
         const conversation = new Conversation(`c1`);
 
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `fix it` },
             { role: `assistant`, text: `Reading.`, thinking: `hmm`, tools: [{ id: `t1`, name: `Read`, category: `read`, status: `completed` }] },
         ]);
 
-        expect(conversation.messages.value).toHaveLength(2);
-        expect(conversation.messages.value[1]).toMatchObject({
+        expect(conversation.transcript.messages.value).toHaveLength(2);
+        expect(conversation.transcript.messages.value[1]).toMatchObject({
             role: `assistant`,
             text: `Reading.`,
             thinking: `hmm`,
             tools: [{ name: `Read`, status: `completed` }],
         });
         // Ids are minted locally and must stay unique, so a later streamed bubble can't collide with a restored one.
-        expect(new Set(conversation.messages.value.map((message) => message.id)).size).toBe(2);
+        expect(new Set(conversation.transcript.messages.value.map((message) => message.id)).size).toBe(2);
     });
 
     // Attachments are recovered from the stored prompt's note; the redrawn bubble shows them as named chips, not the
@@ -3415,11 +3439,11 @@ describe(`Conversation`, () => {
     it(`redraws a restored message's attachments as chips`, () => {
         const conversation = new Conversation(`c1`);
 
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `analyze this`, attachments: [`${STATE_DIR}/records/artifacts/attachments/uuid-1/image.png`] },
         ]);
 
-        expect(conversation.messages.value[0]).toMatchObject({
+        expect(conversation.transcript.messages.value[0]).toMatchObject({
             role: `user`,
             text: `analyze this`,
             attachments: [`.intentic/records/artifacts/attachments/uuid-1/image.png`],
@@ -3431,12 +3455,12 @@ describe(`Conversation`, () => {
     it(`leaves an isolated conversation's posture alone when its transcript is restored`, () => {
         const conversation = new Conversation(`c1`);
         conversation.isolated.value = true;
-        conversation.provider.value = `codex`;
+        conversation.selection.apply({ kind: `set`, picks: { provider: `codex` } });
 
-        conversation.restoreMessages([{ role: `user`, text: `hi` }]);
+        conversation.transcript.restoreMessages([{ role: `user`, text: `hi` }]);
 
         expect(conversation.isolated.value).toBe(true);
-        expect(conversation.provider.value).toBe(`codex`);
+        expect(conversation.selection.provider.value).toBe(`codex`);
     });
 });
 
@@ -3447,13 +3471,15 @@ describe(`the transcript's clock`, () => {
         const conversation = new Conversation(`c-parked`);
         // Frames requested but never delivered, as with a minimized window.
         stubGlobal(`requestAnimationFrame`, () => 0);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `hi` }], { stayOpen: true }));
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `hi` }], { stayOpen: true }));
 
-        const turn = conversation.send(`go`, settings);
+        const turn = conversation.turn.send(`go`, settings);
 
-        await waitFor(() => expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `hi` }), { timeout: 2_000 });
+        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `hi` }), {
+            timeout: 2_000,
+        });
 
-        conversation.stop();
+        conversation.turn.stop();
         await turn;
     });
 
@@ -3461,8 +3487,8 @@ describe(`the transcript's clock`, () => {
     // is drawn; rewinding must use the daemon's index, not the bubble's.
     it(`rewinds by the daemon's transcript index and truncates by the bubble's, then drops the session`, async () => {
         const conversation = new Conversation(`c-rewind`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 // index 0: the daemon has this turn's user message at the head of its record.
                 { kind: `checkpoint`, id: `cp-1`, index: 0 },
@@ -3470,21 +3496,19 @@ describe(`the transcript's clock`, () => {
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`first`, settings);
+        await conversation.turn.send(`first`, settings);
         expect(conversation.session.value).toEqual(expect.any(Object));
 
-        const user = conversation.messages.value[0];
+        const user = conversation.transcript.messages.value[0];
         expect(user).toMatchObject({ role: `user`, checkpointId: `cp-1`, rewindIndex: 0 });
 
-        sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ snapshot: `cp-1`, dropped: 2 }), { status: 200 }));
-        expect(await conversation.rewindTo(user!)).toBe(true);
+        daemon.mockResolvedValue({ snapshot: `cp-1`, dropped: 2 });
+        expect(await conversation.transcript.rewindTo(user!)).toBe(true);
 
-        const [path, init] = sandboxRequestMock.mock.calls.at(-1)!;
-        expect(path).toBe(`/agent/rewind`);
-        expect(JSON.parse(init!.body as string)).toEqual({ conversationId: `c-rewind`, index: 0 });
+        expect(daemon).toHaveBeenLastCalledWith(`agent.rewind`, { conversationId: `c-rewind`, index: 0 }, { context: { at: undefined } });
         // Everything from the rewound message on is gone and the session drops; the notice is the only place that says
         // so, including that the workspace moved too.
-        expect(conversation.messages.value).toEqual([
+        expect(conversation.transcript.messages.value).toEqual([
             expect.objectContaining({ role: `notice`, text: `Went back to here, 2 messages dropped and the files restored to this point.` }),
         ]);
         expect(conversation.session.value).toBeUndefined();
@@ -3492,53 +3516,53 @@ describe(`the transcript's clock`, () => {
 
     it(`leaves the tab untouched when the daemon refuses the rewind`, async () => {
         const conversation = new Conversation(`c-busy`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `checkpoint`, id: `cp-1`, index: 0 }, { kind: `done` }]),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `checkpoint`, id: `cp-1`, index: 0 }, { kind: `done` }]),
         );
-        await conversation.send(`first`, settings);
-        const before = conversation.messages.value.length;
+        await conversation.turn.send(`first`, settings);
+        const before = conversation.transcript.messages.value.length;
 
-        sandboxRequestMock.mockImplementation(async () => new Response(`busy`, { status: 409 }));
-        expect(await conversation.rewindTo(conversation.messages.value[0]!)).toBe(false);
+        daemon.mockRejectedValue(daemonRefusal(409));
+        expect(await conversation.transcript.rewindTo(conversation.transcript.messages.value[0]!)).toBe(false);
 
         // A transcript cut against a workspace that never moved is the one state with no way back.
-        expect(conversation.messages.value).toHaveLength(before);
+        expect(conversation.transcript.messages.value).toHaveLength(before);
         expect(conversation.session.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toContain(`running a turn`);
     });
 });
 
-// Conversation.beginEdit/cancelEdit/submitEdit: editing a sent message. Arming destroys and sends nothing, so
+// TranscriptView.beginEdit/cancelEdit/submitEdit: editing a sent message. Arming destroys and sends nothing, so
 // cancel costs nothing; only submit spends the rewind, and only if it lands does anything go out.
 describe(`Conversation editing a sent message`, () => {
     // One turn, checkpointed, with the session live: the state every edit starts from.
     const settled = async (id: string): Promise<Conversation> => {
         const conversation = new Conversation(id);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([
+        daemon.mockImplementation(
+            turnDaemon([
                 { kind: `session`, sessionId: `s-1` },
                 { kind: `checkpoint`, id: `cp-1`, index: 0 },
                 { kind: `delta`, text: `done` },
                 { kind: `done` },
             ]),
         );
-        await conversation.send(`frist`, settings);
+        await conversation.turn.send(`frist`, settings);
         return conversation;
     };
 
     it(`arms without touching the transcript, the files or the session`, async () => {
         const conversation = await settled(`c-edit-arm`);
         conversation.draft.value = `something half-written`;
-        const before = [...conversation.messages.value];
-        sandboxRequestMock.mockClear();
+        const before = [...conversation.transcript.messages.value];
+        daemon.mockClear();
 
-        expect(conversation.beginEdit(conversation.messages.value[0]!)).toBe(true);
+        expect(conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!)).toBe(true);
 
         // Old words are in the box, the transcript untouched, and the daemon never asked: nothing yet to undo.
         expect(conversation.draft.value).toBe(`frist`);
-        expect(conversation.messages.value).toEqual(before);
+        expect(conversation.transcript.messages.value).toEqual(before);
         expect(conversation.session.value).toEqual(expect.any(Object));
-        expect(sandboxRequestMock).not.toHaveBeenCalled();
+        expect(daemon).not.toHaveBeenCalled();
     });
 
     // Entering an edit must not eat a half-written draft, the one thing here the app cannot recover (see `unsent`).
@@ -3546,69 +3570,69 @@ describe(`Conversation editing a sent message`, () => {
         const conversation = await settled(`c-edit-cancel`);
         conversation.draft.value = `something half-written`;
 
-        conversation.beginEdit(conversation.messages.value[0]!);
+        conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
         conversation.draft.value = `retyped`;
-        conversation.cancelEdit();
+        conversation.transcript.cancelEdit();
 
         expect(conversation.draft.value).toBe(`something half-written`);
-        expect(conversation.editing.value).toBeUndefined();
+        expect(conversation.transcript.editing.value).toBeUndefined();
     });
 
     it(`refuses to arm on a message with no state to go back to`, async () => {
         const conversation = new Conversation(`c-edit-uncheckpointed`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `hi` }, { kind: `done` }]));
-        await conversation.send(`first`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `hi` }, { kind: `done` }]));
+        await conversation.turn.send(`first`, settings);
 
         // No checkpoint means no anchor: files can't be restored, so an edit here would start the replacement on the
         // work
         // it should discard.
-        expect(conversation.messages.value[0]?.rewindIndex).toBeUndefined();
-        expect(conversation.beginEdit(conversation.messages.value[0]!)).toBe(false);
-        expect(conversation.editing.value).toBeUndefined();
+        expect(conversation.transcript.messages.value[0]?.rewindIndex).toBeUndefined();
+        expect(conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!)).toBe(false);
+        expect(conversation.transcript.editing.value).toBeUndefined();
     });
 
     // The rewind must go first and the send only if it lands; reversed, the replacement would run against a workspace
     // still holding the discarded turns.
     it(`rewinds to the message and sends the replacement in its place`, async () => {
         const conversation = await settled(`c-edit-send`);
-        conversation.beginEdit(conversation.messages.value[0]!);
+        conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
         conversation.draft.value = `first`;
 
         const calls: string[] = [];
-        const turn = sseResponse([{ kind: `delta`, text: `better` }, { kind: `done` }]);
-        sandboxRequestMock.mockImplementation(async (path: string, init?: RequestInit) => {
-            calls.push(path);
-            return path === `/agent/rewind` ? new Response(JSON.stringify({ snapshot: `cp-1`, dropped: 2 }), { status: 200 }) : turn(path, init);
+        const turn = turnDaemon([{ kind: `delta`, text: `better` }, { kind: `done` }]);
+        daemon.mockImplementation(async (procedure: string, input: unknown, options?: CallOptions) => {
+            calls.push(procedure);
+            return procedure === `agent.rewind` ? { snapshot: `cp-1`, dropped: 2 } : turn(procedure, input, options);
         });
 
-        expect(await conversation.submitEdit(`first`)).toBe(true);
+        expect(await conversation.transcript.submitEdit(`first`)).toBe(true);
 
         // The rewind went first, and the turn only after it.
-        expect(calls[0]).toBe(`/agent/rewind`);
-        expect(calls.slice(1).some((path) => path !== `/agent/rewind`)).toBe(true);
-        expect(conversation.editing.value).toBeUndefined();
+        expect(calls[0]).toBe(`agent.rewind`);
+        expect(calls.slice(1).some((called) => called !== `agent.rewind`)).toBe(true);
+        expect(conversation.transcript.editing.value).toBeUndefined();
         // The notice names the edit, not the rewind underneath it, so it doesn't read as an unrelated rewind plus a
         // fresh
         // prompt.
-        expect(conversation.messages.value[0]).toMatchObject({
+        expect(conversation.transcript.messages.value[0]).toMatchObject({
             role: `notice`,
             text: `Edited this message, 2 messages dropped and the files restored to this point.`,
         });
-        expect(conversation.messages.value[1]).toMatchObject({ role: `user`, text: `first` });
+        expect(conversation.transcript.messages.value[1]).toMatchObject({ role: `user`, text: `first` });
     });
 
     // A refused rewind leaves the chat untouched, its reason shown, and the edit still armed so the press works once
     // the turn ends.
     it(`sends nothing and stays armed when the rewind is refused`, async () => {
         const conversation = await settled(`c-edit-refused`);
-        conversation.beginEdit(conversation.messages.value[0]!);
-        const before = [...conversation.messages.value];
+        conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
+        const before = [...conversation.transcript.messages.value];
 
-        sandboxRequestMock.mockImplementation(async () => new Response(`busy`, { status: 409 }));
-        expect(await conversation.submitEdit(`try again`)).toBe(false);
+        daemon.mockRejectedValue(daemonRefusal(409));
+        expect(await conversation.transcript.submitEdit(`try again`)).toBe(false);
 
-        expect(conversation.messages.value).toEqual(before);
-        expect(conversation.editing.value).toEqual(expect.any(Object));
+        expect(conversation.transcript.messages.value).toEqual(before);
+        expect(conversation.transcript.editing.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toContain(`running a turn`);
     });
 
@@ -3616,68 +3640,64 @@ describe(`Conversation editing a sent message`, () => {
     // message; an edit resolved by id alone would silently replace the wrong turn.
     it(`disarms when the transcript underneath it is replaced wholesale`, async () => {
         const conversation = await settled(`c-edit-replaced`);
-        conversation.beginEdit(conversation.messages.value[0]!);
-        expect(conversation.editing.value).toEqual(expect.any(Object));
+        conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
+        expect(conversation.transcript.editing.value).toEqual(expect.any(Object));
 
         // A different record, whose first message carries the id the edit was armed on.
-        conversation.restoreMessages([{ role: `user`, text: `a different conversation entirely` }]);
-        sandboxRequestMock.mockClear();
+        conversation.transcript.restoreMessages([{ role: `user`, text: `a different conversation entirely` }]);
+        daemon.mockClear();
 
-        expect(conversation.editing.value).toBeUndefined();
-        expect(await conversation.submitEdit(`replacement`)).toBe(false);
-        expect(sandboxRequestMock).not.toHaveBeenCalled();
-        expect(conversation.messages.value).toEqual([expect.objectContaining({ text: `a different conversation entirely` })]);
+        expect(conversation.transcript.editing.value).toBeUndefined();
+        expect(await conversation.transcript.submitEdit(`replacement`)).toBe(false);
+        expect(daemon).not.toHaveBeenCalled();
+        expect(conversation.transcript.messages.value).toEqual([expect.objectContaining({ text: `a different conversation entirely` })]);
     });
 
     // A plain rewind also renumbers every surviving message, so an armed edit must disarm here too.
     it(`disarms when a plain rewind renumbers the messages under it`, async () => {
         const conversation = await settled(`c-edit-rewound`);
-        conversation.beginEdit(conversation.messages.value[0]!);
+        conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
 
-        sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ snapshot: `cp-1`, dropped: 2 }), { status: 200 }));
-        expect(await conversation.rewindTo(conversation.messages.value[0]!)).toBe(true);
+        daemon.mockResolvedValue({ snapshot: `cp-1`, dropped: 2 });
+        expect(await conversation.transcript.rewindTo(conversation.transcript.messages.value[0]!)).toBe(true);
 
-        expect(conversation.editing.value).toBeUndefined();
+        expect(conversation.transcript.editing.value).toBeUndefined();
         // And it is the REWIND's own sentence, not the edit's: nobody edited anything here.
-        expect(conversation.messages.value[0]).toMatchObject({
+        expect(conversation.transcript.messages.value[0]).toMatchObject({
             text: `Went back to here, 2 messages dropped and the files restored to this point.`,
         });
     });
 });
 
-// Conversation.placeAsAgent: the tab's half of agents.place. The daemon appends the row and drops the provider
+// TranscriptView.placeAsAgent: the tab's half of agents.place. The daemon appends the row and drops the provider
 // session; a refusal must move nothing here either.
 describe(`Conversation placeAsAgent`, () => {
     it(`appends a marked agent bubble and drops the session, so the next send starts a fresh thread`, async () => {
         const conversation = new Conversation(`c-place`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `done` }, { kind: `done` }]),
-        );
-        await conversation.send(`first`, settings);
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `delta`, text: `done` }, { kind: `done` }]));
+        await conversation.turn.send(`first`, settings);
         expect(conversation.session.value).toEqual(expect.any(Object));
 
-        sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
-        expect(await conversation.placeAsAgent(`I checked the tests.`)).toBe(true);
+        daemon.mockResolvedValue({ ok: true });
+        expect(await conversation.transcript.placeAsAgent(`I checked the tests.`)).toBe(true);
 
-        const [path, init] = sandboxRequestMock.mock.calls.at(-1)!;
-        expect(path).toBe(`/agents/c-place/place`);
-        expect(JSON.parse(init!.body as string)).toEqual({ text: `I checked the tests.` });
+        expect(daemon).toHaveBeenLastCalledWith(`agents.place`, { id: `c-place`, text: `I checked the tests.` }, { context: { at: undefined } });
         // The bubble reads as the agent's, carrying the mark whose one audience is the human re-reading this.
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `I checked the tests.`, placed: true });
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `I checked the tests.`, placed: true });
         // And the local session matches the daemon's forgotten one: the next send resumes nothing.
         expect(conversation.session.value).toBeUndefined();
     });
 
     it(`leaves the tab untouched when the daemon refuses the place`, async () => {
         const conversation = new Conversation(`c-place-busy`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));
-        await conversation.send(`first`, settings);
-        const before = conversation.messages.value.length;
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));
+        await conversation.turn.send(`first`, settings);
+        const before = conversation.transcript.messages.value.length;
 
-        sandboxRequestMock.mockImplementation(async () => new Response(`busy`, { status: 409 }));
-        expect(await conversation.placeAsAgent(`planted`)).toBe(false);
+        daemon.mockRejectedValue(daemonRefusal(409));
+        expect(await conversation.transcript.placeAsAgent(`planted`)).toBe(false);
 
-        expect(conversation.messages.value).toHaveLength(before);
+        expect(conversation.transcript.messages.value).toHaveLength(before);
         expect(conversation.session.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toContain(`running a turn`);
     });
@@ -3686,27 +3706,27 @@ describe(`Conversation placeAsAgent`, () => {
     // only thing naming which audience missed it, so it surfaces verbatim.
     it(`surfaces the daemon's sentence when the channel delivery is refused`, async () => {
         const conversation = new Conversation(`c-place-channel`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));
-        await conversation.send(`first`, settings);
-        const before = conversation.messages.value.length;
+        daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `done` }]));
+        await conversation.turn.send(`first`, settings);
+        const before = conversation.transcript.messages.value.length;
 
         const daemonMessage = `the discord gateway is not running, so the message cannot reach the channel`;
-        sandboxRequestMock.mockImplementation(async () => new Response(JSON.stringify({ message: daemonMessage }), { status: 502 }));
-        expect(await conversation.placeAsAgent(`planted`)).toBe(false);
+        daemon.mockRejectedValue(daemonRefusal(502, daemonMessage));
+        expect(await conversation.transcript.placeAsAgent(`planted`)).toBe(false);
 
-        expect(conversation.messages.value).toHaveLength(before);
+        expect(conversation.transcript.messages.value).toHaveLength(before);
         expect(conversation.error.value).toContain(`discord gateway`);
     });
 
     // The mark survives a reopen: the record's `placed` maps back onto the bubble a restored tab draws.
     it(`restores a placed row with its mark`, () => {
         const conversation = new Conversation(`c-place-restore`);
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `map the flow` },
             { role: `assistant`, text: `I checked the tests.`, placed: true },
         ]);
-        expect(conversation.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `I checked the tests.`, placed: true });
-        expect(conversation.messages.value[0]).not.toHaveProperty(`placed`);
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `I checked the tests.`, placed: true });
+        expect(conversation.transcript.messages.value[0]).not.toHaveProperty(`placed`);
     });
 });
 
@@ -3715,31 +3735,31 @@ describe(`Conversation placeAsAgent`, () => {
 describe(`Conversation sent time`, () => {
     it(`stamps a message the user sends here with the moment it was sent`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `On it.` }, { kind: `done` }]));
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `On it.` }, { kind: `done` }]));
 
         const before = Date.now();
-        await conversation.send(`Hi there`, settings);
+        await conversation.turn.send(`Hi there`, settings);
 
-        const sentAt = conversation.messages.value[0]?.sentAt;
+        const sentAt = conversation.transcript.messages.value[0]?.sentAt;
         expect(sentAt).toBeGreaterThanOrEqual(before);
         expect(sentAt).toBeLessThanOrEqual(Date.now());
         // Only the user's row gets a stamp; nothing in the stream says when part of the answer was written, and a
         // guessed
         // time is worse than none.
-        expect(conversation.messages.value[1]?.sentAt).toBeUndefined();
+        expect(conversation.transcript.messages.value[1]?.sentAt).toBeUndefined();
     });
 
     // A turn already running before this tab attached is drawn now but was sent then, so its bubble takes the run's
     // start time, not the attach moment.
     it(`takes the running turn's own start for a bubble drawn on reattach`, async () => {
         const conversation = new Conversation(`c1`);
-        sandboxRequestMock.mockImplementation(
-            sseResponse([{ kind: `delta`, text: `On it.` }], { head: () => ({ prompt: `refactor the parser`, startedAt: 1234 }) }),
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `delta`, text: `On it.` }], { head: () => ({ prompt: `refactor the parser`, startedAt: 1234 }) }),
         );
 
-        await expect(conversation.reattach()).resolves.toBe(true);
+        await expect(conversation.turn.reattach()).resolves.toBe(true);
 
-        expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: `refactor the parser`, sentAt: 1234 });
+        expect(conversation.transcript.messages.value[0]).toMatchObject({ role: `user`, text: `refactor the parser`, sentAt: 1234 });
     });
 
     // The daemon writes `sentAt` beside the words (TranscriptRow.sentAt); a redraw from the record must not re-date
@@ -3747,16 +3767,16 @@ describe(`Conversation sent time`, () => {
     it(`keeps the daemon's stamp when a stored transcript is restored`, () => {
         const conversation = new Conversation(`c1`);
 
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `start the migration`, sentAt: 1_767_225_600_000 },
             { role: `assistant`, text: `Done with step one.` },
         ]);
 
-        expect(conversation.messages.value.map((message) => message.sentAt)).toEqual([1_767_225_600_000, undefined]);
+        expect(conversation.transcript.messages.value.map((message) => message.sentAt)).toEqual([1_767_225_600_000, undefined]);
     });
 
     // Conversation.box: a conversation homed in another sandbox. No leg (send/attach/stop) may point at the wrong
-    // box. Asserted against the reach argument, since that's invisible in the path itself.
+    // box. Asserted against each call's context, since nothing in the input says where it went.
     describe(`homed in another sandbox`, () => {
         const remote = (): Conversation => {
             const conversation = new Conversation(`c-elsewhere`);
@@ -3766,48 +3786,48 @@ describe(`Conversation sent time`, () => {
 
         it(`starts the turn on that box's daemon and follows the run there`, async () => {
             const conversation = remote();
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `on it` }, { kind: `done` }]));
+            daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }]));
 
-            await conversation.send(`do it over there`, settings);
+            await conversation.turn.send(`do it over there`, settings);
 
-            expect(pathsAimedAt(`sbx-there`)).toEqual([`/agent`, `/agent/attach`]);
-            expect(pathsAimedAt(undefined)).toEqual([]);
+            expect(proceduresAimedAt(`sbx-there`)).toEqual([`agent.run`, `agent.attach`]);
+            expect(proceduresAimedAt(undefined)).toEqual([]);
         });
 
         // `registered` normally latches on a roster frame; this browser streams only one sandbox, so without the ack
         // fallback a remote tab would stay a draft forever and show a phantom New-agent card.
         it(`counts as registered from the daemon's ack, since no roster frame here will ever say so`, async () => {
             const conversation = remote();
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+            daemon.mockImplementation(turnDaemon([{ kind: `done` }]));
 
             expect(conversation.registered.value).toBe(false);
-            await conversation.send(`start`, settings);
+            await conversation.turn.send(`start`, settings);
             expect(conversation.registered.value).toBe(true);
         });
 
         // A local conversation keeps the roster-frame latch; the ack alone isn't evidence when a proper stream exists.
         it(`leaves a local conversation's registration to the roster`, async () => {
             const conversation = new Conversation(`c-here`);
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+            daemon.mockImplementation(turnDaemon([{ kind: `done` }]));
 
-            await conversation.send(`start`, settings);
+            await conversation.turn.send(`start`, settings);
 
             expect(conversation.registered.value).toBe(false);
-            expect(pathsAimedAt(undefined)).toEqual([`/agent`, `/agent/attach`]);
+            expect(proceduresAimedAt(undefined)).toEqual([`agent.run`, `agent.attach`]);
         });
 
         // Stop is the side channel, and it has to reach the daemon actually running the turn.
         it(`stops the turn at the box running it`, async () => {
             const conversation = remote();
-            sandboxRequestMock.mockImplementation(sseResponse([{ kind: `delta`, text: `working` }], { stayOpen: true }));
+            daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true }));
 
-            const sending = conversation.send(`long one`, settings);
-            await waitFor(() => expect(conversation.streaming.value).toBe(true));
-            conversation.stop();
+            const sending = conversation.turn.send(`long one`, settings);
+            await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
+            conversation.turn.stop();
             await sending;
 
-            expect(pathsAimedAt(`sbx-there`)).toContain(`/agent/stop`);
-            expect(pathsAimedAt(undefined)).toEqual([]);
+            expect(proceduresAimedAt(`sbx-there`)).toContain(`agent.stop`);
+            expect(proceduresAimedAt(undefined)).toEqual([]);
         });
     });
 });
@@ -3816,13 +3836,16 @@ describe(`Conversation sent time`, () => {
 // recent turns and says where they start (sessions/transcript-record.ts); paging back must not cost what's
 // already on screen.
 describe(`older history`, () => {
-    // The daemon's answer to `GET /agents/{id}/transcript?before=N`, as the fetch layer reads it.
-    const olderPage = (messages: readonly TranscriptRow[], from: number, more: boolean): Response =>
-        new Response(JSON.stringify({ messages, from, more }), { status: 200, headers: { "content-type": `application/json` } });
+    // The daemon's answer to `agents.transcript` with a `before`, as the typed client hands it back.
+    const olderPage = (messages: TranscriptRow[], from: number, more: boolean): { messages: TranscriptRow[]; from: number; more: boolean } => ({
+        messages,
+        from,
+        more,
+    });
 
     const opened = (): Conversation => {
         const conversation = new Conversation(`c1`);
-        conversation.restoreMessages(
+        conversation.transcript.restoreMessages(
             [
                 { role: `user`, text: `turn 20` },
                 { role: `assistant`, text: `answer 20` },
@@ -3834,24 +3857,24 @@ describe(`older history`, () => {
 
     it(`opens on a window that knows it is one`, () => {
         const conversation = opened();
-        expect(conversation.historyFrom.value).toBe(40);
-        expect(conversation.historyMore.value).toBe(true);
+        expect(conversation.transcript.historyFrom.value).toBe(40);
+        expect(conversation.transcript.historyMore.value).toBe(true);
     });
 
     // A conversation that fits in one window says so, and is the case that must offer nothing: most of them.
     it(`offers nothing to page back through when the record arrived whole`, async () => {
         const conversation = new Conversation(`c1`);
-        conversation.restoreMessages([{ role: `user`, text: `hello` }], { from: 0, more: false });
+        conversation.transcript.restoreMessages([{ role: `user`, text: `hello` }], { from: 0, more: false });
 
-        await conversation.loadOlder();
+        await conversation.transcript.loadOlder();
 
-        expect(conversation.historyMore.value).toBe(false);
-        expect(pathsAimedAt(undefined)).toEqual([]);
+        expect(conversation.transcript.historyMore.value).toBe(false);
+        expect(proceduresAimedAt(undefined)).toEqual([]);
     });
 
     it(`puts the older page above what is drawn and moves the cursor to it`, async () => {
         const conversation = opened();
-        sandboxRequestMock.mockResolvedValue(
+        daemon.mockResolvedValue(
             olderPage(
                 [
                     { role: `user`, text: `turn 19` },
@@ -3862,20 +3885,20 @@ describe(`older history`, () => {
             ),
         );
 
-        await conversation.loadOlder();
+        await conversation.transcript.loadOlder();
 
-        expect(conversation.messages.value.map(({ text }) => text)).toEqual([`turn 19`, `answer 19`, `turn 20`, `answer 20`]);
-        expect(conversation.historyFrom.value).toBe(38);
-        expect(conversation.historyMore.value).toBe(true);
-        expect(pathsAimedAt(undefined)).toEqual([`/agents/c1/transcript?before=40`]);
+        expect(conversation.transcript.messages.value.map(({ text }) => text)).toEqual([`turn 19`, `answer 19`, `turn 20`, `answer 20`]);
+        expect(conversation.transcript.historyFrom.value).toBe(38);
+        expect(conversation.transcript.historyMore.value).toBe(true);
+        expect(daemon.mock.calls).toEqual([[`agents.transcript`, { id: `c1`, before: 40 }, { context: { at: undefined } }]]);
     });
 
     // Ids are identity, not order; a prepended page must not hand an older bubble the id of one already on screen,
     // since a live patch addresses messages by id and a collision would misapply it.
     it(`gives the arriving rows ids of their own`, async () => {
         const conversation = opened();
-        const standing = conversation.messages.value.map((message) => message.id);
-        sandboxRequestMock.mockResolvedValue(
+        const standing = conversation.transcript.messages.value.map((message) => message.id);
+        daemon.mockResolvedValue(
             olderPage(
                 [
                     { role: `user`, text: `turn 19` },
@@ -3886,9 +3909,9 @@ describe(`older history`, () => {
             ),
         );
 
-        await conversation.loadOlder();
+        await conversation.transcript.loadOlder();
 
-        const ids = conversation.messages.value.map((message) => message.id);
+        const ids = conversation.transcript.messages.value.map((message) => message.id);
         expect(new Set(ids).size).toBe(ids.length);
         // And the rows that were already drawn keep the ids they had, so nothing addressing them goes stale.
         expect(ids.slice(2)).toEqual(standing);
@@ -3897,95 +3920,95 @@ describe(`older history`, () => {
     // Reaching the beginning retires the offer, so the top of the record reads as the top of the record.
     it(`stops offering once the first page of the record lands`, async () => {
         const conversation = opened();
-        sandboxRequestMock.mockResolvedValue(olderPage([{ role: `user`, text: `turn 1` }], 0, false));
+        daemon.mockResolvedValue(olderPage([{ role: `user`, text: `turn 1` }], 0, false));
 
-        await conversation.loadOlder();
+        await conversation.transcript.loadOlder();
 
-        expect(conversation.historyFrom.value).toBe(0);
-        expect(conversation.historyMore.value).toBe(false);
+        expect(conversation.transcript.historyFrom.value).toBe(0);
+        expect(conversation.transcript.historyMore.value).toBe(false);
     });
 
     // Two presses against one cursor are the same page twice; the second is refused rather than queued.
     it(`reads one page per cursor however many times it is asked`, async () => {
         const conversation = opened();
-        sandboxRequestMock.mockResolvedValue(olderPage([{ role: `user`, text: `turn 19` }], 38, true));
+        daemon.mockResolvedValue(olderPage([{ role: `user`, text: `turn 19` }], 38, true));
 
-        await Promise.all([conversation.loadOlder(), conversation.loadOlder()]);
+        await Promise.all([conversation.transcript.loadOlder(), conversation.transcript.loadOlder()]);
 
-        expect(pathsAimedAt(undefined)).toEqual([`/agents/c1/transcript?before=40`]);
-        expect(conversation.messages.value.map(({ text }) => text)).toEqual([`turn 19`, `turn 20`, `answer 20`]);
+        expect(daemon.mock.calls).toEqual([[`agents.transcript`, { id: `c1`, before: 40 }, { context: { at: undefined } }]]);
+        expect(conversation.transcript.messages.value.map(({ text }) => text)).toEqual([`turn 19`, `turn 20`, `answer 20`]);
     });
 
     // A failed read costs nothing: the transcript stays as it was and the offer stands, so retrying is the same press
     // again.
     it(`leaves the transcript and the offer alone when the read fails`, async () => {
         const conversation = opened();
-        sandboxRequestMock.mockRejectedValue(new Error(`tunnel closed`));
+        daemon.mockRejectedValue(new Error(`tunnel closed`));
 
-        await expect(conversation.loadOlder()).resolves.toBeUndefined();
+        await expect(conversation.transcript.loadOlder()).resolves.toBeUndefined();
 
-        expect(conversation.messages.value.map(({ text }) => text)).toEqual([`turn 20`, `answer 20`]);
-        expect(conversation.historyFrom.value).toBe(40);
-        expect(conversation.historyMore.value).toBe(true);
-        expect(conversation.loadingOlder.value).toBe(false);
+        expect(conversation.transcript.messages.value.map(({ text }) => text)).toEqual([`turn 20`, `answer 20`]);
+        expect(conversation.transcript.historyFrom.value).toBe(40);
+        expect(conversation.transcript.historyMore.value).toBe(true);
+        expect(conversation.transcript.loadingOlder.value).toBe(false);
     });
 
     // A redraw (rewind, runtime handoff) replaces the window, so the cursor must move with it; a stale `historyFrom`
     // would fetch rows that no longer sit above anything on screen.
     it(`re-aims the cursor when the transcript is redrawn under it`, () => {
         const conversation = opened();
-        conversation.restoreMessages([{ role: `user`, text: `only turn` }], { from: 0, more: false });
-        expect(conversation.historyFrom.value).toBe(0);
-        expect(conversation.historyMore.value).toBe(false);
+        conversation.transcript.restoreMessages([{ role: `user`, text: `only turn` }], { from: 0, more: false });
+        expect(conversation.transcript.historyFrom.value).toBe(0);
+        expect(conversation.transcript.historyMore.value).toBe(false);
     });
 
     // A caller with no page to report can't vouch for where its rows sit, so the cursor reads "this is all of it"
     // rather than a stale one.
     it(`drops the cursor for a redraw that cannot say where its rows sit`, () => {
         const conversation = opened();
-        conversation.restoreMessages([{ role: `user`, text: `from the mirror` }]);
-        expect(conversation.historyMore.value).toBe(false);
+        conversation.transcript.restoreMessages([{ role: `user`, text: `from the mirror` }]);
+        expect(conversation.transcript.historyMore.value).toBe(false);
     });
 });
 
 // An app errand whose words need a read first (a land conflict's fresh report). The turn opens at the call, so the chat
 // shows the errand's row and the working line through that read rather than nothing; the read's answer decides
 // whether anything is sent at all, and nothing about a turn that never went is left behind.
-describe(`Conversation.startErrand`, () => {
+describe(`TurnClient.startErrand`, () => {
     const opening = errands().landConflict.opening;
     const prompt = `${opening}\n\nWhat blocked the land:\nroot\n  - a.ts`;
-    // Every path this test's conversation asked the daemon for, in order.
-    const asked = (): string[] => sandboxRequestMock.mock.calls.map(([path]) => String(path));
+    // Every procedure this test's conversation called, in order.
+    const asked = (): string[] => daemon.mock.calls.map(([procedure]) => procedure);
 
     it(`opens the turn under the errand's row before its words exist, then sends the words it composed`, async () => {
         const conversation = new Conversation(`c-errand`);
-        sandboxRequestMock.mockImplementation(sseResponse([{ kind: `done` }]));
+        daemon.mockImplementation(turnDaemon([{ kind: `done` }]));
         let answer: (words: string) => void = () => undefined;
-        const taken = conversation.startErrand(opening, () => new Promise((settle) => (answer = settle)));
+        const taken = conversation.turn.startErrand(opening, () => new Promise((settle) => (answer = settle)));
 
         // Before the read answers: the row the transcript folds by its opening, a running turn, and nothing sent.
-        expect(conversation.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([{ role: `user`, text: opening }]);
-        expect(conversation.streaming.value).toBe(true);
-        expect(conversation.turnStartedAt.value).toBeGreaterThan(0);
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([{ role: `user`, text: opening }]);
+        expect(conversation.turn.streaming.value).toBe(true);
+        expect(conversation.turn.turnStartedAt.value).toBeGreaterThan(0);
         expect(asked()).toEqual([]);
 
         answer(prompt);
 
         expect(await taken).toBe(true);
         expect(turnBodies().map((body) => body[`prompt`])).toEqual([prompt]);
-        await waitFor(() => expect(conversation.streaming.value).toBe(false));
-        expect(conversation.messages.value[0]).toMatchObject({ role: `user`, text: prompt });
+        await waitFor(() => expect(conversation.turn.streaming.value).toBe(false));
+        expect(conversation.transcript.messages.value[0]).toMatchObject({ role: `user`, text: prompt });
     });
 
     it(`takes the turn back with nothing sent when the read leaves nothing to ask`, async () => {
         const conversation = new Conversation(`c-errand`);
-        sandboxRequestMock.mockImplementation(sseResponse([]));
+        daemon.mockImplementation(turnDaemon([]));
 
-        expect(await conversation.startErrand(opening, async () => undefined)).toBe(false);
+        expect(await conversation.turn.startErrand(opening, async () => undefined)).toBe(false);
 
-        expect(conversation.messages.value).toEqual([]);
-        expect(conversation.streaming.value).toBe(false);
-        expect(conversation.queued.value).toEqual([]);
+        expect(conversation.transcript.messages.value).toEqual([]);
+        expect(conversation.turn.streaming.value).toBe(false);
+        expect(conversation.turn.queued.value).toEqual([]);
         expect(asked()).toEqual([]);
     });
 
@@ -3993,9 +4016,9 @@ describe(`Conversation.startErrand`, () => {
     // a round trip answering "nothing running", and the local turn would outlive the press until it came back.
     it(`ends a Stop pressed while composing here, aborting the read and asking the daemon nothing`, async () => {
         const conversation = new Conversation(`c-errand`);
-        sandboxRequestMock.mockImplementation(sseResponse([]));
+        daemon.mockImplementation(turnDaemon([]));
         const reads: AbortSignal[] = [];
-        const taken = conversation.startErrand(
+        const taken = conversation.turn.startErrand(
             opening,
             (signal) =>
                 new Promise((_settle, fail) => {
@@ -4004,36 +4027,36 @@ describe(`Conversation.startErrand`, () => {
                 }),
         );
 
-        conversation.stop();
+        conversation.turn.stop();
 
         expect(await taken).toBe(false);
         expect(reads.map((signal) => signal.aborted)).toEqual([true]);
         expect(asked()).toEqual([]);
-        expect(conversation.messages.value).toEqual([]);
-        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.transcript.messages.value).toEqual([]);
+        expect(conversation.turn.streaming.value).toBe(false);
         expect(conversation.error.value).toBeNull();
         // A stopped errand leaves no words to send again: nothing of the user's was ever in it.
-        expect(conversation.queued.value).toEqual([]);
+        expect(conversation.turn.queued.value).toEqual([]);
     });
 
     // Not every read honours an abort (a re-judging land already on its way, a transport that keeps going): the Stop is
     // the reader's, so it ends the turn in the frame it was pressed rather than whenever that read gets round to it.
     it(`ends a Stop pressed while composing at once, even over a read that ignores the abort`, async () => {
         const conversation = new Conversation(`c-errand`);
-        sandboxRequestMock.mockImplementation(sseResponse([]));
+        daemon.mockImplementation(turnDaemon([]));
         let finish: (words: string) => void = () => undefined;
-        const taken = conversation.startErrand(opening, () => new Promise((settle) => (finish = settle)));
+        const taken = conversation.turn.startErrand(opening, () => new Promise((settle) => (finish = settle)));
 
-        conversation.stop();
+        conversation.turn.stop();
 
         expect(await taken).toBe(false);
-        expect(conversation.streaming.value).toBe(false);
-        expect(conversation.messages.value).toEqual([]);
+        expect(conversation.turn.streaming.value).toBe(false);
+        expect(conversation.transcript.messages.value).toEqual([]);
         // Its late answer names a turn that is already gone, so nothing is sent on it.
         finish(prompt);
         await Promise.resolve();
         expect(asked()).toEqual([]);
-        expect(conversation.messages.value).toEqual([]);
+        expect(conversation.transcript.messages.value).toEqual([]);
     });
 
     // The caller owns this sentence (the board's strip, the review's error line); the chat's own error line would be a
@@ -4042,27 +4065,28 @@ describe(`Conversation.startErrand`, () => {
         const conversation = new Conversation(`c-errand`);
 
         await expect(
-            conversation.startErrand(opening, async () => {
+            conversation.turn.startErrand(opening, async () => {
                 throw new Error(`the report could not be read`);
             }),
         ).rejects.toThrow(`the report could not be read`);
 
-        expect(conversation.messages.value).toEqual([]);
-        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.transcript.messages.value).toEqual([]);
+        expect(conversation.turn.streaming.value).toBe(false);
         expect(conversation.error.value).toBeNull();
     });
 
     it(`answers false when the daemon turns the composed turn away, which the chat explains itself`, async () => {
         const conversation = new Conversation(`c-errand`);
-        sandboxRequestMock.mockImplementation(async (path) =>
-            path === `/agent`
-                ? ({ ok: false, status: 400, json: async () => ({ message: `No account here can run this.` }) } as Response)
-                : ({ ok: true, json: async () => ({}) } as Response),
-        );
+        daemon.mockImplementation(async (procedure) => {
+            if (procedure === `agent.run`) {
+                throw daemonRefusal(400, `No account here can run this.`);
+            }
+            return {};
+        });
 
-        expect(await conversation.startErrand(opening, async () => prompt)).toBe(false);
+        expect(await conversation.turn.startErrand(opening, async () => prompt)).toBe(false);
 
-        expect(conversation.streaming.value).toBe(false);
+        expect(conversation.turn.streaming.value).toBe(false);
         expect(conversation.error.value).toContain(`No account here can run this.`);
     });
 });

@@ -1,6 +1,6 @@
 import { EngineChannelInputSchema, EngineRevertInputSchema, EngineUpdateInputSchema } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
-import { opt } from "../agent/run/opt.js";
+import { opt } from "../opt.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";

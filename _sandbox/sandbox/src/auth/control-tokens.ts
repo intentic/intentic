@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { CONTROL_SCOPES, type ControlScope, ControlScopeSchema, roleAtLeast } from "@intentic/sandbox-contract";
+import { CONTROL_SCOPES, type ControlReach, type ControlScope, ControlScopeSchema, roleAtLeast, sandboxRouteFor } from "@intentic/sandbox-contract";
 import { sha256Hex } from "@intentic/sandbox-contract/tunnel-ids";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
@@ -123,78 +123,45 @@ export const fileControlTokens = (path: string): ControlTokens => {
     };
 };
 
-// What each scope reaches, derived from the role floors rather than kept as a second list: `read` sees what a viewer
-// sees, `drive` does what a collaborator does, `land` adds the one irreversible press.
-// Route paths are matched as received (/agents/abc/land), not as the contract templates them, since this runs before
-// any router parses a param.
+// What each scope reaches, derived from each route's floor rather than kept as a second list: `read` sees what a viewer
+// sees, `drive` does what a collaborator does, `land` adds the one irreversible press. A route's own `control` meta
+// (sandbox-contract route-meta.ts) withholds it from every rung, or opens it to one its floor alone would not.
 type ScopeReach = (method: string, path: string) => boolean;
 
-// The surface no token reaches regardless of floor: a viewer member may open these since a person is behind the
-// request, but a program may not.
-// Roster, credentials and tokens, diagnostics, state exports, pairing doors, money, network, webext lending, push, and
-// the child-agent surface.
-const NEVER_PREFIXES: readonly string[] = [
-    "/secrets",
-    "/capabilities",
-    "/members",
-    "/system",
-    "/logs",
-    "/bundles",
-    "/enroll",
-    "/pool",
-    "/wallet",
-    "/vpn",
-    "/exit",
-    "/webext",
-    "/push",
-    "/children",
-];
-
-const never = (path: string): boolean => NEVER_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
-
-const oneOf = (path: string, ...paths: readonly string[]): boolean => paths.includes(path);
+// A program reaches only a declared route: a path nothing serves reads as withheld, not as an unclassified read.
+const controlOf = (method: string, path: string): ControlReach | undefined => {
+    const route = sandboxRouteFor(method, path);
+    return route === undefined ? "never" : route.meta.control;
+};
 
 const isRead = (method: string): boolean => method === "GET" || method === "HEAD";
 
 // The agent-conversation seam and nothing else: run a turn, answer a parked card, read transcripts, search the tree.
-// Hand-listed rather than derived from a role, since no member role corresponds to this ACP-bridge slice.
-const editorReach: ScopeReach = (method, path) => {
-    if (method === "POST") {
-        return oneOf(path, "/agent", "/agent/reply");
-    }
-    return isRead(method) && (path === "/sessions" || path.startsWith("/sessions/") || path === "/workspace/search");
-};
+// Declared route by route, since no member role corresponds to this ACP-bridge slice.
+const editorReach: ScopeReach = (method, path) => controlOf(method, path) === "editor";
 
-// Observation only: every read a viewer may make.
-// Plus /agent/attach: a read shaped as a POST since it carries a replay cursor in its body.
+// Observation only: every read a viewer may make, and a read shaped as a POST (/agent/attach carries a replay cursor
+// in its body). A person is behind a viewer's request; the routes withheld are ones a program may not open.
 const readReach: ScopeReach = (method, path) => {
-    if (never(path)) {
+    const control = controlOf(method, path);
+    if (control === "never") {
         return false;
     }
-    if (method === "POST" && path === "/agent/attach") {
-        return true;
-    }
-    return isRead(method) && routeFloor(method, path) === "viewer";
+    return control === "read" || (isRead(method) && routeFloor(method, path) === "viewer");
 };
 
 // Everything `read` sees, plus making an agent work: every route a collaborator reaches.
-// Stops short of anything that moves code into the main tree: those routes floor at maintainer and aren't named here.
+// Stops short of anything that moves code into the main tree: those routes floor at maintainer.
 const driveReach: ScopeReach = (method, path) => {
     if (readReach(method, path)) {
         return true;
     }
-    return !never(path) && roleAtLeast("collaborator", routeFloor(method, path));
+    return controlOf(method, path) !== "never" && roleAtLeast("collaborator", routeFloor(method, path));
 };
 
 // `drive` plus the irreversible half: merging a worktree in, or discarding one; kept separate since the usual split is
-// a program that works and a person who decides.
-// Named rather than derived: these are the only maintainer-floored presses a token may ever hold.
-const landReach: ScopeReach = (method, path) => {
-    if (driveReach(method, path)) {
-        return true;
-    }
-    return method === "POST" && (path === "/agents/purge" || /^\/agents\/[^/]+\/(land|discard)$/.test(path));
-};
+// a program that works and a person who decides. These are the only maintainer-floored presses a token may hold.
+const landReach: ScopeReach = (method, path) => driveReach(method, path) || controlOf(method, path) === "land";
 
 const SCOPE_REACH: Record<ControlScope, ScopeReach> = {
     editor: editorReach,

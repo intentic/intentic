@@ -9,6 +9,7 @@ import { IconStub } from "@intentic/ui/testing";
 import { it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { waitFor } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, ref, ref as shallow } from "vue";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 const areas = ref<Area[]>([]);
 // Upserts like the real route: creating an area opens it immediately, so a mock that didn't add the row would leave
 // the creation test asserting against a page that never redrew.
@@ -43,7 +44,9 @@ mock.module(`../overview/useSandboxOutline`, () => ({ useSandboxOutline: () => r
 
 // <FolderPicker>'s own reads; this suite is about the page, so the tree is a fixture and nothing is fetched lazily.
 const tree = ref<WorkspaceTreeEntry[]>([]);
-mock.module(`../client/sandboxClient`, () => ({ sandboxJson: mock().mockResolvedValue({ entries: [] }) }));
+mock.module(`../client/sandboxRpc`, () => ({
+    sandboxRpc: fakeSandboxRpc({ workspace: { children: mock(async () => ({ entries: [], hidden: 0 })) } }),
+}));
 mock.module(`../client/useSandboxQuery`, () => {
     // Imported inside the factory so the mock owns its own bindings, not this file's.
     return {

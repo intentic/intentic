@@ -1,41 +1,50 @@
-import { type AgentHarness, type AgentProvider, type ModelPin, capabilitiesOf } from "@intentic/sandbox-contract";
+import {
+    type AgentHarness,
+    type AgentProvider,
+    type ModelPin,
+    capabilitiesOf,
+    NATIVE_PROVIDERS,
+    type NativeProvider,
+} from "@intentic/sandbox-contract";
 import { unstubbed } from "@intentic/testing";
 import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import type { Services } from "../../composition.js";
 import type { PerfFields } from "../../platform/resources/perf.js";
-import * as harnessCredentialsOriginal from "../providers/harness-credentials.js";
+import { PROVIDER_MODULES } from "../../runtimes/runtime-table.js";
+import { askRoleModel, REFUSED_FOR_MS } from "./role-model.js";
+import { RoleModelUnsetError } from "../../seams/role-model-unset.js";
+import { sentenceAnswer } from "./role-answer.js";
 
-const ready = mock<() => Promise<Record<string, boolean>>>();
-// Only the readiness probe is faked. The rest of the module stands, because the walk's window check reads its
-// model-resolution rule (routedModel) and a mock that replaced the whole module left that undefined — which the
-// check's own catch then swallowed as "window unknown".
-mock.module("../providers/harness-credentials.js", () => ({
-    ...harnessCredentialsOriginal,
-    harnessReadyProviders: () => ready(),
-}));
+// Only the readiness sweep is faked; a provider it leaves unnamed is one that cannot run.
+const ready = mock<() => Promise<Partial<Record<NativeProvider, boolean>>>>();
+const readiness = async (): Promise<Record<NativeProvider, boolean>> => {
+    const named = await ready();
+    return Object.fromEntries(NATIVE_PROVIDERS.map((provider) => [provider, named[provider] === true])) as Record<NativeProvider, boolean>;
+};
 
-// Mocked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took.
+// Faked at the adapter seam, keyed by runtime, so a test can tell which loop a rung took.
 const oneShot = mock<(ask: { model: string }) => Promise<string>>();
 const geminiOneShot = mock<(ask: { model: string }) => Promise<string>>();
 const cursorOneShot = mock<(ask: { model: string }) => Promise<string>>();
-mock.module("../providers/adapter-registry.js", () => {
-    const runners: Record<string, (ask: { model: string }) => Promise<string>> = {
-        "claude-code": (ask) => oneShot(ask),
-        "opencode-gemini": (ask) => geminiOneShot(ask),
-        cursor: (ask) => cursorOneShot(ask),
-    };
+const runners: Record<string, (ask: { model: string }) => Promise<string>> = {
+    "claude-code": (ask) => oneShot(ask),
+    "opencode-gemini": (ask) => geminiOneShot(ask),
+    cursor: (ask) => cursorOneShot(ask),
+};
+type Adapter = ReturnType<Services[`adapters`][`for`]>;
+// A runtime with no runner here is one that runs no helper, so its adapter carries no `oneShot` at all.
+const adapterFor = (provider: AgentProvider, harness: AgentHarness): Adapter => {
+    const runtime = capabilitiesOf(provider, harness).runtime;
+    const run = runners[runtime];
+    const unasked = unstubbed<Adapter>(`adapters.${runtime}`, {});
     return {
-        adapterFor: (provider: AgentProvider, harness: AgentHarness) => {
-            const runtime = capabilitiesOf(provider, harness).runtime;
-            const run = runners[runtime];
-            return { runtime, ...(run === undefined ? {} : { oneShot: (_services: Services, ask: { model: string }) => run(ask) }) };
-        },
+        runtime,
+        preflight: unasked.preflight,
+        health: unasked.health,
+        holdsSession: unasked.holdsSession,
+        ...(run === undefined ? {} : { oneShot: (_deps: unknown, ask: { model: string }) => run(ask) }),
     };
-});
-
-const { askRoleModel, REFUSED_FOR_MS } = await import("./role-model.js");
-const { RoleModelUnsetError } = await import("./role-model-unset.js");
-const { sentenceAnswer } = await import("./role-answer.js");
+};
 
 // Thinnest answer contract (accepts any ordinary commit subject), so these tests exercise the walk, not the reply
 // shape.
@@ -60,10 +69,14 @@ const asPins = (keys: readonly string[]): ModelPin[] =>
 
 const fakeServices = (pinned: readonly string[], spent: readonly string[] = []): Services =>
     unstubbed<Services>(`services`, {
+        providerReadiness: readiness,
+        adapters: { for: adapterFor, all: [] },
         sandboxSettings: unstubbed<Services[`sandboxSettings`]>(`sandboxSettings`, {
             get: async () => ({ modelRoles: { [ROLE]: asPins(pinned) } }) as Awaited<ReturnType<Services[`sandboxSettings`][`get`]>>,
         }),
         capabilities: unstubbed<Services[`capabilities`]>(`capabilities`, { list: async () => [] }),
+        // The real modules, so a provider keeping its own allowance reading answers for itself.
+        providerModules: PROVIDER_MODULES,
         cliProxy: unstubbed<Services[`cliProxy`]>(`cliProxy`, {
             turnLimit: async (provider) => (spent.includes(provider) ? { spent: 1, withHeadroom: 0 } : { spent: 0, withHeadroom: 1 }),
         }),

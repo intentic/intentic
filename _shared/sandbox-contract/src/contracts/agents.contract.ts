@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { AgentToolChildrenSchema, AgentTranscriptSchema } from "../events/transcript.js";
 import {
     AgentArchiveSchema,
@@ -33,7 +33,7 @@ import { ConversationPromptSchema } from "../schemas/system-prompt.js";
 // `archive` is the non-destructive counterpart to `discard` (worktree committed, entry kept); `purge` is `discard`
 // applied to every already-archived agent.
 export const agentsContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/agents",
@@ -41,8 +41,9 @@ export const agentsContract = {
             description:
                 "The fleet as the board draws it: each conversation with its title, what it is doing, when it last moved and whether anybody has read it since. Archived conversations are not in here.",
         })
+        .meta({ guest: true })
         .output(AgentsListSchema),
-    archived: oc
+    archived: procedure
         .route({
             method: "GET",
             path: "/agents/archived",
@@ -50,9 +51,10 @@ export const agentsContract = {
             description:
                 "The same shape as the live fleet, for the conversations somebody has decided are finished. Their work is kept, and any one of them can be brought back.",
         })
+        .meta({ guest: true })
         .output(AgentsListSchema),
     // Never-carded conversations (neither live nor archived) are `sessions.list`'s query, matching by the same rule.
-    search: oc
+    search: procedure
         .route({
             method: "GET",
             path: "/agents/search",
@@ -62,16 +64,17 @@ export const agentsContract = {
         })
         .input(AgentSearchQuerySchema)
         .output(AgentSearchResultSchema),
-    get: oc
+    get: procedure
         .route({
             method: "GET",
             path: "/agents/{id}",
             summary: "One conversation's card",
             description: "Everything the board shows for a single conversation: its title, state, working branch, unread marker and timestamps.",
         })
+        .meta({ guest: true })
         .input(AgentIdSchema)
         .output(AgentSummarySchema),
-    transcript: oc
+    transcript: procedure
         .route({
             method: "GET",
             path: "/agents/{id}/transcript",
@@ -79,9 +82,10 @@ export const agentsContract = {
             description:
                 "The most recent turns of one conversation, in order, including the tool calls and their results: what the chat replays and the next turn is seeded from. A page, not the whole record — pass the answer's `from` back as `before` to walk further back, until `more` reads false.",
         })
+        .meta({ guest: true })
         .input(AgentTranscriptQuerySchema)
         .output(AgentTranscriptSchema),
-    systemPrompt: oc
+    systemPrompt: procedure
         .route({
             method: "GET",
             path: "/agents/{id}/system-prompt",
@@ -91,7 +95,7 @@ export const agentsContract = {
         })
         .input(AgentIdSchema)
         .output(ConversationPromptSchema),
-    toolChildren: oc
+    toolChildren: procedure
         .route({
             method: "GET",
             path: "/agents/{id}/transcript/tools/{toolId}",
@@ -103,7 +107,7 @@ export const agentsContract = {
         .output(AgentToolChildrenSchema),
     // Also forgets the provider session, rewind-style, so the next fresh session reads the placed line as the agent's
     // own.
-    place: oc
+    place: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/place",
@@ -113,7 +117,7 @@ export const agentsContract = {
         })
         .input(AgentPlaceSchema)
         .output(OkSchema),
-    rename: oc
+    rename: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/rename",
@@ -121,9 +125,10 @@ export const agentsContract = {
             description:
                 "Sets the title a person chose, replacing the one that was generated. Allowed while the conversation is working, and it does not count as activity.",
         })
+        .meta({ floor: "collaborator", guest: true })
         .input(AgentRenameSchema)
         .output(AgentSummarySchema),
-    autoLand: oc
+    autoLand: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/auto-land",
@@ -135,7 +140,7 @@ export const agentsContract = {
         .output(AgentSummarySchema),
     // Legal for a workspace conversation too (unlike autoLand): an outage kills a main-tree chat just as readily.
     // Also offered on the card, not just in chat: a limit reopens hours later, so the decider is usually at a board.
-    breakPolicy: oc
+    breakPolicy: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/break-policy",
@@ -143,9 +148,10 @@ export const agentsContract = {
             description:
                 "One answer per ending — a spent usage limit, a provider outage, a turn that stopped short — overriding the sandbox-wide policy for one conversation; clear it to follow the default again. The answers are mutually exclusive by construction, so nothing here can arm two automations over the same wall. Every ending starts at `wait` unless asked otherwise, because a re-run spends the user's own allowance on a turn they sent once.",
         })
+        .meta({ floor: "collaborator" })
         .input(AgentBreakPolicySchema)
         .output(AgentSummarySchema),
-    seen: oc
+    seen: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/seen",
@@ -153,10 +159,11 @@ export const agentsContract = {
             description:
                 "Stamps the read marker behind the unread badge on one card. Allowed while the conversation is working, and reading never counts as activity.",
         })
+        .meta({ floor: "collaborator", guest: true })
         .input(AgentIdSchema)
         .output(AgentSummarySchema),
     // A finer-grained ask (watch this, not that) goes through the chat, not a per-watch id here.
-    stopWatching: oc
+    stopWatching: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/stop-watching",
@@ -166,15 +173,16 @@ export const agentsContract = {
         })
         .input(AgentStopWatchingSchema)
         .output(AgentSummarySchema),
-    seenAll: oc
+    seenAll: procedure
         .route({
             method: "POST",
             path: "/agents/seen",
             summary: "Mark every conversation read",
             description: "Clears the unread badge across the whole fleet at once, and hands the refreshed list back.",
         })
+        .meta({ floor: "collaborator", guest: true })
         .output(AgentsListSchema),
-    diff: oc
+    diff: procedure
         .route({
             method: "GET",
             path: "/agents/{id}/diff",
@@ -186,7 +194,7 @@ export const agentsContract = {
         .output(AgentChangesSchema),
     // Costs a `git log` per repo: ask only once `diff` reports something absorbed. Reading a file here reuses
     // `fileDiff`.
-    history: oc
+    history: procedure
         .route({
             method: "GET",
             path: "/agents/{id}/history",
@@ -196,7 +204,7 @@ export const agentsContract = {
         })
         .input(AgentIdSchema)
         .output(AgentHistorySchema),
-    fileDiff: oc
+    fileDiff: procedure
         .route({
             method: "GET",
             path: "/agents/{id}/{repo}/file-diff",
@@ -207,7 +215,7 @@ export const agentsContract = {
         .output(FileDiffSchema),
     // Stages rather than commits: the next capture commits it like the rest of the work, with nothing to unwind if the
     // conversation's next turn moves it.
-    includeScratch: oc
+    includeScratch: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/scratch/include",
@@ -217,7 +225,7 @@ export const agentsContract = {
         })
         .input(AgentScratchSchema)
         .output(OkSchema),
-    deleteScratch: oc
+    deleteScratch: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/scratch/delete",
@@ -227,7 +235,7 @@ export const agentsContract = {
         })
         .input(AgentScratchSchema)
         .output(OkSchema),
-    land: oc
+    land: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/land",
@@ -235,10 +243,12 @@ export const agentsContract = {
             description:
                 "Brings the conversation's branches into the main tree, one repo at a time. A conflict is reported rather than raised and nothing is lost when it fails. Refused while a turn is running, and refused for a conversation that works directly in the shared tree, which has nothing to merge.",
         })
+        // The irreversible press a program may hold, kept to its own rung apart from the work.
+        .meta({ control: "land" })
         .input(AgentLandSchema)
         .output(LandResultSchema),
     // Stamps `AgentSummarySchema.landRequested` with the caller's identity.
-    requestLand: oc
+    requestLand: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/request-land",
@@ -246,11 +256,13 @@ export const agentsContract = {
             description:
                 "For a collaborator who is not allowed to merge: marks the conversation as waiting for review, with who asked. The request shows on every maintainer's board and clears when somebody merges or discards it.",
         })
+        // A collaborator's landings are only requests.
+        .meta({ floor: "collaborator" })
         .input(AgentIdSchema)
         .output(AgentSummarySchema),
     // Sets `AgentSummarySchema.owner`. Who may: the current owner (handing over), a maintainer or the sandbox owner
     // (taking over), and anyone at the driving tier when nobody owns it yet (claiming).
-    assign: oc
+    assign: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/assign",
@@ -258,11 +270,12 @@ export const agentsContract = {
             description:
                 "Hands a conversation to a member: its owner is who answers its questions and who a reviewer asks about its work. Its owner may hand it to anyone; a maintainer may reassign any conversation; one nobody owns may be claimed by anyone allowed to drive agents. Refused for an address that is not a member's. Nothing about the conversation's own work changes.",
         })
+        // Changing hands is driving, not shipping; the route itself decides whose hands may do it.
+        .meta({ floor: "collaborator" })
         .input(AgentAssignSchema)
         .output(AgentSummarySchema),
-    // Floored at viewer (auth/role-floor.ts), unlike every other write here: marking a conversation is expression, not
-    // operating authority.
-    react: oc
+    // Floored at viewer, unlike every other write here: marking a conversation is expression, not operating authority.
+    react: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/react",
@@ -270,9 +283,10 @@ export const agentsContract = {
             description:
                 "Puts your mark on a conversation, or takes it back. Everyone sharing the sandbox sees it, with who left it, which is what makes it worth more than a private bookmark. One mark per person per emoji; nothing about the conversation's own work changes.",
         })
+        .meta({ floor: "viewer", guest: true })
         .input(AgentReactSchema)
         .output(AgentSummarySchema),
-    discard: oc
+    discard: procedure
         .route({
             method: "POST",
             path: "/agents/{id}/discard",
@@ -280,9 +294,10 @@ export const agentsContract = {
             description:
                 "Deletes the conversation's working copies, its branches and its entry. Nothing is kept. Refused while a turn is running, and refused for a conversation working in the shared tree.",
         })
+        .meta({ control: "land" })
         .input(AgentIdSchema)
         .output(OkSchema),
-    archive: oc
+    archive: procedure
         .route({
             method: "POST",
             path: "/agents/archive",
@@ -290,9 +305,10 @@ export const agentsContract = {
             description:
                 "The gentle counterpart to discarding. Commits whatever the conversation still has in progress onto its own branch, releases its working copy, and keeps the entry and the record. Its scratch is not committed and goes with the copy. It leaves the live fleet and joins the archive. Refused for a conversation that is running.",
         })
+        .meta({ floor: "collaborator", guest: true })
         .input(AgentArchiveSchema)
         .output(AgentsArchivedSchema),
-    unarchive: oc
+    unarchive: procedure
         .route({
             method: "POST",
             path: "/agents/unarchive",
@@ -300,9 +316,10 @@ export const agentsContract = {
             description:
                 "Returns archived conversations to the live fleet. The next turn picks up a fresh working copy from the branch that was kept.",
         })
+        .meta({ floor: "collaborator", guest: true })
         .input(AgentIdsSchema)
         .output(AgentsMovedSchema),
-    purge: oc
+    purge: procedure
         .route({
             method: "POST",
             path: "/agents/purge",
@@ -310,5 +327,6 @@ export const agentsContract = {
             description:
                 "Discards every conversation already in the archive: working copies, branches and entries. The whole archive rather than a chosen few, because the archive is the pile somebody has already decided is over. A teardown that fails on one conversation leaves that one behind instead of taking the rest down with it.",
         })
+        .meta({ control: "land" })
         .output(AgentsRemovedSchema),
 };

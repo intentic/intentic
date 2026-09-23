@@ -1,9 +1,18 @@
 import { join } from "node:path";
-import { type AgentTurn, PROVIDER_ACCESS } from "@intentic/sandbox-contract";
-import { attemptProbe, type AgentAdapter, healthReady, healthUnavailable, healthUnknown } from "../../agent/providers/adapter.js";
+import { type AgentEvent, type AgentTurn, PROVIDER_ACCESS } from "@intentic/sandbox-contract";
+import {
+    attemptProbe,
+    armPlan,
+    type AgentAdapter,
+    healthReady,
+    healthUnavailable,
+    healthUnknown,
+    type TurnArmPlan,
+    type TurnContext,
+} from "../../agent/providers/adapter.js";
+import type { AgentRequest, ContainerCredential } from "../../agent/providers/agent-request.js";
 import { withAttachments } from "../../agent/prompt/attachment-note.js";
 import { authStateRelPath, type ProviderModule, providerAccountEntry } from "../../agent/providers/provider-module.js";
-import type { TurnContext, TurnArmPlan } from "../../agent/run/turn/turn-plan.js";
 import type { Services } from "../../composition.js";
 import type { Config } from "../../env.config.js";
 import { createGrokAgent, createGrokRunner } from "../grok/grok-agent.js";
@@ -12,7 +21,7 @@ import { onPath } from "../../platform/boot/on-path.js";
 import { createGeminiCatalog, type GeminiCatalog } from "./gemini-catalog.js";
 import { geminiOneShot } from "./gemini-one-shot.js";
 
-// Everything Gemini contributes to the daemon, aggregated by the provider registry. Its native runtime is Grok's
+// Everything Gemini contributes to the daemon, listed in runtimes/runtime-table.ts. Its native runtime is Grok's
 // OpenCode loop pointed at a different backend, and its credential is the translator's, so this module owns only the
 // catalog and the loop binding.
 
@@ -21,7 +30,7 @@ export interface GeminiSlice {
     readonly geminiModels: GeminiCatalog;
     // Same OpenCode loop grokAgent runs on, just a different backend; built from the same factory, not a separate
     // adapter.
-    readonly geminiAgent: Services["agent"];
+    readonly geminiAgent: (request: AgentRequest<ContainerCredential>) => AsyncGenerator<AgentEvent>;
 }
 
 export const createGeminiSlice = (input: {
@@ -37,7 +46,10 @@ export const createGeminiSlice = (input: {
 // Gemini on the same OpenCode loop Grok runs on, pointed at the translator instead of xAI; OpenCode holds no
 // credential, CLIProxyAPI does, the same as a routed turn. Exists because the Claude Code loop's baked-in identity line
 // gets every Google account refused as a false quota error.
-export const planGeminiTurn = async (services: Services, input: AgentTurn, context: TurnContext): Promise<TurnArmPlan> => {
+// What a Gemini turn is planned from: the translator's accounts and the Google catalog it serves.
+export type GeminiPlanDeps = Pick<Services, "cliProxy" | "config" | "geminiAgent" | "geminiModels">;
+
+export const planGeminiTurn = async (services: GeminiPlanDeps, input: AgentTurn, context: TurnContext): Promise<TurnArmPlan> => {
     if (services.config.translator.url === "") {
         return {
             ok: false,
@@ -72,17 +84,19 @@ export const planGeminiTurn = async (services: Services, input: AgentTurn, conte
     }
     // Never empty, so this always resolves.
     const model = pinned ?? catalog.default;
-    return {
-        ok: true,
-        run: services.geminiAgent,
-        request: withAttachments({ ...context.base, model }, context.attachmentPaths),
-    };
+    return armPlan(
+        services.geminiAgent,
+        withAttachments({ ...context.base, spec: { ...context.base.spec, model }, credential: { kind: "container" } }, context.attachmentPaths),
+    );
 };
 
 // Own adapter row, not a second provider on Grok's, since health is keyed by runtime: sharing one entry would grey
 // Gemini out over a missing xAI sign-in, or Grok out over a missing Google account. OpenCode holds no Gemini credential
 // (CLIProxyAPI does); the binary is Grok's, so if `opencode` is missing, neither runs.
-const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
+// What the Gemini adapter reads: its arm's deps, and the OpenCode sessions a resume and the one-shot helper ask.
+export type GeminiAdapterDeps = GeminiPlanDeps & Pick<Services, "openCode">;
+
+const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini", GeminiAdapterDeps> = {
     runtime: "opencode-gemini",
     oneShot: geminiOneShot,
     preflight: (services, input, context) => planGeminiTurn(services, input, context),
@@ -102,7 +116,7 @@ const OPENCODE_GEMINI_ADAPTER: AgentAdapter<"opencode-gemini"> = {
     holdsSession: (services, sessionId, cwd) => services.openCode.sessionExists(sessionId, cwd),
 };
 
-export const geminiProvider: ProviderModule = {
+export const geminiProvider: ProviderModule<GeminiAdapterDeps> = {
     id: "gemini",
     adapters: [OPENCODE_GEMINI_ADAPTER],
     catalog: (services) => services.geminiModels.models(),

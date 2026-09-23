@@ -9,7 +9,7 @@ import type { TurnCheckpoint } from "./turn-checkpoints.js";
 // mid-restore; order is files, then transcript, then session, since a failed restore must leave the conversation
 // intact.
 
-export type RewindDeps = Pick<Services, "agents" | "agentWorktrees" | "history" | "transcripts" | "turnCheckpoints" | "logger">;
+export type RewindDeps = Pick<Services, "agents" | "conversations" | "agentWorktrees" | "history" | "transcripts" | "turnCheckpoints" | "logger">;
 
 // Refusal reasons as values, not throws; the route maps each to its own status, both ordinary outcomes.
 export type RewindRefusal = "busy" | "no-checkpoint";
@@ -42,7 +42,7 @@ export const rewindConversation = async (
     index: number,
     git: GitRunner = defaultGit,
 ): Promise<RewindResult | RewindRefusal> => {
-    const outcome = await services.agents.withRewindLease(conversationId, async (): Promise<RewindResult | RewindRefusal> => {
+    const outcome = await services.conversations.withRewindLease(conversationId, async (): Promise<RewindResult | RewindRefusal> => {
         // Resolved inside the lease, since checkpoints aren't frozen; a lookup before the lease could get a stale answer.
         const checkpoint = await services.turnCheckpoints.of(conversationId, index);
         if (checkpoint === undefined) {
@@ -58,14 +58,10 @@ export const rewindConversation = async (
         } else if (!(await resetWorktree(services, conversationId, checkpoint, git))) {
             return "no-checkpoint";
         }
-        const agent = services.agents.entry(conversationId);
-        const dropped =
-            agent === undefined
-                ? 0
-                : await services.transcripts.truncate({ id: conversationId, provider: agent.provider, harness: agent.harness }, index);
+        const dropped = services.agents.entry(conversationId) === undefined ? 0 : await services.transcripts.truncate({ id: conversationId }, index);
         // Dropped turns' checkpoints go with them, so no state is offered for a message no longer in the transcript.
         await services.turnCheckpoints.truncate(conversationId, index + 1);
-        await services.agents.clearSession(conversationId);
+        await services.conversations.send(conversationId, { kind: "session-cleared" }).settled;
         // Timeline has a point only where the rewind moved through it; an isolated rewind moves the branch instead.
         return { dropped, ...(checkpoint.kind === "tree" ? { snapshot: checkpoint.snapshot } : {}) };
     });

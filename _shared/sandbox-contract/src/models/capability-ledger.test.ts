@@ -8,7 +8,7 @@ import type { AgentCapabilities } from "./agent-runtimes.js";
 type Backing = "enforced" | "descriptive";
 
 const LEDGER: Record<keyof AgentCapabilities, Backing> = {
-    // adapter-registry.ts maps this runtime to its serving adapter; also keys per-runtime health probes.
+    // runtime-table.ts maps this runtime to its serving adapter; also keys per-runtime health probes.
     runtime: "enforced",
     // conversation.ts's `steerable`: the composer offers mid-turn injection only where there is a queue.
     steering: "enforced",

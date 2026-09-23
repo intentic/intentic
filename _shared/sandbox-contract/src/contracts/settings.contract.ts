@@ -1,5 +1,5 @@
 import { FIELD_NOTES_FILE } from "@intentic/constants";
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import {
     BuiltinPromptSchema,
     BuiltinPromptTextSchema,
@@ -20,15 +20,16 @@ import { DayWindowQuerySchema } from "../schemas/providers/usage.js";
 // overwrites whole. `savings` measures each token-reduction mechanism's worth over the same UTC day window the spend
 // ledger takes. `builtinPrompt` returns a built-in prompt's actual text to show or fork.
 export const settingsContract = {
-    get: oc
+    get: procedure
         .route({
             method: "GET",
             path: "/settings",
             summary: "How this sandbox is configured",
             description: "Every setting that governs how agents behave here, with the defaults filled in for anything nobody has chosen.",
         })
+        .meta({ guest: true })
         .output(SandboxSettingsSchema),
-    set: oc
+    set: procedure
         .route({
             method: "POST",
             path: "/settings",
@@ -37,7 +38,7 @@ export const settingsContract = {
         })
         .input(SandboxSettingsSchema)
         .output(OkSchema),
-    savings: oc
+    savings: procedure
         .route({
             method: "GET",
             path: "/settings/savings",
@@ -47,7 +48,7 @@ export const settingsContract = {
         })
         .input(DayWindowQuerySchema)
         .output(SavingsReportSchema),
-    builtinPrompt: oc
+    builtinPrompt: procedure
         .route({
             method: "GET",
             path: "/settings/system-prompt/{base}",
@@ -58,7 +59,7 @@ export const settingsContract = {
         .input(BuiltinPromptSchema)
         .output(BuiltinPromptTextSchema),
     // Own route, not a settings field: a firing isn't an edit, so it shouldn't cost a settings write.
-    firings: oc
+    firings: procedure
         .route({
             method: "GET",
             path: "/settings/rule-firings",
@@ -69,7 +70,7 @@ export const settingsContract = {
         .output(RuleFiringsSchema),
     // Read off the repositories themselves, not out of the settings file: the declaration is a tracked file in each
     // repository, and only the owner's answer to it lives here.
-    repoChecks: oc
+    repoChecks: procedure
         .route({
             method: "GET",
             path: "/settings/repo-checks",
@@ -79,7 +80,7 @@ export const settingsContract = {
         .output(RepoChecksListSchema),
     // Read off the file and the automation store rather than the settings manifest: nothing here is a choice anyone
     // made, so storing it would only give it a second place to be wrong.
-    fieldNotes: oc
+    fieldNotes: procedure
         .route({
             method: "GET",
             path: "/settings/field-notes",
@@ -91,7 +92,7 @@ export const settingsContract = {
     // browser offers the zone it is in; the daemon takes it only if nobody has chosen one. Folding it into the
     // whole-object `set` would mean the second machine to open the workspace silently moved every schedule to its own
     // clock, and an owner in Warsaw would find their chores on a colleague's Tokyo hours.
-    adoptTimezone: oc
+    adoptTimezone: procedure
         .route({
             method: "POST",
             path: "/settings/timezone",
@@ -101,7 +102,7 @@ export const settingsContract = {
         })
         .input(TimezoneOfferSchema)
         .output(TimezoneStateSchema),
-    adoptRepoChecks: oc
+    adoptRepoChecks: procedure
         .route({
             method: "POST",
             path: "/settings/repo-checks/adopt",

@@ -282,7 +282,7 @@ expires unused); a 200-without-receipt is recorded as an anomaly against that en
 | `_shared/sandbox-contract/src/schemas/capabilities.ts` | `wallet` added to `CapabilityKindSchema` |
 | `_sandbox/sandbox/bin/wallet` | the CLI (services-CLI pattern: `node:http`, agent token, `INTENTIC_TURN_OWNER`) + `skills/wallet/SKILL.md` |
 | `_sandbox/sandbox/src/auth/grants.ts` | `agentReach` += `GET /wallet/status`, `POST /wallet/fetch`, `GET /wallet/history` |
-| `_sandbox/sandbox/src/wallet/` | `x402-client.ts` (three challenge parsers → normalized quote; payload builders v2/v1/MPP), `payment-offer.ts` (the gate: `createRequest` + `turnRunOf` + `agents.observe`, non-journalled, `OFFER_DEADLINE_MS` 10 min), `wallet-ledger.ts`, `wallet.routes.ts` |
+| `_sandbox/sandbox/src/wallet/` | `x402-client.ts` (three challenge parsers → normalized quote; payload builders v2/v1/MPP), `payment-offer.ts` (the gate: `cards.create` + `turnRunOf` + `agents.observe`, non-journalled, `OFFER_DEADLINE_MS` 10 min), `wallet-ledger.ts`, `wallet.routes.ts` |
 | `_sandbox/sandbox/src/capabilities/handlers/wallet.ts` | the capability handler (`apply` = signer handshake + address fetch; `status` = balance probe; `echo` = full config) |
 | `_platform/api/src/wallet/` | signer service: `POST /wallet/sign-transfer` (connect-token auth, policy re-check, audit), custody-API integration, withdraw endpoint; Prisma: `Wallet`, `WalletPayment` |
 | `_devices/host` | optional `wallet.sign` oRPC verb + `policy.ts` scope, local keystore (option B) |

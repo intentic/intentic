@@ -1,8 +1,8 @@
 import type { CapabilitySummary } from "@intentic/api-contract";
-import type { CapabilityCatalogEntry } from "@intentic/capability-catalog";
+import { CAPABILITY_CATALOG, type CapabilityCatalogEntry, instancesOf } from "@intentic/capability-catalog";
 import type { ExtensionSummary } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { entryHaystack, contributedTiles, entryIcon, instancesOf, isDefaultName, suggestName, withIdentityPicker } from "./tiles";
+import { catalogEntries, contributedTiles, entryHaystack, entryIcon, isDefaultName, openingName, suggestName, withIdentityPicker } from "./tiles";
 
 // Join between a tile and the connections it's answerable for. Each case is one somebody hit: a tile owning two
 // providers, two extensions declaring the same connector, a repeat add that must not overwrite the connection
@@ -154,4 +154,41 @@ test(`searches the kind and the hint, not only what the tile shows`, () => {
 
     expect(haystack).toContain(`mcp`);
     expect(haystack).toContain(`botfather`);
+});
+
+// Enabled extensions' tiles lead the static catalog, and a browser tile's identity field names only identities that
+// exist in this sandbox.
+test(`offers the enabled extensions' tiles first, then the core catalog`, () => {
+    const entries = catalogEntries(
+        [
+            extension(`social`, [
+                {
+                    id: `reddit`,
+                    kind: `browser`,
+                    catalog: { name: `Reddit`, category: `communication`, description: `Act as you on Reddit.` },
+                    fields: [{ key: `identity`, label: `Identity` }],
+                },
+            ]),
+        ],
+        [instance(`ada`, `identity`), instance(`ops`, `ssh`)],
+    );
+
+    expect(entries.map((entry) => entry.id)).toEqual([`reddit`, ...CAPABILITY_CATALOG.map((entry) => entry.id)]);
+    expect(entries[0]?.fields.find((field) => field.key === `identity`)?.options).toEqual([
+        { value: ``, label: `Standalone` },
+        { value: `ada`, label: `ada` },
+    ]);
+});
+
+// An edit keeps the connection's name; an add suggests a free one; a machine arriving from desktop sync brings its own,
+// chosen, so the two doors fold into one row.
+test(`opens the form on the connection's name, a free one, or the arriving machine's`, () => {
+    const linux = tile({ id: `linux`, kind: `device` });
+    const taken = [instance(`linux`, `device`)];
+
+    expect(openingName(linux, instance(`linux`, `device`), taken, ``)).toEqual({ name: `linux`, chosen: false });
+    expect(openingName(linux, undefined, taken, ``)).toEqual({ name: `linux-2`, chosen: false });
+    expect(openingName(linux, undefined, taken, `radarsu-rog`)).toEqual({ name: `radarsu-rog`, chosen: true });
+    // Editing wins over an arriving machine: the connection being edited keeps its own name.
+    expect(openingName(linux, instance(`omen`, `device`), taken, `radarsu-rog`)).toEqual({ name: `omen`, chosen: false });
 });

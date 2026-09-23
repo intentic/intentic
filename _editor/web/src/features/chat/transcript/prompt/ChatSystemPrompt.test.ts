@@ -7,6 +7,7 @@ import { IconStub } from "@intentic/ui/testing";
 import PrimeVue from "primevue/config";
 import { test, expect, afterEach, mock } from "bun:test";
 import { type App, createApp, h, ref, toValue } from "vue";
+import { fakeSandboxRpc } from "../../../../testing/sandboxRpcFake";
 import ChatSystemPrompt from "./ChatSystemPrompt.vue";
 
 const PROMPT: ConversationPrompt = {
@@ -41,7 +42,7 @@ mock.module(`../../../sandbox/client/useSandboxQuery`, () => ({
         };
     },
 }));
-mock.module(`../../../sandbox/client/sandboxClient`, () => ({ sandboxJson: mock() }));
+mock.module(`../../../sandbox/client/sandboxRpc`, () => ({ sandboxRpc: fakeSandboxRpc() }));
 
 let app: App | undefined;
 

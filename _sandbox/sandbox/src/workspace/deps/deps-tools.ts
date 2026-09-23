@@ -1,5 +1,5 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
-import { sdk } from "../../runtimes/claude/claude-sdk.js";
+import { sdk } from "../../engines/claude-sdk.js";
 import { z } from "zod";
 import { unresolvedSummary } from "./dependency-drift.js";
 import type { DependencyRequestOrigin } from "./dependency-origin.js";

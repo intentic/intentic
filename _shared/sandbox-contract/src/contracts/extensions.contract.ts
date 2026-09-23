@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { CapabilityIdParamSchema } from "../schemas/capabilities.js";
 import {
     ExtensionEnabledInputSchema,
@@ -24,7 +24,7 @@ import { OkSchema } from "../schemas/shared.js";
 // Installed extensions resolved to their approved manifests. The bundle itself is a plain Hono route, `GET
 // /extensions/{id}/bundle`, not part of this oRPC contract: raw ESM bytes aren't a JSON payload.
 export const extensionsContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/extensions",
@@ -34,7 +34,7 @@ export const extensionsContract = {
         })
         .output(ExtensionsListSchema),
     // Writes into `.intentic/config/workspace-extensions/<name>/`.
-    create: oc
+    create: procedure
         .route({
             method: "POST",
             path: "/extensions/workspace",
@@ -46,7 +46,7 @@ export const extensionsContract = {
         .output(WorkspaceExtensionCreatedSchema),
     // Read the plan first, then send the removal: the plan is the only place the owner is told what else goes, and the
     // connections it names are not derivable from the manifest alone.
-    removalPlan: oc
+    removalPlan: procedure
         .route({
             method: "GET",
             path: "/extensions/{id}/removal",
@@ -56,7 +56,7 @@ export const extensionsContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(ExtensionRemovalPlanSchema),
-    remove: oc
+    remove: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/remove",
@@ -66,7 +66,7 @@ export const extensionsContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(ExtensionRemovedSchema),
-    settings: oc
+    settings: procedure
         .route({
             method: "GET",
             path: "/extensions/{id}/settings",
@@ -75,7 +75,7 @@ export const extensionsContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(ExtensionSettingsSchema),
-    setSettings: oc
+    setSettings: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/settings",
@@ -86,7 +86,7 @@ export const extensionsContract = {
         .input(ExtensionSettingsInputSchema)
         .output(OkSchema),
     // The Extensions tab states which of these apply to a given extension.
-    setEnabled: oc
+    setEnabled: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/enabled",
@@ -97,7 +97,7 @@ export const extensionsContract = {
         .input(ExtensionEnabledInputSchema)
         .output(OkSchema),
     // The permission gate that produces these counts runs in the browser (apiImpl.ts).
-    recordUsage: oc
+    recordUsage: procedure
         .route({
             method: "POST",
             path: "/extensions/usage",
@@ -107,7 +107,7 @@ export const extensionsContract = {
         })
         .input(ExtensionUsageBatchSchema)
         .output(OkSchema),
-    readiness: oc
+    readiness: procedure
         .route({
             method: "GET",
             path: "/extensions/{id}/readiness",
@@ -119,7 +119,7 @@ export const extensionsContract = {
         .output(ExtensionReadinessSchema),
     // The extensions list itself carries what the periodic registry check found (update/advisory/health per row); these
     // routes are the verbs around it.
-    checkUpdates: oc
+    checkUpdates: procedure
         .route({
             method: "POST",
             path: "/extensions/updates/check",
@@ -128,7 +128,7 @@ export const extensionsContract = {
                 "Compares every installed extension against its source and reports what is newer, what carries an advisory and what looks unhealthy. This also happens on a schedule; call it to check on demand.",
         })
         .output(ExtensionUpdatesCheckedSchema),
-    updatePreview: oc
+    updatePreview: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/update/preview",
@@ -138,7 +138,7 @@ export const extensionsContract = {
         })
         .input(ExtensionUpdateActionSchema)
         .output(ExtensionUpdatePreviewSchema),
-    applyUpdate: oc
+    applyUpdate: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/update",
@@ -148,7 +148,7 @@ export const extensionsContract = {
         })
         .input(ExtensionUpdateActionSchema)
         .output(ExtensionUpdateAppliedSchema),
-    revert: oc
+    revert: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/revert",
@@ -157,7 +157,7 @@ export const extensionsContract = {
         })
         .input(CapabilityIdParamSchema)
         .output(ExtensionUpdateAppliedSchema),
-    setUpdatePolicy: oc
+    setUpdatePolicy: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/update-policy",
@@ -168,7 +168,7 @@ export const extensionsContract = {
         .input(ExtensionUpdatePolicyInputSchema)
         .output(OkSchema),
     // Declared via `contributes.processes`; the terminals list shows each one's log as `svc-ext-<id>-<name>`.
-    processStatus: oc
+    processStatus: procedure
         .route({
             method: "GET",
             path: "/extensions/{id}/processes/{name}",
@@ -177,7 +177,7 @@ export const extensionsContract = {
         })
         .input(ExtensionProcessParamSchema)
         .output(ExtensionProcessStatusSchema),
-    processStart: oc
+    processStart: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/processes/{name}/start",
@@ -186,7 +186,7 @@ export const extensionsContract = {
         })
         .input(ExtensionProcessParamSchema)
         .output(OkSchema),
-    processStop: oc
+    processStop: procedure
         .route({
             method: "POST",
             path: "/extensions/{id}/processes/{name}/stop",

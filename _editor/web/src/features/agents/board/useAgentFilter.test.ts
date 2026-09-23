@@ -1,6 +1,8 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import * as actualVueQuery from "@tanstack/vue-query";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // Same module-eval cuts useAgents.test.ts makes: importing the fleet store pulls in the router, analytics and sandbox
 // modules, which read environment.ts's `window.env` at import time.
@@ -15,6 +17,8 @@ mock.module("../../sandbox/client/useSandbox", () => {
         sandboxKey: (...parts: unknown[]) => [...parts, `sbx-1`],
     };
 });
+// The daemon tier never reaches the typed client here (its useQuery is stubbed below); anything else that asks says so.
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc() }));
 // These cases run on fake timers, so useChat's hydrate watch actually runs here; the registered placeholder has an
 // empty transcript and other requests answer 404, irrelevant to the filter but must not unlatch `registered`.
 mock.module("../../sandbox/client/sandboxClient", () => ({
@@ -37,7 +41,7 @@ mock.module("@tanstack/vue-query", () => {
         useQuery: (options: { queryKey: Ref<unknown[]> }) => {
             keys.push(options.queryKey);
             return {
-                data: computed(() => (unref(options.queryKey)[0] === `agents` ? answers.agents : answers.sessions)),
+                data: computed(() => (unref(options.queryKey)[0] === `agents.search` ? answers.agents : answers.sessions)),
                 isFetching: ref(false),
             };
         },
@@ -49,7 +53,7 @@ import { computed, effectScope, type EffectScope, nextTick, ref, type Ref, unref
 import { Conversation } from "../../chat/session/conversation";
 import { useChat } from "../../chat/run/useChat";
 import { useAgentFilter } from "./useAgentFilter";
-import { resetAgents, useAgents } from "../fleet/useAgents";
+import { useAgents } from "../fleet/useAgents";
 import type { FleetAgent } from "../fleet/useAgents-fleet";
 import { setAgents } from "../fleet/useAgents-registry";
 
@@ -103,7 +107,7 @@ afterEach(() => {
 
 beforeEach(() => {
     jest.useFakeTimers();
-    resetAgents();
+    resetSandboxScope();
     keys.length = 0;
     answers.agents = undefined;
     answers.sessions = undefined;
@@ -138,7 +142,7 @@ describe(`useAgentFilter`, () => {
     it(`matches a later prompt of an OPEN tab without the daemon, and quotes the line`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
         const conversation = new Conversation(`a1`);
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `fix the login bug` },
             { role: `assistant`, text: `landAgent is defined in laneDrop.ts` },
             { role: `user`, text: `actually make it use landAgent instead` },
@@ -159,7 +163,7 @@ describe(`useAgentFilter`, () => {
     it(`matches the agent's own reply in an open tab and names the speaker`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
         const conversation = new Conversation(`a1`);
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `fix the login bug` },
             { role: `assistant`, text: `landAgent is defined in laneDrop.ts` },
         ]);
@@ -177,7 +181,7 @@ describe(`useAgentFilter`, () => {
     it(`never matches a notice line`, async () => {
         setAgents([agent(`a1`, { title: `fix the login bug` })], 1);
         const conversation = new Conversation(`a1`);
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `fix the login bug` },
             { role: `notice`, text: `landAgent branch was rebased` },
         ]);
@@ -204,7 +208,7 @@ describe(`useAgentFilter`, () => {
     it(`prefers the local answer when both tiers hit the same agent`, async () => {
         setAgents([agent(`a1`, { title: `whatever` })], 1);
         const conversation = new Conversation(`a1`);
-        conversation.restoreMessages([{ role: `user`, text: `the landAgent bug` }]);
+        conversation.transcript.restoreMessages([{ role: `user`, text: `the landAgent bug` }]);
         useChat().conversations.value = [placeholder(), conversation];
         answers.agents = { matches: [{ id: `a1`, snippet: { text: `stale daemon line`, speaker: `user` } }], scanned: 1 };
 
@@ -238,7 +242,8 @@ describe(`useAgentFilter`, () => {
         const filter = filterIn();
         filter.query.value = `FROM`;
         await settle();
-        expect(keys.every((key) => !String(unref(key)).includes(`caseSensitive`))).toBe(true);
+        // Each key carries the read's own input: the term as folded, and no switch while the rule is off.
+        expect(keys.map((key) => unref(key)[1])).toEqual([{ query: `from` }, { query: `from` }]);
 
         // Flipping the switch re-folds the term and re-asks; until it settles, the composable's own guard holds back
         // the daemon's older answer.
@@ -246,7 +251,11 @@ describe(`useAgentFilter`, () => {
         await settle();
         // Both tiers' keys, the fleet's and the never-carded sessions', or rows found under the old rule would still be
         // listed.
-        expect(keys.map((key) => String(unref(key))).filter((key) => key.includes(`query=FROM&caseSensitive=true`))).toHaveLength(2);
+        expect(keys.map((key) => unref(key)[0])).toEqual([`agents.search`, `sessions.list`]);
+        expect(keys.map((key) => unref(key)[1])).toEqual([
+            { query: `FROM`, caseSensitive: `true` },
+            { query: `FROM`, caseSensitive: `true` },
+        ]);
     });
 
     // The board memoises a card on this snippet (`v-memo`); an equal-but-new object every call would read as a change
@@ -254,7 +263,7 @@ describe(`useAgentFilter`, () => {
     it(`reports one unchanged hit as the same object every time it is asked`, async () => {
         setAgents([agent(`a1`, { title: `whatever` })], 1);
         const conversation = new Conversation(`a1`);
-        conversation.restoreMessages([{ role: `user`, text: `the landAgent bug` }]);
+        conversation.transcript.restoreMessages([{ role: `user`, text: `the landAgent bug` }]);
         useChat().conversations.value = [placeholder(), conversation];
 
         const filter = filterIn();
@@ -269,7 +278,7 @@ describe(`useAgentFilter`, () => {
 
         // ...and across a rebuild of the local index, which every streaming frame causes: the quoted line is untouched,
         // so the hit is the same hit.
-        conversation.restoreMessages([
+        conversation.transcript.restoreMessages([
             { role: `user`, text: `the landAgent bug` },
             { role: `assistant`, text: `looking at it now` },
         ]);

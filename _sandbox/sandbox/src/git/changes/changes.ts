@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { type GitChange, isScratch, type ScratchPath } from "@intentic/sandbox-contract";
 import { defaultGit, type GitRunner } from "@intentic/scaffold";
-import { EMPTY_TREE } from "../../history/history.js";
+import { EMPTY_TREE } from "../../workspace/layout/git-layout.js";
 import { readWorkspaceFile, statWorkspaceFileSize } from "../../workspace/files/workspace-files.js";
 import { parseNameStatusZ, parseNumstatZ, parseStatusV2 } from "./changes-porcelain.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";

@@ -126,17 +126,18 @@ export const createDiffLocator = (services: DiffLocatorDeps): DiffLocator => {
         if (entry === undefined) {
             throw new DiffLocateError(404, "unknown agent");
         }
-        if (entry.branch === undefined) {
+        const worktree = entry.placement;
+        if (worktree.kind === "main") {
             throw new DiffLocateError(400, "workspace conversation has no isolated diff");
         }
-        const composed = entry.repos.find((candidate) => candidate.repo === query.repo);
+        const composed = worktree.repos.find((candidate) => candidate.repo === query.repo);
         if (composed === undefined) {
             throw new DiffLocateError(404, "repo not in this agent's composition");
         }
         if (entry.archivedAt !== undefined) {
             const main = services.agentWorktrees.mainDir(query.repo);
             guardPath(main, query.path);
-            return { dir: main, spec: which === "before" ? `${composed.base}:${query.path}` : `${entry.branch}:${query.path}` };
+            return { dir: main, spec: which === "before" ? `${composed.base}:${query.path}` : `${worktree.branch}:${query.path}` };
         }
         const dir = services.agentWorktrees.worktreeDir(entry.id, query.repo);
         const file = guardPath(dir, query.path);

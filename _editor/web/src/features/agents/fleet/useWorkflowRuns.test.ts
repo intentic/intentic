@@ -3,17 +3,21 @@ import { describe, it, expect, mock } from "bun:test";
 import { mocked, waitFor } from "@intentic/testing/bun";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp, effectScope, ref } from "vue";
-import { WORKFLOW_RUNS } from "../../../lib/queryKeys";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { rpcKey } from "../../../lib/queryKeys";
+import type { ProcedureOutput } from "../../sandbox/client/sandboxRpc";
 import { useSandboxQuery } from "../../sandbox/client/useSandboxQuery";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 import type { FleetAgent } from "./useAgents-fleet";
 import { insideRun, laneOfRun, runIdsInLedger, runMatches, runsInLane, useWorkflowRuns } from "./useWorkflowRuns";
 
-// Importing these functions pulls in the sandbox client and fleet store, which read `window.env` at import time;
-// mocked here even though this file never touches them.
+// Importing these functions pulls in the fleet store, which reads `window.env` at import time; mocked here even
+// though this file never touches it.
 mock.module("../../../router", () => ({ router: { push: mock() } }));
 mock.module("../../../app/analytics", () => ({ track: mock() }));
-mock.module("../../sandbox/client/sandboxClient", () => ({ sandboxJson: mock(), sandboxRequest: mock() }));
+// The two filing verbs this file presses; any other call names itself.
+const archiveRun = mock();
+const unarchiveRun = mock();
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workflows: { archiveRun, unarchiveRun } }) }));
 mock.module("../../sandbox/client/useSandboxQuery", () => ({ useSandboxQuery: mock() }));
 
 // The grouping rule alone: the pure half of a run row shared by the board's lanes, the board's archive, and the
@@ -120,24 +124,28 @@ describe("filing a run on the press", () => {
         const runs = effectScope().run(() => app.runWithContext(() => useWorkflowRuns()))!;
         return { client, runs };
     };
+    // The ledger as the query holds it: the daemon's whole answer, filed under its route name.
     const filedAt = (client: QueryClient, runId: string): number | undefined =>
-        client.getQueryData<WorkflowRun[]>(WORKFLOW_RUNS.every)?.find((entry) => entry.runId === runId)?.archivedAt;
+        client.getQueryData<ProcedureOutput<`workflows.runs`>>(rpcKey(`workflows.runs`))?.runs.find((entry) => entry.runId === runId)?.archivedAt;
     // The daemon's answer to the one press out, held open so the frame before it can be read.
     const heldRefusal = (): ((error: Error) => void) => {
         let refuse: (error: Error) => void = () => undefined;
-        mocked(sandboxJson).mockImplementation((() => new Promise((_answer, fail) => (refuse = fail))) as never);
+        for (const verb of [archiveRun, unarchiveRun]) {
+            verb.mockImplementation(() => new Promise((_answer, fail) => (refuse = fail)));
+        }
         return (error) => refuse(error);
     };
 
     it("files the run away on the press, and back where it stood when the daemon refuses", async () => {
         const { client, runs } = standUp();
-        client.setQueryData(WORKFLOW_RUNS.every, [run(`r1`), run(`r2`)]);
+        client.setQueryData(rpcKey(`workflows.runs`), { runs: [run(`r1`), run(`r2`)] });
         const refuse = heldRefusal();
 
         const press = runs.archive.mutateAsync(`r1`);
 
         await waitFor(() => expect(filedAt(client, `r1`)).toEqual(expect.any(Number)));
         expect(filedAt(client, `r2`)).toBeUndefined();
+        expect(archiveRun).toHaveBeenCalledWith({ runId: `r1` });
         refuse(new Error(`the run is still going`));
         await expect(press).rejects.toThrow(`the run is still going`);
         expect(filedAt(client, `r1`)).toBeUndefined();
@@ -145,12 +153,13 @@ describe("filing a run on the press", () => {
 
     it("brings an archived run back on the press, and returns it to the archive, filing date and all, when refused", async () => {
         const { client, runs } = standUp();
-        client.setQueryData(WORKFLOW_RUNS.every, [run(`r1`, { archivedAt: 9_000 })]);
+        client.setQueryData(rpcKey(`workflows.runs`), { runs: [run(`r1`, { archivedAt: 9_000 })] });
         const refuse = heldRefusal();
 
         const press = runs.unarchive.mutateAsync(`r1`);
 
         await waitFor(() => expect(filedAt(client, `r1`)).toBeUndefined());
+        expect(unarchiveRun).toHaveBeenCalledWith({ runId: `r1` });
         refuse(new Error(`its sessions are gone`));
         await expect(press).rejects.toThrow(`its sessions are gone`);
         expect(filedAt(client, `r1`)).toBe(9_000);

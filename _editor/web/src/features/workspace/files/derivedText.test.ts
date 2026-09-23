@@ -1,13 +1,15 @@
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { WorkspaceDerived } from "@intentic/sandbox-contract";
 import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { fakeSandboxRpc } from "../../../testing/sandboxRpcFake";
 
 // The rpc client builds a link at import time, so the daemon call is the seam: the predicates are pure, and what the
 // module remembers is asserted through it.
 const derived = mock();
-mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: { workspace: { derived, derive: mock() } } }));
+mock.module("../../sandbox/client/sandboxRpc", () => ({ sandboxRpc: fakeSandboxRpc({ workspace: { derived, derive: mock() } }) }));
 
 const { derivedIsOnlyView, mayHaveDerivedText, readDerivedText } = await import("./derivedText");
-const { forgetDerivedText, rememberedDerivedText } = await import("./derivedCache");
+const { rememberedDerivedText } = await import("./derivedCache");
 
 const STOPPED = { enabled: false, queued: 0, deriving: [], sweeping: false, broken: false };
 const shadow = (path: string, content: string): WorkspaceDerived => ({
@@ -25,7 +27,7 @@ const shadow = (path: string, content: string): WorkspaceDerived => ({
 
 describe("what a tab remembers of the shadows it has read", () => {
     beforeEach(() => {
-        forgetDerivedText();
+        resetSandboxScope();
         derived.mockReset();
     });
 
@@ -35,6 +37,7 @@ describe("what a tab remembers of the shadows it has read", () => {
         derived.mockResolvedValue(shadow(`docs/spec.docx`, `# Quarterly plan`));
         expect(rememberedDerivedText(`docs/spec.docx`)).toBeUndefined();
         await readDerivedText(`docs/spec.docx`);
+        expect(derived).toHaveBeenCalledWith({ path: `docs/spec.docx` });
         expect(rememberedDerivedText(`docs/spec.docx`)?.path).toBe(`docs/spec.docx`);
     });
 
@@ -54,7 +57,7 @@ describe("what a tab remembers of the shadows it has read", () => {
     test("switching sandboxes drops all of them", async () => {
         derived.mockResolvedValue(shadow(`docs/spec.docx`, `# Quarterly plan`));
         await readDerivedText(`docs/spec.docx`);
-        forgetDerivedText();
+        resetSandboxScope();
         expect(rememberedDerivedText(`docs/spec.docx`)).toBeUndefined();
     });
 });

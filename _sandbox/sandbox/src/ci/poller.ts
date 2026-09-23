@@ -1,7 +1,6 @@
 import { CI_POLL_INTERVAL_MS } from "@intentic/sandbox-contract";
-import type { WakeFn } from "../automations/scheduler.js";
 import type { Services } from "../composition.js";
-import { publishRuntimeChange } from "../system/runtime-watch.js";
+import { publishRuntimeChange } from "../seams/runtime-feed.js";
 import { ciResultOf, dispatchCiRun, rememberCiRun } from "./events.js";
 import { ciClientFor, type FetchFn } from "./providers.js";
 import { ciProjects } from "./projects.js";
@@ -20,7 +19,7 @@ export interface CiPoller {
     readonly poll: () => Promise<void>;
 }
 
-export const createCiPoller = (services: Services, wake: WakeFn, fetchFn: FetchFn = fetch, intervalMs = CI_POLL_INTERVAL_MS): CiPoller => {
+export const createCiPoller = (services: Services, fetchFn: FetchFn = fetch, intervalMs = CI_POLL_INTERVAL_MS): CiPoller => {
     let timer: NodeJS.Timeout | undefined;
     let pass: Promise<void> = Promise.resolve();
 
@@ -51,7 +50,7 @@ export const createCiPoller = (services: Services, wake: WakeFn, fetchFn: FetchF
                 announced.authorName !== undefined
                     ? { id: announced.authorName, name: announced.authorName }
                     : { id: project.account.provider, name: project.account.provider };
-            await dispatchCiRun(services, announced, author, wake);
+            await dispatchCiRun(services, announced, author);
         }
         // Written after dispatch, so a crash mid-pass re-announces instead of silently dropping a run.
         await services.ciStore.recordAnnounced(project.repo, [...ids, ...known]);

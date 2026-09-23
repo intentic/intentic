@@ -2,15 +2,15 @@
 // to land. Driven through real surfaces (a tab click, a history row, a link) since they all land on the same write. The
 // board's other selection (multi-pane splits) is tested at the foot of the file.
 import "@intentic/testing/dom";
+import { resetSandboxScope } from "@intentic/extension-api";
 import type { AgentSummary } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { type App, createApp, h, nextTick } from "vue";
-import { resetChat, useChat } from "../../chat/run/useChat";
+import { useChat } from "../../chat/run/useChat";
 import { openAgentConversation } from "../../chat/panel/useChat-reveal";
 import { queryClient } from "../../../lib/queryPersistence";
-import { resetAgents } from "../fleet/useAgents";
 import { setAgents } from "../fleet/useAgents-registry";
 import { router } from "../../../router";
 import AgentsView from "./AgentsView.vue";
@@ -53,8 +53,7 @@ const settle = async (): Promise<void> => {
 
 beforeEach(async () => {
     localStorage.clear(); // the tab snapshot persists per sandbox; each test starts from one fresh chat
-    resetChat();
-    resetAgents();
+    resetSandboxScope();
     reveals.length = 0;
     await nextTick();
 });

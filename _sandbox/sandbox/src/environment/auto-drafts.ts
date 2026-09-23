@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { EnvironmentDrift, RuntimeInstall, RuntimeInstallsFile } from "@intentic/sandbox-contract";
 import { utcDayOf } from "@intentic/sandbox-contract";
 import { installLive } from "./drift.js";
-import { statePath } from "../workspace/layout/state-paths.js";
+import { statePath } from "../state-paths.js";
 
 // Writes an overlay draft for a runtime install once it earns one; the pipeline downstream (environment.d/, review,
 // approval, rebuild) is untouched. A draft needs all three:

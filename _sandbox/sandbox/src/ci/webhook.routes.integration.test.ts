@@ -9,9 +9,9 @@ import { Hono } from "hono";
 import { SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { test, expect, mock } from "bun:test";
 import { SETTLES, hoisted, waitFor } from "@intentic/testing/bun";
-import { fileTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { sqliteTurnJournal } from "../agent/run/turn/turn-journal.js";
+import { conversationsDbPath, openConversationsDb } from "../store/conversations-db.js";
 import { fileAutomationsStore } from "../automations/automations-store.js";
-import type { WakeFn } from "../automations/scheduler.js";
 import { fileCapabilitiesStore } from "../capabilities/capabilities-store.js";
 import { automationConfig } from "../harness/route-stores.testing.js";
 import type { Services } from "../composition.js";
@@ -22,11 +22,13 @@ import { fileCiStore } from "./ci-store.js";
 import type { FetchFn } from "./providers.js";
 import { createRunsCache } from "./runs-cache.js";
 import { createCiWebhookRoute } from "./webhook.routes.js";
+import type { TurnStarter } from "../seams/turn-starter.js";
+import { drivenBy } from "../testing.js";
 
 // The push half, recorded rather than fed to a live /events feed: subscribing for real would start the runtime
 // sampler (tmux, procfs) for a fact these tests state in one line.
 const { published } = hoisted(() => ({ published: [] as string[] }));
-mock.module("../system/runtime-watch.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
+mock.module("../seams/runtime-feed.js", () => ({ publishRuntimeChange: (...domains: string[]) => published.push(...domains) }));
 
 // The receiver touches ciStore/ciRuns/workspace/capabilities plus the listener dispatch path
 // (automations/activity/logger); `unstubbed` keeps the fake that small: the listeners.integration.test.ts convention.
@@ -52,13 +54,13 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
     const prompts: string[] = [];
-    const wake: WakeFn = async function* (_services, input) {
+    const wake: TurnStarter["stream"] = async function* (input) {
         prompts.push(input.prompt);
         yield { kind: "done" } as never;
     };
@@ -66,7 +68,7 @@ const harness = async (automationId: string, narrow: { eventType?: string; branc
     const fetchFn: FetchFn = (async () =>
         new Response(JSON.stringify({ jobs: [{ id: 1, name: "lint", conclusion: "failure" }] }), { status: 200 })) as FetchFn;
     const app = new Hono();
-    app.post("/ci/webhook/:host", createCiWebhookRoute(services, wake, fetchFn));
+    app.post("/ci/webhook/:host", createCiWebhookRoute(drivenBy(services, wake), fetchFn));
     return { app, services, prompts };
 };
 
@@ -207,18 +209,18 @@ test("a gitlab delivery authenticates by token echo and normalizes the Pipeline 
         ciRuns: createRunsCache(60_000),
         threadSessions: fileThreadSessionsStore(join(root, `${STATE_DIR}`, "records", "thread-sessions.json")),
         senders: fileSendersStore(join(root, `${STATE_DIR}`, "records", "senders.json")),
-        turnJournal: fileTurnJournal(join(root, "turns")),
+        turnJournal: sqliteTurnJournal(openConversationsDb(conversationsDbPath(root))),
         transcripts: unstubbed<Services["transcripts"]>("transcripts", { read: async () => [], append: async () => {} }),
         activity: { append: async () => {}, list: async () => [] },
         logger: unstubbed<Services["logger"]>("logger", { error: () => {}, warn: () => {} }),
     });
     const prompts: string[] = [];
-    const wake: WakeFn = async function* (_services, input) {
+    const wake: TurnStarter["stream"] = async function* (input) {
         prompts.push(input.prompt);
         yield { kind: "done" } as never;
     };
     const app = new Hono();
-    app.post("/ci/webhook/:host", createCiWebhookRoute(services, wake, (async () => new Response("[]")) as FetchFn));
+    app.post("/ci/webhook/:host", createCiWebhookRoute(drivenBy(services, wake), (async () => new Response("[]")) as FetchFn));
 
     const payload = {
         object_attributes: { id: 42, ref: "main", sha: "abc", status: "success", created_at: "2026-07-29T10:00:00Z", duration: 90 },

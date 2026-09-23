@@ -1,7 +1,7 @@
 import { checks as agentChecks, owner as agentOwner, type TurnJournalDeps } from "../agent/invariant.js";
 import { checks as agentsChecks, owner as agentsOwner, type FleetRegistryDeps } from "../agents/invariant.js";
 import { checks as capabilityChecks, owner as capabilityOwner, type ManifestSecretDeps } from "../capabilities/invariant.js";
-import { checks as childrenChecks, owner as childrenOwner } from "../agent/subagents/invariant.js";
+import { type ChildLedgerDeps, checks as childrenChecks, owner as childrenOwner } from "../agent/subagents/invariant.js";
 import { checks as cursorChecks, type CommandGuardDeps, owner as cursorOwner } from "../runtimes/cursor/invariant.js";
 import { checks as derivedChecks, owner as derivedOwner } from "../derived/invariant.js";
 import { checks as engineChecks, owner as engineOwner } from "../engines/invariant.js";
@@ -14,6 +14,7 @@ import { checks as runnerChecks, owner as runnerOwner } from "../runners/invaria
 import { checks as areaChecks, owner as areaOwner, type AreaRosterDeps } from "../areas/invariant.js";
 import { checks as fenceChecks, owner as fenceOwner } from "../fences/invariant.js";
 import { checks as runtimeChecks, owner as runtimeOwner } from "../runtimes/invariant.js";
+import { checks as seamChecks, owner as seamOwner } from "../seams/invariant.js";
 import { checks as tunnelChecks, owner as tunnelOwner } from "../tunnel/invariant.js";
 import { checks as webextChecks, owner as webextOwner } from "../webext/invariant.js";
 import type { InvariantRegistry } from "./invariants.js";
@@ -23,6 +24,7 @@ import type { InvariantRegistry } from "./invariants.js";
 // checks is still registered, since owners() means "answered", not "has checks".
 
 export type DaemonInvariantDeps = TurnJournalDeps &
+    ChildLedgerDeps &
     FleetRegistryDeps &
     ManifestSecretDeps &
     ExitInvariantDeps &
@@ -42,8 +44,8 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(issueOwner, issueChecks(deps));
     registry.register(cursorOwner, cursorChecks(deps));
     registry.register(areaOwner, areaChecks(deps));
+    registry.register(childrenOwner, childrenChecks(deps));
     // Read their subjects off module state and the volume rather than off a service.
-    registry.register(childrenOwner, childrenChecks());
     registry.register(hostOwner, hostChecks());
     registry.register(webextOwner, webextChecks());
     registry.register(runnerOwner, runnerChecks());
@@ -51,5 +53,6 @@ export const registerDaemonInvariants = (registry: InvariantRegistry, deps: Daem
     registry.register(derivedOwner, derivedChecks());
     registry.register(fenceOwner, fenceChecks());
     registry.register(runtimeOwner, runtimeChecks());
+    registry.register(seamOwner, seamChecks());
     registry.register(tunnelOwner, tunnelChecks());
 };

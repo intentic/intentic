@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
-import { lstat, readdir, readlink } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdtemp, readdir, readlink, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join } from "node:path";
 import { Readable } from "node:stream";
 import { createGzip } from "node:zlib";
 import { type BundleManifest, HISTORY_STATE_FILES, WORKSPACE_STATE_FILES } from "@intentic/sandbox-contract";
@@ -8,6 +9,7 @@ import { createIgnoreScope, type IgnoreScope } from "@intentic/workspace-ignore"
 import { pack, type Pack } from "tar-stream";
 import type { Services } from "../composition.js";
 import type { SandboxPresentation } from "../platform/platform-client.js";
+import { conversationsDbPath } from "../store/conversations-db.js";
 import { discoverRepos } from "../workspace/layout/repo-discovery.js";
 import { carries, historyMayContain, historyPortability, IGNORE_SCOPE_EXCLUSIONS, workspaceMayContain, workspacePortability } from "./classify.js";
 import { deriveDefinition } from "./definition.js";
@@ -94,6 +96,23 @@ const packTree = async (
 
     await walk(root, "", scope);
     return { files, bytes };
+};
+
+// A consistent copy of the conversations database, packed as one file and gone from disk once packed; nothing at all for
+// a fleet that has never held a row, as a volume nothing has happened on carries no history.
+const packSnapshot = async (packer: Pack, name: string, database: Pick<Services["conversationsDb"], "snapshot" | "empty">): Promise<void> => {
+    if (database.empty()) {
+        return;
+    }
+    const scratch = await mkdtemp(join(tmpdir(), "intentic-bundle-"));
+    try {
+        const snapshot = join(scratch, "snapshot.db");
+        database.snapshot(snapshot);
+        const stats = await lstat(snapshot);
+        await packFile(packer, name, snapshot, stats.size, stats.mode & 0o7777, stats.mtime);
+    } finally {
+        await rm(scratch, { recursive: true, force: true });
+    }
 };
 
 // The manifest's `excluded` list, derived from the same tables the walk consults, so it can never describe a different
@@ -203,16 +222,20 @@ export const packBundle = (services: Services, options: { readonly secrets: bool
             // file, and it counts against MAX_UPLOAD_BYTES. IGNORED_DIRS already names `.turbo`, so the junk denylist
             // is the right instrument. Nothing carried is at risk: every node_modules/dist under /history lives in
             // `engines/`, which is `derived` and never descended.
+            // The live database and its WAL are a pair a file copy can tear mid-write; a snapshot taken for this bundle
+            // stands in for both, under the database's own name.
+            const database = basename(conversationsDbPath(services.config.historyRoot));
             await packTree(
                 packer,
                 services.config.historyRoot,
                 "history/",
                 {
-                    carry: (relPath) => carries(historyPortability(relPath), options.secrets),
+                    carry: (relPath) => !relPath.startsWith(database) && carries(historyPortability(relPath), options.secrets),
                     enter: (relPath) => historyMayContain(relPath, options.secrets),
                 },
                 await createIgnoreScope().descend(services.config.historyRoot, ""),
             );
+            await packSnapshot(packer, `history/${database}`, services.conversationsDb);
             packer.finalize();
         } catch (error) {
             packer.destroy(error instanceof Error ? error : new Error(String(error)));

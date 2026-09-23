@@ -1,10 +1,10 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { ActivityListSchema, ActivityQuerySchema, ActivityStatusSchema } from "../schemas/activity.js";
 
 // The activity audit feed (provider-agnostic; Discord is the first source). Read-only by design,
 // events are appended daemon-side only, so the log stays a trustworthy record of what the agent did.
 export const activityContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/activity",
@@ -14,7 +14,7 @@ export const activityContract = {
         })
         .input(ActivityQuerySchema)
         .output(ActivityListSchema),
-    status: oc
+    status: procedure
         .route({
             method: "GET",
             path: "/activity/status",

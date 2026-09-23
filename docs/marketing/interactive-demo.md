@@ -19,12 +19,12 @@ Every browser→outside call in the web app goes through one of two globals, res
 
 | Transport | Where | Reaches |
 | --- | --- | --- |
-| `globalThis.fetch` | `composables/sandbox/sandboxClient.ts:43` (raw path calls), `sandboxRpc.ts:60` (typed + streams), `useApi.ts` (platform), better-auth's client | the daemon's `OpenAPIHandler` and the platform's `/rpc` + `/api/auth/*` |
-| `globalThis.WebSocket` | `composables/terminal/terminalSession.ts:160`, `composables/browser/useBrowserView.ts:122` | `/system/terminal`, `/system/browser-view` |
+| `globalThis.fetch` | `features/sandbox/client/sandboxAuthFetch.ts` (every daemon call, the typed `sandboxRpc` and the raw `sandboxClient` alike), `lib/useApi.ts` (platform), better-auth's client | the daemon's `OpenAPIHandler` and its raw routes, and the platform's `/rpc` + `/api/auth/*` |
+| `globalThis.WebSocket` | `features/terminal/terminalSession.ts`, `features/browsers/useBrowserView.ts` | `/system/terminal`, `/system/browser-view` |
 
-`sandboxRpc.ts:43` already documents why its fetch is a hook rather than a captured reference: *"a fetch bound
-then is invisible to anything that replaces it afterwards (a test's stub, an instrumentation wrapper)"*. The demo
-is that wrapper, and it needs no branch anywhere in the app.
+`features/sandbox/client/sandboxRpc.ts` already documents why its fetch is resolved per request rather than
+captured: *"so a fetch replaced later (a test stub, instrumentation) still applies"*. The demo is that
+replacement, and it needs no branch anywhere in the app.
 
 ## The package
 
@@ -51,12 +51,35 @@ source under a path prefix is what surfaced them:
   onto a dead end and the panel never left its column. It is an ordinary route of the app (`/demo/floating/chat`),
   so the demo needs nothing of its own for it beyond the SPA fallback every other route already gets.
 
-Both fixture handlers are plain `Request → Response` functions with contract types on every payload
-(`satisfies AgentsList`, `: SavingsReport`, …), so a shape that drifts from the wire is a build error. They are
-deliberately *not* an oRPC server: `OpenAPIHandler` would put `@orpc/server` in the bundle to re-validate
-payloads this fixture is the only writer of, and the client re-validates none of them anyway. The one piece of
-protocol the demo does own is the event-iterator framing in `sse.ts`: three lines, rather than a dependency on
-`@orpc/standard-server` (a transitive dep of the client, not one web declares).
+The platform's fixture is a plain `Request → Response` function. The daemon's is a **typed fixture router**
+(`src/daemon.ts`): one handler per contract procedure the demo serves, keyed by group and name exactly as the
+contract nests them, each typed by the contract package's handler types (`SandboxHandlerInput`,
+`SandboxHandlerOutput`: what a handler is given, and anything the output schema parses). That matters because the
+editor's typed client parses every answer with the procedure's output schema, so a drifted answer is not a
+cosmetic gap but a surface that never opens. Before the router was typed, seven answers had drifted and nothing
+said so: a transcript page without `from`/`more` (no conversation opened), a sign-in status the contract has no
+word for, an extension switch answering the list instead of `{ ok: true }`, a VPN list without `links`, a secrets
+inventory without `entries`, branches without their `ahead`/`behind`/`at`, and a heartbeat without the fleet `rev`.
+Each became a compile error, and a contract change now breaks the demo's typecheck rather than the landing page.
+
+The dispatcher (`src/router.ts`) stands in for the daemon's `OpenAPIHandler` without being one (`@orpc/*` is not
+a dependency of the demo). A request resolves through the contract's own matcher, `sandboxRouteFor`, the one the
+daemon's gates use. A procedure's input is decoded the way oRPC's compact input structure is, matching what the
+editor's `OpenAPILink` sends: the path's `{param}`s, overlaid by the query's keys for a GET or by the JSON body
+otherwise, then parsed by the procedure's input schema, so a handler reads `caseSensitive` as the boolean the
+daemon's handler would. A handler refuses by throwing, answered as the daemon's own `{ error }` body. A streamed
+procedure (`/events`, `/agent/attach`, a device's agent flow) answers with frames typed by its frame schema. The
+routes the daemon serves outside oRPC (bytes, uploads, the members roster, an extension backend's `/x/…`
+namespace) are answered by hand, keyed by their `RAW_ROUTES` declaration, so a route renamed in the contract
+stops compiling here too. `coverage()` counts the served procedures against the contract's, and the boot line in
+the console reports both.
+
+`pnpm -C _site/demo smoke` (`scripts/smoke-daemon.ts`) is the runtime half: Vite bundles the demo's modules for
+Node, and the script sends one request per served procedure through the dispatcher, encoded as the `OpenAPILink`
+encodes it, and parses every answer, and every streamed frame, with the contract's schema. A procedure served
+without a sample input there does not compile. The one piece of protocol the demo still owns is the
+event-iterator framing in `sse.ts`: three lines, rather than a dependency on `@orpc/standard-server` (a transitive
+dep of the client, not one web declares).
 
 ## The three gates, and why none needs a branch
 

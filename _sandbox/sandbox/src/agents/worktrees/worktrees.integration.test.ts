@@ -9,7 +9,7 @@ import { gitInit } from "@intentic/scaffold";
 import { test, expect, afterEach } from "bun:test";
 import { noIsolation } from "../../testing.js";
 import { ensureRootRepo } from "../../git/remote/root-repo.js";
-import { repoGitDir } from "../../history/history.js";
+import { repoGitDir } from "../../workspace/layout/git-layout.js";
 import { createLogger } from "../../logger.js";
 import { createPerfTracker } from "../../platform/resources/perf.js";
 import { workspacePaths } from "../../workspace/workspace.js";
@@ -381,7 +381,7 @@ test("ensure with a recorded composition repairs a deleted .git pointer", async 
     expect(await sh(repaired.cwd, "branch", "--show-current")).toBe("agent/c1");
 });
 
-test("remove tears down worktrees and branches; prune sweeps orphan dirs", async () => {
+test("remove tears down worktrees and branches; prune leaves a checkout no record names", async () => {
     const { work, historyRoot, worktrees } = await setup();
     const conversation = await worktrees.ensure("c1", []);
     await worktrees.remove("c1", conversation.repos);
@@ -389,13 +389,15 @@ test("remove tears down worktrees and branches; prune sweeps orphan dirs", async
     expect(existsSync(conversation.cwd)).toBe(false);
     await expect(sh(work, "rev-parse", "-q", "--verify", "refs/heads/agent/c1")).rejects.toThrow();
 
-    const orphan = join(historyRoot, "worktrees", "ghost");
-    await mkdir(orphan, { recursive: true });
+    // Unnamed: data this store never held (another storage generation, a hand-made copy), which only its owner deletes.
+    const unnamed = join(historyRoot, "worktrees", "ghost");
+    await mkdir(unnamed, { recursive: true });
+    await writeFile(join(unnamed, "uncommitted.md"), "work\n");
     await worktrees.prune(
         () => ["kept"],
         () => [],
     );
-    expect(existsSync(orphan)).toBe(false);
+    expect(await readFile(join(unnamed, "uncommitted.md"), "utf8")).toBe("work\n");
 });
 
 // Retiring a checkout must cost nothing but the checkout: the branch must capture uncommitted state before the checkout
@@ -485,7 +487,7 @@ test("retire takes the branch off refs/heads and ensure puts it back", async () 
     expect(await readFile(join(restored.cwd, "new-file.md"), "utf8")).toBe("agent file\n");
 });
 
-test("prune parks the branches of agents that are off the board and drops refs no entry claims", async () => {
+test("prune parks the branches of agents that are off the board and keeps refs no entry claims", async () => {
     const { work, worktrees } = await setup();
     const archived = await worktrees.ensure("c1", []);
     await worktrees.ensure("c2", []);
@@ -493,8 +495,9 @@ test("prune parks the branches of agents that are off the board and drops refs n
     await worktrees.retire("c1", archived.repos, undefined);
     await sh(work, "branch", "agent/c1", "refs/agent/c1");
     await sh(work, "update-ref", "-d", "refs/agent/c1");
-    // A parked ref whose conversation the registry no longer lists.
-    await sh(work, "update-ref", "refs/agent/ghost", await sh(work, "rev-parse", "HEAD"));
+    // A parked ref no conversation record names: commits this store never held, which only their owner drops.
+    const head = await sh(work, "rev-parse", "HEAD");
+    await sh(work, "update-ref", "refs/agent/ghost", head);
 
     await worktrees.prune(
         () => ["c1", "c2"],
@@ -504,7 +507,7 @@ test("prune parks the branches of agents that are off the board and drops refs n
     // The sweep never touches a repo that is still checked out.
     expect(await sh(work, "for-each-ref", "--format=%(refname:short)", "refs/heads/agent/")).toBe("agent/c2");
     expect(await sh(work, "rev-parse", "-q", "--verify", "refs/agent/c1")).not.toBe("");
-    await expect(sh(work, "rev-parse", "-q", "--verify", "refs/agent/ghost")).rejects.toThrow();
+    expect(await sh(work, "rev-parse", "-q", "--verify", "refs/agent/ghost")).toBe(head);
 });
 
 test("remove drops a parked agent's commits, not just its branch", async () => {

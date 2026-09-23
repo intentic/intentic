@@ -1,15 +1,18 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { streamOf } from "../protocol/routes.js";
 import { IntenticLineSchema } from "../events/system-events.js";
 import { NetdiskIdParamSchema, NetdiskListSchema } from "../schemas/netdisk.js";
 import { OkSchema } from "../schemas/shared.js";
+
+// The agent's `netdisk` CLI mounts and unmounts these on the agent token.
+const netdiskRoute = procedure.meta({ agent: true });
 
 // A network disk is added as a `netdisk` capability; mounting and unmounting it happen through the routes here, called
 // by both the operator UI and the agent's `netdisk` CLI.
 // Every route reads mount state from the kernel, not daemon memory, so a disk unmounted from a shell and one unmounted
 // from a screen are the same event across a restart.
 export const netdiskContract = {
-    list: oc
+    list: netdiskRoute
         .route({
             method: "GET",
             path: "/netdisk",
@@ -20,7 +23,7 @@ export const netdiskContract = {
         .output(NetdiskListSchema),
     // Streamed: a mount can take seconds against a slow server and can fail with something a person has to read (a
     // refused password, an unreachable server behind a tunnel that is down).
-    mount: oc
+    mount: netdiskRoute
         .route({
             method: "POST",
             path: "/netdisk/{id}/mount",
@@ -30,7 +33,7 @@ export const netdiskContract = {
         })
         .input(NetdiskIdParamSchema)
         .output(streamOf(IntenticLineSchema)),
-    unmount: oc
+    unmount: netdiskRoute
         .route({
             method: "POST",
             path: "/netdisk/{id}/unmount",

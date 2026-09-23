@@ -1,7 +1,6 @@
-import { type ChatRoute, ChatRouteSchema, type Persona, mentionPaths, parsePinned, personaModels, pinnedModelLabel } from "@intentic/sandbox-contract";
+import { type ChatRoute, type Persona, mentionPaths, parsePinned, personaModels, pinnedModelLabel } from "@intentic/sandbox-contract";
 import { computed, ref, type Ref } from "vue";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { sandboxJson } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { useRole } from "../../sandbox/secrets/useRole";
@@ -145,33 +144,33 @@ const noticeText = (want: Want): string => {
 
 // A chat nothing has run in yet: the only state either question can be asked in, and the one the answers are free to
 // decide anything from.
-const fresh = (chat: Conversation, state: RouteState): boolean => !state.asked && chat.box.value === undefined && chat.messages.value.length === 0;
+const fresh = (chat: Conversation, state: RouteState): boolean => !state.asked && chat.box.value === undefined && chat.transcript.messages.value.length === 0;
 
 // Which halves this message is worth asking about. Each is a fact about the chat, not about the sandbox's settings:
 // one already pointed at a model or a persona by hand has nothing left to ask about it.
 const wanted = (chat: Conversation, state: RouteState, text: string, personaOn: boolean): Want => {
     const open = fresh(chat, state);
     return {
-        model: open && chat.auto.value && text.length >= MODEL_MIN_CHARS,
-        persona: open && personaOn && !state.held.value && chat.actsAs.value === undefined && text.length >= PERSONA_MIN_CHARS,
+        model: open && chat.selection.auto.value && text.length >= MODEL_MIN_CHARS,
+        persona: open && personaOn && !state.held.value && chat.selection.actsAs.value === undefined && text.length >= PERSONA_MIN_CHARS,
     };
 };
 
 // The persona this reading may actually put on: the one it named, unless a hand pointed the chat somewhere while the
 // reading ran.
 const takeable = (chat: Conversation, matched: Persona | undefined): Persona | undefined =>
-    matched !== undefined && !stateOf(chat).held.value && chat.actsAs.value === undefined ? matched : undefined;
+    matched !== undefined && !stateOf(chat).held.value && chat.selection.actsAs.value === undefined ? matched : undefined;
 
 // The reading's own model, worn as a pick the user owns from here on.
 const wearPick = (chat: Conversation, pick: NonNullable<NonNullable<ChatRoute["model"]>["pick"]>): void => {
-    chat.wearModel({ provider: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) });
+    chat.selection.apply({ kind: `wearModel`, pin: { provider: pick.provider, model: pick.model, ...(pick.effort === undefined ? {} : { effort: pick.effort }) } });
     // After wearModel, never before: pointing at a provider re-scopes the account to that provider's own remembered
     // one, which would throw away the account the judge just named.
     if (pick.account !== undefined) {
-        chat.account.value = pick.account;
+        chat.selection.apply({ kind: `set`, picks: { account: pick.account } });
     }
     // Marks the one turn the judge decided, so the ledger can be asked later whether the choice held.
-    chat.autoPicked.value = true;
+    chat.selection.apply({ kind: `set`, picks: { autoPicked: true } });
 };
 
 export const useChatRoute = (conversation: () => Conversation): ChatRouting => {
@@ -191,29 +190,26 @@ export const useChatRoute = (conversation: () => Conversation): ChatRouting => {
 
     // A failed call reads as no answer rather than an error: the chat keeps what it had and says so.
     const ask = (chat: Conversation, text: string, want: Want, editorContext: boolean): Promise<ChatRoute | undefined> =>
-        sandboxJson(
-            `/agent/route-chat`,
-            jsonBody(`POST`, {
+        sandboxRpc.agent
+            .routeChat({
                 prompt: text,
                 paths: pathsOf(chat, text),
                 editorContext,
-                planMode: chat.modePick.value === `plan`,
+                planMode: chat.selection.modePick.value === `plan`,
                 model: want.model,
                 persona: want.persona,
-            }),
-        )
-            .then((raw) => ChatRouteSchema.parse(raw))
+            })
             .catch((): ChatRoute | undefined => undefined);
 
     // Puts the persona on and its model with it, through the same `actsAs` ref the pill writes, so a routed persona and
     // a picked one look identical everywhere that reads it.
     const wearPersona = (chat: Conversation, persona: Persona): boolean => {
-        chat.actsAs.value = persona.id;
+        chat.selection.apply({ kind: `set`, picks: { actsAs: persona.id } });
         const head = personaModels(persona, roleSources.value)[0];
         if (head === undefined) {
             return false;
         }
-        chat.wearModel(head);
+        chat.selection.apply({ kind: `wearModel`, pin: head });
         return true;
     };
 
@@ -224,7 +220,7 @@ export const useChatRoute = (conversation: () => Conversation): ChatRouting => {
         const carried = persona !== undefined && wearPersona(chat, persona);
         const pick = route?.model?.pick;
         // `carried` first: a persona's own ladder outranks a model chosen for a chat that had no persona yet.
-        const model = pick !== undefined && !carried && chat.auto.value;
+        const model = pick !== undefined && !carried && chat.selection.auto.value;
         if (model) {
             wearPick(chat, pick);
         }
@@ -239,14 +235,14 @@ export const useChatRoute = (conversation: () => Conversation): ChatRouting => {
         if (!want.model && !want.persona) {
             // Auto armed on a chat nothing will read disarms instead of leaving a question standing that nothing will
             // ever answer.
-            if (chat.auto.value) {
-                chat.setAuto(false);
+            if (chat.selection.auto.value) {
+                chat.selection.apply({ kind: `setAuto`, auto: false });
             }
             return undefined;
         }
         state.asked = true;
         state.since.value = Date.now();
-        const noticeId = chat.notice(noticeText(want), { noticeWait: `chatRoute` });
+        const noticeId = chat.transcript.notice(noticeText(want), { noticeWait: `chatRoute` });
         const wait = new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), SEND_WAIT_MS));
         return Promise.race([ask(chat, trimmed, want, editorContext), wait]).then((route) => {
             state.since.value = undefined;
@@ -255,9 +251,9 @@ export const useChatRoute = (conversation: () => Conversation): ChatRouting => {
             // Auto is spent either way, but only where it was armed: it asked its one question, and what runs now is a
             // pick like any other.
             if (want.model) {
-                chat.setAuto(false);
+                chat.selection.apply({ kind: `setAuto`, auto: false });
             }
-            chat.reword(noticeId, verdictLine(route, want, worn, matched), { noticeWait: undefined });
+            chat.transcript.rewordNotice(noticeId, verdictLine(route, want, worn, matched), { noticeWait: undefined });
         });
     };
 

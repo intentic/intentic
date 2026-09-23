@@ -1,5 +1,5 @@
+import { sandboxRef } from "@intentic/extension-api";
 import type { IconName } from "@intentic/ui";
-import { ref, watch } from "vue";
 import { useSandbox } from "../sandbox/client/useSandbox";
 
 // Per-terminal cosmetic overrides (label, pill color, pill icon) keyed by tmux session name. Client-side
@@ -63,10 +63,8 @@ const read = (): Record<string, TerminalMeta> => {
     }
 };
 
-const metas = ref<Record<string, TerminalMeta>>(read());
-watch(useSandbox().activeSandboxId, () => {
-    metas.value = read();
-});
+// Each sandbox's own, read back from its key on a switch.
+const metas = sandboxRef<Record<string, TerminalMeta>>(() => read());
 
 const persist = (): void => {
     try {

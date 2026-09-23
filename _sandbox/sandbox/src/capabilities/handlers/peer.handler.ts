@@ -1,6 +1,6 @@
 import type { PeerHub } from "../../peers/peer-hub.js";
 import type { PeerStore } from "../../peers/peer-store.js";
-import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../settings/loaded-skills.js";
+import { loadedSkillFile, removeLoadedSkill, writeLoadedSkill } from "../../store/loaded-skills.js";
 import type { CapabilityCtx, CapabilityHandler } from "../capability.js";
 import { contributedSkill, contributionKey, contributionRegistry, hostOf } from "../contributions.js";
 

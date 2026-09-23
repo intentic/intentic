@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import {
     CredentialGateSchema,
     CredentialGuardSubjectParamSchema,
@@ -13,11 +13,14 @@ import {
 } from "../schemas/secrets.js";
 import { OkSchema } from "../schemas/shared.js";
 
+// Credentials are the operating tier's, reads included: maintainer is the highest revokable grant, and no token's.
+const secretRoute = procedure.meta({ floor: "maintainer", control: "never" });
+
 // User-supplied secrets, in the gitignored desired-state/.env; `apply` reloads them, no restart. `inventory` aggregates
 // every store (never values) and always answers; the rest refuse until desired-state is scaffolded. `reveal` alone
 // returns a value, owner-only, POST so the key avoids the URL.
 export const secretsContract = {
-    set: oc
+    set: secretRoute
         .route({
             method: "POST",
             path: "/secrets",
@@ -27,7 +30,7 @@ export const secretsContract = {
         })
         .input(SecretSetSchema)
         .output(OkSchema),
-    list: oc
+    list: secretRoute
         .route({
             method: "GET",
             path: "/secrets",
@@ -35,7 +38,7 @@ export const secretsContract = {
             description: "Which secrets exist here. Names only, never values.",
         })
         .output(SecretKeysSchema),
-    remove: oc
+    remove: secretRoute
         .route({
             method: "DELETE",
             path: "/secrets/{key}",
@@ -44,7 +47,7 @@ export const secretsContract = {
         })
         .input(SecretKeyParamSchema)
         .output(OkSchema),
-    inventory: oc
+    inventory: secretRoute
         .route({
             method: "GET",
             path: "/secrets/inventory",
@@ -53,7 +56,7 @@ export const secretsContract = {
                 "One view across all the places secrets live here: what exists, where it came from and whether it is working. Never any values. This one always answers, even before there is a store to write to.",
         })
         .output(SecretInventorySchema),
-    reveal: oc
+    reveal: secretRoute
         .route({
             method: "POST",
             path: "/secrets/reveal",
@@ -64,7 +67,7 @@ export const secretsContract = {
         .input(SecretKeyParamSchema)
         .output(SecretRevealSchema),
     // Gate policy lives off the workspace, not in agent-editable `.intentic/config/`, so agents can't hold the key.
-    gates: oc
+    gates: secretRoute
         .route({
             method: "GET",
             path: "/secrets/gates",
@@ -72,8 +75,10 @@ export const secretsContract = {
             description:
                 "What is gated and who may release it. Names and addresses only, never values, and the agent may read it too: knowing a credential needs Bob is what stops it concluding the account is simply not connected.",
         })
+        // The `secrets` CLI's names-only reads and its ask, on the agent token; never a value.
+        .meta({ agent: true })
         .output(CredentialGatesSchema),
-    setGate: oc
+    setGate: secretRoute
         .route({
             method: "PUT",
             path: "/secrets/gates/{subject}",
@@ -83,7 +88,7 @@ export const secretsContract = {
         })
         .input(CredentialGateSchema)
         .output(OkSchema),
-    removeGate: oc
+    removeGate: secretRoute
         .route({
             method: "DELETE",
             path: "/secrets/gates/{subject}",
@@ -92,7 +97,7 @@ export const secretsContract = {
         })
         .input(CredentialGuardSubjectParamSchema)
         .output(OkSchema),
-    request: oc
+    request: secretRoute
         .route({
             method: "POST",
             path: "/secrets/request",
@@ -100,6 +105,7 @@ export const secretsContract = {
             description:
                 "Raises the release card in the live conversation and waits for one of the people named on it. Refused, rather than held, when there is nobody to ask: an unattended turn, no live conversation, or a click with no verified identity behind it.",
         })
+        .meta({ agent: true })
         .input(CredentialRequestSchema)
         .output(CredentialGrantSchema),
 };

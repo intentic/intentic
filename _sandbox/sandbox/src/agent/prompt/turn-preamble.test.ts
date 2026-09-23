@@ -3,7 +3,7 @@ import { WORKSPACE_ROOT } from "@intentic/constants";
 import { test, expect } from "bun:test";
 import { setupNoticeFor, SETUP_NOTICE_HEADER } from "../../workspace/layout/workspace-setup.js";
 import { SPAWN_NOTE_HEADER } from "../subagents/spawn-note.js";
-import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../settings/loaded-skills.js";
+import { SKILL_CATALOG_NOTE_HEADER, SKILL_CATALOG_NOTE_TITLE } from "../../store/loaded-skills.js";
 import { LITERAL_SLASH_NOTE, preambleNotes, stripTurnPreamble, unwrapStoredPrompt, withTurnPreamble } from "./turn-preamble.js";
 
 const notice = `${SETUP_NOTICE_HEADER}\n(a dropped project arrives without them on purpose):\n- intentic: run \`pnpm install\` there first.`;
@@ -65,7 +65,7 @@ test("a message that starts with a header but has no separator is left alone", (
     expect(stripTurnPreamble(notice)).toBe(notice);
 });
 
-// Two real layers add notes (honoured() per runtime, then turn-plan.ts's harness arm on top); nesting must never double
+// Two real layers add notes (honoured() per runtime, then harness-plan.ts's arm on top); nesting must never double
 // the separator.
 test("a second pass of notes merges into the first rather than nesting a separator", () => {
     const inner = withTurnPreamble([note], "fix the bug");

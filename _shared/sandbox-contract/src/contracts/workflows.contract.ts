@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { DoorTokenSchema, OkSchema } from "../schemas/shared.js";
 import {
     WorkflowIdParamSchema,
@@ -17,7 +17,7 @@ import {
 // `run` acks with the run as recorded and executes detached, the same contract every turn-starting route here keeps.
 export const workflowsContract = {
     // Every saved workflow with its run history, newest first; a never-run workflow isn't an error case.
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/workflows",
@@ -29,7 +29,7 @@ export const workflowsContract = {
     // Create or replace, with the operation explicit so an id collision can't turn a create into an overwrite.
     // Refuses a graph that can't run (a cycle, an unmet `needs`, a step with no completion signal), in the same words
     // the design-time validator (workflowFaults) uses.
-    save: oc
+    save: procedure
         .route({
             method: "POST",
             path: "/workflows",
@@ -40,7 +40,7 @@ export const workflowsContract = {
         .input(WorkflowSaveSchema)
         .output(WorkflowSavedSchema),
     // Mints a new gate credential; every pipeline holding the old URL stops working the moment this answers.
-    rotateGateToken: oc
+    rotateGateToken: procedure
         .route({
             method: "POST",
             path: "/workflows/{id}/gate/rotate",
@@ -51,7 +51,7 @@ export const workflowsContract = {
         .input(WorkflowIdParamSchema)
         .output(DoorTokenSchema),
     // Deleting a workflow doesn't stop or erase an in-flight run: a run snapshots its definition at start.
-    remove: oc
+    remove: procedure
         .route({
             method: "DELETE",
             path: "/workflows/{id}",
@@ -64,7 +64,7 @@ export const workflowsContract = {
     // Starts a run, optionally with a request appended to every step's own prompt; each step is recorded `pending` up
     // front so the graph is complete from the first frame.
     // Multiple runs of one workflow can be in flight at once; each derives its own conversation ids, so none collide.
-    run: oc
+    run: procedure
         .route({
             method: "POST",
             path: "/workflows/{id}/run",
@@ -75,7 +75,7 @@ export const workflowsContract = {
         .input(WorkflowRunStartSchema)
         .output(WorkflowRunSchema),
     // Every run across every workflow, newest first; the only place a deleted workflow's runs are still reachable.
-    runs: oc
+    runs: procedure
         .route({
             method: "GET",
             path: "/workflows/runs",
@@ -87,7 +87,7 @@ export const workflowsContract = {
     // Cuts off in-flight steps where they stand, aborting their turns like /agent/stop; not the graceful
     // finish-the-iteration stop a loop performs, since a step is a whole agent turn.
     // Always ends the run, including one left `running` by a daemon that was replaced mid-flight.
-    stopRun: oc
+    stopRun: procedure
         .route({
             method: "POST",
             path: "/workflows/runs/{runId}/stop",
@@ -100,7 +100,7 @@ export const workflowsContract = {
     // Ends a run's board presence, the run's half of `agents.archive`: nothing is lost, checkouts are reclaimed, and
     // `unarchiveRun` reverses it. Refused while the run is going.
     // Archives every step that ran along with it, since a step has no card of its own; the run's row stands for it.
-    archiveRun: oc
+    archiveRun: procedure
         .route({
             method: "POST",
             path: "/workflows/runs/{runId}/archive",
@@ -111,7 +111,7 @@ export const workflowsContract = {
         .input(WorkflowRunIdParamSchema)
         .output(OkSchema),
     // Inverse of archiveRun: puts an archived run and its sessions back on the board.
-    unarchiveRun: oc
+    unarchiveRun: procedure
         .route({
             method: "POST",
             path: "/workflows/runs/{runId}/unarchive",

@@ -4,15 +4,15 @@ import { promisify } from "node:util";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { nsenterPrefix, type TurnPlacement } from "../../agents/worktrees/isolation.js";
 import { AGENT_SESSION_ENV } from "../../platform/boot/container-owner.js";
-import { WORKLOAD_ENV } from "../../platform/boot/leftovers.js";
+import { WORKLOAD_ENV } from "../../seams/workload-stamp.js";
 import { redirectCommand } from "../../agents/worktrees/worktree-redirect.js";
-import { resolveCommandSecrets, type SecretAccess } from "./agent-secrets.js";
+import { resolveCommandSecrets, type SecretAccess } from "../../secrets/secret-access.js";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
 import { QUEUE_RUN_BIN, queueRunEnabled, TMUX_RUN_BIN } from "../../terminal/terminal-run.js";
 import { type HeavyCommands, matchHeavyCommand } from "../../platform/resources/heavy-commands.js";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { type BackgroundJob, type BackgroundJobSeed, jobCommandLine, openBackgroundJob } from "./background-jobs.js";
-import { turnRunOf } from "../run/turn/turn-runs.js";
+import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
 
 // Rewrites every Bash tool command through bin/tmux-run so it runs visibly in the `agent-<sdk session>` tmux session
 // the terminal panel attaches to; subagent Bash calls land in the same session as extra windows.
@@ -113,7 +113,7 @@ const startJob = (
         toolUseId: call.toolUseId,
     });
     if (job !== undefined) {
-        turnRunOf(job.conversationId)?.note({
+        turnRunOf(seed.conversations, job.conversationId)?.note({
             role: "notice",
             text: `Background job: ${job.label}`,
             backgroundJob: { id: job.id, label: job.label, command: jobCommandLine(call.command), startedAt: job.startedAt },

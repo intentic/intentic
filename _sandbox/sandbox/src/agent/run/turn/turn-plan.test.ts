@@ -6,12 +6,15 @@ import { type Persona, type SandboxSettings, PersonaPowersSchema, SandboxSetting
 import { test, expect, beforeEach, mock } from "bun:test";
 import type { Services } from "../../../composition.js";
 import { unstubbed } from "@intentic/testing";
-import { testConfig } from "../../../testing.js";
+import { conversationAfter, testConfig } from "../../../testing.js";
 import { UNATTENDED_ACCOUNTS_TITLE } from "../../../personas/personas.js";
 import { TURN_ENDING_NOTE_HEADER } from "../../../rules/turn-ending-note.js";
-import type { AgentRequest } from "../agent.js";
+import type { AgentRequest, TurnPolicy, TurnSpec } from "../../providers/agent-request.js";
 import type { MemoryHeadroom } from "../../../platform/resources/memory-admission.js";
-import { conversationExperimentArm, planTurn, ruleCommandIn, type TurnContext } from "./turn-plan.js";
+import type { TurnContext } from "../../providers/adapter.js";
+import { conversationExperimentArm } from "../decide/experiments.js";
+import { ruleCommandIn } from "../harness/harness-hooks.js";
+import { planTurn } from "./turn-plan.js";
 import { base, codexServices, context, harnessServices, ROOT, servicesWith, turn, wire } from "./turn-plan.testing.js";
 import * as harnessCredentialsOriginal from "../../providers/harness-credentials.js";
 
@@ -188,10 +191,10 @@ test("a window under a full turn trims the guidance and says what it left out", 
     expect(plan.ok).toBe(true);
     const trimmed = plan as Extract<typeof plan, { ok: true }>;
     // The composed request carries the decision on, so the adapter sheds the same guidance the planner did.
-    expect(trimmed.request.contextTrim).toEqual({ guidance: true, base: false });
+    expect(trimmed.request.spec.contextTrim).toEqual({ guidance: true, base: false });
     // 40k holds the loop's own base, so it keeps it; what goes is everything this product would have added.
     expect(trimmed.contextTrim?.trim.tier).toBe("lean");
-    expect(trimmed.request.systemPrompt).toBeUndefined();
+    expect(trimmed.request.spec.systemPrompt).toBeUndefined();
 });
 
 // 26k, not 16k: below about 22k the refusal gate fires first on this runtime (its floor plus the output reserve), and
@@ -202,10 +205,10 @@ test("a window under the next rung swaps the base rather than sending none", asy
 
     expect(plan.ok).toBe(true);
     const trimmed = plan as Extract<typeof plan, { ok: true }>;
-    expect(trimmed.request.contextTrim).toEqual({ guidance: true, base: true });
+    expect(trimmed.request.spec.contextTrim).toEqual({ guidance: true, base: true });
     // THE BUG THIS PINS: the swap is composed in planning, and a turn that carried the decision without the text
     // would reach the model with an empty system prompt instead of a short one.
-    expect(trimmed.request.systemPrompt).toContain("context window is small");
+    expect(trimmed.request.spec.systemPrompt).toContain("context window is small");
 });
 
 test("a window that holds a full turn is left alone", async () => {
@@ -213,7 +216,7 @@ test("a window that holds a full turn is left alone", async () => {
 
     expect(plan.ok).toBe(true);
     const full = plan as Extract<typeof plan, { ok: true }>;
-    expect(full.request.contextTrim).toBeUndefined();
+    expect(full.request.spec.contextTrim).toBeUndefined();
     expect(full.contextTrim).toBeUndefined();
 });
 
@@ -246,7 +249,7 @@ test("Codex resolves the catalog default when the turn pins no model", async () 
     const plan = await planTurn(services, turn({ agent: "codex" }), context);
 
     expect(plan).toMatchObject({ ok: true, account: "codex-subscription" });
-    expect((plan as { request: AgentRequest }).request.model).toBe("gpt-5.6-codex");
+    expect((plan as { request: AgentRequest }).request.spec.model).toBe("gpt-5.6-codex");
 });
 
 // A turn nobody started acts as no one, so it reaches none of the sandbox's signed-in accounts. Denying the skills is
@@ -264,10 +267,10 @@ test("an unattended turn is told which signed-in accounts it cannot reach", asyn
     const plan = await planTurn(services, turn({ unattended: true, conversationId: "ci-fix-intentic-1" }), context);
 
     const request = (plan as { request: AgentRequest }).request;
-    expect(request.disallowedTools).toContain("Skill(npmjs)");
+    expect(request.policy.disallowedTools).toContain("Skill(npmjs)");
     // Asserted through the wire prompt, since a note the composer drops is a note the model never reads. The title
     // rides the chat row rather than the prompt, so the text is what has to carry the account's name.
-    expect(request.notes?.map((note: { title: string }) => note.title)).toContain(UNATTENDED_ACCOUNTS_TITLE);
+    expect(request.spec.notes?.map((note: { title: string }) => note.title)).toContain(UNATTENDED_ACCOUNTS_TITLE);
     expect(wire(plan)).toContain("signed-in accounts are not loaded into it: `npmjs`");
     expect(wire(plan)).toContain("not a broken login");
 });
@@ -283,10 +286,10 @@ test("a turn somebody started keeps the account, and is told nothing about a fen
     const plan = await planTurn(services, turn({ conversationId: "chat-1" }), context);
 
     const request = (plan as { request: AgentRequest }).request;
-    expect(request.disallowedTools ?? []).not.toContain("Skill(npmjs)");
+    expect(request.policy.disallowedTools ?? []).not.toContain("Skill(npmjs)");
     // The text, not the title: titles ride the chat row and never reach the wire, so asserting one absent would pass
     // whether the note was there or not.
-    expect(request.notes?.map((note: { title: string }) => note.title) ?? []).not.toContain(UNATTENDED_ACCOUNTS_TITLE);
+    expect(request.spec.notes?.map((note: { title: string }) => note.title) ?? []).not.toContain(UNATTENDED_ACCOUNTS_TITLE);
     expect(wire(plan)).not.toContain("signed-in accounts are not loaded into it");
 });
 
@@ -320,11 +323,11 @@ test("Codex receives the connected browser granted to its persona, and no other 
         true,
         "reddit-conversation",
     );
-    expect(request.sdkServers).toEqual({
+    expect(request.tools.sdkServers).toEqual({
         identity: { type: "stdio", command: "/usr/bin/socat", args: ["STDIO", "UNIX-CONNECT:/tmp/identity.sock"] },
     });
-    expect(request.browserPorts).toEqual({ identity: 41_111 });
-    expect(request.browserPasskeys).toEqual({ identity: "/state/identity/passkeys.json" });
+    expect(request.tools.browserPorts).toEqual({ identity: 41_111 });
+    expect(request.tools.browserPasskeys).toEqual({ identity: "/state/identity/passkeys.json" });
 });
 
 test("Grok replaces a model its live catalog no longer offers, and keeps one it does", async () => {
@@ -342,10 +345,10 @@ test("Grok replaces a model its live catalog no longer offers, and keeps one it 
     });
 
     const retired = await planTurn(services, turn({ agent: "grok", model: "grok-code-fast-1" }), context);
-    expect((retired as { request: AgentRequest }).request.model).toBe("grok-4");
+    expect((retired as { request: AgentRequest }).request.spec.model).toBe("grok-4");
 
     const offered = await planTurn(services, turn({ agent: "grok", model: "grok-4-fast" }), context);
-    expect((offered as { request: AgentRequest }).request.model).toBe("grok-4-fast");
+    expect((offered as { request: AgentRequest }).request.spec.model).toBe("grok-4-fast");
     // OpenCode holds one xAI auth, so every Grok turn attributes to the same account.
     expect(offered).toMatchObject({ account: "xai" });
 });
@@ -399,7 +402,13 @@ const CHECKED_SETTINGS = unstubbed<Services["sandboxSettings"]>("sandboxSettings
 // A conversation as the registry has it: turns run, the turn a compaction happened under (compactedTurn), and the
 // account its last turn actually ran on.
 const conversationAt = (fields: { readonly turns: number; readonly compactedTurn?: number; readonly account?: string }): Services["agents"] =>
-    unstubbed<Services["agents"]>("agents", { entry: () => fields as ReturnType<Services["agents"]["entry"]> });
+    unstubbed<Services["agents"]>("agents", {
+        entry: () =>
+            conversationAfter(fields.turns, {
+                profile: { provider: "claude", harness: "native", ...(fields.account === undefined ? {} : { account: fields.account }) },
+                ...(fields.compactedTurn === undefined ? {} : { compactedTurn: fields.compactedTurn }),
+            }),
+    });
 
 test("the automatic checks are named on a conversation's opening message", async () => {
     const plan = await planTurn(harnessServices({ sandboxSettings: CHECKED_SETTINGS }), turn(), context);
@@ -494,20 +503,26 @@ test("the account the credential resolver answered with becomes the turn's attri
 
 // The route already folds the turn's posture into the request before an arm is picked, so this edits context, not the
 // turn.
-const asking = (overrides: Partial<AgentRequest>): TurnContext => ({ ...context, base: { ...base, ...overrides } });
+const asking = (overrides: {
+    readonly spec?: Pick<TurnSpec, "effort" | "fast">;
+    readonly policy?: Pick<TurnPolicy, "permissionMode">;
+}): TurnContext => ({
+    ...context,
+    base: { ...base, spec: { ...base.spec, ...overrides.spec }, policy: { ...base.policy, ...overrides.policy } },
+});
 
 test("a plan-only runtime keeps `plan` and is handed no other permission mode", async () => {
-    const asked = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ permissionMode: "default" }));
-    expect((asked as { request: AgentRequest }).request.permissionMode).toBeUndefined();
+    const asked = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ policy: { permissionMode: "default" } }));
+    expect((asked as { request: AgentRequest }).request.policy.permissionMode).toBeUndefined();
 
-    const planning = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ permissionMode: "plan" }));
-    expect((planning as { request: AgentRequest }).request.permissionMode).toBe("plan");
+    const planning = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ policy: { permissionMode: "plan" } }));
+    expect((planning as { request: AgentRequest }).request.policy.permissionMode).toBe("plan");
 });
 
 test("the Claude Code loop keeps every mode: it is the runtime that honours them", async () => {
-    const plan = await planTurn(harnessServices(), turn(), asking({ permissionMode: "default" }));
+    const plan = await planTurn(harnessServices(), turn(), asking({ policy: { permissionMode: "default" } }));
 
-    expect((plan as { request: AgentRequest }).request.permissionMode).toBe("default");
+    expect((plan as { request: AgentRequest }).request.policy.permissionMode).toBe("default");
 });
 
 // the JS execution backend: planned with the request, only where the runtime hosts it
@@ -515,7 +530,7 @@ test("the Claude Code loop keeps every mode: it is the runtime that honours them
 test("a Claude turn carries the JS backend's plan, the turn tree, spawn beside its shell", async () => {
     const plan = await planTurn(harnessServices(), turn(), context);
 
-    expect((plan as { request: AgentRequest }).request.jsExecution).toMatchObject({
+    expect((plan as { request: AgentRequest }).request.tools.jsExecution).toMatchObject({
         cwd: ROOT,
         readRoots: [ROOT, tmpdir()],
         writeRoots: [ROOT],
@@ -533,25 +548,25 @@ test("a card decides each backend on its own: code-only, and shell-only, both pl
     const services = harnessServices({ personas: unstubbed<Services["personas"]>("personas", { list: async () => cards }) });
 
     const codeOnly = (await planTurn(services, turn({ actsAs: "code-only" }), context)) as { request: AgentRequest };
-    expect(codeOnly.request.jsExecution).toMatchObject({ allowSpawn: false });
-    expect(codeOnly.request.disallowedTools).toContain("Bash");
+    expect(codeOnly.request.tools.jsExecution).toMatchObject({ allowSpawn: false });
+    expect(codeOnly.request.policy.disallowedTools).toContain("Bash");
 
     const shellOnly = (await planTurn(services, turn({ actsAs: "shell-only" }), context)) as { request: AgentRequest };
-    expect(shellOnly.request.jsExecution).toBeUndefined();
-    expect(shellOnly.request.disallowedTools ?? []).not.toContain("Bash");
+    expect(shellOnly.request.tools.jsExecution).toBeUndefined();
+    expect(shellOnly.request.policy.disallowedTools ?? []).not.toContain("Bash");
 });
 
 test("a runtime that hosts no js backend is handed no plan for it, whatever the card says", async () => {
     const plan = await planTurn(codexServices(), turn({ agent: "codex" }), context);
 
-    expect((plan as { request: AgentRequest }).request.jsExecution).toBeUndefined();
+    expect((plan as { request: AgentRequest }).request.tools.jsExecution).toBeUndefined();
 });
 
 // Codex forwards reasoning effort (modelReasoningEffort); OpenCode only takes a model id and a prompt, so an effort
 // riding a Grok request is read by nobody.
 test("effort reaches the runtimes that forward it and no others", async () => {
-    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ effort: "high" }));
-    expect((codex as { request: AgentRequest }).request.effort).toBe("high");
+    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ spec: { effort: "high" } }));
+    expect((codex as { request: AgentRequest }).request.spec.effort).toBe("high");
 
     const grokServices = servicesWith({
         openCode: unstubbed<Services["openCode"]>("openCode", {
@@ -559,16 +574,16 @@ test("effort reaches the runtimes that forward it and no others", async () => {
             xaiModels: async () => ({ default: "grok-4", models: [{ id: "grok-4", label: "Grok 4" }] }),
         }),
     });
-    const grok = await planTurn(grokServices, turn({ agent: "grok" }), asking({ effort: "high" }));
-    expect((grok as { request: AgentRequest }).request.effort).toBeUndefined();
+    const grok = await planTurn(grokServices, turn({ agent: "grok" }), asking({ spec: { effort: "high" } }));
+    expect((grok as { request: AgentRequest }).request.spec.effort).toBeUndefined();
 });
 
 // Fast speed passes two gates: the runtime's declared capability, and the route — a codex/grok/endpoint turn riding the
 // Claude Code harness inherits its record, which the harness refuses fast mode for on a non-Anthropic endpoint.
 test("fast speed reaches a native Claude turn", async () => {
-    const plan = await planTurn(harnessServices(), turn(), asking({ fast: true }));
+    const plan = await planTurn(harnessServices(), turn(), asking({ spec: { fast: true } }));
 
-    expect((plan as { request: AgentRequest }).request.fast).toBe(true);
+    expect((plan as { request: AgentRequest }).request.spec.fast).toBe(true);
 });
 
 test("fast speed is withheld from a routed turn, whose endpoint the harness would refuse", async () => {
@@ -578,12 +593,12 @@ test("fast speed is withheld from a routed turn, whose endpoint the harness woul
         ok: true,
         credentials: { endpoint: { baseUrl: "http://127.0.0.1:8788", authToken: "local", model: "gpt-5.6-codex" }, account: "sub" },
     });
-    const routed = await planTurn(harnessServices(), turn({ agent: "codex", harness: "claude-code" }), asking({ fast: true }));
+    const routed = await planTurn(harnessServices(), turn({ agent: "codex", harness: "claude-code" }), asking({ spec: { fast: true } }));
     const request = (routed as { request: AgentRequest }).request;
 
     // The turn really did take the harness arm and really is routed: otherwise this asserts nothing.
-    expect(request.baseUrl).toBe("http://127.0.0.1:8788");
-    expect(request.fast).toBeUndefined();
+    expect(request.credential).toEqual({ kind: "routed", baseUrl: "http://127.0.0.1:8788", authToken: "local" });
+    expect(request.spec.fast).toBeUndefined();
 });
 
 test("the free-trial credential's bounded policy reaches the harness request", async () => {
@@ -597,12 +612,12 @@ test("the free-trial credential's bounded policy reaches the harness request", a
 
     const plan = await planTurn(harnessServices(), turn({ agent: "endpoint/free-trial", harness: "claude-code" }), context);
 
-    expect((plan as { request: AgentRequest }).request.trial).toBe(true);
+    expect((plan as { request: AgentRequest }).request.credential).toEqual({ kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" });
 });
 
 test("fast speed is withheld from every runtime that isn't the Claude Code loop", async () => {
-    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ fast: true }));
-    expect((codex as { request: AgentRequest }).request.fast).toBeUndefined();
+    const codex = await planTurn(codexServices(), turn({ agent: "codex" }), asking({ spec: { fast: true } }));
+    expect((codex as { request: AgentRequest }).request.spec.fast).toBeUndefined();
 });
 
 // A runtime that can't enter the turn's mount namespace is only cwd'd into its worktree, so an absolute /work path
@@ -624,7 +639,10 @@ test("a cwd-isolated runtime gets one worktree explanation, then compact reminde
     expect(prompt).toContain("/history/worktrees/abc/work");
     expect(prompt).toContain("do the thing");
 
-    const followup = await planTurn(grokServices, turn({ agent: "grok" }), { ...isolated, base: { ...isolated.base, sessionId: "session-1" } });
+    const followup = await planTurn(grokServices, turn({ agent: "grok" }), {
+        ...isolated,
+        base: { ...isolated.base, spec: { ...isolated.base.spec, sessionId: "session-1" } },
+    });
     const followupPrompt = wire(followup);
     const sharedCheckout = "/nowhere/turn-plan";
     expect(followupPrompt).toMatch(/relative paths/i);
@@ -659,7 +677,7 @@ test("every runtime is told which automatic check runs when its turn ends", asyn
     });
 
     // Claude Code runs the command rules at its Stop; a native runtime gets the same rules from the daemon once its
-    // frames end (agent.routes.ts daemonStopFindings), so neither is promised a check nothing runs.
+    // frames end (settle/settle-turn.ts daemonStopFindings), so neither is promised a check nothing runs.
     for (const plan of [
         await planTurn(withSettings(harnessServices(), gated), turn(), context),
         await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), context),
@@ -701,11 +719,11 @@ const withSettings = (services: Services, settings: SandboxSettings): Services =
 
 test("a runtime that replaces is handed the owner's prompt; one that only adds is handed it to add", async () => {
     const claude = await planTurn(withSettings(harnessServices(), customSettings()), turn(), context);
-    expect((claude as { request: AgentRequest }).request.systemPrompt).toBe(CUSTOM_PROMPT);
+    expect((claude as { request: AgentRequest }).request.spec.systemPrompt).toBe(CUSTOM_PROMPT);
 
     // Native Codex takes a replacement too, through its own config keys (codex-instructions.ts).
     const codex = await planTurn(withSettings(codexServices(), customSettings()), turn({ agent: "codex" }), context);
-    expect((codex as { request: AgentRequest }).request.systemPrompt).toBe(CUSTOM_PROMPT);
+    expect((codex as { request: AgentRequest }).request.spec.systemPrompt).toBe(CUSTOM_PROMPT);
 
     // OpenCode has no seam to replace its own base prompt, so the owner's text arrives as an addition instead, matching
     // what the settings page promises rather than a replacement it can't perform.
@@ -716,18 +734,18 @@ test("a runtime that replaces is handed the owner's prompt; one that only adds i
         }),
     });
     const grok = await planTurn(withSettings(grokServices, customSettings()), turn({ agent: "grok" }), context);
-    expect((grok as { request: AgentRequest }).request.systemPrompt).toBeUndefined();
-    expect((grok as { request: AgentRequest }).request.systemAppend).toBe(CUSTOM_PROMPT);
+    expect((grok as { request: AgentRequest }).request.spec.systemPrompt).toBeUndefined();
+    expect((grok as { request: AgentRequest }).request.spec.systemAppend).toBe(CUSTOM_PROMPT);
 });
 
 // `refs/` (excluded from scanners) and `public/` (served on the open internet) must reach a runtime with no other way
 // to learn them, like Codex; the Claude Code loop composes them itself and must not be told twice.
 test("a native runtime is told the workspace conventions; the Claude Code loop is not told twice", async () => {
     const codex = await planTurn(codexServices(), turn({ agent: "codex" }), context);
-    expect((codex as { request: AgentRequest }).request.systemAppend).toContain("`refs/`");
+    expect((codex as { request: AgentRequest }).request.spec.systemAppend).toContain("`refs/`");
 
     const claude = await planTurn(harnessServices(), turn(), context);
-    expect((claude as { request: AgentRequest }).request.systemAppend).toBeUndefined();
+    expect((claude as { request: AgentRequest }).request.spec.systemAppend).toBeUndefined();
 });
 
 // A rule's command must run inside the turn's namespace, not the daemon's: the daemon-side worktree has empty

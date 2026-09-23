@@ -77,12 +77,12 @@ export const runProbe = async (spec: ProbeSpec, cwd: string, nowMs: number, work
     return finish({ state: "ok", facts });
 };
 
-// Only what the runner needs, not the whole Services object, so it's testable without a daemon; `agents` only exposes
+// Only what the runner needs, not the whole Services object, so it's testable without a daemon; `conversations` only exposes
 // whether anything is running.
 export interface ProbeRunnerDeps {
     readonly workspace: { readonly root: string };
     readonly chores: ChoresStore;
-    readonly agents: { readonly liveSessionIds: () => readonly string[] };
+    readonly conversations: { readonly liveSessionIds: () => readonly string[] };
     // Whether anything reads the measurements: the sweep spends machine time only while the maintenance extension is on.
     readonly wanted: () => Promise<boolean>;
     readonly logger: Logger;
@@ -164,7 +164,7 @@ export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
 
     const sweep = async (): Promise<void> => {
         // The owner's own work always comes first; this sweep is background-only and defers to any live turn.
-        if (draining !== undefined || deps.agents.liveSessionIds().length > 0) {
+        if (draining !== undefined || deps.conversations.liveSessionIds().length > 0) {
             return;
         }
         // No panel to read them means no sweep; a requested probe (`refresh`) still runs, since someone asked.
@@ -175,7 +175,7 @@ export const createProbeRunner = (deps: ProbeRunnerDeps): ProbeRunner => {
         await deps.chores.pruneProbes(["", ...(await discoverRepos(deps.workspace.root))]);
         for (const { repo, spec } of due) {
             // Re-checked between probes, not the top only: a long sweep can outlast the owner starting to work.
-            if (deps.agents.liveSessionIds().length > 0) {
+            if (deps.conversations.liveSessionIds().length > 0) {
                 return;
             }
             await enqueue(repo, spec.id);

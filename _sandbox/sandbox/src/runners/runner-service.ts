@@ -14,8 +14,6 @@ import {
     runnerContract,
 } from "@intentic/sandbox-contract";
 import { implement } from "@orpc/server";
-import { streamAgent } from "../agent/routes/agent.routes.js";
-import { applyReply, applySteer, composeSteerText } from "../agent/run/turn/turn-interactions.js";
 import type { Services } from "../composition.js";
 import { adoptDefinitionSettings } from "../portability/apply-definition.js";
 import { parseDefinitionToml } from "../portability/definition.js";
@@ -23,8 +21,9 @@ import { pushToParent, type RunnerSyncDeps, syncFromParent } from "./runner-sync
 import type { RunnerIdentity } from "./runner-identity.js";
 
 // The oRPC server on the socket this runner dialled out (the host router's inversion). Everything here is a thin
-// adapter onto machinery this daemon already has: a turn is streamAgent, the same composition a local turn runs; a sync
-// is stock git against the parent's door. A remote turn behaves like a local one because it is the same code.
+// adapter onto machinery this daemon already has: a turn, its answers and its steers go through the TurnStarter port,
+// the same doors a local turn takes; a sync is stock git against the parent's door. A remote turn behaves like a local
+// one because it is the same code.
 
 // freeDiskMb is read where the workspace lives, which is the disk a turn actually fills.
 const facts = async (workspaceRoot: string): Promise<RunnerFacts> => {
@@ -105,7 +104,7 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         const controller = new AbortController();
         running.set(input.conversationId, controller);
         try {
-            yield* streamAgent(services, turn, controller.signal);
+            yield* services.turns.stream(turn, controller.signal);
         } finally {
             if (running.get(input.conversationId) === controller) {
                 running.delete(input.conversationId);
@@ -128,14 +127,17 @@ export const createRunnerService = (services: Services, identity: RunnerIdentity
         // Applied by the same function a local answer takes, so a question closes identically wherever it runs. A gated
         // credential's release cannot come this way (a known gap): the hop carries no verified identity, so it fails
         // closed.
-        reply: os.reply.handler(async ({ input }) => ({ applied: (await applyReply(services, input)) === "settled" })),
+        reply: os.reply.handler(async ({ input }) => ({ applied: (await services.turns.reply(input)) === "settled" })),
         // Composed here deliberately: the attachment note names absolute paths meaningful only in this workspace.
         steer: os.steer.handler(async ({ input }) => {
-            const composed = await composeSteerText(services, input);
-            if (composed.invalid !== undefined) {
-                return { applied: false, invalid: composed.invalid };
-            }
-            return { applied: applySteer(input.conversationId, composed.text) };
+            const steered = await services.turns.steer(input.conversationId, {
+                text: input.text,
+                voice: "person",
+                ...(input.attachments === undefined ? {} : { attachments: input.attachments }),
+                ...(input.mentions === undefined ? {} : { mentions: input.mentions }),
+                ...(input.editorContext === undefined ? {} : { editorContext: input.editorContext }),
+            });
+            return typeof steered === "object" ? { applied: false, invalid: steered.invalid } : { applied: steered };
         }),
         // The parent's settings push (a REPLACE); parsed by the same strict reader as any definition, so a bad field
         // fails named, not half-applied.

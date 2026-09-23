@@ -5,7 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { parseSidecarFront, sidecarBody, sidecarPathFor } from "@intentic/fileq/sidecar";
 import type { DerivedSide } from "@intentic/sandbox-contract";
 import { readWorkspaceFileWindow } from "../workspace/files/workspace-files.js";
-import { statePath, stateRelPath } from "../workspace/layout/state-paths.js";
+import { statePath, stateRelPath } from "../state-paths.js";
 import { defaultExec, DERIVE_TIMEOUT_MS, FILEQ_MAX_BUFFER, isMissingBinary, stdoutOf, withFileqSlot, type ExecFn } from "./fileq.js";
 
 // Text of bytes that are not a workspace file: a blob at a rev-spec, the before side of a document's diff. fileq keys

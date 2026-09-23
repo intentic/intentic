@@ -31,6 +31,8 @@ export interface TurnGateInput {
     // side: a runtime that doesn't set it gets the guard rather than a hole.
     readonly ownCheckout?: boolean;
     readonly signal: AbortSignal;
+    // Where a held command's card is parked.
+    readonly cards: CommandGuardOptions["cards"];
 }
 
 export interface TurnGate {
@@ -67,6 +69,7 @@ export const createTurnGate = (turn: TurnGateInput): TurnGate => {
             ...(turn.cwd === undefined ? {} : { cwd: turn.cwd }),
             ...(turn.ownCheckout === true ? { ownCheckout: true } : {}),
             signal: turn.signal,
+            cards: turn.cards,
             taint,
             judge: turn.judge,
             log: turn.log,

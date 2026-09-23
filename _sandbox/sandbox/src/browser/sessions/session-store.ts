@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { BrowserConfig, Capability } from "@intentic/sandbox-contract";
-import { statePath } from "../../workspace/layout/state-paths.js";
+import { statePath } from "../../state-paths.js";
 
 // A logged-in session for one profile owner is a persistent Chromium profile at sessionDir, written by
 // browser-profile.ts and read by @playwright/mcp via --user-data-dir; lives under .intentic on /work, gitignored,

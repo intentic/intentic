@@ -200,7 +200,7 @@ const hoverCard = ref<InstanceType<typeof HoverCard> | null>(null);
 // Includes attachments: a screenshot is often the whole of what was asked, and dropping it would misquote the prompt.
 const firstPromptOf = (id: string): { text?: string; attachments?: readonly string[] } | undefined => {
     const conversation = conversations.value.find((c) => c.conversationId === id);
-    const prompt = conversation?.messages.value.find((message) => message.role === `user`);
+    const prompt = conversation?.transcript.messages.value.find((message) => message.role === `user`);
     return prompt === undefined ? undefined : { text: prompt.text, attachments: prompt.attachments };
 };
 const showOrigins = (event: MouseEvent, ids: readonly string[]): void => {
@@ -550,9 +550,9 @@ const writingRepos = computed<ReadonlySet<string>>(
     () =>
         new Set(
             conversations.value
-                .filter((conversation) => !conversation.isolated.value && conversation.streaming.value)
+                .filter((conversation) => !conversation.isolated.value && conversation.turn.streaming.value)
                 .flatMap((conversation) =>
-                    [...turnWrites(conversation.conversationId, conversation.turnStartedAt.value)].map((path) =>
+                    [...turnWrites(conversation.conversationId, conversation.turn.turnStartedAt.value)].map((path) =>
                         repoOfPath(path, repos.repoDirs.value),
                     ),
                 ),

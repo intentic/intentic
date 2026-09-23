@@ -3,17 +3,16 @@ import { watch } from "vue";
 import { desyncAgents } from "../../agents/fleet/useAgents";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { queryClient } from "../../../lib/queryPersistence";
-import { presenceStreamOpened, resetPresence } from "../../../shell/presence/usePresence";
+import { clearPresence, presenceStreamOpened } from "../../../shell/presence/usePresence";
 import { markWorkspaceChanged } from "../../workspace/changes/live/useWorkspaceLive";
 import { classifyFailure, type ConnectionFailure, watchdogRecoveryDelay } from "../live/connection";
 import { forgetEdgeVerdict, lastEdgeVerdict } from "../client/edgeVerdict";
-import { daemonErrorMessage, daemonErrorStatus, sandboxRpc, SandboxUnaddressedError } from "../client/sandboxRpc";
+import { SandboxUnaddressedError } from "../client/sandboxAuthFetch";
+import { daemonErrorMessage, daemonErrorStatus, sandboxRpc } from "../client/sandboxRpc";
 import { useSandboxSession } from "../session/sandboxSession";
 import { acquireStreamSlot } from "../client/streamBudget";
 import { applySystemEvent } from "../live/systemEvents";
 import { sandboxQueryPredicate } from "../live/systemEventRouting";
-import { resetDaemonBoot } from "./useDaemonBoot";
-import { resetDaemonRoutes } from "./useDaemonRoutes";
 import { useEndpoint } from "../secrets/useEndpoint";
 import { signalConnection, useSandbox } from "../client/useSandbox";
 import { uuid } from "../../../lib/uuid";
@@ -211,7 +210,7 @@ const attempt = async (): Promise<void> => {
         }
         // Presence is meaningless while disconnected, so it clears outright. The roster only desyncs (its guard
         // resets), so the painted list stays until the reconnect's snapshot overwrites it.
-        resetPresence();
+        clearPresence();
         desyncAgents();
         // Picks up a re-registered daemonUrl before retrying; swallowed since the next attempt handles a failure here
         // too.
@@ -266,10 +265,6 @@ watch(activeSandboxId, (id, previous) => {
     // The outgoing box's verdict must never be read as the incoming one's.
     forgetEdgeVerdict();
     signalConnection({ kind: `switched`, lastKnownOnline: id !== undefined && (lastKnown.get(id) ?? false) });
-    // Another sandbox is another image on its own clock; attributing the outgoing daemon's routes or boot state to it
-    // would gate the wrong daemon's reads. Both re-report on the next hello.
-    resetDaemonRoutes();
-    resetDaemonBoot();
     controller?.abort();
     napping?.abort();
 });

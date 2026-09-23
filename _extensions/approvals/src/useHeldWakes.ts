@@ -1,4 +1,4 @@
-import { type AutomationApproval, AutomationApprovalsListSchema } from "@intentic/sandbox-contract";
+import type { AutomationApproval } from "@intentic/sandbox-contract";
 import type { HostQuery } from "@intentic/extension-api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed } from "vue";
@@ -11,8 +11,7 @@ export const heldWakesQuery = (): HostQuery<AutomationApproval[]> => {
     const api = host();
     return {
         queryKey: api.sandbox.key(`automation-approvals`),
-        queryFn: async (): Promise<AutomationApproval[]> =>
-            AutomationApprovalsListSchema.parse(await api.sandbox.json(`/automations/pending`)).approvals,
+        queryFn: async (): Promise<AutomationApproval[]> => (await api.sandbox.rpc.automations.pendingList()).approvals,
     };
 };
 
@@ -36,11 +35,11 @@ export function useHeldWakes() {
     };
 
     const approve = useMutation({
-        mutationFn: (id: string) => api.sandbox.json(`/automations/pending/${encodeURIComponent(id)}/approve`, { method: `POST` }),
+        mutationFn: (id: string) => api.sandbox.rpc.automations.approve({ id }),
         onSuccess: invalidate,
     });
     const reject = useMutation({
-        mutationFn: (id: string) => api.sandbox.json(`/automations/pending/${encodeURIComponent(id)}/reject`, { method: `POST` }),
+        mutationFn: (id: string) => api.sandbox.rpc.automations.reject({ id }),
         onSuccess: invalidate,
     });
 

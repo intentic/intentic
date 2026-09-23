@@ -1,7 +1,6 @@
 import type { LimitResetClaim, LimitResetStatus } from "@intentic/sandbox-contract";
 import { ref } from "vue";
-import { jsonBody } from "../../sandbox/client/jsonBody";
-import { sandboxJsonVia } from "../../sandbox/client/sandboxClient";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { t } from "@intentic/ui/i18n";
 
 // Client side of the session-limit reset: the provider can reopen a spent five-hour window once a week per account
@@ -26,7 +25,8 @@ export const askLimitReset = async (account: string | undefined, at?: string): P
     if (joined !== undefined) {
         return joined;
     }
-    const request = sandboxJsonVia<LimitResetStatus>(at, `/usage/limit-reset/${encodeURIComponent(account)}`)
+    const request = sandboxRpc.usage
+        .limitReset({ account }, { context: { at } })
         .then((status) => {
             answers.value.set(account, status);
         })
@@ -44,9 +44,9 @@ export const askLimitReset = async (account: string | undefined, at?: string): P
 const RETRYABLE = new Set([`unavailable`, `error`]);
 
 export const claimLimitReset = async (account: string, at?: string): Promise<LimitResetClaim> => {
-    const claim = await sandboxJsonVia<LimitResetClaim>(at, `/usage/limit-reset/${encodeURIComponent(account)}/claim`, jsonBody(`POST`, {})).catch(
-        (): LimitResetClaim => ({ result: `error`, detail: t(`chat.limitReset.sandboxDidntAnswer`) }),
-    );
+    const claim = await sandboxRpc.usage
+        .claimLimitReset({ account }, { context: { at } })
+        .catch((): LimitResetClaim => ({ result: `error`, detail: t(`chat.limitReset.sandboxDidntAnswer`) }));
     if (!RETRYABLE.has(claim.result)) {
         answers.value.delete(account);
     }

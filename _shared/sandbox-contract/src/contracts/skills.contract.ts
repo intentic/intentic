@@ -1,4 +1,4 @@
-import { oc } from "@orpc/contract";
+import { procedure } from "../protocol/route-meta.js";
 import { SkillBodySchema, SkillDraftSchema, SkillIdSchema, SkillRemoveSchema, SkillsListSchema, SkillSwitchSchema } from "../schemas/settings.js";
 import { OkSchema } from "../schemas/shared.js";
 
@@ -8,7 +8,7 @@ import { OkSchema } from "../schemas/shared.js";
 // together with the text. `read` takes the id in the query, since an id can name an owner and won't fit a path
 // template.
 export const skillsContract = {
-    list: oc
+    list: procedure
         .route({
             method: "GET",
             path: "/skills",
@@ -17,7 +17,7 @@ export const skillsContract = {
                 "Every skill available here and whether it is switched on, joined from all the places they come from: the owner's own, the settings, plugins a connection installed, folders inside extensions, and persona kits.",
         })
         .output(SkillsListSchema),
-    read: oc
+    read: procedure
         .route({
             method: "GET",
             path: "/skills/read",
@@ -29,7 +29,7 @@ export const skillsContract = {
         .output(SkillBodySchema),
     // Upsert by name; renaming saves under a new name and deletes the old. A new skill starts on; rewriting keeps its
     // switch as it was.
-    save: oc
+    save: procedure
         .route({
             method: "POST",
             path: "/skills",
@@ -39,7 +39,7 @@ export const skillsContract = {
         })
         .input(SkillDraftSchema)
         .output(OkSchema),
-    switch: oc
+    switch: procedure
         .route({
             method: "POST",
             path: "/skills/switch",
@@ -49,7 +49,7 @@ export const skillsContract = {
         })
         .input(SkillSwitchSchema)
         .output(OkSchema),
-    remove: oc
+    remove: procedure
         .route({
             method: "POST",
             path: "/skills/remove",

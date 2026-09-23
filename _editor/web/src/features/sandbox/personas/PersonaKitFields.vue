@@ -94,7 +94,7 @@ const toggle = async (name: string): Promise<void> => {
     close();
     openName.value = name;
     try {
-        openBody.value = ((await readSkill(name)) as { body: string }).body;
+        openBody.value = (await readSkill(name)).body;
     } catch (err) {
         bodyError.value = noticeFrom(err, `Couldn't read that skill.`).detail;
     }

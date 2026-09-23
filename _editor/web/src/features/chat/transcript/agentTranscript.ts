@@ -1,6 +1,7 @@
-import type { AgentHarness, AgentProvider, TranscriptRow, TranscriptTool, TurnEnding } from "@intentic/sandbox-contract";
+import type { AgentHarness, AgentProvider, TranscriptRow, TranscriptTool } from "@intentic/sandbox-contract";
 import { queryClient, UNPERSISTED } from "../../../lib/queryPersistence";
-import { sandboxRequestVia } from "../../sandbox/client/sandboxClient";
+import { orRefusal, SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
+import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { supportsRoute } from "../../sandbox/overview/useDaemonRoutes";
 import { AGENTS } from "../../../lib/queryKeys";
 import { type PickUp, pickUpOf } from "../run/pickUp";
@@ -35,34 +36,22 @@ const boundSession = (body: { sessionId?: string; provider?: AgentProvider; harn
         : undefined;
 
 const read = async (conversationId: string, at: string | undefined, before?: number): Promise<AgentTranscript> => {
-    const query = before === undefined ? `` : `?before=${before}`;
-    const response = await sandboxRequestVia(at, `/agents/${encodeURIComponent(conversationId)}/transcript${query}`);
-    // 404 is trusted only when the daemon advertises this route; an older one's 404 just means no such route.
-    if (response.status === 404 && supportsRoute(`agents.transcript`)) {
-        return `gone`;
-    }
-    if (!response.ok) {
+    const page = await orRefusal(sandboxRpc.agents.transcript({ id: conversationId, before }, { context: { at } }));
+    if (page instanceof SandboxHttpError) {
+        // 404 is trusted only when the daemon advertises this route; an older one's 404 just means no such route.
+        if (page.status === 404 && supportsRoute(`agents.transcript`)) {
+            return `gone`;
+        }
         throw new Error(`Could not open that conversation.`);
     }
-    const body = (await response.json()) as {
-        sessionId?: string;
-        provider?: AgentProvider;
-        harness?: AgentHarness;
-        account?: string;
-        ending?: TurnEnding;
-        messages?: TranscriptRow[];
-        from?: number;
-        more?: boolean;
-    };
-    const bound = boundSession(body);
+    const bound = boundSession(page);
     // Absent here reads as "nothing to pick up", the correct default for a daemon that predates this field.
     return {
         ...(bound !== undefined ? { session: bound } : {}),
-        ...(body.ending !== undefined ? { ending: pickUpOf(body.ending) } : {}),
-        messages: body.messages ?? [],
-        // A pre-paging daemon sends the whole record, which "from: 0, nothing above it" already describes correctly.
-        from: body.from ?? 0,
-        more: body.more ?? false,
+        ...(page.ending !== undefined ? { ending: pickUpOf(page.ending) } : {}),
+        messages: page.messages,
+        from: page.from,
+        more: page.more,
     };
 };
 
@@ -91,11 +80,6 @@ export const olderTranscriptPage = (conversationId: string, before: number, at?:
 // card, so reopening a conversation full of delegations costs the cards, not their runs. A failed read is empty, not an
 // error: the card simply stays as it was and the next press asks again.
 export const agentToolChildren = async (conversationId: string, toolId: string, at?: string): Promise<TranscriptTool[]> => {
-    const path = `/agents/${encodeURIComponent(conversationId)}/transcript/tools/${encodeURIComponent(toolId)}`;
-    const response = await sandboxRequestVia(at, path);
-    if (!response.ok) {
-        return [];
-    }
-    const body = (await response.json()) as { children?: TranscriptTool[] };
-    return body.children ?? [];
+    const delegation = await orRefusal(sandboxRpc.agents.toolChildren({ id: conversationId, toolId }, { context: { at } }));
+    return delegation instanceof SandboxHttpError ? [] : delegation.children;
 };

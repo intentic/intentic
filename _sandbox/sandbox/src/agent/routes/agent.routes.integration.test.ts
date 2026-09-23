@@ -1,30 +1,22 @@
-import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { test, expect, afterEach } from "bun:test";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import { createApp } from "../../app.js";
 
 import { type TranscriptRow, SandboxSettingsSchema } from "@intentic/sandbox-contract";
-import { claudeStoreOf } from "../../sessions/session-store.js";
-import { conversationExperimentArm } from "../run/turn/turn-plan.js";
-import type { AgentWorktrees } from "../../agents/worktrees/worktrees.js";
+import { conversationExperimentArm } from "../run/decide/experiments.js";
 import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
+import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
 import { attachedRows, runAgentTurn } from "../../harness/route-turns.testing.js";
-import { createRequest } from "../tools/agent-requests.js";
 
 // Exercises the agent routes over the daemon's HTTP surface, as the browser does. Shared fakes and client live in
 // route-services.testing.ts and its siblings.
 
 // Real git only for what a land actually touches (checkout, branch, main tree); other worktree lifecycle members stay
 // the harness's inert fakes.
-const exec = promisify(execFile);
-const sh = async (cwd: string, ...args: string[]): Promise<string> => (await exec("git", ["-C", cwd, ...args])).stdout.trim();
-const commit = (cwd: string, message: string): Promise<string> => sh(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", message);
 const tempDirs: string[] = [];
 afterEach(async () => {
     for (const dir of tempDirs.splice(0)) {
@@ -32,39 +24,11 @@ afterEach(async () => {
     }
 });
 
-const realCheckout = async (id: string): Promise<{ work: string; worktree: string; worktrees: AgentWorktrees }> => {
-    const root = await mkdtemp(join(tmpdir(), "intentic-turn-end-"));
-    tempDirs.push(root);
-    const work = join(root, "work");
-    const worktree = join(root, "worktrees", id);
-    await mkdir(work, { recursive: true });
-    await sh(work, "init", "-q", "-b", "main");
-    await writeFile(join(work, "app.ts"), "line one\n");
-    await sh(work, "add", "-A");
-    await commit(work, "baseline");
-    await sh(work, "worktree", "add", "-q", "-b", `agent/${id}`, worktree, "HEAD");
-    const repos = [{ repo: "root", base: await sh(work, "rev-parse", "HEAD") }];
-    return {
-        work,
-        worktree,
-        worktrees: {
-            conversationDir: () => worktree,
-            worktreeDir: () => worktree,
-            mainDir: () => work,
-            sessionStore: (entry) => claudeStoreOf(work, root, entry),
-            exists: async () => true,
-            attached: async () => true,
-            elsewhere: async () => [],
-            snapshot: async () => repos,
-            ensure: async () => ({ cwd: worktree, branch: `agent/${id}`, repos, fenced: false, elsewhere: [] }),
-            remove: async () => {},
-            retire: async () => {},
-            reapRepoCheckout: async () => {},
-            prune: async () => {},
-            withRepoLock: (_repo, task) => task(),
-            repoBusy: () => false,
-        },
-    };
+// A real checkout, removed after the test that made it.
+const checkout = async (id: string): ReturnType<typeof realCheckout> => {
+    const made = await realCheckout(id);
+    tempDirs.push(made.root);
+    return made;
 };
 
 test("agent.run rejects an empty prompt", async () => {
@@ -233,7 +197,10 @@ test("a spent allowance holds the turn, and agent.resume runs that same turn aga
         createApp(
             services({
                 async *agent(request) {
-                    seen.push({ prompt: request.prompt, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) });
+                    seen.push({
+                        prompt: request.spec.prompt,
+                        ...(request.spec.sessionId === undefined ? {} : { sessionId: request.spec.sessionId }),
+                    });
                     yield { kind: "session", sessionId: "s-void" };
                     if (refuse) {
                         yield { kind: "error", code: "rate_limit", message: "Claude usage limit reached." };
@@ -272,7 +239,10 @@ test("a runtime that dies with no code holds the turn too, and the press re-runs
         createApp(
             services({
                 async *agent(request) {
-                    seen.push({ prompt: request.prompt, ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }) });
+                    seen.push({
+                        prompt: request.spec.prompt,
+                        ...(request.spec.sessionId === undefined ? {} : { sessionId: request.spec.sessionId }),
+                    });
                     yield { kind: "session", sessionId: "s-real" };
                     yield { kind: "delta", text: "looking" };
                     if (die) {
@@ -341,7 +311,11 @@ test("dismissing a question ends the turn where the dismissal lands, and settles
             services({
                 async *agent(request) {
                     // Exactly what the `ask` tool does: the card names the conversation it parked.
-                    const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
+                    const { id, wait } = request.hooks.cards.create(
+                        "question",
+                        { kind: "question", requestId: "", cancelled: true },
+                        request.spec.conversationId,
+                    );
                     yield { kind: "question", requestId: id, questions: [] };
                     raised?.(id);
                     const { resolved } = await wait(request.signal);
@@ -362,7 +336,7 @@ test("dismissing a question ends the turn where the dismissal lands, and settles
 });
 
 test("a dismissed question settles the turn's books on the branch, and lands nothing into the main tree", async () => {
-    const { work, worktree, worktrees } = await realCheckout("conv1");
+    const { work, worktree, worktrees } = await checkout("conv1");
     let raised: ((id: string) => void) | undefined;
     const card = new Promise<string>((resolve) => (raised = resolve));
     const client = clientFor(
@@ -373,7 +347,11 @@ test("a dismissed question settles the turn's books on the branch, and lands not
                 turnCheckpoints: { record: async () => {}, of: async () => undefined, all: async () => new Map(), truncate: async () => {} },
                 async *agent(request) {
                     await writeFile(join(worktree, "app.ts"), "line one\nthe agent's work\n");
-                    const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
+                    const { id, wait } = request.hooks.cards.create(
+                        "question",
+                        { kind: "question", requestId: "", cancelled: true },
+                        request.spec.conversationId,
+                    );
                     yield { kind: "question", requestId: id, questions: [] };
                     raised?.(id);
                     const { resolved } = await wait(request.signal);
@@ -386,14 +364,14 @@ test("a dismissed question settles the turn's books on the branch, and lands not
     await client.agent.run({ prompt: "rename Credits?", conversationId: "conv1", isolated: true });
     await client.agent.reply({ kind: "question", requestId: await card, cancelled: true });
 
-    expect(await sh(work, "status", "--porcelain")).toBe("");
-    expect(await sh(work, "show", "--name-only", "--format=%s", "agent/conv1")).toContain("app.ts");
+    expect(await gitOut(work, "status", "--porcelain")).toBe("");
+    expect(await gitOut(work, "show", "--name-only", "--format=%s", "agent/conv1")).toContain("app.ts");
     const { agents } = await client.agents.list();
     expect(agents[0]).toMatchObject({ id: "conv1", status: "idle", diff: { files: 1, insertions: 1, deletions: 0 } });
 });
 
 test("an isolated turn announces the state its message can be rewound to, and files it under that message", async () => {
-    const { worktrees } = await realCheckout("conv-anchor");
+    const { worktrees } = await checkout("conv-anchor");
     const filed: { index: number; kind: string }[] = [];
     const client = clientFor(
         createApp(

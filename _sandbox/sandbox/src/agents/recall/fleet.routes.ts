@@ -2,9 +2,9 @@ import type { Context } from "hono";
 import { z } from "zod";
 import type { Services } from "../../composition.js";
 import type { AppEnv } from "../../app-env.js";
-import { soleLiveConversation } from "../../agent/run/turn/turn-runs.js";
+import { soleLiveConversation } from "../actor/conversation-holdings.js";
 import { messageConversation } from "./fleet-message.js";
-import { fleetMessages, fleetRecall, fleetRoster, fleetSearch, resolveHandle, type RosterOptions } from "./fleet-recall.js";
+import { candidateOf, fleetMessages, fleetRecall, fleetRoster, fleetSearch, resolveHandle, type RosterOptions } from "./fleet-recall.js";
 
 // The shell door onto the daemon's fleet knowledge (registry, record, worktree composition, phrase index), joined into
 // one answer. Its own namespace, not `/agents`: the board's router can land, discard and rename, so what lives here
@@ -55,6 +55,15 @@ const rosterOptionsOf = (c: Context<AppEnv>): RosterOptions => {
     };
 };
 
+// How many of a conversation's files a stored read lists; the count past it says how many more there are.
+const STORED_FILES = 200;
+
+// Everything the daemon keeps for one conversation, as stored: its rows by table and its directory's files.
+const storedState = async (services: Pick<Services, "conversationsDb" | "conversationUnits">, id: string) => ({
+    rows: services.conversationsDb.rowsOf(id),
+    unit: { dir: services.conversationUnits.dir(id), ...(await services.conversationUnits.files(id, STORED_FILES)) },
+});
+
 // Full Services, not a Pick: `message` starts turns, and a turn is the whole daemon.
 export const createFleetRoutes = (services: Services) => ({
     /** GET /fleet: paginated roster, newest first; `?q=` switches it to a phrase search, `?owner=` narrows to one member's. */
@@ -65,7 +74,8 @@ export const createFleetRoutes = (services: Services) => ({
         // `indexing` marks a backfill still running, so an empty result may still grow rather than mean nothing exists.
         return c.json({ agents, ...(query === undefined || query === "" ? {} : { indexing: services.saidIndex.indexing() }) });
     },
-    /** GET /fleet/:handle: one conversation, whole; `?transcript=1` adds the record, bounded by `last` and `grep`. */
+    /** GET /fleet/:handle: one conversation, whole; `?transcript=1` adds the record, bounded by `last` and `grep`;
+     *  `?stored=1` adds what the daemon keeps for it, raw: its row in every table and the files in its directory. */
     show: async (c: Context<AppEnv>): Promise<Response> => {
         const handle = c.req.param("handle") ?? "";
         const resolved = resolveHandle(services, handle);
@@ -75,7 +85,7 @@ export const createFleetRoutes = (services: Services) => ({
                 {
                     ok: false,
                     message: `\`${handle}\` matches ${resolved.candidates.length} conversations; name one of them.`,
-                    candidates: resolved.candidates.map((entry) => ({ id: entry.id, title: entry.title, status: entry.status, updatedAt: entry.updatedAt })),
+                    candidates: resolved.candidates.map(candidateOf),
                 },
                 409,
             );
@@ -84,6 +94,9 @@ export const createFleetRoutes = (services: Services) => ({
             return c.json({ ok: false, message: `No conversation answers to \`${handle}\`. Search for one with \`agents find "<text>"\`.` }, 404);
         }
         const recall = await fleetRecall(services, resolved.entry, services.config.historyRoot, (flagQuery(c, "diff") === false ? { diff: false } : {}));
+        if (flagQuery(c, "stored") === true) {
+            return c.json({ agent: recall, stored: await storedState(services, resolved.entry.id) });
+        }
         if (flagQuery(c, "transcript") !== true) {
             return c.json({ agent: recall });
         }
@@ -102,7 +115,7 @@ export const createFleetRoutes = (services: Services) => ({
             return c.json({ ok: false, message: 'Pass JSON like {"to": "<handle>", "message": "…"}.' }, 400);
         }
         // Same attribution the children routes use: the turn's own stamp, else the one turn in flight.
-        const from = c.req.header("x-intentic-conversation") ?? soleLiveConversation();
+        const from = c.req.header("x-intentic-conversation") ?? soleLiveConversation(services.conversations);
         const outcome = await messageConversation(services, from === "" ? undefined : from, parsed.data.to, parsed.data.message);
         return outcome.ok
             ? c.json(outcome)
@@ -112,7 +125,7 @@ export const createFleetRoutes = (services: Services) => ({
                       message: outcome.message,
                       ...(outcome.candidates === undefined
                           ? {}
-                          : { candidates: outcome.candidates.map((entry) => ({ id: entry.id, title: entry.title, status: entry.status, updatedAt: entry.updatedAt })) }),
+                          : { candidates: outcome.candidates.map(candidateOf) }),
                   },
                   outcome.status,
               );

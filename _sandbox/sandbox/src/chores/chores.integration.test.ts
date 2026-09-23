@@ -103,7 +103,7 @@ describe(`the runner's lane`, () => {
                 workspace: { root: dir },
                 chores,
                 // A background sweep defers to live turns; a manually requested probe runs regardless, asserted below.
-                agents: { liveSessionIds: () => [] },
+                conversations: { liveSessionIds: () => [] },
                 wanted: async () => true,
                 logger: createLogger({ logLevel: `silent`, logPretty: false, historyRoot: `` }),
             }),

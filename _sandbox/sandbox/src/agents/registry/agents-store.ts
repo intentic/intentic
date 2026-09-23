@@ -1,36 +1,40 @@
-import { readFile, rename } from "node:fs/promises";
 import {
     AgentHarnessSchema,
     AgentOriginSchema,
     AgentProviderSchema,
     ForkedFromSchema,
     LandConflictSchema,
-    type LandedMessage,
+    LandedMessageSchema,
     LimitPolicySchema,
+    profileOf,
     RetryPolicySchema,
     SessionOwnerSchema,
+    type TurnProfile,
     UnfinishedWorkSchema,
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
-import { writeJsonFile } from "../../store/json-file.js";
+import type { ConversationsDb } from "../../store/conversations-db.js";
 
-// Persisted half of the fleet registry (<historyRoot>/agents.json, on /history so identity survives container
-// rebuilds); one entry per conversation. Runtime-only state (status, attention, activity) lives in the registry's
-// memory, rebuilt from turn frames; only what must survive a restart is here.
-
-// How the last turn ended, not a live state (running/awaiting, rebuilt live) or a derived land verdict (git answers
-// that live). `interrupted` is what a daemon killed mid-turn leaves; only it triggers the boot resume.
-const PersistedAgentStatusSchema = z.enum(["idle", "interrupted", "stopped", "error"]).catch("idle");
+// The persisted half of the fleet registry: one record per conversation, what must survive a restart, as nested records
+// whose invariants are their types. Runtime-only state (status, attention, activity) lives in the conversation's actor,
+// rebuilt from turn frames. Stored as the `conversation` row, its checkout's repos as `conversation_repo` rows.
 
 // Authority ladder over the title: `derived` (prompt cut to a line), `model` (naming helper wrote it), `plan` (the
-// agent's own heading), `user` (a rename, outranks all). Unknown values fall back to `derived`.
-const AgentTitleSourceSchema = z.enum(["derived", "model", "plan", "user"]).catch("derived");
+// agent's own heading), `user` (a rename, outranks all).
+const AgentTitleSourceSchema = z.enum(["derived", "model", "plan", "user"]);
 export type AgentTitleSource = z.infer<typeof AgentTitleSourceSchema>;
 
-// Whether a compaction happened since the last turn, so its preamble note must repeat. `>=`, not `===`: the read is one
-// turn behind the write, so a turn whose count did not advance errs toward telling twice.
-export const compactedSinceLastTurn = (entry: { readonly compactedTurn?: number | undefined } | undefined, conversationTurns: number): boolean =>
-    entry?.compactedTurn !== undefined && entry.compactedTurn >= conversationTurns - 1;
+// One repo of a worktree conversation's checkout: `base` is the main-line sha the branch stands on, moved by the pre-turn
+// rebase; `landedTip`/`landedHead`/`landedAt` are the last land's provenance; `absorbed` marks it fully committed.
+const RepoRecordSchema = z.object({
+    repo: z.string(),
+    base: z.string(),
+    landedTip: z.string().optional(),
+    landedHead: z.string().optional(),
+    landedAt: z.number().optional(),
+    absorbed: z.number().optional(),
+});
+export type RepoRecord = z.infer<typeof RepoRecordSchema>;
 
 // Nested repos a conversation's checkout holds (root is always included, never listed) plus the persona card it was
 // read off, so the preamble can name it. Daemon-local; nothing outside this process reads it.
@@ -40,180 +44,262 @@ export const CompositionSchema = z.object({
 });
 export type Composition = z.infer<typeof CompositionSchema>;
 
-export const PersistedAgentSchema = z.object({
-    // `id` is the conversationId; `branch` is present only for an isolated conversation.
-    id: z.string(),
-    branch: z.string().optional(),
-    // The paired runner's id, absent for one that runs here; latched with the identity like `branch`, so a stale tab
-    // cannot move it between machines. A remote conversation is isolated by construction.
+// Where the conversation works, latched at its first turn so a stale request can never move it: the shared tree, or a
+// checkout of its own on `branch` (on another machine when `runner` names one), carrying `repos` as `composition` says.
+const WorktreePlacementSchema = z.object({
+    kind: z.literal("worktree"),
+    branch: z.string(),
     runner: z.string().optional(),
-    // Display name, one sanitized line; `titleSource` says how it got there and gates the next promotion.
-    title: z.string().optional(),
-    titleSource: AgentTitleSourceSchema.optional(),
-    // One action word the naming pass wrote for this title (`fix`, `audit`), split off the name and never displayed;
-    // the board reads it as the kind of work. Cleared whenever the title is replaced from any other source.
-    titleAction: z.string().optional(),
+    repos: z.array(RepoRecordSchema),
+    // What the checkout should carry, copied from the opening turn's persona card; absent means everything. A later
+    // persona edit never moves an existing conversation.
+    composition: CompositionSchema.optional(),
+});
+export type WorktreePlacement = z.infer<typeof WorktreePlacementSchema>;
+const PlacementSchema = z.discriminatedUnion("kind", [z.object({ kind: z.literal("main") }), WorktreePlacementSchema]);
+export type Placement = z.infer<typeof PlacementSchema>;
+
+// Latched on the first turn and never re-read: where it came from (`origin` an automation, `startedBy` who asked, as the
+// daemon verified them), the fence it was born with as area ids (absent: the whole workspace), where it opened and as
+// whom, and the conversation it was forked from.
+const IdentitySchema = z.object({
+    origin: AgentOriginSchema.optional(),
+    startedBy: z.string().optional(),
+    areas: z.array(z.string()).optional(),
+    startIn: z.string().optional(),
+    actsAs: z.string().optional(),
+    forkedFrom: ForkedFromSchema.optional(),
+});
+export type Identity = z.infer<typeof IdentitySchema>;
+
+// The turn settings the last turn ran under, each kept from the turn before when a turn names none; persisted since a
+// client on another device has nowhere else to learn them.
+const ProfileSchema = z.object({
     provider: AgentProviderSchema,
     harness: AgentHarnessSchema,
-    // Turn settings last run under; persisted since a client on another device has nowhere else to learn them.
     model: z.string().optional(),
     effort: z.string().optional(),
     thinking: z.boolean().optional(),
     fast: z.boolean().optional(),
-    // What the complexity judge made of the last turn, feeding the next turn's `afterHardTurn` signal; may be read
-    // tomorrow, from another device. The judgement itself, never what ran; absent means nothing judged yet.
     account: z.string().optional(),
-    sessionId: z.string().optional(),
-    // Turn index the context window was last compacted under; absent means never compacted. The next turn after that
-    // index has to restate its preamble notes, since compaction summarized away the messages they rode in on.
-    compactedTurn: z.number().optional(),
-    // Set when an automation (a mention, a webhook) opened this conversation; absent means the user started it.
-    origin: AgentOriginSchema.optional(),
-    // Who asked for the first turn, latched like `origin`; absent when the request carried no verified identity.
-    startedBy: z.string().optional(),
-    // The fence this conversation was born with, as area ids, from whoever started it. Latched at the first turn and
-    // never re-read: a conversation is the unit a fence binds to, so an unfenced member replying in a fenced thread
-    // cannot widen what it may touch. Absent means the whole workspace.
-    areas: z.array(z.string()).optional(),
-    // Who answers for it: the member who started it, the parent's owner for a spawned child, or whoever it was handed
-    // to since. Absent means unclaimed.
-    owner: SessionOwnerSchema.optional(),
-    // Where the conversation opened and as whom, latched at the first turn like `origin`: what a project-scoped board
-    // reads to decide whether this conversation is its own.
-    startIn: z.string().optional(),
-    actsAs: z.string().optional(),
-    // Where this conversation was forked from; written once at the fork's first turn and never cleared.
-    forkedFrom: ForkedFromSchema.optional(),
-    // Per-repo worktree state. `base` is the main-line sha the branch stands on, moved by the pre-turn rebase;
-    // `landedTip`/`landedHead`/`landedAt` are the last land's provenance; `absorbed` marks it fully committed.
-    repos: z.array(
-        z.object({
-            repo: z.string(),
-            base: z.string(),
-            landedTip: z.string().optional(),
-            landedHead: z.string().optional(),
-            landedAt: z.number().optional(),
-            absorbed: z.number().optional(),
-        }),
-    ),
-    // What the checkout should carry, copied from the opening turn's persona card; `repos` above is brought to this
-    // each later turn. Absent means everything; a later persona edit never moves an existing conversation.
-    composition: CompositionSchema.optional(),
-    // What the landed work did, as a commit subject drafted the moment it lands, for the Changes panel's chip. Kept
-    // here rather than derived on demand, since deriving it would put model latency behind a click meant to be instant.
-    landedSubject: z.string().optional(),
-    // User-facing sentence for the same landing (a changelog entry); persisted since the commit often comes long after.
-    landedNote: z.string().optional(),
-    // Breaking-change sentence for the Release's trailer; almost always absent.
-    landedBreaking: z.string().optional(),
-    status: PersistedAgentStatusSchema,
-    // Persist the last failure until a fresh turn clears it.
-    failure: z.string().optional(),
-    // Which kind of failure, the frame's own code; persisted and cleared alongside `failure`.
-    failureCode: z.string().optional(),
-    // A refused turn's limit facts: when it reopens, whether held for a press, whether a fire is booked. The latter two
-    // are dropped on load; that memory does not survive a restart.
-    limitResetsAt: z.number().optional(),
-    limitHeld: z.boolean().optional(),
-    limitScheduled: z.boolean().optional(),
-    // Where a booked move was taking it; stripped on load along with `limitHeld`/`limitScheduled`.
-    limitMoving: z.string().optional(),
-    // Override of the sandbox-wide autoLand default (absent inherits); must govern turns that finish unattended.
+});
+export type StoredProfile = z.infer<typeof ProfileSchema>;
+
+// How the last turn ended, not a live state (rebuilt from frames) or a land verdict (git answers that live).
+// `interrupted` is what a daemon killed mid-turn leaves. A spent allowance is its own kind, the only one with limit facts.
+const EndingSchema = z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("idle") }),
+    z.object({ kind: z.literal("interrupted") }),
+    z.object({ kind: z.literal("stopped") }),
+    z.object({ kind: z.literal("failed"), failure: z.string().optional(), code: z.string().optional() }),
+    z.object({
+        kind: z.literal("limited"),
+        failure: z.string().optional(),
+        // Epoch seconds the allowance reopens; absent when the provider publishes no instant.
+        resetsAt: z.number().optional(),
+        // Held for a press, booked to fire at the reset, and where a booked move takes it: this process's memory, which
+        // the registry clears on load.
+        held: z.boolean(),
+        scheduled: z.boolean(),
+        moving: z.string().optional(),
+    }),
+]);
+export type Ending = z.infer<typeof EndingSchema>;
+export type FailedEnding = Extract<Ending, { kind: "failed" | "limited" }>;
+
+// The conversation's own answer to each sandbox-wide default, absent inheriting it: whether its work lands on its own,
+// and each ending's one question (turn-break.ts), armed for a resume with nobody watching.
+const PosturesSchema = z.object({
     autoLand: z.boolean().optional(),
-    // This conversation's own answer to each ending's one question (absent inherits the sandbox-wide policy). The whole
-    // point of arming any of them is a resume with nobody watching, and a limit's reopening is often hours past the tab
-    // that armed it, so all three are persisted rather than held in a window.
-    limitPolicy: LimitPolicySchema.optional(),
-    outagePolicy: RetryPolicySchema.optional(),
-    stopPolicy: RetryPolicySchema.optional(),
-    // A collaborator's standing ask to land; persisted so it survives a restart.
-    landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
-    // Every mark anyone left, flat and in press order; summaryOf groups them per emoji for the card. Flat here because
-    // one press adds or removes exactly one row, and a grouped store would have to be re-keyed on every press.
-    reactions: z.array(z.object({ emoji: z.string(), email: z.string(), name: z.string().optional(), at: z.number() })).optional(),
-    // Why the last land refused; evidence, not state, standing.ts reads it to explain a delta and never to invent one.
-    // A land-time snapshot: surfaces re-derive from it rather than replay its per-path content.
+    limit: LimitPolicySchema.optional(),
+    outage: RetryPolicySchema.optional(),
+    stopped: RetryPolicySchema.optional(),
+});
+export type Postures = z.infer<typeof PosturesSchema>;
+
+// What the last land left: the commit message drafted the moment it landed (a claim on the main tree, retired only by a
+// commit), why it refused (evidence standing.ts reads, never state), and the base-to-tip diffstat across the composition.
+const LandingSchema = z.object({
+    message: LandedMessageSchema.optional(),
     conflicts: z.array(LandConflictSchema).optional(),
-    // What the last turn left open, written by the finish that measured it; persisted for a reader who returns tomorrow
-    // to a settled card. Rewritten only when a finish actually observed the checklist, never cleared for silence.
-    unfinished: UnfinishedWorkSchema.optional(),
+    diff: z.object({ files: z.number(), insertions: z.number(), deletions: z.number() }).optional(),
+});
+export type Landing = z.infer<typeof LandingSchema>;
+
+// What people left on it rather than anything it did: its name (with the source that ranks it, and the naming pass's one
+// work word, never displayed), who answers for it, a standing ask to land, every mark in press order, and when it was
+// last opened, the unread badge's reference point, kept here so it holds across devices.
+const SocialSchema = z.object({
+    title: z.object({ text: z.string(), source: AgentTitleSourceSchema, action: z.string().optional() }).optional(),
+    owner: SessionOwnerSchema.optional(),
+    landRequested: z.object({ email: z.string(), name: z.string().optional(), at: z.number() }).optional(),
+    reactions: z.array(z.object({ emoji: z.string(), email: z.string(), name: z.string().optional(), at: z.number() })),
+    seenAt: z.number().optional(),
+});
+export type Social = z.infer<typeof SocialSchema>;
+
+// Lifetime spend and counts: completed turns, tool calls, and agents started, counted here rather than off the live
+// subagent registry, which forgets a child minutes after it settles and everything across a restart.
+const TotalsSchema = z.object({
     costUsd: z.number(),
     inputTokens: z.number(),
     outputTokens: z.number(),
-    // Completed turns and lifetime tool calls; optional, since entries older than these counters read as absent.
-    turns: z.number().optional(),
-    toolUses: z.number().optional(),
-    // Agents started, for this conversation's whole life. Counted here rather than off the live subagent registry,
-    // which forgets a child minutes after it settles and everything across a restart.
-    subagents: z.number().optional(),
-    // Cumulative base-to-tip diffstat across the composition, refreshed on each land.
-    diffFiles: z.number().optional(),
-    diffInsertions: z.number().optional(),
-    diffDeletions: z.number().optional(),
+    turns: z.number(),
+    toolUses: z.number(),
+    subagents: z.number(),
+});
+export type Totals = z.infer<typeof TotalsSchema>;
+
+export const PersistedAgentSchema = z.object({
+    // The conversation id.
+    id: z.string(),
+    placement: PlacementSchema,
+    identity: IdentitySchema,
+    profile: ProfileSchema,
+    sessionId: z.string().optional(),
+    // Turn index the context window was last compacted under; the next turn after it restates its preamble notes.
+    compactedTurn: z.number().optional(),
+    ending: EndingSchema,
+    // What the last turn left open, written by the finish that measured it, never cleared for silence.
+    unfinished: UnfinishedWorkSchema.optional(),
+    postures: PosturesSchema,
+    landing: LandingSchema,
+    social: SocialSchema,
+    totals: TotalsSchema,
     createdAt: z.number(),
     updatedAt: z.number(),
-    // When last opened, the unread badge's reference point; kept here, not in a browser, so it holds across devices.
-    seenAt: z.number().optional(),
-    // When archived: off the board, checkout retired, branch kept. Absent means live; the entry itself survives
-    // untouched.
+    // When archived: off the board, checkout retired, branch kept. The record itself survives untouched.
     archivedAt: z.number().optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 
-// A conversation that owns a worktree, as a type rather than a runtime re-check: branch-only code paths take this so
-// the compiler carries the guarantee instead of each one re-testing `branch !== undefined`.
-export type IsolatedAgent = PersistedAgent & { branch: string };
-export const isIsolated = (entry: PersistedAgent): entry is IsolatedAgent => entry.branch !== undefined;
+// A conversation that owns a worktree, as a type rather than a runtime re-check.
+export type IsolatedAgent = PersistedAgent & { readonly placement: WorktreePlacement };
+export const isIsolated = (entry: PersistedAgent): entry is IsolatedAgent => entry.placement.kind === "worktree";
 
-// The drafted commit message as one value, whether read off the live card or the review's own record; stored as three
-// flat columns. `undefined` before any sentence is written, and notes never ride without a subject.
-export const landedMessageOf = (entry: PersistedAgent): LandedMessage | undefined =>
-    entry.landedSubject === undefined
-        ? undefined
-        : {
-              subject: entry.landedSubject,
-              ...(entry.landedNote === undefined ? {} : { note: entry.landedNote }),
-              ...(entry.landedBreaking === undefined ? {} : { breaking: entry.landedBreaking }),
-          };
+// The worktree a conversation owns, undefined for one working in the shared tree (or none at all).
+export const worktreeOf = (entry: PersistedAgent | undefined): WorktreePlacement | undefined =>
+    entry?.placement.kind === "worktree" ? entry.placement : undefined;
+
+// The checkout's repos, none for a conversation working in the shared tree.
+export const reposOf = (entry: PersistedAgent): readonly RepoRecord[] => worktreeOf(entry)?.repos ?? [];
+
+// The ending in the card's status vocabulary: both failure kinds read as `error`.
+export type EndingStatus = "idle" | "interrupted" | "stopped" | "error";
+export const endingStatus = (ending: Ending): EndingStatus =>
+    ending.kind === "failed" || ending.kind === "limited" ? "error" : ending.kind;
+
+// Whether a compaction happened since the last turn, so its preamble note must repeat. `>=`, not `===`: the read is one
+// turn behind the write, so a turn whose count did not advance errs toward telling twice.
+export const compactedSinceLastTurn = (entry: { readonly compactedTurn?: number | undefined } | undefined, conversationTurns: number): boolean =>
+    entry?.compactedTurn !== undefined && entry.compactedTurn >= conversationTurns - 1;
+
+// What the conversation runs as now, as its last turn left it: the profile a turn the daemon starts on it (a wake, a
+// child's report, a peer's message) carries. Only the fields the entry keeps; placement and job are the turn's own.
+export const conversationProfile = (entry: PersistedAgent): TurnProfile =>
+    profileOf({
+        agent: entry.profile.provider,
+        harness: entry.profile.harness,
+        model: entry.profile.model,
+        effort: entry.profile.effort,
+        thinking: entry.profile.thinking,
+        fast: entry.profile.fast,
+        account: entry.profile.account,
+        actsAs: entry.identity.actsAs,
+    });
 
 export interface AgentsStore {
-    readonly load: () => Promise<PersistedAgent[]>;
-    // Full-replace write; the registry owns the authoritative array after init.
-    readonly save: (agents: readonly PersistedAgent[]) => Promise<void>;
+    // Every conversation whose record this build can read; one it cannot costs that one, never the roster.
+    readonly load: () => PersistedAgent[];
+    // Each record whole, its repo rows replaced with it; one transaction, joining the caller's when one is open.
+    readonly save: (entries: readonly PersistedAgent[]) => void;
+    // Each conversation's row and, by cascade, every row keyed by it in any table; one transaction.
+    readonly remove: (ids: readonly string[]) => void;
+    // Whether a row exists for the conversation, readable by this build or not.
+    readonly has: (id: string) => boolean;
 }
 
-// The fleet's only record of which conversations exist; a load that answers a bad file with `[]` would have the next
-// write-through persist that emptiness forever. Both guard against it:
-// - save is atomic (tmp + rename), so a daemon killed mid-write leaves the previous file intact
-// - load never lets unreadable content be overwritten: a bad file is set aside, a bad entry dropped alone
-export const fileAgentsStore = (path: string): AgentsStore => ({
-    load: async () => {
-        let raw: string;
-        try {
-            raw = await readFile(path, "utf8");
-        } catch {
-            return []; // Absent means a fresh sandbox; the one case where an empty fleet is the truth.
-        }
-        let parsed: unknown;
-        try {
-            parsed = JSON.parse(raw);
-        } catch {
-            // Not valid JSON (a torn write, a stray edit). Renamed out of the write path first, since returning `[]`
-            // with the bad file still there is how one bad boot used to erase the fleet on the next persist.
-            await rename(path, `${path}.corrupt`).catch(() => undefined);
-            return [];
-        }
-        if (!Array.isArray(parsed)) {
-            await rename(path, `${path}.corrupt`).catch(() => undefined);
-            return [];
-        }
-        // Per entry, not the whole array: one row a schema no longer accepts costs that row, not the whole roster.
-        return parsed.flatMap((entry) => {
-            const result = PersistedAgentSchema.safeParse(entry);
-            return result.success ? [result.data] : [];
-        });
-    },
-    // Write-then-rename, so the file is always one complete roster or the previous one, never a prefix. Through the
-    // shared writer since /history can be shared by a second daemon, whose temp file needs its own pid tag.
-    save: (agents) => writeJsonFile(path, agents),
+interface RepoRow {
+    readonly conversation_id: string;
+    readonly repo: string;
+    readonly base: string;
+    readonly landed_tip: string | null;
+    readonly landed_head: string | null;
+    readonly landed_at: number | null;
+    readonly absorbed: number | null;
+}
+
+const fromRow = (row: RepoRow): RepoRecord => ({
+    repo: row.repo,
+    base: row.base,
+    ...(row.landed_tip === null ? {} : { landedTip: row.landed_tip }),
+    ...(row.landed_head === null ? {} : { landedHead: row.landed_head }),
+    ...(row.landed_at === null ? {} : { landedAt: row.landed_at }),
+    ...(row.absorbed === null ? {} : { absorbed: row.absorbed }),
 });
+
+// The record column: the entry less its key and its repos, which are rows of their own.
+const recordOf = ({ id: _key, placement, ...rest }: PersistedAgent): string => {
+    if (placement.kind === "main") {
+        return JSON.stringify({ ...rest, placement });
+    }
+    const { repos: _rows, ...checkout } = placement;
+    return JSON.stringify({ ...rest, placement: checkout });
+};
+
+export const sqliteAgentsStore = ({ db, transaction }: ConversationsDb): AgentsStore => {
+    const upsert = db.prepare("INSERT INTO conversation(id, record) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET record = excluded.record");
+    const dropRepos = db.prepare("DELETE FROM conversation_repo WHERE conversation_id = ?");
+    const insertRepo = db.prepare(
+        "INSERT INTO conversation_repo(conversation_id, position, repo, base, landed_tip, landed_head, landed_at, absorbed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    const deleteConversation = db.prepare("DELETE FROM conversation WHERE id = ?");
+    const selectConversations = db.prepare("SELECT id, record FROM conversation");
+    const selectRepos = db.prepare("SELECT * FROM conversation_repo ORDER BY conversation_id, position");
+    const selectOne = db.prepare("SELECT 1 FROM conversation WHERE id = ?");
+    return {
+        load: () => {
+            const repos = new Map<string, RepoRecord[]>();
+            for (const row of selectRepos.all() as unknown as RepoRow[]) {
+                const held = repos.get(row.conversation_id);
+                if (held === undefined) {
+                    repos.set(row.conversation_id, [fromRow(row)]);
+                } else {
+                    held.push(fromRow(row));
+                }
+            }
+            return (selectConversations.all() as unknown as { id: string; record: string }[]).flatMap(({ id, record }) => {
+                const stored = JSON.parse(record) as { readonly placement?: { readonly kind?: unknown } };
+                const placement = stored.placement?.kind === "worktree" ? { ...stored.placement, repos: repos.get(id) ?? [] } : stored.placement;
+                const parsed = PersistedAgentSchema.safeParse({ ...stored, id, placement });
+                return parsed.success ? [parsed.data] : [];
+            });
+        },
+        save: (entries) =>
+            transaction(() => {
+                for (const entry of entries) {
+                    upsert.run(entry.id, recordOf(entry));
+                    dropRepos.run(entry.id);
+                    reposOf(entry).forEach((repo, position) =>
+                        insertRepo.run(
+                            entry.id,
+                            position,
+                            repo.repo,
+                            repo.base,
+                            repo.landedTip ?? null,
+                            repo.landedHead ?? null,
+                            repo.landedAt ?? null,
+                            repo.absorbed ?? null,
+                        ),
+                    );
+                }
+            }),
+        remove: (ids) =>
+            transaction(() => {
+                for (const id of ids) {
+                    deleteConversation.run(id);
+                }
+            }),
+        has: (id) => selectOne.get(id) !== undefined,
+    };
+};

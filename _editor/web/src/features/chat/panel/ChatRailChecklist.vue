@@ -14,9 +14,9 @@ const t = useT();
 
 const { active } = useChat();
 
-const todos = computed(() => currentChecklist(active.value.messages.value));
+const todos = computed(() => currentChecklist(active.value.transcript.messages.value));
 // `generating`, not `streaming`: a turn parked on a permission card is waiting on the reader, so nothing should spin.
-const live = computed(() => active.value.generating.value);
+const live = computed(() => active.value.turn.generating.value);
 const done = computed(() => todos.value?.filter((item) => item.status === `completed`).length ?? 0);
 const progress = computed(() => `${done.value} of ${todos.value?.length ?? 0} done`);
 </script>

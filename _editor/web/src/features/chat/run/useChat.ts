@@ -1,20 +1,5 @@
-import type { AgentCommand, OauthAccount } from "@intentic/sandbox-contract";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
-import { accountsLoaded, noTranslatorAccounts, providerAccounts, providerRefusals, translatorAccounts, usageByAccount } from "../accounts/providerAccounts";
-import {
-    acpProviders,
-    type CatalogLoadState,
-    endpointProviders,
-    endpointsLoaded,
-    type ModelOption,
-    nativeReady,
-    perProvider,
-    providerCommands,
-    providerDefaultModel,
-    providerModels,
-    providerModelsState,
-} from "../accounts/providerCatalog";
-import { turnDefaults } from "./turnDefaults";
+import { accountsLoaded, translatorAccounts } from "../accounts/providerAccounts";
 import {
     active,
     activeId,
@@ -24,26 +9,21 @@ import {
     collapsePanes,
     composerFocus,
     conversations,
-    forgetSettled,
     keepChat,
     openBeside,
     panes,
     releaseDone,
-    restoreTabs,
     setActive,
     setPanes,
     tabReveal,
 } from "../tabs/useChat-tabs";
-import { attachStarted, loadSessions, paintCachedTranscripts, sessions } from "./useChat-sessions";
-import { retireCommandReads } from "../models/useChat-catalog";
-import { hasSignIn } from "../session/access";
+import { attachStarted, loadSessions, sessions } from "./useChat-sessions";
 import {
     accountBusy,
     accountUsage,
     claudeConnected,
     disconnect,
     error,
-    heldAccounts,
     loadUsage,
     managedAccounts,
     managedProvider,
@@ -83,7 +63,6 @@ const {
     awaitingDecision,
     pendingPlanMessage,
     queued,
-    removeQueued,
     steerable,
     capabilities,
     activeModel,
@@ -92,7 +71,6 @@ const {
     provider,
     selectProvider,
     harness,
-    selectHarness,
     model,
     selectModel,
     effort,
@@ -100,68 +78,13 @@ const {
     fast,
     fastMode,
     account,
-    selectAccount,
     accounts,
     connected,
     draft,
     attachments,
     send,
-    stop,
     forkAt,
-    decidePlan,
-    answerQuestion,
-    cancelQuestion,
-    decidePermission,
 } = activeView;
-
-// Resets the chat singleton when the active sandbox changes (see sandboxScope): conversations, history, and
-// account-connection state all belong to the sandbox they loaded from.
-export const resetChat = (): void => {
-    for (const conversation of conversations.value) {
-        conversation.abort();
-    }
-    // Cleared before restoreTabs, or it validates new picks against the old sandbox's accounts.
-    providerAccounts.value = perProvider<readonly OauthAccount[]>(() => []);
-    // The other half of the same reading, and just as sandbox-scoped: what the outgoing box could run says nothing
-    // about the incoming one.
-    nativeReady.value = [];
-    accountsLoaded.value = false;
-    // Which chats were done with was the outgoing daemon's reading; the incoming roster gives its own.
-    forgetSettled();
-    // Rebuilds tabs and re-seeds the account pick from the incoming sandbox's own remembered one.
-    restoreTabs();
-    // Mirror is keyed by conversation, so new tabs paint from this sandbox's own cache, not the old one's.
-    paintCachedTranscripts(conversations.value);
-    sessions.value = [];
-    providerModels.value = perProvider<ModelOption[]>(() => []);
-    providerCommands.value = perProvider<readonly AgentCommand[]>(() => []);
-    retireCommandReads();
-    providerDefaultModel.value = perProvider(() => ``);
-    providerModelsState.value = perProvider<CatalogLoadState>(() => `idle`);
-    // Which providers this sandbox adds (its ACP agents, its endpoints, the free trial among them) is unknown until its
-    // own daemon answers; both lists come from one read, so both wait on it.
-    acpProviders.value = [];
-    endpointProviders.value = [];
-    endpointsLoaded.value = false;
-/* The account card opens on the user's remembered pick, but ONLY where that pick is a provider it can connect. */
-    const picked = turnDefaults.provider.value;
-    if (picked !== undefined && hasSignIn(picked)) {
-        managedProvider.value = picked;
-    }
-    cancelConnect();
-    cancelTranslatorConnect();
-    accountBusy.value = undefined;
-    translatorAccounts.value = noTranslatorAccounts();
-    // Keyed by ids the outgoing daemon minted, so it can't answer for the incoming sandbox either.
-    usageByAccount.value = {};
-    // Outgoing sandbox's totals aren't an answer for the incoming one, so these wait again too.
-    accountUsage.value = {};
-    usageLoaded.value = false;
-    // Names the outgoing daemon's accounts, and what its provider was holding off says nothing about this one's.
-    heldAccounts.value = [];
-    providerRefusals.value = {};
-    error.value = null;
-};
 
 export function useChat() {
     return {
@@ -186,9 +109,7 @@ export function useChat() {
         provider,
         selectProvider,
         harness,
-        selectHarness,
         account,
-        selectAccount,
         accounts,
         managedAccounts,
         accountUsage,
@@ -222,14 +143,8 @@ export function useChat() {
         attachStarted,
         send,
         queued,
-        removeQueued,
         steerable,
         forkAt,
-        stop,
-        decidePlan,
-        answerQuestion,
-        cancelQuestion,
-        decidePermission,
         loadSessions,
         openConversation,
         showActiveProvider,

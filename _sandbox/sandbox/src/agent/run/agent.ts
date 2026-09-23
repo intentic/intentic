@@ -4,264 +4,92 @@ import type {
     HookCallbackMatcher,
     HookEvent,
     McpSdkServerConfigWithInstance,
-    McpServerConfig,
     Options,
     PermissionResult,
     PermissionUpdate,
     SpawnedProcess,
     SpawnOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import { claudeCliPath, refreshClaudeSdk, sdk } from "../../runtimes/claude/claude-sdk.js";
+import { claudeCliPath, refreshClaudeSdk, sdk } from "../../engines/claude-sdk.js";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import {
-    type AdmissionRule,
-    type AgentCapabilities,
     type AgentEvent,
     type AskQuestion,
     type RequestDocument,
-    type CommandJudgeMode,
     DEFAULT_SAFETY_POLICY,
     documentOf,
     type PermissionMode,
-    type Rule,
     sendableEffort,
     sendableThinking,
-    type SystemPromptMode,
-    type TurnNote,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
 import { join, relative, sep } from "node:path";
 import { z } from "zod";
-import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV, type TurnPlacement } from "../../agents/worktrees/isolation.js";
+import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../agents/worktrees/isolation.js";
 import { worktreeRedirectHooks } from "../../agents/worktrees/worktree-redirect.js";
-import type { AccountsServerFactory } from "../../browser/tools/accounts-tools.js";
-import type { ChildSupervisor } from "../subagents/children.js";
 import { browserArtifactHooks } from "../../browser/cast/browser-artifacts.js";
 import { browserSessionHooks } from "../../browser/sessions/browser-sessions.js";
 import { depsNoticeHooks } from "../tools/agent-deps.js";
 import { searchNoticeHooks } from "../verification/agent-search.js";
-import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
-import { editDiagnosticsHooks, type EditReviewer } from "../verification/agent-diagnostics.js";
-import { createShellEditTracker, type DirtyFiles } from "../tools/agent-shell-edits.js";
+import { editDiagnosticsHooks } from "../verification/agent-diagnostics.js";
+import { createShellEditTracker } from "../tools/agent-shell-edits.js";
 import { EDIT_TOOL_NAMES } from "../../rules/edit-tools.js";
-import type { RuleCommandRun } from "../../rules/rule-command.js";
 import { installSteeringHooks } from "../providers/agent-installs.js";
-import type { ClassifiedInstall } from "../../environment/runtime-installs.js";
 import { redactionHooks } from "../tools/agent-redaction.js";
-import { type SecretAccess, secretCommandHooks } from "../tools/agent-secrets.js";
-import { type CommandGuardOptions, commandGateHooks } from "../../guard/command-guard.js";
+import { secretCommandHooks } from "../tools/agent-secrets.js";
+import { commandGateHooks } from "../../guard/command-guard.js";
 import { outboundGuardHooks } from "../../guard/outbound-guard.js";
 import { outsideResultHooks } from "../../guard/outside-results.js";
 import { createTurnTaint, publishTurnTaint } from "../../guard/turn-taint.js";
-import { type PersonaScope, personaScopeHooks } from "../../personas/persona-scope.js";
-import type { JsExecutionPlan } from "../../execution/js-runtime.js";
+import { personaScopeHooks } from "../../personas/persona-scope.js";
 import { JS_TOOL_ALIAS, JS_TOOL_NAME, jsExecutionServer } from "../../execution/js-tool.js";
-import { type AgentTool, mcpServersOf } from "../tools/agent-tools.js";
-import { createRequest } from "../tools/agent-requests.js";
-import { type SteeringQueue, turnSteered } from "../checkpoints/agent-steering.js";
-import { type FollowUpOutcome, type TurnRuleCommand, turnEndingHooks } from "../../rules/turn-ending.js";
+import { mcpServersOf } from "../tools/agent-tools.js";
+import { turnEndingHooks } from "../../rules/turn-ending.js";
 import { agentShellBusy, bashTmuxHooks, tmuxRunEnabled } from "../tools/agent-terminals.js";
-import type { BackgroundJobSeed } from "../tools/background-jobs.js";
-import type { HeavyCommands } from "../../platform/resources/heavy-commands.js";
 import { terminalHelpServer } from "../../terminal/terminal-help.js";
 import { EventQueue } from "./event-queue.js";
 import { trialUnavailableFrame } from "./error-frames.js";
-import { harnessEnv, type TurnAllowance } from "../providers/harness-credentials.js";
-import { workloadStamp } from "../../platform/boot/leftovers.js";
-import { opt } from "./opt.js";
+import type { AgentRequest, HarnessCredential } from "../providers/agent-request.js";
+import { harnessEnv } from "../providers/harness-credentials.js";
+import { workloadStamp } from "../../seams/workload-stamp.js";
+import { opt } from "../../opt.js";
 import { readClaudeUsage } from "../../usage/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
 import { checklistSeedOf } from "./task-store.js";
-import { type PromptTrim, promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
-import type { HostDeviceReach } from "../../hosts/self-host.js";
-import type { OwnBrowserReach } from "../../webext/webext-peer.js";
+import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
 import { ASK_TOOL_NAMES, formatAnswers } from "../tools/question-answers.js";
+import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
-export interface AgentRequest {
-    // The user's own words, read after `notes`; never the composed wire string, minted once at dispatch.
-    readonly prompt: string;
-    // Typed daemon-authored notes shown before the prompt, in order; absent means nothing was injected.
-    readonly notes?: readonly TurnNote[];
-    // Conversation this turn belongs to, for filing its subagents under the parent. Absent: unregistered.
-    readonly conversationId?: string;
-    // Absolute paths of attached files; Codex sends images as native inputs, Claude folds them into the prompt.
-    readonly attachments?: readonly string[];
-    // Working dir the agent edits, the workspace root; under `isolation` it's the root as seen inside the namespace.
-    readonly cwd: string;
-    // Whether that cwd is a copy of this conversation's own, which only an isolated turn has: a main-tree turn edits
-    // the owner's checkout. Absent reads as shared, the fail-safe side for the gate that consumes it.
-    readonly ownCheckout?: boolean;
-    // This conversation's runtime session store, where its checklist is read back from; outside the workspace when the
-    // conversation was born fenced (sessions/session-store.ts).
-    readonly sessionStore?: string;
-    // Project-scoped dependency answer for the command-failure hook, so one project's error stays its own.
-    readonly dependencyIssue?: (command: string) => Promise<DependencyIssue | undefined>;
-    readonly dependencyInstallAllowed?: boolean;
-    // Files the tree says are dirty, by both names, so a Bash edit gets the same diagnostics as a native Edit.
-    readonly dirtyFiles?: DirtyFiles;
-    // Owner's file.edited rules bound to this turn's placement, run on every file an edit tool or shell writes.
-    readonly editReviewers?: readonly EditReviewer[];
-    // Every classified image-scoped install this turn attempts, for the install ledger; nothing reaches the model.
-    readonly onImageInstall?: (installs: readonly ClassifiedInstall[], command: string) => void;
-    // Where this turn works, how strongly enforced; anchored, /work IS the worktree, else inputs are redirected.
-    readonly isolation?: TurnPlacement;
-    // Resume a prior turn's session for multi-message conversations.
-    readonly sessionId?: string;
-    readonly signal: AbortSignal;
-    // Defaults to the account/subscription default; override with INTENTIC_AGENT_MODEL.
-    readonly model?: string;
-    // User's Claude subscription token, resolved from stored credentials; else falls back to the container env.
-    readonly oauthToken?: string;
-    // Re-mints `oauthToken` mid-turn on refusal; undefined or the same token ends the turn as before.
-    readonly refreshOauthToken?: (context: { readonly signal: AbortSignal }) => Promise<string | undefined>;
-    // Custom Anthropic endpoint + bearer for a translator-served turn; when set, the OAuth token is withheld.
-    readonly baseUrl?: string;
-    readonly authToken?: string;
-    // Whose allowance a routed turn spends and when it reopens; set alongside `baseUrl`. See TurnAllowance.
-    readonly allowance?: TurnAllowance;
-    // Platform-owned free trial: bound retries and use trial-specific failure frames/copy.
-    readonly trial?: boolean;
-    // Selected Codex account's CODEX_HOME (Codex path only); absent falls back to the container's OPENAI_API_KEY.
-    readonly codexHome?: string;
-    // Serves a native Codex turn via the translator, on the subscription; codexHome then holds sessions only.
-    readonly codexEndpoint?: { readonly baseUrl: string; readonly authToken: string };
-    // Selected Cursor account's API key, passed per request since Cursor runs in-process with no child env to set.
-    readonly cursorApiKey?: string;
-    // How tool calls are gated this turn; defaults to bypassPermissions, safe since the container is the boundary.
-    readonly permissionMode?: PermissionMode;
-    // Narrows the turn to tool NAMES (SDK option), not `tools` below (MCP servers); the Visitor chat allowlist.
-    readonly allowedTools?: readonly string[];
-    // Reasoning controls forwarded to the SDK: effort level and extended thinking.
-    readonly effort?: string;
-    readonly thinking?: boolean;
-    // Ask the harness to serve this turn at fast speed; only ever set for a native Claude turn, never a routed one.
-    readonly fast?: boolean;
-    // This turn's MCP tools: intent-declared internal services plus configured integrations, each a remote server.
-    readonly tools?: readonly AgentTool[];
-    // Env vars for the agent's shell from cli-kind capability credentials (e.g. a bot token), merged in each turn.
-    readonly cliEnv?: Record<string, string>;
-    // JS execution backend's plan; absent means it isn't mounted (projected as the `Code` tool below).
-    readonly jsExecution?: JsExecutionPlan;
-    // Owner's rules standing at turn.ending, and how to run one's command; read at Stop. Empty: nothing wired.
-    readonly turnEndingRules?: readonly Rule[];
-    readonly runRuleCommand?: TurnRuleCommand;
-    // Which projects the daemon is installing, asked only after a turn-ending command has already failed.
-    readonly dependencyInstalling?: () => Promise<readonly string[]>;
-    // Told when a rule actually fires, so settings can show which rules are earning their place.
-    readonly onRuleFired?: (rule: Rule) => void;
-    // Told what every command rule's run said, so end-of-turn landing can hold work whose check went red.
-    readonly onCheckRun?: (rule: Rule, run: RuleCommandRun) => void;
-    // What the model did after a turn.ending follow-up, at the Stop that followed it.
-    readonly onFollowUpOutcome?: (rule: Rule, outcome: FollowUpOutcome) => void;
-    // The verify-tests built-in's answer for this tree, bound while planning; absent means it says nothing.
-    readonly verifyTests?: () => Promise<string | undefined>;
-    // What the tree says the turn changed, for the Stop's conditions: a shell edit is invisible to the edit ledger.
-    readonly changedPaths?: () => Promise<readonly string[]>;
-    // This tree's repositories, for a rule aimed at one; asked at the Stop only when such a rule stands.
-    readonly turnRepos?: () => Promise<readonly string[]>;
-    // Absolute plugin checkout dirs; the SDK's loader parses their skills/agents/hooks/commands/.mcp.json.
-    readonly plugins?: readonly string[];
-    // In-process SDK MCP servers whose handlers run in the daemon itself, merged into mcpServers alongside `tools`.
-    readonly sdkServers?: Record<string, McpServerConfig>;
-    // Accounts tools as a factory rather than a built server, closed over this turn's event stream and abort signal.
-    readonly accountsServer?: AccountsServerFactory;
-    // Directory for browser tool artifacts (the `--output-dir` value); drives the redirect hook and read-back path.
-    readonly browserOutputDir?: string;
-    // Whether turn-plan mounted the diagnostics server; withheld from a persona whose `files` power is `none`.
-    readonly diagnostics?: boolean;
-    // The connected devices this turn carries servers for, which of them runs this sandbox (when the daemon's held
-    // readings name it) and this container's slug out there: what the prompt needs to say "run it there yourself".
-    readonly hostDevices?: HostDeviceReach | undefined;
-    // The owner's own browsers this turn carries servers for, and what each of them is: what the prompt needs to say
-    // the browser they are watching is right here.
-    readonly ownBrowsers?: OwnBrowserReach | undefined;
-    // Whether the iq plugin is actually loaded, so the empty-search notice can name it only where it's real.
-    readonly iqAvailable?: boolean;
-    // Each browser profile owner's CDP debugging port, so the first browser call can register a watchable session.
-    readonly browserPorts?: Record<string, number>;
-    // Each logged-in profile owner's passkey store path, so the session observer arms pages with the software key.
-    readonly browserPasskeys?: Record<string, string>;
-    // Routed browser server's account-to-owner map, so the observer resolves a call's `account` to its profile.
-    readonly browserAccounts?: Record<string, string>;
-    // Built-in tool names removed from context, e.g. Edit/Write when hashlineEdits routes through MCP tools instead.
-    readonly disallowedTools?: readonly string[];
-    // Where this persona's file tools may point, when its card limits them; absent wires no hook.
-    readonly personaScope?: PersonaScope;
-    // Bash output-cleaner spec, forwarded as INTENTIC_OUTPUT_CLEANERS, or 'off' to disable filtering entirely.
-    readonly outputCleaners?: string;
-    // Sniffer's rulebook, verdicts per outbound call, enforced by the PreToolUse gate; empty wires no gate.
-    readonly actionRules?: Readonly<Record<string, AdmissionRule>>;
-    // Owner's safety policy the judge applies to a flagged command; absent uses the shipped default, always wired.
-    readonly safetyPolicy?: string;
-    // How much of the command gate is on: 'on' full design, 'watch' records only, 'off' skips the judge.
-    readonly judging?: CommandJudgeMode;
-    // The judge and its writes, as functions so this module never reaches for `Services`; absent skips the judge.
-    readonly judge?: CommandGuardOptions["judge"];
-    readonly logSafety?: CommandGuardOptions["log"];
-    readonly safetyAnswered?: CommandGuardOptions["answered"];
-    readonly rememberSafety?: CommandGuardOptions["remember"];
-    // What the serving runtime can do about the safety policy; absent defaults to 'hooks' (Claude Code).
-    readonly rulebook?: AgentCapabilities["rulebook"];
-    // Whether this turn was woken by outside content (a listener message, a webchat visitor), naming the source.
-    readonly outsideWake?: string;
-    // Fraction [0,1] of commands whose output bypasses cleaning, recorded as a baseline; 0/undefined disables it.
-    readonly outputHoldout?: number;
-    // Every named credential this sandbox stores: masked on read, resolved on shell exit, typed into browser fields.
-    readonly secrets?: SecretAccess;
-    // Heavy-command rules, read fresh per Bash command so an edit to the file binds immediately.
-    readonly heavyCommands?: () => Promise<HeavyCommands>;
-    // Where a `run_in_background` job's completion is delivered once this turn is gone; absent leaves such a job
-    // ordinary, dying with the turn as everything else does.
-    readonly backgroundJobs?: BackgroundJobSeed;
-    // Harness's delegation ceilings: concurrent, per-turn, nesting; undefined leaves the CLI default in place.
-    readonly subagentsAtOnce?: number;
-    readonly subagentsPerTurn?: number;
-    readonly subagentDepth?: number;
-    // Extra turn-scoped instructions appended to the system prompt (e.g. the CLI delegation note).
-    readonly systemAppend?: string;
-    // Which base this turn's system prompt is built on; absent uses 'intentic', the product default.
-    readonly systemPromptMode?: SystemPromptMode;
-    // Owner's own prompt, used only when mode is 'custom'; then it's the whole prompt, `systemAppend` included.
-    readonly systemPrompt?: string;
-    // What the model's declared window would not pay for (agent/prompt/window/context-trim.ts), already applied to the two
-    // fields above. Carried on so the adapter sheds the same guidance the planner did, and the disclosure shows the
-    // prompt that was actually sent.
-    readonly contextTrim?: PromptTrim;
-    // Mid-turn steering queue; when present the turn streams input and pushed messages inject between tool calls.
-    readonly steering?: SteeringQueue;
-    // Rebases onto main when the turn parks for a person; the model isn't told. Absent off-harness or main-tree.
-    readonly resync?: () => Promise<AgentEvent | undefined>;
-    // No one is watching this turn; plan/ask tools are withheld and the permission gate refuses rather than waits.
-    readonly unattended?: boolean;
-    // Supervision surface for runtimes that mount child-agent tools as their own, not through the harness's SDK.
-    readonly children?: ChildSupervisor;
-}
+// The request the Claude Code loop runs: it spends a stored account's token, a routed endpoint, the trial, or the
+// container's own credential.
+export type HarnessRequest = AgentRequest<HarnessCredential>;
 
 // Rebases only on an actual answer, not a dismissal/rejection; and only when quiet, skipped if the turn's shell or a
 // subagent is still writing. Either case leaves the branch exactly where it was.
 const syncOnAnswer = async (
-    request: AgentRequest,
+    conversations: Pick<ConversationActors, "holdings">,
+    request: HarnessRequest,
     push: (event: AgentEvent) => void,
     shell: { sessionId: string | undefined },
     answered: boolean,
 ): Promise<void> => {
-    if (!answered || request.resync === undefined) {
+    if (!answered || request.hooks.resync === undefined) {
         return;
     }
-    if (request.conversationId !== undefined && subagentInParentTree(request.conversationId)) {
+    if (request.spec.conversationId !== undefined && subagentInParentTree(conversations, request.spec.conversationId)) {
         return;
     }
     if (shell.sessionId !== undefined && (await agentShellBusy(shell.sessionId))) {
         return;
     }
     // Swallowed here so a rebase fault can't fail a card the user already answered; resync owns its own logging.
-    const frame = await request.resync().catch(() => undefined);
+    const frame = await request.hooks.resync().catch(() => undefined);
     if (frame !== undefined) {
         push(frame);
     }
@@ -280,26 +108,26 @@ const errorMessage = (error: unknown, stderr: string): string => {
 
 // Maps output-cleaner settings to env vars for the Bash filter; 'off' disables it, everything else selects which
 // cleaners run.
-const cleanerEnv = (request: AgentRequest): Record<string, string> => {
-    if (request.outputCleaners === "off") {
+const cleanerEnv = (request: HarnessRequest): Record<string, string> => {
+    if (request.tools.outputCleaners === "off") {
         return { INTENTIC_RUN_FILTER: "0" };
     }
     return {
         // Empty means the filter's default, so it's dropped the same as absent.
-        ...opt("INTENTIC_OUTPUT_CLEANERS", request.outputCleaners || undefined),
+        ...opt("INTENTIC_OUTPUT_CLEANERS", request.tools.outputCleaners || undefined),
         ...opt(
             "INTENTIC_OUTPUT_HOLDOUT",
-            request.outputHoldout !== undefined && request.outputHoldout > 0 ? String(request.outputHoldout) : undefined,
+            request.tools.outputHoldout !== undefined && request.tools.outputHoldout > 0 ? String(request.tools.outputHoldout) : undefined,
         ),
     };
 };
 
 // The three env vars the CLI reads for delegation ceilings; the only way to move them since they aren't SDK options.
 // Absent emits nothing, so the CLI's own default stands.
-const subagentEnv = (request: AgentRequest): Record<string, string> => ({
-    ...opt("CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS", request.subagentsAtOnce?.toString()),
-    ...opt("CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION", request.subagentsPerTurn?.toString()),
-    ...opt("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH", request.subagentDepth?.toString()),
+const subagentEnv = (request: HarnessRequest): Record<string, string> => ({
+    ...opt("CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS", request.policy.subagentsAtOnce?.toString()),
+    ...opt("CLAUDE_CODE_MAX_SUBAGENTS_PER_SESSION", request.policy.subagentsPerTurn?.toString()),
+    ...opt("CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH", request.policy.subagentDepth?.toString()),
 });
 
 // Pins Claude Code's checklist tools on: newer models gate Task*/TodoWrite off by default, but the prompt and reducer
@@ -337,10 +165,10 @@ const PLAN_TOOLS = ["EnterPlanMode", "ExitPlanMode"];
 const CLI_SCHEDULER_TOOLS = ["ScheduleWakeup", "CronCreate", "CronDelete", "CronList"];
 
 // Tools removed from the model: scheduler tools always, the caller's own list, plus plan tools on an unattended turn.
-const disallowedToolsOf = (request: AgentRequest): string[] => [
+const disallowedToolsOf = (request: HarnessRequest): string[] => [
     ...CLI_SCHEDULER_TOOLS,
-    ...(request.disallowedTools ?? []),
-    ...(request.unattended === true ? PLAN_TOOLS : []),
+    ...(request.policy.disallowedTools ?? []),
+    ...(request.policy.unattended === true ? PLAN_TOOLS : []),
 ];
 
 // The SDK writes every MCP server onto the CLI's argv as one inline JSON document. `/proc/<pid>/cmdline` is readable by
@@ -403,17 +231,17 @@ export type OauthRecoveryOptions = Options & {
 
 // Effort and thinking are set together since the API only accepts certain combinations; sendableThinking/sendableEffort
 // make the tier explicit even for a max turn with no thinking set.
-const reasoningOptions = (request: AgentRequest): { effort?: EffortLevel; thinking?: { type: "adaptive" | "disabled" } } => {
-    const thinking = sendableThinking(request.effort, request.thinking);
+const reasoningOptions = (request: HarnessRequest): { effort?: EffortLevel; thinking?: { type: "adaptive" | "disabled" } } => {
+    const thinking = sendableThinking(request.spec.effort, request.spec.thinking);
     return {
-        ...opt("effort", sendableEffort(request.effort, request.thinking) as EffortLevel | undefined),
+        ...opt("effort", sendableEffort(request.spec.effort, request.spec.thinking) as EffortLevel | undefined),
         ...opt("thinking", thinking === undefined ? undefined : { type: thinking ? ("adaptive" as const) : ("disabled" as const) }),
     };
 };
 
 // Base SDK options for the turn.
 const baseOptions = (
-    request: AgentRequest,
+    request: HarnessRequest,
     abortController: AbortController,
     permissionMode: PermissionMode,
     tmuxEnabled: boolean,
@@ -423,22 +251,22 @@ const baseOptions = (
     push: (event: AgentEvent) => void,
 ): OauthRecoveryOptions => {
     // This turn's outside-content bit, set once here; the wrap hook sets it, the gate reads it per command.
-    const taint = createTurnTaint(request.outsideWake);
+    const taint = createTurnTaint(request.policy.outsideWake);
     // Published for consult sites outside this generator (wallet gate, host bridge); cleared when the turn settles.
-    if (request.conversationId !== undefined) {
-        publishTurnTaint(request.conversationId, taint, request.unattended === true);
+    if (request.spec.conversationId !== undefined) {
+        publishTurnTaint(request.spec.conversationId, taint, request.policy.unattended === true);
     }
     return {
-        cwd: request.cwd,
+        cwd: request.spec.cwd,
         // Named for a store copy so the CLI spawned is the one this daemon chose; absent on the image's copy.
         ...opt("pathToClaudeCodeExecutable", claudeCliPath()),
         // Only for a native Claude turn on a sandbox credential; other endpoints have no refresh token to mint from.
-        ...opt("getOAuthToken", request.baseUrl === undefined ? request.refreshOauthToken : undefined),
+        ...opt("getOAuthToken", request.credential.kind === "claude-oauth" ? request.credential.refresh : undefined),
         includePartialMessages: true,
         // Forwards a subagent's prose and thinking, not just tool calls, so it renders as a conversation.
         forwardSubagentText: true,
         permissionMode,
-        ...opt("allowedTools", request.allowedTools?.slice()),
+        ...opt("allowedTools", request.policy.allowedTools?.slice()),
         abortController,
         // Loads the workspace's .claude/ config: skills, subagents, settings, hooks, .mcp.json; else none. Not the
         // owner's standing rules — those are composed for every runtime alike (workspace-memory.ts), so a CLAUDE.md
@@ -448,15 +276,15 @@ const baseOptions = (
         // overrides the owner's settings.json.
         settings: {
             ...HEADLESS_SETTINGS,
-            ...(request.fast === true ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
+            ...(request.spec.fast === true ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
         },
         env: {
             ...process.env,
             // cli-kind capability credentials the shell reads, rebuilt every turn; tmux panes get key names, not
             // values.
-            ...request.cliEnv,
+            ...request.tools.cliEnv,
             // IS_SANDBOX plus this turn's credential; a custom endpoint withholds the OAuth token for its own bearer.
-            ...harnessEnv(request),
+            ...harnessEnv(request.credential, { model: request.spec.model }),
             // Output-cleaner spec/holdout the Bash to tmux-run pipeline reads.
             ...cleanerEnv(request),
             // Delegation ceilings this turn overrides, if any, on top of the harness defaults.
@@ -465,9 +293,9 @@ const baseOptions = (
             ...CHECKLIST_ENV,
             // Where tmux-run talks to tmux: the daemon's namespace, not the turn's, so it starts a server there if
             // needed.
-            ...(request.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
+            ...(request.spec.isolation?.anchor !== undefined ? { [TMUX_NS_ENV]: daemonMountNs } : {}),
             // Whose work this is, for the leftovers sweep; unstamped with no conversation rather than a made-up owner.
-            ...(request.conversationId !== undefined ? workloadStamp(request.conversationId) : {}),
+            ...(request.spec.conversationId !== undefined ? workloadStamp(request.spec.conversationId) : {}),
         },
         // Hooks fire under bypassPermissions and for subagents: tmux wraps every Bash command, installs redirect to the
         // approved overlay, diagnostics type-checks native edits.
@@ -475,20 +303,21 @@ const baseOptions = (
             // Runs before the tmux wrapper, so the classifier and card see the agent's own command, not wrapper
             // boilerplate.
             commandGateHooks({
-                policy: request.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
-                judging: request.judging ?? "on",
-                unattended: request.unattended === true,
+                policy: request.policy.safetyPolicy ?? DEFAULT_SAFETY_POLICY,
+                judging: request.policy.judging ?? "on",
+                unattended: request.policy.unattended === true,
                 // Read per command, not snapshotted beside it: attendance is the one fact about a turn that can arrive
                 // after it starts, and it arrives as a steering message.
-                steered: () => request.conversationId !== undefined && turnSteered(request.conversationId),
+                steered: () => request.hooks.steered?.() === true,
                 push,
                 signal: request.signal,
+                cards: request.hooks.cards,
                 taint,
-                cwd: request.cwd,
-                judge: request.judge,
-                log: request.logSafety,
-                answered: request.safetyAnswered,
-                remember: request.rememberSafety,
+                cwd: request.spec.cwd,
+                judge: request.hooks.judge,
+                log: request.hooks.logSafety,
+                answered: request.hooks.safetyAnswered,
+                remember: request.hooks.rememberSafety,
             }),
             // Wraps content pulled in mid-turn (a fetched page, a foreign MCP result); sets the taint the gate reads.
             outsideResultHooks((source) => {
@@ -498,75 +327,82 @@ const baseOptions = (
             // alone.
             tmuxEnabled
                 ? bashTmuxHooks(
-                      Object.keys(request.cliEnv ?? {}),
-                      request.isolation,
-                      request.conversationId,
-                      request.secrets,
-                      request.heavyCommands,
-                      request.backgroundJobs,
+                      Object.keys(request.tools.cliEnv ?? {}),
+                      request.spec.isolation,
+                      request.spec.conversationId,
+                      request.tools.secrets,
+                      request.tools.heavyCommands,
+                      request.hooks.backgroundJobs,
                   )
-                : request.secrets !== undefined
-                  ? secretCommandHooks(request.secrets)
+                : request.tools.secrets !== undefined
+                  ? secretCommandHooks(request.tools.secrets)
                   : {},
             // Masks every stored credential to its reference in any tool result, not just Bash's.
-            request.secrets !== undefined ? redactionHooks(request.secrets.list) : {},
-            installSteeringHooks(request.dependencyInstallAllowed === true, request.onImageInstall),
+            request.tools.secrets !== undefined ? redactionHooks(request.tools.secrets.list) : {},
+            installSteeringHooks(request.policy.dependencyInstallAllowed === true, request.hooks.onImageInstall),
             // Checks classified outbound calls against owner action rules before they run, even under
             // bypassPermissions.
-            hasRules(request.actionRules) ? outboundGuardHooks(request.actionRules) : {},
+            hasRules(request.policy.actionRules) ? outboundGuardHooks(request.policy.actionRules) : {},
             // Persona's folder limit and config-edit permission; the only layer between an unattended wake and a bad
             // path.
-            request.personaScope !== undefined ? personaScopeHooks(request.personaScope) : {},
+            request.policy.personaScope !== undefined ? personaScopeHooks(request.policy.personaScope) : {},
             // Every owner rule standing at turn.ending: the proof ledger, a standing instruction, a required command.
-            turnEndingHooks(request.turnEndingRules ?? [], {
-                isolation: request.isolation?.plan,
-                inWorktree: (path) => inWorktree(path, request.isolation?.plan),
-                runCommand: request.runRuleCommand,
-                installing: request.dependencyInstalling,
-                cwd: request.cwd,
-                onFired: request.onRuleFired,
-                onCheckRun: request.onCheckRun,
-                onFollowUpOutcome: request.onFollowUpOutcome,
-                tests: request.verifyTests,
-                changedPaths: request.changedPaths,
-                repos: request.turnRepos,
+            turnEndingHooks(request.policy.turnEndingRules ?? [], {
+                isolation: request.spec.isolation?.plan,
+                inWorktree: (path) => inWorktree(path, request.spec.isolation?.plan),
+                runCommand: request.hooks.runRuleCommand,
+                installing: request.hooks.dependencyInstalling,
+                cwd: request.spec.cwd,
+                onFired: request.hooks.onRuleFired,
+                onCheckRun: request.hooks.onCheckRun,
+                onFollowUpOutcome: request.hooks.onFollowUpOutcome,
+                tests: request.hooks.verifyTests,
+                changedPaths: request.hooks.changedPaths,
+                repos: request.hooks.turnRepos,
             }),
             // The harness's own ask beside the owner's rules: a checklist about to be left open is said back once, since
             // the board reads that list to tell a finished session from one that stopped short.
-            checklistCloseHooks({ sessionStore: request.sessionStore }),
+            checklistCloseHooks({ sessionStore: request.spec.sessionStore }),
             // Apply worktree redirection only when no anchor already resolves paths.
-            request.isolation !== undefined && request.isolation.anchor === undefined ? worktreeRedirectHooks(request.isolation.plan) : {},
+            request.spec.isolation !== undefined && request.spec.isolation.anchor === undefined
+                ? worktreeRedirectHooks(request.spec.isolation.plan)
+                : {},
             // Rewrites a model-named screenshot path into the tool-owned output directory before the tool sees it.
-            request.browserOutputDir !== undefined ? browserArtifactHooks(request.browserOutputDir) : {},
+            request.tools.browserOutputDir !== undefined ? browserArtifactHooks(request.tools.browserOutputDir) : {},
             // One-time advisory about rg vs grep and an empty result; never rewrites, since the two regex dialects
             // disagree.
-            searchNoticeHooks(request.iqAvailable === true),
+            searchNoticeHooks(request.tools.iqAvailable === true),
             // Registers a watchable session the moment a browser call launches Chromium; the MCP owns its lifecycle.
-            request.browserPorts !== undefined
-                ? browserSessionHooks(request.browserPorts, request.browserPasskeys ?? {}, request.browserAccounts ?? {}, request.conversationId)
+            request.tools.browserPorts !== undefined
+                ? browserSessionHooks(
+                      request.tools.browserPorts,
+                      request.tools.browserPasskeys ?? {},
+                      request.tools.browserAccounts ?? {},
+                      request.spec.conversationId,
+                  )
                 : {},
             // Names the ids a child's transcript is read by, opening the Subagents area for this turn's children.
             subagents !== undefined ? subagentHooks(subagents) : {},
             // Placed by the turn's isolation, since an anchored turn's dependencies exist only inside its own
             // namespace.
             editDiagnosticsHooks(
-                request.isolation,
+                request.spec.isolation,
                 undefined,
                 undefined,
-                request.dirtyFiles === undefined ? undefined : createShellEditTracker(request.dirtyFiles),
-                request.editReviewers ?? [],
+                request.hooks.dirtyFiles === undefined ? undefined : createShellEditTracker(request.hooks.dirtyFiles),
+                request.hooks.editReviewers ?? [],
             ),
             // Flags a failing test/build caused by a genuinely missing package, checked first; asked of the main
             // checkout.
-            depsNoticeHooks(request.dependencyIssue ?? (async () => undefined), request.dependencyInstallAllowed === true),
+            depsNoticeHooks(request.hooks.dependencyIssue ?? (async () => undefined), request.policy.dependencyInstallAllowed === true),
         ),
         // Wraps the CLI's own spawn so the agent process and everything it forks is born inside the namespace.
-        ...(request.isolation?.anchor !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.isolation.anchor) } : {}),
-        ...opt("model", request.model),
-        ...opt("resume", request.sessionId),
+        ...(request.spec.isolation?.anchor !== undefined ? { spawnClaudeCodeProcess: namespacedSpawn(request.spec.isolation.anchor) } : {}),
+        ...opt("model", request.spec.model),
+        ...opt("resume", request.spec.sessionId),
         ...opt(
             "plugins",
-            request.plugins?.map((path) => ({ type: "local" as const, path })),
+            request.tools.plugins?.map((path) => ({ type: "local" as const, path })),
         ),
         ...reasoningOptions(request),
         ...opt("disallowedTools", disallowedToolsOf(request)),
@@ -608,7 +444,8 @@ const trackProse = (prose: TurnProse, event: AgentEvent): void => {
 // A custom MCP tool, not the built-in, since the built-in's picker UI has nowhere to render headless; aliased onto the
 // built-in's name so the model's trained call site still works. alwaysLoad keeps it out of tool search.
 const askServer = (
-    request: AgentRequest,
+    conversations: Pick<ConversationActors, "holdings">,
+    request: HarnessRequest,
     push: (event: AgentEvent) => void,
     shell: { sessionId: string | undefined },
     documents: TurnDocuments,
@@ -640,7 +477,11 @@ const askServer = (
                 async (args) => {
                     const questions = args.questions as AskQuestion[];
                     // Named with its conversation: dismissing this ends the turn immediately, not on a second request.
-                    const { id, wait } = createRequest("question", { kind: "question", requestId: "", cancelled: true }, request.conversationId);
+                    const { id, wait } = request.hooks.cards.create(
+                        "question",
+                        { kind: "question", requestId: "", cancelled: true },
+                        request.spec.conversationId,
+                    );
                     // The turn's latest write-up rides along, already in hand, since a question about it needs it.
                     push({ kind: "question", requestId: id, questions, ...(documents.latest === undefined ? {} : { document: documents.latest }) });
                     const { reply, resolved } = await wait(request.signal);
@@ -649,7 +490,7 @@ const askServer = (
                     push(resolved);
                     // Rebase happens before the model acts on the answer, announced to the transcript, not folded into
                     // what it reads.
-                    await syncOnAnswer(request, push, shell, !reply.cancelled && reply.answers !== undefined);
+                    await syncOnAnswer(conversations, request, push, shell, !reply.cancelled && reply.answers !== undefined);
                     return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
                 },
             ),
@@ -677,24 +518,6 @@ const planDecision = (toolName: string, input: Record<string, unknown>): Permiss
 // restart path for a restored card.
 export const POST_PLAN_MODE: PermissionMode = "bypassPermissions";
 
-// A permission granted before a restart, consumed once by the resumed turn's re-run of the same tool so the gate
-// doesn't ask twice. Keyed by conversation and tool name, deleted on use, expires after 10 minutes.
-const RESTORED_GRANT_TTL_MS = 10 * 60_000;
-const restoredGrants = new Map<string, { tool: string; always: boolean; grantedAt: number }>();
-export const grantRestoredPermission = (conversationId: string, toolName: string, always: boolean, now: number = Date.now()): void => {
-    restoredGrants.set(conversationId, { tool: toolName, always, grantedAt: now });
-};
-const consumeRestoredGrant = (conversationId: string | undefined, toolName: string, now: number = Date.now()): { always: boolean } | undefined => {
-    if (conversationId === undefined) {
-        return undefined;
-    }
-    const grant = restoredGrants.get(conversationId);
-    if (grant === undefined || grant.tool !== toolName || now - grant.grantedAt > RESTORED_GRANT_TTL_MS) {
-        return undefined;
-    }
-    restoredGrants.delete(conversationId);
-    return { always: grant.always };
-};
 
 // 'Always' grants the whole tool for the session, not the SDK's narrower prefix suggestions, since the container is
 // already the isolation boundary.
@@ -732,8 +555,7 @@ const relativePath = (absolute: string | undefined, cwd: string): string | undef
 // Whether a card raised now would reach nobody: how the turn STARTED, corrected by whether a person has since steered
 // it. An unattended turn somebody is typing into has an audience, and a card is pushed to that same chat, so refusing
 // it refuses the one person who is demonstrably there (agent-steering.ts).
-const nobodyToAsk = (request: AgentRequest): boolean =>
-    request.unattended === true && !(request.conversationId !== undefined && turnSteered(request.conversationId));
+const nobodyToAsk = (request: HarnessRequest): boolean => request.policy.unattended === true && request.hooks.steered?.() !== true;
 
 // Refuses rather than parks: nobody can answer, and a hung card would read as the agent freezing.
 const unanswerable = (toolName: string): PermissionResult => ({
@@ -757,7 +579,8 @@ const planRequest = (documents: TurnDocuments, prose: TurnProse): { text: string
 // Every permission decision the turn needs from the user; the two postures this branches on are plan, which asks
 // nobody, and Manual, the only one that asks at all.
 const permissionGate = (
-    request: AgentRequest,
+    conversations: Pick<ConversationActors, "holdings">,
+    request: HarnessRequest,
     push: (event: AgentEvent) => void,
     shell: { sessionId: string | undefined },
     documents: TurnDocuments,
@@ -778,7 +601,7 @@ const permissionGate = (
                 message: "Write the complete plan in your response, then call ExitPlanMode again.",
             };
         }
-        const { id, wait } = createRequest("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
+        const { id, wait } = request.hooks.cards.create("plan", { kind: "plan", requestId: "", approve: false, feedback: "Planning cancelled." });
         push({ kind: "plan", requestId: id, ...card });
         const { reply, resolved } = await wait(request.signal);
         push(resolved);
@@ -790,7 +613,7 @@ const permissionGate = (
         push({ kind: "mode", mode: POST_PLAN_MODE });
         // Rebase before the agent builds on the plan, so it isn't working against a moved tree; the agent isn't
         // told.
-        await syncOnAnswer(request, push, shell, true);
+        await syncOnAnswer(conversations, request, push, shell, true);
         return {
             behavior: "allow",
             updatedInput: input,
@@ -800,7 +623,7 @@ const permissionGate = (
     };
     // The per-tool card: the turn parks here until somebody presses a button.
     const askOwner = async (toolName: string, input: Record<string, unknown>, options: Parameters<CanUseTool>[2]): Promise<PermissionResult> => {
-        const { id, wait } = createRequest("permission", {
+        const { id, wait } = request.hooks.cards.create("permission", {
             kind: "permission",
             requestId: "",
             decision: "deny",
@@ -808,7 +631,7 @@ const permissionGate = (
         });
         // Passes through the bridge's own prompt sentence, button label and reason rather than re-deriving copy.
         const suggestions = options.suggestions ?? [];
-        const path = relativePath(options.blockedPath, request.cwd);
+        const path = relativePath(options.blockedPath, request.spec.cwd);
         push({
             kind: "permission",
             requestId: id,
@@ -861,7 +684,7 @@ const permissionGate = (
             return unanswerable(toolName);
         }
         // Consumes an answer already given by a restored card, so the resumed turn's re-ask doesn't re-prompt.
-        const granted = consumeRestoredGrant(request.conversationId, toolName);
+        const granted = request.hooks.restoredGrant?.(toolName);
         if (granted !== undefined) {
             return allowDecision(toolName, input, granted.always, options.suggestions ?? []);
         }
@@ -869,10 +692,23 @@ const permissionGate = (
     };
 };
 
-// Runs one agent turn over `request.cwd`, streaming typed events; one path for every permission mode, the SDK decides
-// which UI fires. canUseTool and the ask handler feed this stream through a bridging queue.
+// What the stream reads of the turn's credential: whose allowance a routed turn spends, the translator endpoint a retry
+// storm can ask whether it is refusing this model rather than having a bad minute, and whether this is the trial.
+const streamCredentialOf = (
+    credential: HarnessCredential,
+    model: string | undefined,
+): Pick<Parameters<typeof streamSdk>[0], "allowance" | "routed" | "trial"> => ({
+    allowance: credential.kind === "routed" ? credential.allowance : undefined,
+    routed: routedEndpointOf(credential, model),
+    trial: credential.kind === "trial",
+});
+
+// Runs one agent turn over `request.spec.cwd`, streaming typed events; one path for every permission mode, the SDK decides
+// which UI fires. canUseTool and the ask handler feed this stream through a bridging queue. `conversations` hold the
+// children and background commands the turn starts.
 export async function* runAgent(
-    request: AgentRequest,
+    conversations: Pick<ConversationActors, "holdings" | "send">,
+    request: HarnessRequest,
     queryFn: QueryFn = defaultQuery,
     usageFetch: typeof fetch = fetch,
 ): AsyncGenerator<AgentEvent> {
@@ -889,20 +725,20 @@ export async function* runAgent(
     const queue = new EventQueue<AgentEvent>();
     const push = (event: AgentEvent): void => queue.push(event);
 
-    const permissionMode: PermissionMode = request.permissionMode ?? "bypassPermissions";
+    const permissionMode: PermissionMode = request.policy.permissionMode ?? "bypassPermissions";
     // One posture for the turn, seeded with the mode it launched in: the stream writes every move the CLI makes onto
     // it, the gate decides on it.
     const posture: TurnPosture = { mode: permissionMode };
     const tmuxEnabled = tmuxRunEnabled();
     // Read after the SDK copy is pinned, since the intentic base is cut from that copy's own preset.
-    const systemPrompt = await sdkSystemPrompt(promptInputOf(request, terminalMounted(request, tmuxEnabled)), request.cwd);
+    const systemPrompt = await sdkSystemPrompt(promptInputOf(request, terminalMounted(request, tmuxEnabled)), request.spec.cwd);
     // Shared handle for every agent this turn starts; no conversation means nothing to file children under.
     const subagents: SubagentTurn | undefined =
-        request.conversationId === undefined
+        request.spec.conversationId === undefined
             ? undefined
-            : { conversationId: request.conversationId, cwd: request.cwd, sessionId: undefined, subagentsDir: undefined };
+            : { conversationId: request.spec.conversationId, conversations, cwd: request.spec.cwd, sessionId: undefined, subagentsDir: undefined };
     // Seeded from the resumed session id, not empty, since an earlier turn's background job may still run in it.
-    const shell: { sessionId: string | undefined } = { sessionId: request.sessionId };
+    const shell: { sessionId: string | undefined } = { sessionId: request.spec.sessionId };
     // Per turn, deliberately: a question in a later turn shouldn't inherit a document written in an earlier one.
     const documents: TurnDocuments = { latest: undefined };
     // Adjacent assistant prose ExitPlanMode reads, filled from main-thread stream frames below.
@@ -922,9 +758,9 @@ export async function* runAgent(
         },
         // Backs AskUserQuestion; withheld on an unattended turn, since nobody is there to answer.
         mcpServers: {
-            ...(request.unattended === true ? {} : { ui: askServer(request, push, shell, documents) }),
+            ...(request.policy.unattended === true ? {} : { ui: askServer(conversations, request, push, shell, documents) }),
             // Accounts tools get the same live stream and abort signal handles the ask tool does.
-            ...(request.accountsServer === undefined ? {} : { accounts: request.accountsServer(push, request.signal) }),
+            ...(request.tools.accountsServer === undefined ? {} : { accounts: request.tools.accountsServer(push, request.signal) }),
             // Hands the terminal to the owner with the same handles plus `shell`, naming which tmux session commands
             // run in.
             ...(!terminalMounted(request, tmuxEnabled)
@@ -932,26 +768,27 @@ export async function* runAgent(
                 : {
                       terminal: terminalHelpServer({
                           shell,
-                          ...(request.conversationId === undefined ? {} : { conversationId: request.conversationId }),
+                          ...(request.spec.conversationId === undefined ? {} : { conversationId: request.spec.conversationId }),
                           signal: request.signal,
                           push,
+                          cards: request.hooks.cards,
                       }),
                   }),
             // JS execution backend, mounted from its own request field like `ui`/`terminal`, not the generic server
             // bags.
             // Spelled out literally (JS_SERVER_NAME): the outside-results conformance scan reads this block as text.
-            ...(request.jsExecution === undefined
+            ...(request.tools.jsExecution === undefined
                 ? {}
                 : {
                       code: jsExecutionServer({
-                          plan: request.jsExecution,
-                          placement: request.isolation,
+                          plan: request.tools.jsExecution,
+                          placement: request.spec.isolation,
                           signal: request.signal,
-                          ...(request.secrets === undefined ? {} : { secrets: request.secrets }),
+                          ...(request.tools.secrets === undefined ? {} : { secrets: request.tools.secrets }),
                       }),
                   }),
-            ...request.sdkServers,
-            ...mcpServersOf(request.tools ?? []),
+            ...request.tools.sdkServers,
+            ...mcpServersOf(request.tools.remote ?? []),
         },
         // Aliases `Code` beside the built-in, so skills/prompts address the execution backend the way they address
         // Bash.
@@ -960,21 +797,21 @@ export async function* runAgent(
         toolConfig: { askUserQuestion: { previewFormat: "markdown" } },
         planModeInstructions:
             "Write the complete, clear, concise plan in your response, then call ExitPlanMode to ask for approval before executing. When you need the user to choose between options, ask with the AskUserQuestion tool rather than writing the choices as plain text.",
-        canUseTool: permissionGate(request, push, shell, documents, prose, posture),
+        canUseTool: permissionGate(conversations, request, push, shell, documents, prose, posture),
     };
 
     // Only a stored-account token reads usage pools at settle; other turns have no pool or account to file under.
-    const oauthToken = request.oauthToken;
+    const credential = request.credential;
     const readUsage =
-        oauthToken === undefined
+        credential.kind !== "claude-oauth"
             ? undefined
-            : (): Promise<UsageWindow[]> => readClaudeUsage(oauthToken, usageFetch).then((reading) => reading.windows);
+            : (): Promise<UsageWindow[]> => readClaudeUsage(credential.token, usageFetch).then((reading) => reading.windows);
 
     // Swallowed-prompt recovery: pushes the turn's own prompt back through the steering queue once.
-    const steering = request.steering;
+    const steering = request.spec.steering;
     let redelivered = false;
     // Checklist rows the session already holds, read off the CLI's own store before it starts writing.
-    const checklistSeed = await checklistSeedOf(request);
+    const checklistSeed = await checklistSeedOf(request.spec);
     const redeliver =
         steering === undefined
             ? undefined
@@ -983,26 +820,22 @@ export async function* runAgent(
                       return false;
                   }
                   redelivered = true;
-                  return steering.push(request.prompt);
+                  return steering.push(request.spec.prompt);
               };
 
     const pump = (async () => {
         try {
             for await (const event of streamSdk({
                 queryFn,
-                prompt: promptInput(request.prompt, request.steering),
+                prompt: promptInput(request.spec.prompt, request.spec.steering),
                 options,
-                cwd: request.cwd,
+                cwd: request.spec.cwd,
                 tmuxEnabled,
-                browserOutputDir: request.browserOutputDir,
-                steering: request.steering,
+                browserOutputDir: request.tools.browserOutputDir,
+                steering: request.spec.steering,
                 redeliver,
                 readUsage,
-                allowance: request.allowance,
-                // Translator endpoint, so a retry storm can ask if it's refusing this model rather than having a bad
-                // minute.
-                routed: routedEndpointOf(request),
-                trial: request.trial === true,
+                ...streamCredentialOf(credential, request.spec.model),
                 subagents,
                 checklistSeed,
                 posture,
@@ -1030,23 +863,23 @@ export async function* runAgent(
                 }
                 // Child tool calls carry the spawning call's id, so edits and checks attribute without a hook or join.
                 if (event.kind === "tool_call") {
-                    noteChildWork(event, event.parentToolUseId);
+                    noteChildWork(conversations, event, event.parentToolUseId);
                 } else if (event.kind === "tool_call_update") {
-                    noteChildWork(event, undefined);
+                    noteChildWork(conversations, event, undefined);
                 }
                 push(event);
             }
         } catch (error) {
-            push(request.trial === true ? trialUnavailableFrame() : { kind: "error", message: errorMessage(error, stderr) });
+            push(credential.kind === "trial" ? trialUnavailableFrame() : { kind: "error", message: errorMessage(error, stderr) });
         } finally {
             // Any child still marked live is closed as `killed` when the turn ends; nothing else reports it.
             if (subagents !== undefined) {
-                for (const frame of closeSubagents(subagents.conversationId)) {
+                for (const frame of closeSubagents(conversations, subagents.conversationId)) {
                     push(frame);
                 }
             }
             // Closes streaming input so the SDK subprocess settles; late steer pushes report undelivered.
-            request.steering?.close();
+            request.spec.steering?.close();
             queue.end();
         }
     })();

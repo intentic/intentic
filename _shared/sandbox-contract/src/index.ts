@@ -1,5 +1,8 @@
+import { getEventIteratorSchemaDetails, isContractProcedure } from "@orpc/contract";
+import type { z } from "zod";
+import { RAW_ROUTE_LIST } from "./protocol/raw-routes.js";
 import type { ContractRoute } from "./protocol/routes.js";
-import { contractRoutes, requestPathFor, routeForProcedure, routeNameForRequest, routeShapes } from "./protocol/routes.js";
+import { contractRoutes, requestPathFor, routeForProcedure, routeNameForRequest, routeShapes, servedRoute } from "./protocol/routes.js";
 import { accountsContract } from "./contracts/accounts.contract.js";
 import { activityContract } from "./contracts/activity.contract.js";
 import { agentContract } from "./contracts/agent.contract.js";
@@ -115,6 +118,9 @@ export * from "./policy/turned-away.js";
 export * from "./text/mentions.js";
 export * from "./protocol/sse.js";
 export * from "./protocol/routes.js";
+export type { ControlReach, RouteMeta } from "./protocol/route-meta.js";
+export { RAW_ROUTE_LIST, RAW_ROUTES, type RawRouteKey, rawRoutePath } from "./protocol/raw-routes.js";
+export type { SandboxCallInput, SandboxGroup, SandboxHandlerInput, SandboxHandlerOutput, SandboxProcedure } from "./protocol/procedure-types.js";
 export * from "./policy/control-scopes.js";
 // The container's directory layout, re-exported since extensions can't import @intentic/constants directly.
 export { HISTORY_ROOT, HOST_STATE_ROOT, STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
@@ -288,9 +294,23 @@ export const SANDBOX_ROUTE_SHAPES: Readonly<Record<string, string>> = routeShape
 export const sandboxRouteName = (method: string, pathWithQuery: string): string | undefined =>
     routeNameForRequest(SANDBOX_ROUTES, method, pathWithQuery);
 
+// The route of either kind that serves a request to the daemon, bound to this build's tables; its meta is the policy the
+// daemon holds the request to, and undefined means nothing serves it.
+export const sandboxRouteFor = (method: string, pathWithQuery: string): ContractRoute | undefined =>
+    servedRoute(RAW_ROUTE_LIST, SANDBOX_ROUTES, method, pathWithQuery);
+
 // The method and path a typed call is about to send, bound to this build's route table. Undefined for an undeclared
 // procedure; the host gate then refuses it rather than assuming it's harmless.
 export const sandboxRequestFor = (procedure: readonly string[], input: unknown): { method: string; path: string } | undefined => {
     const route = routeForProcedure(SANDBOX_ROUTES, procedure);
     return route === undefined ? undefined : { method: route.method, path: requestPathFor(route, input) };
+};
+
+// The schema a procedure's answer is parsed by, bound to this build's contract; undefined for a streamed answer, which
+// passes as it arrives, since a frame kind this build does not know must not end the stream.
+export const sandboxAnswerSchema = (procedure: readonly string[]): z.ZodType | undefined => {
+    const [group = "", name = ""] = procedure;
+    const declared = (sandboxContract as Readonly<Record<string, Readonly<Record<string, unknown>>>>)[group]?.[name];
+    const schema = isContractProcedure(declared) ? declared["~orpc"].outputSchema : undefined;
+    return schema === undefined || getEventIteratorSchemaDetails(schema) !== undefined ? undefined : (schema as z.ZodType);
 };

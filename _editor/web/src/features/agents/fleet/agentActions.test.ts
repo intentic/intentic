@@ -1,6 +1,23 @@
 import type { AgentSummary, LandConflict } from "@intentic/sandbox-contract";
 import { it, expect, afterEach, mock } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals, hoisted } from "@intentic/testing/bun";
+import type { PickAction } from "../../chat/session/selectionReducer";
+
+// A tab's selection as this suite reads it back: the picks it holds, and the one write every pick goes through, which
+// lands a plain write on those picks and records any model worn; hoisted, since the draft stub below is.
+const pickable = hoisted(() => <P extends Record<string, { value: string | undefined }>>(picks: P, worn: unknown[] = []) => ({
+    ...picks,
+    apply: (action: PickAction): void => {
+        if (action.kind === `wearModel`) {
+            worn.push(action.pin);
+        }
+        if (action.kind === `set`) {
+            for (const [pick, value] of Object.entries(action.picks)) {
+                picks[pick]!.value = value as string | undefined;
+            }
+        }
+    },
+}));
 
 // The chat tabs agentActions sends through, swappable per test; hoisted because the module factory below is.
 const chat = hoisted(() => ({
@@ -8,11 +25,12 @@ const chat = hoisted(() => ({
         value: [] as {
             conversationId: string;
             isolated: { value: boolean };
-            enqueue: (prompt: string) => void;
-            startErrand: (opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>) => Promise<boolean>;
+            turn: {
+                enqueue: (prompt: string) => void;
+                startErrand: (opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>) => Promise<boolean>;
+            };
             // Only the errand path touches these, so the tabs the other tests build leave them off.
-            wearModel?: (pin: unknown) => void;
-            account?: { value: string | undefined };
+            selection?: { apply: (action: PickAction) => void; account: { value: string | undefined } };
         }[],
     },
     // Every prompt that reached a conversation: the assertion for "a turn was actually spent".
@@ -27,17 +45,19 @@ const tab = (id: string) => ({
     isolated: { value: false },
     registered: { value: true },
     unsent: { value: false },
-    enqueue: (prompt: string) => chat.enqueued.push(prompt),
-    // The chat's half of an errand as Conversation.startErrand keeps it: the turn opens under its opening at once, only
-    // a composed prompt is sent, and every send here is one the daemon takes.
-    startErrand: async (opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>): Promise<boolean> => {
-        chat.opened.push(opening);
-        const prompt = await compose(new AbortController().signal);
-        if (prompt === undefined) {
-            return false;
-        }
-        chat.enqueued.push(prompt);
-        return true;
+    turn: {
+        enqueue: (prompt: string) => chat.enqueued.push(prompt),
+        // The chat's half of an errand as TurnClient.startErrand keeps it: the turn opens under its opening at once,
+        // only a composed prompt is sent, and every send here is one the daemon takes.
+        startErrand: async (opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>): Promise<boolean> => {
+            chat.opened.push(opening);
+            const prompt = await compose(new AbortController().signal);
+            if (prompt === undefined) {
+                return false;
+            }
+            chat.enqueued.push(prompt);
+            return true;
+        },
     },
 });
 
@@ -45,8 +65,9 @@ const tab = (id: string) => ({
 const painting = hoisted(() => ({ until: undefined as Promise<void> | undefined }));
 mock.module("../../chat/run/useChat-sessions", () => ({ transcriptShown: () => painting.until ?? Promise.resolve() }));
 
-// sandboxClient stays real: the bug under test lived in the gap between agentActions and the actual request. Everything
-// else mocked here is what agentActions's other actions need for a browser (device, router, sandbox).
+// The daemon clients stay real, the typed one included: the bug under test lived in the gap between agentActions and the
+// actual request. Everything else mocked here is what agentActions's other actions need for a browser (device, router,
+// sandbox).
 mock.module("@intentic/ui", () => ({ useDevice: () => ({ mobile: { value: false } }) }));
 mock.module("../../chat/run/useChat", () => ({
     // `active` and `releaseDone` are both reached by module-scope watchers in useAgents the moment that module loads.
@@ -64,12 +85,15 @@ mock.module("../../chat/panel/useChat-strip", () => ({
 }));
 // The draft startAgent pins and summons, one per test so its pins can be read back.
 const draft = hoisted(() => ({
-    value: { conversationId: `c1`, actsAs: { value: undefined as string | undefined }, startIn: { value: undefined as string | undefined } },
+    value: {
+        conversationId: `c1`,
+        selection: pickable({ actsAs: { value: undefined as string | undefined }, startIn: { value: undefined as string | undefined } }),
+    },
 }));
 mock.module("../../chat/panel/useChat-reveal", () => ({
     // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
     // pressing Anyone un-pins a persona.
-    draftConversation: () => ({ ...draft.value, enqueue: (prompt: string) => chat.enqueued.push(prompt) }),
+    draftConversation: () => ({ ...draft.value, turn: { enqueue: (prompt: string) => chat.enqueued.push(prompt) } }),
     agentTabOf: () => ({}),
     composingConversation: () => undefined,
 }));
@@ -77,7 +101,7 @@ mock.module("../../chat/panel/useChat-reveal", () => ({
 // so a summoned turn runs here, as summonTurn does in any window drawing the chat.
 mock.module("../../chat/run/summon", () => ({
     summonChat: () => {},
-    summonTurn: (conversation: { enqueue: (prompt: string) => void }, prompt: string) => conversation.enqueue(prompt),
+    summonTurn: (conversation: { turn: { enqueue: (prompt: string) => void } }, prompt: string) => conversation.turn.enqueue(prompt),
 }));
 mock.module("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined }, UNPERSISTED: `unpersisted` }));
 mock.module("../../../router", () => ({ router: { push: mock() } }));
@@ -116,15 +140,23 @@ const lanesOf = (id: string): string[] =>
 
 // Every request fetch was handed, as the Request the daemon would have received.
 const sent: Request[] = [];
-const stubFetch = (body: unknown = { landed: true }): void => {
+// The daemon, route by route (`METHOD /path`): each answers a body its contract output accepts, since the typed client
+// parses every answer; a route not named here is one the daemon does not know.
+const stubDaemon = (routes: Readonly<Record<string, unknown>>): void => {
     stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
-        sent.push(new Request(url, init));
-        return Promise.resolve(Response.json(body));
+        const request = new Request(url, init);
+        sent.push(request);
+        const answer = routes[`${request.method} ${new URL(request.url).pathname}`];
+        return Promise.resolve(answer === undefined ? Response.json({ message: `Not Found` }, { status: 404 }) : Response.json(answer));
     });
 };
 
-// GET /agents/{id}/diff as the daemon would answer it for a refused land.
-const stubConflicts = (conflicts: readonly LandConflict[]): void => stubFetch({ repos: [], conflicts });
+// A land that carried work, as the daemon answers one.
+const LANDED = { landed: true, changed: true };
+const stubLand = (): void => stubDaemon({ [`POST /agents/a1/land`]: LANDED });
+
+// GET /agents/{id}/diff as the daemon would answer it for a refused land: nothing listed, nothing absorbed.
+const stubConflicts = (conflicts: readonly LandConflict[]): void => stubDaemon({ [`GET /agents/a1/diff`]: { repos: [], absorbed: 0, conflicts } });
 
 afterEach(() => {
     sent.length = 0;
@@ -133,7 +165,7 @@ afterEach(() => {
     chat.opened.length = 0;
     painting.until = undefined;
     registry.value = [];
-    draft.value = { conversationId: `c1`, actsAs: { value: undefined }, startIn: { value: undefined } };
+    draft.value = { conversationId: `c1`, selection: pickable({ actsAs: { value: undefined }, startIn: { value: undefined } }) };
     setProjectScope(undefined);
     unstubAllGlobals();
 });
@@ -141,9 +173,8 @@ afterEach(() => {
 // Pinned because a missing content-type is invisible from this side and fatal on the daemon's: a string body is
 // labelled text/plain, and its oRPC handler drops the `{id}` it took from the path.
 it("sends the land body as JSON, so the daemon parses an object and keeps the agent id from the path", async () => {
-    stubFetch();
-    // The daemon answers with the fields it has; `as unknown` is the whole answer under a type that requires more.
-    expect((await landAgent(`a1`)) as unknown).toEqual({ landed: true });
+    stubLand();
+    expect(await landAgent(`a1`)).toEqual(LANDED);
     const [request] = sent;
     expect(request?.url).toBe(`https://daemon.test/agents/a1/land`);
     expect(request?.headers.get(`content-type`)).toBe(`application/json`);
@@ -155,13 +186,13 @@ it("sends the land body as JSON, so the daemon parses an object and keeps the ag
 // The force flag changes WHEN a land may run, not what it carries: the daemon refuses a land mid-write unless this says
 // the user was warned. A land on a parked turn sends false like any other.
 it("carries the force flag, so a warned user can land while the agent is still writing", async () => {
-    stubFetch();
+    stubLand();
     await landAgent(`a1`, `check`, `outstanding`, true);
     expect(await sent[0]?.json()).toEqual({ mode: `check`, span: `outstanding`, force: true });
 });
 
 it("carries an explicit mode, so the conflict report's Merge is a different request and not the same one twice", async () => {
-    stubFetch();
+    stubLand();
     await landAgent(`a1`, `merge`);
     expect(sent[0]?.headers.get(`content-type`)).toBe(`application/json`);
     expect(await sent[0]?.json()).toEqual({ mode: `merge`, span: `outstanding`, force: false });
@@ -197,7 +228,8 @@ it("refuses the ask when the report names no blocked path at all, and names the 
 // a report with nothing in it. It re-judges instead, through the one land mode that writes to no tree.
 it("re-judges instead of scolding when the refusal it was pressed about has evaporated", async () => {
     chat.conversations.value = [tab(`a1`)];
-    stubFetch({ repos: [] });
+    // A report with nothing in it, and the judgement a measure land hands back: nothing applied, work held.
+    stubDaemon({ [`GET /agents/a1/diff`]: { repos: [], absorbed: 0 }, [`POST /agents/a1/land`]: { landed: false, changed: false, held: true } });
     const ask = await askAgentToResolve(`a1`);
     // Reported as an outcome, not a refusal: the board floats this rather than raising its failure strip.
     expect(ask).toEqual({ kind: `settled`, why: expect.stringContaining(`ready to land`) });
@@ -240,7 +272,7 @@ it("sends the composed prompt when the agent's own rebase could reach it, and fe
 it("runs the errand on the agent's own model and account, not on the picks this window's tab happens to hold", async () => {
     const worn: unknown[] = [];
     const account = { value: `left-over-account` };
-    chat.conversations.value = [{ ...tab(`a1`), account, wearModel: (pin: unknown) => worn.push(pin) }];
+    chat.conversations.value = [{ ...tab(`a1`), selection: pickable({ account }, worn) }];
     registry.value = [
         {
             id: `a1`,
@@ -267,7 +299,7 @@ it("runs the errand on the agent's own model and account, not on the picks this 
 // pick to send on; overwriting it with `undefined` would drop a pick the user did make.
 it("leaves the tab's account alone when the registry has no account for the agent", async () => {
     const account = { value: `the-tab-pick` };
-    chat.conversations.value = [{ ...tab(`a1`), account, wearModel: () => {} }];
+    chat.conversations.value = [{ ...tab(`a1`), selection: pickable({ account }) }];
     registry.value = [
         {
             id: `a1`,
@@ -303,10 +335,10 @@ it("still starts an empty one when there is nothing to say", () => {
 // ordinary chat.
 it("starts an agent under the open project wearing the project's own persona, made first if missing", async () => {
     setProjectScope(`web`);
-    stubFetch({ personas: [], connected: [] });
+    stubDaemon({ [`GET /personas`]: { personas: [], connected: [] }, [`POST /personas`]: { ok: true } });
     startAgent(`Fix the footer.`);
-    expect(draft.value.actsAs.value).toBe(`project-web`);
-    expect(draft.value.startIn.value).toBe(`web`);
+    expect(draft.value.selection.actsAs.value).toBe(`project-web`);
+    expect(draft.value.selection.startIn.value).toBe(`web`);
     await waitFor(() => expect(chat.enqueued).toEqual([`Fix the footer.`]));
     const posted = sent.find((request) => request.method === `POST` && request.url === `https://daemon.test/personas`);
     expect(await posted?.json()).toMatchObject({ id: `project-web`, workspace: { startIn: `web`, folders: [`web`] }, context: { repos: [`web`] } });
@@ -314,10 +346,10 @@ it("starts an agent under the open project wearing the project's own persona, ma
 
 it("keeps the persona a press named over the project's own", () => {
     setProjectScope(`web`);
-    stubFetch();
+    stubDaemon({});
     startAgent(undefined, `maya-support`);
-    expect(draft.value.actsAs.value).toBe(`maya-support`);
-    expect(draft.value.startIn.value).toBe(`web`);
+    expect(draft.value.selection.actsAs.value).toBe(`maya-support`);
+    expect(draft.value.selection.startIn.value).toBe(`web`);
     expect(sent).toEqual([]);
 });
 
@@ -333,7 +365,7 @@ it("refuses the ask when the agent has no conversation left", async () => {
 // span is measured from the last landed tip, which sees nothing once discarded; only the cumulative span reads from the
 // branch's base.
 it("asks for the cumulative span by name, so a re-land carries work the default span can no longer see", async () => {
-    stubFetch();
+    stubLand();
     await landAgent(`a1`, `check`, `cumulative`);
     expect(await sent[0]?.json()).toEqual({ mode: `check`, span: `cumulative`, force: false });
 });
@@ -357,7 +389,7 @@ it("moves the card to Active and opens the errand on the press, before the repor
     await waitFor(() => expect(chat.opened).toEqual([errands().landConflict.opening]));
     expect(chat.enqueued).toEqual([]);
 
-    answer(Response.json({ repos: [], conflicts: [{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }] }));
+    answer(Response.json({ repos: [], absorbed: 0, conflicts: [{ repo: `root`, clean: 0, paths: [{ path: `src/app.ts`, reason: `diverged` }] }] }));
 
     expect(await asking).toEqual({ kind: `sent` });
     expect(chat.enqueued).toEqual([expect.stringContaining(`src/app.ts`)]);
@@ -387,6 +419,8 @@ it("never opens the errand when a later press replaced it while the chat was sti
 
     const asking = askAgentToResolve(`a1`);
     claim(`a1`, undefined, `stop`);
+    // The report's read is already out while the chat paints; the replacing press is what lets it go.
+    await waitFor(() => expect(sent.filter((request) => request.url.endsWith(`/agents/a1/diff`)).map((request) => request.method)).toEqual([`GET`]));
     painted();
 
     expect(await asking).toEqual({ kind: `dropped` });

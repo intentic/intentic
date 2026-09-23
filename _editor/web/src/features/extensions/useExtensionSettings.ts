@@ -1,8 +1,6 @@
 import type { SettingValue } from "@intentic/extension-api";
-import { ExtensionSettingsSchema } from "@intentic/sandbox-contract";
 import { type ShallowRef, shallowRef } from "vue";
-import { sandboxJson } from "../sandbox/client/sandboxClient";
-import { jsonBody } from "../sandbox/client/jsonBody";
+import { sandboxRpc } from "../sandbox/client/sandboxRpc";
 
 /* One shared per-extension settings store (keyed by the capability entry id). */
 
@@ -28,7 +26,7 @@ export const extensionSettingsStore = (id: string): ExtensionSettingsStore => {
     const values = shallowRef<Record<string, SettingValue> | undefined>(undefined);
     const secretsSet = shallowRef<readonly string[]>([]);
     const load = async (): Promise<void> => {
-        const parsed = ExtensionSettingsSchema.parse(await sandboxJson(`/extensions/${encodeURIComponent(id)}/settings`));
+        const parsed = await sandboxRpc.extensions.settings({ id });
         values.value = parsed.settings;
         secretsSet.value = parsed.secretsSet;
     };
@@ -37,7 +35,7 @@ export const extensionSettingsStore = (id: string): ExtensionSettingsStore => {
         secretsSet,
         load,
         save: async (patch) => {
-            await sandboxJson(`/extensions/${encodeURIComponent(id)}/settings`, jsonBody(`POST`, { settings: patch }));
+            await sandboxRpc.extensions.setSettings({ id, settings: patch });
             await load();
         },
     };
