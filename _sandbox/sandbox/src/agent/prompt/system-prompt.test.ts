@@ -395,7 +395,7 @@ test("the owner's own browser is named, as the browser they see, and preferred o
         mode: "intentic",
         custom: undefined,
         hostDevices: { ids: ["rog"] },
-        ownBrowsers: { browsers: [{ id: "chrome", what: "Brave 141 on Windows" }] },
+        ownBrowsers: { browsers: [{ id: "chrome", what: "Brave 141 on Windows" }], unlisted: [] },
     })) as string;
     expect(prompt).toContain("`chrome` (Brave 141 on Windows)");
     expect(prompt).toContain("ToolSearch (`+mcp__chrome__`)");
@@ -406,14 +406,34 @@ test("the owner's own browser is named, as the browser they see, and preferred o
     expect(prompt.indexOf("The owner's own computers are connected")).toBeLessThan(prompt.indexOf("The owner's OWN browser is connected"));
 
     // A browser that has never said what it is is still named; only the parenthesis goes.
-    const unread = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [{ id: "chrome" }] } })) as string;
+    const unread = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [{ id: "chrome" }], unlisted: [] } })) as string;
     expect(unread).toContain("this turn: `chrome`, behind deferred tools");
 
     // No browser connected, or a card with none granted: no sentence at all rather than one about absent tools.
     const none = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined })) as string;
     expect(none).not.toContain("The owner's OWN browser");
-    const empty = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [] } })) as string;
+    const empty = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [], unlisted: [] } })) as string;
     expect(empty).not.toContain("The owner's OWN browser");
+});
+
+// A granted browser whose bridge lists no tools (no socket, nothing remembered) was still called connected, and the turn
+// searched for `mcp__chrome__` tools that were never there.
+test("a granted browser that publishes no tools is said to be absent, never connected", async () => {
+    const prompt = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, ownBrowsers: { browsers: [], unlisted: ["chrome"] } })) as string;
+    expect(prompt).not.toContain("The owner's OWN browser is connected");
+    expect(prompt).toContain("`chrome` is added to this sandbox but its extension is not connected");
+    expect(prompt).toContain("this turn has no `mcp__chrome__` tools");
+    expect(prompt).toContain("needs pairing again");
+
+    const both = (await systemPromptOf({
+        ...BASE,
+        mode: "intentic",
+        custom: undefined,
+        ownBrowsers: { browsers: [{ id: "work" }], unlisted: ["chrome"] },
+    })) as string;
+    expect(both).toContain("connected to this turn: `work`, behind deferred tools you load with ToolSearch (`+mcp__work__`)");
+    expect(both).not.toContain("connected to this turn: `work`, `chrome`");
+    expect(both).toContain("this turn has no `mcp__chrome__` tools");
 });
 
 // ONE CARD, SEVERAL OS INSTALLS. A turn told only the machine's id would look for a second device that does not

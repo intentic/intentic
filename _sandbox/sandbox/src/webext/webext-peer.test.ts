@@ -1,5 +1,8 @@
 import { test, expect } from "bun:test";
-import { sealAnswer } from "./webext-peer.js";
+import type { Capability } from "@intentic/sandbox-contract";
+import { createPeerHub } from "../peers/peer-hub.js";
+import { memoryPeerTools } from "../peers/peer-tool-memory.js";
+import { ownBrowserReach, sealAnswer, type WebExtHub } from "./webext-peer.js";
 
 /* THE SEAL. */
 
@@ -45,4 +48,28 @@ test("an image result passes through untouched: there is no marker to forge in p
 test("an answer with no content list is returned as it came: an error envelope has nothing to seal", () => {
     const answer = { jsonrpc: "2.0", id: 1, error: { code: -32000, message: "closed" } };
     expect(sealAnswer("my-chrome", "snapshot", answer)).toEqual(answer);
+});
+
+/* WHAT A TURN MAY BE TOLD ABOUT A BROWSER: only one whose bridge would list tools is called connected. */
+
+const card = (id: string): Capability => ({ id, kind: "webext", config: { platform: "chrome" } }) as unknown as Capability;
+const hubWith = (remembered: Record<string, unknown>): WebExtHub => {
+    const memory = memoryPeerTools();
+    for (const [id, tools] of Object.entries(remembered)) {
+        memory.set(`webext:${id}`, tools);
+    }
+    return createPeerHub({ domain: "webext", heartbeatMs: 20_000, callTimeoutMs: 60_000, offline: (id) => `"${id}" is away` }, { warn: () => undefined }, memory);
+};
+
+test("an offline browser that never listed its tools is unlisted, not named as connected", async () => {
+    expect(await ownBrowserReach({ webextHub: hubWith({}) }, [card("chrome")])).toEqual({ browsers: [], unlisted: ["chrome"] });
+});
+
+test("an offline browser whose tools are remembered stays named, and an empty remembered table does not count", async () => {
+    const hub = hubWith({ asleep: { tools: [{ name: "describe", inputSchema: { type: "object" } }] }, empty: { tools: [] } });
+    expect(await ownBrowserReach({ webextHub: hub }, [card("asleep"), card("empty")])).toEqual({ browsers: [{ id: "asleep" }], unlisted: ["empty"] });
+});
+
+test("no browser card granted answers nothing, so no sentence is composed", async () => {
+    expect(await ownBrowserReach({ webextHub: hubWith({}) }, [])).toBeUndefined();
 });

@@ -250,6 +250,24 @@ const ownBrowserGuidance = ({ browsers }: OwnBrowserReach): string => {
     );
 };
 
+// A granted browser whose bridge publishes no tools: said as absent, so a turn neither hunts for tools ToolSearch cannot
+// find nor goes looking for another way into the owner's session.
+const unlistedBrowserGuidance = (ids: readonly string[]): string => {
+    const named = ids.map((id) => `\`${id}\``).join(", ");
+    return (
+        `The owner's own browser ${named} is added to this sandbox but its extension is not connected and has never ` +
+        `published its tools here, so this turn has no \`mcp__${ids[0] ?? "browser"}__\` tools and ToolSearch will not ` +
+        `find any. Do not look for another way into their session: tell the owner the extension needs pairing again ` +
+        `(Connect on that browser's capability card, then paste the code into the extension), and that the next turn ` +
+        `after that can work in it.`
+    );
+};
+
+const ownBrowserParagraphs = (reach: OwnBrowserReach | undefined): string[] => [
+    ...(reach === undefined || reach.browsers.length === 0 ? [] : [ownBrowserGuidance(reach)]),
+    ...(reach === undefined || reach.unlisted.length === 0 ? [] : [unlistedBrowserGuidance(reach.unlisted)]),
+];
+
 // Names the situation, not just the tool: pinning the schema alone didn't stop the model from writing commands out in
 // prose for the owner to run by hand. Gated on the server actually being mounted (attended turn, tmux wrapper on).
 const TERMINAL_GUIDANCE =
@@ -435,7 +453,7 @@ export interface SdkSystemPromptInput {
     readonly terminal?: boolean;
     // The devices this turn can act on; absent or `ids: []` ⇒ no sentence about running things out there at all.
     readonly hostDevices?: HostDeviceReach | undefined;
-    // The owner's own browsers this turn can work in; absent or empty ⇒ no sentence about theirs at all.
+    // The owner's own browsers granted this turn: `browsers` get the connected paragraph, `unlisted` the absent one.
     readonly ownBrowsers?: OwnBrowserReach | undefined;
     // What the model's window will not pay for; carried this far so the composed prompt and the disclosed one shed the
     // same pieces.
@@ -517,7 +535,7 @@ const untrimmedGuidance = ({
     // Only with a device actually mounted: the whole sentence is about tools this turn can load.
     ...(hostDevices === undefined || hostDevices.ids.length === 0 ? [] : [hostDeviceGuidance(hostDevices)]),
     // After the devices, on purpose: the sentence that says which of the two to reach for reads last.
-    ...(ownBrowsers === undefined || ownBrowsers.browsers.length === 0 ? [] : [ownBrowserGuidance(ownBrowsers)]),
+    ...ownBrowserParagraphs(ownBrowsers),
 ];
 
 // A string replaces Claude Code's preset outright (the SDK's documented behaviour): how both `intentic` and `custom`

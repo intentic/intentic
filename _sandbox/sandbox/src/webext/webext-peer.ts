@@ -104,24 +104,37 @@ export interface OwnBrowser {
     readonly what?: string | undefined;
 }
 
-// One entry per granted browser card, which is exactly the set `peerToolsOf("webext", …)` mounts for the turn;
-// undefined with no card at all, so a prompt composed from it says nothing rather than promising tools that aren't
-// there. Liveness is deliberately absent: a browser is named whether or not it holds a socket this second, and whether
-// it is reachable right now is what a call to it answers.
+// Granted browser cards, split by what their bridge answers `tools/list` with: `browsers` publish tools (online, or a
+// table remembered from an earlier connect), `unlisted` publish none, since they hold no socket and never listed here.
+// Undefined with no card at all. A prompt may say a browser is connected only for `browsers`.
 export interface OwnBrowserReach {
     readonly browsers: readonly OwnBrowser[];
+    readonly unlisted: readonly string[];
 }
 
+const listsTools = (known: unknown): boolean => {
+    const tools = (known as { readonly tools?: unknown } | undefined)?.tools;
+    return Array.isArray(tools) && tools.length > 0;
+};
+
 // Reads only what the hub already holds — no `describe` round trip — so composing a turn never waits on a laptop.
-export const ownBrowserReach = async (services: Services, granted: readonly Capability[]): Promise<OwnBrowserReach | undefined> => {
-    const browsers = granted.flatMap((capability): OwnBrowser[] => {
-        if (capability.kind !== "webext") {
-            return [];
-        }
-        const what = services.webextHub.state(capability.id).facts?.browser;
-        return [{ id: capability.id, ...(what === undefined ? {} : { what }) }];
-    });
-    return browsers.length === 0 ? undefined : { browsers };
+export const ownBrowserReach = async (
+    services: { readonly webextHub: Pick<WebExtHub, "state" | "online" | "knownTools"> },
+    granted: readonly Capability[],
+): Promise<OwnBrowserReach | undefined> => {
+    const cards = granted.filter((capability) => capability.kind === "webext");
+    if (cards.length === 0) {
+        return undefined;
+    }
+    const hub = services.webextHub;
+    const publishing = cards.filter((card) => hub.online(card.id) || listsTools(hub.knownTools(card.id)));
+    return {
+        browsers: publishing.map((card): OwnBrowser => {
+            const what = hub.state(card.id).facts?.browser;
+            return { id: card.id, ...(what === undefined ? {} : { what }) };
+        }),
+        unlisted: cards.filter((card) => !publishing.includes(card)).map((card) => card.id),
+    };
 };
 
 export const webextPeerRoutes = (services: Services) =>
