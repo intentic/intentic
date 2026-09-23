@@ -10,7 +10,7 @@ import { bearerFrom, tokenEquals } from "../auth/auth.js";
 import { ownerDenied } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import type { rawRouteServer } from "../raw-route-server.js";
+import type { rawRouteServer } from "../http/raw-route-server.js";
 import type { PeerDoor } from "./peer.js";
 import type { PeerClient, PeerHub } from "./peer-hub.js";
 import type { PeerStore } from "./peer-store.js";

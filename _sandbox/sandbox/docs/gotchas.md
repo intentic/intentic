@@ -363,7 +363,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   own process (`@intentic/iq-engine/host`, logged with its pid at boot) rather than as worker threads sharing
   this address space, because threads move CPU off the loop but leave the models and the index cache resident
   here. Anything new that is large or forks often belongs on the far side of one of those boundaries. What is
-  CPU-bound but small takes a worker thread instead, over one call channel (`src/worker-calls.ts`):
+  CPU-bound but small takes a worker thread instead, over one call channel (`src/workers/worker-calls.ts`):
   the phrase index's SQLite (`src/sessions/search-index-worker.ts`), whose cold query took 2.2 s, and the tokenizer
   behind code counts (`src/git/changes/code-counts-worker.ts`), over a second on a large file. The daemon's own
   processes stay off the host's swap too: the entrypoint gives it a cgroup with `memory.swap.max` 0 and moves what it

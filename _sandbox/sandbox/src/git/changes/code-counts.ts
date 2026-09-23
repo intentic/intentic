@@ -3,7 +3,7 @@ import type { LineStat } from "@intentic/code-read";
 import type { GitChange } from "@intentic/sandbox-contract";
 import { gitBytes } from "@intentic/scaffold";
 import { readWorkspaceFile, statWorkspaceSizeMtime } from "../../workspace/files/workspace-files.js";
-import { siblingModule, workerCalls } from "../../worker-calls.js";
+import { siblingModule, workerCalls } from "../../workers/worker-calls.js";
 import { MAX_FILE_DIFF_BYTES } from "./diff-partial.js";
 
 // The code-only +/- a diff row shows, computed here (not per-render) so counts never change after they're drawn; uses

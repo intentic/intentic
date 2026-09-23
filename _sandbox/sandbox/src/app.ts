@@ -5,7 +5,7 @@ import { ORPCError } from "@orpc/server";
 import { type Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
-import { compressResponses } from "./compress-responses.js";
+import { compressResponses } from "./http/compress-responses.js";
 import { bearerFrom, ForbiddenError, PasskeyRequiredError } from "./auth/auth.js";
 import { allowedOriginsOf, originAllowedBy } from "./auth/browser-origins.js";
 import { createPasskeyRoutes } from "./auth/passkeys/passkeys.routes.js";
@@ -63,7 +63,7 @@ import { createGateRoute } from "./workflows/gate.routes.js";
 import { createWorkspaceBytesRoutes } from "./workspace/files/workspace-bytes.routes.js";
 import { reachPosture } from "./platform/listeners/ingress-tunnel.js";
 import { profileTraits } from "./platform/boot/profile.js";
-import { rawRouteServer } from "./raw-route-server.js";
+import { rawRouteServer } from "./http/raw-route-server.js";
 
 // Only genuine server faults (5xx) are logged; expected ORPCErrors are the routes' normal control flow.
 const logUnexpectedError = (services: Services, error: unknown): void => {

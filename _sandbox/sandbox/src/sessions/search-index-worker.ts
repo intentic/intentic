@@ -1,7 +1,7 @@
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { parentPort, workerData } from "node:worker_threads";
 import { errorMessage } from "@intentic/base/errors";
-import { post, type WorkerAnswer } from "../worker-calls.js";
+import { post, type WorkerAnswer } from "../workers/worker-calls.js";
 import type { SearchAsk, SearchIndexMetrics, SearchKind } from "./search-index.js";
 import { openSearchStore } from "./search-store.js";
 import type { SpokenLine } from "./transcript-search.js";

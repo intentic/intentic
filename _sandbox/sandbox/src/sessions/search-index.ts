@@ -1,5 +1,5 @@
 import type { MatchSnippet } from "@intentic/sandbox-contract";
-import { siblingModule, workerCalls } from "../worker-calls.js";
+import { siblingModule, workerCalls } from "../workers/worker-calls.js";
 import type { SpokenLine } from "./transcript-search.js";
 
 // What was said, indexed durably and written forward as turns settle, so a search reads only this, never the

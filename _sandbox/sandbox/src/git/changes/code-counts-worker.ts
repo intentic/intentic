@@ -1,7 +1,7 @@
 import { parentPort } from "node:worker_threads";
 import { codeLineStat, type LineStat } from "@intentic/code-read";
 import { analyze } from "@intentic/code-read/grammars";
-import { serveCalls } from "../../worker-calls.js";
+import { serveCalls } from "../../workers/worker-calls.js";
 import type { CodeCountAsk } from "./code-counts.js";
 
 // Tokenizing both sides of a file with its TextMate grammar is the costly part of a code count (over a second for a

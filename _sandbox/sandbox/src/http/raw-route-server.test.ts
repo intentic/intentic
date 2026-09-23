@@ -3,7 +3,7 @@ import { StandardOpenAPIMatcher } from "@orpc/openapi/standard";
 import { type AnyProcedure, implement } from "@orpc/server";
 import { expect, test } from "bun:test";
 import { Hono } from "hono";
-import type { AppEnv } from "./app-env.js";
+import type { AppEnv } from "../app-env.js";
 import { rawRouteServer } from "./raw-route-server.js";
 
 // The route matcher decides every gate's policy, so it must name the route the daemon actually dispatches a request

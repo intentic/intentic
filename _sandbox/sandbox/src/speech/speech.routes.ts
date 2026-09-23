@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Services } from "../composition.js";
 import type { AppEnv } from "../app-env.js";
-import { rawRouteServer } from "../raw-route-server.js";
+import { rawRouteServer } from "../http/raw-route-server.js";
 import { MAX_UTTERANCE_WAV_BYTES, SpeechModelNotReadyError, SpeechUnprovisionedError } from "./transcribe.js";
 
 // Bytes in, words out, off oRPC since a WAV doesn't fit its JSON contract. `/speech/status` is arming: an absent model

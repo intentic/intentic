@@ -67,7 +67,7 @@ new whole-`Services` taker, is refused at the push. The cycle edges still standi
 
 Every procedure carries a typed `RouteMeta` (`protocol/route-meta.ts`) and every hand-written Hono route is declared
 in `RAW_ROUTES` (`protocol/raw-routes.ts`); `app.ts`, `auth/role-floor.ts`, `auth/grants.ts` and
-`auth/control-tokens.ts` derive their decisions from them, and `src/raw-route-server.ts` refuses to register an
+`auth/control-tokens.ts` derive their decisions from them, and `src/http/raw-route-server.ts` refuses to register an
 undeclared raw route. `auth/route-reach.test.ts` holds each route's policy as literal data recorded from the path tables
 this replaced, so a route that becomes more or less reachable fails a test by name. Moving policy into one table
 surfaced one silent override: `POST /logs/client` was documented at the viewer floor and served at maintainer, because a
