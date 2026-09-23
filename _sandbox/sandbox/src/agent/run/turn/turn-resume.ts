@@ -404,8 +404,8 @@ export const stopResumeAt = (tries: number, now: number = Date.now()): number | 
 // climbing, and the reader is owed the count it spent on their allowance.
 const STOP_LADDER_GAVE_UP = `This turn was picked back up ${RETRY_LADDER_TRIES} times and got nowhere each time, so nothing more is sent automatically. Send again to carry on.`;
 
-// One rung of the stop ladder, or the end of it. Unlike the limit's single appointment this fires repeatedly, which is
-// exactly why it is bounded: three tries that achieve nothing, then it stands down and says so.
+// One rung of the stop ladder, bounded because it fires repeatedly: three tries that achieve nothing, then it stands down,
+// says so, and leaves the hold for a press, so carrying on re-runs the turn rather than appending a message.
 const runStopRung = async (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
     if (held.fired || (await breakPolicyFor(services, conversationId, "stopped")) !== "retry") {
         return;

@@ -33,12 +33,15 @@ export const usePaneAttach = (pane: PaneAttachHost): void => {
     onBeforeUnmount(() => (pane.conversation().transcript.watched.value = false));
 
     const { agentById } = useAgents();
-    // The daemon's own entry wherever it has one, never the card a press drew ahead of it (useAgents-provisional): that
-    // drawing is not a turn to attach to. Primitive-valued, so only an actual transition fires the watch below.
-    const fleetTurn = computed<boolean | undefined>(() => {
+    // The daemon's entry, never a press's provisional card: off the roster, nothing in flight, in flight with no run (a
+    // booked resume, a land), or the running turn's start, which tells a resume pass's re-run from the turn before it.
+    const fleetTurn = computed<number | boolean | undefined>(() => {
         const id = pane.conversation().conversationId;
         const agent = registry.value.find((entry) => entry.id === id) ?? agentById(id);
-        return agent === undefined ? undefined : turnInFlight(agent);
+        if (agent === undefined) {
+            return undefined;
+        }
+        return turnInFlight(agent) && (agent.startedAt ?? true);
     });
     // Whether this pane streamed the turn the roster is about to settle: its transcript already has the result.
     let streamedTurn = false;
@@ -48,17 +51,18 @@ export const usePaneAttach = (pane: PaneAttachHost): void => {
         }
     });
     // A one-shot read never retries, so the roster's transitions are what tells a non-streaming pane to hydrate;
-    // off the roster (undefined) changes nothing.
+    // off the roster (undefined) changes nothing, and neither does a run settling into a booked resume.
     watch(fleetTurn, (now, before) => {
-        if (before === true && now === false && streamedTurn) {
+        const wasInFlight = before !== undefined && before !== false;
+        if (wasInFlight && now === false && streamedTurn) {
             streamedTurn = false;
             return;
         }
-        if (now === undefined || pane.streaming.value) {
+        if (now === undefined || pane.streaming.value || (wasInFlight && now === true)) {
             return;
         }
-        if (now) {
-            // A turn this pane is not streaming just began: whatever the flag remembers is about an older one.
+        if (typeof now === `number`) {
+            // A run this pane is not streaming just began: whatever the flag remembers is about an older one.
             streamedTurn = false;
         }
         const chat = pane.conversation();

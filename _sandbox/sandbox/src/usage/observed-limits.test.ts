@@ -27,7 +27,7 @@ test("a reading names no reopening, because nothing published one", () => {
     const window = observedUsage(spent(`composer-2.5`), undefined, NOW)?.windows[0];
 
     expect(window?.resetsAt).toBeUndefined();
-    expect(window?.label).toBe(`composer-2.5`);
+    expect(window?.label).toBe(`Composer 2.5`);
 });
 
 test("an account with nothing on file has no reading at all, which is not a reading of zero", () => {

@@ -47,3 +47,11 @@ export const RETRY_LADDER_TRIES = RETRY_LADDER_MS.length;
 
 /** The wait before the next rung, or undefined once the ladder is spent. */
 export const retryLadderDelay = (triesWithoutProgress: number): number | undefined => RETRY_LADDER_MS[triesWithoutProgress];
+
+// Where an automatic re-run ladder stands, whichever wall climbs it (an outage's breaker, a stopped turn's rungs).
+// `made` equal to `max` is a spent ladder: nothing more goes unasked.
+export const RetryLadderSchema = z.object({
+    made: z.number().int().min(0).describe("Automatic re-runs already sent for this turn."),
+    max: z.number().int().min(1).describe("How many the ladder may send before it stands down."),
+});
+export type RetryLadder = z.infer<typeof RetryLadderSchema>;

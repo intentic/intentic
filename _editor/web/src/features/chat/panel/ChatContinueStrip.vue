@@ -41,13 +41,8 @@ const { agentById, setBreakPolicy } = useAgents();
 const counting = computed(() => props.visible && pickUp.value !== undefined && (pickUp.value.readyAt !== undefined || pickUp.value.nextAt !== undefined));
 const now = useNow(() => counting.value);
 
-// The daemon's breaker names the outage's remaining tries; the line spends them out loud.
-const attempts = computed(() => {
-    const outage = conversation.value.failures.outageResume.value;
-    return outage === undefined ? undefined : { attempt: outage.attempt, maxAttempts: outage.maxAttempts };
-});
 const ending = computed(() => pickUp.value?.reason);
-const status = computed(() => (pickUp.value === undefined ? `` : pickUpStatus(pickUp.value, attempts.value, now.value)));
+const status = computed(() => (pickUp.value === undefined ? `` : pickUpStatus(pickUp.value, now.value)));
 
 // A held turn resends unchanged: nothing is added to the conversation, so pressing it twice is free. The reset
 // shown is the provider's own guess and is routinely early; pressing before it costs one refused request.
@@ -113,7 +108,7 @@ const choose = async (next: TurnBreakPolicy): Promise<void> => {
 
 // What that answer will actually do, and when. Absent while the answer is `wait`, where the selected pill has already
 // said it and a line repeating it is the second strip all over again.
-const nextLine = computed(() => (pickUp.value === undefined ? undefined : pickUpNext(pickUp.value, answer.value, attempts.value, now.value)));
+const nextLine = computed(() => (pickUp.value === undefined ? undefined : pickUpNext(pickUp.value, answer.value, now.value)));
 
 // The only control here that changes whether a press can work, rather than when: reopens the account's five-hour
 // window on demand (once a week), leaving the weekly pool alone. Asked about the conversation's own account pick

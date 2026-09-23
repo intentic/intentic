@@ -8,10 +8,11 @@ import * as sessionsOriginal from "../../run/useChat-sessions";
 // Pins what keeps a pane on the chat it shows: the typewriter runs in the focused pane alone, and a chat this pane is
 // not streaming hydrates on the roster's transitions, never on the turn it streamed itself.
 
-// The fleet roster as agentById answers it, by conversation id; a status is all a turn's standing is read from here.
+// The fleet roster as agentById answers it, by conversation id; a status and the running turn's start are all a turn's
+// standing is read from here.
 const { roster, hydrateOnce } = await hoisted(async () => {
     const { ref: vueRef } = await import(`vue`);
-    return { roster: vueRef<Record<string, { readonly status: string }>>({}), hydrateOnce: mock() };
+    return { roster: vueRef<Record<string, { readonly status: string; readonly startedAt?: number }>>({}), hydrateOnce: mock() };
 });
 // Held before the mock replaces the module's binding, which would otherwise answer with the mock itself.
 const { useAgents } = useAgentsOriginal;
@@ -112,6 +113,25 @@ describe(`hydration off the roster`, () => {
         roster.value = { a: { status: `idle` } };
         await nextTick();
         expect(hydrateOnce).toHaveBeenCalledTimes(2);
+    });
+
+    it(`follows the resume pass's re-run behind a booked resume, which read as in flight all along`, async () => {
+        const chat = new Conversation(`a`);
+        const pane = attach(chat);
+        pane.streaming.value = true;
+        roster.value = { a: { status: `running`, startedAt: 1_000 } };
+        await nextTick();
+
+        // The streamed turn fails with a rung booked: in flight still, and nothing new to attach to.
+        pane.streaming.value = false;
+        roster.value = { a: { status: `resuming` } };
+        await nextTick();
+        expect(hydrateOnce).not.toHaveBeenCalled();
+
+        // The rung fires: a run this pane is not streaming.
+        roster.value = { a: { status: `running`, startedAt: 2_000 } };
+        await nextTick();
+        expect(hydrateOnce.mock.calls).toEqual([[chat]]);
     });
 
     it(`reads no transition while the pane is streaming`, async () => {

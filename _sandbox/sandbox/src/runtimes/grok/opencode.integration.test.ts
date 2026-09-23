@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test, expect, afterEach, mock } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
 import { createTurnGate } from "../../guard/turn-gate.js";
-import { humanizeModelId } from "../../agent/models/model-discovery.js";
+import { humanizeModelId } from "@intentic/sandbox-contract";
 import { SEED_XAI_MODELS } from "./grok-models.js";
 import { createOpenCodeService, geminiProviderConfig, registerSessionGate, releaseSessionGate } from "./opencode.js";
 import { parkedCards } from "../../agents/actor/parked-cards.js";

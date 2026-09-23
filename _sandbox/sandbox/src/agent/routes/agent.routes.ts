@@ -575,7 +575,10 @@ const failureQueries = (services: Services): FailureQueries => ({
     breakPolicy: (conversationId, ending) => breakPolicyFor(services, conversationId, ending),
     reopensAt: (at) => limitReopensAt({ services, ...at }),
     limitWay: (params) => limitWayOf(services, params),
-    stopResumeAt: (conversationId) => stopResumeAt(services.conversations.state(conversationId)?.resume.stopTries ?? 0),
+    stopLadder: (conversationId) => {
+        const made = services.conversations.state(conversationId)?.resume.stopTries ?? 0;
+        return { made, nextAt: stopResumeAt(made) };
+    },
 });
 
 // What a running turn knows about itself, which each failure it classifies reads.
@@ -753,6 +756,10 @@ export const createAgentRoutes = (services: Services) => {
         resume: i.resume.handler(async ({ input, context }) => {
             own(context, input.conversationId);
             const run = await services.turns.resume(input.conversationId, input.routing);
+            // A live turn already owns it (the resume pass's re-run, another window): the caller follows it, not re-sends.
+            if (run === undefined && services.conversations.state(input.conversationId)?.phase.kind === "running") {
+                throw new ORPCError("CONFLICT", { message: "a turn is already running in that conversation" });
+            }
             if (run === undefined) {
                 throw new ORPCError("NOT_FOUND", { message: "no held turn to run again for that conversation" });
             }

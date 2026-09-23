@@ -6,6 +6,7 @@ import { RateLimitInfoSchema } from "../schemas/providers/claude-gate.js";
 import { FastModeStateSchema } from "../schemas/providers/fast-mode.js";
 import { AgentReplySchema, UsageWindowSchema } from "../schemas/providers/plan-limits.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
+import { RetryLadderSchema } from "../schemas/turn-break.js";
 import { AgentCommandSchema, browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, ContextUsageSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionRequestSchema, PlanRequestSchema, QuestionRequestSchema, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 import { TranscriptPatchSchema, TranscriptRowSchema, TurnNoteSchema } from "./transcript.js";
 
@@ -275,8 +276,10 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 moving: z.string().optional(),
             })
             .optional(),
-        // provider-outage only: `retryAt` is the next attempt on backoff; `attempt`/`maxAttempts` bound it.
-        outage: z.object({ retryAt: z.number(), attempt: z.number(), maxAttempts: z.number() }).optional(),
+        // provider-outage only, while the breaker has tries left: epoch seconds its backoff next lets one through.
+        outage: z.object({ retryAt: z.number() }).optional(),
+        // Laddered walls only (an outage, a stopped turn): how far the automatic re-runs have got.
+        retries: RetryLadderSchema.optional(),
         // sandbox-memory-low only: the cgroup reading the refusal was decided on, so a client can offer to raise the
         // cap rather than only restate the sentence. Resident and swapped are apart for the reason the message keeps
         // them apart — their sum can exceed the cap, since the ceiling bounds resident pages and not swapped anon.

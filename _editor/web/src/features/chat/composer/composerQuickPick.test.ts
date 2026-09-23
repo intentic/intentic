@@ -23,7 +23,7 @@ const MODELS: readonly PickerEntry[] = [
 const ALL: QuickPickSources = {
     persona: { personas: [persona(`intentic`, { label: `Intentic`, brief: `Product work` }), persona(`radarsu`)], picked: `intentic` },
     sandbox: { runners: [{ id: `omen` }], boxes: [{ id: `box-2`, name: `Paperwork` }], box: undefined, runner: undefined },
-    model: { entries: MODELS, provider: `claude`, model: `claude-opus-5`, isReady: () => true },
+    model: { entries: MODELS, provider: `claude`, model: `claude-opus-5`, label: `Claude Opus 5`, isReady: () => true },
     effort: {
         options: [
             { label: `Low`, value: `low` },
@@ -44,14 +44,14 @@ it(`lists one summary row per offered kind, in kind order, each carrying the cur
     expect(rows.map((row) => row.detail)).toEqual([`Intentic`, `Here`, `Claude Opus 5`, `High`]);
 });
 
-it(`names a raw id when the current pick is on no list, never an empty value`, () => {
+it(`names a pick on no list by its raw id or the model's own name, never an empty value`, () => {
     const gone: QuickPickSources = {
         ...ALL,
         persona: { personas: [], picked: `deleted` },
         sandbox: { runners: [], boxes: [], box: `unknown-box`, runner: undefined },
-        model: { entries: [], provider: `claude`, model: `claude-opus-9`, isReady: () => true },
+        model: { entries: [], provider: `claude`, model: `claude-opus-9`, label: `Claude Opus 9`, isReady: () => true },
     };
-    expect(quickRows(gone, { kind: undefined, query: `` }).map((row) => row.detail)).toEqual([`deleted`, `Another sandbox`, `claude-opus-9`, `High`]);
+    expect(quickRows(gone, { kind: undefined, query: `` }).map((row) => row.detail)).toEqual([`deleted`, `Another sandbox`, `Claude Opus 9`, `High`]);
     expect(
         quickRows({ ...ALL, sandbox: { runners: [], boxes: [], box: undefined, runner: `omen` } }, { kind: undefined, query: `` })[1]?.detail,
     ).toBe(`omen`);
@@ -95,14 +95,14 @@ it(`puts the kind's summary row first when the word names the kind, so Enter dri
 
 it(`caps models in a flat search at the boundary, so files below stay within reach`, () => {
     const many = Array.from({ length: FLAT_MODEL_ROWS + 1 }, (_, index) => entry(`claude`, `claude-m-${index}`, `Claude M${index}`));
-    const sources: QuickPickSources = { ...ALL, model: { entries: many, provider: `claude`, model: `claude-m-0`, isReady: () => true } };
+    const sources: QuickPickSources = { ...ALL, model: { entries: many, provider: `claude`, model: `claude-m-0`, label: `Claude M 0`, isReady: () => true } };
     expect(quickRows(sources, { kind: undefined, query: `claude` }).filter((row) => row.kind === `model`)).toHaveLength(FLAT_MODEL_ROWS);
     expect(quickRows(sources, { kind: `model`, query: `claude` })).toHaveLength(FLAT_MODEL_ROWS + 1);
 });
 
 it(`drills into one kind alone, caps its list at the boundary, and leads with the current pick`, () => {
     const many = Array.from({ length: DRILLED_ROWS + 1 }, (_, index) => entry(`claude`, `claude-m-${index}`, `Claude M${index}`));
-    const sources: QuickPickSources = { ...ALL, model: { entries: many, provider: `claude`, model: `claude-m-7`, isReady: () => true } };
+    const sources: QuickPickSources = { ...ALL, model: { entries: many, provider: `claude`, model: `claude-m-7`, label: `Claude M 7`, isReady: () => true } };
     const rows = quickRows(sources, { kind: `model`, query: `` });
     expect(rows).toHaveLength(DRILLED_ROWS);
     expect(rows.every((row) => row.kind === `model`)).toBe(true);

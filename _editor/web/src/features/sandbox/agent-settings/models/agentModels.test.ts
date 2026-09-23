@@ -2,7 +2,7 @@
 // row writes only its own job's list, never a shared one. Mounted, since what's tested is the click-through round trip.
 import "@intentic/testing/dom";
 import type { SandboxSettings } from "@intentic/api-contract";
-import { MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelPin } from "@intentic/sandbox-contract";
+import { humanizeModelId, MODEL_ROLE_BLOCKS, MODEL_ROLES, type ModelPin } from "@intentic/sandbox-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
 import PrimeVue from "primevue/config";
 import { test, expect, afterEach, mock } from "bun:test";
@@ -51,6 +51,7 @@ mock.module(`../../../chat/accounts/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
     modelOptionsFor: (provider: string) => CATALOGS[provider] ?? [],
+    modelLabelFor: (provider: string, model: string) => CATALOGS[provider]?.find((option) => option.value === model)?.label ?? humanizeModelId(model),
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
     // <ProviderLogo> names it; bun links an ESM import against exactly what this factory returns.
     providerGlyph: () => `cpu`,

@@ -121,14 +121,14 @@ test("a selection carries params only when there are any", () => {
     expect(selectionFor(model({ id: "bare" }), "low")).toEqual({ id: "bare" });
 });
 
-test("a catalog row publishes what Cursor said and invents nothing where it was silent", () => {
+test("a catalog row publishes what Cursor said, and names a model it left unnamed by the shared humanizer", () => {
     expect(toModel(withEffort)).toEqual({
         id: "composer-2.5",
         label: "Composer 2.5",
         description: "Cursor's own frontier model.",
         efforts: ["low", "medium", "high"],
     });
-    expect(toModel(model({ id: "plain", displayName: "" }))).toEqual({ id: "plain", label: "plain" });
+    expect(toModel(model({ id: "plain", displayName: "" }))).toEqual({ id: "plain", label: "Plain" });
 });
 
 // Cursor's order is the vendor's own preference (unlike Codex's unordered /v1/models), so it passes through unranked,

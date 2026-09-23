@@ -1,7 +1,7 @@
 // Pins which rows the Subagents list draws for a chip-filtered agent, and which facts appear on a child's row.
 // Needs jsdom: mounts a real Vue app to the DOM.
 import "@intentic/testing/dom";
-import type { SubagentSession } from "@intentic/sandbox-contract";
+import { humanizeModelId, type SubagentSession } from "@intentic/sandbox-contract";
 import { it, expect, afterEach, mock } from "bun:test";
 import { type App, computed, createApp, defineComponent, h, nextTick, ref } from "vue";
 import { createMemoryHistory, createRouter, type Router } from "vue-router";
@@ -117,13 +117,13 @@ it(`opens the parent conversation in the chat instead of leaving for its diff`, 
     expect(mounted?.currentRoute.value.name).toBe(`subagents`);
 });
 
-// The spawning call named no model, so the row falls back to the parent's inherited model.
+// The spawning call named no model, so the row falls back to the parent's inherited model, named as every surface names it.
 it(`names the model on the card and drops the facts that crowded it out`, async () => {
     sessions.value = [child({ background: true, toolUses: 6, tokens: 19_000 })];
     const card = (await mount({})).querySelector(`.session-card`);
     const text = card?.textContent ?? ``;
     expect(text).toContain(`Locate the handler`);
-    expect(text).toContain(`x-test-model`);
+    expect(text).toContain(humanizeModelId(`x-test-model`));
     expect(text).not.toContain(`bg`);
     expect(text).not.toContain(`Explore`);
     expect(text).not.toContain(`analyse the gap`);
@@ -135,7 +135,7 @@ it(`names the child's own model rather than the conversation's`, async () => {
     sessions.value = [child({ model: `sonnet` })];
     const text = (await mount({})).querySelector(`.session-card`)?.textContent ?? ``;
     expect(text).toContain(`Sonnet`);
-    expect(text).not.toContain(`x-test-model`);
+    expect(text).not.toContain(humanizeModelId(`x-test-model`));
 });
 
 // Hidden is the default, so the control's label reads "Show tool calls".

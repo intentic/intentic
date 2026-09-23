@@ -1,4 +1,3 @@
-import { modelsFor } from "./agent-catalog.js";
 import type { AgentProvider, ModelPin } from "../schemas/agent.js";
 
 // The order to try models in for a role or job (settings.modelRoles), shared by daemon and browser so both agree what a
@@ -34,11 +33,6 @@ export const parsePinned = (pinned: string): ModelChoice | undefined => {
     }
     return { provider: pinned.slice(0, separator), model: pinned.slice(separator + 1) };
 };
-
-// A pin as a person reads it: the catalog's own label, or the raw id when the static catalog has not caught up with it
-// (a real case, via the picker's custom-id escape hatch).
-export const pinnedModelLabel = (choice: ModelChoice): string =>
-    modelsFor(choice.provider).find((option) => option.value === choice.model)?.label ?? choice.model;
 
 // Filters pinned entries to ready providers only; there is no floor beneath a written list, so an account left unnamed
 // is never reached. Returns whole pins, not bare pairs, since effort, thinking and harness must survive with the pick.

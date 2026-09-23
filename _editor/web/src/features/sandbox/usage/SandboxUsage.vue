@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { BarChart, Card, ui, Notice, type NoticeModel, NoticeStack, SegmentedControl, vAction } from "@intentic/ui";
+import { modelPinKey, parsePinned } from "@intentic/sandbox-contract";
 import { localZone, sameClock, UTC } from "@intentic/sandbox-contract/time";
 import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useAgents } from "../../agents/fleet/useAgents";
 import { relativeTime } from "../../chat/models/catalog";
-import { providerDisplayLabel, providerGroup, providerGroupLabel } from "../../chat/accounts/providerCatalog";
+import { modelLabelFor, providerDisplayLabel, providerGroup, providerGroupLabel } from "../../chat/accounts/providerCatalog";
 import { useSandboxOutline } from "../overview/useSandboxOutline";
 import { useSavings } from "./useSavings";
 import { useUsage } from "./useUsage";
@@ -126,11 +127,15 @@ const comparedTo = computed(() =>
 const turnPoints = computed(() => sparkPoints(series.value.map((bucket) => bucket.totals.turns)));
 const tokenPoints = computed(() => sparkPoints(series.value.map((bucket) => totalTokens(bucket.totals))));
 
+// Keyed by provider and model together: an id, and its label, belong to the provider that vends it.
 const byModel = computed(() =>
     rankByCost(
         current.value,
-        (row) => row.model,
-        (key) => key,
+        (row) => (row.model === undefined ? undefined : modelPinKey({ provider: row.provider, model: row.model })),
+        (key) => {
+            const choice = parsePinned(key)!;
+            return modelLabelFor(choice.provider, choice.model);
+        },
         `Provider default`,
         providerGroup,
     ),
@@ -407,7 +412,7 @@ const hasSpend = computed(() => current.value.length > 0);
                                             {{ providerDisplayLabel(row.provider) }}
                                         </span>
                                     </td>
-                                    <td class="py-1.5 pr-3">{{ row.model ?? `—` }}</td>
+                                    <td class="py-1.5 pr-3">{{ row.model === undefined ? `—` : modelLabelFor(row.provider, row.model) }}</td>
                                     <td class="max-w-40 truncate py-1.5 pr-3">
                                         {{ row.conversationId === undefined ? t(`sandbox.sandboxUsage.mainTree`) : agentTitle(row.conversationId) }}
                                     </td>

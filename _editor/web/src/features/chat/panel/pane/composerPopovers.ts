@@ -1,6 +1,7 @@
 import type { AgentCommand, Persona, RunnerSummary } from "@intentic/sandbox-contract";
 import { computed, nextTick, type Ref, ref, watch } from "vue";
 import { otherBoxes } from "../../../sandbox/live/fleetAcross";
+import { modelLabelFor } from "../../accounts/providerCatalog";
 import type { QuickPick, QuickPickSources } from "../../composer/composerQuickPick";
 import { drillMention, fileMention, mentionQueryAt, replaceMention } from "../../composer/useMentions";
 import { pickerEntries } from "../../models/modelPickerState";
@@ -61,6 +62,7 @@ const quickSourcesOf = (chat: Conversation, host: PopoversHost): QuickPickSource
                   entries: host.view.streaming.value ? pickerEntries.value.filter((entry) => entry.provider === provider) : pickerEntries.value,
                   provider,
                   model: selection.model.value,
+                  label: modelLabelFor(provider, selection.model.value),
                   isReady: providerReady,
               },
         effort: steered || selection.auto.value || !selection.capabilities.value.effort ? undefined : effortSourceOf(chat),

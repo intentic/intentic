@@ -19,6 +19,7 @@ import {
     providerDefaultModel,
     providerModels,
     providerModelsState,
+    readCatalogsWith,
     trialStatus,
 } from "../accounts/providerCatalog";
 import { active, conversations } from "../tabs/useChat-tabs";
@@ -139,6 +140,8 @@ const loadProviderModelsOnce = async (target: AgentProvider): Promise<void> => {
 // flight table per sandbox, so a load after a switch never joins a read the outgoing daemon is answering.
 const modelLoads = sandboxValue(() => withConcurrency(loadProviderModelsOnce, { mode: `singleFlight`, key: (target) => target }));
 export const loadProviderModels = (target: AgentProvider): Promise<void> => modelLoads.value(target);
+// A label naming a model on a catalog nothing has read reads it here (providerCatalog.modelLabelFor).
+readCatalogsWith(loadProviderModels);
 
 // Refreshes every native provider's catalog so cross-provider search has all lists warm; ACP providers have no
 // daemon catalog. Safe to spam: in-flight providers collapse into their running load.

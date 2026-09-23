@@ -419,7 +419,8 @@ test("an outage goes out as the breaker's retry frame, and remembers the session
             code: "provider-outage",
             message: "Anthropic is overloaded.",
             autoResume: "available",
-            outage: { retryAt: expect.any(Number), attempt: 1, maxAttempts: 6 },
+            outage: { retryAt: expect.any(Number) },
+            retries: { made: 0, max: 6 },
         },
         { kind: "done" },
     ]);
@@ -469,7 +470,8 @@ test("an outage on a conversation armed to retry names the appointment the break
         message: "Anthropic is overloaded.",
         autoResume: "scheduled",
         nextAt: expect.any(Number),
-        outage: { retryAt: expect.any(Number), attempt: 1, maxAttempts: 6 },
+        outage: { retryAt: expect.any(Number) },
+        retries: { made: 0, max: 6 },
     });
     // The appointment is the breaker's own retry, not a second clock.
     expect(failure?.kind === "error" ? failure.nextAt : undefined).toBe(failure?.kind === "error" ? failure.outage?.retryAt : undefined);

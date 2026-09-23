@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { humanizeModelId } from "../../agent/models/model-discovery.js";
+import { humanizeModelId } from "@intentic/sandbox-contract";
 import { discoverGeminiModels, isChatModel, SEED_GEMINI_MODELS } from "./gemini-models.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
@@ -85,7 +85,7 @@ test("carries each model's published input modalities, so the runtime is not lef
     );
 
     expect(await discoverGeminiModels("http://127.0.0.1:8788", "local-bearer", fake)).toEqual([
-        { id: "claude-opus-4-6-thinking", label: "Claude Opus 4 6 Thinking", inputModalities: ["text", "image"] },
+        { id: "claude-opus-4-6-thinking", label: "Claude Opus 4.6 Thinking", inputModalities: ["text", "image"] },
         { id: "gemini-pro-agent", label: "Gemini Pro Agent", inputModalities: ["text", "image", "audio", "video"] },
         { id: "gpt-oss-120b-medium", label: "GPT OSS 120b Medium", inputModalities: ["text"] },
     ]);

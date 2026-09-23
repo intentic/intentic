@@ -1,9 +1,10 @@
-import { sandboxRef } from "@intentic/extension-api";
+import { sandboxRef, sandboxValue } from "@intentic/extension-api";
 import {
     type AgentCommand,
     type AgentProvider,
     type CatalogOption,
     endpointIdOf,
+    humanizeModelId,
     isEndpointProvider,
     isTrialProvider,
     type ModelBadge,
@@ -17,8 +18,8 @@ import {
 
 // Live per-sandbox catalogs (models, defaults, commands, installed ACP agents) and the label rules
 // pickers read them through. Module state, not per-conversation, since a catalog belongs to the
-// sandbox; useChat fills it on the reachable seam and a switch clears it with the scope. Nothing here fetches, and
-// nothing is synthesized: labels and badges are the provider's own words.
+// sandbox; useChat fills it on the reachable seam, a label asked of an unread catalog fills it on demand
+// (modelLabelFor), and a switch clears it with the scope. Labels and badges are the provider's own words where it has any.
 
 // A live-catalog model option; all fields optional since catalogs vary in how much they report
 // (id-only rows render label-only).
@@ -147,17 +148,47 @@ export const providerGroup = (provider: AgentProvider): string => (isLocalModelP
 // What a group is called; takes a group key, not a provider, since the folded group has no single card.
 export const providerGroupLabel = (group: string): string => (group === LOCAL_MODELS_GROUP ? LOCAL_MODELS_LABEL : providerDisplayLabel(group));
 
-// A tier is never resolved to a version here; the harness decides which build it names.
-const TIERS: ReadonlySet<string> = new Set([`opus`, `sonnet`, `haiku`, `fable`]);
-const tierLabel = (modelId: string): string | undefined =>
-    TIERS.has(modelId) ? `${modelId.charAt(0).toUpperCase()}${modelId.slice(1)}` : undefined;
+// A failed catalog read is asked again no sooner than this, however often a render names a model on it.
+const DEMAND_RETRY_MS = 30_000;
 
+// What reads one provider's catalog, registered by the loader (useChat-catalog.ts), which reads this module's state and
+// so cannot be imported by it; unset where no loader runs, which leaves an unread catalog's labels to the humanizer.
+let catalogReader: ((provider: AgentProvider) => unknown) | undefined;
+export const readCatalogsWith = (reader: (provider: AgentProvider) => unknown): void => {
+    catalogReader = reader;
+};
+
+// When a label last asked for each provider's catalog; plain state, since it is written from inside renders.
+const demanded = sandboxValue(() => new Map<AgentProvider, number>());
+
+// Reads the catalog a label found nothing in, when nothing has read it yet or its last read failed. Only native
+// providers and endpoints publish one; an ACP agent names its own models.
+const demandCatalog = (provider: AgentProvider): void => {
+    const state = providerModelsState.value[provider];
+    if (state === `loading` || state === `loaded` || (!NATIVE_PROVIDERS.includes(provider as NativeProvider) && !isEndpointProvider(provider))) {
+        return;
+    }
+    const last = demanded.value.get(provider);
+    if (last !== undefined && Date.now() - last < DEMAND_RETRY_MS) {
+        return;
+    }
+    demanded.value.set(provider, Date.now());
+    // Off the render that asked: the read writes the load state that render depends on.
+    queueMicrotask(() => catalogReader?.(provider));
+};
+
+// The one way the app names a model, by its catalog's label; asking of an unread catalog reads it, and until it lands, or
+// for an id none lists (a custom pin, a tier alias), the id reads through the contract's humanizeModelId, as daemon-side.
 export const modelLabelFor = (provider: AgentProvider, modelId: string): string => {
+    if (modelId === ``) {
+        return providerDisplayLabel(provider);
+    }
     const option = modelOptionsFor(provider).find((entry) => entry.value === modelId);
     if (option !== undefined) {
         return option.label;
     }
-    return modelId === `` ? providerDisplayLabel(provider) : (tierLabel(modelId) ?? modelId);
+    demandCatalog(provider);
+    return humanizeModelId(modelId);
 };
 
 // Provider tabs for account pickers, derived from PROVIDER_SPECS so a new provider always gets a tab.

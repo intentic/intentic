@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AgentHarnessSchema, AgentProviderSchema } from "../schemas/agent.js";
 import { ShareDetailSchema } from "../schemas/share.js";
 import { SubagentKindSchema, SubagentStatusSchema, SubagentVerificationSchema } from "../schemas/terminal.js";
+import { RetryLadderSchema } from "../schemas/turn-break.js";
 import type { ToolCallContent, ToolCallLocation, ToolCallStatus, ToolKind} from "./requests.js";
 import { browserHelpRequest, capabilityOfferRequest, CapabilityOutcomeSchema, credentialOfferRequest, CredentialReceiptSchema, paymentOfferRequest, PaymentReceiptSchema, PermissionAskSchema, permissionRequest, planRequest, questionRequest, terminalHelpRequest, TodoItemSchema, ToolCallContentSchema, ToolCallLocationSchema, ToolCallStatusSchema, ToolKindSchema } from "./requests.js";
 
@@ -366,6 +367,9 @@ export const TurnEndingSchema = z.object({
         .describe(
             "When the booked send actually fires, in epoch seconds. Present only with `scheduled`; absent for a booking that fires on the next pass, which is 'now' to a reader.",
         ),
+    retries: RetryLadderSchema.optional().describe(
+        "How many automatic re-runs a stopped turn has already had, of how many. Absent before its first; equal counts mean the ladder is spent and only a press sends it again.",
+    ),
 });
 export type TurnEnding = z.infer<typeof TurnEndingSchema>;
 

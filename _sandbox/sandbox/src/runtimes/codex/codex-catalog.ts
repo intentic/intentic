@@ -1,7 +1,6 @@
 import { join } from "node:path";
-import { compareUnrankedModelIds, type Model, ModelSchema } from "@intentic/sandbox-contract";
+import { compareUnrankedModelIds, humanizeModelId, type Model, ModelSchema } from "@intentic/sandbox-contract";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
-import { humanizeModelId } from "../../agent/models/model-discovery.js";
 import type { Config } from "../../env.config.js";
 import { jsonFile } from "../../store/json-file.js";
 import { codexModelList, type CodexModelListReader } from "./codex-model-list.js";

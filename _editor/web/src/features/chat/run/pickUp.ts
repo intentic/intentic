@@ -1,4 +1,4 @@
-import type { TurnBreak, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
+import type { RetryLadder, TurnBreak, TurnBreakPolicy, TurnEnding } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
 import { formatReset, formatWait } from "../session/usageStatus";
 
@@ -18,6 +18,8 @@ export interface PickUp {
     readonly readyAt?: number;
     /** When the daemon's own booking fires (ms), as the failure frame stated it; absent means it fires on the next pass. */
     readonly nextAt?: number;
+    /** How far a laddered wall's automatic re-runs have got (an outage's breaker, a stopped turn's rungs). */
+    readonly retries?: RetryLadder;
     // The daemon is holding the turn itself, so the press re-runs it rather than sending a message. `ran` says whether
     // the held turn got anywhere before it was refused, since a blanket "work kept" was wrong for the common case of a
     // turn refused before its first request.
@@ -55,6 +57,7 @@ export const pickUpOf = (ending: TurnEnding): PickUp => ({
     reason: ending.reason,
     ...(ending.resetsAt === undefined ? {} : { readyAt: ending.resetsAt * 1_000 }),
     ...(ending.nextAt === undefined ? {} : { nextAt: ending.nextAt * 1_000 }),
+    ...(ending.retries === undefined ? {} : { retries: ending.retries }),
     ...(ending.held === undefined ? {} : { held: ending.held }),
 });
 
@@ -77,12 +80,6 @@ export const pickUpWhen = (at: number, now: number = Date.now()): string =>
         ? t(`chat.turnBreak.whenFar`, { clock: formatReset(Math.round(at / 1_000), now), wait: formatWait(Math.round(at / 1_000), now) })
         : t(`chat.turnBreak.whenNear`, { wait: formatWait(Math.round(at / 1_000), now) });
 
-/** How many tries the daemon's outage breaker has left. */
-export interface PickUpAttempts {
-    readonly attempt: number;
-    readonly maxAttempts: number;
-}
-
 // The strip's one status line: what happened, and what survived. Built here rather than in the template so the wording
 // is tested directly and the several endings can't drift apart. What happens NEXT is deliberately not in it — that is
 // the control's own business, one line below, and saying it twice is what put two clocks on one card.
@@ -90,11 +87,14 @@ export interface PickUpAttempts {
 // The one thing a reader can't check themselves: whether the held turn got anywhere before the wall.
 const survived = (pickUp: PickUp): boolean => pickUp.held?.ran !== false;
 
-export const pickUpStatus = (pickUp: PickUp, attempts: PickUpAttempts | undefined, now: number = Date.now()): string => {
+// Said out loud since a ladder spending the user's allowance unwatched owes an account of itself; nothing before its
+// first re-run.
+const retriedSoFar = (pickUp: PickUp): string =>
+    pickUp.retries === undefined || pickUp.retries.made === 0 ? `` : ` · ${t(`chat.turnBreak.retriedOf`, { ...pickUp.retries })}`;
+
+export const pickUpStatus = (pickUp: PickUp, now: number = Date.now()): string => {
     if (pickUp.reason === `outage`) {
-        // Said out loud since a breaker spending the user's allowance unwatched owes an account of itself.
-        const tries = attempts === undefined ? `` : ` · ${t(`chat.turnBreak.tryOf`, { ...attempts })}`;
-        return `${t(`chat.turnBreak.outageStatus`)}${tries}`;
+        return `${t(`chat.turnBreak.outageStatus`)}${retriedSoFar(pickUp)}`;
     }
     if (pickUp.reason === `limit`) {
         // Limit reached comes in two shapes: work kept (hit mid-flight) or nothing ran (spent before the first
@@ -105,7 +105,7 @@ export const pickUpStatus = (pickUp: PickUp, attempts: PickUpAttempts | undefine
         const due = pickUp.readyAt === undefined || pickUp.readyAt <= now ? `` : ` · ${t(`chat.turnBreak.backWhen`, { when: pickUpWhen(pickUp.readyAt, now) })}`;
         return `${head}${due}`;
     }
-    return t(`chat.turnBreak.stoppedStatus`);
+    return `${t(`chat.turnBreak.stoppedStatus`)}${retriedSoFar(pickUp)}`;
 };
 
 /**
@@ -113,12 +113,7 @@ export const pickUpStatus = (pickUp: PickUp, attempts: PickUpAttempts | undefine
  * selected chip already says that, and a line repeating it is the second strip all over again. Reads the answer rather
  * than the frame, so it changes the instant the reader changes their mind.
  */
-export const pickUpNext = (
-    pickUp: PickUp,
-    policy: TurnBreakPolicy,
-    attempts: PickUpAttempts | undefined,
-    now: number = Date.now(),
-): string | undefined => {
+export const pickUpNext = (pickUp: PickUp, policy: TurnBreakPolicy, now: number = Date.now()): string | undefined => {
     // A booked move fires on the next pass and names its destination instead of an hour.
     if (pickUp.held?.moving !== undefined) {
         return t(`chat.turnBreak.movingNow`, { account: pickUp.held.moving });
@@ -127,13 +122,18 @@ export const pickUpNext = (
         return undefined;
     }
     const at = pickUp.nextAt ?? pickUp.readyAt;
-    if (at === undefined || at <= now) {
-        return t(`chat.turnBreak.goesSoon`);
+    // A laddered retry counts its tries; an allowance reopening is a one-shot appointment, with nothing to count.
+    if (pickUp.retries !== undefined) {
+        return ladderNext(pickUp.retries, at, now);
     }
-    // An outage retry is a guess and says how many it has left; an allowance reopening is a one-shot appointment from
-    // the provider, with nothing to count.
-    if (pickUp.reason === `outage` && attempts !== undefined) {
-        return t(`chat.turnBreak.nextTry`, { when: pickUpWhen(at, now), ...attempts });
+    return at === undefined || at <= now ? t(`chat.turnBreak.goesSoon`) : t(`chat.turnBreak.goesAt`, { when: pickUpWhen(at, now) });
+};
+
+// A spent ladder books nothing, whatever the answer says: the press is the only way on, and the line says so.
+const ladderNext = (retries: RetryLadder, at: number | undefined, now: number): string => {
+    if (retries.made >= retries.max) {
+        return t(`chat.turnBreak.ladderSpent`, { max: retries.max });
     }
-    return t(`chat.turnBreak.goesAt`, { when: pickUpWhen(at, now) });
+    const attempt = { attempt: retries.made + 1, max: retries.max };
+    return at === undefined || at <= now ? t(`chat.turnBreak.nextTrySoon`, attempt) : t(`chat.turnBreak.nextTry`, { ...attempt, when: pickUpWhen(at, now) });
 };

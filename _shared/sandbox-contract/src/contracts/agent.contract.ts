@@ -68,7 +68,7 @@ export const agentContract = {
         .meta({ floor: "collaborator", guest: true })
         .input(StopTurnSchema)
         .output(OkSchema),
-    // NOT_FOUND when nothing is held (superseded, or the daemon restarted): the client should fall back to `run`.
+    // CONFLICT while a turn already runs (the client follows it); NOT_FOUND when nothing is held (it falls back to `run`).
     resume: procedure
         .route({
             method: "POST",

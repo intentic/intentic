@@ -1,7 +1,8 @@
 // Model catalog discovery for the Google channel (Antigravity), reached only through the translator (CLIProxyAPI) since
 // Google publishes no Anthropic endpoint; the translator's own model list is the catalog. Antigravity vends more than
 // Gemini (Claude Opus/Sonnet, GPT-OSS too), so membership is decided by `owned_by`, not an id prefix.
-import { getJson, humanizeModelId } from "../../agent/models/model-discovery.js";
+import { humanizeModelId } from "@intentic/sandbox-contract";
+import { getJson } from "../../agent/models/model-discovery.js";
 
 // A model the user can chat with, not one of the image/audio/embedding endpoints Google ships alongside it.
 export const isChatModel = (id: string): boolean => !/(image|embedding|imagen|tts|audio|veo|moderation)/i.test(id);

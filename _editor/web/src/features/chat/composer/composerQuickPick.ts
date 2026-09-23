@@ -32,6 +32,8 @@ export interface QuickPickSources {
               readonly entries: readonly PickerEntry[];
               readonly provider: AgentProvider;
               readonly model: string;
+              // What the current pick is called, by the app's one naming rule (providerCatalog.modelLabelFor).
+              readonly label: string;
               readonly isReady: (provider: AgentProvider) => boolean;
           }
         | undefined;
@@ -169,8 +171,8 @@ const rowsOf = (sources: QuickPickSources, kind: QuickKind, query: string): Quic
     }
 };
 
-// What each kind is set to now, as the summary row's second word; a pick no list names (a deleted persona, a model
-// off the catalog) shows its raw id rather than nothing.
+// What each kind is set to now, as the summary row's second word; a pick no list names (a deleted persona) shows its
+// raw id rather than nothing.
 const personaValue = (source: NonNullable<QuickPickSources[`persona`]>): string => {
     const persona = source.personas.find((candidate) => candidate.id === source.picked);
     return persona === undefined ? (source.picked ?? `Anyone`) : (persona.label ?? persona.id);
@@ -181,8 +183,6 @@ const sandboxValue = (source: NonNullable<QuickPickSources[`sandbox`]>): string 
     }
     return source.runner ?? `Here`;
 };
-const modelValue = (source: NonNullable<QuickPickSources[`model`]>): string =>
-    source.entries.find((entry) => entry.provider === source.provider && entry.value === source.model)?.label ?? source.model;
 const effortValue = (source: NonNullable<QuickPickSources[`effort`]>): string =>
     source.options.find((option) => option.value === source.picked)?.label ?? source.picked;
 
@@ -193,7 +193,7 @@ const currentValue = (sources: QuickPickSources, kind: QuickKind): string | unde
         case `sandbox`:
             return sources.sandbox === undefined ? undefined : sandboxValue(sources.sandbox);
         case `model`:
-            return sources.model === undefined ? undefined : modelValue(sources.model);
+            return sources.model?.label;
         case `effort`:
             return sources.effort === undefined ? undefined : effortValue(sources.effort);
     }

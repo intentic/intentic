@@ -1,4 +1,4 @@
-import { RESUME_NOTES, type TurnBreakPolicy } from "@intentic/sandbox-contract";
+import { RESUME_NOTES, RETRY_LADDER_TRIES, type TurnBreakPolicy } from "@intentic/sandbox-contract";
 import { describe, expect, test } from "bun:test";
 import type { LimitWay } from "../../models/limit-way.js";
 import { OUTAGE_MAX_ATTEMPTS } from "../../providers/provider-health.js";
@@ -40,7 +40,7 @@ const context = (change: Partial<FailureContext> = {}): FailureContext => ({
 
 // Canned answers to every question, recording each one asked.
 const answering = (
-    answers: { readonly policy?: TurnBreakPolicy; readonly reopensAt?: number; readonly way?: LimitWay; readonly rung?: number } = {},
+    answers: { readonly policy?: TurnBreakPolicy; readonly reopensAt?: number; readonly way?: LimitWay; readonly made?: number; readonly rung?: number } = {},
 ): FailureQueries & { readonly asked: unknown[][] } => {
     const asked: unknown[][] = [];
     return {
@@ -57,9 +57,9 @@ const answering = (
             asked.push(["limitWay", params]);
             return params.turn.conversationId === undefined ? undefined : answers.way;
         },
-        stopResumeAt: (conversationId) => {
-            asked.push(["stopResumeAt", conversationId]);
-            return answers.rung;
+        stopLadder: (conversationId) => {
+            asked.push(["stopLadder", conversationId]);
+            return { made: answers.made ?? 0, nextAt: answers.rung };
         },
     };
 };
@@ -223,7 +223,8 @@ describe("an outage", () => {
             code: "provider-outage",
             message: "overloaded",
             autoResume: "available",
-            outage: { retryAt: 1_800_000_030, attempt: 1, maxAttempts: OUTAGE_MAX_ATTEMPTS },
+            outage: { retryAt: 1_800_000_030 },
+            retries: { made: 0, max: OUTAGE_MAX_ATTEMPTS },
         });
         expect(plan.writes).toStrictEqual([]);
         expect(plan.walls).toStrictEqual({ outageHit: true });
@@ -237,7 +238,8 @@ describe("an outage", () => {
             message: "overloaded",
             autoResume: "scheduled",
             nextAt: 1_800_000_031,
-            outage: { retryAt: 1_800_000_031, attempt: 3, maxAttempts: OUTAGE_MAX_ATTEMPTS },
+            outage: { retryAt: 1_800_000_031 },
+            retries: { made: 2, max: OUTAGE_MAX_ATTEMPTS },
         });
     });
 
@@ -319,17 +321,41 @@ describe("an uncoded death", () => {
             },
             walls: {},
         });
-        expect(queries.asked).toStrictEqual([["breakPolicy", "c-1", "stopped"]]);
+        expect(queries.asked).toStrictEqual([
+            ["breakPolicy", "c-1", "stopped"],
+            ["stopLadder", "c-1"],
+        ]);
     });
 
-    test("on a conversation that retries names the ladder's next rung, in epoch seconds", async () => {
-        const plan = await classifyFailure(died, context({ contextTokens: undefined }), answering({ policy: "retry", rung: 1_800_000_060_500 }));
-        expect(plan.frame).toStrictEqual({ ...died, held: { ran: true }, autoResume: "scheduled", nextAt: 1_800_000_061 });
+    test("on a conversation that retries names the ladder's next rung, in epoch seconds, and which try it is", async () => {
+        const plan = await classifyFailure(died, context({ contextTokens: undefined }), answering({ policy: "retry", made: 1, rung: 1_800_000_060_500 }));
+        expect(plan.frame).toStrictEqual({
+            ...died,
+            held: { ran: true },
+            autoResume: "scheduled",
+            nextAt: 1_800_000_061,
+            retries: { made: 1, max: RETRY_LADDER_TRIES },
+        });
     });
 
-    test("with a spent ladder offers the press instead", async () => {
-        const plan = await classifyFailure(died, context(), answering({ policy: "retry" }));
-        expect(plan.frame).toStrictEqual({ ...died, held: { ran: true, contextTokens: 9_000 }, autoResume: "available" });
+    test("with a spent ladder offers the press instead, and says the ladder is spent", async () => {
+        const plan = await classifyFailure(died, context(), answering({ policy: "retry", made: RETRY_LADDER_TRIES }));
+        expect(plan.frame).toStrictEqual({
+            ...died,
+            held: { ran: true, contextTokens: 9_000 },
+            autoResume: "available",
+            retries: { made: RETRY_LADDER_TRIES, max: RETRY_LADDER_TRIES },
+        });
+    });
+
+    test("still counts the rungs already sent once the conversation stops retrying", async () => {
+        const plan = await classifyFailure(died, context(), answering({ made: 2 }));
+        expect(plan.frame).toStrictEqual({
+            ...died,
+            held: { ran: true, contextTokens: 9_000 },
+            autoResume: "available",
+            retries: { made: 2, max: RETRY_LADDER_TRIES },
+        });
     });
 
     test.each([

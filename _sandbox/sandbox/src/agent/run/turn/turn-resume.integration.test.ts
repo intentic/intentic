@@ -1760,12 +1760,22 @@ test("a spent ladder stands down and says so, rather than leaving the card promi
     }
     expect(turns).toHaveLength(RETRY_LADDER_TRIES);
 
-    // One more hold, with the ladder spent: nothing fires, and the conversation is told why.
+    // One more hold, with the ladder spent: nothing fires, and the conversation is told why, once.
     const lastAt = RECORDED + RETRY_LADDER_TRIES * 60_000;
     stopHeld(services, "stop-3", lastAt);
     await scheduler.tick(lastAt + 24 * 60 * 60 * 1000);
+    await scheduler.tick(lastAt + 25 * 60 * 60 * 1000);
     expect(turns).toHaveLength(RETRY_LADDER_TRIES);
     expect(abandoned).toEqual(["stop-3"]);
+
+    // The hold outlives the stand-down: a press re-runs the turn itself, where a dropped hold left it only a
+    // "Continue" message to send.
+    expect(heldTurn(services, "stop-3")?.input.prompt).toBe("ship the parser");
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "stop-3");
+    await settle(services, "stop-3");
+    expect(turns).toHaveLength(RETRY_LADDER_TRIES + 1);
+    expect(turns.at(-1)!.prompt).toContain("ship the parser");
+    clearPendingResume(services, "stop-3");
     clearStopLadder(services, "stop-3");
 });
 

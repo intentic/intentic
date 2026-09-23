@@ -100,7 +100,7 @@ it(`reports a pool that answered as a working trial, whatever it went through to
     const element = mount();
 
     expect(element.textContent).toContain(`4 free messages left today`);
-    expect(element.textContent).toContain(`Last answer: gemini-flash-lite-latest`);
+    expect(element.textContent).toContain(`Last answer: Gemini Flash Lite Latest`);
     expect(element.textContent).toContain(`Trial capacity is tight right now`);
     // The two false claims over an answered turn: that a message failed, and that there's something to press about.
     expect(element.textContent).not.toContain(`Failed messages are not counted`);

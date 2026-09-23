@@ -1,23 +1,8 @@
 // Shared helpers for the OpenAI-compatible `/v1/models` shape four of the five providers use: a bearer header, a GET
-// that returns undefined instead of throwing, the `{ data: [{ id }] }` unwrap, and id-to-label humanizing. Per-provider
-// concerns (which ids are chat models, which endpoints in what order) stay with the provider.
-import { compareUnrankedModelIds } from "@intentic/sandbox-contract";
-
-// Ids whose case is the vendor's, not English's. Title-casing these reads as a typo in a picker row.
-const ACRONYMS = new Set(["gpt", "oss", "api"]);
-
-// Raw model id → display label (`gpt-5-codex` → "GPT 5 Codex"); dotted/dated segments pass through untouched. Used only
-// when the vendor publishes no name of its own.
-export const humanizeModelId = (id: string): string =>
-    id
-        .split("-")
-        .map((token) => {
-            if (token === "") {
-                return token;
-            }
-            return ACRONYMS.has(token.toLowerCase()) ? token.toUpperCase() : token[0]!.toUpperCase() + token.slice(1);
-        })
-        .join(" ");
+// that returns undefined instead of throwing, and the `{ data: [{ id }] }` unwrap. Per-provider concerns (which ids are
+// chat models, which endpoints in what order) stay with the provider; an unnamed id reads through the contract's
+// humanizeModelId, the rule the app's labels share.
+import { compareUnrankedModelIds, humanizeModelId } from "@intentic/sandbox-contract";
 
 // Bare ids → the wire shape, for providers whose discovery returns nothing but ids. Neither publishes a ranking, so the
 // app orders them (compareUnrankedModelIds) and takes the head as `default`; callers with richer data order their own.

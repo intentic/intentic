@@ -12,6 +12,7 @@ import {
     type AgentSummary,
     type ScratchPath,
     capabilitiesOf,
+    RETRY_LADDER_TRIES,
     type TurnEnding,
 } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
@@ -121,9 +122,14 @@ export const createAgentsRoutes = (services: Services) => {
         ...(held.move !== undefined ? { moving: held.move.account } : {}),
     });
     // The live hold, never a summary flag: a restart clears the hold, so only it backs a re-run rather than a message.
-    const heldOn = (id: string): Pick<TurnEnding, "held"> => {
+    // A stopped hold also says how far its automatic re-runs got, once any has gone.
+    const heldOn = (id: string): Pick<TurnEnding, "held" | "retries"> => {
         const held = services.conversations.state(id)?.resume.held;
-        return held === undefined ? {} : { held: heldEnding(held) };
+        if (held === undefined) {
+            return {};
+        }
+        const climbed = held.reason === "stopped" && held.tries > 0;
+        return { held: heldEnding(held), ...(climbed ? { retries: { made: held.tries, max: RETRY_LADDER_TRIES } } : {}) };
     };
     const failureEnding = (id: string, summary: AgentSummary): TurnEnding | undefined => {
         if (summary.failureCode === "rate_limit") {

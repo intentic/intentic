@@ -1,9 +1,10 @@
-import { type ChatRoute, type Persona, mentionPaths, parsePinned, personaModels, pinnedModelLabel } from "@intentic/sandbox-contract";
+import { type ChatRoute, type Persona, mentionPaths, parsePinned, personaModels } from "@intentic/sandbox-contract";
 import { computed, ref, type Ref } from "vue";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { usePersonas } from "../../sandbox/personas/usePersonas";
 import { useSandboxSettings } from "../../sandbox/overview/useSandboxSettings";
 import { useRole } from "../../sandbox/secrets/useRole";
+import { modelLabelFor } from "../accounts/providerCatalog";
 import { roleSources } from "../accounts/roleModel";
 import type { Conversation } from "../session/conversation";
 
@@ -86,7 +87,7 @@ const pathsOf = (chat: Conversation, text: string): string[] => {
 // What the reading cost, named: the model that answered, or nothing at all when none was reached.
 const spent = (route: ChatRoute): string => {
     const choice = route.judge === undefined ? undefined : parsePinned(route.judge);
-    return choice === undefined ? `` : ` Read by ${pinnedModelLabel(choice)}.`;
+    return choice === undefined ? `` : ` Read by ${modelLabelFor(choice.provider, choice.model)}.`;
 };
 
 const nameOf = (persona: Persona): string => persona.label ?? persona.id;

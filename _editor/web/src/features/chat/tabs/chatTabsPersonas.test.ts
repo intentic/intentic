@@ -2,6 +2,7 @@
 // lane/persona switch is part of what's tested.
 import "@intentic/testing/dom";
 import { resetSandboxScope } from "@intentic/extension-api";
+import { humanizeModelId } from "@intentic/sandbox-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { it, expect, beforeEach, afterEach } from "bun:test";
 import { hoisted } from "@intentic/testing/bun";
@@ -301,7 +302,7 @@ it("shows what the persona's chat runs on under the name", async () => {
         conversation.activeModel.value = `sonnet-under-test`;
     }
     await settle();
-    expect(rowFor(el, `Work`)?.textContent).toContain(`sonnet-under-test`);
+    expect(rowFor(el, `Work`)?.textContent).toContain(humanizeModelId(`sonnet-under-test`));
 });
 
 it("says nothing about what a persona runs on until it has a chat", async () => {

@@ -6,6 +6,7 @@ import { createBackoff } from "@intentic/base/async";
 import { errorMessage } from "@intentic/base/errors";
 import {
     cliProxyIdOf,
+    humanizeModelId,
     type KeyedProvider,
     KeyedProviderSchema,
     type Model,
@@ -603,7 +604,7 @@ export const createCliProxyClient = (params: {
                     : [
                           {
                               id: model.id,
-                              label: model.display_name ?? model.id,
+                              label: model.display_name ?? humanizeModelId(model.id),
                               ...(model.description !== undefined && model.description !== "" ? { description: model.description } : {}),
                               ...(model.thinking?.levels !== undefined ? { efforts: model.thinking.levels } : {}),
                           },

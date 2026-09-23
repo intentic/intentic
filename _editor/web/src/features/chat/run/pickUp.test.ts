@@ -35,6 +35,14 @@ describe(`pickUpOf`, () => {
             held: { ran: true },
         });
     });
+
+    it(`carries how far the ladder got, so a reopened tab counts the same tries a watching one did`, () => {
+        expect(pickUpOf({ reason: `stopped`, held: { ran: true }, retries: { made: 3, max: 3 } })).toEqual({
+            reason: `stopped`,
+            held: { ran: true },
+            retries: { made: 3, max: 3 },
+        });
+    });
 });
 
 // The defect that made a reader believe there were two different waits: one card said "back at Sun 08:20" over
@@ -55,15 +63,22 @@ describe(`pickUpStatus`, () => {
     // Two shapes of the same wall: hit mid-flight, or spent before the first request. Claiming survival for both is
     // what makes the line untrustworthy.
     it(`says whether anything ran, and when the allowance is back`, () => {
-        expect(pickUpStatus({ reason: `limit`, held: { ran: true }, readyAt: NOW + 3_600_000 }, undefined, NOW)).toBe(
+        expect(pickUpStatus({ reason: `limit`, held: { ran: true }, readyAt: NOW + 3_600_000 }, NOW)).toBe(
             `Limit reached · work kept · back about 60 min`,
         );
-        expect(pickUpStatus({ reason: `limit`, held: { ran: false } }, undefined, NOW)).toBe(`Limit reached · nothing ran`);
+        expect(pickUpStatus({ reason: `limit`, held: { ran: false } }, NOW)).toBe(`Limit reached · nothing ran`);
     });
 
-    it(`spends the breaker's tries out loud, and says nothing about what happens next`, () => {
-        expect(pickUpStatus({ reason: `outage` }, { attempt: 2, maxAttempts: 5 }, NOW)).toBe(`Provider failed · work kept · try 2 of 5`);
-        expect(pickUpStatus({ reason: `stopped`, held: { ran: true } }, undefined, NOW)).toBe(`Turn stopped short · work kept`);
+    it(`spends either ladder's tries out loud, and says nothing about what happens next`, () => {
+        expect(pickUpStatus({ reason: `outage`, retries: { made: 1, max: 5 } }, NOW)).toBe(`Provider failed · work kept · retried 1 of 5`);
+        expect(pickUpStatus({ reason: `stopped`, held: { ran: true }, retries: { made: 2, max: 3 } }, NOW)).toBe(
+            `Turn stopped short · work kept · retried 2 of 3`,
+        );
+    });
+
+    it(`counts nothing before the first re-run has gone`, () => {
+        expect(pickUpStatus({ reason: `stopped`, held: { ran: true }, retries: { made: 0, max: 3 } }, NOW)).toBe(`Turn stopped short · work kept`);
+        expect(pickUpStatus({ reason: `stopped`, held: { ran: true } }, NOW)).toBe(`Turn stopped short · work kept`);
     });
 });
 
@@ -71,24 +86,33 @@ describe(`pickUpNext`, () => {
     // The whole point of one question with one answer: `wait` shows no countdown at all, so a card can never carry a
     // clock for an automation nobody armed.
     it(`says nothing while the answer is to wait`, () => {
-        expect(pickUpNext({ reason: `limit`, readyAt: NOW + 3_600_000 }, `wait`, undefined, NOW)).toBeUndefined();
+        expect(pickUpNext({ reason: `limit`, readyAt: NOW + 3_600_000 }, `wait`, NOW)).toBeUndefined();
     });
 
     it(`names the instant the chosen answer fires`, () => {
-        expect(pickUpNext({ reason: `limit`, readyAt: NOW + 3_600_000 }, `resend`, undefined, NOW)).toBe(`Goes by itself about 60 min`);
+        expect(pickUpNext({ reason: `limit`, readyAt: NOW + 3_600_000 }, `resend`, NOW)).toBe(`Goes by itself about 60 min`);
     });
 
     // The booking, not the allowance: a rung fires long before any reset the frame also carries.
     it(`prefers the daemon's own booking to the allowance behind it`, () => {
-        expect(pickUpNext({ reason: `stopped`, readyAt: NOW + 3_600_000, nextAt: NOW + 15_000 }, `retry`, undefined, NOW)).toBe(
-            `Goes by itself about 15s`,
+        expect(pickUpNext({ reason: `stopped`, readyAt: NOW + 3_600_000, nextAt: NOW + 15_000 }, `retry`, NOW)).toBe(`Goes by itself about 15s`);
+    });
+
+    it(`names which try the booking is, of how many, whichever wall climbs the ladder`, () => {
+        expect(pickUpNext({ reason: `outage`, nextAt: NOW + 30_000, retries: { made: 1, max: 5 } }, `retry`, NOW)).toBe(`Try 2 of 5 in about 30s`);
+        expect(pickUpNext({ reason: `stopped`, nextAt: NOW + 15_000, retries: { made: 1, max: 3 } }, `retry`, NOW)).toBe(`Try 2 of 3 in about 15s`);
+        expect(pickUpNext({ reason: `stopped`, retries: { made: 0, max: 3 } }, `retry`, NOW)).toBe(`Try 1 of 3 shortly`);
+    });
+
+    // The defect behind "I chose keep trying and nothing happened": a spent ladder books nothing, and a line promising
+    // "shortly" under the selected answer kept the reader waiting for a send that was never coming.
+    it(`says a spent ladder has stood down, whatever the answer`, () => {
+        expect(pickUpNext({ reason: `stopped`, held: { ran: true }, retries: { made: 3, max: 3 } }, `retry`, NOW)).toBe(
+            `Stood down after 3 tries that got nowhere · Continue sends it again`,
         );
     });
 
-    it(`counts an outage's tries, and reports a booked move instead of an hour`, () => {
-        expect(pickUpNext({ reason: `outage`, nextAt: NOW + 30_000 }, `retry`, { attempt: 2, maxAttempts: 5 }, NOW)).toBe(
-            `Next try about 30s · try 2 of 5`,
-        );
-        expect(pickUpNext({ reason: `limit`, held: { ran: true, moving: `alice` } }, `wait`, undefined, NOW)).toBe(`Moving to alice now`);
+    it(`reports a booked move instead of an hour`, () => {
+        expect(pickUpNext({ reason: `limit`, held: { ran: true, moving: `alice` } }, `wait`, NOW)).toBe(`Moving to alice now`);
     });
 });

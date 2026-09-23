@@ -2146,6 +2146,45 @@ describe(`Conversation`, () => {
         expect(turnBodies().map((body) => body[`prompt`])).toEqual([`ship the parser`, CONTINUATIONS.plain]);
     });
 
+    // The resume pass's own rung got there first, in a turn this window wasn't following: the press follows it, and
+    // "Continue" never reaches the conversation.
+    it(`follows the turn already re-running the held one, rather than saying carry on`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockImplementation(turnDaemon([{ kind: `error`, message: `Google turn timed out waiting for OpenCode.`, held: { ran: true } }, { kind: `done` }]));
+        await conversation.turn.send(`ship the parser`, settings);
+        expect(conversation.pickUp.value).toMatchObject({ reason: `stopped`, held: { ran: true } });
+
+        const rung = turnDaemon([{ kind: `delta`, text: `back on it` }, { kind: `done` }], {
+            head: () => ({ run: `rung-1`, prompt: withResumeNote(`ship the parser`, RESUME_NOTES.stopped), startedAt: Date.now() }),
+        });
+        daemon.mockImplementation((procedure, input, options) =>
+            procedure === `agent.resume` ? Promise.reject(daemonRefusal(409, `a turn is already running in that conversation`)) : rung(procedure, input, options),
+        );
+        await expect(conversation.turn.continueTurn()).resolves.toBeUndefined();
+
+        expect(turnBodies()).toHaveLength(1);
+        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `ship the parser` }]);
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `back on it` });
+    });
+
+    it(`keeps a stopped turn's booked rung and how far the ladder got on the pick-up`, async () => {
+        const conversation = new Conversation(`c1`);
+        const nextAt = Math.floor(Date.now() / 1000) + 15;
+        daemon.mockImplementation(
+            turnDaemon([
+                { kind: `error`, message: `Google turn timed out waiting for OpenCode.`, held: { ran: true }, autoResume: `scheduled`, nextAt, retries: { made: 1, max: 3 } },
+                { kind: `done` },
+            ]),
+        );
+        await conversation.turn.send(`ship the parser`, settings);
+
+        expect(conversation.pickUp.value).toEqual({ reason: `stopped`, nextAt: nextAt * 1_000, retries: { made: 1, max: 3 }, held: { ran: true } });
+        expect(conversation.transcript.messages.value.at(-1)).toMatchObject({
+            role: `notice`,
+            text: `Google turn timed out waiting for OpenCode. Retrying by itself: attempt 2 of 3.`,
+        });
+    });
+
     // A turn the sandbox started itself (a fix press, a peer's message) and kept after the door turned it away: its
     // words were never in this window, so the press asks the sandbox to run that turn and sends nothing of its own.
     it(`runs a turn the sandbox kept on a press, as it was started, sending nothing of its own`, async () => {
@@ -2227,7 +2266,8 @@ describe(`Conversation`, () => {
                     code: `provider-outage`,
                     message: `API Error: 529 Overloaded.`,
                     autoResume: `scheduled`,
-                    outage: { retryAt, attempt: 2, maxAttempts: 6 },
+                    outage: { retryAt },
+                    retries: { made: 1, max: 6 },
                 },
                 { kind: `done` },
             ]),
@@ -2239,7 +2279,8 @@ describe(`Conversation`, () => {
         expect(notice.text).toContain(`attempt 2 of 6`);
         // No second switch on the row: what happens next is one question, asked once, on the card above the composer.
         expect(notice.noticeAction).toBeUndefined();
-        expect(conversation.failures.outageResume.value).toEqual({ retryAt, attempt: 2, maxAttempts: 6, scheduled: true });
+        expect(conversation.failures.outageResume.value).toEqual({ retryAt, scheduled: true });
+        expect(conversation.pickUp.value?.retries).toEqual({ made: 1, max: 6 });
         expect(conversation.error.value).toBeNull();
         expect(conversation.status.value).not.toBe(`error`);
         conversation.turn.abort();
@@ -2483,14 +2524,15 @@ describe(`Conversation`, () => {
                     code: `provider-outage`,
                     message: `API Error: 500 Internal server error.`,
                     autoResume: `available`,
-                    outage: { retryAt, attempt: 1, maxAttempts: 6 },
+                    outage: { retryAt },
+                    retries: { made: 0, max: 6 },
                 },
                 { kind: `done` },
             ]),
         );
         await conversation.turn.send(`hello`, settings);
 
-        expect(conversation.failures.outageResume.value).toEqual({ retryAt, attempt: 1, maxAttempts: 6, scheduled: false });
+        expect(conversation.failures.outageResume.value).toEqual({ retryAt, scheduled: false });
 
         // Answering `retry` starts this window watching for the run the daemon will bring back; answering `wait`
         // stands that watch down. Nothing is written to the transcript either way — a toggle's state belongs on the
@@ -3216,9 +3258,9 @@ describe(`Conversation`, () => {
         expect(conversation.transcript.messages.value).toEqual([]);
     });
 
-    // A 409 means a turn is already running, so these words belong to it as steering; the queue must stay free to
-    // flush once it settles.
-    it(`leaves the queue alone when the refusal is that a turn is already running`, async () => {
+    // A 409 means a turn this window isn't following owns the conversation: the words wait in the queue for it to end,
+    // not as a bubble drawn over a turn they never reached.
+    it(`holds the words in the queue when the refusal is that a turn is already running`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockRejectedValue(daemonRefusal(409, `a turn is already running`));
 
@@ -3234,8 +3276,52 @@ describe(`Conversation`, () => {
             fast: false,
         });
 
-        expect(conversation.error.value).toContain(`turn`);
-        expect(conversation.error.value).toContain(`running`);
+        await waitFor(() => expect(conversation.error.value).toContain(`already has a turn running`));
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`and the docs`]);
+        expect(conversation.transcript.messages.value).toEqual([]);
+    });
+
+    // The burst behind a wall of "Continue" bubbles: a queued nudge the door refused as busy was resent at once, one
+    // drawn bubble per round trip, until the unseen turn ended. Refused once, it now waits for that turn instead.
+    it(`sends a queued message once when the door says a turn is already running, rather than resending it in a loop`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockImplementation((procedure) =>
+            Promise.reject(procedure === `agent.run` ? daemonRefusal(409, `a turn is already running`) : daemonRefusal(404, `nothing is running`)),
+        );
+
+        await conversation.turn.enqueue(CONTINUATIONS.plain);
+        await waitFor(() => expect(conversation.error.value).toContain(`held below`));
+
+        expect(turnBodies()).toHaveLength(1);
+        expect(conversation.transcript.messages.value).toEqual([]);
+        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([CONTINUATIONS.plain]);
+    });
+
+    it(`follows the turn the door said is running, and sends the queued words once it ends`, async () => {
+        const conversation = new Conversation(`c1`);
+        const unseen = turnDaemon([{ kind: `delta`, text: `back on it` }, { kind: `done` }], {
+            head: () => ({ run: `rung-2`, prompt: withResumeNote(`ship the parser`, RESUME_NOTES.stopped), startedAt: Date.now() }),
+        });
+        const after = turnDaemon([{ kind: `delta`, text: `docs done` }, { kind: `done` }]);
+        let busy = true;
+        daemon.mockImplementation((procedure, input, options) => {
+            if (busy && procedure === `agent.run`) {
+                return Promise.reject(daemonRefusal(409, `a turn is already running`));
+            }
+            if (busy && procedure === `agent.attach`) {
+                busy = false;
+                return unseen(procedure, input, options);
+            }
+            return after(procedure, input, options);
+        });
+
+        await conversation.turn.enqueue(`and the docs`);
+        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `docs done` }));
+
+        // Refused once, delivered once: the unseen turn's end is what sent them.
+        expect(turnBodies().map((body) => body[`prompt`])).toEqual([`and the docs`, `and the docs`]);
+        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `and the docs` }]);
+        expect(conversation.transcript.messages.value.some((message) => message.text === `back on it`)).toBe(true);
         expect(conversation.turn.queued.value).toEqual([]);
     });
 
@@ -3395,8 +3481,7 @@ describe(`Conversation`, () => {
 
         await conversation.turn.send(`Hi`, settings);
 
-        expect(conversation.error.value).toContain(`turn`);
-        expect(conversation.error.value).toContain(`running`);
+        await waitFor(() => expect(conversation.error.value).toContain(`already has a turn running`));
         expect(conversation.turn.streaming.value).toBe(false);
     });
 

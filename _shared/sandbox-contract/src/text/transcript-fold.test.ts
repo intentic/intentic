@@ -186,7 +186,8 @@ describe("foldTurn", () => {
                 code: "provider-outage",
                 message: "Anthropic is down.",
                 autoResume: "scheduled",
-                outage: { retryAt: 1, attempt: 2, maxAttempts: 6 },
+                outage: { retryAt: 1 },
+                retries: { made: 1, max: 6 },
             },
         ];
         // The row states what happened and nothing more: what happens next, and the one control that changes it, are
@@ -198,6 +199,23 @@ describe("foldTurn", () => {
             text: "Token refused. The credential is being renewed and this turn continues automatically.",
             noticeWait: "credentialRenewal",
         });
+    });
+
+    // The count lives in the record, so a reader scrolling back sees how many times a stuck turn was sent again.
+    it("says on a stopped turn's row which automatic try comes next, or that the ladder stood down", () => {
+        const timedOut = "Google turn timed out waiting for OpenCode.";
+        const booked: AgentEvent[] = [{ kind: "error", message: timedOut, autoResume: "scheduled", nextAt: 1, retries: { made: 1, max: 3 } }];
+        expect(foldOf("hi", booked).at(-1)).toEqual({ role: "notice", text: `${timedOut} Retrying by itself: attempt 2 of 3.` });
+        const spent: AgentEvent[] = [{ kind: "error", message: timedOut, autoResume: "available", retries: { made: 3, max: 3 } }];
+        expect(foldOf("hi", spent).at(-1)).toEqual({
+            role: "notice",
+            text: `${timedOut} Retried 3 of 3 times by itself; nothing more is sent automatically.`,
+        });
+        // An outage nobody armed says so, instead of promising the breaker's retry.
+        const unarmed: AgentEvent[] = [
+            { kind: "error", code: "provider-outage", message: "Anthropic is down.", autoResume: "available", outage: { retryAt: 1 }, retries: { made: 0, max: 6 } },
+        ];
+        expect(foldOf("hi", unarmed).at(-1)).toEqual({ role: "notice", text: "Anthropic is down. Nothing is retrying it, so the turn is waiting here." });
     });
 
     it("writes the turn's own events down as notices", () => {

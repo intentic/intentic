@@ -5,6 +5,7 @@ import {
     type ProviderRefusal,
     reportsPlanLimits,
     RESUME_NOTES,
+    RETRY_LADDER_TRIES,
     type TodoItem,
     type TurnBreak,
     type TurnBreakPolicy,
@@ -83,8 +84,8 @@ export interface FailureQueries {
     // When a spent allowance reopens by the account's snapshot or the translator's pool.
     readonly reopensAt: (at: { readonly provider: AgentProvider; readonly model: string | undefined; readonly account: string | undefined }) => Promise<number | undefined>;
     readonly limitWay: (params: Parameters<typeof limitWayOf>[1]) => Promise<LimitWay | undefined>;
-    // When the stop ladder's next rung would fire, or undefined once it is spent.
-    readonly stopResumeAt: (conversationId: string) => number | undefined;
+    // How many rungs the stop ladder has spent, and when its next would fire (undefined once it is spent).
+    readonly stopLadder: (conversationId: string) => { readonly made: number; readonly nextAt: number | undefined };
 }
 
 // A record a classification files; the turn performs each fire-and-forget, with its own named failure line.
@@ -182,7 +183,8 @@ export const outageFrame = (event: ErrorFrame, armed: boolean, outage: OutageSta
         ...event,
         autoResume: armed ? "scheduled" : "available",
         ...(armed ? { nextAt: retryAt } : {}),
-        outage: { retryAt, attempt: outage.attempt + 1, maxAttempts: OUTAGE_MAX_ATTEMPTS },
+        outage: { retryAt },
+        retries: { made: outage.attempt, max: OUTAGE_MAX_ATTEMPTS },
     };
 };
 
@@ -235,12 +237,15 @@ const stoppedFrame = async (
     stopped: { readonly conversationId: string; readonly ran: boolean; readonly contextTokens: number | undefined },
 ): Promise<ErrorFrame> => {
     const armed = (await queries.breakPolicy(stopped.conversationId, "stopped")) === "retry";
-    const nextAt = armed ? queries.stopResumeAt(stopped.conversationId) : undefined;
+    const ladder = queries.stopLadder(stopped.conversationId);
+    const nextAt = armed ? ladder.nextAt : undefined;
     return {
         ...event,
         held: { ran: stopped.ran, ...opt("contextTokens", stopped.contextTokens) },
         autoResume: nextAt === undefined ? "available" : "scheduled",
         ...opt("nextAt", nextAt === undefined ? undefined : Math.round(nextAt / 1000)),
+        // Stated while armed and once any rung has gone, so the reader always knows how far the ladder got.
+        ...(armed || ladder.made > 0 ? { retries: { made: ladder.made, max: RETRY_LADDER_TRIES } } : {}),
     };
 };
 

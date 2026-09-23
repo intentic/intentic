@@ -201,9 +201,9 @@ describe(`draftReport`, () => {
             NOW,
         );
         expect(rows.map((row) => [row.status, row.model, row.elapsed])).toEqual([
-            [`skipped`, `gemini-3-flash`, undefined],
-            [`refused`, `gpt-5.6`, `58s`],
-            [`answered`, `claude-haiku`, `7s`],
+            [`skipped`, `Gemini 3 Flash`, undefined],
+            [`refused`, `GPT 5.6`, `58s`],
+            [`answered`, `Claude Haiku`, `7s`],
         ]);
         expect(rows[0]?.detail).toBe(`usage limit reached`);
         expect(rows[1]?.detail).toBe(`no capacity`);
@@ -238,7 +238,7 @@ describe(`draftReport`, () => {
         expect(skipped?.title).not.toBe(refused?.title);
     });
 
-    test(`drops the release stamp from the model and the boilerplate from the refusal`, () => {
+    test(`names the model as the rest of the app does, and drops the boilerplate from the refusal`, () => {
         const rows = draftReport(
             {
                 startedAt: 0,
@@ -258,10 +258,10 @@ describe(`draftReport`, () => {
         );
         const [refused, asking] = rows;
         const googleReason = `Google usage limit reached — the allowance is exhausted. Try again once it resets.`;
-        expect(refused?.model).toBe(`gemini-3.5-flash-extra-low`);
+        expect(refused?.model).toBe(`Gemini 3.5 Flash Extra Low`);
         expect(refused?.detail).toBe(googleReason.slice(0, googleReason.indexOf(` — `)));
         expect(refused?.elapsed).toBe(`19s`);
-        expect(asking?.model).toBe(`claude-haiku-4-5`);
+        expect(asking?.model).toBe(`Claude Haiku 4.5`);
         expect(asking?.status).toBe(`asking`);
         expect(asking?.elapsed).toBe(`2s`);
     });
@@ -282,7 +282,7 @@ describe(`draftReport`, () => {
 
     test(`an in-flight ask shows its elapsed, minutes and all`, () => {
         const rows = draftReport(running([{ provider: `gemini`, model: `gemini-3-flash`, status: `asking`, at: 2_000 }]), 64_000);
-        expect(rows.map((row) => [row.status, row.model, row.elapsed])).toEqual([[`asking`, `gemini-3-flash`, `1m 2s`]]);
+        expect(rows.map((row) => [row.status, row.model, row.elapsed])).toEqual([[`asking`, `Gemini 3 Flash`, `1m 2s`]]);
     });
 
     test(`a failure the steps don't explain gets the report's own reason as its last row`, () => {

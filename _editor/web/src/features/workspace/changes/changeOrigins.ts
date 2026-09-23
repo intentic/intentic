@@ -1,6 +1,7 @@
 import type { GitDiffSide, LandedMessage, LandedMessageDraft, LandedMessageStep, RepoChanges } from "@intentic/api-contract";
 import { landedCommitMessage } from "@intentic/sandbox-contract";
 import { t } from "@intentic/ui/i18n";
+import { modelLabelFor } from "../../chat/accounts/providerCatalog";
 
 // Attribution layer over each repo's `origins` map (path -> agent ids that landed it, newest first); cleared on commit.
 // Only agents are ever named — an unlanded change carries no origin, and absence is the signal, not a "you" badge.
@@ -92,9 +93,6 @@ const seconds = (ms: number): string => {
     return total < 60 ? `${total}s` : `${Math.floor(total / 60)}m ${total % 60}s`;
 };
 
-// Strips a trailing release-date stamp from a model id (`claude-haiku-4-5-20251001` -> `claude-haiku-4-5`).
-const shortModel = (model: string): string => model.replace(/-\d{8}$/, ``).replace(/-\d{4}-\d{2}-\d{2}$/, ``);
-
 // First clause of a refusal reason: cut at the em-dash vendors use to hang advice off the fact, or at the first
 // sentence end.
 const headline = (reason: string): string => {
@@ -110,7 +108,7 @@ export interface DraftReportRow {
     readonly key: string;
     // A step status, or `reading`/`failed` for the two draft-level rows with no model of their own.
     readonly status: LandedMessageStep[`status`] | `reading` | `failed`;
-    // Model name, shortened; absent on the two draft-level rows.
+    // What the model is called (providerCatalog.modelLabelFor); absent on the two draft-level rows.
     readonly model?: string;
     // What happened, in a few words: the reason's headline, or the phase.
     readonly detail?: string;
@@ -121,7 +119,7 @@ export interface DraftReportRow {
 }
 
 const stepRow = (step: LandedMessageStep, index: number, now: number): DraftReportRow => {
-    const model = shortModel(step.model);
+    const model = modelLabelFor(step.provider, step.model);
     const elapsed =
         step.status === `asking`
             ? step.at === undefined

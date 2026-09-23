@@ -2,10 +2,10 @@
 import { Button, Icon } from "@intentic/ui";
 import { computed, ref, watch } from "vue";
 import { RouterLink } from "vue-router";
-import { isTrialProvider, TRIAL_NOTICE } from "@intentic/sandbox-contract";
+import { isTrialProvider, TRIAL_NOTICE, TRIAL_PROVIDER } from "@intentic/sandbox-contract";
 import { trialExhausted } from "../session/access";
 import { useAgents } from "../../agents/fleet/useAgents";
-import { trialStatus } from "../accounts/providerCatalog";
+import { modelLabelFor, trialStatus } from "../accounts/providerCatalog";
 import { loadTrialStatus } from "../models/useChat-catalog";
 import { usePaneView } from "./useChat-view";
 import { useSandbox } from "../../sandbox/client/useSandbox";
@@ -87,7 +87,7 @@ const trialNotice = computed(() => {
     // Which model answered, once one has: the trial serves a different real model per message (trial-ladder.ts), so
     // this is the only way to tell a weak answer from a fallback rung. Leads the sentence only after a turn has run.
     const served = trialStatus.value.servedModel;
-    const answered = served === undefined ? `` : `Last answer: ${served}. `;
+    const answered = served === undefined ? `` : `Last answer: ${modelLabelFor(TRIAL_PROVIDER, served)}. `;
     // The pool working for its answer, said last and mildly: it explains a slower or weaker turn.
     const strained = trialStatus.value.health === `degraded` ? ` Trial capacity is tight right now, so answers can be slower.` : ``;
     return `${answered}${left}. Each agent step costs one. ${TRIAL_NOTICE}${strained}`;

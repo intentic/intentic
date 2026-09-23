@@ -30,6 +30,7 @@ mock.module(`../../../chat/accounts/providerCatalog`, () => ({
     endpointProviders: ref([]),
     providerModels: ref({}),
     modelOptionsFor: (provider: string) => CATALOGS[provider] ?? [],
+    modelLabelFor: (provider: string, model: string) => CATALOGS[provider]?.find((option) => option.value === model)?.label,
     providerDisplayLabel: (provider: string) => provider.toUpperCase(),
 }));
 

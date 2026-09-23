@@ -1,18 +1,7 @@
 import { test, expect } from "bun:test";
-import { humanizeModelId, listModels, suggestedModels } from "./model-discovery.js";
+import { listModels, suggestedModels } from "./model-discovery.js";
 
 const jsonResponse = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), { status });
-
-/* One humanizer for every provider that has to invent a label. */
-test("humanizeModelId title-cases the tokens and keeps vendor acronyms upper", () => {
-    expect(humanizeModelId("gpt-5-codex")).toBe("GPT 5 Codex");
-    expect(humanizeModelId("gpt-oss-120b-medium")).toBe("GPT OSS 120b Medium");
-    expect(humanizeModelId("o3-mini")).toBe("O3 Mini");
-    expect(humanizeModelId("grok-4-fast")).toBe("Grok 4 Fast");
-    expect(humanizeModelId("gemini-3.1-pro-low")).toBe("Gemini 3.1 Pro Low");
-    // Dated and dotted segments are the vendor's own and pass through as they are.
-    expect(humanizeModelId("grok-4.20-0309-reasoning")).toBe("Grok 4.20 0309 Reasoning");
-});
 
 test("listModels reads both the `data` and `models` spellings of an OpenAI-compatible list", async () => {
     const data = (async () => jsonResponse({ data: [{ id: "a", owned_by: "openai" }] })) as unknown as typeof fetch;

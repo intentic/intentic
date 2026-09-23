@@ -1,4 +1,4 @@
-import { type AccountUsage, gatingWindows, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
+import { type AccountUsage, gatingWindows, humanizeModelId, type ModelRef, type UsageWindow } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { jsonFile } from "../store/json-file.js";
 import type { TurnLimit } from "./fleet-limit.js";
@@ -58,7 +58,7 @@ export const fileObservedLimitStore = (path: string): ObservedLimitStore => {
 // Pool key for a model's observed allowance; namespaced so it can't collide with a kind a provider publishes itself.
 const kindOf = (model: string): string => `observed:${model}`;
 
-/** Display name for a model id, from the provider's own catalog; undefined leaves the id standing as the pool's name. */
+/** Display name for a model id, from the provider's own catalog; undefined names the pool by the id, humanized. */
 export type ModelLabels = (model: string) => string | undefined;
 
 // One window per model the account is out of. No reset instant and no window length: the provider published neither,
@@ -66,7 +66,7 @@ export type ModelLabels = (model: string) => string | undefined;
 export const observedWindows = (spent: ObservedSpend, labels?: ModelLabels): UsageWindow[] =>
     Object.keys(spent).map((model) => ({
         kind: kindOf(model),
-        label: labels?.(model) ?? model,
+        label: labels?.(model) ?? humanizeModelId(model),
         utilization: 100,
         // Scoped to the model that was refused: nothing here says whether the pool behind it covers anything else.
         gates: { models: [model] },
@@ -89,7 +89,7 @@ const gatingLimits = (spent: ObservedSpend, model: ModelRef, labels: ModelLabels
     const gating = new Set(gatingWindows({ windows: observedWindows(spent, labels), measuredAt: 0 }, model).map((window) => window.kind));
     return Object.keys(spent)
         .filter((entry) => gating.has(kindOf(entry)))
-        .map((entry) => ({ model: entry, pool: labels?.(entry) ?? entry }));
+        .map((entry) => ({ model: entry, pool: labels?.(entry) ?? humanizeModelId(entry) }));
 };
 
 // What the ledger says about a fleet for one model, in fleet-limit's own shape. Not fleetLimit itself: there an account

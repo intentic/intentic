@@ -13,8 +13,8 @@ Every check that reads the checkout and nothing else, listed once and run everyw
   placed by the rule that computes it rather than by a hand-tuned offset, no tracked text file carries a control
   byte, every skill description fits the budget the prompt pays for on every call, no `.astro` frontmatter holds a
   script tag for vite's dependency scan to lift out and parse, the words a reader sees live in a message catalog
-  rather than in a template and every key one asks for is in one, and the one picture that defines the site's four
-  product nouns is read from a docs page and never from the home page.
+  rather than in a template and every key one asks for is in one, no model label falls back to its raw id, and the
+  one picture that defines the site's four product nouns is read from a docs page and never from the home page.
 
 ## Key files
 

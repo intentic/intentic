@@ -115,7 +115,7 @@ export type ConversationEvent =
     | { readonly kind: "resume-dropped"; readonly record: "auth" | "outage" | "held" }
     // The held turn's one dispatch, a limit's appointment or a stop-ladder rung; answers whether it may go.
     | { readonly kind: "held-fired"; readonly ladder: boolean }
-    // A spent stop ladder stands down: the hold goes, and so does the count it spent.
+    // A spent stop ladder stands down: the hold stays for a press, never fired by the pass again; the count restarts.
     | { readonly kind: "ladder-spent" }
     // A turn took the conversation's steering seam; it starts unwatched, whatever the last one was.
     | { readonly kind: "turn-registered" }
@@ -572,7 +572,7 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
     "auth-firing": (state, event) => unchanged(withResume(state, { authFiring: event.firing }), undefined),
     "resume-dropped": (state, event) => unchanged(withResume(state, { [event.record]: undefined }), undefined),
     "held-fired": (state, event) => onHeldFired(state, event.ladder),
-    "ladder-spent": (state) => unchanged(withResume(state, { held: undefined, stopTries: 0 }), undefined),
+    "ladder-spent": (state) => unchanged(withResume(state, { held: state.resume.held && { ...state.resume.held, fired: true }, stopTries: 0 }), undefined),
     "turn-registered": (state) => unchanged({ ...state, steered: false }, undefined),
     "person-steered": (state) => unchanged({ ...state, steered: true }, undefined),
     "steer-reserved": onSteerReserved,

@@ -153,9 +153,7 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
     const { message, code } = event;
     switch (code) {
         case "provider-outage":
-            return event.outage === undefined
-                ? { role: "notice", text: `${message} Nothing is retrying it, so the turn is waiting here.` }
-                : { role: "notice", text: `${message} Retrying by itself: attempt ${event.outage.attempt} of ${event.outage.maxAttempts}.` };
+            return { role: "notice", text: `${message} ${retryClause(event) ?? `Nothing is retrying it, so the turn is waiting here.`}` };
         case "claude-token-refused":
             return event.autoResume === "scheduled"
                 ? {
@@ -170,9 +168,22 @@ const errorRow = (event: Extract<AgentEvent, { kind: "error" }>): TranscriptRow 
             break;
     }
     if (!turnedAwayCode(code)) {
-        return { role: "notice", text: message };
+        const clause = retryClause(event);
+        return { role: "notice", text: clause === undefined ? message : `${message} ${clause}` };
     }
     return heldRow(event);
+};
+
+// What a laddered wall's automatic re-runs are doing, said on the failure's own row so the count stays in the record.
+const retryClause = (event: Extract<AgentEvent, { kind: "error" }>): string | undefined => {
+    const { retries } = event;
+    if (retries === undefined) {
+        return undefined;
+    }
+    if (event.autoResume === "scheduled") {
+        return `Retrying by itself: attempt ${retries.made + 1} of ${retries.max}.`;
+    }
+    return retries.made >= retries.max ? `Retried ${retries.made} of ${retries.max} times by itself; nothing more is sent automatically.` : undefined;
 };
 
 // The turn's opening user row: text, timestamp, attachments, and whatever the daemon later stamps onto it (checkpoint,

@@ -4,13 +4,14 @@ import {
     type ChatRoute,
     type ChatRouteAsk,
     FENCE,
+    humanizeModelId,
     type ModelOffer,
     type ModelPick,
-    type ParsedPick,
-    type Persona,
     modelPinKey,
     offerLines,
+    type ParsedPick,
     parseModelPick,
+    type Persona,
     replyFields,
 } from "@intentic/sandbox-contract";
 import type { Services } from "../../composition.js";
@@ -306,7 +307,7 @@ const modelVerdict = (pick: ModelPick | undefined, offer: ModelOffer): ModelVerd
     if (pick === undefined) {
         return { reason: `Couldn't choose a model for this chat, so it keeps the one it had.` };
     }
-    const label = offer.models.find((model) => model.provider === pick.provider && model.model === pick.model)?.label ?? pick.model;
+    const label = offer.models.find((model) => model.provider === pick.provider && model.model === pick.model)?.label ?? humanizeModelId(pick.model);
     return { pick, reason: `Read the opening message as work for ${pickWords(pick, label)}.` };
 };
 

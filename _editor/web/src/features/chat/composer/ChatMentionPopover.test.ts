@@ -37,6 +37,7 @@ const SOURCES: QuickPickSources = {
         entries: [entry(`claude`, `claude-opus-5`, `Claude Opus 5`), entry(`claude`, `claude-sonnet-4-5`, `Claude Sonnet 4.5`)],
         provider: `claude`,
         model: `claude-opus-5`,
+        label: `Claude Opus 5`,
         isReady: () => true,
     },
     effort: { options: [{ label: `High`, value: `high` }], picked: `high` },

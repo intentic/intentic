@@ -1,6 +1,6 @@
 import type { SandboxSettings } from "@intentic/api-contract";
 import { SandboxSettingsSchema } from "@intentic/api-contract";
-import { type ChatRoute, type Persona, pinnedModelLabel } from "@intentic/sandbox-contract";
+import type { ChatRoute, Persona } from "@intentic/sandbox-contract";
 import { test, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { effectScope, type EffectScope, type Ref, ref } from "vue";
@@ -92,7 +92,7 @@ const chatWith = (over: ChatOver = {}): Chat => {
 
 // A pin the static catalog knows, so the sentence under test carries the label a reader would actually see.
 const JUDGE_PIN = { provider: `claude`, model: `claude-haiku-4-5-20251001` };
-const JUDGE_LABEL = pinnedModelLabel(JUDGE_PIN);
+const JUDGE_LABEL = `Claude Haiku 4.5`;
 const JUDGE = `${JUDGE_PIN.provider}:${JUDGE_PIN.model}`;
 const PICK = { provider: `claude`, model: `claude-opus-5`, effort: `high`, account: `work` };
 const WORK = `the invoice totals are off in billing`;

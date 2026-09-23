@@ -1,6 +1,6 @@
 import type { Options, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
-import { CLAUDE_SEED_MODELS, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
+import { CLAUDE_SEED_MODELS, humanizeModelId, type Model, type ModelBadge, ModelSchema } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { Logger } from "pino";
 import { discoveredCatalog } from "../../agent/models/model-catalog.js";
@@ -119,7 +119,7 @@ const fetchApiModels = async (oauthToken: string, fetchImpl: typeof fetch, logge
         return undefined;
     }
     const json = (await response.json().catch(() => undefined)) as { data?: { id: string; display_name?: string }[] } | undefined;
-    return (json?.data ?? []).map((model) => ({ id: model.id, label: model.display_name ?? model.id }));
+    return (json?.data ?? []).map((model) => ({ id: model.id, label: model.display_name ?? humanizeModelId(model.id) }));
 };
 
 // The first credential the REST catalog answers for, tried in order. One account's org can forbid OAuth REST

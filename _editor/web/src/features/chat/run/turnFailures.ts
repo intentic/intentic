@@ -15,12 +15,10 @@ import { importOrReload } from "../../../router/staleChunk";
 
 type TurnError = Extract<TurnFact, { kind: "error" }>;
 
-// A provider outage in progress: next retry time, attempts used and allowed, and whether it is armed to fire
-// automatically. Drives the composer's outage banner.
+// A provider outage in progress: when the breaker next lets a retry through (epoch seconds), and whether this
+// conversation is armed to take it; the tries it has spent ride the pick-up (PickUp.retries).
 export interface OutageResume {
     readonly retryAt: number;
-    readonly attempt: number;
-    readonly maxAttempts: number;
     readonly scheduled: boolean;
 }
 
@@ -165,7 +163,12 @@ export class TurnFailures {
         // the block and pressing it would just re-fail. `held` rides through, so the press re-runs the turn the daemon
         // kept rather than appending a word after it.
         if (code === undefined) {
-            this.host.pickUp.value = { reason: `stopped`, ...(error.held === undefined ? {} : { held: error.held }) };
+            this.host.pickUp.value = {
+                reason: `stopped`,
+                ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }),
+                ...(error.retries === undefined ? {} : { retries: error.retries }),
+                ...(error.held === undefined ? {} : { held: error.held }),
+            };
         }
     }
 
@@ -199,9 +202,13 @@ export class TurnFailures {
             return;
         }
         const scheduled = error.autoResume === `scheduled`;
-        this.outageResume.value = { ...outage, scheduled };
+        this.outageResume.value = { retryAt: outage.retryAt, scheduled };
         // Same pickUp shape every failure leaves, so the card is one card; the press stays live whatever is booked.
-        this.host.pickUp.value = { reason: `outage`, ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }) };
+        this.host.pickUp.value = {
+            reason: `outage`,
+            ...(error.nextAt === undefined ? {} : { nextAt: error.nextAt * 1_000 }),
+            ...(error.retries === undefined ? {} : { retries: error.retries }),
+        };
         if (scheduled) {
             this.scheduleReattach(outage.retryAt * 1000, OUTAGE_PROBE);
         }

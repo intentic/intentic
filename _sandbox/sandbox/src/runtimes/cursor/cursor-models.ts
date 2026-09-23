@@ -1,5 +1,5 @@
 import type { ModelListItem, ModelParameterValue, ModelSelection } from "@cursor/sdk";
-import type { Model } from "@intentic/sandbox-contract";
+import { humanizeModelId, type Model } from "@intentic/sandbox-contract";
 
 // Pure functions over Cursor.models.list()'s response, kept apart from the fetching service (cursor-catalog.ts) so the
 // mapping is testable without a credential. Nothing here is curated: a model Cursor adds tomorrow reaches the picker
@@ -66,7 +66,7 @@ export const toModel = (item: ModelListItem): Model => {
     const dial = effortParameterOf(item);
     return {
         id: item.id,
-        label: item.displayName !== "" ? item.displayName : item.id,
+        label: item.displayName !== "" ? item.displayName : humanizeModelId(item.id),
         ...(item.description !== undefined && item.description !== "" ? { description: item.description } : {}),
         ...(dial !== undefined ? { efforts: dial.values.map(tierOf) } : {}),
     };
