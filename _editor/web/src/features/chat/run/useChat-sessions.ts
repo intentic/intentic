@@ -68,6 +68,10 @@ const fetchAgentTranscript = async (conversation: Conversation): Promise<AgentTr
 const hydrate = async (conversation: Conversation): Promise<boolean> => {
     // Must run before attaching, or the live turn paints over an empty transcript and clobbers the mirror.
     await conversation.transcript.paintCached();
+    // A draft the daemon never filed has no record or run to read; the roster registering it re-hydrates (paneAttach).
+    if (!conversation.registered.value && conversation.session.value === undefined) {
+        return true;
+    }
     // Whether anything is there already, not whether this call put it there (the sweep may have painted it).
     const seeded = conversation.transcript.messages.value.length === 0;
     // Only case with nothing to show meanwhile: report loading rather than inviting a fresh start.

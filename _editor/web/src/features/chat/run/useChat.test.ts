@@ -1,7 +1,7 @@
 import { resetSandboxScope } from "@intentic/extension-api";
 import { STATE_DIR } from "@intentic/constants";
 import { type AttachFrame, sandboxRouteName, TRIAL_PROVIDER, TrialStatusSchema } from "@intentic/sandbox-contract";
-import { nextTick, ref, toRaw } from "vue";
+import { nextTick, ref, toRaw, watch } from "vue";
 import { describe, it, expect, beforeEach, afterEach, mock, spyOn, jest } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -1954,6 +1954,24 @@ describe(`hydrating a conversation whose turn is still running`, () => {
 
     afterEach(() => {
         unstubAllGlobals();
+    });
+
+    it(`asks the daemon nothing for a draft it never filed, so the pane shows no loading state`, async () => {
+        const procedures: string[] = [];
+        daemonAnswers((procedure) => {
+            procedures.push(procedure);
+            return undefined;
+        });
+        const conversation = useChat().active.value;
+        const loadingSeen: boolean[] = [];
+        const stop = watch(conversation.transcript.loading, (loading) => loadingSeen.push(loading));
+
+        hydrateOnce(conversation);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        stop();
+
+        expect(loadingSeen).not.toContain(true);
+        expect(procedures.filter((procedure) => procedure.startsWith(`agent`) || procedure.startsWith(`sessions`))).toEqual([]);
     });
 
     it(`runs one pass at a time, so a second trigger cannot answer about a tab the first has moved on`, async () => {
