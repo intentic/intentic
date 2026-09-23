@@ -2,7 +2,7 @@ import { resetSandboxScope } from "@intentic/extension-api";
 import { fileBoundQueryKeys, staleQueryKeys, staleRuntimeQueryKeys, type SystemEvent } from "@intentic/sandbox-contract";
 import { contributedFileBindings } from "../../../extension-host/fileBindings";
 import { emitFilesChanged } from "../../../extension-host/fileEvents";
-import { emitRefsChanged } from "../../../extension-host/refEvents";
+import { emitRefsChanged, emitReposChanged } from "../../../extension-host/repoEvents";
 import { dropEditBuffers } from "../../workspace/files/useEditBuffers";
 import { desyncAgents } from "../../agents/fleet/useAgents";
 import { auditRoster, refreshAgents, setAgents } from "../../agents/fleet/useAgents-registry";
@@ -156,6 +156,8 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             // Watcher never sees `.git` paths, so no workspaceChanged batch covers this; the daemon diffs its own repo
             // discovery.
             void queryClient.invalidateQueries({ queryKey: rpcPrefix(`panels.list`) });
+            // Extensions own their own caches; this only announces the new set (see extension-host/repoEvents).
+            emitReposChanged(event.repos);
             return;
         case `refsChanged`: {
             // Refs moved (commit, checkout, branch, tag, rebase) outside this tab; three things go stale:
@@ -167,7 +169,7 @@ export const applySystemEvent = (event: SystemEvent, sandboxId: string): void =>
             if (worktreeMovedRecently()) {
                 dropEditBuffers();
             }
-            // Extensions own their own caches; this only announces that a ref moved (see extension-host/refEvents).
+            // Extensions own their own caches; this only announces that a ref moved (see extension-host/repoEvents).
             emitRefsChanged(event.repos);
             return;
         }

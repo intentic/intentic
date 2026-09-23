@@ -1,12 +1,10 @@
 import { useQueries, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { computed, type ComputedRef } from "vue";
+import { computed, type ComputedRef, onScopeDispose } from "vue";
 import { host } from "./host.js";
 import { accentOf, monogramOf, projectIds, type ProjectTile, summaryOf } from "./projects.js";
 
 // The tiles: the daemon's repository list, each with its README's first paragraph and whether it can be looked at
-// running. Re-read on a slow clock, and at once after a press makes a new one.
-
-const REPOS_EVERY_MS = 30_000;
+// running. Never polled: the host's repo-set push re-reads it the moment a clone, scaffold or delete lands.
 
 export function useProjects() {
     const api = host();
@@ -16,8 +14,9 @@ export function useProjects() {
         queryKey: reposKey,
         queryFn: () => api.sandbox.rpc.workspace.repos(),
         enabled: computed(() => api.sandbox.reachable()),
-        refetchInterval: REPOS_EVERY_MS,
     });
+    const reposMoved = api.workspace.onDidChangeRepos(() => void queryClient.invalidateQueries({ queryKey: reposKey.value }));
+    onScopeDispose(() => reposMoved.dispose());
     const ids = computed(() => projectIds(repos.data.value?.repos ?? []));
 
     // One small read per tile, cached by path; a README that does not exist is an empty summary, not an error.

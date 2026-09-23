@@ -1,6 +1,7 @@
 import type { SubagentSession } from "@intentic/sandbox-contract";
 import type { PendingChildCard } from "./children.js";
-import { type BackgroundJob, backgroundJobOf, jobFinished, type JobReport, jobReport, runningJobsOf } from "../tools/background-jobs.js";
+import { whenFileAppears } from "../../file-appears.js";
+import { type BackgroundJob, backgroundJobOf, jobFinished, type JobReport, jobReport, jobStatusPath, runningJobsOf } from "../tools/background-jobs.js";
 import { type SubagentWaitOptions, type SubagentWaitUntil, waitForSubagent } from "./subagents.js";
 import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
@@ -14,7 +15,7 @@ export interface WorkWaitOutcome {
     readonly job?: JobReport;
 }
 
-// A job's completion is bin/tmux-run's status file appearing; polled, in ms.
+// A job's completion is bin/tmux-run's status file appearing; polled at this cadence, in ms, only where unwatchable.
 const JOB_POLL_MS = 500;
 
 // The first of these jobs to finish, or the timeout, or the abort.
@@ -27,12 +28,23 @@ const waitForJobs = (
     options: Pick<SubagentWaitOptions, "timeoutMs" | "signal">,
 ): Promise<WorkWaitOutcome> =>
     new Promise((resolve) => {
-        const deadline = Date.now() + options.timeoutMs;
-        let timer: ReturnType<typeof setTimeout> | undefined;
+        if (options.signal?.aborted === true) {
+            resolve({ outcome: "aborted" });
+            return;
+        }
+        const stops: (() => void)[] = [];
+        let poll: ReturnType<typeof setInterval> | undefined;
+        let settled = false;
         const settle = (outcome: Promise<WorkWaitOutcome>): void => {
-            if (timer !== undefined) {
-                clearTimeout(timer);
+            if (settled) {
+                return;
             }
+            settled = true;
+            for (const stop of stops.splice(0)) {
+                stop();
+            }
+            clearInterval(poll);
+            clearTimeout(deadline);
             options.signal?.removeEventListener("abort", onAbort);
             resolve(outcome);
         };
@@ -41,26 +53,35 @@ const waitForJobs = (
             const done = jobs.find(jobFinished);
             if (done !== undefined) {
                 settle(jobReport(actors, done).then((job) => ({ outcome: "finished", job })));
-                return;
             }
-            if (Date.now() >= deadline) {
+        };
+        const deadline = setTimeout(
+            () => {
+                look();
                 const only = jobs.length === 1 ? jobs[0] : undefined;
                 settle(
                     only === undefined
                         ? Promise.resolve({ outcome: "timeout" })
                         : jobReport(actors, only).then((job) => ({ outcome: "timeout", job })),
                 );
+            },
+            Math.max(0, options.timeoutMs),
+        );
+        deadline.unref();
+        options.signal?.addEventListener("abort", onAbort, { once: true });
+        for (const job of jobs) {
+            const stop = whenFileAppears(jobStatusPath(job), look);
+            if (settled) {
+                stop?.();
                 return;
             }
-            timer = setTimeout(look, Math.min(JOB_POLL_MS, Math.max(0, deadline - Date.now())));
-            timer.unref();
-        };
-        if (options.signal?.aborted === true) {
-            resolve({ outcome: "aborted" });
-            return;
+            if (stop === undefined) {
+                poll ??= setInterval(look, JOB_POLL_MS);
+                poll.unref();
+            } else {
+                stops.push(stop);
+            }
         }
-        options.signal?.addEventListener("abort", onAbort, { once: true });
-        look();
     });
 
 const fromSubagent = async (actors: Actors, conversationId: string, options: SubagentWaitOptions): Promise<WorkWaitOutcome> => {

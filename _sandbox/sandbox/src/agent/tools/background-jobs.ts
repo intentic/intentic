@@ -7,6 +7,7 @@ import { type AgentJob, profileOf, type TurnProfile, TurnProfileSchema } from "@
 import { z } from "zod";
 import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 import type { Holding } from "../../agents/actor/conversation-holdings.js";
+import { whenFileAppears } from "../../file-appears.js";
 
 // Every `run_in_background` Bash call, which outlives the per-turn CLI in its own pane, held by its conversation's
 // actor, whose card lists it (`jobs-shown`).
@@ -30,8 +31,8 @@ const COMMAND_LINE_CHARS = 120;
 // Bytes of output tail a reader is handed.
 export const OUTPUT_TAIL_BYTES = 4_000;
 
-// Longest wait, in ms, between a command exiting and its card saying so.
-const END_POLL_MS = 3_000;
+// Longest wait, in ms, between a command exiting and its card saying so when the status file's own arrival went unseen.
+const END_POLL_MS = 30_000;
 
 // Ended jobs a conversation's card keeps, newest last.
 export const ENDINGS_KEPT = 8;
@@ -97,6 +98,8 @@ interface JobRecord {
     shellId: string | undefined;
     toolUseId: string | undefined;
     notice: Notice;
+    // Stops watching for the status file; the card moves the moment it lands.
+    unwatch: (() => void) | undefined;
 }
 
 // A conversation's jobs, by job id, until nothing depends on one any more.
@@ -161,6 +164,8 @@ const sweepEnds = (actors: Actors): void => {
     const moved = new Set<string>();
     for (const [, record] of jobs) {
         if (!ended(actors, record.job) && jobFinished(record.job) && noteEnded(actors, record.job)) {
+            record.unwatch?.();
+            record.unwatch = undefined;
             moved.add(record.job.conversationId);
         }
     }
@@ -189,9 +194,16 @@ const followEnds = (actors: Actors): void => {
     }
 };
 
+const followJob = (actors: Actors, record: JobRecord): void => {
+    record.unwatch = whenFileAppears(jobStatusPath(record.job), () => sweepEnds(actors));
+    followEnds(actors);
+};
+
 // Every path out of JOBS comes through here, so a job that exited is written down before it is forgotten.
 const forgetJob = (actors: Actors, record: JobRecord): void => {
     actors.holdings(JOBS).drop(record.job.id);
+    record.unwatch?.();
+    record.unwatch = undefined;
     if (jobFinished(record.job)) {
         noteEnded(actors, record.job);
     }
@@ -242,12 +254,12 @@ export const openBackgroundJob = (
         startedAt: Date.now(),
         profile: seed.profile,
     };
-    const record: JobRecord = { job, adopted: false, shellId: undefined, toolUseId: spec.toolUseId, notice: "none" };
+    const record: JobRecord = { job, adopted: false, shellId: undefined, toolUseId: spec.toolUseId, notice: "none", unwatch: undefined };
     const actors = seed.conversations;
     actors.holdings(JOBS).hold(job.conversationId, id, record);
     persist(record);
     publish(actors, job.conversationId);
-    followEnds(actors);
+    followJob(actors, record);
     return job;
 };
 
@@ -259,7 +271,14 @@ const recordOf = (dir: string): JobRecord | undefined => {
             return undefined;
         }
         const { shellId, adopted, turn, ...rest } = parsed.data;
-        return { job: { ...rest, dir, profile: profileOf(turn) }, adopted: adopted === true, shellId, toolUseId: undefined, notice: "none" };
+        return {
+            job: { ...rest, dir, profile: profileOf(turn) },
+            adopted: adopted === true,
+            shellId,
+            toolUseId: undefined,
+            notice: "none",
+            unwatch: undefined,
+        };
     } catch {
         return undefined;
     }
@@ -276,12 +295,10 @@ export const restoreBackgroundJobs = (actors: Actors, now: number = Date.now()):
         }
         jobs.hold(record.job.conversationId, record.job.id, record);
         restored.push(record.job);
+        followJob(actors, record);
     }
     for (const conversationId of new Set(restored.map((job) => job.conversationId))) {
         publish(actors, conversationId);
-    }
-    if (restored.length > 0) {
-        followEnds(actors);
     }
     return restored;
 };

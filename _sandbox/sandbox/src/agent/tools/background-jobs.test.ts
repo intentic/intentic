@@ -296,6 +296,24 @@ describe("background job adoption", () => {
         expect(started).toEqual([]);
     });
 
+    // The watch's own check is every 30s; a job's status file landing is what wakes, measured at 3–27s before.
+    it("wakes the conversation the moment a watched job's status file lands, not at its next check", async () => {
+        stop = startWatcherRuntime(runtime());
+        const job = opened("conv-prompt", "pnpm test");
+        expect(await adoptBackgroundJobs(actors, "conv-prompt", logger)).toBe(1);
+        finish(job);
+        await delivered(() => started.length);
+        expect(started).toHaveLength(1);
+        expect(checks).toEqual([completionCheck(job), completionCheck(job)]);
+    });
+
+    it("moves the card the moment the status file lands, without a sweep", async () => {
+        const job = opened("conv-card-now");
+        finish(job, "0");
+        await delivered(() => (listed("conv-card-now") ?? []).filter((entry) => entry.endedAt !== undefined).length);
+        expect(listed("conv-card-now")).toMatchObject([{ id: job.id, exitCode: 0 }]);
+    });
+
     it("reports a job that finished unseen straight away", async () => {
         stop = startWatcherRuntime(runtime());
         const job = opened("conv-late", "pnpm test");

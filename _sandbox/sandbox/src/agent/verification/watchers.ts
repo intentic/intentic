@@ -7,6 +7,7 @@ import type { ConversationActors } from "../../agents/actor/conversation-actors.
 import type { Holding } from "../../agents/actor/conversation-holdings.js";
 import { turnCliEnv } from "../../capabilities/turn-env.js";
 import type { Services } from "../../composition.js";
+import { whenFileAppears } from "../../file-appears.js";
 import { deliverWake, type WakeDoors } from "../run/turn/wake-delivery.js";
 import { type CheckOptions, type CheckResult, type RunCheck, watchCheck, type WatchPlacement } from "./watch-check.js";
 import type { JournalledWatch, WatchJournal } from "./watch-journal.js";
@@ -46,6 +47,8 @@ export interface WatcherSpec {
     readonly placement?: WatchPlacement;
     // The source a fetching check's output is outside content from.
     readonly outside?: string;
+    // A local file whose appearance is the condition moving: checked at once, the interval only the floor.
+    readonly signalPath?: string;
     // The arming turn's profile, snapshotted at arm time: the wake continues that turn rather than starting a new one.
     readonly profile: TurnProfile;
 }
@@ -61,6 +64,9 @@ interface WatcherRecord {
     timer: NodeJS.Timeout | undefined;
     // A record leaves the map the moment it stops checking; this flag only guards the in-flight check.
     cancelled: boolean;
+    // The signal file arrived while a check was already running, so the next one goes at once.
+    recheck: boolean;
+    unsignal: (() => void) | undefined;
 }
 
 export interface WatcherSummary {
@@ -151,6 +157,8 @@ export const cancelWatchersFor = async (conversationId: string): Promise<number>
 // Stops a record's checking; an in-flight check sees the flag and schedules nothing after it.
 const stopChecking = (record: WatcherRecord): void => {
     record.cancelled = true;
+    record.unsignal?.();
+    record.unsignal = undefined;
     if (record.timer !== undefined) {
         clearTimeout(record.timer);
         record.timer = undefined;
@@ -255,6 +263,7 @@ const entryOf = (record: WatcherRecord): JournalledWatch => ({
     cwd: record.spec.cwd,
     ...(record.spec.placement === undefined ? {} : { placement: record.spec.placement }),
     ...(record.spec.outside === undefined ? {} : { outside: record.spec.outside }),
+    ...(record.spec.signalPath === undefined ? {} : { signalPath: record.spec.signalPath }),
     // Names, never values: the environment's shape restores, its substance is asked of the capability store again.
     envKeys: Object.keys(record.spec.env),
     turn: record.spec.profile,
@@ -305,19 +314,44 @@ const tick = async (live: WatcherRuntime, record: WatcherRecord): Promise<void> 
     fire(live, record, outcome);
 };
 
+const runTick = (live: WatcherRuntime, record: WatcherRecord): void => {
+    void tick(live, record).catch((error: unknown) => {
+        live.logger.error({ err: error, watch: record.id }, "watch: check crashed, watch dropped");
+        // Off disk too: a check that crashes the runner is not a watch a restart should faithfully re-arm.
+        void discard(live, record);
+    });
+};
+
 const schedule = (live: WatcherRuntime, record: WatcherRecord): void => {
     // Never past the deadline: a long interval with little time left checks once more, not sleeping through it.
-    const wait = Math.min(record.intervalMs, Math.max(0, record.deadlineAt - Date.now()));
+    const wait = record.recheck ? 0 : Math.min(record.intervalMs, Math.max(0, record.deadlineAt - Date.now()));
+    record.recheck = false;
     record.timer = setTimeout(() => {
         record.timer = undefined;
-        void tick(live, record).catch((error: unknown) => {
-            live.logger.error({ err: error, watch: record.id }, "watch: check crashed, watch dropped");
-            // Off disk too: a check that crashes the runner is not a watch a restart should faithfully re-arm.
-            void discard(live, record);
-        });
+        runTick(live, record);
     }, wait);
     // A watchdog must never hold the event loop open on its own (idle-stop's rule, same reason).
     record.timer.unref();
+};
+
+// No timer means a check is running or the arm is still journalling; either schedules next, and goes at once.
+const recheck = (live: WatcherRuntime, record: WatcherRecord): void => {
+    if (record.cancelled) {
+        return;
+    }
+    if (record.timer === undefined) {
+        record.recheck = true;
+        return;
+    }
+    clearTimeout(record.timer);
+    record.timer = undefined;
+    runTick(live, record);
+};
+
+const follow = (live: WatcherRuntime, record: WatcherRecord): void => {
+    if (record.spec.signalPath !== undefined) {
+        record.unsignal = whenFileAppears(record.spec.signalPath, () => recheck(live, record));
+    }
 };
 
 export type ArmOutcome =
@@ -369,6 +403,8 @@ export const armWatcher = async (spec: WatcherSpec, options: ArmOptions = {}): P
         last: firstCheck,
         timer: undefined,
         cancelled: false,
+        recheck: false,
+        unsignal: undefined,
     };
     if (firstCheck.exitCode === 0) {
         fire(live, record, "met");
@@ -378,6 +414,7 @@ export const armWatcher = async (spec: WatcherSpec, options: ArmOptions = {}): P
     // Written before the first timer, so a crash leaves an armed watch restorable, never an orphan timer.
     await live.journal.record(entryOf(record));
     schedule(live, record);
+    follow(live, record);
     // The card learns in the same breath the holding does: this is the moment the conversation stops looking finished.
     publish(live, spec.conversationId);
     live.logger.info({ watch: record.id, conversationId: spec.conversationId, intervalSeconds, timeoutSeconds, note: spec.note }, "watch: armed");
@@ -416,6 +453,7 @@ const specOf = (entry: JournalledWatch, env: Record<string, string>): WatcherSpe
     env: Object.fromEntries(entry.envKeys.filter((key) => env[key] !== undefined).map((key) => [key, env[key] as string])),
     ...(entry.placement === undefined ? {} : { placement: entry.placement }),
     ...(entry.outside === undefined ? {} : { outside: entry.outside }),
+    ...(entry.signalPath === undefined ? {} : { signalPath: entry.signalPath }),
     profile: profileOf(entry.turn),
 });
 
@@ -448,6 +486,8 @@ const restoreOne = async (live: WatcherRuntime, entry: JournalledWatch, env: Rec
         last: firing === undefined ? await live.runCheck(entry.command, checkOptions(spec)) : checkOf(firing.check),
         timer: undefined,
         cancelled: false,
+        recheck: false,
+        unsignal: undefined,
     };
     if (firing !== undefined) {
         live.logger.info(context, "watch: it fired before the restart and its wake had not landed, delivering it now");
@@ -463,6 +503,7 @@ const restoreOne = async (live: WatcherRuntime, entry: JournalledWatch, env: Rec
         return;
     }
     schedule(live, record);
+    follow(live, record);
     // The card gets its readout back: a conversation waiting before the restart must not read as finished after it.
     publish(live, entry.conversationId);
     live.logger.info({ ...context, secondsLeft: Math.round((entry.deadlineAt - Date.now()) / 1000) }, "watch: re-armed after restart");

@@ -226,6 +226,9 @@ export interface IntenticApi {
         // Fires when a ref moves in a repo (commit, branch, checkout, rebase) — a change `.git` watching can't
         // see as a file path. `repos` are root-relative ids.
         onDidChangeRefs(listener: (repos: readonly string[]) => void): Disposable;
+        // Fires when a repository appears or goes (a clone, a scaffold, a delete); `repos` is every root-relative id, not
+        // narrowed to the open project.
+        onDidChangeRepos(listener: (repos: readonly string[]) => void): Disposable;
         // Fires for a write under your declared `contributes.files` prefixes; `paths` are the matching ones.
         // Fires with your whole declaration when the host can't say what moved.
         onDidChangeFiles(listener: (paths: readonly string[]) => void): Disposable;

@@ -6,7 +6,7 @@
     "category": "workspace",
     "icon": "th-large",
     "engines": {
-        "intentic": "^2.12.0"
+        "intentic": "^2.18.0"
     },
     "permissions": {
         "sandbox": [

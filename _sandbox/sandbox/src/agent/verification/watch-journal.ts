@@ -21,6 +21,8 @@ const JournalledWatchSchema = z.object({
     placement: z.object({ worktree: z.string(), fenced: z.boolean() }).optional(),
     // The source a fetching check's output is outside content from.
     outside: z.string().optional(),
+    // A local file whose appearance re-checks at once; the interval stays the floor.
+    signalPath: z.string().optional(),
     // Set from firing until its wake has landed.
     firing: z
         .object({

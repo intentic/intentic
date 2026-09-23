@@ -26,7 +26,7 @@ import { useWorkspaceTabs } from "../features/workspace/tabs/useWorkspaceTabs";
 import { diffTabId } from "../features/workspace/tabs/workspaceTabs";
 import { documentProvider, registerDocumentProvider } from "../core-views/documentRegistry";
 import { onFilesChanged } from "./fileEvents";
-import { onRefsChanged } from "./refEvents";
+import { onRefsChanged, onReposChanged } from "./repoEvents";
 import { registerView } from "../core-views/registry";
 import { registerViewer } from "../core-views/viewerRegistry";
 import { previewAddress } from "../features/preview/previewAddress";
@@ -338,6 +338,7 @@ export const createExtensionApi = (
             },
             inProject: (path) => withinScope(path),
             onDidChangeRefs: (listener) => track(onRefsChanged(listener)),
+            onDidChangeRepos: (listener) => track(onReposChanged(listener)),
             // Scoped to the approved manifest's paths, so an extension declaring nothing is never woken. An empty
             // declaration still returns a live Disposable, since sandboxPoll subscribes unconditionally.
             onDidChangeFiles: (listener) => track(onFilesChanged(declaredFilePaths, listener)),

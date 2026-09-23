@@ -24,6 +24,7 @@ mock.module("../client/sandboxClient", () => ({
 
 import { queryClient } from "../../../lib/queryPersistence";
 import { viewsOnScreen } from "../../../testing/viewsOnScreen";
+import { onReposChanged } from "../../../extension-host/repoEvents";
 import { applySystemEvent } from "./systemEvents";
 
 // These views hold no timer of their own, so this frame is their entire live feed; right views refresh, wrong ones are
@@ -52,6 +53,19 @@ it(`refreshes the panels AND the per-repo apps from one dev-server frame`, () =>
     // Both lists are drawn from the same managed process, so one domain name invalidates both keys.
     applySystemEvent({ kind: `runtimeChanged`, domains: [`panels`] }, SANDBOX);
     expect(invalidated).toEqual([[`panels`], [`panels.list`], [`apps`]]);
+});
+
+// The Projects dashboard lists every repo, not the open project's, so the narrowed panels list cannot tell it.
+it(`hands a new repository set to extensions as well as refreshing the panels`, () => {
+    const heard: (readonly string[])[] = [];
+    const listening = onReposChanged((repos) => heard.push(repos));
+    try {
+        applySystemEvent({ kind: `reposChanged`, repos: [`root`, `web`, `cloned`] }, SANDBOX);
+    } finally {
+        listening.dispose();
+    }
+    expect(invalidated).toEqual([[`panels.list`]]);
+    expect(heard).toEqual([[`root`, `web`, `cloned`]]);
 });
 
 it(`asks nothing of a domain this build does not know`, () => {

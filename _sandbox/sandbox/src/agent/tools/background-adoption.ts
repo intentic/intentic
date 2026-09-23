@@ -7,7 +7,7 @@ import type { ConversationActors } from "../../agents/actor/conversation-actors.
 
 // Kept apart from background-jobs.ts, whose importing the watch engine would close a cycle through agent.ts.
 
-// Seconds between completion checks.
+// Seconds between completion checks when the status file's own arrival went unseen.
 const CHECK_INTERVAL_S = 30;
 
 // Exits 0 only once the status file exists, printing the command's exit code and then its output tail.
@@ -32,6 +32,8 @@ const specOf = (job: BackgroundJob): WatcherSpec => ({
     timeoutSeconds: Math.round(JOB_MAX_MS / 1000),
     // Once the tmp sweep takes this dir, a restored watch wakes as broken rather than waiting on nothing.
     cwd: job.dir,
+    // The status file landing is the exit, so the wake goes then, not at the next check.
+    signalPath: jobStatusPath(job),
     // The check reads two files and needs no credential.
     env: {},
     ...outsideOf(job),

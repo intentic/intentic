@@ -33,9 +33,10 @@ test("a watch round-trips verbatim, is filed under its own id, and drops indepen
 
     const firing = entryOf({ firing: { outcome: "met", check: { exitCode: 0, output: "success" } }, placement: { worktree: "/wt/conv-1", fenced: true } });
     await journal.record(firing);
-    await journal.record(entryOf({ id: "watch-2", note: "deploy", conversationId: "conv-2" }));
+    const signalled = entryOf({ id: "watch-2", note: "deploy", conversationId: "conv-2", signalPath: "/tmp/intentic-run-job-2/status" });
+    await journal.record(signalled);
     // Verbatim: a restore re-arms from exactly these fields, so a lossy round-trip changes what it watches.
-    expect(await journal.list()).toEqual([firing, entryOf({ id: "watch-2", note: "deploy", conversationId: "conv-2" })]);
+    expect(await journal.list()).toEqual([firing, signalled]);
 
     await journal.drop("watch-1");
     expect((await journal.list()).map((entry) => entry.id)).toEqual(["watch-2"]);

@@ -107,4 +107,6 @@
 // `request`/`json`, by `permissions.daemon` on the method and path a call resolves to, and refused before anything is
 // sent. Additive, and the recorded surface grows a `daemonApi` member list (`api.daemon`'s own members, read from
 // server.ts): the backend half was the one surface no recorded grain could see.
-export const extensionApiVersion = "2.17.0";
+// 2.18.0 adds `api.workspace.onDidChangeRepos`: the repository set moving (a clone, a scaffold, a delete). `repos()` is
+// narrowed to the open project, so a view listing every repository (the Projects dashboard) could only poll. Additive.
+export const extensionApiVersion = "2.18.0";
