@@ -4,6 +4,8 @@ import { describe, it, expect, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
 import type { Config } from "../../config.js";
 import {
+    closeHostedStretch,
+    dropHostedMachine,
     hostedArrivalBudget,
     hostedBudgetOf,
     hostedOwnerMinutes,
@@ -26,9 +28,11 @@ const config = (
 // One machine as every budget read names it: which sandbox, which rung, whose account.
 const onFree = { sandboxId: `s1`, tier: FREE_TIER.id, ownerId: `u1` };
 const onStandard = { sandboxId: `s1`, tier: STANDARD.id, ownerId: `u1` };
+// The machine row a stretch write names: which row, whose month.
+const owned = { id: `h1`, sandboxId: `s1`, ownerId: `u1` };
 
-const prismaWith = (over: Record<string, Record<string, ReturnType<typeof mock>>>) =>
-    ({
+const prismaWith = (over: Record<string, Record<string, ReturnType<typeof mock>>>) => {
+    const prisma = {
         hostedUsage: {
             findUnique: mock().mockResolvedValue(null),
             upsert: mock().mockResolvedValue({}),
@@ -37,8 +41,40 @@ const prismaWith = (over: Record<string, Record<string, ReturnType<typeof mock>>
         // No open stretch unless a test says so: the live half of the meter reads the machine's own wake stamp.
         hostedMachine: { update: mock().mockResolvedValue({}), findUnique: mock().mockResolvedValue(null), findMany: mock().mockResolvedValue([]) },
         hostedOom: { create: mock().mockResolvedValue({}), count: mock().mockResolvedValue(0) },
+        // A stretch write locks the row and acts in one transaction; the stub runs it in place.
+        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $queryRaw: mock().mockResolvedValue([]),
         ...over,
-    }) as unknown as PrismaClient;
+    };
+    return prisma as unknown as PrismaClient;
+};
+
+// The machine row as a stretch write's lock reads it: holding `wokeAt`.
+const holding = (wokeAt: Date | null, over: Record<string, Record<string, ReturnType<typeof mock>>> = {}) =>
+    prismaWith({ ...over, hostedMachine: { update: mock().mockResolvedValue({}), findUnique: mock().mockResolvedValue({ wokeAt }), ...over[`hostedMachine`] } });
+
+// One machine row and its month, stateful, so a case can order a stretch's writers; `charged` is every charge in minutes.
+const meterDb = (wokeAt: Date | null, idleWarnedAt: Date | null = null) => {
+    const state = { row: { wokeAt, idleWarnedAt } as { wokeAt: Date | null; idleWarnedAt: Date | null } | null, charged: [] as number[] };
+    const db = {
+        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(db)),
+        $queryRaw: mock().mockResolvedValue([]),
+        hostedMachine: {
+            findUnique: mock(async () => (state.row === null ? null : { ...state.row })),
+            update: mock(async ({ data }: { data: Partial<{ wokeAt: Date | null; idleWarnedAt: Date | null }> }) => Object.assign(state.row ?? {}, data)),
+            delete: mock(async () => {
+                state.row = null;
+            }),
+        },
+        hostedUsage: {
+            upsert: mock(async ({ create }: { create: { minutes: number } }) => {
+                state.charged.push(create.minutes);
+            }),
+        },
+        hostedOom: { create: mock().mockResolvedValue({}) },
+    };
+    return { prisma: db as unknown as PrismaClient, db, state };
+};
 
 // Fly's answer for one machine read; updated_at is the stamp the meter closes a stretch on.
 const stubMachine = (state: string, updatedAt?: string) => {
@@ -222,8 +258,9 @@ describe(`the hosted hour meter`, () => {
 
         it(`bills a stopped machine from its wake to Fly's own stop stamp, then closes the stretch`, async () => {
             stubMachine(`stopped`, `2026-08-13T10:30:00.000Z`);
-            const prisma = prismaWith({});
-            await settleHostedStretch(prisma, config(), logger, machine(new Date(`2026-08-13T10:00:00.000Z`)));
+            const wokeAt = new Date(`2026-08-13T10:00:00.000Z`);
+            const prisma = holding(wokeAt);
+            await settleHostedStretch(prisma, config(), logger, machine(wokeAt));
             // The row names both: the sandbox whose ceiling it counts against, and the account it outlives.
             expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -261,16 +298,18 @@ describe(`the hosted hour meter`, () => {
         // A stamp older than the wake (clock skew, a replaced machine) would bill a negative stretch.
         it(`falls back to now rather than billing a stop stamp that precedes the wake`, async () => {
             stubMachine(`stopped`, `2020-01-01T00:00:00.000Z`);
-            const prisma = prismaWith({});
-            await settleHostedStretch(prisma, config(), logger, machine(new Date(Date.now() - 120_000)));
+            const wokeAt = new Date(Date.now() - 120_000);
+            const prisma = holding(wokeAt);
+            await settleHostedStretch(prisma, config(), logger, machine(wokeAt));
             expect(prisma.hostedUsage.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: expect.objectContaining({ minutes: 2 }) }));
         });
 
         // Still closes, though: that's what stops the same stretch being counted again later.
         it(`writes no row for a stretch too short to round to a minute, but still closes it`, async () => {
             stubMachine(`stopped`, new Date().toISOString());
-            const prisma = prismaWith({});
-            await settleHostedStretch(prisma, config(), logger, machine(new Date()));
+            const wokeAt = new Date();
+            const prisma = holding(wokeAt);
+            await settleHostedStretch(prisma, config(), logger, machine(wokeAt));
             expect(prisma.hostedUsage.upsert).not.toHaveBeenCalled();
             expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
         });
@@ -299,8 +338,9 @@ describe(`the hosted hour meter`, () => {
         it(`writes the kill with the rung and memory the machine HAD, and still settles the stretch`, async () => {
             oomKilled(`stopped`);
             const create = mock().mockResolvedValue({});
-            const prisma = prismaWith({ hostedOom: { create }, hostedMachine: { update: mock(), findUnique: mock().mockResolvedValue(null) } });
-            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt: new Date(`2026-08-13T10:00:00.000Z`) });
+            const wokeAt = new Date(`2026-08-13T10:00:00.000Z`);
+            const prisma = holding(wokeAt, { hostedOom: { create } });
+            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt });
             expect(create).toHaveBeenCalledWith({
                 data: { hostedMachineId: `h1`, sandboxId: `s1`, tier: FREE_TIER.id, memoryMb: FREE_TIER.memoryMb },
             });
@@ -323,15 +363,87 @@ describe(`the hosted hour meter`, () => {
         it(`settles the stretch even when the kill cannot be written down`, async () => {
             oomKilled(`stopped`);
             const create = mock().mockRejectedValue(new Error(`write failed`));
-            const prisma = prismaWith({ hostedOom: { create }, hostedMachine: { update: mock(), findUnique: mock().mockResolvedValue(null) } });
-            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt: new Date(`2026-08-13T10:00:00.000Z`) });
+            const wokeAt = new Date(`2026-08-13T10:00:00.000Z`);
+            const prisma = holding(wokeAt, { hostedOom: { create } });
+            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt });
             expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: null } });
+        });
+
+        // Two settles that read one stretch both see the kill; only the one that closed the stretch writes it down.
+        it(`writes one kill however many settles of the stretch race`, async () => {
+            oomKilled(`stopped`);
+            const wokeAt = new Date(`2026-08-13T10:00:00.000Z`);
+            const { prisma, db } = meterDb(wokeAt);
+            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt });
+            await settleHostedStretch(prisma, config(), logger, { ...machine, wokeAt });
+            expect(db.hostedOom.create).toHaveBeenCalledTimes(1);
         });
     });
 
     it(`opening a stretch clears the idle warning`, async () => {
-        const prisma = prismaWith({});
-        await openHostedStretch(prisma, `h1`);
-        expect(prisma.hostedMachine.update).toHaveBeenCalledWith({ where: { id: `h1` }, data: { wokeAt: expect.any(Date), idleWarnedAt: null } });
+        const { prisma, state } = meterDb(null, new Date(`2026-08-13T10:00:00.000Z`));
+        expect(await openHostedStretch(prisma, owned)).toBe(true);
+        expect(state.row).toEqual({ wokeAt: expect.any(Date), idleWarnedAt: null });
+        expect(state.charged).toEqual([]);
+    });
+
+    // Orders of writers the model explores (specs/HostedStretch.tla); each must leave every stretch charged exactly once.
+    describe(`writers racing for one stretch`, () => {
+        const stretch = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000);
+        const read = (wokeAt: Date) => ({ ...owned, tier: FREE_TIER.id, memoryMb: FREE_TIER.memoryMb, appName: `a`, machineId: `m1`, wokeAt });
+
+        // A browser that loses its daemon calls wake on a machine that never stopped; the settle leaves it open.
+        it(`a wake on a machine that never stopped charges the stretch it was in, then opens the next`, async () => {
+            const wokeAt = stretch(90);
+            const { prisma, state } = meterDb(wokeAt);
+            expect(await openHostedStretch(prisma, owned)).toBe(true);
+            expect(state.charged).toEqual([90]);
+            expect(state.row?.wokeAt?.getTime()).toBeGreaterThan(wokeAt.getTime());
+        });
+
+        // Abuse and a wake, or the meter and a wake, each holding the same stretch they read before the other closed it.
+        it(`two closes of one stretch charge it once`, async () => {
+            stubMachine(`stopped`, new Date().toISOString());
+            const wokeAt = stretch(30);
+            const { prisma, state } = meterDb(wokeAt);
+            await settleHostedStretch(prisma, config(), logger, read(wokeAt));
+            expect(await closeHostedStretch(prisma, { ...owned, wokeAt }, new Date())).toBeUndefined();
+            expect(state.charged).toEqual([30]);
+            expect(state.row?.wokeAt).toBeNull();
+        });
+
+        // The meter read stretch 1, a wake then settled it and opened stretch 2: the meter's close must touch neither.
+        it(`a settle holding a stretch the row has moved past charges nothing and leaves the newer one open`, async () => {
+            stubMachine(`stopped`, new Date().toISOString());
+            const newer = stretch(5);
+            const { prisma, state } = meterDb(newer);
+            await settleHostedStretch(prisma, config(), logger, read(stretch(60)));
+            expect(state.charged).toEqual([]);
+            expect(state.row?.wokeAt).toEqual(newer);
+        });
+
+        // The idle sweep saw a stop, then a wake opened a newer stretch before the delete: that stop is not its end.
+        it(`deleting the row charges the stretch it holds, up to now when the caller's stop stamp predates it`, async () => {
+            const { prisma, state } = meterDb(stretch(10));
+            await dropHostedMachine(prisma, owned, stretch(60));
+            expect(state.charged).toEqual([10]);
+            expect(state.row).toBeNull();
+        });
+
+        it(`deleting a row that is already gone charges nothing`, async () => {
+            const { prisma, db, state } = meterDb(stretch(10));
+            state.row = null;
+            await dropHostedMachine(prisma, owned);
+            expect(state.charged).toEqual([]);
+            expect(db.hostedMachine.delete).not.toHaveBeenCalled();
+        });
+
+        // The row went (trash, release, the idle sweep) while a wake was starting the machine: nothing is left to bill.
+        it(`opening a stretch on a row that is gone reports it, so the caller can stop the machine`, async () => {
+            const { prisma, state } = meterDb(null);
+            state.row = null;
+            expect(await openHostedStretch(prisma, owned)).toBe(false);
+            expect(state.charged).toEqual([]);
+        });
     });
 });

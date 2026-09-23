@@ -64,7 +64,14 @@ const prismaWith = (
 ) => {
     const created: Record<string, unknown>[] = [];
     const prisma = {
-        hostedMachine: { findMany: mock().mockResolvedValue(rows), update: mock().mockResolvedValue({}) },
+        // `findUnique` is the stretch close's locked read of the row, which still holds what the sweep selected.
+        hostedMachine: {
+            findMany: mock().mockResolvedValue(rows),
+            findUnique: mock(async ({ where }: { where: { id: string } }) => rows.find((row) => row.id === where.id) ?? null),
+            update: mock().mockResolvedValue({}),
+        },
+        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $queryRaw: mock().mockResolvedValue([]),
         hostedStrike: {
             findFirst: mock(
                 async ({ where }: { where: { appName: string; createdAt: { gte: Date } } }) =>

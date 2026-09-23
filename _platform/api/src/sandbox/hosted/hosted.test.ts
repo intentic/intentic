@@ -938,11 +938,13 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                     findFirst: mock().mockResolvedValue({
                         id: `s1`,
                         ownerId: `u1`,
-                        hosted: { id: `h1`, tier, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
+                        hosted: { id: `h1`, sandboxId: `s1`, tier, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
                     }),
                 },
                 hostedUsage: { findUnique: mock().mockResolvedValue({ minutes: FREE_TIER.monthlyHours * 60 }) },
                 hostedPlan: { findUnique: mock().mockResolvedValue({ status: `active`, items: [] }) },
+                // The row the wake opens its stretch on, still there when the start lands.
+                hostedMachine: { findUnique: mock().mockResolvedValue({ wokeAt: null }) },
             });
         await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma: spent(FREE_TIER.id) }) })).rejects.toThrow(
             /free hours are used up/u,
@@ -1164,7 +1166,12 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
     // preserving.
     it(`hostedRestart builds a replacement when the provider says the machine is gone`, async () => {
         const machineCreate = mock().mockResolvedValue({});
-        const rowDelete = mock().mockResolvedValue({});
+        // The dead row until the rebuild deletes it; after that the sandbox has no row, as the new app's check expects.
+        let row: Record<string, unknown> | null = { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null };
+        const rowDelete = mock(async () => {
+            row = null;
+            return {};
+        });
         const calls = stubFetch([
             { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ error: `app not found` }, 404) },
             { match: (method, url) => method === `GET` && url.includes(`/machines/m1`), respond: () => json({ error: `app not found` }, 404) },
@@ -1180,9 +1187,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
         const prisma = fakePrisma({
             sandbox: { findFirst: mock().mockResolvedValue(ownedRow) },
             hostedMachine: {
-                findUnique: mock()
-                    .mockResolvedValueOnce({ id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, volumeId: `vol_1`, region: `iad`, wokeAt: null })
-                    .mockResolvedValue(null),
+                findUnique: mock(async () => row),
                 create: machineCreate,
                 delete: rowDelete,
                 update: mock().mockResolvedValue({}),
@@ -1250,7 +1255,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 findFirst: mock().mockResolvedValue({
                     id: `s1`,
                     ownerId: `u1`,
-                    hosted: { id: `h1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
+                    hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
                 }),
                 update: mock((args: unknown) => {
                     written.push(args);
@@ -1258,6 +1263,7 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
                 }),
             },
             hostedMachine: {
+                findUnique: mock().mockResolvedValue({ wokeAt: null }),
                 delete: mock((args: unknown) => {
                     written.push(args);
                     return Promise.resolve({});
@@ -1296,14 +1302,37 @@ describe(`sandbox routes: the hosted lane's gates`, () => {
 
     it(`wake starts the machine for an accepted member's hosted sandbox`, async () => {
         stubFetch([{ match: (method, url) => method === `POST` && url.endsWith(`/start`), respond: () => json({ ok: true }) }]);
-        const findFirst = mock().mockResolvedValue({ id: `s1`, hosted: { appName: `intentic-sbx-a`, machineId: `m1`, region: `iad` } });
-        const result = await call(
-            sandboxRoutes.wake,
-            { sandboxId: `s1` },
-            { context: routeContext({ prisma: fakePrisma({ sandbox: { findFirst } }) }) },
-        );
+        const findFirst = mock().mockResolvedValue({
+            id: `s1`,
+            hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, region: `iad` },
+        });
+        const prisma = fakePrisma({ sandbox: { findFirst }, hostedMachine: { findUnique: mock().mockResolvedValue({ wokeAt: null }) } });
+        const result = await call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) });
         expect(result).toEqual({ ok: true });
         // Access query admits owner OR accepted member; the OR is the contract under test.
         expect(findFirst.mock.calls[0]?.[0]?.where?.OR).toHaveLength(2);
+    });
+
+    // A trash, a release or the idle sweep deleted the row between this wake's read and its start (specs/HostedStretch.tla).
+    it(`wake stops the machine it started when the row went meanwhile`, async () => {
+        const calls = stubFetch([
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/start`), respond: () => json({ ok: true }) },
+            { match: (method, url) => method === `POST` && url.endsWith(`/machines/m1/stop`), respond: () => json({ ok: true }) },
+        ]);
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: mock().mockResolvedValue({
+                    id: `s1`,
+                    ownerId: `u1`,
+                    hosted: { id: `h1`, sandboxId: `s1`, appName: `intentic-sbx-a`, machineId: `m1`, wokeAt: null },
+                }),
+            },
+            // What the stretch's row lock finds: no row.
+            hostedMachine: { findUnique: mock().mockResolvedValue(null) },
+        });
+        await expect(call(sandboxRoutes.wake, { sandboxId: `s1` }, { context: routeContext({ prisma }) })).rejects.toMatchObject({
+            code: `NOT_FOUND`,
+        });
+        expect(calls.filter((entry) => entry.method === `POST`).map((entry) => entry.url.split(`/`).pop())).toEqual([`start`, `stop`]);
     });
 });

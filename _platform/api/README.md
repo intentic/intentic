@@ -45,7 +45,7 @@ Fly confirms absence. These records survive sandbox deletion and failed or inter
   this platform: so only a credential the browser holds can serve both, and asking for Google twice was
   costing sign-ups. It makes the platform a second CONSUMER of that credential, never its issuer.
 - [src/config.ts](src/config.ts) (`@puristic/env` config; [src/prisma.ts](src/prisma.ts)) client factory; [src/context.ts](src/context.ts): the per-request context that carries it.
-- [specs/](specs): TLA+ models checked with TLC. `HostedStretch` covers every path that reads or writes `HostedMachine.wokeAt`, and a change to one of those paths updates its action there.
+- [specs/](specs): TLA+ models checked with TLC. `HostedStretch` models the writers that race for a `HostedMachine.wokeAt` stretch (its README lists what it leaves out), and a change to one of them updates its action there.
 
 ## Conventions & gotchas
 

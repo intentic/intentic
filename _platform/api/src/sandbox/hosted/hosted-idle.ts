@@ -5,7 +5,6 @@ import { linkEmail, sendMail } from "../../mail.js";
 import { onHostedPlan } from "./hosted-plan.js";
 import { getMachine, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 import { destroyHosted, forgetHostedMachine, hostedEnabled } from "./hosted.js";
-import { closeHostedStretch } from "./hosted-usage.js";
 import { DAY_MS } from "../../durations.js";
 
 // Destroys a hosted machine (disk and all) once its owner hasn't opened it in `hosted.idleDays`, with one warning at
@@ -42,8 +41,6 @@ interface IdleCandidate {
     readonly machineId: string;
     readonly createdAt: Date;
     readonly idleWarnedAt: Date | null;
-    // The open awake stretch, if any (hosted-usage.ts): closed before the row goes, or its minutes go with it.
-    readonly wokeAt: Date | null;
     readonly sandbox: { id: string; name: string; lastSeenAt: Date | null; ownerId: string; owner: { email: string } };
 }
 
@@ -79,6 +76,7 @@ const decideIdleMachine = async (
     if (await onHostedPlan(prisma, config, machine.sandbox.ownerId)) {
         return `kept`;
     }
+    const row = { id: machine.id, sandboxId: machine.sandboxId, ownerId: machine.sandbox.ownerId };
     // A row Fly no longer backs still holds the owner's one hosted slot, so leaving it blocks a replacement.
     const state = await getMachine(config.hosted.flyApiToken, machine.appName, machine.machineId).catch((error: unknown) => {
         if (!isFlyGone(error)) {
@@ -87,10 +85,8 @@ const decideIdleMachine = async (
         return undefined;
     });
     if (state === undefined) {
-        // A stretch still open on a machine that no longer exists ended at the latest now; charged before the
-        // row that carries it is dropped, the same ceiling the meter's own settle takes for a gone machine.
-        await closeHostedStretch(prisma, { ...machine, ownerId: machine.sandbox.ownerId });
-        await forgetHostedMachine(prisma, machine.id, machine.sandbox.id);
+        // A stretch still open on a machine that no longer exists is charged up to now, as the meter's settle does.
+        await forgetHostedMachine(prisma, row);
         logger.warn({ app: machine.appName, sandboxId: machine.sandbox.id }, `hosted idle sweep: machine gone from the provider; row dropped`);
         return `dropped`;
     }
@@ -102,12 +98,9 @@ const decideIdleMachine = async (
         return `kept`;
     }
     if (idleDaysSoFar >= config.hosted.idleDays && noticeServed(config, machine, now)) {
-        // Any stretch still open is closed at the stop Fly just reported, BEFORE the app goes: afterwards there
-        // is no machine to ask and, a line later, no row to hold the minutes.
-        await closeHostedStretch(prisma, { ...machine, ownerId: machine.sandbox.ownerId }, state.updatedAt);
         await destroyHosted(config, machine.appName);
         // Row and address go with the machine; the sandbox stays, so its owner just picks a new one.
-        await forgetHostedMachine(prisma, machine.id, machine.sandbox.id);
+        await forgetHostedMachine(prisma, row, state.updatedAt);
         logger.warn(
             { app: machine.appName, sandboxId: machine.sandbox.id, idleDays: Math.floor(idleDaysSoFar) },
             `hosted idle sweep: machine collected`,
@@ -148,7 +141,6 @@ export const reapIdleHosted = async (
             machineId: true,
             createdAt: true,
             idleWarnedAt: true,
-            wokeAt: true,
             sandbox: { select: { id: true, name: true, lastSeenAt: true, ownerId: true, owner: { select: { email: true } } } },
         },
     });

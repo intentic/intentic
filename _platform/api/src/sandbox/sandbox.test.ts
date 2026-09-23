@@ -571,6 +571,39 @@ describe(`sandbox.delete on a hosted sandbox`, () => {
         expect(upsert.mock.invocationCallOrder[0]).toBeLessThan(deleteRow.mock.invocationCallOrder[0]!);
     });
 
+    // Trash racing a wake (specs/HostedStretch.tla): the wake opened a newer stretch after the trash read the row.
+    it(`charges the stretch the row holds at the delete, and stops the machine only once the row is gone`, async () => {
+        const read = new Date(Date.now() - 90 * 60_000);
+        const held = new Date(Date.now() - 10 * 60_000);
+        const month = held.toISOString().slice(0, 7);
+        const events: string[] = [];
+        const upsert = mock().mockResolvedValue({});
+        stubGlobal(`fetch`, (url: string, init?: RequestInit) => {
+            events.push(`${init?.method ?? `GET`} ${url.split(`/`).pop()}`);
+            return Promise.resolve(new Response(``, { status: 200 }));
+        });
+        const prisma = fakePrisma({
+            sandbox: {
+                findFirst: mock().mockResolvedValue(sandboxRow),
+                findUniqueOrThrow: mock().mockResolvedValue({ ...sandboxRow, hosted: { ...hostedMachineRow, wokeAt: read } }),
+                delete: mock(async () => {
+                    events.push(`delete sandbox`);
+                    return {};
+                }),
+            },
+            hostedMachine: { findUnique: mock().mockResolvedValue({ ...hostedMachineRow, wokeAt: held }), delete: mock().mockResolvedValue({}) },
+            hostedUsage: { upsert, aggregate: mock().mockResolvedValue({ _sum: { minutes: null } }) },
+        });
+        await call(sandboxRoutes.delete, { sandboxId: `s1` }, { context: context({ prisma, config: hostedConfig }) });
+        expect(upsert).toHaveBeenCalledTimes(1);
+        expect(upsert).toHaveBeenCalledWith({
+            where: { sandboxId_month: { sandboxId: `s1`, month } },
+            create: { sandboxId: `s1`, ownerId: `u1`, month, minutes: 10 },
+            update: { minutes: { increment: 10 } },
+        });
+        expect(events).toEqual([`delete sandbox`, `POST stop`]);
+    });
+
     it(`stops a deleted sandbox's machine and keeps its app, so the disk is there to restore onto`, async () => {
         const calls: { method: string; url: string }[] = [];
         stubGlobal(`fetch`, (url: string, init?: RequestInit) => {

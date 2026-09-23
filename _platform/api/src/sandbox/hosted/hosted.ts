@@ -34,6 +34,7 @@ import { resolveHostedImage } from "./build/hosted-image.js";
 import { hostedSlotsOf, slotsAtTier } from "./hosted-plan.js";
 import { assertHostedIdentity, HostedAlreadyProvisioned, HostedProvisionCancelled, lockHostedSandbox, withHostedApp } from "./hosted-cleanup.js";
 import { hostedShapeFor, volumeOptions } from "./hosted-shape.js";
+import { dropHostedMachine } from "./hosted-usage.js";
 
 // Hosted lane orchestration over fly.ts: one machine and one volume in one app per sandbox, named `<prefix>-<12-hex
 // tunnel id>` always. Reachability is a replay: the edge answers `sandbox-<id>` with `fly-replay: app=<prefix>-<id>`,
@@ -438,11 +439,12 @@ export const destroyHosted = async (config: Config, appName: string): Promise<vo
 
 // Drops the machine row and clears `daemonUrl`, so the browser reads "not connected" instead of reconnecting into a
 // machine that's gone. `lastSeenAt` stays: it's what keeps this a workspace to reopen, not a fresh setup.
-export const forgetHostedMachine = async (prisma: PrismaClient, hostedMachineId: string, sandboxId: string): Promise<void> => {
-    await prisma.$transaction([
-        prisma.hostedMachine.delete({ where: { id: hostedMachineId } }),
-        prisma.sandbox.update({ where: { id: sandboxId }, data: { daemonUrl: null } }),
-    ]);
+export const forgetHostedMachine = async (prisma: PrismaClient, machine: { id: string; sandboxId: string; ownerId: string }, endedAt?: Date): Promise<void> => {
+    await prisma.$transaction(async (tx) => {
+        // Sandbox row before machine row: the lock order trash and release take.
+        await tx.sandbox.update({ where: { id: machine.sandboxId }, data: { daemonUrl: null } });
+        await dropHostedMachine(tx, machine, endedAt);
+    });
 };
 
 // A cold provision runs app to volume to machine to row over minutes; inside this window it's in progress, not litter.

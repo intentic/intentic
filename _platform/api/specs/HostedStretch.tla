@@ -4,15 +4,13 @@
 (* HostedMachine row, the row's `wokeAt` column, and every path that       *)
 (* opens or closes the stretch that column holds (hosted-usage.ts and its  *)
 (* callers). A stretch is an id, not a duration: the properties are about  *)
-(* which stretches reach hostedUsage, and how many times.                  *)
+(* which stretches reach hostedUsage, and how many times. Each shared step *)
+(* is one transaction holding the row lock, so it is one atomic action.    *)
 (***************************************************************************)
 EXTENDS Naturals, FiniteSets, TLC
 
 CONSTANTS
-    Wakes,  \* concurrent `wake` requests, each one-shot
-    Fixed   \* FALSE models the code as built, TRUE the fix in README.md
-
-ASSUME Fixed \in BOOLEAN
+    Wakes   \* concurrent `wake` requests, each one-shot
 
 None == 0
 \* Stretch 1 predates the model; each wake mints at most one more.
@@ -59,35 +57,25 @@ Keep(p, v) == snap' = [snap EXCEPT ![p] = v]
 (* Shared steps.                                                           *)
 (***************************************************************************)
 
-\* closeHostedStretch(snap). As built: chargeMinutes, then a separate unconditional
-\* `wokeAt: null`. Fixed: one transaction that closes only the stretch it read.
-Close(p, clearAt, next) ==
-    /\ IF Fixed
-          THEN /\ IF row /\ snap[p] # None /\ wokeAt = snap[p]
-                     THEN wokeAt' = None /\ charged' = Charge(snap[p])
-                     ELSE UNCHANGED <<wokeAt, charged>>
-               /\ Goto(p, next)
-          ELSE /\ charged' = Charge(snap[p])
-               /\ UNCHANGED wokeAt
-               /\ Goto(p, clearAt)
+\* closeHostedStretch: closes and charges the stretch the process read, only while the row still holds it.
+Close(p, next) ==
+    /\ IF row /\ snap[p] # None /\ wokeAt = snap[p]
+          THEN wokeAt' = None /\ charged' = Charge(snap[p])
+          ELSE UNCHANGED <<wokeAt, charged>>
+    /\ Goto(p, next)
     /\ UNCHANGED <<fly, row, nextId, snap, destroyedRunning>>
 
-\* The as-built second half of Close; Prisma's update throws on a deleted row.
-Clear(p, next, failed) ==
-    /\ IF row THEN wokeAt' = None /\ Goto(p, next) ELSE UNCHANGED wokeAt /\ Goto(p, failed)
-    /\ UNCHANGED <<fly, row, nextId, charged, snap, destroyedRunning>>
-
-\* Deleting the row. Fixed: DELETE ... RETURNING wokeAt, charged in the same transaction.
+\* dropHostedMachine: deletes the row, charging whatever stretch it holds at that moment.
 Forget(p, next) ==
     /\ row' = FALSE
     /\ wokeAt' = None
-    /\ charged' = IF Fixed /\ row THEN Charge(wokeAt) ELSE charged
+    /\ charged' = IF row THEN Charge(wokeAt) ELSE charged
     /\ Goto(p, next)
     /\ UNCHANGED <<fly, nextId, snap, destroyedRunning>>
 
 (***************************************************************************)
 (* wake (sandbox.routes.ts): read the row, settleHostedStretch, wakeHosted,*)
-(* openHostedStretch. Any browser that loses the daemon calls it.          *)
+(* then openStretchOrStop. Any browser that loses the daemon calls it.     *)
 (***************************************************************************)
 
 WakeRead(w) ==
@@ -102,8 +90,7 @@ WakeSettle(w) ==
        \/ snap[w] # None /\ fly \in {"stopped", "gone"} /\ Goto(w, "close")
     /\ UNCHANGED <<fly, row, wokeAt, nextId, charged, snap, destroyedRunning>>
 
-WakeClose(w) == pc[w] = "close" /\ Close(w, "clear", "start")
-WakeClear(w) == pc[w] = "clear" /\ Clear(w, "start", "done")
+WakeClose(w) == pc[w] = "close" /\ Close(w, "start")
 
 \* A refused start on a live machine reads as success, so only a stopped one can fail.
 WakeStart(w) ==
@@ -113,21 +100,22 @@ WakeStart(w) ==
        \/ fly = "stopped" /\ UNCHANGED fly /\ Goto(w, "done")
     /\ UNCHANGED <<row, wokeAt, nextId, charged, snap, destroyedRunning>>
 
+\* forgetHostedMachine, on a machine Fly no longer has.
 WakeForget(w) == pc[w] = "forget" /\ Forget(w, "done")
 
-\* As built: overwrite the column. Fixed: charge whatever it held in the same transaction;
-\* with no row left, stop the machine this wake just started.
+\* openHostedStretch: charges the stretch the row still holds and opens the next; no row means "undo".
 WakeOpen(w) ==
     /\ pc[w] = "open"
     /\ IF row
           THEN /\ wokeAt' = nextId
                /\ nextId' = nextId + 1
-               /\ charged' = IF Fixed THEN Charge(wokeAt) ELSE charged
+               /\ charged' = Charge(wokeAt)
                /\ Goto(w, "done")
           ELSE /\ UNCHANGED <<wokeAt, nextId, charged>>
-               /\ Goto(w, IF Fixed THEN "undo" ELSE "done")
+               /\ Goto(w, "undo")
     /\ UNCHANGED <<fly, row, snap, destroyedRunning>>
 
+\* The stop openStretchOrStop issues for a machine it started with no row left to bill it.
 WakeUndo(w) ==
     /\ pc[w] = "undo"
     /\ fly' = IF fly = "running" THEN "stopped" ELSE fly
@@ -152,8 +140,7 @@ MeterSettle ==
        \/ fly \in {"stopped", "gone"} /\ Goto("meter", "close")
     /\ UNCHANGED <<fly, row, wokeAt, nextId, charged, snap, destroyedRunning>>
 
-MeterClose == pc["meter"] = "close" /\ Close("meter", "clear", "idle")
-MeterClear == pc["meter"] = "clear" /\ Clear("meter", "idle", "idle")
+MeterClose == pc["meter"] = "close" /\ Close("meter", "idle")
 
 (***************************************************************************)
 (* abuse (hosted-abuse.ts): stop a machine at full load, close at now.     *)
@@ -171,75 +158,53 @@ AbuseStop ==
     /\ IF fly = "gone" THEN UNCHANGED fly /\ Goto("abuse", "done") ELSE fly' = "stopped" /\ Goto("abuse", "close")
     /\ UNCHANGED <<row, wokeAt, nextId, charged, snap, destroyedRunning>>
 
-AbuseClose == pc["abuse"] = "close" /\ Close("abuse", "clear", "done")
-AbuseClear == pc["abuse"] = "clear" /\ Clear("abuse", "done", "done")
+AbuseClose == pc["abuse"] = "close" /\ Close("abuse", "done")
 
 (***************************************************************************)
-(* idle (hosted-idle.ts decideIdleMachine): drop a machine Fly lost,       *)
-(* collect one stopped past its deadline. As built: close, destroy, forget.*)
-(* Fixed: forget (which charges), then destroy.                            *)
+(* idle (hosted-idle.ts decideIdleMachine): forget a machine Fly lost;     *)
+(* destroy one stopped past its deadline, then forget it.                  *)
 (***************************************************************************)
 
 IdleRead ==
     /\ pc["idle"] = "idle"
     /\ row
-    /\ Keep("idle", wokeAt)
     /\ Goto("idle", "settle")
-    /\ UNCHANGED <<fly, row, wokeAt, nextId, charged, destroyedRunning>>
+    /\ UNCHANGED <<fly, row, wokeAt, nextId, charged, snap, destroyedRunning>>
 
 \* Not due, still running, or getMachine failed: the machine is kept.
 IdleSettle ==
     /\ pc["idle"] = "settle"
     /\ \/ Goto("idle", "done")
-       \/ fly = "gone" /\ Goto("idle", IF Fixed THEN "goneForget" ELSE "goneClose")
-       \/ fly = "stopped" /\ Goto("idle", IF Fixed THEN "collectForget" ELSE "collectClose")
+       \/ fly = "gone" /\ Goto("idle", "forget")
+       \/ fly = "stopped" /\ Goto("idle", "destroy")
     /\ UNCHANGED <<fly, row, wokeAt, nextId, charged, snap, destroyedRunning>>
-
-IdleGoneClose == pc["idle"] = "goneClose" /\ Close("idle", "goneClear", "goneForget")
-IdleGoneClear == pc["idle"] = "goneClear" /\ Clear("idle", "goneForget", "done")
-IdleGoneForget == pc["idle"] = "goneForget" /\ Forget("idle", "done")
-
-IdleCollectClose == pc["idle"] = "collectClose" /\ Close("idle", "collectClear", "destroy")
-IdleCollectClear == pc["idle"] = "collectClear" /\ Clear("idle", "destroy", "done")
-IdleCollectForget == pc["idle"] = "collectForget" /\ Forget("idle", IF Fixed THEN "destroy" ELSE "done")
 
 IdleDestroy ==
     /\ pc["idle"] = "destroy"
     /\ fly' = "gone"
     /\ destroyedRunning' = (destroyedRunning \/ fly = "running")
-    /\ Goto("idle", IF Fixed THEN "done" ELSE "collectForget")
+    /\ Goto("idle", "forget")
     /\ UNCHANGED <<row, wokeAt, nextId, charged, snap>>
 
+IdleForget == pc["idle"] = "forget" /\ Forget("idle", "done")
+
 (***************************************************************************)
-(* trash (sandbox-trash.ts trashSandbox). As built: stop, then one         *)
-(* transaction closing the stretch read BEFORE it and deleting the row.    *)
-(* Fixed: delete (which charges), then stop.                               *)
+(* trash (sandbox-trash.ts trashSandbox): one transaction that deletes the *)
+(* row (charging it), then the stop.                                       *)
 (***************************************************************************)
 
 TrashRead ==
     /\ pc["trash"] = "idle"
-    /\ IF row
-          THEN Keep("trash", wokeAt) /\ Goto("trash", IF Fixed THEN "forget" ELSE "stop")
-          ELSE UNCHANGED snap /\ Goto("trash", "done")
-    /\ UNCHANGED <<fly, row, wokeAt, nextId, charged, destroyedRunning>>
+    /\ Goto("trash", IF row THEN "forget" ELSE "done")
+    /\ UNCHANGED <<fly, row, wokeAt, nextId, charged, snap, destroyedRunning>>
+
+TrashForget == pc["trash"] = "forget" /\ Forget("trash", "stop")
 
 TrashStop ==
     /\ pc["trash"] = "stop"
     /\ fly' = IF fly = "running" THEN "stopped" ELSE fly
-    /\ Goto("trash", IF Fixed THEN "done" ELSE "commit")
-    /\ UNCHANGED <<row, wokeAt, nextId, charged, snap, destroyedRunning>>
-
-TrashCommit ==
-    /\ pc["trash"] = "commit"
-    /\ IF row
-          THEN /\ charged' = Charge(snap["trash"])
-               /\ row' = FALSE
-               /\ wokeAt' = None
-          ELSE UNCHANGED <<charged, row, wokeAt>>
     /\ Goto("trash", "done")
-    /\ UNCHANGED <<fly, nextId, snap, destroyedRunning>>
-
-TrashForget == pc["trash"] = "forget" /\ Forget("trash", "stop")
+    /\ UNCHANGED <<row, wokeAt, nextId, charged, snap, destroyedRunning>>
 
 (***************************************************************************)
 (* The machine on its own: the daemon exits on idle (and the meter's       *)
@@ -259,13 +224,12 @@ Vanish ==
 
 Next ==
     \/ \E w \in Wakes :
-          \/ WakeRead(w) \/ WakeSettle(w) \/ WakeClose(w) \/ WakeClear(w)
-          \/ WakeStart(w) \/ WakeForget(w) \/ WakeOpen(w) \/ WakeUndo(w)
-    \/ MeterRead \/ MeterSettle \/ MeterClose \/ MeterClear
-    \/ AbuseRead \/ AbuseStop \/ AbuseClose \/ AbuseClear
-    \/ IdleRead \/ IdleSettle \/ IdleGoneClose \/ IdleGoneClear \/ IdleGoneForget
-    \/ IdleCollectClose \/ IdleCollectClear \/ IdleCollectForget \/ IdleDestroy
-    \/ TrashRead \/ TrashStop \/ TrashCommit \/ TrashForget
+          \/ WakeRead(w) \/ WakeSettle(w) \/ WakeClose(w) \/ WakeStart(w)
+          \/ WakeForget(w) \/ WakeOpen(w) \/ WakeUndo(w)
+    \/ MeterRead \/ MeterSettle \/ MeterClose
+    \/ AbuseRead \/ AbuseStop \/ AbuseClose
+    \/ IdleRead \/ IdleSettle \/ IdleDestroy \/ IdleForget
+    \/ TrashRead \/ TrashForget \/ TrashStop
     \/ SelfStop \/ Vanish
 
 Spec == Init /\ [][Next]_vars
@@ -279,8 +243,7 @@ Spec == Init /\ [][Next]_vars
 WakeSymmetry == Permutations(Wakes)
 
 \* From these steps on, a process never reads its snapshot again before taking a new one.
-Spent == {"idle", "done", "clear", "goneClear", "collectClear", "start", "open", "undo",
-          "forget", "goneForget", "collectForget", "destroy"}
+Spent == {"idle", "done", "start", "open", "undo", "forget"}
 View == <<fly, row, wokeAt, nextId, charged, pc, destroyedRunning,
           [p \in Procs |-> IF pc[p] \in Spent THEN None ELSE snap[p]]>>
 
@@ -298,6 +261,6 @@ NoLostStretch == \A s \in Stretches : s < nextId => (charged[s] >= 1 \/ (row /\ 
 Quiescent == \A p \in Procs : pc[p] \in {"idle", "done"}
 RunningIsMetered == (Quiescent /\ fly = "running") => (row /\ wokeAt # None)
 
-\* The idle sweep never destroys a machine somebody has woken.
+\* The idle sweep never destroys a machine somebody has woken. Known not to hold: README.md.
 NoDestroyWhileRunning == ~destroyedRunning
 =============================================================================

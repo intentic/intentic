@@ -32,15 +32,24 @@ const machine = (over: Record<string, unknown> = {}) => ({
     ...over,
 });
 
-const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof mock>>> = {}) =>
-    ({
-        hostedMachine: { findMany: mock().mockResolvedValue(rows), update: mock().mockResolvedValue({}), delete: mock().mockResolvedValue({}) },
-        // Ending a machine writes two rows together (forgetHostedMachine); settled like the rest of the hosted suite.
+const prismaWith = (rows: ReturnType<typeof machine>[], over: Record<string, Record<string, ReturnType<typeof mock>>> = {}) => {
+    const prisma = {
+        // `findUnique` is the drop's locked read of the row, which still holds what the sweep selected.
+        hostedMachine: {
+            findMany: mock().mockResolvedValue(rows),
+            findUnique: mock(async ({ where }: { where: { id: string } }) => rows.find((row) => row.id === where.id) ?? null),
+            update: mock().mockResolvedValue({}),
+            delete: mock().mockResolvedValue({}),
+        },
+        // Ending a machine writes two rows in one transaction (forgetHostedMachine); the stub runs it in place.
         sandbox: { update: mock().mockResolvedValue({}) },
-        $transaction: mock((operations: Promise<unknown>[]) => Promise.all(operations)),
+        $transaction: mock((work: (tx: unknown) => Promise<unknown>) => work(prisma)),
+        $queryRaw: mock().mockResolvedValue([]),
         hostedPlan: { findUnique: mock().mockResolvedValue(null) },
         ...over,
-    }) as unknown as PrismaClient;
+    };
+    return prisma as unknown as PrismaClient;
+};
 
 /* The shared in-memory Fly, seeded with the one machine this sweep looks at. What these cases turn on is whether
  * the app was torn down, so the fake's own call log is the assertion and its state is the setup. */

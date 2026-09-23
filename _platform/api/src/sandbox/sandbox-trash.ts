@@ -5,7 +5,7 @@ import { RECOVERY_WINDOW_MS } from "../durations.js";
 import { isFlyGone, stopMachine, updateMachine } from "./hosted/fly/fly.js";
 import { hostedMachineConfig, withHostedSlot, type HostedProvisionArgs } from "./hosted/hosted.js";
 import { shapeOfRow, tierOfRow } from "./hosted/hosted-shape.js";
-import { closeHostedStretch } from "./hosted/hosted-usage.js";
+import { dropHostedMachine } from "./hosted/hosted-usage.js";
 import { lockHostedSandbox } from "./hosted/hosted-cleanup.js";
 import { mintSandbox } from "./mint-sandbox.js";
 
@@ -80,13 +80,10 @@ const stopForTrash = async (config: Config, logger: Logger, hosted: { appName: s
 export const trashSandbox = async (prisma: PrismaClient, config: Config, logger: Logger, sandboxId: string): Promise<void> => {
     const sandbox = await prisma.sandbox.findUniqueOrThrow({ where: { id: sandboxId }, include: { hosted: true } });
     const { hosted } = sandbox;
-    if (hosted !== null) {
-        await stopForTrash(config, logger, hosted);
-    }
     await prisma.$transaction(async (tx) => {
         await lockHostedSandbox(tx, sandboxId);
         if (hosted !== null) {
-            await closeHostedStretch(tx, { ...hosted, ownerId: sandbox.ownerId });
+            await dropHostedMachine(tx, { ...hosted, ownerId: sandbox.ownerId });
         }
         await tx.sandboxTrash.create({
             data: {
@@ -97,10 +94,13 @@ export const trashSandbox = async (prisma: PrismaClient, config: Config, logger:
                 purgeAfter: new Date(Date.now() + RECOVERY_WINDOW_MS),
             },
         });
-        // The cascade takes HostedMachine with it; the app it named is now spoken for by the trash row above,
-        // which is what keeps the orphan reaper off it.
+        // The app the dropped row named is now spoken for by the trash row above, which keeps the orphan reaper off it.
         await tx.sandbox.delete({ where: { id: sandboxId } });
     });
+    // Stopped once the row is gone, never before: a wake between a stop and the delete would restart it unbilled.
+    if (hosted !== null) {
+        await stopForTrash(config, logger, hosted);
+    }
 };
 
 export interface TrashedSummary {

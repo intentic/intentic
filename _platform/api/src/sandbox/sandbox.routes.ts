@@ -41,7 +41,7 @@ import { hostedPlanEnabled, hostedSlotsOf, onHostedPlan } from "./hosted/hosted-
 import { tierOfRow } from "./hosted/hosted-shape.js";
 import { assertHostedSource, HostedSourceCapped, recordHostedProvision } from "./hosted/abuse/hosted-source.js";
 import { assertHostedStanding, HostedSuspended, hostedSuspensionOf } from "./hosted/abuse/hosted-standing.js";
-import { hostedArrivalBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
+import { dropHostedMachine, hostedArrivalBudget, hostedBudgetOf, openHostedStretch, settleHostedStretch } from "./hosted/hosted-usage.js";
 import { hostedRegionFor } from "./hosted/region.js";
 import { mintSandbox } from "./mint-sandbox.js";
 import { listTrash, restoreSandbox, trashSandbox, TrashedSandboxGone } from "./sandbox-trash.js";
@@ -116,6 +116,7 @@ const restartOrRebuild = async (
     context: OrpcContext,
     args: HostedProvisionArgs,
     hosted: { id: string; appName: string; machineId: string; volumeId: string },
+    ownerId: string,
 ): Promise<boolean> => {
     try {
         await refreshHosted(context.config, args, hosted);
@@ -128,10 +129,21 @@ const restartOrRebuild = async (
             { app: hosted.appName, sandboxId: args.sandboxId },
             `hosted restart: the machine is gone from the provider; building a replacement for this sandbox`,
         );
-        await context.prisma.hostedMachine.delete({ where: { id: hosted.id } });
+        await context.prisma.$transaction((tx) => dropHostedMachine(tx, { id: hosted.id, sandboxId: args.sandboxId, ownerId }));
         await provisionHosted(context.prisma, context.config, context.logger, args);
         return true;
     }
+};
+
+// A row gone mid-start (trash, release, the idle sweep) leaves nothing to bill the run, so the machine is stopped again.
+const openStretchOrStop = async (context: OrpcContext, hosted: { id: string; sandboxId: string; appName: string; machineId: string }, ownerId: string): Promise<void> => {
+    if (await openHostedStretch(context.prisma, { ...hosted, ownerId })) {
+        return;
+    }
+    await stopMachine(context.config.hosted.flyApiToken, hosted.appName, hosted.machineId).catch((error: unknown) =>
+        context.logger.error({ err: error, app: hosted.appName }, `hosted: a machine started after its row was deleted could not be stopped`),
+    );
+    throw new ORPCError(`NOT_FOUND`, { message: `this sandbox no longer has a machine we run` });
 };
 
 /* THE GATES A NEW HOSTED MACHINE PASSES, together because they are all refusals and none of them is about
@@ -501,15 +513,18 @@ export const sandboxRoutes = {
                 // The machine's own rung: a restart puts back the guest it had, never the one a new machine gets.
                 tier: tierOfRow(hosted.tier),
             };
-            const rebuilt = await restartOrRebuild(context, args, hosted);
+            const rebuilt = await restartOrRebuild(context, args, hosted, sandbox.ownerId);
             // A rebuild stamps `wokeAt` at creation; opening a stretch here too would meter one boot twice.
             if (!rebuilt) {
-                await openHostedStretch(context.prisma, hosted.id);
+                await openStretchOrStop(context, hosted, sandbox.ownerId);
                 // Restart keeps the existing overlay; a moved base image triggers a background rebuild under the
                 // owner's limits.
                 await rebuildOnMovedBase(context.prisma, context.config, context.logger, hosted, { id: user.id, email: user.email.toLowerCase() });
             }
         } catch (error) {
+            if (error instanceof ORPCError) {
+                throw error;
+            }
             // The rebuild half provisions too, so it can meet a full fleet like any other provision; the sandbox and
             // its address survive regardless.
             if (error instanceof HostedAtCapacity) {
@@ -596,7 +611,7 @@ export const sandboxRoutes = {
             // anything asks about it, so the row and the sandbox's address are dropped here rather than left to the
             // nightly sweep.
             if (isFlyGone(error)) {
-                await forgetHostedMachine(context.prisma, sandbox.hosted.id, sandbox.id);
+                await forgetHostedMachine(context.prisma, { ...sandbox.hosted, ownerId: sandbox.ownerId });
                 context.logger.warn(
                     { app: sandbox.hosted.appName, sandboxId: sandbox.id },
                     `hosted wake: the provider has no such machine; the row and the sandbox's address are dropped`,
@@ -608,7 +623,7 @@ export const sandboxRoutes = {
             throw new ORPCError(`BAD_GATEWAY`, { message: error instanceof Error ? error.message : `waking the machine failed` });
         }
         // Only after a start that actually succeeded; a failed wake must not be billed.
-        await openHostedStretch(context.prisma, sandbox.hosted.id);
+        await openStretchOrStop(context, sandbox.hosted, sandbox.ownerId);
         return { ok: true };
     }),
     // Whether this platform mints addresses, the same switch setupCode enforces; asked here so the wizard never draws a

@@ -12,6 +12,8 @@ import { getMachineDetail, isFlyGone, LIVE_STATES } from "./fly/fly.js";
 //
 // PER MACHINE, because the ceiling is its rung's (@intentic/constants hosted-tiers). An account holding two machines
 // on two rungs has two ceilings, and an account figure is the sum of them, which is only ever a display.
+//
+// Every stretch write locks the machine row and charges in its transaction; the writers race in specs/HostedStretch.tla.
 
 // The calendar month a moment belongs to, UTC, as the `YYYY-MM` rows are keyed by.
 export const usageMonth = (at: Date): string => at.toISOString().slice(0, 7);
@@ -153,8 +155,8 @@ export const hostedBudgetForSandbox = async (prisma: PrismaClient, config: Confi
     return hostedBudgetOf(prisma, config, { sandboxId, tier: machine.tier, ownerId: machine.sandbox.ownerId }, now);
 };
 
-// Adds a settled stretch to its machine's month; atomic upsert so two racing settlements both increment. Also used by
-// an overlay build's minutes (hosted-build.ts), charged once when it ends.
+// Adds minutes to a machine's month; an atomic upsert, so two stretches (or a build) landing on one row both count.
+// Also used by an overlay build's minutes (hosted-build.ts), charged once when it ends.
 export const chargeMinutes = async (
     prisma: Prisma.TransactionClient,
     machine: { sandboxId: string; ownerId: string },
@@ -169,6 +171,21 @@ export const chargeMinutes = async (
         create: { sandboxId: machine.sandboxId, ownerId: machine.ownerId, month, minutes },
         update: { minutes: { increment: minutes } },
     });
+};
+
+// Locks the machine row until the transaction ends and reads its open stretch; null once the row is gone.
+const lockedStretch = async (tx: Prisma.TransactionClient, id: string): Promise<{ wokeAt: Date | null } | null> => {
+    await tx.$queryRaw`SELECT id FROM hosted_machine WHERE id = ${id} FOR UPDATE`;
+    return tx.hostedMachine.findUnique({ where: { id }, select: { wokeAt: true } });
+};
+
+// Charges a stretch to the month it began in, up to `endedAt` when that falls inside it, else up to now.
+const chargeStretch = async (tx: Prisma.TransactionClient, machine: { sandboxId: string; ownerId: string }, wokeAt: Date, endedAt?: Date): Promise<number> => {
+    const now = new Date();
+    const stoppedAt = endedAt !== undefined && endedAt <= now && endedAt >= wokeAt ? endedAt : now;
+    const minutes = Math.round((stoppedAt.getTime() - wokeAt.getTime()) / 60_000);
+    await chargeMinutes(tx, machine, usageMonth(wokeAt), minutes);
+    return minutes;
 };
 
 // Closes an open stretch if it has actually ended; safe to call on anything. A still-running machine is left open
@@ -197,18 +214,22 @@ export const settleHostedStretch = async (
     if (state === undefined || (state !== `gone` && LIVE_STATES.has(state.state))) {
         return;
     }
+    // Fly's stamp of the last transition is when it stopped. A destroyed machine has no stamp left to read at
+    // all, so it takes the honest ceiling chargeStretch falls back to: now.
+    const minutes = await closeHostedStretch(prisma, machine, state === `gone` ? undefined : state.updatedAt);
+    // Another writer settled or replaced this stretch after it was read; how it ended is that writer's to record.
+    if (minutes === undefined) {
+        return;
+    }
     if (state !== `gone` && state.oomKilled) {
         await recordHostedOom(prisma, logger, machine);
     }
-    // Fly's stamp of the last transition is when it stopped. A destroyed machine has no stamp left to read at
-    // all, so it takes the honest ceiling closeHostedStretch falls back to: now.
-    const minutes = await closeHostedStretch(prisma, machine, state === `gone` ? undefined : state.updatedAt);
     logger.info({ app: machine.appName, minutes }, `hosted meter: stretch settled`);
 };
 
-/* THE MACHINE WAS KILLED FOR MEMORY, as the provider reported it. Written once per stretch, since a machine ends a
- * stretch once; the rung and memory are the ones it HAD, because a later resize is exactly what makes the old figure
- * the interesting one. Never throws: a meter that can fall over on a bookkeeping row would leave the stretch open. */
+/* THE MACHINE WAS KILLED FOR MEMORY, as the provider reported it. Written by the settle that closed the stretch, so
+ * once per stretch however many settles race; the rung and memory are the ones it HAD, because a later resize is
+ * exactly what makes the old figure the interesting one. Never throws: the stretch it follows is already closed. */
 const recordHostedOom = async (
     prisma: PrismaClient,
     logger: Logger,
@@ -232,27 +253,56 @@ const recordHostedOom = async (
 export const hostedOomsSince = async (prisma: PrismaClient, sandboxId: string, since: Date): Promise<number> =>
     prisma.hostedOom.count({ where: { sandboxId, at: { gte: since } } });
 
-/* CLOSE AN OPEN STRETCH WITHOUT ASKING THE PROVIDER, for the paths that already know how the machine ended: the settle above (which just asked). */
+// Closes the stretch the caller read, only while the row still holds it; undefined when it no longer does.
 export const closeHostedStretch = async (
-    prisma: Prisma.TransactionClient,
+    prisma: PrismaClient,
     machine: { id: string; sandboxId: string; ownerId: string; wokeAt: Date | null },
     endedAt?: Date,
-): Promise<number> => {
-    if (!machine.wokeAt) {
-        return 0;
+): Promise<number | undefined> => {
+    const { wokeAt } = machine;
+    if (!wokeAt) {
+        return undefined;
     }
-    const now = new Date();
-    const stoppedAt = endedAt !== undefined && endedAt <= now && endedAt >= machine.wokeAt ? endedAt : now;
-    const minutes = Math.round((stoppedAt.getTime() - machine.wokeAt.getTime()) / 60_000);
-    await chargeMinutes(prisma, machine, usageMonth(machine.wokeAt), minutes);
-    await prisma.hostedMachine.update({ where: { id: machine.id }, data: { wokeAt: null } });
-    return minutes;
+    return prisma.$transaction(async (tx) => {
+        const row = await lockedStretch(tx, machine.id);
+        if (row?.wokeAt?.getTime() !== wokeAt.getTime()) {
+            return undefined;
+        }
+        const minutes = await chargeStretch(tx, machine, wokeAt, endedAt);
+        await tx.hostedMachine.update({ where: { id: machine.id }, data: { wokeAt: null } });
+        return minutes;
+    });
 };
 
-// Opens a stretch right after a successful start (a failed wake costs nothing and isn't billed). Clearing idleWarnedAt
-// in the same write cancels any pending collection.
-export const openHostedStretch = async (prisma: PrismaClient, machineRowId: string): Promise<void> => {
-    await prisma.hostedMachine.update({ where: { id: machineRowId }, data: { wokeAt: new Date(), idleWarnedAt: null } });
+// Opens a stretch at a start that succeeded, charging the one the row still holds; false when the row is gone.
+// Clearing idleWarnedAt in the same write cancels any pending collection.
+export const openHostedStretch = async (prisma: PrismaClient, machine: { id: string; sandboxId: string; ownerId: string }): Promise<boolean> =>
+    prisma.$transaction(async (tx) => {
+        const row = await lockedStretch(tx, machine.id);
+        if (!row) {
+            return false;
+        }
+        if (row.wokeAt) {
+            await chargeStretch(tx, machine, row.wokeAt);
+        }
+        await tx.hostedMachine.update({ where: { id: machine.id }, data: { wokeAt: new Date(), idleWarnedAt: null } });
+        return true;
+    });
+
+// Deletes the row, charging the stretch it holds at that moment; runs in the caller's transaction, which keeps the lock.
+export const dropHostedMachine = async (
+    tx: Prisma.TransactionClient,
+    machine: { id: string; sandboxId: string; ownerId: string },
+    endedAt?: Date,
+): Promise<void> => {
+    const row = await lockedStretch(tx, machine.id);
+    if (!row) {
+        return;
+    }
+    if (row.wokeAt) {
+        await chargeStretch(tx, machine, row.wokeAt, endedAt);
+    }
+    await tx.hostedMachine.delete({ where: { id: machine.id } });
 };
 
 // Hourly reconcile: settles every ended stretch, so a machine that slept doesn't sit unsettled until its owner returns.

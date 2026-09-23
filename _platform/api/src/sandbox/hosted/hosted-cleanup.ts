@@ -7,7 +7,7 @@ import { RECOVERY_WINDOW_MS } from "../../durations.js";
 import { connectTokenIdentity, mintConnectToken } from "../mint-sandbox.js";
 import { appExists, deleteApp } from "./fly/fly.js";
 import { withHostedAppLock } from "./hosted-app-lock.js";
-import { closeHostedStretch } from "./hosted-usage.js";
+import { dropHostedMachine } from "./hosted-usage.js";
 
 export class HostedProvisionCancelled extends Error {
     constructor() {
@@ -90,8 +90,7 @@ export const releaseHosted = async (prisma: PrismaClient, config: Config, sandbo
                 create: { appName: sandbox.hosted.appName, deleteAfter },
                 update: { deleteAfter },
             });
-            await closeHostedStretch(tx, { ...sandbox.hosted, ownerId: sandbox.ownerId });
-            await tx.hostedMachine.delete({ where: { id: sandbox.hosted.id } });
+            await dropHostedMachine(tx, { ...sandbox.hosted, ownerId: sandbox.ownerId });
         }
         const token = mintConnectToken();
         await tx.sandbox.update({
