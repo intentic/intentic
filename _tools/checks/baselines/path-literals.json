@@ -16,7 +16,6 @@
     "_sandbox/sandbox/src/agent/run/turn/turn-plan.test.ts": 2,
     "_sandbox/sandbox/src/agent/subagents/children.test.ts": 3,
     "_sandbox/sandbox/src/agent/tools/agent-redaction.test.ts": 3,
-    "_sandbox/sandbox/src/agent/verification/verify-nudge.test.ts": 6,
     "_sandbox/sandbox/src/agent/verification/watchers.test.ts": 1,
     "_sandbox/sandbox/src/agents/land/landed-subject.test.ts": 1,
     "_sandbox/sandbox/src/browser/browser-router.integration.test.ts": 1,
