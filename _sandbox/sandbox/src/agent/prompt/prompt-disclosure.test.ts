@@ -1,5 +1,6 @@
 import { capabilitiesOf } from "@intentic/sandbox-contract";
 import { test, expect, mock } from "bun:test";
+import { guidanceBlock } from "./guidance.js";
 import { promptDisclosure, withBaseText } from "./prompt-disclosure.js";
 import { turnPromptPlacement } from "./system-prompt.js";
 
@@ -75,6 +76,39 @@ test("the harness arm's own guidance is shown, though it never rode the append",
     expect(textOf(claude, "guidance")).toContain("You run inside Intentic");
     // Unattended: the interactive paragraph is composed out, and must be absent here for the same turn.
     expect(textOf(claude, "guidance")).not.toContain("AskUserQuestion");
+});
+
+// The variant rides the request, so the disclosure recomposes the form the turn drew rather than the default.
+test("the guidance shown is the form the turn was sent", () => {
+    const lean = promptDisclosure({
+        capabilities: CLAUDE,
+        request: { spec: { systemPromptMode: "intentic", guidance: "lean" }, policy: { unattended: true }, tools: {} },
+        at: AT,
+    });
+    expect(textOf(lean, "guidance")).toBe(
+        guidanceBlock("lean", {
+            unattended: true,
+            browserOutputDir: undefined,
+            browserAccounts: false,
+            diagnostics: false,
+            terminal: false,
+            hostDevices: undefined,
+            ownBrowsers: undefined,
+        }),
+    );
+    const codex = promptDisclosure({
+        capabilities: CODEX,
+        request: {
+            spec: {
+                systemPromptMode: "intentic",
+                ...turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, guidance: "lean" }),
+            },
+            policy: {},
+            tools: {},
+        },
+        at: AT,
+    });
+    expect(textOf(codex, "guidance")).toBe(guidanceBlock("lean", undefined));
 });
 
 test("a runtime that keeps its own prompt says so, and its guidance is the append's own head", () => {

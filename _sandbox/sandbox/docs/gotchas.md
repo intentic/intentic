@@ -325,7 +325,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   never edit it — and they are withheld from a persona whose `files` power is `none`. Being a tool was not
   enough to be found: the server is deferred, so what reaches the prompt is a name in a list, and over this
   workspace's 1,084 transcripts the four were called from 5 sessions (`errors` 10 times, `turns` once).
-  `src/agent/prompt/system-prompt.ts` now names them, with the situations each answers, on every turn that mounted
+  `src/agent/prompt/guidance.ts` now names them, with the situations each answers, on every turn that mounted
   them. Their results are deliberately **not** in `INTERNAL_SERVERS`: two of the four relay a provider's own sentence verbatim, and a
   third party's words dressed as the platform's own log is what the outside-content envelope is for.
 - **The browser is the only witness to its own crashes**, so it gets the one write on the logs router.

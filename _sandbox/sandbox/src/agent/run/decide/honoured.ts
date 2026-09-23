@@ -163,6 +163,7 @@ export const honoured = (
         ...opt("fieldNotesNote", context.fieldNotesNote),
         // What the window will not pay for: this product's guidance, and on the smallest windows the base prompt too.
         ...opt("trim", promptTrim(context.contextTrim)),
+        guidance: premise.guidance,
     });
     const access = turnAccess(facts, base, persona, withheldMounts);
     return {
@@ -179,6 +180,7 @@ export const honoured = (
             systemPromptMode: prompt.mode,
             ...opt("systemPrompt", placement.systemPrompt),
             ...opt("systemAppend", placement.systemAppend),
+            guidance: premise.guidance,
             sessionStore: facts.sessionStore,
             ...opt("cwd", startPath),
             // A fact about that cwd: only an isolated turn works in a copy of its own. Read by the command gate.

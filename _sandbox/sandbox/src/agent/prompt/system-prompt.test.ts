@@ -1,6 +1,7 @@
 import { STATE_DIR, WORKSPACE_ROOT } from "@intentic/constants";
 import { capabilitiesOf } from "@intentic/sandbox-contract";
 import { test, expect, mock } from "bun:test";
+import { GUIDANCE_HEADER, guidanceBlock } from "./guidance.js";
 import { intenticPromptOf } from "./intentic-prompt.js";
 import { sdkSystemPrompt, turnPromptPlacement } from "./system-prompt.js";
 
@@ -74,6 +75,22 @@ test("a runtime outside the Claude Code loop is told the workspace conventions; 
 
     const claude = turnPromptPlacement({ capabilities: CLAUDE, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
     expect(claude.systemAppend).toBeUndefined();
+});
+
+// Cursor seals outside tool results and automations wrap outside messages on every runtime, so the rule that says what
+// an envelope means has to arrive wherever an envelope can.
+test("a runtime outside the Claude Code loop is told what outside content is", () => {
+    for (const capabilities of [CODEX, GROK]) {
+        const placement = turnPromptPlacement({ capabilities, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+        expect(placement.systemAppend).toContain("<untrusted-content");
+    }
+});
+
+test("the drawn variant is the one a runtime outside the loop carries", () => {
+    const lean = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false, guidance: "lean" });
+    expect(lean.systemAppend).toBe(guidanceBlock("lean", undefined));
+    const full = turnPromptPlacement({ capabilities: CODEX, mode: "intentic", systemPrompt: "", stableSystemPrompt: false });
+    expect(full.systemAppend).toBe(guidanceBlock("full", undefined));
 });
 
 test("a custom prompt is added where it cannot replace", () => {
@@ -225,6 +242,28 @@ test("claude keeps the CLI's preset and hands the same guidance to its append", 
     // it might miss.
     expect(append).toContain("/work/.intentic/records/artifacts/browser");
     expect(append.endsWith("extra")).toBe(true);
+});
+
+test("both built-in bases carry the guidance under its heading, after the base", async () => {
+    const intentic = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined })) as string;
+    expect(intentic.startsWith(`${INTENTIC}\n\n${GUIDANCE_HEADER}\n\n`)).toBe(true);
+    const claude = (await systemPromptOf({ ...BASE, mode: "claude", custom: undefined })) as { append: string };
+    expect(claude.append.startsWith(`${GUIDANCE_HEADER}\n\n`)).toBe(true);
+});
+
+test("the lean variant replaces the full one in the loop's own composition", async () => {
+    const lean = (await systemPromptOf({ ...BASE, mode: "intentic", custom: undefined, guidance: "lean", append: "extra" })) as string;
+    const mounted = {
+        unattended: false,
+        browserOutputDir: undefined,
+        browserAccounts: false,
+        diagnostics: false,
+        terminal: false,
+        hostDevices: undefined,
+        ownBrowsers: undefined,
+    };
+    expect(lean).toBe(`${INTENTIC}\n\n${guidanceBlock("lean", mounted)}\n\nextra`);
+    expect(lean).not.toContain("ORIENTING");
 });
 
 test("custom reaches the SDK as the bare text, with no guidance at all", async () => {

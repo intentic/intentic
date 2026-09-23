@@ -5,10 +5,10 @@ import { contextTrimLine } from "./context-trim.js";
 // thin, what it lost, and whether the reader's own instructions were among the losses.
 
 test("the window comes first, then what went, then what stayed", () => {
-    const line = contextTrimLine({ window: 16_384, omitted: ["Map of this project", "How this sandbox asks agents to work"], base: true });
+    const line = contextTrimLine({ window: 16_384, omitted: ["Map of this project", "Working in this sandbox"], base: true });
 
     expect(line).toContain("16k window");
-    expect(line).toContain("Map of this project, How this sandbox asks agents to work");
+    expect(line).toContain("Map of this project, Working in this sandbox");
     // Without this clause the line reads as "your AGENTS.md may not have arrived", which is the one thing it is not.
     expect(line).toContain("Your workspace rules");
 });

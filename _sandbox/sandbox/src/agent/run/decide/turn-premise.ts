@@ -11,6 +11,7 @@ import {
 import { conversationFence } from "../../../areas/area-scope.js";
 import { compactedSinceLastTurn, type PersistedAgent } from "../../../agents/registry/agents-store.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
+import type { GuidanceVariant } from "../../prompt/guidance.js";
 import { type TurnBriefing, briefingOf } from "../../prompt/turn-briefing.js";
 import { armOf, EXPERIMENTS } from "./experiments.js";
 
@@ -51,7 +52,14 @@ export interface TurnPremise {
     // Which of the sandbox's own preamble notes the card still wants; all of them for a turn wearing no card.
     readonly briefing: TurnBriefing;
     // Each experiment's arm for this conversation; undefined where it is not measuring (armOf).
-    readonly arms: { readonly search: boolean | undefined; readonly map: boolean | undefined; readonly notes: boolean | undefined };
+    readonly arms: {
+        readonly search: boolean | undefined;
+        readonly map: boolean | undefined;
+        readonly notes: boolean | undefined;
+        readonly guidance: boolean | undefined;
+    };
+    // The guidance the turn is composed with: the arm where one was drawn, else the owner's switch.
+    readonly guidance: GuidanceVariant;
     readonly iqSearchEnabled: boolean;
     // Workspace-relative: the card's own folder, else the one the conversation latched at its first turn.
     readonly startIn: string | undefined;
@@ -86,10 +94,12 @@ export const premiseOf = (facts: PremiseFacts, input: AgentTurn, runtime: TurnRu
     const iqSearchEnabled = search ?? EXPERIMENTS.iqSearch.on(settings);
     // A card that drops the map takes its conversation out of the experiment, not into its control group.
     const map = briefing.sends("map") ? armOf(EXPERIMENTS.workspaceMap, settings, input.conversationId) : undefined;
+    const guidance = armOf(EXPERIMENTS.guidance, settings, input.conversationId);
     return {
         persona,
         briefing,
-        arms: { search, map, notes: armOf(EXPERIMENTS.fieldNotes, settings, input.conversationId) },
+        arms: { search, map, notes: armOf(EXPERIMENTS.fieldNotes, settings, input.conversationId), guidance },
+        guidance: (guidance ?? EXPERIMENTS.guidance.on(settings)) ? "lean" : "full",
         iqSearchEnabled,
         startIn: persona.workspace?.startIn ?? entry?.identity.startIn ?? input.startIn,
         send: {

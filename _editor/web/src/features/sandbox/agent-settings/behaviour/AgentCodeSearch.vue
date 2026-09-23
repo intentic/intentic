@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { FIELD_NOTES_FILE } from "@intentic/constants";
-import type { TurnExperiment } from "@intentic/sandbox-contract";
 import { Row, RowGroup, ui } from "@intentic/ui";
 import { RouterLink } from "vue-router";
 import ToggleSwitch from "primevue/toggleswitch";
@@ -10,8 +9,8 @@ import { useSandboxSettings } from "../../overview/useSandboxSettings";
 import { useSidecarStatus } from "../../../workspace/files/useSidecarStatus";
 import { useFieldNotes } from "./useFieldNotes";
 import { commitCount,asPercent } from "../models/numberInputs";
-import { meanUnit, verdictsOf } from "../../usage/savingsChart";
 import MeasurementPanel, { type PanelReading } from "../models/MeasurementPanel.vue";
+import { readingsOf } from "../models/experimentReadings";
 import { useT } from "@intentic/ui/i18n";
 
 // Four composing settings, ordered by when each acts: iq search (on demand), the project map (before there's
@@ -25,23 +24,6 @@ const { savings } = useSavings({});
 
 // Session state: the holdout flips whole conversations, never individual turns.
 const iqSearchHoldoutPercent = computed<number>(() => asPercent(settings.value?.iqSearchHoldout));
-
-// Through `verdictsOf` rather than treating each metric as a peer: two readings of one subject would otherwise
-// read as two findings. This block is the only place these experiments are reported.
-const readingsOf = (experiment: TurnExperiment | undefined): PanelReading[] => {
-    if (experiment === undefined) {
-        return [];
-    }
-    const { headline, also } = verdictsOf(experiment);
-    return [headline, ...also].flatMap((verdict, index) => {
-        const reading = experiment.metrics[index];
-        if (reading === undefined) {
-            return [];
-        }
-        // Means travel with the arms: the panel draws them as the bars under the verdict they produced.
-        return [{ verdict, on: reading.on, off: reading.off, meanUnit: meanUnit(reading) }];
-    });
-};
 
 const searchReadings = computed<PanelReading[]>(() => readingsOf(savings.value?.search));
 

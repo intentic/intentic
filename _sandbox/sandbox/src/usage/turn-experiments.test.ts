@@ -213,3 +213,25 @@ test("a monthly rewrite is a new treatment: only the latest revision's turns are
     expect(notes?.metrics[0].on.mean).toBe(1);
     expect(notes?.metrics[0].on.turns).toBe(MIN_ARM_TURNS);
 });
+
+// The short form is `on`; the long form, kept by the holdout, is the control it is compared against.
+test("the guidance experiment compares failed calls between the short and long forms", async () => {
+    const rows = [
+        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
+            turn({ conversationId: `short-${index}`, guidanceArm: true, guidanceCohort: "g1", failedCalls: index % 2 === 0 ? 1 : 2 }),
+        ),
+        ...Array.from({ length: MIN_ARM_TURNS }, (_, index) =>
+            turn({ conversationId: `long-${index}`, guidanceArm: false, guidanceCohort: "g1", failedCalls: index % 2 === 0 ? 3 : 4 }),
+        ),
+    ];
+    const { guidance, notes } = await readTurnExperiments(storeOf(rows), {});
+
+    expect(notes).toBeUndefined();
+    expect(guidance?.cohort).toBe("g1");
+    expect(guidance?.sampleUnit).toBe("conversations");
+    expect(guidance?.metrics[0]).toMatchObject({
+        metric: "failedCalls",
+        on: { turns: MIN_ARM_TURNS, mean: 1.5 },
+        off: { turns: MIN_ARM_TURNS, mean: 3.5 },
+    });
+});

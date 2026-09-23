@@ -138,7 +138,8 @@ const sharedContext = (
     ...opt("turnContextNote", facts.turnContext !== undefined && "note" in facts.turnContext ? facts.turnContext.note : undefined),
 });
 
-// The turn index only for a turn in a conversation; the map's size off the notes as they will be sent, trimmed.
+// The turn index only for a turn in a conversation; the map's size off the notes as they will be sent, trimmed. The
+// guidance arm only where guidance was composed at all, so a turn that got neither form is no control turn.
 const experimentsOf = (
     facts: AdmittedTurnFacts,
     input: AgentTurn,
@@ -146,12 +147,14 @@ const experimentsOf = (
     premise: TurnPremise,
     notes: TurnFieldNotes,
     sent: readonly TurnNote[] | undefined,
+    guided: boolean,
 ): TurnExperimentStamps =>
     experimentStamps(input.conversationId === undefined ? undefined : runtime.conversationTurns, {
         iqSearch: { arm: premise.arms.search, cohort: facts.iqTeaching?.cohort },
         workspaceMap: { arm: premise.arms.map, notes: sent },
         fieldNotes: notes,
         turnContext: facts.turnContext,
+        guidance: { arm: guided ? premise.arms.guidance : undefined },
     });
 
 // A turn acting as a card this workspace lacks runs with nothing, while its prompt still reads as if it had everything.
@@ -182,11 +185,8 @@ export const decideTurn = (facts: TurnFacts, input: AgentTurn, context: TurnCont
     const prompt = personaPrompt(persona.persona, facts.personaPrompt, facts.settings);
     const shared = sharedContext(context, facts, settings, premise, runtime, trim, notes, spawnNoteFor(spawn, runtime));
     // The card's briefing, then the window's filter: what a small window left out is named by building what it would send.
-    const composed = trimmed(
-        trim,
-        honoured(facts, shared, settings, capabilities, premise, prompt, mounts.withheld),
-        systemPieces(capabilities, prompt.mode, notes),
-    );
+    const system = systemPieces(capabilities, prompt.mode, notes);
+    const composed = trimmed(trim, honoured(facts, shared, settings, capabilities, premise, prompt, mounts.withheld), system);
     const planned: TurnContext = { ...shared, base: composed.request, persona };
     // The last gate, and the only one that reads the prompt as it will be sent: notes and all, trimmed where trimmed.
     const shortfall = contextShortfall({
@@ -210,7 +210,7 @@ export const decideTurn = (facts: TurnFacts, input: AgentTurn, context: TurnCont
         spawn,
         briefing: premise.briefing,
         ...opt("contextTrim", composed.contextTrim),
-        experiments: experimentsOf(facts, input, runtime, premise, notes, planned.base.spec.notes),
+        experiments: experimentsOf(facts, input, runtime, premise, notes, planned.base.spec.notes, system.guidance && trim?.guidance !== true),
         warnings,
     };
 };

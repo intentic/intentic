@@ -254,6 +254,21 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Your own instructions, used only when the mode above says custom. Then it is the whole of them: both built-in bases go, and so does everything this product would otherwise add, including the guidance the chat's own cards are driven by. That is the price of total control.",
         ),
+    // Measured by the `guidance` experiment against the full set; the full set stays the default until that says otherwise.
+    leanGuidance: z
+        .boolean()
+        .default(false)
+        .describe(
+            "Send this product's own guidance in its short form: only what the agent cannot find out by looking, instead of a paragraph for every habit it was once caught in. Off by default, because the long form is the one the product was tuned on.",
+        ),
+    leanGuidanceHoldout: z
+        .number()
+        .min(0)
+        .max(1)
+        .default(0)
+        .describe(
+            "What share of conversations to keep on the long form, so the two can be compared. Whole conversations rather than individual turns, because the guidance sits in the prompt for the whole session.",
+        ),
     iqSearch: z
         .boolean()
         .default(false)
@@ -578,6 +593,7 @@ export const SavingsReportSchema = z.object({
     // Same absence rule as `search`: not measured, never zero.
     map: TurnExperimentSchema.optional(),
     notes: TurnExperimentSchema.optional(),
+    guidance: TurnExperimentSchema.optional(),
 });
 export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 

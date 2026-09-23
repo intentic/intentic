@@ -17,7 +17,7 @@ const PROMPT: ConversationPrompt = {
         mode: `intentic`,
         base: { kind: `intentic`, text: `You are an Intentic agent.` },
         sections: [
-            { source: `guidance`, title: `How this sandbox asks agents to work`, text: `Search code with rg.` },
+            { source: `guidance`, title: `Working in this sandbox`, text: `## Working in this sandbox\n\nSearch code with rg.` },
             { source: `field-notes`, title: `Field notes for this sandbox`, text: `## Field notes for this sandbox\n\npnpm's exit code lies here.` },
             {
                 source: `memory`,

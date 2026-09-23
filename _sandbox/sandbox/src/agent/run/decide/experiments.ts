@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SandboxSettings, TurnNote } from "@intentic/sandbox-contract";
 import type { FieldNotes } from "../../prompt/field-notes.js";
+import { GUIDANCE_REVISION } from "../../prompt/guidance.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "../../prompt/workspace-map.js";
 import { opt } from "../../../opt.js";
 import type { TurnContextOutcome, TurnContextSkip } from "../turn/turn-context.js";
@@ -35,6 +36,8 @@ export interface ExperimentReadings {
     readonly fieldNotes: TurnFieldNotes;
     // Undefined when retrieval was never attempted, which is a different fact from a lookup that skipped.
     readonly turnContext: TurnContextOutcome | undefined;
+    // Undefined on a turn sent no guidance at all (a custom prompt, no system seam, a trimmed window).
+    readonly guidance: { readonly arm: boolean | undefined };
 }
 
 interface Experiment<Reading> {
@@ -85,6 +88,13 @@ export const EXPERIMENTS: { readonly [K in keyof ExperimentReadings]: Experiment
         on: (settings) => settings.iqSearch,
         holdout: () => 0,
         stamps: (outcome) => ({ ...opt("turnContext", deliveryOf(outcome)), ...opt("turnContextMs", outcome?.durationMs) }),
+    },
+    // The arm is the lean form; the holdout keeps the full one.
+    guidance: {
+        salt: "lean-guidance",
+        on: (settings) => settings.leanGuidance,
+        holdout: (settings) => settings.leanGuidanceHoldout,
+        stamps: ({ arm }) => ({ ...opt("guidanceArm", arm), ...opt("guidanceCohort", arm === undefined ? undefined : GUIDANCE_REVISION) }),
     },
 };
 

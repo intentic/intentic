@@ -548,17 +548,18 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   and the only per-chat decision is WHICH card, which [src/agent/prompt/chat-router.ts](../src/agent/prompt/chat-router.ts)
   answers from the first message, in the same one call that chooses what the chat runs on (`docs/context-composition-plan.md` at the workspace root says why not a
   per-session pick).
-- [src/agent/prompt/system-prompt.ts](../src/agent/prompt/system-prompt.ts): what the model is told before the conversation
-  starts, composed once per turn for whichever runtime is about to serve it. Its header carries the split that
-  makes the setting honest: which guidance is a fact about the WORKSPACE or the image (the reference shelf, the
-  public outbox, `rg` being the search binary that is installed) and therefore travels to every runtime, and
-  which names a mechanism only the Claude Code loop wires (the question and plan cards, the checklist tools, the
-  secret references, the outside-content envelopes, the browser servers, the diagnostics server, the
-  `run_in_background`/watch seams that exist so a turn never polls a build with `sleep`, and the `intentic`
-  skill). It also says what the agent is INSIDE OF: the base prompt names the product in four words and the
-  Claude preset never does, and an agent that knows only that answers questions about the product from its
-  training, so one unconditional block gives the identity, points at the skill, and states the precedence rule
-  that a workspace's AGENTS.md is the owner's instruction rather than a description of the product.
+- [src/agent/prompt/system-prompt.ts](../src/agent/prompt/system-prompt.ts): where what the model is told before the
+  conversation goes, decided once per turn for whichever runtime is about to serve it: the base, the append, or
+  the user message where a runtime has no system seam.
+- [src/agent/prompt/guidance.ts](../src/agent/prompt/guidance.ts): this product's own guidance, one ordered registry
+  under a `## Working in this sandbox` heading. Each entry declares its reach (a fact about the workspace or the
+  image, such as the reference shelf, the public outbox, `rg`, and what an outside-content envelope means, travels
+  to every runtime; a mechanism only the Claude Code loop wires, such as the question cards, the checklist tools,
+  secret references, the browser and diagnostics servers and the `intentic` skill, does not), the mounts it waits
+  for, and its two forms. `full` is every paragraph as written against a past failure; `lean` is the short core,
+  which leaves to the base prompt and the tool descriptions what they already say. The `guidance` experiment
+  (decide/experiments.ts, settings `leanGuidance` and `leanGuidanceHoldout`) measures one against the other per
+  conversation, cohorted by a hash over both forms.
   [src/runtimes/codex/codex-instructions.ts](../src/runtimes/codex/codex-instructions.ts) is the Codex half: two
   undocumented config keys, verified by reading what reached the wire.
 - [src/agent/prompt/workspace-memory.ts](../src/agent/prompt/workspace-memory.ts): the owner's own standing rules,

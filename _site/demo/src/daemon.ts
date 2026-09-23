@@ -930,6 +930,8 @@ const DEMO_SETTINGS: SandboxHandlerOutput<`settings`, `get`> = {
     fieldNotes: true,
     fieldNotesBudget: 4000,
     fieldNotesHoldout: 0.2,
+    leanGuidance: true,
+    leanGuidanceHoldout: 0.2,
     sidecars: true,
 };
 
@@ -947,8 +949,8 @@ const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
         sections: [
             {
                 source: `guidance`,
-                title: `How this sandbox asks agents to work`,
-                text: "You run inside Intentic: a sandbox container serving one workspace, driven from a browser editor, where each conversation is an agent on its own git worktree whose finished delta lands in the owner's tree as uncommitted changes.\n\nSearch code with `rg` (ripgrep), which is installed: it is ~30× faster than `grep -r` on this tree.\n\nThe owner lands uncommitted work; commit only when asked.",
+                title: `Working in this sandbox`,
+                text: "## Working in this sandbox\n\nYou run inside Intentic, a sandbox serving one workspace from a browser editor. For anything about Intentic itself, load the `intentic` skill before answering.\n\nSearch code with `rg`, never `grep -r`, which walks node_modules.\n\nThe owner lands uncommitted work; commit only when asked.",
             },
             {
                 source: `persona`,

@@ -22,6 +22,7 @@ import type { FollowUpOutcome, TurnRuleCommand } from "../../rules/turn-ending.j
 import type { OwnBrowserReach } from "../../webext/webext-peer.js";
 import type { DependencyIssue } from "../../workspace/deps/reconcile-deps.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
+import type { GuidanceVariant } from "../prompt/guidance.js";
 import type { PromptTrim } from "../prompt/system-prompt.js";
 import type { ChildSupervisor } from "../subagents/children.js";
 import type { SecretAccess } from "../../secrets/secret-access.js";
@@ -72,6 +73,8 @@ export interface TurnSpec {
     // What the model's declared window would not pay for, already applied to the prompt fields above, so the adapter
     // sheds the same guidance the planner did and the disclosure shows the prompt that was actually sent.
     readonly contextTrim?: PromptTrim;
+    // Which variant of this product's guidance the turn drew, read by the adapter and the disclosure alike; absent is full.
+    readonly guidance?: GuidanceVariant;
     // Mid-turn steering queue; when present the turn streams input and pushed messages inject between tool calls.
     readonly steering?: SteeringQueue;
 }

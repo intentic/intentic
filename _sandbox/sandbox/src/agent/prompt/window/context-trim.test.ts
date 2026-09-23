@@ -4,7 +4,7 @@ import { applyTrim, trimFrame, trimState, type TurnTrim, turnTrim } from "./cont
 import { SKILL_CATALOG_NOTE_TITLE } from "../../../store/loaded-skills.js";
 import { PERSONA_NOTE_TITLE } from "../../../personas/personas.js";
 import { HANDOFF_STATE_NOTE_TITLE } from "../handoff-state.js";
-import { GUIDANCE_TITLE } from "../system-prompt.js";
+import { GUIDANCE_TITLE } from "../guidance.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "../workspace-map.js";
 import { MEMORY_NOTE_TITLE } from "../workspace-memory.js";
 import { WORKTREE_NOTE_TITLE } from "../turn-preamble.js";

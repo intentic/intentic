@@ -6,6 +6,7 @@ import { TURN_ENDING_NOTE_TITLE } from "../../../rules/turn-ending-note.js";
 import { createCredentialGrants } from "../../../secrets/credential-grants.js";
 import { GATED_CREDENTIALS_TITLE } from "../../../secrets/credential-gating.js";
 import type { FieldNotes } from "../../prompt/field-notes.js";
+import { GUIDANCE_REVISION } from "../../prompt/guidance.js";
 import { IQ_SEARCH_INSTRUCTION_TITLE } from "../../prompt/iq-search-instruction.js";
 import { WORKSPACE_MAP_NOTE_TITLE } from "../../prompt/workspace-map.js";
 import type { ChildSupervisor } from "../../subagents/children.js";
@@ -401,6 +402,34 @@ test("a window too small for the field notes withholds them, so the ledger recor
 
     expect(decision.context.fieldNotesNote).toBeUndefined();
     expect(decision.experiments).toEqual({ notesCohort: BRIEF.revision });
+});
+
+// the guidance experiment: the arm is the short form, and a turn composed with neither form is no control turn
+
+const GUIDANCE_MEASURED = SandboxSettingsSchema.parse({ leanGuidance: true, leanGuidanceHoldout: 0.5 });
+
+test.each([true, false])("a conversation drawing the %s arm is composed with that form and stamped with it", (arm) => {
+    const decision = decided({ ...FACTS, settings: GUIDANCE_MEASURED }, turn({ conversationId: conversationIn("lean-guidance", arm) }));
+
+    expect(decision.context.base.spec.guidance).toBe(arm ? "lean" : "full");
+    expect(decision.experiments).toEqual({ turnIndex: 0, guidanceArm: arm, guidanceCohort: GUIDANCE_REVISION });
+});
+
+test("the switch with no holdout sends the short form and measures nothing", () => {
+    const decision = decided({ ...FACTS, settings: SandboxSettingsSchema.parse({ leanGuidance: true }) }, turn({ conversationId: "c-1" }));
+
+    expect(decision.context.base.spec.guidance).toBe("lean");
+    expect(decision.experiments).toEqual({ turnIndex: 0 });
+});
+
+test.each([
+    ["a custom prompt", { ...FACTS, settings: { ...GUIDANCE_MEASURED, systemPromptMode: "custom", systemPrompt: "Own." } }],
+    ["a window too small for guidance", { ...FACTS, settings: GUIDANCE_MEASURED, declared: { window: 40_000, onACard: true } }],
+] as const)("%s sends neither form, so its conversation is stamped with no arm", (_case, facts) => {
+    const decision = decided(facts, turn({ agent: "endpoint/tiny", conversationId: conversationIn("lean-guidance", false) }));
+
+    expect(decision.experiments.guidanceArm).toBeUndefined();
+    expect(decision.experiments.guidanceCohort).toBeUndefined();
 });
 
 // the spawn door: the delegate shelf and full agency, on a conversation with a supervisor handed down

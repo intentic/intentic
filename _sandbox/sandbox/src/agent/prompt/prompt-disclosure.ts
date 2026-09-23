@@ -11,13 +11,15 @@ import { tmuxRunEnabled } from "../tools/agent-terminals.js";
 import { FIELD_NOTES_NOTE_HEADER, FIELD_NOTES_NOTE_TITLE } from "./field-notes.js";
 import { intenticSystemPrompt } from "./intentic-prompt.js";
 import { presetSystemPrompt } from "./preset-prompt.js";
-import { GUIDANCE_TITLE, harnessGuidance, type PromptRequest, promptInputOf, terminalMounted } from "./system-prompt.js";
+import { GUIDANCE_HEADER, GUIDANCE_TITLE } from "./guidance.js";
+import { harnessGuidance, type PromptRequest, promptInputOf, terminalMounted } from "./system-prompt.js";
 import { MEMORY_NOTE_HEADER, MEMORY_NOTE_TITLE } from "./workspace-memory.js";
 
 // Read off the request the adapter was handed, never recomposed from settings: what was sent, not what would be now.
 
 // Each piece is found by the header it opens with, the same anchors turn-preamble.ts splits at.
 const APPENDED: readonly { readonly header: string; readonly title: string; readonly source: PromptSectionSource }[] = [
+    { header: GUIDANCE_HEADER, title: GUIDANCE_TITLE, source: "guidance" },
     { header: PERSONA_NOTE_HEADER, title: PERSONA_NOTE_TITLE, source: "persona" },
     { header: FIELD_NOTES_NOTE_HEADER, title: FIELD_NOTES_NOTE_TITLE, source: "field-notes" },
     { header: MEMORY_NOTE_HEADER, title: MEMORY_NOTE_TITLE, source: "memory" },
@@ -53,7 +55,7 @@ export interface DisclosureInput {
 // The owner's text under `custom`, or the small-window paragraph (context-trim.ts), stands in the base's place.
 const baseReplaced = (request: PromptRequest, mode: SystemPromptMode): boolean => mode === "custom" || request.spec.contextTrim?.base === true;
 
-// The harness composes its guidance itself (harnessGuidance) rather than in the append; a replaced base has none.
+// The Claude Code loop composes its guidance outside the append (harnessGuidance); unheaded append text is also ours.
 const guidanceOf = ({ capabilities, request }: DisclosureInput, leading: string, replaced: boolean): string =>
     replaced
         ? ""
@@ -71,7 +73,7 @@ export const promptDisclosure = (input: DisclosureInput): SystemPromptDisclosure
     // A replaced base on a replacing runtime carries the composition in the prompt itself, not the append.
     const append = (replaced ? request.spec.systemPrompt : undefined) ?? request.spec.systemAppend ?? "";
     const marks = marksIn(append);
-    // Ahead of the first titled piece: the guidance, or the replacing prompt where there is one.
+    // Ahead of the first titled piece: the replacing prompt where there is one.
     const leading = append.slice(0, marks[0]?.at).trim();
     const base = baseOf(capabilities, request, mode, leading, replaced);
     const guidance = guidanceOf(input, leading, replaced);

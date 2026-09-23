@@ -1,4 +1,4 @@
-import type { DayWindowQuery, TurnExperiment, TurnMetricReading, UsageTurn } from "@intentic/sandbox-contract";
+import type { DayWindowQuery, SavingsReport, TurnExperiment, TurnMetricReading, UsageTurn } from "@intentic/sandbox-contract";
 import type { UsageStore } from "./usage-store.js";
 
 // Measures the mechanism experiments (iq search teaching, project map) off the ledger rather than asserting their
@@ -186,17 +186,29 @@ const NOTES_DESIGN: Design = {
     sample: meanOfTurns,
 };
 
+// `on` is the lean form. Judged on what the long form was written to prevent: calls that fail, and calls spent before
+// reaching the work. Every turn counts, since the guidance rides the system prompt for the whole session.
+const GUIDANCE_DESIGN: Design = {
+    arm: (turn) => turn.guidanceArm,
+    cohort: (turn) => turn.guidanceCohort,
+    metrics: [FAILED_CALLS, CALLS_BEFORE_TARGET],
+    sampleUnit: "conversations",
+    sample: meanOfTurns,
+};
+
 export const readTurnExperiments = async (
     usage: UsageStore,
     window: DayWindowQuery,
-): Promise<{ readonly search?: TurnExperiment; readonly map?: TurnExperiment; readonly notes?: TurnExperiment }> => {
+): Promise<Pick<SavingsReport, "search" | "map" | "notes" | "guidance">> => {
     const turns = (await usage.turns(window)).filter(measurable);
     const search = experimentOf(turns, SEARCH_DESIGN);
     const map = experimentOf(turns, MAP_DESIGN);
     const notes = experimentOf(turns, NOTES_DESIGN);
+    const guidance = experimentOf(turns, GUIDANCE_DESIGN);
     return {
         ...(search !== undefined ? { search } : {}),
         ...(map !== undefined ? { map } : {}),
         ...(notes !== undefined ? { notes } : {}),
+        ...(guidance !== undefined ? { guidance } : {}),
     };
 };

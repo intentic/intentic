@@ -205,7 +205,7 @@ What that buys, per surface: a button where there used to be a command (the upda
 container repair, the dev reload, the rebuild of a checkout-built sandbox from its checkout, deleting a sandbox
 from the machine holding it, enrolling desktop sync on a device already connected), and a paragraph in every
 turn's prompt naming the machines it can act on
-([system-prompt.ts](../../_sandbox/sandbox/src/agent/prompt/system-prompt.ts), plus the same rule in the per-device skill
+([guidance.ts](../../_sandbox/sandbox/src/agent/prompt/guidance.ts), plus the same rule in the per-device skill
 pack, [host-skills.ts](../../_sandbox/sandbox/src/hosts/host-skills.ts)).
 
 A machine can also be reachable without being a way in: desktop sync is deliberately capability-free, so a laptop
@@ -309,7 +309,7 @@ join:
   and the Linux connect dialog can hand a distro's one-liner to PowerShell (`wsl -d <distro> --exec sh -c "…"`).
 - The turn's prompt says the ids are one computer, which side owns the screen, and how to cross
   ([self-host.ts](../../_sandbox/sandbox/src/hosts/self-host.ts) `machineReach`,
-  [system-prompt.ts](../../_sandbox/sandbox/src/agent/prompt/system-prompt.ts)); both skill packs carry the same.
+  [guidance.ts](../../_sandbox/sandbox/src/agent/prompt/guidance.ts)); both skill packs carry the same.
 
 Crossing is a parameter, not a quoting exercise: `run_command` takes `in: "wsl:<distro>"` on a Windows device
 (`wsl.exe --exec sh -lc`, the script as one argument) and `in: "windows"` inside a distro (PowerShell through interop,

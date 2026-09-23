@@ -61,7 +61,7 @@ Every surface this one process owns, and the reason each one lives here rather t
   a layout the daemon has always known. So the surface is a grant over COST, not over reach — every byte it
   answers was already readable from the turn — which is why the routes are their own namespace rather than a
   widening of `/agents`, whose neighbours land, discard and archive (auth/grants.ts states the bargain). The standing
-  prompt names the verb on every runtime (`FLEET_GUIDANCE` in src/agent/prompt/system-prompt.ts), and `iq sessions
+  prompt names the verb on every runtime (the `fleet` entry in src/agent/prompt/guidance.ts), and `iq sessions
   list` joins the same registry so a runtime session prints the conversation it belonged to instead of a bare
   uuid.
 - Outwait the world on the agent's behalf. For a condition OUTSIDE the harness: a CI run, a deploy, a remote

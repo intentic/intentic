@@ -8,7 +8,8 @@ import {
     type TurnNote,
 } from "@intentic/sandbox-contract";
 import { FIELD_NOTES_NOTE_TITLE } from "../field-notes.js";
-import { GUIDANCE_TITLE, type PromptTrim } from "../system-prompt.js";
+import { GUIDANCE_TITLE } from "../guidance.js";
+import type { PromptTrim } from "../system-prompt.js";
 import { BRIEFING_NOTE_TITLES } from "../turn-briefing.js";
 
 // Tiers are read off the local-model card's window rungs, never off the harness floor estimate in context-budget.ts.
