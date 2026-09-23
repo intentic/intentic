@@ -1584,7 +1584,7 @@ const windowsSide = (): Device => ({
         home: `C:\\Users\\radar`,
         roots: [],
         hostname: `rog`,
-        wslDistros: [`Arch`, `Ubuntu`],
+        wslDistros: [`Arch`, `Ubuntu`, `docker-desktop`],
     },
     sandboxes: [CONTAINER],
     report: { hostname: `rog`, os: `win32`, pairings: [], ports: [], agent: { running: true, installed: `1.183.0` }, capturedAt: Date.now() },
@@ -1667,6 +1667,8 @@ it(`opens the PC as one page: an environment row per side, the sandbox once, and
     expect(text).not.toContain(`connected as rog::wsl:Arch`);
     expect(text).toContain(`Ubuntu`);
     expect(labels(el)).toContain(`Connect`);
+    // Docker Desktop's own distro is listed by `wsl -l` but is no environment of the PC.
+    expect(text).not.toContain(`docker-desktop`);
     // One Update for the computer, one Restart per side: an update moves every side, a restart is one process.
     expect(labels(el).filter((label) => label === `Update agent`)).toHaveLength(1);
     expect(labels(el).filter((label) => label === `Restart agent`)).toHaveLength(2);

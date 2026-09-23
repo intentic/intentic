@@ -93,7 +93,7 @@ it(`hands a WSL distro's command to PowerShell when the device is named for one`
                 home: `C:\\Users\\radar`,
                 roots: [],
                 hostname: `rog`,
-                wslDistros: [`Arch`, `Ubuntu`],
+                wslDistros: [`Arch`, `Ubuntu`, `docker-desktop`],
             },
         },
     ];
@@ -102,6 +102,7 @@ it(`hands a WSL distro's command to PowerShell when the device is named for one`
     await waitFor(() => expect(document.body.textContent).toContain(`PAIR_TOKEN='pair-token'`));
     expect(document.body.textContent).toContain(`wsl -d Arch --exec sh -c "curl -fsSL https://intentic.dev/device |`);
     expect(document.body.textContent).toContain(`in PowerShell`);
+    expect(document.body.textContent).not.toContain(`docker-desktop`);
 
     // The other way in stays one click away, for a reader already inside the distro.
     pill(`A terminal in the distro`).click();

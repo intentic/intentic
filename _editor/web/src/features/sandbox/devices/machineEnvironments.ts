@@ -1,4 +1,4 @@
-import { deviceDistro } from "@intentic/sandbox-contract";
+import { deviceDistro, userDistrosOf } from "@intentic/sandbox-contract";
 import type { RouteLocationRaw } from "vue-router";
 import { deviceDoors, osLabel, osTitle } from "./deviceFacts";
 import type { DeviceRow, MachineRow } from "./deviceRows";
@@ -49,7 +49,7 @@ export const wslDistroRows = (machine: MachineRow): WslDistroRow[] => {
         return [];
     }
     const stem = windows.device.hostId ?? machine.label;
-    return (windows.device.facts?.wslDistros ?? [])
+    return userDistrosOf(windows.device.facts)
         .filter((name) => !machine.environments.some((environment) => distroOf(environment) === name))
         .map((name) => ({
             name,

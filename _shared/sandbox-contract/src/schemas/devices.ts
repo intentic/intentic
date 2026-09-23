@@ -1,6 +1,6 @@
 // What one of the user's own machines is running.
 import { z } from "zod";
-import { hostEntryOf, hostEnvironmentOf, type DeviceFacts, DeviceFactsSchema, WSL_SYSTEM_DISTROS, WslEnvironmentSchema } from "./hosts.js";
+import { hostEntryOf, hostEnvironmentOf, type DeviceFacts, DeviceFactsSchema, userDistrosOf, WslEnvironmentSchema } from "./hosts.js";
 import { DEV_VERSION } from "../state/versions.js";
 // Desktop-sync report shape shared by the agent, daemon and browser, produced only by the agent's own `deviceReport`.
 // The agent never reports `sandboxes`; the docker half is filled in by whoever reads the report, scoped to the reader's
@@ -596,7 +596,7 @@ export const pathReach = (platform: string | undefined, facts: DeviceFacts | und
     if (platform === undefined || (platform === "windows") === windowsPath(path)) {
         return { kind: "direct" };
     }
-    const distros = platform === "windows" ? (facts?.wslDistros ?? []).filter((distro) => !WSL_SYSTEM_DISTROS.has(distro)) : [];
+    const distros = platform === "windows" ? userDistrosOf(facts) : [];
     const only = distros.length === 1 ? distros[0] : undefined;
     return only === undefined ? { kind: "none", distros } : { kind: "wsl", distro: only };
 };

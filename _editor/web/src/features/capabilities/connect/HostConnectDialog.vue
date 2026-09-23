@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { HostSummary } from "@intentic/sandbox-contract";
+import { type HostSummary, userDistrosOf } from "@intentic/sandbox-contract";
 import { Button, Code, Modal, type NoticeModel, Notice, SegmentedControl, noticeFrom } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useDevices } from "../../sandbox/devices/useDevices";
@@ -31,7 +31,7 @@ const { daemonUrl } = useSandbox();
 // The distros every connected Windows PC lists, read off the fleet already held (no poll): the Linux one-liner can
 // be run inside one from PowerShell, so a reader on that PC never has to open the distro's own terminal first.
 const { devices } = useDevices({ poll: false });
-const distros = computed(() => (props.platform === `linux` ? [...new Set(devices.value.flatMap((device) => device.facts?.wslDistros ?? []))] : []));
+const distros = computed(() => (props.platform === `linux` ? [...new Set(devices.value.flatMap((device) => userDistrosOf(device.facts)))] : []));
 type Via = `terminal` | `powershell`;
 const VIA_OPTIONS = computed((): { label: string; value: Via; title: string }[] => [
     {

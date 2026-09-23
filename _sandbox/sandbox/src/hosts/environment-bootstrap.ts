@@ -1,5 +1,5 @@
 import { installScriptUrl } from "@intentic/constants";
-import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf, WSL_SYSTEM_DISTROS } from "@intentic/sandbox-contract";
+import { HOST_NATIVE_ENVIRONMENT, type DeviceFacts, hostEntryOf, hostConnectionKey, hostEnvironmentOf, userDistrosOf } from "@intentic/sandbox-contract";
 import type { Services } from "../composition.js";
 import { callTool } from "./device-reports.js";
 
@@ -27,7 +27,7 @@ export const forgetBootstrap = (connection?: string): void => void (connection =
 // connected side's own facts: Windows lists its distros, and a distro implies the Windows side it runs on.
 export const bootstrapTargets = (environment: string, facts: DeviceFacts): string[] => {
     if (environment === HOST_NATIVE_ENVIRONMENT) {
-        return (facts.wslDistros ?? []).filter((distro) => !WSL_SYSTEM_DISTROS.has(distro)).map((distro) => `wsl:${distro}`);
+        return userDistrosOf(facts).map((distro) => `wsl:${distro}`);
     }
     // A distro can only be reached from Windows and can only reach Windows, so its sibling set is that one side.
     return environment.startsWith("wsl:") ? [HOST_NATIVE_ENVIRONMENT] : [];
