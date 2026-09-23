@@ -70,6 +70,17 @@ const hoverOut = (): void => void bar()?.dispatchEvent(new Event(`pointerleave`)
 const handle = (): HTMLButtonElement | null => document.querySelector<HTMLButtonElement>(`.chat-quick-eye`);
 const hoverHandle = (): void => void handle()?.dispatchEvent(new Event(`pointerenter`));
 const escape = (): void => void bar()?.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
+const pressOn = (target: Element | null): void => void target?.dispatchEvent(new Event(`pointerdown`, { bubbles: true }));
+const caretLeavesFor = (next: Element | null): void =>
+    void bar()?.dispatchEvent(new FocusEvent(`focusout`, { bubbles: true, relatedTarget: next }));
+// A press on the transcript's own glass: where a selection starts.
+const card = (): HTMLElement | null => document.querySelector(`.chat-quick-card`);
+const peekThroughHandle = async (): Promise<void> => {
+    hoverHandle();
+    jest.advanceTimersByTime(200);
+    await settle();
+};
+const said = (): void => useChat().active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
 // Past both delays the pill uses, so a test never has to restate either one.
 const waitOutHover = async (): Promise<void> => {
     jest.advanceTimersByTime(1_000);
@@ -284,24 +295,19 @@ it(`offers the transcript only on the open box, and only once something has been
     expect(handle()).toBeNull();
 });
 
-// Two things end with one pointer, and they must not end together: the transcript is what the pointer asked for, so it
-// goes the moment the pointer does, while the box keeps the grace that lets an overshot edge be crossed back.
-it(`folds the transcript away with the pointer, before the box itself goes`, async () => {
-    const chat = useChat();
-    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+// A borrowed transcript and a borrowed box both end with the pointer, the transcript first: its grace and its fade
+// together are over before the box's grace is.
+it(`folds a borrowed transcript away with the pointer, before the box itself goes`, async () => {
+    said();
     await mount(ChatQuickBar);
-    press().click();
-    await settle();
+    hoverIn();
+    await waitOutHover();
 
-    hoverHandle();
-    jest.advanceTimersByTime(200);
-    await settle();
+    await peekThroughHandle();
     expect(chatBarPeek.value).toBe(true);
 
-    // The turns stay mounted just long enough to fade with the card behind them — they are the panel's, so they cannot
-    // fade after the flag that draws them has dropped — and the box is still standing when they are gone.
     hoverOut();
-    jest.advanceTimersByTime(130);
+    jest.advanceTimersByTime(350);
     await settle();
     expect([chatBarPeek.value, opened()]).toEqual([false, true]);
 
@@ -309,11 +315,108 @@ it(`folds the transcript away with the pointer, before the box itself goes`, asy
     expect(opened()).toBe(false);
 });
 
+it(`gives an overshot edge its transcript back when the pointer returns in time`, async () => {
+    said();
+    await mount(ChatQuickBar);
+    hoverIn();
+    await waitOutHover();
+    await peekThroughHandle();
+
+    hoverOut();
+    jest.advanceTimersByTime(100);
+    hoverIn();
+    await waitOutHover();
+
+    expect([chatBarPeek.value, opened()]).toEqual([true, true]);
+});
+
+// Selecting a line to copy starts with a press on the transcript and often ends past its edge: neither may fold it.
+it(`keeps the box and its transcript once pressed, so a selection survives the pointer leaving`, async () => {
+    said();
+    await mount(ChatQuickBar);
+    hoverIn();
+    await waitOutHover();
+    await peekThroughHandle();
+
+    pressOn(card());
+    hoverOut();
+    await waitOutHover();
+
+    expect([chatBarPeek.value, opened()]).toEqual([true, true]);
+});
+
+// A press on text takes the caret out of the composer and gives it to nothing, which is not the reader leaving.
+it(`stays open when the caret falls to nothing, and folds when it leaves for the page`, async () => {
+    await mount(ChatQuickBar);
+    hoverIn();
+    await waitOutHover();
+
+    caretLeavesFor(null);
+    await settle();
+    expect(opened()).toBe(true);
+
+    const elsewhere = document.createElement(`button`);
+    document.body.append(elsewhere);
+    caretLeavesFor(elsewhere);
+    await settle();
+    expect(opened()).toBe(false);
+});
+
+it(`folds the transcript and an empty box on a press on the page`, async () => {
+    said();
+    await mount(ChatQuickBar);
+    press().click();
+    await settle();
+    handle()!.click();
+    await settle();
+
+    pressOn(document.body);
+    await settle();
+
+    expect([chatBarPeek.value, opened()]).toEqual([false, false]);
+});
+
+// Words hold the composer open against the page, so copying from it into them is one press away, and the box's own
+// minimize is what folds them; the pill carries them from there.
+it(`keeps a box holding words through a press on the page, and folds it only on its own minimize`, async () => {
+    const chat = useChat();
+    await mount(ChatQuickBar);
+    press().click();
+    await settle();
+    chat.active.value.draft.value = `half a thought`;
+    await settle();
+
+    pressOn(document.body);
+    await settle();
+    expect(opened()).toBe(true);
+
+    document.querySelector<HTMLButtonElement>(`.chat-quick-fold`)!.click();
+    await settle();
+    expect([opened(), line()]).toEqual([false, `half a thought`]);
+});
+
+// The model list, the mode menu and their kind hang off the composer but are teleported to the body.
+it(`counts the menus the composer opens as part of the box`, async () => {
+    await mount(ChatQuickBar);
+    press().click();
+    await settle();
+    const menu = document.createElement(`div`);
+    menu.className = `ui-anchored`;
+    const row = document.createElement(`button`);
+    menu.append(row);
+    document.body.append(menu);
+
+    pressOn(row);
+    caretLeavesFor(row);
+    await settle();
+
+    expect(opened()).toBe(true);
+});
+
 // A press keeps what a hover only borrows — the transcript's only door for a keyboard or a touch, neither of which can
 // hover — and then one Escape undoes one thing, in the order they were opened.
 it(`keeps the transcript on a press, and gives it back one Escape before the box`, async () => {
-    const chat = useChat();
-    chat.active.value.transcript.restoreMessages([{ role: `user`, text: `an earlier turn` }]);
+    said();
     await mount(ChatQuickBar);
     press().click();
     await settle();
@@ -330,6 +433,56 @@ it(`keeps the transcript on a press, and gives it back one Escape before the box
     escape();
     await settle();
     expect(opened()).toBe(false);
+});
+
+// The eye stays on the transcript it opened: pressing a borrowed one keeps it, pressing a kept one folds it.
+it(`keeps a borrowed transcript on the eye's press, and folds it on the next`, async () => {
+    said();
+    await mount(ChatQuickBar);
+    hoverIn();
+    await waitOutHover();
+    await peekThroughHandle();
+
+    handle()!.click();
+    hoverOut();
+    await waitOutHover();
+    expect([chatBarPeek.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([true, `true`]);
+
+    handle()!.click();
+    jest.advanceTimersByTime(130);
+    await settle();
+    expect([chatBarPeek.value, handle()!.getAttribute(`aria-expanded`)]).toEqual([false, `false`]);
+});
+
+// Pressing on transcript text leaves the caret on the body, so that is where the reader's Escape lands.
+it(`hears an Escape that lands on the body while the box is the last thing pressed`, async () => {
+    said();
+    await mount(ChatQuickBar);
+    press().click();
+    await settle();
+    handle()!.click();
+    await settle();
+
+    document.body.dispatchEvent(new KeyboardEvent(`keydown`, { key: `Escape`, bubbles: true, cancelable: true }));
+    jest.advanceTimersByTime(130);
+    await settle();
+
+    expect([chatBarPeek.value, opened()]).toEqual([false, true]);
+});
+
+it(`opens the full chat from the transcript's corner, folding the box behind it`, async () => {
+    said();
+    const push = jest.spyOn(router, `push`).mockResolvedValue(undefined);
+    await mount(ChatQuickBar);
+    press().click();
+    await settle();
+
+    document.querySelector<HTMLButtonElement>(`.chat-quick-full`)!.click();
+    await settle();
+
+    expect(push.mock.calls).toEqual([[`/chat`]]);
+    expect(opened()).toBe(false);
+    push.mockRestore();
 });
 
 // The other half of the contract: what the pill grows into is the panel, wearing one presentation.

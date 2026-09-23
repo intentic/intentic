@@ -975,7 +975,10 @@
         "chatQuickBar": {
             "agentWaitingForYou": "Tu agente te está esperando",
             "conversationSoFar": "La conversación hasta ahora",
+            "hideConversation": "Ocultar la conversación",
+            "minimize": "Minimizar",
             "openChatAgentWaiting": "Abre el chat: tu agente espera una respuesta",
+            "openFullChat": "Abrir el chat completo",
             "titleWaitingForYou": "{title} · te espera",
             "whatWasSaidHover": "Lo que se dijo: pasa el ratón para leer, pulsa para dejarlo abierto",
             "writeToAgentHere": "Escribe a tu agente desde aquí"

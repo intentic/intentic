@@ -646,13 +646,28 @@
         opacity: 0;
     }
 }
+/* The tools stand on the box's top edge, so they arrive once the growth reaches it, and move with the card's own motion. */
+.chat-quick-tools {
+    animation: chat-quick-tools-in 300ms ease-out;
+}
+.chat-quick-peeking .chat-quick-tools {
+    animation: chat-peek-card 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes chat-quick-tools-in {
+    from,
+    55% {
+        opacity: 0;
+    }
+}
 @media (prefers-reduced-motion: reduce) {
     .chat-quick-card,
     .chat-peeking .chat-turns {
         transition: none;
     }
     .chat-quick-peeking .chat-quick-card,
-    .chat-quick-peeking .chat-peeking .chat-turns {
+    .chat-quick-peeking .chat-peeking .chat-turns,
+    .chat-quick-tools,
+    .chat-quick-peeking .chat-quick-tools {
         animation: none;
     }
 }

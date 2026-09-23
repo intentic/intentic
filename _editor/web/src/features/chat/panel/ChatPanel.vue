@@ -49,12 +49,13 @@ const peeking = computed(() => bar && chatBarPeek.value);
 // What the panel lies on. The strip is one composer floating over someone else's page, so it paints nothing: the box
 // draws its own edge and a surface behind it reads as a tray. A peek needs a card, since turns cannot be read over a
 // page showing through them — but that card is the strip's own (ChatQuickBar draws it, so it can arrive without the
-// composer arriving with it). All this does is clip the turns to its shape and refuse to outgrow the view.
+// composer arriving with it). All this does is clip the turns to its shape and refuse to outgrow the view; the top
+// padding is the band the strip's tools stand in, so they never cover a pinned prompt.
 const ground = computed(() => {
     if (!bar) {
         return `ground-card h-full overflow-hidden bg-card`;
     }
-    return peeking.value ? `chat-peeking ground-card max-h-[60vh] overflow-hidden rounded-2xl` : ``;
+    return peeking.value ? `chat-peeking ground-card max-h-[60vh] overflow-hidden rounded-2xl pt-3` : ``;
 });
 
 // How narrow a chat may shrink (useLayout's MIN_PANE_PX), imported rather than restated since the docked column

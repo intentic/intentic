@@ -1018,7 +1018,10 @@
         "chatQuickBar": {
             "agentWaitingForYou": "Your agent is waiting for you",
             "conversationSoFar": "The conversation so far",
+            "hideConversation": "Hide the conversation",
+            "minimize": "Minimize",
             "openChatAgentWaiting": "Open the chat: your agent is waiting for an answer",
+            "openFullChat": "Open the full chat",
             "titleWaitingForYou": "{title} · waiting for you",
             "whatWasSaidHover": "What was said: hover to read, press to keep it open",
             "writeToAgentHere": "Write to your agent from here"

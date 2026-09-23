@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ProgressRing } from "@intentic/ui";
+import { ProgressRing, ui } from "@intentic/ui";
 import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { chatBarPeek, chatParked } from "./chatPanelLayout";
 import { chatBarDock } from "../../../shell/window/dockSlots";
 import { focusComposer } from "../tabs/useChat-tabs";
@@ -10,36 +10,31 @@ import { useT } from "@intentic/ui/i18n";
 import IdentityTile from "../../capabilities/connect/IdentityTile.vue";
 import { contextPct } from "../../agents/fleet/agentStatus";
 
-// The chat's home while it is parked: a pill floating over the bottom of the area that grows into the focused chat's
-// own composer. The panel teleports here (PoppablePanels), so this is never a second composer — the words, the model,
-// the attachments and the stream are the conversation /chat would show.
-// It floats rather than sitting in the shell's grid: growing it must not reflow the page underneath, because the
-// reader opened it to say something ABOUT that page.
-// Open, THE COMPOSER IS THE WHOLE SURFACE: no frame, no title, no status row around it. Every one of those drew a
-// second edge around a box that already has one, and none of them carried anything a reader writing one message needs.
-// The one thing the box cannot answer on its own — "what did it just say?" — is a handle on its top edge, and what
-// that reveals is this same pane's transcript, unfolding upward over the page (chatBarPeek).
+// The parked chat's home: a pill over the bottom of the area that grows into the focused chat's own composer (the panel
+// teleports into `slot`), with that pane's own transcript unfolding above it on request (chatBarPeek). Hover borrows the
+// box and a press keeps it until the reader dismisses it; docs/design/chat-quick-bar.md has the rules and their reasons.
 
 const t = useT();
 
 const router = useRouter();
+const route = useRoute();
 const { active, messages, streaming, draft, composerFocus, awaitingDecision, contextUsage, provider } = useChat();
 
 const expanded = ref(false);
-// Whether this box has ever been open. Closing is the growth run backwards (chat.css), and an exit animation on an
-// element that STARTS in its exit state would play once on page load, with nothing having closed.
+// Whether the box has ever opened: its closing animation must not play on a box that starts closed.
 const woken = ref(false);
-// Focus, not hover, is what keeps it open through a pointer that has wandered off.
-const holdsFocus = ref(false);
+// A press, the caret or a summons has made the box the reader's: only a dismissal closes it, never the pointer.
+const kept = ref(false);
+// The transcript is shown, and a press has kept it past the pointer that borrowed it.
+const peekOpen = ref(false);
+const peekKept = ref(false);
 const float = useTemplateRef(`float`);
 const slot = useTemplateRef(`slot`);
 
 const title = computed(() => active.value.title.value ?? undefined);
-// Nothing said yet is nothing to look back at, so the handle isn't drawn on a chat that has no turns.
 const hasTranscript = computed(() => messages.value.length > 0);
 
-// What the pill is for right now, most urgent first. `asking` is the one that isn't about the composer at all: a
-// permission card or a question is drawn in the transcript, which a pill has none of, so it can only carry the news.
+// What the pill is for right now, most urgent first; `asking` is news only, since its card is drawn in the transcript.
 type Standing = `asking` | `working` | `unsent` | `named` | `inviting`;
 const standing = computed<Standing>(() => {
     if (awaitingDecision.value) {
@@ -54,9 +49,7 @@ const standing = computed<Standing>(() => {
     return title.value === undefined ? `inviting` : `named`;
 });
 
-// What the identity ring reads, the fleet card's two readings in the card's own order (tileRim): a turn in flight is
-// an arc going round, and otherwise it is how full this chat's context window is. Nothing measured leaves the plain
-// track, which is what the card draws too.
+// The fleet card's two readings in its own order (tileRim): a turn in flight spins, otherwise context fullness.
 const rim = computed<{ percent: number; tone: string; spin: boolean } | undefined>(() => {
     if (streaming.value) {
         return { percent: 25, tone: `text-link`, spin: true };
@@ -65,73 +58,71 @@ const rim = computed<{ percent: number; tone: string; spin: boolean } | undefine
     return percent === undefined ? undefined : { percent, tone: percent >= 80 ? `text-warning` : `text-primary-500`, spin: false };
 });
 
-// Hover opens on intent, not on contact: the bottom of the area is also the way to a scrollbar and to the terminal,
-// and a pill that unfolded under every crossing pointer would cover the page being read.
+// A pointer crossing the bottom of the area on its way to a scrollbar or the terminal must not unfold the box.
 const HOVER_INTENT_MS = 250;
-// Long enough to cross the gap back after overshooting the pill's own edge.
+// Long enough to cross back after overshooting an edge; the transcript's is shorter, so it always folds before the box.
 const HOVER_GRACE_MS = 400;
-// The handle is a target reached on purpose, so its guard only has to outlast a pointer leaving the box across it.
+const PEEK_GRACE_MS = 200;
+// The eye is reached on purpose, so its intent only has to outlast a pointer crossing it.
 const PEEK_INTENT_MS = 140;
-// Long enough to read as leaving, short enough that nobody waits for it; must match the card's own exit duration,
-// since this is what keeps the turns mounted while they fade with it.
+// Must match the card's exit transition in chat.css: the turns stay mounted this long so they fade with it.
 const PEEK_EXIT_MS = 130;
-let timer: ReturnType<typeof setTimeout> | undefined;
+// Surfaces the composer opens outside its own subtree; a press or the caret landing in one is still inside the box.
+const OVERLAYS = `.ui-anchored, [role="dialog"], .p-contextmenu`;
+
+let boxTimer: ReturnType<typeof setTimeout> | undefined;
 let peekTimer: ReturnType<typeof setTimeout> | undefined;
 let peekExit: ReturnType<typeof setTimeout> | undefined;
-const cancelTimer = (): void => {
-    clearTimeout(timer);
-    timer = undefined;
+const cancelBoxTimer = (): void => {
+    clearTimeout(boxTimer);
+    boxTimer = undefined;
 };
-
-// Two states, not one, and both flip in the same render: `peekOpen` is whether the transcript is being asked for,
-// `chatBarPeek` is whether the panel is drawing it. They come apart only on the way out, where the turns have to stay
-// mounted long enough to fade — they belong to the panel, so they cannot fade after the flag that draws them drops.
-// The entry state is an ANIMATION rather than a transition (chat.css) precisely so nothing here has to wait a frame:
-// a flag set a frame late is a flag that is wrong for a frame, and Escape arriving in it closed the wrong thing.
-const peekOpen = ref(false);
-const openPeek = (): void => {
-    clearTimeout(peekTimer);
-    clearTimeout(peekExit);
-    peekTimer = peekExit = undefined;
-    peekOpen.value = true;
-    chatBarPeek.value = true;
-};
-const closePeek = (): void => {
+const cancelPeekTimer = (): void => {
     clearTimeout(peekTimer);
     peekTimer = undefined;
+};
+
+const within = (node: Element): boolean => float.value?.contains(node) === true || node.closest(OVERLAYS) !== null;
+
+// `peekOpen` is whether the transcript is asked for and `chatBarPeek` whether the panel draws it: they part only on the
+// way out, where the turns must stay mounted to fade with the card, and both flip in one render so Escape reads true.
+const openPeek = (keep: boolean): void => {
+    cancelPeekTimer();
+    clearTimeout(peekExit);
+    peekExit = undefined;
+    peekOpen.value = true;
+    chatBarPeek.value = true;
+    if (keep) {
+        peekKept.value = true;
+        kept.value = true;
+    }
+};
+const closePeek = (): void => {
+    cancelPeekTimer();
     if (!peekOpen.value) {
         return;
     }
     peekOpen.value = false;
+    peekKept.value = false;
     peekExit = setTimeout(() => {
         chatBarPeek.value = false;
         peekExit = undefined;
     }, PEEK_EXIT_MS);
 };
-// The whole form is leaving, so there is nothing for the transcript to fade out of: it goes with it, in one render.
+// The whole box is leaving, so the transcript goes with it in the same render rather than fading on its own.
 const dropPeek = (): void => {
-    clearTimeout(peekTimer);
+    cancelPeekTimer();
     clearTimeout(peekExit);
-    peekTimer = peekExit = undefined;
+    peekExit = undefined;
     peekOpen.value = false;
+    peekKept.value = false;
     chatBarPeek.value = false;
 };
-onBeforeUnmount(() => {
-    cancelTimer();
-    dropPeek();
-});
 
-// Words in the box are the one thing a close could lose sight of, so they hold it open; a live turn does not, since
-// the pill says so on its own line.
-const collapsible = computed(() => !holdsFocus.value && draft.value.trim() === ``);
-
-// A pointer that merely crossed the pill gets the box, never the caret: taking it on hover would route the next
-// keystroke away from whatever the reader was actually typing into, and the caret it stole would then hold the
-// composer open over the page. Only a press or a summons means to write.
+// Only a press or a summons takes the caret: taken on hover, it would route the next keystroke away from the page.
 const expand = (caret: boolean): void => {
-    cancelTimer();
-    // While a card is waiting for an answer, a box offering to send a message is the wrong instrument: it would read as
-    // the way to answer, and the answer isn't a message. One already open stands, so nobody loses sight of a draft.
+    cancelBoxTimer();
+    // A waiting card is answered in the transcript, not by a message, so no box is offered; one already open stays.
     if (standing.value === `asking`) {
         return;
     }
@@ -140,36 +131,99 @@ const expand = (caret: boolean): void => {
         woken.value = true;
     }
     if (caret) {
+        kept.value = true;
         focusComposer();
     }
 };
 const collapse = (): void => {
-    cancelTimer();
+    cancelBoxTimer();
     dropPeek();
     expanded.value = false;
+    kept.value = false;
+};
+// Words in the box hold it open against the pointer and a press on the page; only Escape or minimizing folds them.
+const collapsible = computed(() => !kept.value && draft.value.trim() === ``);
+
+// What the reader moving on to the page ends: the transcript always, the box unless it holds words.
+const release = (): void => {
+    closePeek();
+    kept.value = false;
+    if (collapsible.value) {
+        collapse();
+    }
 };
 
 const onEnter = (): void => {
-    cancelTimer();
+    cancelBoxTimer();
+    cancelPeekTimer();
     if (!expanded.value) {
-        timer = setTimeout(() => expand(false), HOVER_INTENT_MS);
+        boxTimer = setTimeout(() => expand(false), HOVER_INTENT_MS);
     }
 };
 const onLeave = (): void => {
-    cancelTimer();
-    // The transcript goes with the pointer that asked for it, whether or not a draft is holding the box open.
-    closePeek();
+    cancelBoxTimer();
+    cancelPeekTimer();
+    if (peekOpen.value && !peekKept.value) {
+        peekTimer = setTimeout(closePeek, PEEK_GRACE_MS);
+    }
     if (expanded.value && collapsible.value) {
-        timer = setTimeout(() => {
+        boxTimer = setTimeout(() => {
             if (collapsible.value) {
                 collapse();
             }
         }, HOVER_GRACE_MS);
     }
 };
-// Escape belongs to the composer first: it stops a streaming turn, abandons an armed edit and quits hands-free, and
-// says so by calling preventDefault on the ones it claimed. Then the transcript, then the box: one press undoes one
-// thing, in the order they were opened.
+// A press anywhere on the box's content keeps it and whatever it is showing; the tools act on their own presses.
+const onPressInside = (event: Event): void => {
+    if (!expanded.value || (event.target instanceof Element && event.target.closest(`.chat-quick-tools`) !== null)) {
+        return;
+    }
+    kept.value = true;
+    if (peekOpen.value) {
+        peekKept.value = true;
+    }
+};
+const onPressOutside = (event: Event): void => {
+    if (event.target instanceof Element && !within(event.target)) {
+        release();
+    }
+};
+// A press on transcript text leaves the caret nowhere, so its Escape arrives on the body; kept, the box was the last
+// thing pressed and the key is its.
+const onStrayEscape = (event: KeyboardEvent): void => {
+    if (event.key === `Escape` && kept.value && event.target === document.body) {
+        onEscape(event);
+    }
+};
+const disarm = (): void => {
+    document.removeEventListener(`pointerdown`, onPressOutside, true);
+    document.removeEventListener(`keydown`, onStrayEscape);
+};
+// Capture phase, so a surface that stops its own presses cannot hide from the box that the reader moved on.
+watch(expanded, (open) => {
+    disarm();
+    if (open) {
+        document.addEventListener(`pointerdown`, onPressOutside, true);
+        document.addEventListener(`keydown`, onStrayEscape);
+    }
+});
+onBeforeUnmount(disarm);
+
+const onFocusIn = (): void => {
+    if (expanded.value) {
+        kept.value = true;
+    }
+};
+// Focus falling to nothing is a press on text inside the box or the window losing focus, never the reader leaving.
+const onFocusOut = (event: FocusEvent): void => {
+    const next = event.relatedTarget;
+    if (next instanceof Element && !within(next)) {
+        release();
+    }
+};
+// Escape is the composer's first (a turn to stop, an edit to drop) and it claims one with preventDefault; then the
+// transcript, then the box: one press undoes one thing.
 const onEscape = (event: KeyboardEvent): void => {
     if (event.defaultPrevented) {
         return;
@@ -180,44 +234,43 @@ const onEscape = (event: KeyboardEvent): void => {
     }
     collapse();
 };
-const onFocusOut = (event: FocusEvent): void => {
-    const next = event.relatedTarget;
-    if (next instanceof Node && float.value?.contains(next) === true) {
-        return;
-    }
-    holdsFocus.value = false;
-    if (collapsible.value) {
-        collapse();
-    }
-};
 
-// Hover reads, a press keeps: the handle is also the transcript's only door for a keyboard or a touch, neither of
-// which can hover at all.
-const onPeekEnter = (): void => {
-    clearTimeout(peekTimer);
+const onEyeEnter = (): void => {
+    cancelPeekTimer();
     if (!peekOpen.value) {
-        peekTimer = setTimeout(openPeek, PEEK_INTENT_MS);
+        peekTimer = setTimeout(() => openPeek(false), PEEK_INTENT_MS);
     }
 };
-const togglePeek = (): void => {
-    if (peekOpen.value) {
+const onEyeLeave = (): void => {
+    if (!peekOpen.value) {
+        cancelPeekTimer();
+    }
+};
+// A press keeps what a hover only borrowed, and a second press folds it: keyboard and touch have no hover to borrow with.
+const onEyePress = (): void => {
+    if (peekOpen.value && peekKept.value) {
         closePeek();
         return;
     }
-    openPeek();
+    openPeek(true);
+};
+const openChat = (): void => {
+    collapse();
+    void router.push(`/chat`);
 };
 
-// Anything that asks for the caret — "New agent" from any surface, a board starter filling the box, a card summoned
-// from another window — means to be typed into, so it grows the pill wherever the reader is standing.
+// A link followed from the transcript is the reader going to look at something the transcript would cover.
+watch(() => route.fullPath, closePeek);
+
+// Anything that asks for the caret (New agent, a board starter, a summons from another window) grows the pill; the
+// caret itself is already on its way from whoever raised the signal.
 watch(composerFocus, () => {
     if (chatParked.value) {
-        // The caret is already on its way from whoever raised the signal; this only has to give it somewhere to land.
         expand(false);
     }
 });
 
-// Publishes the slot only while the pill is on screen; parked elsewhere, the panel goes back to the parking stage.
-// Leaving also closes the box, so the composer is never left grown over a surface that has its own.
+// The slot is published only while the pill is on screen, and leaving closes the box over a surface with its own.
 watch(
     [() => chatParked.value, slot],
     ([parked, element]) => {
@@ -228,7 +281,11 @@ watch(
     },
     { immediate: true, flush: `post` },
 );
-onBeforeUnmount(() => (chatBarDock.value = null));
+onBeforeUnmount(() => {
+    chatBarDock.value = null;
+    cancelBoxTimer();
+    dropPeek();
+});
 
 const restingLine = computed(() => {
     if (standing.value === `asking`) {
@@ -242,7 +299,7 @@ const restingLine = computed(() => {
     return title.value ?? (standing.value === `working` ? t(`shared.working`) : t(`shared.askAnything`));
 });
 
-// A question can only be answered where its card is drawn, so here the press is a door, not a disclosure.
+// A question is answered where its card is drawn, so while one waits the press is a door rather than a disclosure.
 const onPress = (): void => {
     if (standing.value === `asking`) {
         collapse();
@@ -255,6 +312,8 @@ const onPress = (): void => {
     }
     expand(true);
 };
+
+const tool = ui.iconButton(`rounded-full text-subtle`);
 </script>
 
 <template>
@@ -264,37 +323,27 @@ const onPress = (): void => {
         class="chat-quick-seat pointer-events-none z-20 flex w-full justify-center self-end px-4 pb-5"
         style="grid-area: workspace"
     >
-        <!-- ONE WIDTH AT EVERY STATE, and the box centred inside it: what moves is opacity and transform, never a size.
-     Animating the width put the composer through its own container queries on every frame — the control row wrapped
-     and unwrapped mid-flight — and it is the one property here that cannot move without the layout moving with it.
-     Nothing hit-tests on this element (`pointer-events` inherits, so each form claims its own back): a 51rem strip of
-     hover target would open the box from halfway across the page. Enter and leave still fire, through the forms. -->
+        <!-- One width at every state with the forms centred in it, so only opacity and transform ever animate. Nothing
+             hit-tests on this element itself: each form claims pointer events back for its own rect. -->
         <div
             ref="float"
             class="chat-quick-float pointer-events-none relative w-[51rem] max-w-full"
             :class="{ 'chat-quick-open': expanded, 'chat-quick-peeking': peekOpen, 'chat-quick-woken': woken }"
             @pointerenter="onEnter"
             @pointerleave="onLeave"
-            @focusin="holdsFocus = true"
+            @pointerdown.capture="onPressInside"
+            @focusin="onFocusIn"
             @focusout="onFocusOut"
             @keydown.esc="onEscape"
         >
-            <!-- The peek's glass, drawn HERE rather than by the panel, because it has to arrive without the composer
-     arriving with it — and the composer is the panel's own child, so anything done to that element is done to the box
-     the reader is typing in. It is exactly the box's own rect: the transcript reads on it, and its bottom is hidden
-     under the composer, so no surface of ours ever stretches past the box the reader is typing in. */ -->
+            <!-- The transcript's glass: exactly the box's rect, drawn here so it can arrive without the composer moving. -->
             <div
                 v-if="chatBarPeek"
-                class="chat-quick-card pointer-events-auto absolute inset-0 rounded-2xl border border-line-strong bg-card/70 shadow-2xl backdrop-blur-2xl"
+                class="chat-quick-card pointer-events-auto absolute inset-0 rounded-2xl border border-line-strong bg-card/85 shadow-2xl backdrop-blur-2xl"
             ></div>
 
-            <!-- WHICHEVER FORM IS NOT SHOWING LEAVES THE FLOW instead of being measured out of it: the box is the size of what is
-     actually in it at both ends, so no reading can be stale and no frame can be left standing on air. -->
-            <!-- It fades to nothing rather than to `display: none`, since the caret a summons sends arrives in the same render and
-     an unrendered box cannot take it. `inert` is a boolean attribute — present is inert whatever it says — and Vue
-     strips a `false` only for the attributes it knows are boolean, which this is not. Hence `|| undefined` on both. -->
-            <!-- The wrapper is what leaves the flow, so the transform stays the pill's own: centring it with a translate
-     of its own would have slid it half its width across the box every time it faded. -->
+            <!-- The form not showing leaves the flow, so the box is always the size of what is in it. `inert` is not a
+                 boolean Vue knows, so a false value is written as `undefined` to drop the attribute. -->
             <div
                 class="chat-quick-rest mx-auto w-fit max-w-full origin-bottom rounded-full border border-line-strong bg-card/80 shadow-lg backdrop-blur-md transition-[opacity,scale] motion-reduce:transition-none"
                 :class="
@@ -311,8 +360,7 @@ const onPress = (): void => {
                     :aria-label="standing === `asking` ? t(`chat.chatQuickBar.openChatAgentWaiting`) : t(`chat.chatQuickBar.writeToAgentHere`)"
                     @click="onPress"
                 >
-                    <!-- The board's own identity mark, ring and all (AgentCard): one chat wears one face wherever it is named,
-                         and the ring is the reading it already had room for — the turn in flight, or how full the window is. -->
+                    <!-- The board's identity mark, ring included (AgentCard): one chat wears one face wherever it is named. -->
                     <span
                         class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full"
                         :class="
@@ -341,10 +389,8 @@ const onPress = (): void => {
                 </button>
             </div>
 
-            <!-- The grown form: the panel's own composer, and nothing of this component's around it. IT GROWS OUT OF THE
-     PILL — through a clip that opens from the pill's own footprint to the whole box (chat.css). The exit is this
-     element's own transition; the entry is the animation there, which is the only one of the two that can start from
-     a shape rather than from a value. -->
+            <!-- The grown form: the panel's own composer and nothing of this component's around it, opening out of the
+                 pill's footprint through a clip (chat.css). -->
             <div
                 class="chat-quick-host w-full origin-bottom transition-[opacity,scale] motion-reduce:transition-none"
                 :class="
@@ -357,21 +403,53 @@ const onPress = (): void => {
                 <div ref="slot" class="contents"></div>
             </div>
 
-            <!-- ONE MARK FOR LOOKING, in the corner of the box it looks into: an eye, lit while it is open, and never a
-     second glyph for closing — a chevron flipping over the box said "fold" about something that only ever appears and
-     goes. Inside the float, so reading the turns is still "inside the box" and neither the peek nor the box closes
-     under the pointer that went up to read them. -->
-            <button
-                v-if="expanded && hasTranscript && !peekOpen"
-                type="button"
-                class="chat-quick-eye pointer-events-auto absolute -top-2.5 right-3 z-10 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-line-strong bg-card/80 text-subtle shadow-md backdrop-blur-md transition-colors hover:text-content"
-                v-tooltip.top="t(`chat.chatQuickBar.whatWasSaidHover`)"
-                :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
-                @pointerenter="onPeekEnter"
-                @click="togglePeek"
+            <!-- The open box's own controls, on its top edge wherever that edge is: the transcript, the full chat, and a way
+                 to fold even a box that words are holding open. -->
+            <div
+                v-if="expanded"
+                class="chat-quick-tools pointer-events-auto absolute -top-3.5 right-3 z-10 flex items-center gap-0.5 rounded-full border border-line-strong bg-card/90 p-0.5 shadow-md backdrop-blur-md"
             >
-                <Icon name="eye" class="text-2xs" />
-            </button>
+                <template v-if="hasTranscript">
+                    <button
+                        type="button"
+                        class="chat-quick-eye relative"
+                        :class="[tool, peekOpen && `bg-primary-500/15 text-primary-500 hover:bg-primary-500/20 hover:text-primary-500`]"
+                        v-tooltip.top="peekKept ? t(`chat.chatQuickBar.hideConversation`) : t(`chat.chatQuickBar.whatWasSaidHover`)"
+                        :aria-label="t(`chat.chatQuickBar.conversationSoFar`)"
+                        :aria-expanded="peekOpen"
+                        @pointerenter="onEyeEnter"
+                        @pointerleave="onEyeLeave"
+                        @click="onEyePress"
+                    >
+                        <Icon name="eye" class="text-2xs" />
+                        <!-- An answer arriving where nobody is looking: the one sign the box can give that there is news to read. -->
+                        <span
+                            v-if="streaming && !peekOpen"
+                            class="chat-quick-news absolute top-0.5 right-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-link motion-reduce:animate-none"
+                        ></span>
+                    </button>
+                    <button
+                        type="button"
+                        class="chat-quick-full"
+                        :class="tool"
+                        v-tooltip.top="t(`chat.chatQuickBar.openFullChat`)"
+                        :aria-label="t(`chat.chatQuickBar.openFullChat`)"
+                        @click="openChat"
+                    >
+                        <Icon name="expand" class="text-2xs" />
+                    </button>
+                </template>
+                <button
+                    type="button"
+                    class="chat-quick-fold"
+                    :class="tool"
+                    v-tooltip.top="t(`chat.chatQuickBar.minimize`)"
+                    :aria-label="t(`chat.chatQuickBar.minimize`)"
+                    @click="collapse"
+                >
+                    <Icon name="chevron-down" class="text-2xs" />
+                </button>
+            </div>
         </div>
     </div>
 </template>
