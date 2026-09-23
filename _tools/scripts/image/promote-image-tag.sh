@@ -35,9 +35,11 @@ shift 2
 REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 
 for registry in $REGISTRIES; do
+    tag_args=()
     for tag in "$@"; do
-        registry_retry docker buildx imagetools create \
-            -t "$registry/$IMAGE_NAME:$tag" \
-            "$registry/$IMAGE_NAME:$SOURCE_TAG"
+        tag_args+=(-t "$registry/$IMAGE_NAME:$tag")
     done
+    registry_retry docker buildx imagetools create \
+        "${tag_args[@]}" \
+        "$registry/$IMAGE_NAME:$SOURCE_TAG"
 done

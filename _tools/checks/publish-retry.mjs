@@ -45,6 +45,10 @@ const SUBJECTS = [
                 "the same unanswered request on the client's own deadline",
                 'failed to do request: Put "https://ghcr.io/v2/intentic/api/manifests/latest": net/http: request canceled (Client.Timeout exceeded while awaiting headers)',
             ],
+            [
+                "an oauth token fetch throttled by GHCR (killed 1.308.1)",
+                "ERROR: copy sha256:7f32cfa3e409a3cddb2fa465e304285b1200948d3074dc6588058eae4b59af8a from ghcr.io/intentic/sandbox:1.308.1-arm64 to ghcr.io/intentic/sandbox:stable: httpReadSeeker: failed open: failed to authorize: failed to fetch oauth token: unexpected status from GET request to https://ghcr.io/token?scope=repository%3Aintentic%2Fsandbox%3Apull&service=ghcr.io: 403 Forbidden",
+            ],
         ],
         // A real permission_denied opens with the same words as a throttled one; only the body tells them apart.
         failAtOnce: [

@@ -105,6 +105,7 @@ registry_retry_transient() {
         -e 'client\.timeout exceeded' \
         -e 'connectex: a connection attempt failed' \
         -e 'dial tcp.*(connection refused|connection timed out|no route to host)' \
+        -e 'failed to fetch oauth token' \
         -- "$1"
 }
 

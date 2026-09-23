@@ -23,10 +23,21 @@ shift
 REGISTRIES="${REGISTRIES:-ghcr.io/intentic}"
 
 for registry in $REGISTRIES; do
-    for tag in "$@"; do
+    if [ -n "${AMD64_REF:-}" ] && [ -n "${ARM64_REF:-}" ]; then
+        tag_args=()
+        for tag in "$@"; do
+            tag_args+=(-t "$registry/$IMAGE_NAME:$tag")
+        done
         registry_retry docker buildx imagetools create \
-            -t "$registry/$IMAGE_NAME:$tag" \
-            "$registry/$IMAGE_NAME:${AMD64_REF:-$tag-amd64}" \
-            "$registry/$IMAGE_NAME:${ARM64_REF:-$tag-arm64}"
-    done
+            "${tag_args[@]}" \
+            "$registry/$IMAGE_NAME:$AMD64_REF" \
+            "$registry/$IMAGE_NAME:$ARM64_REF"
+    else
+        for tag in "$@"; do
+            registry_retry docker buildx imagetools create \
+                -t "$registry/$IMAGE_NAME:$tag" \
+                "$registry/$IMAGE_NAME:$tag-amd64" \
+                "$registry/$IMAGE_NAME:$tag-arm64"
+        done
+    fi
 done
