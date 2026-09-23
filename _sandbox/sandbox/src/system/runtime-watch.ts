@@ -35,6 +35,10 @@ const THROTTLE_MS: Record<RuntimeDomain, number> = {
     runners: 250,
     // One push lands several runs: a commit sets off every workflow a repo has, and they end together.
     ci: 250,
+    // Update-all walks engines back to back; each start/end pair folds into one frame.
+    engines: 250,
+    // A verify fan-out or a turn's start and end log in bursts; each read re-scans the whole log.
+    activity: 1000,
 };
 
 const subscribers = new Set<(domains: RuntimeDomain[]) => void>();

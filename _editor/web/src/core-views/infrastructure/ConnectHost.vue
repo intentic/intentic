@@ -2,10 +2,11 @@
 import { ui, Code, commandLang, InfoHint, osOptions, SegmentedControl, useOsPreference } from "@intentic/ui";
 import { computed, onUnmounted, ref } from "vue";
 import { useInventory } from "../../features/extensions/useInventory";
+import { onFilesChanged } from "../../extension-host/fileEvents";
 import { useSandbox } from "../../features/sandbox/client/useSandbox";
 import { bashCommand, psCommand } from "../../app/environments/scriptCommand";
 import ScriptSourceSwitch from "../../features/capabilities/connect/ScriptSourceSwitch.vue";
-import { zoneFromUrl } from "@intentic/sandbox-contract";
+import { INVENTORY_PATH, zoneFromUrl } from "@intentic/sandbox-contract";
 import { normalizeHostName } from "./hostName";
 import { useT } from "@intentic/ui/i18n";
 
@@ -85,9 +86,9 @@ const connectHostCommandPs = computed(() => {
     return psCommand(`hostPs1`, `${base}$env:CF_TOKEN='${cfToken.value.trim()}'; ${zoneEnv}${nameEnv}`);
 });
 
-// While the section is open, poll the inventory so a machine that just ran connect-host appears in the list.
-const timer = setInterval(() => void refetch(), 3000);
-onUnmounted(() => clearInterval(timer));
+// An enrolled machine lands in deploy.config.ts, whose write the daemon's file push names.
+const inventoryWatch = onFilesChanged([INVENTORY_PATH], () => void refetch());
+onUnmounted(() => inventoryWatch.dispose());
 </script>
 
 <template>

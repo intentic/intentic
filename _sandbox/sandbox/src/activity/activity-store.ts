@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { type ActivityEvent, ActivityEventSchema } from "@intentic/sandbox-contract";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 // The activity audit log (historyRoot/activity.jsonl): append-only JSONL, written by the daemon only, kept outside the
 // agent's /work mount so the agent can't read or rewrite its own trail.
@@ -48,6 +49,7 @@ export const fileActivityStore = (path: string): ActivityStore => {
                 lastAt = Math.max(Date.now(), lastAt + 1);
                 const record: ActivityEvent = { id: randomUUID(), at: lastAt, ...event };
                 await appendFile(path, `${JSON.stringify(record)}\n`);
+                publishRuntimeChange("activity");
                 if ((await stat(path)).size <= MAX_BYTES) {
                     return;
                 }

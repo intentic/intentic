@@ -8,6 +8,7 @@ import type { EngineId } from "@intentic/sandbox-contract";
 import { engineDescriptor, type EngineDescriptor } from "./engine-descriptors.js";
 import { activateVersion, collectGarbage, engineDir, engineVersionDir, installedVersions, quarantineVersion } from "./engine-store.js";
 import { forgetEngineResolution } from "./engine-resolve.js";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 
 // Gets a version onto the volume and refuses to serve it until verified; downloading is npm's job, this file only asks
 // whether the version still works with this daemon. Installs to a temp prefix and renames into `versions/<version>`
@@ -101,8 +102,12 @@ export const installEngine = (id: EngineId, version: string): Promise<EngineInst
     if (inFlight !== undefined) {
         return inFlight;
     }
-    const run = installOnce(id, version).finally(() => installing.delete(id));
+    const run = installOnce(id, version).finally(() => {
+        installing.delete(id);
+        publishRuntimeChange("engines");
+    });
     installing.set(id, run);
+    publishRuntimeChange("engines");
     return run;
 };
 

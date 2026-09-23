@@ -5,10 +5,10 @@ import { sinceOf, type TimeWindow } from "@intentic/extension-ui";
 import { host } from "./host";
 
 // The activity feed: the daemon's durable event log (wakes, outbound calls, turn lifecycle, failures) plus live
-// connection/voice status, polled. Paged, since a fixed limit would silently lie: the window decides how far back to
-// pull. Bounded at MAX_PAGES; `truncated` says when that bound bit.
+// connection/voice status. Paged, since a fixed limit would silently lie: the window decides how far back to pull.
+// Bounded at MAX_PAGES; `truncated` says when that bound bit.
+// Never polled: the `activity` push and the manifest's config-file bindings are both reads' only feed.
 
-const POLL_MS = 5000;
 // Contract's per-request ceiling (ActivityQuerySchema); fewer, bigger pages beat many small round trips.
 const PAGE = 500;
 // 4×500 = 2,000, matching the daemon's prune ceiling (activity-store.ts KEEP_LINES); only bites past that.
@@ -27,15 +27,11 @@ export function useActivity(window: Ref<TimeWindow>) {
         // The oldest event's `at` is the next exclusive cursor; a short page is the end of the log.
         getNextPageParam: (last: ActivityEvent[]) => (last.length < PAGE ? undefined : last.at(-1)?.at),
         enabled,
-        // A poll refetches every held page, but only the newest can have changed; full cadence with one page, backed
-        // off once history is pulled in for its own sake.
-        refetchInterval: (query) => ((query.state.data?.pages.length ?? 1) > 1 ? POLL_MS * 6 : POLL_MS),
     });
     const status = useQuery({
         queryKey: api.sandbox.key(`activity-status`),
         queryFn: async () => ActivityStatusSchema.parse(await api.sandbox.json(`/activity/status`)),
         enabled,
-        refetchInterval: POLL_MS,
     });
 
     const events = computed<ActivityEvent[]>(() => (feed.data.value?.pages ?? []).flat());

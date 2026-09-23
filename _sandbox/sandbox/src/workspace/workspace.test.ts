@@ -1,5 +1,7 @@
+import { join, relative } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
-import { REPO_ROLES } from "@intentic/scaffold";
+import { INVENTORY_PATH } from "@intentic/sandbox-contract";
+import { CONFIG_FILE, REPO_ROLES } from "@intentic/scaffold";
 import { test, expect } from "bun:test";
 import { workspacePaths } from "./workspace.js";
 
@@ -18,4 +20,9 @@ test("every declared repo role has a derived path", () => {
     for (const role of REPO_ROLES) {
         expect(typeof paths.repos[role]).toBe("string");
     }
+});
+
+test("the inventory path the browser listens on is where the config store writes", () => {
+    const paths = workspacePaths(WORKSPACE_ROOT);
+    expect(relative(paths.root, join(paths.repos.intent, CONFIG_FILE))).toBe(INVENTORY_PATH);
 });

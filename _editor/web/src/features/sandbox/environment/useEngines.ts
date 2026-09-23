@@ -1,6 +1,6 @@
 import { type EngineRow, type EnginesView, EnginesViewSchema } from "@intentic/api-contract";
 import type { NoticeModel } from "@intentic/ui";
-import { computed, onScopeDispose, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { ENGINES } from "../../../lib/queryKeys";
 import { queryClient } from "../../../lib/queryPersistence";
 import { jsonBody } from "../client/jsonBody";
@@ -11,6 +11,7 @@ import { t } from "@intentic/ui/i18n";
 // The agent engines this sandbox runs (Claude Code, codex, Cursor SDK, opencode, ...) and which version each is on,
 // read from the daemon's /engines route. In-flight update/revert/channel state lives at module scope, so switching tabs
 // doesn't drop what's mid-flight.
+// Never polled: the daemon's `engines` push lands every install's start and end, whoever started it.
 
 export const ENGINES_KEY = ENGINES.of();
 
@@ -125,35 +126,6 @@ export function useEngines() {
 
     // Rows with an update waiting; derived here since the shell's own banner counts the same thing.
     const updatable = computed<readonly EngineRow[]>(() => engines.value.filter((engine: EngineRow) => engine.offered !== undefined));
-
-    const anyInstalling = computed<boolean>(
-        () => engines.value.some((engine: EngineRow) => engine.installing) || inFlight.value.size > 0 || updatingAll.value,
-    );
-
-    let pollTimer: ReturnType<typeof setInterval> | undefined;
-    watch(
-        anyInstalling,
-        (active) => {
-            if (active) {
-                if (pollTimer === undefined) {
-                    pollTimer = setInterval(() => {
-                        void query.refetch();
-                    }, 1500);
-                }
-            } else if (pollTimer !== undefined) {
-                clearInterval(pollTimer);
-                pollTimer = undefined;
-            }
-        },
-        { immediate: true },
-    );
-
-    onScopeDispose(() => {
-        if (pollTimer !== undefined) {
-            clearInterval(pollTimer);
-            pollTimer = undefined;
-        }
-    });
 
     const isEngineUpdating = (engine: EngineRow): boolean =>
         engine.installing === true || inFlight.value.get(engine.id) === "update" || (updatingAll.value && engine.offered !== undefined);

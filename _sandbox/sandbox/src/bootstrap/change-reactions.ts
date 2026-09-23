@@ -1,7 +1,9 @@
 import { startVanishedRepoSweep } from "../agents/registry/vanished-repos.js";
 import { startSidecarService } from "../derived/sidecar-service.js";
+import { onListenerStatusMoved } from "../extensions/listener-status.js";
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { stateRelPath } from "../workspace/layout/state-paths.js";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { startRepoWatch, subscribeRepoChanges } from "../workspace/watch/repo-watch.js";
 import { startWorkspaceWatch, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 import type { BootPhase } from "./boot-phase.js";
@@ -32,6 +34,8 @@ export const startChangeReactions = ({ logger, services, shutdown }: BootPhase):
     // A ref can move without a workspace byte changing, so only the ref feed can invalidate health.
     shutdown.push(subscribeRefChanges(() => services.iq.invalidateHealth()));
     shutdown.push(startVanishedRepoSweep(services, subscribeRepoChanges));
+    // A gateway's live status is half of what the Activity view shows, and it has no file to watch.
+    shutdown.push(onListenerStatusMoved(() => publishRuntimeChange("activity")));
 
     // Incremental, so a valid on-disk index survives a boot.
     void services.iq.warm().catch((error: unknown) => logger.warn({ err: error }, "iq index warmup failed, search runs on the index as it stands"));

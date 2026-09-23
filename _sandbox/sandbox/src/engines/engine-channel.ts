@@ -13,6 +13,8 @@ const LIST_URL = (): string =>
 // Refreshed hourly; the card's Update button reads the list directly, bypassing the wait.
 const LIST_TTL_MS = 60 * 60_000;
 const FETCH_TIMEOUT_MS = 15_000;
+// One registry answer serves every read this long: an npm document runs to megabytes, GitHub allows 60 anonymous calls/h.
+const PUBLISHED_TTL_MS = 10 * 60_000;
 
 const BlessedEntrySchema = z.object({
     blessed: z.string(),
@@ -74,9 +76,10 @@ export const blessedEntry = async (id: EngineId): Promise<BlessedEntry | undefin
 export const blessedListReadAt = (): string | undefined => list?.readAt;
 export const blessedListSource = (): string => LIST_URL();
 
-// Test seam: clears the cached list so a suite can change INTENTIC_ENGINES_LIST_URL between cases.
-export const forgetBlessedList = (): void => {
+// Test seam: clears both upstream caches so a suite can change what fetch answers between cases.
+export const forgetUpstream = (): void => {
     list = undefined;
+    publishedCache.clear();
 };
 
 const npmMetadata = async (packageName: string): Promise<{ latest?: string; versions: string[] } | undefined> => {
@@ -118,11 +121,28 @@ const githubReleases = async (repo: string): Promise<{ latest?: string; versions
     }
 };
 
+type Published = { latest?: string; versions: string[] } | undefined;
+
+// Concurrent readers share one request; an unreachable answer is dropped at once so the next read asks again.
+const publishedCache = new Map<EngineId, { readonly at: number; readonly answer: Promise<Published> }>();
+
 // What upstream publishes for this engine, or undefined when upstream could not be reached; "no newer version" and "we
 // could not ask" must not read the same.
-const publishedVersions = async (id: EngineId): Promise<{ latest?: string; versions: string[] } | undefined> => {
+const publishedVersions = (id: EngineId, fresh = false): Promise<Published> => {
+    const held = publishedCache.get(id);
+    if (!fresh && held !== undefined && Date.now() - held.at < PUBLISHED_TTL_MS) {
+        return held.answer;
+    }
     const { source } = engineDescriptor(id);
-    return source.kind === "npm" ? npmMetadata(source.package) : githubReleases(source.repo);
+    const answer = source.kind === "npm" ? npmMetadata(source.package) : githubReleases(source.repo);
+    const entry = { at: Date.now(), answer };
+    publishedCache.set(id, entry);
+    void answer.then((result) => {
+        if (result === undefined && publishedCache.get(id) === entry) {
+            publishedCache.delete(id);
+        }
+    });
+    return answer;
 };
 
 // Lowest published version at or above the floor, the smallest step that clears it. Used by the card's Update-anyway
@@ -131,8 +151,9 @@ export const lowestSatisfying = async (id: EngineId, floor: string): Promise<str
     const descriptor = engineDescriptor(id);
     // Claude's floors are in the CLI's vocabulary, not npm's; the descriptor is responsible for the mapping.
     const satisfies = descriptor.satisfiesFloor ?? ((published: string, bound: string) => published === bound || isNewer(published, bound));
-    const published = await publishedVersions(id);
-    return published?.versions
+    // Fresh: the floor was raised by a refusal just now, which a held answer may predate.
+    const upstream = await publishedVersions(id, true);
+    return upstream?.versions
         .filter((version) => satisfies(version, floor))
         .sort((left, right) => (isNewer(left, right) ? 1 : -1))
         .at(0);

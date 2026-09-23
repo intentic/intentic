@@ -2,7 +2,7 @@ import "@intentic/testing/dom";
 import type { EngineRow, EnginesView } from "@intentic/api-contract";
 import { VueQueryPlugin } from "@tanstack/vue-query";
 import { test, expect, beforeEach, mock, jest } from "bun:test";
-import { waitFor, stubGlobal, mocked } from "@intentic/testing/bun";
+import { waitFor, stubGlobal, mocked, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import { createApp, defineComponent, h, ref } from "vue";
 
 stubGlobal(`localStorage`, { getItem: () => null, setItem: () => {}, removeItem: () => {} });
@@ -130,5 +130,28 @@ test("updateAll updates all updatable engines sequentially", async () => {
 
     expect(updatedEngines).toEqual(["codex", "cursor"]);
     expect(result.updatingAll.value).toBe(false);
+    unmount();
+});
+
+// A read re-asks npm and GitHub for megabytes; the daemon's `engines` push, not a clock, is what re-reads the card.
+test("an install in flight is never re-read on a clock", async () => {
+    const reads: string[] = [];
+    const installing: EnginesView = { ...FIXTURE_ENGINES, engines: FIXTURE_ENGINES.engines.map((engine) => ({ ...engine, installing: true })) };
+    jsonMock.mockImplementation((path: string) => {
+        reads.push(path);
+        return Promise.resolve(installing) as Promise<never>;
+    });
+
+    const { result, unmount } = mounted(() => useEngines());
+    await waitFor(() => expect(result.engines.value.length).toBe(2));
+    expect(result.isAnyBusy.value).toBe(true);
+
+    jest.useFakeTimers();
+    try {
+        await advanceTimersByTimeAsync(60_000);
+    } finally {
+        jest.useRealTimers();
+    }
+    expect(reads).toEqual([`/engines`]);
     unmount();
 });

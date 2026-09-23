@@ -10,6 +10,10 @@
         "sandbox": ["GET /activity", "GET /activity/status"]
     },
     "contributes": {
-        "views": [{ "id": "activity", "label": "Activity", "surface": "sandbox" }]
+        "views": [{ "id": "activity", "label": "Activity", "surface": "sandbox" }],
+        "files": [
+            { "path": ".intentic/config/automations.json", "invalidates": ["activity-status"] },
+            { "path": ".intentic/config/extension-enablement.json", "invalidates": ["activity-status"] }
+        ]
     }
 }

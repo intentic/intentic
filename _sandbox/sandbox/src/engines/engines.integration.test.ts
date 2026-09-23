@@ -2,8 +2,9 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect, beforeEach, afterEach, mock } from "bun:test";
-import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { forgetBlessedList } from "./engine-channel.js";
+import { stubGlobal, unstubAllGlobals, waitFor } from "@intentic/testing/bun";
+import { subscribeRuntimeChanges } from "../system/runtime-watch.js";
+import { forgetUpstream } from "./engine-channel.js";
 import { engineDescriptor } from "./engine-descriptors.js";
 import { forgetEngineResolution } from "./engine-resolve.js";
 import { activateVersion, engineVersionDir, forgetEngineStates, readEngineState } from "./engine-store.js";
@@ -44,14 +45,14 @@ beforeEach(() => {
     workspace = mkdtempSync(join(tmpdir(), "engines-workspace-"));
     forgetEngineStates();
     forgetEngineResolution();
-    forgetBlessedList();
+    forgetUpstream();
     process.env["INTENTIC_ENGINES_LIST_URL"] = "https://example.test/engines.json";
 });
 
 afterEach(() => {
     unstubAllGlobals();
     delete process.env["INTENTIC_ENGINES_LIST_URL"];
-    forgetBlessedList();
+    forgetUpstream();
 });
 
 // On a fresh sandbox the blessed version already is what the image bakes; comparing against the store instead would
@@ -165,4 +166,30 @@ test("the view reports when an install is in flight", async () => {
     const viewAfter = await enginesView(host(workspace));
     const rowAfter = viewAfter.engines.find((engine) => engine.id === "opencode");
     expect(rowAfter?.installing).toBeUndefined();
+});
+
+// The card holds no clock: an install's start and end are its only feed, whoever started it.
+test("an install announces its start and its end on the runtime feed", async () => {
+    stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ engines: { opencode: { blessed: "9.9.9" } } })));
+    const frames: string[][] = [];
+    const unsubscribe = subscribeRuntimeChanges((domains) => frames.push(domains));
+    let finishInstall: () => void = () => undefined;
+    const pending = new Promise<void>((resolve) => {
+        finishInstall = resolve;
+    });
+    const install: EngineInstaller = mock(async (_id, version) => {
+        await pending;
+        writeStoreCopy(version);
+        await activateVersion("opencode", version);
+        return { ok: true as const, version, reused: false };
+    });
+    try {
+        const updatePromise = updateEngine(host(workspace), "opencode", undefined, install);
+        await waitFor(() => expect(frames).toEqual([["engines"]]));
+        finishInstall();
+        await updatePromise;
+        await waitFor(() => expect(frames).toEqual([["engines"], ["engines"]]));
+    } finally {
+        unsubscribe();
+    }
 });

@@ -2,6 +2,9 @@
 import { z } from "zod";
 // The daemon renders/parses these; the browser edits them through the inventory routes.
 
+// Where the inventory lives, workspace-root-relative: the space the daemon's workspaceChanged paths arrive in.
+export const INVENTORY_PATH = "intent/deploy.config.ts";
+
 export const InventoryProviderSchema = z.enum(["host", "cloudflare", "github", "gitlab", "stripe"]);
 export type InventoryProvider = z.infer<typeof InventoryProviderSchema>;
 export const ServiceKindSchema = z.enum(["signoz", "outline", "paperless", "openproject", "invoiceninja", "infisical"]);

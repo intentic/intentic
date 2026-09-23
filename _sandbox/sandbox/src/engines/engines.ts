@@ -4,6 +4,7 @@ import type { Logger } from "pino";
 import { opt } from "../agent/run/opt.js";
 import type { BootRole } from "../agent/providers/provider-module.js";
 import { refreshClaudeSdk } from "../runtimes/claude/claude-sdk.js";
+import { publishRuntimeChange } from "../system/runtime-watch.js";
 import { blessedEntry, blessedList, blessedListReadAt, blessedListSource, lowestSatisfying, targetVersion } from "./engine-channel.js";
 import { ENGINE_DESCRIPTORS, engineDescriptor } from "./engine-descriptors.js";
 import { type EngineInstallOutcome, installEngine, isEngineInstalling } from "./engine-install.js";
@@ -127,6 +128,7 @@ export const updateEngine = async (
     install: EngineInstaller = installEngine,
 ): Promise<EngineApplied | undefined> => {
     updating.add(id);
+    publishRuntimeChange("engines");
     try {
         if (target?.version !== undefined) {
             return await apply(host, id, target.version, install);
@@ -144,6 +146,7 @@ export const updateEngine = async (
         return await convergeEngine(host, id, install);
     } finally {
         updating.delete(id);
+        publishRuntimeChange("engines");
     }
 };
 
@@ -179,6 +182,14 @@ const apply = async (host: EngineHost, id: EngineId, version: string, install: E
 // Back to the version kept behind this one, or the image's copy when there is none; both are pointer moves, safe when
 // the network is the problem.
 export const revertEngine = async (host: EngineHost, id: EngineId): Promise<EngineApplied> => {
+    try {
+        return await revertOnce(host, id);
+    } finally {
+        publishRuntimeChange("engines");
+    }
+};
+
+const revertOnce = async (host: EngineHost, id: EngineId): Promise<EngineApplied> => {
     const state = await readEngineState(id);
     const previous = state.previous;
     if (previous !== undefined && (await installedVersions(id)).includes(previous)) {
@@ -199,8 +210,12 @@ export const revertEngine = async (host: EngineHost, id: EngineId): Promise<Engi
 // effect at once, the other three wait for Update or the daily check.
 export const setChannel = async (host: EngineHost, id: EngineId, channel: EngineChannel): Promise<EngineChannel> => {
     const stored = await setEngineChannel(host.workspace.root, id, channel);
-    if (stored.kind === "image") {
-        await convergeEngine(host, id, installEngine);
+    try {
+        if (stored.kind === "image") {
+            await convergeEngine(host, id, installEngine);
+        }
+    } finally {
+        publishRuntimeChange("engines");
     }
     return stored;
 };

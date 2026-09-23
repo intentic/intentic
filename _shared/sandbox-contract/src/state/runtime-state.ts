@@ -48,6 +48,12 @@ const RUNTIME_DOMAINS = [
     // Runs only: the frame doesn't name which run moved, and re-reading every open row's job graph would cost a
     // vendor call per row. The row re-reads its own graph off the status this invalidation lands (useRunJobs.ts).
     { domain: "ci", invalidates: [["ci-runs"]] },
+
+    // An engine install starting or ending, whoever started it; the card's only feed, since a read costs registry calls.
+    { domain: "engines", invalidates: [["engines"]] },
+
+    // The audit log grew or a gateway's status moved or aged out; the log lives outside /work, so no file push carries it.
+    { domain: "activity", invalidates: [["activity"], ["activity-status"]] },
 ] as const satisfies readonly RuntimeDomainBinding[];
 
 export const RUNTIME_DOMAIN_BINDINGS: readonly RuntimeDomainBinding[] = RUNTIME_DOMAINS;

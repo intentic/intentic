@@ -55,7 +55,8 @@ describe(`the builtins' declared bindings`, () => {
     const bindings = [...builtinModules.values()].flatMap((module) => module.manifest.contributes?.files ?? []);
 
     it(`refreshes the Automations view when the agent edits the manifest on disk`, () => {
-        expect(staleQueryKeys([`.intentic/config/automations.json`], bindings)).toEqual([`automations`]);
+        // Activity's connection card reads the same file: a disabled listener automation turns its gateway idle.
+        expect(staleQueryKeys([`.intentic/config/automations.json`], bindings)).toEqual([`automations`, `activity-status`]);
         expect(staleQueryKeys([`.intentic/records/approvals/pending-1.json`], bindings)).toEqual([`automation-approvals`]);
     });
 

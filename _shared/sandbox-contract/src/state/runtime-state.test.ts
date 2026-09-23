@@ -28,6 +28,15 @@ describe(`staleRuntimeQueryKeys`, () => {
         // The Pipelines board reads ["ci-runs", <sandbox>]; a prefix is what invalidation matches on.
         expect(staleRuntimeQueryKeys([`ci`])).toEqual([[`ci-runs`]]);
     });
+
+    it(`re-reads the engines card on an install's start and end, its only feed`, () => {
+        expect(staleRuntimeQueryKeys([`engines`])).toEqual([[`engines`]]);
+    });
+
+    it(`re-reads both Activity reads when the log grows or a gateway's status moves`, () => {
+        // The feed is ["activity", <sandbox>] and the status ["activity-status", <sandbox>]: two keys, not one prefix.
+        expect(staleRuntimeQueryKeys([`activity`])).toEqual([[`activity`], [`activity-status`]]);
+    });
 });
 
 describe(`RUNTIME_DOMAIN_BINDINGS`, () => {

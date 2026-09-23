@@ -1,6 +1,6 @@
 import { test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { stubGlobal, unstubAllGlobals } from "@intentic/testing/bun";
-import { blessedList, blessedListReadAt, forgetBlessedList, lowestSatisfying, targetVersion } from "./engine-channel.js";
+import { blessedList, blessedListReadAt, forgetUpstream, lowestSatisfying, targetVersion } from "./engine-channel.js";
 import type { EngineState } from "./engine-store.js";
 
 // Pins channel-selection policy against stubbed network responses, not real npm; an unreachable list or registry must
@@ -15,14 +15,14 @@ const jsonResponse = (body: unknown, init?: { status?: number; etag?: string }):
     });
 
 beforeEach(() => {
-    forgetBlessedList();
+    forgetUpstream();
     process.env["INTENTIC_ENGINES_LIST_URL"] = "https://example.test/engines.json";
 });
 
 afterEach(() => {
     unstubAllGlobals();
     delete process.env["INTENTIC_ENGINES_LIST_URL"];
-    forgetBlessedList();
+    forgetUpstream();
 });
 
 test("the image channel asks for nothing at all", async () => {
@@ -45,6 +45,35 @@ test("the blessed channel takes what the list names", async () => {
 test("the latest channel takes upstream's own newest", async () => {
     stubGlobal("fetch", mock().mockResolvedValue(jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.260": {} } })));
     expect(await targetVersion("claude", { kind: "latest" }, CLEAN)).toBe("0.3.260");
+});
+
+// The card, every tab and each Update-all step read the same answer.
+test("one registry answer serves repeated reads of the latest channel", async () => {
+    const fetchMock = mock().mockResolvedValue(jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.260": {} } }));
+    stubGlobal("fetch", fetchMock);
+    const reads = await Promise.all([1, 2, 3].map(() => targetVersion("claude", { kind: "latest" }, CLEAN)));
+    expect(reads).toEqual(["0.3.260", "0.3.260", "0.3.260"]);
+    expect(await targetVersion("claude", { kind: "latest" }, CLEAN)).toBe("0.3.260");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("an unreachable registry is asked again on the next read, not remembered as nothing on offer", async () => {
+    const fetchMock = mock()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "0.3.260" }, versions: { "0.3.260": {} } }));
+    stubGlobal("fetch", fetchMock);
+    expect(await targetVersion("claude", { kind: "latest" }, CLEAN)).toBeUndefined();
+    expect(await targetVersion("claude", { kind: "latest" }, CLEAN)).toBe("0.3.260");
+});
+
+// A turn just died on a floor upstream raised minutes ago; a held answer could predate the version that clears it.
+test("a floor always asks the registry afresh", async () => {
+    const fetchMock = mock()
+        .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "1.0.0" }, versions: { "1.0.0": {} } }))
+        .mockResolvedValueOnce(jsonResponse({ "dist-tags": { latest: "1.2.0" }, versions: { "1.0.0": {}, "1.2.0": {} } }));
+    stubGlobal("fetch", fetchMock);
+    expect(await targetVersion("opencode", { kind: "latest" }, CLEAN)).toBe("1.0.0");
+    expect(await lowestSatisfying("opencode", "1.2.0")).toBe("1.2.0");
 });
 
 test("a version already refused here is not offered again", async () => {
