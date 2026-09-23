@@ -1,4 +1,4 @@
-import type { AgentCommand, AgentHarness, AgentProvider, EditorContext, OauthAccount, PermissionMode } from "@intentic/sandbox-contract";
+import type { AgentCommand, AgentHarness, AgentProvider, EditorContext, OauthAccount, PermissionMode, QueuedMessage } from "@intentic/sandbox-contract";
 import { computed, type ComputedRef, inject, type InjectionKey } from "vue";
 import { reloadOnHotUpdate } from "../../../app/hotReload";
 import { Conversation } from "../session/conversation";
@@ -43,8 +43,10 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
     // The standing version of continueTurn is not here: it is this conversation's answer to the ending's one question
     // (turnBreak.ts), owned by the daemon and read through the agent roster, so it survives this tab closing and
     // cannot disagree with the same switch on the board.
-    // Undelivered messages sent mid-turn, and whether the running turn can actually take one right now.
-    queued: computed(() => conversation.value.turn.queued.value),
+    // What waits in the conversation's queue for its next turn, the same in every window, and why it is held if it is;
+    // and whether the running turn can actually take words right now.
+    queued: computed<readonly QueuedMessage[]>(() => conversation.value.queue.value?.items ?? []),
+    queuePaused: computed(() => conversation.value.queue.value?.paused),
     steerable: computed(() => conversation.value.selection.steerable.value),
     // What this conversation's runtime can do, from the contract's declared record.
     capabilities: computed(() => conversation.value.selection.capabilities.value),
@@ -135,13 +137,17 @@ export const conversationView = (conversation: ComputedRef<Conversation>) => ({
         track(`message_edited`, { agent: conversation.value.selection.provider.value });
         return conversation.value.transcript.submitEdit(text, staged, editorContext);
     },
-    // The one send path regardless of state: an idle chat starts a turn, a running one takes the message mid-turn or
-    // holds it.
+    // The one send path regardless of state: an idle chat starts a turn, a running one takes the message mid-turn, and
+    // otherwise the daemon queues it for the next.
     send: (prompt: string, staged?: readonly ChatAttachment[], editorContext?: EditorContext): Promise<void> => {
         // Funnel milestone missed by autocapture (Enter-key sends); PostHog derives "first message" from it.
         track(`message_sent`, { agent: conversation.value.selection.provider.value, queued: conversation.value.turn.streaming.value });
-        return conversation.value.turn.enqueue(prompt, staged, editorContext);
+        return conversation.value.turn.say(prompt, staged, editorContext);
     },
+    // The queue's doors, each acting on the message as this window read it, and letting a held queue go.
+    unqueue: (message: QueuedMessage): Promise<boolean> => conversation.value.turn.unqueue(message),
+    reword: (message: QueuedMessage, text: string): Promise<boolean> => conversation.value.turn.reword(message, text),
+    resumeQueue: (): Promise<void> => conversation.value.turn.resume(),
     // Forks the conversation at `cut` (the index of the first message below the line) into a fresh tab, leaving the
     // source untouched. A cut above a user message reopens that prompt in the new composer instead of sending it.
     forkAt: (cut: number, files: "then" | "now"): Conversation | undefined => {

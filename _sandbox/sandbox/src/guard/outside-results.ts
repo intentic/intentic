@@ -1,5 +1,5 @@
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { classifyCommand } from "@intentic/sandbox-contract";
+import { classifyCommand, CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract";
 import { JS_TOOL_NAME } from "../execution/js-tool.js";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 
@@ -7,23 +7,9 @@ import { wrapOutsideContent } from "@intentic/base/outside-text";
 // turn-birth wrap. Runs on PostToolUse, which fires for every tool including ones not yet written, so the default is
 // wrap and exceptions are named explicitly. Wraps only the fields that carry content, never the whole result object.
 
-// Daemon's own control servers, the exceptions to wrap-by-default: none carries content from outside this container.
-// Browser servers are deliberately absent. Pinned by the conformance test in outside-results.test.ts.
-export const INTERNAL_SERVERS: ReadonlySet<string> = new Set([
-    // agent/agent.ts mounts these two directly.
-    "ui", // AskUserQuestion
-    "accounts", // browser/accounts-tools.ts: the roster and the credential typists
-    // agent/run/harness/harness-servers.ts, the harness arm's own mounts.
-    "secrets", // browser/secrets-tools.ts: types a stored value into a focused field
-    "hashline", // hash-anchored Edit/Write replacements
-    "subagents", // the `wait` park
-    "watch", // condition watches
-    "deps", // dependency readiness
-    // Internal for the server itself; the pane output it carries back wraps separately, at the tool.
-    "terminal",
-    // Same as Bash: the agent's own in-container script; wrapped only when it fetches, via its own branch.
-    "code",
-]);
+// The exceptions to wrap-by-default are the daemon's own control servers (contract reserved-servers.ts, the `control`
+// subset): none carries content from outside this container, browser servers deliberately excluded. Pinned by the
+// conformance test in outside-results.test.ts, which discovers every mounted server and checks it against that list.
 
 // `mcp__<server>__<tool>`, the SDK's naming for an MCP tool; anything else is a native tool.
 const MCP_TOOL = /^mcp__([^_](?:[^_]|_[^_])*)__/;
@@ -56,7 +42,7 @@ export const outsideSourceOf = (toolName: string, toolInput: unknown): string | 
         return classifyCommand(code, { locus: "sandbox" }).includes("network.outbound") ? "code-fetch" : undefined;
     }
     const server = mcpServerOf(toolName);
-    if (server === undefined || INTERNAL_SERVERS.has(server)) {
+    if (server === undefined || CONTROL_MCP_SERVERS.has(server)) {
         return undefined;
     }
     return server;

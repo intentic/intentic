@@ -23,10 +23,10 @@ type Host = ConstructorParameters<typeof TranscriptView>[1];
 // Two recorded turns, each prompt under its checkpoint, with a line only this window drew between them: the daemon's
 // index and the bubble's position part ways at it.
 const ROWS: readonly ChatMessage[] = [
-    { id: 1, role: `user`, text: `first`, sentAt: 1, rewindIndex: 0, attachments: [`docs/spec.md`] },
+    { id: 1, role: `user`, text: `first`, sentAt: 1, messageId: `m-1`, rewindIndex: 0, attachments: [`docs/spec.md`] },
     { id: 2, role: `assistant`, text: `done` },
     { id: 3, role: `notice`, text: `Switched to Haiku`, local: true },
-    { id: 4, role: `user`, text: `second`, sentAt: 2, rewindIndex: 2 },
+    { id: 4, role: `user`, text: `second`, sentAt: 2, messageId: `m-2`, rewindIndex: 2 },
     { id: 5, role: `assistant`, text: `also done` },
 ];
 const SESSION: SessionRef = { id: `s-1`, provider: `claude`, account: `a1`, harness: `native` };
@@ -40,7 +40,7 @@ const viewOf = (rows: readonly ChatMessage[] = ROWS) => {
         attachments: ref<PendingAttachment[]>([STAGED]),
         error: ref<string | null>(`an older failure`),
         session: ref<SessionRef | undefined>(SESSION),
-        turn: { streaming: computed(() => false), enqueue: mock<Host["turn"]["enqueue"]>(async () => undefined) },
+        turn: { streaming: computed(() => false), say: mock<Host["turn"]["say"]>(async () => undefined) },
     };
     const view = new TranscriptView(() => undefined, host);
     view.adopt(rows);
@@ -60,7 +60,7 @@ describe(`rewindTo`, () => {
 
         expect(await view.rewindTo(row(4))).toBe(true);
 
-        expect(rewind.mock.calls).toEqual([[{ conversationId: `c1`, index: 2 }, { context: { at: `box-2` } }]]);
+        expect(rewind.mock.calls).toEqual([[{ conversationId: `c1`, index: 2, messageId: `m-2` }, { context: { at: `box-2` } }]]);
         expect(texts()).toEqual([
             `first`,
             `done`,
@@ -85,14 +85,22 @@ describe(`rewindTo`, () => {
         expect(await view.rewindTo(row(4))).toBe(false);
         expect(host.error.value).toBe(`That message can no longer be gone back to.`);
 
+        // Another window rewound and ran since: the position now holds a different message.
+        rewind.mockImplementationOnce(async () => {
+            throw new SandboxHttpError(412, `Moved.`);
+        });
+        expect(await view.rewindTo(row(4))).toBe(false);
+        expect(host.error.value).toBe(`This conversation has moved on since you opened it: reload it and try again.`);
+
         expect(texts()).toEqual(ROWS.map((message) => message.text));
         expect(host.session.value).toEqual(SESSION);
     });
 
-    it(`asks nothing of the daemon for a row with no checkpoint, or one no longer drawn`, async () => {
-        const { view, row } = viewOf();
+    it(`asks nothing of the daemon for a row with no checkpoint, no id to name it by, or one no longer drawn`, async () => {
+        const { view, row } = viewOf([...ROWS, { id: 6, role: `user`, text: `unnamed`, rewindIndex: 5 }]);
 
         expect(await view.rewindTo(row(2))).toBe(false);
+        expect(await view.rewindTo(row(6))).toBe(false);
         expect(await view.rewindTo({ ...row(4) })).toBe(false);
         expect(rewind).not.toHaveBeenCalled();
     });
@@ -131,14 +139,14 @@ describe(`an edit`, () => {
         });
 
         expect(await view.submitEdit(`first, better`)).toBe(false);
-        expect(host.turn.enqueue).not.toHaveBeenCalled();
+        expect(host.turn.say).not.toHaveBeenCalled();
         // Still armed: the refusal is the daemon's to lift, and the press is the same one again.
         expect(view.editing.value).toMatchObject({ id: 1 });
 
         expect(await view.submitEdit(`first, better`)).toBe(true);
         expect(texts()).toEqual([`Edited this message, 5 messages dropped and the files restored to this point.`]);
         expect(view.editing.value).toBeUndefined();
-        expect(host.turn.enqueue.mock.calls).toEqual([[`first, better`, [], undefined]]);
+        expect(host.turn.say.mock.calls).toEqual([[`first, better`, [], undefined]]);
     });
 
     it(`ends when the prompt it aimed at left the transcript`, async () => {

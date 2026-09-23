@@ -33,7 +33,7 @@ const call = (turn: number, index: number): TranscriptTool => ({
 // One turn as the record holds it: a user row, then one assistant row per prose block carrying its thinking and tool
 // calls. Sized like a real working turn, not a minimal one.
 const turnRows = (turn: number): TranscriptRow[] => [
-    { role: "user", text: filler(180, `ask number ${turn}`), sentAt: 1_700_000_000_000 + turn * 60_000 },
+    { role: "user", text: filler(180, `ask number ${turn}`), sentAt: 1_700_000_000_000 + turn * 60_000, messageId: `m-${turn}` },
     ...[0, 1, 2].map((block): TranscriptRow => ({
         role: "assistant",
         text: filler(700, `answer block ${block} of turn ${turn}`),

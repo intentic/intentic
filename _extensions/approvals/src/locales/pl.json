@@ -23,8 +23,11 @@
         "automationsHeld": "Automatyzacje wstrzymane dla Ciebie",
         "backToReviewNothing": "Wróć do przeglądu: nic się nie dzieje",
         "cancel": "Anuluj",
+        "couldntApproveHooks": "Nie udało się zatwierdzić tych hooków.",
+        "couldntDismissHooks": "Nie udało się pozostawić tych hooków wyłączonych.",
         "couldntReadApprovals": "Nie udało się odczytać Twoich zatwierdzeń.",
         "couldntReadHeldAutomations": "Nie udało się odczytać wstrzymanych automatyzacji.",
+        "couldntReadHooks": "Nie udało się odczytać hooków czekających na zatwierdzenie.",
         "couldntReadWontRun": "nie dało się odczytać i nie zostanie uruchomione:",
         "done": "Gotowe",
         "doneEditing": "Zakończ edycję",
@@ -36,7 +39,15 @@
         "fileDeletedAgentWould": "Plik jest usunięty. Twój agent musiałby zaproponować go od nowa.",
         "fired": "odpalone",
         "goingAhead": "Rusza",
+        "hookLedgerUnreadable": "Nie udało się odczytać zapisu hooków, które zatwierdziłeś, więc żaden hook z przestrzeni roboczej nie działa, dopóki znów jakiegoś nie zatwierdzisz.",
+        "hookSetTitle": "Hook Claude Code | {count} hooki Claude Code | {count} hooków Claude Code",
+        "hooks": "Hooki",
+        "hooksFound": "Znalezione przez turę",
+        "hooksWaiting": "Hooki czekające na Twoje tak",
         "inProgress": "w toku",
+        "keepOff": "Pozostaw wyłączone",
+        "keptOff": "pozostawione wyłączone",
+        "letThemRun": "Pozwól im działać",
         "needsReview": "Wymaga Twojego przeglądu",
         "nothingWaitingPostsAgent": "Nic nie czeka. Wpisy, które Twój agent chce opublikować, wszystko inne, czego nie powinien robić bez pytania, i automatyzacje ustawione na „najpierw zapytaj” — wszystko ląduje tutaj do zatwierdzenia.",
         "open": "Otwórz",
@@ -63,6 +74,11 @@
     "extension": {
         "approvals": "Zatwierdzenia",
         "waitingOn": "{count} czeka na Ciebie"
+    },
+    "hookSetBody": {
+        "filesPinned": "Zatwierdzenie obejmuje też te pliki, bajt po bajcie:",
+        "fromProjectSettings": ".claude/settings.json przestrzeni roboczej",
+        "fromUserSettings": "~/.claude/settings.json"
     },
     "postBody": {
         "showLess": "Pokaż mniej",

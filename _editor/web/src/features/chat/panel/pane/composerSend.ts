@@ -202,12 +202,13 @@ export const useComposerSend = (host: SendHost) => {
             }
             return host.mobile.value ? `Stop generating` : `Stop generating (Esc)`;
         }),
-        // What will happen to the queued messages: a parked turn was offered them, a running one ends first.
+        // What will happen to the waiting messages: a parked turn takes them once answered, a running one ends first, and
+        // with nothing running here they go as soon as the agent is free.
         queuedHint: computed(() => {
             if (!streaming.value) {
-                return `Sends with your next message`;
+                return t(`chat.chatQueue.goesWhenFree`);
             }
-            return awaitingDecision.value ? `Sends once you answer the request above` : `Sends when this turn ends`;
+            return awaitingDecision.value ? t(`chat.chatQueue.goesAfterAnswer`) : t(`chat.chatQueue.goesAfterTurn`);
         }),
         // Place and edit intercept and always return, since falling through with an empty box would misfire as Continue
         // or an appended send; then the run-through badge, then `canSend` for what's left.

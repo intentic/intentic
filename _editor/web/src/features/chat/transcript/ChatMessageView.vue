@@ -159,8 +159,8 @@ const stopThisWatch = async (): Promise<void> => {
 };
 
 // The message a refusal at the door turned away is still waiting behind it: nothing running, no row since, and its
-// words still kept — in this window's queue when the composer sent them, or by the sandbox, message still above, when
-// the sandbox started the turn itself. Every press on the notice acts on that message, so all go once it has.
+// words still kept — held in the conversation's queue when a person sent them, or by the sandbox, message still above,
+// when the sandbox started the turn itself. Every press on the notice acts on that message, so all go once it has.
 const heldHere = computed(
     () =>
         (props.message.noticeAction === `sendAnyway` || props.message.noticeAction === `sandboxMemory` || props.message.noticeAction === `sendAgain`) &&

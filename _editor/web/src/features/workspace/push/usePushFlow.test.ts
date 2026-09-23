@@ -571,7 +571,8 @@ test(`start over stops a running attempt, files it away, and opens attempt 2 on 
     expect(flow.attemptOnOffer.value?.continuable).toBe(false);
 
     await flow.startFix(undefined, `start-over`);
-    expect(stopAgent).toHaveBeenCalledWith(base);
+    // Set aside whichever turn it is on: the attempt goes to the archive whatever it started since.
+    expect(stopAgent).toHaveBeenCalledWith(base, undefined, { live: true });
     expect(archive).toHaveBeenCalledWith([base]);
     expect(suggestion.composeSession).toHaveBeenCalledWith(expect.objectContaining({ prompt, conversationId: fixAttemptId(base, 2) }));
     expect(flow.question.value).toBeUndefined();

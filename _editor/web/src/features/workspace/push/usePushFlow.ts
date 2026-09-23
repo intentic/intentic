@@ -556,7 +556,7 @@ export function usePushFlow() {
             return;
         }
         if (plan.stopFirst) {
-            await stopAgent(plan.retire);
+            await stopAgent(plan.retire, undefined, { live: true });
         }
         await archive([plan.retire]);
     };

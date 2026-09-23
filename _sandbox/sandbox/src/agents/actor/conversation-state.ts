@@ -4,10 +4,11 @@ import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { AuthFailure, HeldTurn, OutageFailure } from "../../agent/run/turn/turn-resume.js";
 import type { CheckVerdict } from "../../agent/verification/turn-checks.js";
 import type { FailedEnding } from "../registry/agents-store.js";
+import { NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
 
 // One conversation's in-memory life as a value: which phase it is in, what its live turn has measured, and the
 // leases and records that outlive a turn. Only conversation-decide.ts writes it, one event at a time; everything else
-// reads it. Nothing here survives a restart: the persisted entry and the turn journal are what a new daemon rebuilds from.
+// reads it. A restart keeps none of it: the persisted entry, its queue included, and the turn journal rebuild it.
 
 // The frames that park a turn on a person; a `resolved` frame naming the same request releases one.
 export type ParkKind = Extract<
@@ -145,6 +146,9 @@ export interface ConversationState {
     // The in-flight record of the run that holds, or is about to hold, the turn (turn-journal.ts): unwritten until the
     // `begin` that writes it with the turn's entry, so neither is ever on disk without the other.
     readonly journal: { readonly entry: JournalledTurn; readonly written: boolean } | undefined;
+    // What waits for its next turn (conversation-queue.ts), written onto the entry at every change and read back from it
+    // by an actor made after a restart.
+    readonly queue: TurnQueue;
 }
 
 export interface RestoredGrant {
@@ -173,8 +177,9 @@ export const freshRuntime = (): TurnRuntime => ({
     landing: false,
 });
 
-// Where a conversation this daemon has not heard from yet starts: after a boot, every one of them.
-export const idleConversation = (): ConversationState => ({
+// Where a conversation this daemon has not heard from yet starts: after a boot, every one of them, holding whatever its
+// entry kept waiting.
+export const idleConversation = (queue: TurnQueue = NO_QUEUE): ConversationState => ({
     phase: { kind: "idle" },
     turn: freshRuntime(),
     land: { held: 0 },
@@ -189,6 +194,7 @@ export const idleConversation = (): ConversationState => ({
     loop: undefined,
     workflow: undefined,
     journal: undefined,
+    queue,
 });
 
 export const runningPhase = (state: ConversationState): RunningPhase | undefined => (state.phase.kind === "running" ? state.phase : undefined);

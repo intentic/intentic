@@ -14,6 +14,7 @@ const build = () => {
             tool({
                 name: "echo",
                 description: "Say it back.",
+                effect: "read",
                 input: z.object({ text: z.string().min(1) }),
                 run: async ({ text }, ctx) => {
                     if (!ctx.allowed) {
@@ -25,6 +26,7 @@ const build = () => {
             tool({
                 name: "fail",
                 description: "Always errs as a result.",
+                effect: "destructive",
                 input: z.object({}),
                 run: async () => textResult("nope", true),
             }),
@@ -51,12 +53,16 @@ test("initialize names the peer and its build; ping answers empty; an unknown me
     expect(await handle("not an object", { allowed: true })).toMatchObject({ error: { code: -32600 } });
 });
 
-test("tools/list publishes each tool's schema as JSON Schema, without the dialect line", async () => {
+test("tools/list publishes each tool's schema as JSON Schema, without the dialect line, and its effect as annotations", async () => {
     const { handle } = build();
     const listed = (await handle({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { allowed: true })) as {
-        result: { tools: { name: string; inputSchema: Record<string, unknown> }[] };
+        result: { tools: { name: string; inputSchema: Record<string, unknown>; annotations: Record<string, boolean> }[] };
     };
     expect(listed.result.tools.map((entry) => entry.name)).toEqual(["echo", "fail"]);
+    expect(listed.result.tools.map((entry) => entry.annotations)).toEqual([
+        { readOnlyHint: true, destructiveHint: false },
+        { readOnlyHint: false, destructiveHint: true },
+    ]);
     expect(listed.result.tools[0]?.inputSchema).toMatchObject({ type: "object", properties: { text: { type: "string" } } });
     expect(listed.result.tools[0]?.inputSchema).not.toHaveProperty("$schema");
 });
@@ -65,6 +71,7 @@ test("a tuple is published without the boolean `items` llama.cpp's grammar conve
     const listed = tool({
         name: "point",
         description: "A point.",
+        effect: "write",
         input: z.object({ at: z.tuple([z.number(), z.number()]), path: z.array(z.tuple([z.number(), z.number()])) }),
         run: async () => textResult("ok"),
     });
@@ -119,7 +126,7 @@ test("a thrown refusal and a thrown failure are both results, and the audit line
 test("an audit log that cannot be written never fails the answer", async () => {
     const handle = createMcpServer<undefined>({
         serverInfo: () => ({ name: "x", version: "1" }),
-        tools: [tool({ name: "hi", description: "Hi.", input: z.object({}), run: async () => textResult("hi") })],
+        tools: [tool({ name: "hi", description: "Hi.", effect: "read", input: z.object({}), run: async () => textResult("hi") })],
         noSuchTool: () => "no",
         refused: () => false,
         errorMessage: String,

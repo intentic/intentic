@@ -33,7 +33,8 @@ testable, since a real click can only be verified by a human watching a screen.
 **Windows**: PowerShell into `user32.dll`. `SetCursorPos` + `mouse_event` for the pointer, `keybd_event` for
 chords, and `SendKeys` for text only. The split is deliberate: SendKeys is the only one that handles arbitrary
 unicode sensibly, and the only one that *cannot press the Windows key*: so text uses it and chords do not.
-Screen capture is `System.Drawing`. No install step, nothing left resident.
+Screen capture is `System.Drawing`. No install step, and nothing left resident but the helper of a notice that is
+open (below).
 
 **Linux**: two backends behind one interface. X11 lets any client synthesise input, so `xdotool` does
 everything with no privileges. Wayland does not, so the pointer goes through `ydotool` (which needs
@@ -80,6 +81,30 @@ not let one client enumerate another's windows, the same protection that stops i
 wlroots family (sway, Hyprland) answers `swaymsg -t get_tree` to anyone who can reach the socket, so those are
 supported; everything else gets a sentence explaining why, rather than an empty list that reads as "nothing is
 open".
+
+## A notice nothing driving the machine can touch
+
+`notice(hotkey, events)` pins one line of text to the top of the display the pointer is on, for the person sitting
+at the machine, while something else drives it ([src/notice-windows.ts](src/notice-windows.ts)). Windows only: elsewhere
+it answers `undefined`, and the caller has nothing to show.
+
+- **It is a hidden `powershell.exe` hosting a WinForms window**, alive exactly as long as the notice is open. It is
+  told `show <text>` or `quit` on stdin, and end of input is quit, so it dies with the process that opened it; it
+  answers `hotkey` and `hotkey-taken` on stdout. `close()` asks it to quit and kills it a second later if it has not.
+- **It never takes focus**: `WS_EX_NOACTIVATE`, and it is shown with `SetWindowPos(SWP_NOACTIVATE | SWP_SHOWWINDOW)`
+  alone. Typing goes to the focused window, so a notice that took focus would take the next `type` with it. (Not
+  `ShowWindow`: a process's first call obeys the `SW_HIDE` a hidden spawn hands it, whatever it asks for.)
+- **Every click goes through it** (`WS_EX_TRANSPARENT | WS_EX_LAYERED`), and it has no taskbar button or Alt+Tab
+  entry (`WS_EX_TOOLWINDOW`) and no title, so `windows()` does not list it either. It stays on top (`WS_EX_TOPMOST`,
+  re-asserted on every `show`).
+- **It is left out of every screen capture**, `capture()` included: `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`.
+  A helper Windows refuses that to quits rather than show a notice that would cover part of the next screenshot.
+- **The hotkey is `RegisterHotKey` on that window**, in this package's key vocabulary (`"Ctrl+Alt+Shift+P"`), so it
+  works exactly while the notice is open. When another program already holds it, `hotkeyTaken` says so.
+
+The window's C# is C# 5, the newest Windows PowerShell 5.1 compiles. What it asks Windows for is pinned by
+[src/notice-windows.test.ts](src/notice-windows.test.ts); whether Windows honours it is for a person at a Windows
+screen to see.
 
 ## Two details worth knowing
 

@@ -51,7 +51,6 @@ mock.module("../../sandbox/client/sandboxRpc", () => ({
             run: procedureOf(`agent.run`),
             attach: procedureOf(`agent.attach`),
             reply: procedureOf(`agent.reply`),
-            steer: procedureOf(`agent.steer`),
             stop: procedureOf(`agent.stop`),
             resume: procedureOf(`agent.resume`),
         },
@@ -717,23 +716,6 @@ describe(`per-tab drafts`, () => {
         expect(chat.active.value).toBe(tabs[1]!);
     });
 
-    it(`restores messages queued behind a running turn, with their attachments`, async () => {
-        const chat = useChat();
-        chat.active.value.turn.queued.value = [
-            {
-                id: `q1`,
-                text: `also update the tests`,
-                attachments: [{ name: `spec.md`, path: `${STATE_DIR}/records/artifacts/attachments/u1/spec.md` }],
-            },
-        ];
-        await nextTick();
-
-        resetSandboxScope();
-        expect(toRaw(chat.queued.value)).toMatchObject([
-            { text: `also update the tests`, attachments: [{ name: `spec.md`, path: `.intentic/records/artifacts/attachments/u1/spec.md` }] },
-        ]);
-    });
-
     it(`degrades a corrupt snapshot to a single fresh tab`, () => {
         storage.set(`intentic.chatTabs.sb1`, `not json`);
         resetSandboxScope();
@@ -826,7 +808,6 @@ describe(`per-tab turn settings`, () => {
                         thinking: false,
                         fast: false,
                         attachments: [],
-                        queued: [],
                     },
                 ],
             }),
@@ -861,7 +842,7 @@ describe(`tab snapshots across windows and sandboxes`, () => {
     const foreignSnapshot = (active: string, ids: readonly string[]): string =>
         JSON.stringify({
             active,
-            tabs: ids.map((conversationId) => ({ conversationId, isolated: true, draft: `typed in another window`, attachments: [], queued: [] })),
+            tabs: ids.map((conversationId) => ({ conversationId, isolated: true, draft: `typed in another window`, attachments: [] })),
         });
 
     beforeEach(() => {
@@ -905,8 +886,8 @@ describe(`tab snapshots across windows and sandboxes`, () => {
             JSON.stringify({
                 active: `conv-real`,
                 tabs: [
-                    { conversationId: `conv-empty`, isolated: true, draft: ``, attachments: [], queued: [] },
-                    { conversationId: `conv-real`, isolated: true, draft: `carry on`, attachments: [], queued: [] },
+                    { conversationId: `conv-empty`, isolated: true, draft: ``, attachments: [] },
+                    { conversationId: `conv-real`, isolated: true, draft: `carry on`, attachments: [] },
                 ],
             }),
         );
@@ -1892,8 +1873,8 @@ describe(`chat panes`, () => {
                 active: `conv-a`,
                 panes: [`conv-a`, `conv-gone`, `conv-b`],
                 tabs: [
-                    { conversationId: `conv-a`, isolated: true, draft: `one`, attachments: [], queued: [] },
-                    { conversationId: `conv-b`, isolated: true, draft: `two`, attachments: [], queued: [] },
+                    { conversationId: `conv-a`, isolated: true, draft: `one`, attachments: [] },
+                    { conversationId: `conv-b`, isolated: true, draft: `two`, attachments: [] },
                 ],
             }),
         );
@@ -1910,8 +1891,8 @@ describe(`chat panes`, () => {
             JSON.stringify({
                 active: `conv-b`,
                 tabs: [
-                    { conversationId: `conv-a`, isolated: true, draft: `one`, attachments: [], queued: [] },
-                    { conversationId: `conv-b`, isolated: true, draft: `two`, attachments: [], queued: [] },
+                    { conversationId: `conv-a`, isolated: true, draft: `one`, attachments: [] },
+                    { conversationId: `conv-b`, isolated: true, draft: `two`, attachments: [] },
                 ],
             }),
         );
@@ -1973,24 +1954,6 @@ describe(`hydrating a conversation whose turn is still running`, () => {
 
     afterEach(() => {
         unstubAllGlobals();
-    });
-
-    // What a window that died between a press and the daemon's ack leaves behind: the words still in the tab's queue,
-    // and a daemon that knows nothing of the conversation. Coming back, the press finishes rather than leaving the
-    // blank chat that made "Fix with agent" look like it did nothing.
-    it(`sends a first turn the daemon never heard of when its tab comes back`, async () => {
-        daemonAnswers((procedure) => (procedure === `agent.run` ? Promise.resolve({ run: `r1` }) : undefined));
-        const conversation = useChat().active.value;
-        conversation.turn.queued.value = [{ id: `q1`, text: `the check failed, fix it`, attachments: [] }];
-
-        hydrateOnce(conversation);
-
-        await waitFor(() =>
-            expect(daemon.mock.calls.filter(([procedure]) => procedure === `agent.run`).map(([, input]) => input)).toMatchObject([
-                { prompt: `the check failed, fix it` },
-            ]),
-        );
-        expect(conversation.turn.queued.value).toHaveLength(0);
     });
 
     it(`runs one pass at a time, so a second trigger cannot answer about a tab the first has moved on`, async () => {

@@ -59,8 +59,9 @@ returns, which the history snapshot's ordering relies on) and isolated (a throwi
 propagated). Where the turn needs an answer (dependency verification after a land) it is a port, not an event.
 
 Mutual value-import cycles between daemon subsystems went from 50 to 10 and whole-`Services` takers from 12 to 0.
-`_tools/checks/daemon-boundaries.mjs` names the ten that remain and why each could not be cut cleanly, and is now a
-`code` gate: a new cycle or a new whole-`Services` taker is refused at the push.
+`_tools/checks/daemon-boundaries.mjs` is a `code` gate: a new value-import edge that closes a cycle of any length, or a
+new whole-`Services` taker, is refused at the push. The cycle edges still standing are its shrink-only baseline,
+`_tools/checks/baselines/daemon-cycles.json`, where the ten mutual pairs keep the reason each could not be cut cleanly.
 
 ## 5. The contract is the only door
 
@@ -124,7 +125,7 @@ history keeps the old files.
 
 ## 8. What is still open
 
-- The ten mutual cycles named in `daemon-boundaries.mjs`.
+- The cycle edges held in `_tools/checks/baselines/daemon-cycles.json`, the ten mutual pairs among them.
 - The watcher runtime is a module-level value set at boot; it no longer hides an import, but it is still a global.
 - `agents.begin` counts a refused turn as a turn, so a conversation whose first send is refused skips its opening
   notes (`turns-that-never-ran.md`), and `begin` does not record `forkedFrom`; both predate this work.

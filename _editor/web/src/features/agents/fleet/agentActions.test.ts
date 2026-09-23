@@ -26,7 +26,7 @@ const chat = hoisted(() => ({
             conversationId: string;
             isolated: { value: boolean };
             turn: {
-                enqueue: (prompt: string) => void;
+                say: (prompt: string) => void;
                 startErrand: (opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>) => Promise<boolean>;
             };
             // Only the errand path touches these, so the tabs the other tests build leave them off.
@@ -46,7 +46,7 @@ const tab = (id: string) => ({
     registered: { value: true },
     unsent: { value: false },
     turn: {
-        enqueue: (prompt: string) => chat.enqueued.push(prompt),
+        say: (prompt: string) => chat.enqueued.push(prompt),
         // The chat's half of an errand as TurnClient.startErrand keeps it: the turn opens under its opening at once,
         // only a composed prompt is sent, and every send here is one the daemon takes.
         startErrand: async (opening: string, compose: (signal: AbortSignal) => Promise<string | undefined>): Promise<boolean> => {
@@ -93,7 +93,7 @@ const draft = hoisted(() => ({
 mock.module("../../chat/panel/useChat-reveal", () => ({
     // `actsAs` is on the stub since startAgent pins the draft before summoning it, including to `undefined` when
     // pressing Anyone un-pins a persona.
-    draftConversation: () => ({ ...draft.value, turn: { enqueue: (prompt: string) => chat.enqueued.push(prompt) } }),
+    draftConversation: () => ({ ...draft.value, turn: { say: (prompt: string) => chat.enqueued.push(prompt) } }),
     agentTabOf: () => ({}),
     composingConversation: () => undefined,
 }));
@@ -101,7 +101,7 @@ mock.module("../../chat/panel/useChat-reveal", () => ({
 // so a summoned turn runs here, as summonTurn does in any window drawing the chat.
 mock.module("../../chat/run/summon", () => ({
     summonChat: () => {},
-    summonTurn: (conversation: { turn: { enqueue: (prompt: string) => void } }, prompt: string) => conversation.turn.enqueue(prompt),
+    summonTurn: (conversation: { turn: { say: (prompt: string) => void } }, prompt: string) => conversation.turn.say(prompt),
 }));
 mock.module("../../../lib/queryPersistence", () => ({ queryClient: { invalidateQueries: async () => undefined }, UNPERSISTED: `unpersisted` }));
 mock.module("../../../router", () => ({ router: { push: mock() } }));

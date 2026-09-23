@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
@@ -13,7 +14,9 @@ import { services } from "../harness/route-services.testing.js";
 import { memoryAutomationsStore, memoryCapabilitiesStore, memorySecretVault } from "../harness/route-stores.testing.js";
 import { removeWorkspacePath } from "../workspace/files/workspace-files.js";
 import { statePath } from "../state-paths.js";
+import { testConfig } from "../testing.js";
 import { workspacePaths } from "../workspace/workspace.js";
+import { approveExtension, extensionApprovals } from "./extension-approvals.js";
 
 // Removal, over the daemon's HTTP surface. The claims worth holding: the plan names the connections configured from
 // the extension's own cards before anything happens, removal actually takes them, and the ledgers keyed by the
@@ -56,10 +59,12 @@ const MODELS = [{ provider: "claude" as const, model: "opus" }];
 
 const settingsFile = (root: string): string => statePath(root, ".intentic/config/extension-settings.json");
 
-// A workspace extension on disk plus the state an owner accumulates around one: a connection added from its card, its
-// own settings (one open, one vaulted), a switch entry, and an automation waking on its listener.
+// A workspace extension on disk plus the state an owner accumulates around one: its approval, a connection added from
+// its card, its own settings (one open, one vaulted), a switch entry, and an automation waking on its listener.
 const withExtension = async (cliConfig: Record<string, string> = { token: "sk-live" }) => {
     const workspace = workspacePaths(mkdtempSync(join(tmpdir(), "ext-remove-")));
+    const historyRoot = mkdtempSync(join(tmpdir(), "ext-remove-history-"));
+    await approveExtension(historyRoot, "acme.toolbox", ExtensionManifestSchema.parse(MANIFEST));
     const dir = join(workspaceExtensionsRoot(workspace.root), "toolbox");
     await mkdir(join(dir, "skills"), { recursive: true });
     await writeFile(join(dir, "intentic-extension.json"), JSON.stringify(MANIFEST));
@@ -73,6 +78,7 @@ const withExtension = async (cliConfig: Record<string, string> = { token: "sk-li
     );
     const svc = services({
         workspace,
+        config: { ...testConfig, historyRoot },
         capabilities: memoryCapabilitiesStore([
             { id: "acme", kind: "cli", config: { provider: "acme-cli", ...cliConfig } },
             // A cli from a card nobody here supplies: removal must leave it exactly where it is.
@@ -133,6 +139,8 @@ test("removing takes the connections configured from its cards and forgets the s
 
     // The owner's automations survive, including the one that now has nothing to wake it.
     expect((await svc.automations.list()).map((automation) => automation.id).toSorted()).toEqual(["nightly", "triage"]);
+    // Its approval goes too: the same folder written again later asks again.
+    expect((await extensionApprovals(svc.config.historyRoot))("acme.toolbox", ExtensionManifestSchema.parse(MANIFEST)).approvedBefore).toBe(false);
 });
 
 // A disabled extension is out of the card registry, so without its own card the cli handler cannot tell a credential

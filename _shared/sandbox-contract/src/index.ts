@@ -141,6 +141,7 @@ export * from "./policy/capability-env.js";
 export * from "./policy/command-classes.js";
 export * from "./policy/command-run.js";
 export * from "./policy/safety-policy.js";
+export * from "./policy/reserved-servers.js";
 export * from "./policy/credential-material.js";
 export * from "./policy/capability-secrets.js";
 export * from "./ids/conversation-ids.js";

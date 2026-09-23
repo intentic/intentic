@@ -1,4 +1,5 @@
 import "@intentic/testing/dom";
+import type { ConversationQueue } from "@intentic/sandbox-contract";
 import { hoisted } from "@intentic/testing/bun";
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { createApp, h, nextTick, ref, shallowRef } from "vue";
@@ -8,11 +9,14 @@ import * as sessionsOriginal from "../../run/useChat-sessions";
 // Pins what keeps a pane on the chat it shows: the typewriter runs in the focused pane alone, and a chat this pane is
 // not streaming hydrates on the roster's transitions, never on the turn it streamed itself.
 
-// The fleet roster as agentById answers it, by conversation id; a status and the running turn's start are all a turn's
+// The fleet roster as agentById answers it, by conversation id; a status, the run it names and its queue are all a turn's
 // standing is read from here.
 const { roster, hydrateOnce } = await hoisted(async () => {
     const { ref: vueRef } = await import(`vue`);
-    return { roster: vueRef<Record<string, { readonly status: string; readonly startedAt?: number }>>({}), hydrateOnce: mock() };
+    return {
+        roster: vueRef<Record<string, { readonly status: string; readonly run?: string; readonly queue?: ConversationQueue }>>({}),
+        hydrateOnce: mock(),
+    };
 });
 // Held before the mock replaces the module's binding, which would otherwise answer with the mock itself.
 const { useAgents } = useAgentsOriginal;
@@ -119,7 +123,7 @@ describe(`hydration off the roster`, () => {
         const chat = new Conversation(`a`);
         const pane = attach(chat);
         pane.streaming.value = true;
-        roster.value = { a: { status: `running`, startedAt: 1_000 } };
+        roster.value = { a: { status: `running`, run: `r1` } };
         await nextTick();
 
         // The streamed turn fails with a rung booked: in flight still, and nothing new to attach to.
@@ -129,7 +133,33 @@ describe(`hydration off the roster`, () => {
         expect(hydrateOnce).not.toHaveBeenCalled();
 
         // The rung fires: a run this pane is not streaming.
-        roster.value = { a: { status: `running`, startedAt: 2_000 } };
+        roster.value = { a: { status: `running`, run: `r2` } };
+        await nextTick();
+        expect(hydrateOnce.mock.calls).toEqual([[chat]]);
+    });
+
+    // The queue starts the next turn the moment this one settles, and a roster read after both says running twice.
+    it(`hydrates when the card names a new run even though it never read as settled in between`, async () => {
+        const chat = new Conversation(`a`);
+        attach(chat);
+        roster.value = { a: { status: `running`, run: `r1` } };
+        await nextTick();
+        roster.value = { a: { status: `running`, run: `r2` } };
+        await nextTick();
+
+        expect(hydrateOnce.mock.calls).toEqual([[chat], [chat]]);
+    });
+
+    it(`follows the turn the card already names once this pane's own stream is over`, async () => {
+        const chat = new Conversation(`a`);
+        const pane = attach(chat);
+        pane.streaming.value = true;
+        await nextTick();
+        roster.value = { a: { status: `running`, run: `r2` } };
+        await nextTick();
+        expect(hydrateOnce).not.toHaveBeenCalled();
+
+        pane.streaming.value = false;
         await nextTick();
         expect(hydrateOnce.mock.calls).toEqual([[chat]]);
     });
@@ -145,5 +175,32 @@ describe(`hydration off the roster`, () => {
 
         expect(hydrateOnce).not.toHaveBeenCalled();
         expect(chat.registered.value).toBe(false);
+    });
+});
+
+describe(`the chat's queue`, () => {
+    const waiting = (revision: number, text: string): ConversationQueue => ({
+        items: [{ id: `m-1`, text, voice: `person`, queuedAt: 1_000, revision }],
+        revision,
+    });
+
+    it(`is read off the chat's card, the same one every window shows`, async () => {
+        const chat = new Conversation(`a`);
+        attach(chat);
+        roster.value = { a: { status: `running`, queue: waiting(1, `and the docs`) } };
+        await nextTick();
+
+        expect(chat.queue.value).toEqual(waiting(1, `and the docs`));
+    });
+
+    // This window's own change was answered with a newer queue than the card it has yet to receive.
+    it(`never goes back to an older copy than the one a change here was answered with`, async () => {
+        const chat = new Conversation(`a`);
+        attach(chat);
+        chat.queue.value = waiting(3, `and the docs, briefly`);
+        roster.value = { a: { status: `running`, queue: waiting(2, `and the docs`) } };
+        await nextTick();
+
+        expect(chat.queue.value).toEqual(waiting(3, `and the docs, briefly`));
     });
 });

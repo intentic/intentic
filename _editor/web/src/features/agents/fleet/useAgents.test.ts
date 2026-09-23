@@ -580,7 +580,6 @@ describe("draft cards", () => {
             draft: `fix the login redirect`,
             draftAt: 1_700,
             attachments: [],
-            queued: [],
         });
 
         expect(
@@ -620,7 +619,6 @@ describe("draft cards", () => {
             registered: false,
             draft: `fix the login redirect`,
             attachments: [],
-            queued: [],
         });
         useChat().conversations.value = [...useChat().conversations.value, new Conversation(`set-aside`)];
 
@@ -787,7 +785,6 @@ describe("draft cards", () => {
                         draft: `fix the login redirect`,
                         draftAt: 1_700,
                         attachments: [],
-                        queued: [],
                     },
                 ],
             },

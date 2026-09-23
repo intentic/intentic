@@ -1062,8 +1062,6 @@
             "moreComposerSettings": "Weitere Composer-Einstellungen",
             "openNewChatHere": "Von hier aus einen neuen Chat mit dem Getippten öffnen: dieser behält seine Antwort",
             "providerModel": "Anbieter und Modell: {providerName} · {modelLabelText}",
-            "removeMessageNotSent": "Entfernen: diese Nachricht wird nicht gesendet",
-            "removeQueuedMessage": "Eingereihte Nachricht entfernen",
             "replacedSend": "sie wird beim Senden ersetzt.",
             "runMessageThrough": "Diese Nachricht laufen lassen durch",
             "sandboxBusyKeepTyping": "Die Sandbox ist ausgelastet: Tippen Sie weiter; Senden geht, sobald sie bereit ist.",
@@ -1137,6 +1135,24 @@
             "submit": "Absenden",
             "typeAnswer": "Tippen Sie Ihre Antwort…",
             "writeAnswerToSubmit": "Schreiben Sie Ihre Antwort zum Absenden."
+        },
+        "chatQueue": {
+            "cancel": "Abbrechen",
+            "fromAgent": "Von einem anderen Agenten",
+            "fromSandbox": "Von der Sandbox",
+            "goesAfterAnswer": "Geht hinein, sobald du die Anfrage oben beantwortest",
+            "goesAfterTurn": "Geht raus, wenn dieser Durchlauf endet",
+            "goesWhenFree": "Geht raus, sobald der Agent frei ist",
+            "heldRefused": "Zurückgehalten: der letzte Versuch wurde abgelehnt, bevor er lief. Behebe die Ursache, dann fortsetzen.",
+            "heldStopped": "Zurückgehalten, seit der Durchlauf gestoppt wurde: nichts geht raus, bis jemand fortsetzt.",
+            "removeHint": "Zurücknehmen: diese Nachricht wird nicht gesendet",
+            "removeLabel": "Wartende Nachricht zurücknehmen",
+            "resume": "Fortsetzen",
+            "resumeHint": "Jetzt senden, was wartet, mit dem Modell und Konto dieses Chats",
+            "rewordHint": "Ändern, was sie sagt, ohne ihren Platz zu verlieren",
+            "rewordLabel": "Wartende Nachricht umformulieren",
+            "save": "Speichern",
+            "sendNow": "Jetzt senden"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Ihr Agent wartet auf Sie",
@@ -1349,28 +1365,13 @@
         "chatTurnStatus": {
             "atCapacity": "an der Kapazitätsgrenze",
             "attemptNothingLost": "(Versuch {attempt}, nichts verloren)",
-            "loader": {
-                "brewing": "Braut",
-                "cogitating": "Denkt nach",
-                "conjuring": "Beschwört",
-                "musing": "Sinniert",
-                "noodling": "Bastelt",
-                "percolating": "Zieht durch",
-                "perusing": "Studiert",
-                "pondering": "Grübelt",
-                "ruminating": "Wälzt",
-                "scheming": "Schmiedet",
-                "synthesizing": "Führt zusammen",
-                "thinking": "Denkt",
-                "tinkering": "Tüftelt",
-                "untangling": "Entwirrt"
-            },
             "modelProvider": "Der Modellanbieter ist",
             "notResponding": "antwortet nicht",
             "rateLimiting": "drosselt",
             "retrying": "versucht es erneut",
             "retryingAt": "versucht es am {when} erneut",
             "retryingIn": "versucht es erneut in {wait}",
+            "thinking": "Denkt",
             "waitingOnSubagents": "Wartet auf {count} Subagenten | Wartet auf {count} Subagenten"
         },
         "composerIntent": {
@@ -2638,17 +2639,26 @@
             "topicOnRepositoryNightly": "-Topic auf sein Repository, und ein nächtlicher Job öffnet den Eintrag für Sie. Kein Konto, kein Upload, keine Warteschlange."
         },
         "extensionsInstalled": {
+            "approve": "Freigeben",
+            "approvedNow": "{manifest} freigegeben.",
+            "asksForNothing": "Es verlangt keine Befugnisse.",
             "clearFilter": "Filter leeren",
+            "couldntApprove": "{manifest} konnte nicht freigegeben werden.",
             "couldntListSandboxsExtensions": "Die Erweiterungen dieser Sandbox ließen sich nicht auflisten.",
             "discoverWhatPeoplePublished": "Entdecken, was andere veröffentlicht haben →",
             "installed": "Installiert",
             "invalid": "ungültig",
             "needsAttention": "Braucht Aufmerksamkeit",
+            "newPowersSinceApproved": "Neue Befugnisse seit deiner Freigabe:",
             "notLoadable": "Nicht ladbar",
+            "pendingBadge": "ausstehend",
             "publishedMatches": "{count} veröffentlichte Erweiterung passt zu „{query}“ → | {count} veröffentlichte Erweiterungen passen zu „{query}“ →",
             "readingSandboxsExtensions": "Die Erweiterungen dieser Sandbox werden gelesen…",
             "removed": "{manifest} entfernt.",
-            "runningNotListed": "Läuft, aber nicht gelistet"
+            "runningNotListed": "Läuft, aber nicht gelistet",
+            "waitingCaption": "In diesem Workspace geschrieben. Nichts von seinem Code läuft, bevor du freigibst, was es verlangt.",
+            "waitingForApproval": "Wartet auf deine Freigabe",
+            "whatItAsksFor": "Was es verlangt:"
         },
         "folderPicker": {
             "change": "Ändern",
@@ -3225,6 +3235,30 @@
             "showLess": "Weniger anzeigen",
             "showMoreAccounts": "{collapsedCredentialCount} weitere Konten zeigen"
         },
+        "sandboxStorageCard": {
+            "clean": "Bereinigen",
+            "confirmHeader": "{category} bereinigen?",
+            "couldntRead": "Die letzte Messung ließ sich nicht lesen",
+            "diskUsed": "{used} von {total} belegt",
+            "failedItems": "{count} Element ließ sich nicht entfernen. | {count} Elemente ließen sich nicht entfernen.",
+            "firstScan": "Jede Datei auf den Volumes der Sandbox wird gelesen. Das kann eine Minute dauern.",
+            "free": "{bytes} freigeben",
+            "freed": "{bytes} aus {category} freigegeben.",
+            "heading": "Speicherplatz",
+            "intro": "Sehen Sie, was den Speicherplatz dieser Sandbox füllt, und geben Sie frei, was gefahrlos weg kann. Ein Scan liest jede Datei auf den Volumes der Sandbox und kann daher eine Minute dauern.",
+            "keptItems": "{count} Element ist geblieben: in Gebrauch oder am letzten Tag geändert. | {count} Elemente sind geblieben: in Gebrauch oder am letzten Tag geändert.",
+            "measured": "Gemessen {when}",
+            "measuring": "Wird gemessen…",
+            "partial": "Der Scan hat sein Zeitlimit erreicht, bevor er alles gelesen hatte; jede Größe ist also mindestens so groß wie angegeben.",
+            "scan": "Scannen",
+            "scanAgain": "Erneut scannen",
+            "stop": "Anhalten",
+            "uncounted": "Vom Scan nicht erfasst",
+            "uncountedHint": "Platz, den der Datenträger als belegt meldet, der aber zu keiner Kategorie gehört: das System selbst, andere Programme auf demselben Datenträger und die Verwaltungsdaten des Dateisystems.",
+            "unreadable": "{count} Datei oder Ordner ließ sich nicht lesen und ist nicht mitgezählt. | {count} Dateien oder Ordner ließen sich nicht lesen und sind nicht mitgezählt.",
+            "waiting": "Noch nichts freizugeben",
+            "waitingHint": "Alles hier wurde am letzten Tag geändert oder ist in Gebrauch, eine Bereinigung ließe also alles an seinem Platz."
+        },
         "sandboxSwitcher": {
             "addSandbox": "Sandbox hinzufügen",
             "alsoDelete": "Auch löschen von",
@@ -3422,6 +3456,98 @@
             "never": "Nie",
             "runsAsksAfterOutside": "läuft, fragt nach Inhalten von außen"
         },
+        "storageCategories": {
+            "artifacts": {
+                "label": "Von Agenten erzeugte Dateien",
+                "reason": "Generierte Bilder, Berichte und andere Dateien, die Agenten bei der Arbeit erzeugt haben.",
+                "warning": "Unterhaltungen, die darauf verweisen, zeigen sie als fehlend an. Alles, was am letzten Tag geändert wurde, bleibt erhalten."
+            },
+            "browserCaptures": {
+                "label": "Browser-Screenshots",
+                "reason": "Screenshots und Seiten-Schnappschüsse, die der Browser des Agenten bei der Arbeit aufgenommen hat.",
+                "warning": "Unterhaltungen, die sie zeigen, zeigen stattdessen ein fehlendes Bild. Die vom letzten Tag bleiben erhalten."
+            },
+            "browserProfiles": {
+                "label": "Browser-Anmeldungen",
+                "reason": "Die Profile des Agenten-Browsers mit den Websites, bei denen er angemeldet ist.",
+                "warning": "Der Agent wird bei jeder Website eines bereinigten Profils abgemeldet und braucht beim erneuten Anmelden womöglich Ihre Hilfe; seine Konten bleiben als verbunden aufgeführt. Ein geöffneter oder am letzten Tag benutzter Browser bleibt erhalten, und Passkeys werden nie angerührt."
+            },
+            "buildCaches": {
+                "label": "Build-Caches",
+                "reason": "Gespeicherte Ergebnisse von Build-Werkzeugen, die beim nächsten Bedarf neu erzeugt werden. Beim Bereinigen bleiben die vom letzten Tag erhalten."
+            },
+            "checkouts": {
+                "label": "Checkouts der Unterhaltungen",
+                "reason": "Die eigene Kopie der Repositories jeder offenen Unterhaltung, mit den Abhängigkeiten, die sie installiert hat. Archivieren Sie eine abgeschlossene Unterhaltung, um ihre Kopie freizugeben."
+            },
+            "conversations": {
+                "label": "Unterhaltungen",
+                "reason": "Transkripte, Anhänge und Aufzeichnungen jeder Unterhaltung, archivierte eingeschlossen. Wenn Sie eine Unterhaltung aus dem Archiv löschen, wird ihr Anteil frei."
+            },
+            "docker": {
+                "label": "Docker",
+                "reason": "Images, Container und Volumes des sandboxeigenen Docker. docker system prune in einem Terminal entfernt, was nichts mehr nutzt."
+            },
+            "engines": {
+                "label": "Agenten-Engines",
+                "reason": "Installierte Versionen der Agenten-Laufzeiten: die aktive und die zum Zurückgehen aufbewahrte. Verwaltet über die Karte Agenten-Engines."
+            },
+            "exports": {
+                "label": "Exportierte Pakete",
+                "reason": "Kopien dieser Sandbox, zum Herunterladen gepackt.",
+                "warning": "Laden Sie zuerst jedes Paket herunter, das Sie noch brauchen. Eines, das gerade gepackt wird, bleibt erhalten."
+            },
+            "extensions": {
+                "label": "Erweiterungen",
+                "reason": "Installierte Erweiterungen und ihre Arbeitsdateien."
+            },
+            "indexes": {
+                "label": "Suchindizes",
+                "reason": "Suchindizes für Code und Unterhaltungen, die die Sandbox selbst aktuell hält."
+            },
+            "logs": {
+                "label": "Logs",
+                "reason": "Die eigenen Logs der Sandbox und Terminal-Mitschnitte. Beim Bereinigen bleiben die vom letzten Tag erhalten."
+            },
+            "modelWeights": {
+                "label": "Gewichte lokaler Modelle",
+                "reason": "Gewichte, die für die Modelle heruntergeladen wurden, die diese Sandbox selbst ausführt.",
+                "warning": "Ein bereinigtes Modell lädt seine Gewichte beim nächsten Start erneut herunter, was eine Weile dauern kann. Gewichte, die ein laufendes Modell nutzt, bleiben erhalten."
+            },
+            "other": {
+                "label": "Nicht zugeordnete Dateien",
+                "reason": "Dateien, die kein Teil der Sandbox beansprucht, etwa von Hand angelegte Sicherungen. Sehen Sie sie sich an, bevor Sie sie selbst löschen."
+            },
+            "packageStores": {
+                "label": "Paket-Downloads",
+                "reason": "Der pnpm-Speicher heruntergeladener Pakete. Beim Bereinigen wird entfernt, was kein Projekt nutzt; die nächste Installation lädt Benötigtes erneut."
+            },
+            "repositories": {
+                "label": "Repository-Historie",
+                "reason": "Die eigenen Git-Daten Ihrer Repositories: jeder Commit und jeder Branch, auch solche, die nie irgendwohin gepusht wurden."
+            },
+            "restorePoints": {
+                "label": "Wiederherstellungspunkte",
+                "reason": "Schnappschüsse, die jede Minute bei Dateiänderungen und nach jeder Agentenrunde entstehen, damit die Historie jeden Moment zurückholen kann."
+            },
+            "scratch": {
+                "label": "Temporäre Dateien",
+                "reason": "Temporäre Dateien, die Agenten und Prüfungen zurücklassen. Beim Bereinigen bleiben die vom letzten Tag und alles in Gebrauch erhalten."
+            },
+            "state": {
+                "label": "Einstellungen und Aufzeichnungen",
+                "reason": "Konfiguration, Anmeldungen, Zugangsdaten und die Aufzeichnungen darüber, was ausgegeben und getan wurde."
+            },
+            "trash": {
+                "label": "Gelöschte Repositories",
+                "reason": "Git-Daten und Checkouts von Repositories, die aus dem Workspace gelöscht wurden.",
+                "warning": "Sie können Commits enthalten, die nie irgendwohin gepusht wurden. Einmal bereinigt, lassen sie sich nicht zurückholen."
+            },
+            "workspace": {
+                "label": "Workspace-Dateien",
+                "reason": "Ihre Repositories, ihre Abhängigkeiten und alles andere im Workspace. Entfernen Sie, was Sie nicht mehr brauchen, unter Dateien oder in einem Terminal."
+            }
+        },
         "usageChart": {
             "allTime": "Gesamtzeit",
             "more": "{count} weitere",
@@ -3452,6 +3578,10 @@
             "sandboxClosedConnection": "Die Sandbox hat die Verbindung geschlossen.",
             "sandboxNeverReportedAddress": "Diese Sandbox hat nie eine Adresse gemeldet.",
             "sandboxStoppedResponding": "Die Sandbox antwortet nicht mehr."
+        },
+        "useSandboxStorage": {
+            "couldntClean": "{category} ließ sich nicht bereinigen",
+            "couldntMeasure": "Der Speicherplatz ließ sich nicht messen"
         }
     },
     "settings": {

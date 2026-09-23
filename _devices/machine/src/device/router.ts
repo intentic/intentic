@@ -1,6 +1,7 @@
 import { narrate } from "@intentic/base/async";
 import { type DeviceScopes, type DeviceFlowLine, type DeviceSandboxFlow, type DeviceSandboxOp, deviceContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { calling } from "./indicator.js";
 import { handleMcpMessage } from "./mcp.js";
 import { hostFacts } from "./tools/describe.js";
 import { machineReport } from "../sync/report.js";
@@ -21,6 +22,8 @@ import {
 // that serves are independent, oRPC's websocket adapter attaches to any socket-like object. `scopes` is a live
 // reference: `setScopes` takes effect on the very next tool call, not at the next reconnect.
 export interface HostRuntime {
+    // The sandbox this socket answers, which names it on this machine's screen while it drives the desktop.
+    readonly sandboxUrl: string;
     readonly scopes: () => DeviceScopes;
     readonly setScopes: (scopes: DeviceScopes) => void;
     readonly log: (message: string) => void;
@@ -121,13 +124,13 @@ export const createHostRouter = (runtime: HostRuntime) => {
             runtime.setScopes(input);
             runtime.log(`permissions updated: commands ${input.shell}, writes ${input.write}, screen ${input.screen}`);
             // Caching it on disk belongs to the connection (see connection.ts), not this router: a device answers to a
-            // list of sandboxes now, and the router can't name which one pushed.
+            // list of sandboxes now, and the connection owns this one's entry in it.
             return { ok: true };
         }),
         ping: os.ping.handler(() => ({ ok: true })),
         // The one opaque procedure. Its payload is MCP, understood by handleMcpMessage and the tool it names, not by
-        // this contract or the daemon.
-        mcp: os.mcp.handler(async ({ input }) => await handleMcpMessage(input, runtime.scopes())),
+        // this contract or the daemon. Run as this link's call, so what it does to the desktop is shown under its name.
+        mcp: os.mcp.handler(async ({ input }) => await calling.run(runtime, async () => await handleMcpMessage(input, runtime.scopes()))),
         // Read here, per call, exactly as the MCP handler reads them: a stream opened before the owner flipped a
         // switch must not outlive the decision.
         runSandboxFlow: os.runSandboxFlow.handler(({ input }) => streamFlow(FLOWS[input.op](input, runtime.scopes()))),

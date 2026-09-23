@@ -1,9 +1,13 @@
+import { HOST_HEARTBEAT_MS } from "@intentic/sandbox-contract";
+import { PEER_LINK_BACKOFF, peerLinkSilenceMs } from "@intentic/sandbox-contract/peer-dial";
 import { localDaemonPort } from "@intentic/sandbox-run";
+import { unstubbed } from "@intentic/testing";
 import { test, expect, afterEach, jest } from "bun:test";
 import { waitFor, advanceTimersByTimeAsync } from "@intentic/testing/bun";
 import type { DaemonBase } from "../daemon-base.js";
 import type { HostLink } from "./config.js";
 import { connect, type Dial } from "./connection.js";
+import type { Indicator } from "./indicator.js";
 
 // Pins that the socket asks the resolver on every reconnect and dials the answer unchanged; the resolver
 // itself is proved against real daemons in ../daemon-base.integration.test.ts.
@@ -220,4 +224,30 @@ test(`a refused enrollment ends the agent instead of redialling`, async () => {
     expect(said.join(`\n`)).toContain(`revoked`);
     // The sync half drops a revoked pairing; the device half drops a revoked link the same way, or it is redialled at every start.
     expect(forgotten).toEqual([PUBLIC]);
+});
+
+// The notice on this machine's screen says a link is driving it; once that link's socket is gone the claim is false,
+// and waiting out its countdown would leave it standing. A socket abandoned for silence can report its close late,
+// after the link has redialled and may be driving again, so only the latest one speaks for the link.
+test(`a link's notice goes when its socket closes, and not when a socket it already left behind does`, async () => {
+    jest.useFakeTimers();
+    const { dial, sockets } = dialing([]);
+    const released: string[] = [];
+    const indicator = unstubbed<Indicator>("indicator", { release: (url) => void released.push(url) });
+    const connection = connect(link, `1.0.0`, quiet, dial, async () => undefined, indicator);
+
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    sockets[0]?.opens();
+    // Silent past the watchdog: the first socket is abandoned, and the redial is at most one backoff ceiling behind.
+    await advanceTimersByTimeAsync(peerLinkSilenceMs(HOST_HEARTBEAT_MS) + PEER_LINK_BACKOFF.capMs);
+    await waitFor(() => expect(sockets).toHaveLength(2));
+    sockets[1]?.opens();
+    sockets[0]?.drops(1006);
+    expect(released).toEqual([]);
+
+    sockets[1]?.drops(1006);
+    expect(released).toEqual([PUBLIC]);
+
+    connection.stop();
+    await connection.done;
 });

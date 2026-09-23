@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { DeviceConfig } from "@intentic/sandbox-contract";
+import { collidesWithReservedServer, type DeviceConfig } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import { capabilityCtx } from "../capabilities/capability.js";
 import { deviceHandler } from "../capabilities/handlers/device.handler.js";
@@ -22,7 +22,8 @@ export const SETUP_HOST_SCOPES = {
 } as const;
 
 // The machine's name in the UI, from the reported hostname; normalized as a person would write it, and never empty
-// since an unnamed card is one nobody can find again.
+// since an unnamed card is one nobody can find again. The id is also the device's MCP server name, so a hostname the
+// daemon's own servers already answer to (`web`, `code`) is set apart, or the machine's tools would never mount.
 export const hostIdFrom = (label: string): string => {
     const cleaned = label
         .trim()
@@ -31,7 +32,10 @@ export const hostIdFrom = (label: string): string => {
         .split(".")[0]
         ?.replaceAll(/[^a-z0-9-]+/g, "-")
         .replaceAll(/^-+|-+$/g, "");
-    return cleaned === undefined || cleaned === "" ? "this-device" : cleaned;
+    if (cleaned === undefined || cleaned === "") {
+        return "this-device";
+    }
+    return collidesWithReservedServer("device", cleaned) ? `${cleaned}-device` : cleaned;
 };
 
 // OS slugs the devices extension has cards for; other platforms connect no device instead of failing apply.

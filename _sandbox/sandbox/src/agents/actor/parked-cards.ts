@@ -71,6 +71,10 @@ export interface ParkedCards {
     readonly conversationOf: (requestId: string) => string | undefined;
 }
 
+/** How many cards the conversation's turn waits on an answer to; one answered leaves this count as its reply lands. */
+export const cardsParkedOn = (conversations: Pick<ConversationActors, "holdings">, conversationId: string): number =>
+    conversations.holdings(PARKED).of(conversationId).length;
+
 // The cards parked in these actors' conversations, and in their conversationless bucket.
 export const parkedCards = (conversations: Pick<ConversationActors, "holdings">): ParkedCards => {
     const restore = <K extends AgentReply["kind"]>(

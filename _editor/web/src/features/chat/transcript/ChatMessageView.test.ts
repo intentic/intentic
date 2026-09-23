@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:tes
 import { hoisted } from "@intentic/testing/bun";
 import { type App, computed, createApp, h, nextTick, reactive, ref, shallowRef } from "vue";
 import {
+    type AgentActivity,
     type AgentJob,
     type AgentWatch,
     agentWordsRow,
@@ -19,7 +20,12 @@ import { IconStub } from "@intentic/ui/testing";
 import { CLOCK_FROM_MS, formatElapsed } from "../../agents/fleet/agentStatus";
 
 const clock = hoisted(() => ({ turnStartedAt: undefined as number | undefined }));
-const roster = hoisted(() => ({ running: 0, watches: undefined as AgentWatch[] | undefined, jobs: undefined as AgentJob[] | undefined }));
+const roster = hoisted(() => ({
+    running: 0,
+    watches: undefined as AgentWatch[] | undefined,
+    jobs: undefined as AgentJob[] | undefined,
+    activity: undefined as AgentActivity | undefined,
+}));
 // Async like the action it stands in for: the row awaits it and swallows a failed disarm, so a sync stub rejects.
 const stopWatching = hoisted(() => mock(async () => undefined));
 // Pane state the edit pencil reads: mid-turn streaming and this message's own armed edit both hide it. The rows and
@@ -181,7 +187,12 @@ mock.module("../panel/useChat-view", () => {
 // it is parked on, which a watch's own notice row reads to say whether it is still waiting.
 mock.module("../../agents/fleet/useAgents", () => ({
     useAgents: () => ({
-        agentById: () => ({ subagents: { running: roster.running, total: roster.running }, watches: roster.watches, jobs: roster.jobs }),
+        agentById: () => ({
+            subagents: { running: roster.running, total: roster.running },
+            watches: roster.watches,
+            jobs: roster.jobs,
+            activity: roster.activity,
+        }),
         setAutoLand: mock(),
         setResumeAfterOutage: mock(),
         stopWatching,
@@ -234,6 +245,7 @@ beforeEach(() => {
     roster.running = 0;
     roster.watches = undefined;
     roster.jobs = undefined;
+    roster.activity = undefined;
     stopWatching.mockClear();
     markdown.parts = [];
     pane.streaming = true;
@@ -300,7 +312,7 @@ describe(`ChatMessageView loader`, () => {
         expect(mount().textContent).toContain(`(1h 6m)`);
     });
 
-    it(`names the children it is waiting on instead of cycling a word`, () => {
+    it(`names the children it is waiting on instead of its own step`, () => {
         roster.running = 2;
         const text = mount().textContent ?? ``;
         expect(text).toContain(String(roster.running));
@@ -314,8 +326,26 @@ describe(`ChatMessageView loader`, () => {
         expect(text).toContain(`subagent`);
     });
 
-    it(`goes back to the cycling word once they are all in`, () => {
-        expect(mount().textContent).not.toContain(`Waiting on`);
+    it(`goes back to its own step once they are all in`, () => {
+        roster.activity = { tool: `Read`, target: `src/a.ts` };
+        const text = mount().textContent ?? ``;
+        expect(text).not.toContain(`Waiting on`);
+        expect(text).toContain(`Read src/a.ts…`);
+    });
+
+    it(`says the step the roster reports: the tool with what it reached for, over the checklist item`, () => {
+        roster.activity = { tool: `Edit`, target: `src/guard.ts`, todo: `write tests` };
+        expect(mount().textContent).toContain(`Edit src/guard.ts…`);
+    });
+
+    it(`falls back to the checklist item, then to Thinking when the roster knows nothing yet`, () => {
+        roster.activity = { todo: `write tests` };
+        expect(mount().textContent).toContain(`write tests…`);
+
+        app?.unmount();
+        app = undefined;
+        roster.activity = undefined;
+        expect(mount().textContent).toContain(`Thinking…`);
     });
 
     it(`ticks while the turn runs and drops the readout when the start is unknown`, async () => {

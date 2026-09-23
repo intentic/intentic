@@ -22,9 +22,14 @@ const SENT_AT = 1_767_225_600_000;
 describe("openingRows", () => {
     it("opens with the user's own words, with the daemon's injections taken back out", () => {
         const prompt = "fix the build\n\nThe user attached these files: read them with the Read tool as needed:\n- /work/shot.png";
-        expect(openingRows({ prompt }, "/work", SENT_AT)).toEqual([
-            { role: "user", text: "fix the build", sentAt: SENT_AT, attachments: ["shot.png"] },
+        expect(openingRows({ prompt, messageId: "m-1" }, "/work", SENT_AT)).toEqual([
+            { role: "user", text: "fix the build", sentAt: SENT_AT, attachments: ["shot.png"], messageId: "m-1" },
         ]);
+    });
+
+    // A rewind names the message it goes back to by id, so a message whose sender named none is named here.
+    it("names a message its sender left unnamed", () => {
+        expect(openingRows({ prompt: "go" }, "/work", SENT_AT)).toEqual([{ role: "user", text: "go", sentAt: SENT_AT, messageId: expect.any(String) }]);
     });
 
     // Nothing in the frame log timestamps an individual assistant block, so only the user row can be.
@@ -40,7 +45,7 @@ describe("openingRows", () => {
             { role: "user", text: "first" },
             { role: "assistant", text: "sure" },
         ]);
-        expect(openingRows({ prompt }, "/work", SENT_AT)).toEqual([{ role: "user", text: "second", sentAt: SENT_AT }]);
+        expect(openingRows({ prompt, messageId: "m-2" }, "/work", SENT_AT)).toEqual([{ role: "user", text: "second", sentAt: SENT_AT, messageId: "m-2" }]);
     });
 
     // A re-run's prompt carries a resume note behind the user's original words; recording it verbatim would file
@@ -57,8 +62,14 @@ describe("openingRows", () => {
     // Unlike a re-run's repeated prompt, this resume carries the only copy of the answer; nothing here duplicates.
     it("keeps a restored card's answer and carries the restart on it as a note", () => {
         const prompt = withResumeNote("the second option", RESUME_NOTES.answered);
-        expect(openingRows({ prompt }, "/work", SENT_AT)).toEqual([
-            { role: "user", text: "the second option", sentAt: SENT_AT, notes: [{ title: expect.any(String), text: RESUME_NOTES.answered }] },
+        expect(openingRows({ prompt, messageId: "m-3" }, "/work", SENT_AT)).toEqual([
+            {
+                role: "user",
+                text: "the second option",
+                sentAt: SENT_AT,
+                messageId: "m-3",
+                notes: [{ title: expect.any(String), text: RESUME_NOTES.answered }],
+            },
         ]);
     });
 

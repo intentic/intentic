@@ -13,7 +13,7 @@
 // `scoped`: the check takes `--paths a,b,c` and judges only those files, with the same verdict on them it would reach
 // reading the whole tree. That is what lets it run on ONE file the instant it is written (.intentic/checks.json's
 // `edit` moment), which is the only moment at which the model that wrote the line is still holding it. A check whose
-// finding is a property of the tree rather than of a file — a directory's size, a link's target, a cycle between two
+// finding is a property of the tree rather than of a file — a directory's size, a link's target, a cycle between
 // subsystems — is not scopable and omits the flag; those are read whole or not at all.
 // `fix`: arguments that make the check write the tree into shape itself; the Stop runs it before judging a failure.
 export const CHECKS = [
@@ -21,13 +21,34 @@ export const CHECKS = [
     { id: "skill-descriptions", file: "skill-descriptions.mjs", needs: "checkout", gate: "tidy", about: "every skill description fits the catalog budget the prompt pays for on every call" },
     { id: "lockfile", file: "lockfile-drift.mjs", needs: "checkout", gate: "code", about: "pnpm-lock.yaml records the manifests, pins the pnpm package.json names, and carries nothing unreachable" },
     { id: "peer-deps", file: "peer-deps.mjs", needs: "checkout", gate: "tidy", about: "no unmet, missing or conflicting peer in any importer (read from the lockfile by pnpm, which the runner must have)" },
+    {
+        id: "licences",
+        file: "licences.mjs",
+        needs: "node_modules",
+        gate: "tidy",
+        about: "every third-party package a shipped unit carries is licensed so intentic may hand it on, or reviewed with its reason",
+    },
     { id: "test-programs", file: "test-programs.mjs", needs: "checkout", gate: "code", about: "tests are type-checked, budgeted, mocked whole, and emitted in order" },
     { id: "workflows", file: "workflow-policy.mjs", needs: "checkout", gate: "code", about: "the fork boundary, permission ceilings, provenance runners, tag triggers" },
     { id: "release-notes", file: "release-headings.mjs", needs: "checkout", gate: "code", about: "the release body: headings spelled the same by writer and parsers, built from a non-empty range" },
     { id: "contract-shrink", file: "contract-shrink.mjs", needs: "git", gate: "code", about: "a shrunk wire contract arrives declared" },
     { id: "hooks-armed", file: "hooks-armed.mjs", needs: "checkout", gate: "code", about: ".githooks are executable (re-armed, not refused)" },
     { id: "invariant-registry", file: "invariant-registry.mjs", needs: "checkout", gate: "tidy", about: "every daemon subsystem registers a runtime invariant or says why not" },
-    { id: "daemon-boundaries", file: "daemon-boundaries.mjs", needs: "checkout", gate: "code", about: "no new whole-Services taker, no new mutual subsystem cycle" },
+    {
+        id: "daemon-boundaries",
+        file: "daemon-boundaries.mjs",
+        needs: "checkout",
+        gate: "code",
+        about: "no new whole-Services taker, no new value import closing a cycle between subsystems, of any length (ratcheted)",
+    },
+    {
+        id: "shared-boundary",
+        file: "shared-boundary.mjs",
+        needs: "checkout",
+        gate: "tidy",
+        scoped: true,
+        about: "nothing in _shared/ depends on another part, by manifest or import, beyond the exceptions it names with their reasons",
+    },
     {
         id: "contract-paths",
         file: "contract-paths.mjs",

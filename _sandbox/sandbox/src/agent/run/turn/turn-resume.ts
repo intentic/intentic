@@ -29,10 +29,10 @@ import type { HeldRecord } from "../../../agents/actor/conversation-state.js";
 import type { VerificationStanding } from "../../verification/agent-verification.js";
 
 // Re-runs a turn once its blocker clears. Two kinds live here and should not be confused: the daemon's own bookkeeping
-// (a rotated token, a restart), which needs nobody's permission, and the three walls the reader answers for — a spent
-// allowance, a provider outage, a turn that stopped short — each of which fires only on that conversation's own policy
-// (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once. What is pending lives in each
-// conversation's actor; a new turn on the conversation supersedes it.
+// (a rotated token, a restart, a session past its window), which needs nobody's permission, and the three walls the
+// reader answers for — a spent allowance, a provider outage, a turn that stopped short — each of which fires only on
+// that conversation's own policy (turn-break.ts), because a re-run spends the reader's budget on a turn they sent once.
+// What is pending lives in each conversation's actor; a new turn on the conversation supersedes it.
 
 // The attempt budget spends in under an hour; past this a resume is worse than staying dead.
 const OUTAGE_STALE_AFTER_MS = 60 * 60_000;
@@ -62,13 +62,14 @@ export interface OutageFailure {
 }
 
 // A turn a wall stranded, held for a press or, where the conversation's policy says so, an automatic fire: at the
-// reopen instant for a spent allowance, on a bounded ladder for one that stopped short. No staleness sweep: a press is
-// a deliberate pick-up regardless of how long it's been.
+// reopen instant for a spent allowance, on a bounded ladder for one that stopped short, at once and on no policy for
+// one whose session outgrew the window. No staleness sweep: a press is a deliberate pick-up however long it's been.
 export interface HeldTurn {
     readonly input: TurnInput & { conversationId: string };
-    // What killed it: a spent allowance, anything else that left nothing to repair (a hung runtime, a crash), or a
-    // refusal at the door of a turn no sender keeps the words of (turn-runs.ts holdTurnedAway), which only a press sends.
-    readonly reason: "limit" | "stopped" | "door";
+    // What killed it: a spent allowance, anything else that left nothing to repair (a hung runtime, a crash), a
+    // refusal at the door of a turn no sender keeps the words of (turn-runs.ts holdTurnedAway), which only a press
+    // sends, or a session past the model's window, which the pass re-runs fresh at once.
+    readonly reason: "limit" | "stopped" | "door" | "overflow";
     // The run a door refusal ended, whose recorded rows are no history: the model never saw them.
     readonly run?: string;
     // The session the failed turn last reported; kept even when unused, so the fire can decide via `ran`.
@@ -134,6 +135,10 @@ const doorRerun = (held: HeldTurn, routing: ResumeRouting | undefined): TurnInpu
 // The note a held turn's re-run carries, and whether it opens fresh. `restate` applies on every arm: the note must
 // describe this attempt's own starting point, not the last one's.
 const rerunOf = (held: HeldTurn, routing: ResumeRouting | undefined): { readonly note: string; readonly options: { readonly fresh?: boolean; readonly restate: true } } => {
+    // The one wall whose own session is the obstacle: fresh whatever ran, with the hand-off the record seeds.
+    if (held.reason === "overflow") {
+        return { note: RESUME_NOTES.overflow, options: { fresh: true, restate: true } };
+    }
     if (held.ran && held.carryRefused !== true && !retiresSession(held.input, routing)) {
         // Same session either way; the note says only what the model cannot see: which wall it hit, and whether the
         // account changed under it.
@@ -448,14 +453,37 @@ const runLimitRung = async (services: Services, conversationId: string, held: He
     }
 };
 
-// Every hold is one record per conversation, whichever wall put it there, so the two shapes of wait are routed by
-// reason rather than by one of them quietly falling through the other's gates.
+// A session past the model's window, re-run once in a fresh one and at once: the daemon's own remedy, fired on no
+// policy, since holding it for a press or a clock would only resume the session that overflowed.
+const runFreshRung = async (services: Services, conversationId: string, held: HeldRecord): Promise<void> => {
+    if (held.fired || !services.conversations.send(conversationId, { kind: "held-fired", ladder: false }).reply) {
+        return;
+    }
+    if ((await services.turns.resume(conversationId)) !== undefined) {
+        services.logger.info({ conversationId }, "context-overflow re-run fired: a fresh session carries the hand-off");
+    }
+};
+
+// One held record's rung, by the wall that put it there.
+const runHeldRung = (services: Services, conversationId: string, held: HeldRecord, now: number): Promise<void> => {
+    switch (held.reason) {
+        case "stopped":
+            return runStopRung(services, conversationId, held, now);
+        case "overflow":
+            return runFreshRung(services, conversationId, held);
+        default:
+            return runLimitRung(services, conversationId, held, now);
+    }
+};
+
+// Every hold is one record per conversation, whichever wall put it there, so the shapes of wait are routed by reason
+// rather than by one of them quietly falling through another's gates.
 const runHeldPass = async (services: Services, now: number): Promise<void> => {
     // Snapshotted, not iterated live: every branch below stamps or drops the very records this walks. A door hold is
     // left out: whether a turn goes past the wall that stopped it is a person's call, not a clock's.
     const stranded = services.conversations.stranded("held").filter(({ record }) => record.reason !== "door");
     for (const { conversationId, record: held } of stranded) {
-        await (held.reason === "stopped" ? runStopRung(services, conversationId, held, now) : runLimitRung(services, conversationId, held, now));
+        await runHeldRung(services, conversationId, held, now);
     }
 };
 

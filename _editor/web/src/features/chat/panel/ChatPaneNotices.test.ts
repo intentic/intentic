@@ -140,8 +140,8 @@ it(`says the pool is strained even while most of the allowance is left`, () => {
     expect(element.textContent).toContain(`Trial capacity is tight right now`);
 });
 
-// The state that is an interruption: the turn is held below (turnFailures holds it, the platform refunds it), so
-// the strip names the failure and carries the resend press.
+// The state that is an interruption: the turn is held below (the conversation's queue holds it, the platform refunds
+// it), so the strip names the failure and carries the resend press.
 it(`interrupts, with the press that sends the held turn, only when nothing answered`, async () => {
     trialStatus.value = { ...trialStatus.value, health: `unavailable` };
 

@@ -1,6 +1,7 @@
 import { procedure } from "../protocol/route-meta.js";
 import { CapabilityIdParamSchema } from "../schemas/capabilities.js";
 import {
+    ExtensionApproveInputSchema,
     ExtensionEnabledInputSchema,
     ExtensionProcessParamSchema,
     ExtensionProcessStatusSchema,
@@ -84,6 +85,19 @@ export const extensionsContract = {
                 "Writes new values. A key the extension never declared is refused rather than quietly stored, the same honesty rule that governs everything else an extension claims.",
         })
         .input(ExtensionSettingsInputSchema)
+        .output(OkSchema),
+    // The install moment a workspace extension otherwise never has. Withheld from every machine credential: an agent can
+    // write the folder, so it must not also be able to give the yes that makes it run.
+    approve: procedure
+        .route({
+            method: "POST",
+            path: "/extensions/{id}/approve",
+            summary: "Let a workspace extension run",
+            description:
+                "Approves an extension written in this workspace with the powers it declares now: its background processes start, its backend loads, and what it contributes is wired from the next turn. Editing its code keeps the approval; declaring a power it did not have puts it back in the pending list. Owner and maintainers only.",
+        })
+        .meta({ panel: false, control: "never" })
+        .input(ExtensionApproveInputSchema)
         .output(OkSchema),
     // The Extensions tab states which of these apply to a given extension.
     setEnabled: procedure

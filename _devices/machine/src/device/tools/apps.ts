@@ -1,5 +1,6 @@
 import { type Desktop, DesktopError, type WindowInfo } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
+import { calling, type Indicator, machineIndicator } from "../indicator.js";
 import { assertScope } from "../policy.js";
 
 // Operating the machine's applications, as opposed to its pixels: knowing what's on screen and which window
@@ -26,11 +27,13 @@ export const listWindows = async (screen: Desktop, scopes: DeviceScopes): Promis
 
 // Focus is the precondition for typing, so this reports what it left focused rather than answering "ok": a
 // focus that silently did not take is the most confusing way for a GUI sequence to go wrong.
-export const focusWindow = async (screen: Desktop, id: string, scopes: DeviceScopes): Promise<string> => {
+export const focusWindow = async (screen: Desktop, id: string, scopes: DeviceScopes, indicator: Indicator = machineIndicator()): Promise<string> => {
     assertScope(scopes, "control");
     if (id === "") {
         throw new DesktopError(`"id" is required: take a window list first and pass the id in brackets.`);
     }
+    // Focus decides where the person's own typing lands, so it is input like a click: shown, and held by a local pause.
+    await indicator.control(calling.getStore());
     await screen.focusWindow(id);
     const focused = (await screen.windows().catch(() => [])).find((window) => window.focused);
     return focused === undefined ? `Asked this device to focus window ${id}.` : `Focused: ${focused.app}, ${focused.title}. Typing now goes here.`;
@@ -54,8 +57,10 @@ export const readClipboard = async (screen: Desktop, scopes: DeviceScopes): Prom
     return text === "" ? "The clipboard is empty." : text;
 };
 
-export const writeClipboard = async (screen: Desktop, text: string, scopes: DeviceScopes): Promise<string> => {
+export const writeClipboard = async (screen: Desktop, text: string, scopes: DeviceScopes, indicator: Indicator = machineIndicator()): Promise<string> => {
     assertScope(scopes, "control");
+    // What the person pastes next is what this puts there, so it is shown and held by a local pause like any input.
+    await indicator.control(calling.getStore());
     await screen.writeClipboard(text);
     return `Put ${text.length} characters on this device's clipboard.`;
 };

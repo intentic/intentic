@@ -16,6 +16,7 @@ import { useSelfResources } from "../devices/useSelfResources";
 import SandboxBackupCard from "./backup/SandboxBackupCard.vue";
 import SandboxBehindCard from "./version/SandboxBehindCard.vue";
 import SandboxManifestCard from "./manifest/SandboxManifestCard.vue";
+import SandboxStorageCard from "./storage/SandboxStorageCard.vue";
 import SandboxUpdateCard from "./version/SandboxUpdateCard.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -334,6 +335,9 @@ const removeLogo = async (): Promise<void> => {
             @cancel="resizing = false"
             @apply="applyResize"
         />
+
+        <!-- What fills the disk and what may be freed; maintainer-only like the routes behind it, self-hides otherwise. -->
+        <SandboxStorageCard />
 
         <!-- Upgrade path for hosted sandboxes only (a member can't create one for the owner). -->
         <Card v-if="hosted && isOwner" class="flex flex-col gap-2">

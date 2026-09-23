@@ -1,6 +1,7 @@
 import { sleep } from "@intentic/base/async";
 import { type Desktop, DesktopError, type MouseButton, type Point, type ScrollDirection } from "@intentic/desktop-automation";
 import type { DeviceScopes } from "@intentic/sandbox-contract";
+import { calling, type Indicator, machineIndicator } from "../indicator.js";
 import { assertScope } from "../policy.js";
 
 // GUI work for what has no command-line way in. The mechanics live in @intentic/desktop-automation; this file
@@ -64,53 +65,49 @@ export const describeAction = (input: DeviceInput): string => {
     }
 };
 
+// The two keyboard actions: text or a chord, and the sentence that says which a call left out.
+const keyboard = async (screen: Desktop, action: "type" | "key", text: string | undefined): Promise<void> => {
+    if (text === undefined || text === "") {
+        throw new DesktopError(
+            action === "type" ? `"text" is required to type.` : `"text" is required to press a key: for example "Return", "ctrl+c", "alt+Tab".`,
+        );
+    }
+    await (action === "type" ? screen.type(text) : screen.key(text));
+};
+
+// Everything else is pointer work, so the frame is read once and every coordinate judged against it.
+const pointer = async (screen: Desktop, input: DeviceInput): Promise<void> => {
+    const frame = await screen.frame();
+    const at = within(point(input.coordinate, "coordinate"), frame, "The coordinate");
+    switch (input.action) {
+        case "mouse_move":
+            return await screen.move(at);
+        case "double_click":
+            return await screen.doubleClick(at);
+        case "left_click_drag":
+            return await screen.drag(at, within(point(input.to, "to"), frame, "The drag target"));
+        case "scroll":
+            return await screen.scroll(at, input.direction ?? "down", input.amount ?? 3);
+        default: {
+            const button = CLICK_BUTTON[input.action];
+            if (button === undefined) {
+                throw new DesktopError(`"${input.action}" is not something this device can do.`);
+            }
+            return await screen.click(at, button);
+        }
+    }
+};
+
 // Perform one action. Returns nothing; the caller reports describeAction plus, when it may look, a fresh
-// screenshot.
-export const act = async (screen: Desktop, input: DeviceInput, scopes: DeviceScopes): Promise<void> => {
+// screenshot. Every action but `wait` is put on the machine's own screen first, and refused while its person pauses.
+export const act = async (screen: Desktop, input: DeviceInput, scopes: DeviceScopes, indicator: Indicator = machineIndicator()): Promise<void> => {
     assertScope(scopes, "control");
     if (input.action === "wait") {
         await sleep(Math.min(Math.max(0, input.ms ?? SETTLE_MS), MAX_WAIT_MS));
         return;
     }
-    if (input.action === "type") {
-        if (input.text === undefined || input.text === "") {
-            throw new DesktopError(`"text" is required to type.`);
-        }
-        await screen.type(input.text);
-        return;
-    }
-    if (input.action === "key") {
-        if (input.text === undefined || input.text === "") {
-            throw new DesktopError(`"text" is required to press a key: for example "Return", "ctrl+c", "alt+Tab".`);
-        }
-        await screen.key(input.text);
-        return;
-    }
-
-    // Everything left is pointer work, so the frame is read once and every coordinate judged against it.
-    const frame = await screen.frame();
-    const at = within(point(input.coordinate, "coordinate"), frame, "The coordinate");
-    if (input.action === "mouse_move") {
-        await screen.move(at);
-        return;
-    }
-    if (input.action === "double_click") {
-        await screen.doubleClick(at);
-        return;
-    }
-    if (input.action === "left_click_drag") {
-        await screen.drag(at, within(point(input.to, "to"), frame, "The drag target"));
-        return;
-    }
-    if (input.action === "scroll") {
-        await screen.scroll(at, input.direction ?? "down", input.amount ?? 3);
-        return;
-    }
-    const button = CLICK_BUTTON[input.action];
-    if (button === undefined) {
-        throw new DesktopError(`"${input.action}" is not something this device can do.`);
-    }
-    await screen.click(at, button);
+    await indicator.control(calling.getStore());
+    await (input.action === "type" || input.action === "key" ? keyboard(screen, input.action, input.text) : pointer(screen, input));
 };
 
 // The settle the confirming screenshot needs. Separate from `act` so a caller that does not want the frame (a

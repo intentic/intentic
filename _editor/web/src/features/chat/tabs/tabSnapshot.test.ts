@@ -29,7 +29,6 @@ const tab = (conversationId: string, title?: string): Record<string, unknown> =>
     isolated: true,
     draft: ``,
     attachments: [],
-    queued: [],
     ...(title !== undefined ? { title } : {}),
 });
 const blob = (active: string, tabs: Record<string, unknown>[]): string => JSON.stringify({ active, tabs });
@@ -118,7 +117,6 @@ describe(`reading a tab snapshot`, () => {
                         session: { id: `sess-1`, provider: `codex`, harness: `claude-code` },
                         title: `Fix the login handler`,
                         attachments: [{ name: `pic.png`, path: `${STATE_DIR}/records/artifacts/attachments/u1/pic.png` }, { name: 42 }],
-                        queued: [{ text: `also the tests`, attachments: [] }, { attachments: [] }],
                     },
                 ],
             }),
@@ -135,7 +133,6 @@ describe(`reading a tab snapshot`, () => {
             session: { id: `sess-1`, provider: `codex`, harness: `claude-code`, account: undefined },
             title: `Fix the login handler`,
             attachments: [{ name: `pic.png`, path: `.intentic/records/artifacts/attachments/u1/pic.png` }],
-            queued: [{ text: `also the tests`, attachments: [] }],
         });
     });
 
@@ -169,7 +166,6 @@ describe(`reading a tab snapshot`, () => {
                         account: `acct-work`,
                         session: { id: `sess-1`, provider: `claude`, harness: `native`, account: `acct-personal` },
                         attachments: [],
-                        queued: [],
                     },
                 ],
             }),
@@ -195,7 +191,6 @@ describe(`reading a tab snapshot`, () => {
                         thinking: false,
                         fast: false,
                         attachments: [],
-                        queued: [],
                     },
                 ],
             }),
@@ -211,7 +206,7 @@ describe(`reading a tab snapshot`, () => {
             JSON.stringify({
                 active: `a`,
                 tabs: [
-                    { conversationId: `a`, draft: ``, provider: `gemini`, model: `gemini-3.1-pro-low`, displacedModel, attachments: [], queued: [] },
+                    { conversationId: `a`, draft: ``, provider: `gemini`, model: `gemini-3.1-pro-low`, displacedModel, attachments: [] },
                 ],
             });
 
@@ -224,7 +219,7 @@ describe(`reading a tab snapshot`, () => {
 
     it(`restores the persona the tab acts as, and drops one that names nothing`, () => {
         const stored = (actsAs: unknown): unknown =>
-            JSON.stringify({ active: `a`, tabs: [{ conversationId: `a`, draft: ``, actsAs, attachments: [], queued: [] }] });
+            JSON.stringify({ active: `a`, tabs: [{ conversationId: `a`, draft: ``, actsAs, attachments: [] }] });
 
         session.set(KEY, stored(`work`) as string);
         expect(readTabSnapshot(`sb1`)?.tabs[0]).toMatchObject({ actsAs: `work` });
@@ -238,7 +233,7 @@ describe(`reading a tab snapshot`, () => {
             KEY,
             JSON.stringify({
                 active: `a`,
-                tabs: [{ conversationId: `a`, draft: ``, model: ``, effort: 3, thinking: `yes`, attachments: [], queued: [] }],
+                tabs: [{ conversationId: `a`, draft: ``, model: ``, effort: 3, thinking: `yes`, attachments: [] }],
             }),
         );
 
@@ -253,7 +248,7 @@ describe(`reading a tab snapshot`, () => {
             KEY,
             JSON.stringify({
                 active: `a`,
-                tabs: [{ conversationId: `a`, draft: `half a sentence`, draftAt: `this morning`, attachments: [], queued: [] }],
+                tabs: [{ conversationId: `a`, draft: `half a sentence`, draftAt: `this morning`, attachments: [] }],
             }),
         );
 
@@ -273,7 +268,6 @@ describe(`reading a tab snapshot`, () => {
                         account: ``,
                         session: { id: `sess-1`, provider: `claude`, harness: `native`, account: 42 },
                         attachments: [],
-                        queued: [],
                     },
                 ],
             }),
@@ -298,7 +292,6 @@ describe(`reading a tab snapshot`, () => {
                         account: `acct-work`,
                         session: { id: `sess-1`, provider: `claude` },
                         attachments: [],
-                        queued: [],
                     },
                 ],
             }),

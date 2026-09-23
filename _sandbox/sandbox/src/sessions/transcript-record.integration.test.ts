@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import { type AgentEvent, type AgentHarness, type AgentProvider, PROVIDERS, HARNESSES, type TranscriptRow } from "@intentic/sandbox-contract";
 import { foldTurn } from "@intentic/sandbox-contract/transcript-fold";
@@ -38,6 +38,16 @@ describe("fileTranscriptRecord", () => {
         expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first", "two", "second"]);
     });
 
+    it("truncates to the rows it keeps, says how many it dropped, and leaves no temp file beside the record", async () => {
+        const root = await dir();
+        const record = fileTranscriptRecord(root);
+        await record.append("c1", [{ role: "user", text: "one" }, said("first"), { role: "user", text: "two" }, said("second")]);
+        expect(await record.truncate("c1", 2)).toBe(2);
+        expect((await record.read("c1")).map((message) => message.text)).toEqual(["one", "first"]);
+        expect(await record.truncate("c1", 2)).toBe(0);
+        expect(await readdir(dirname(transcriptFile(root, "c1")))).toEqual(["transcript.jsonl"]);
+    });
+
     it("leaves an already-opened branch alone, so a repeated origin cannot re-copy over its turns", async () => {
         const record = fileTranscriptRecord(await dir());
         await record.append("c1", [said("source")]);
@@ -67,7 +77,7 @@ describe("fileTranscriptRecord", () => {
 // Drives every provider×harness pair (read from the PROVIDERS/HARNESSES catalog, not a hardcoded list) through the fold
 // the daemon runs live, and demands a readable transcript out the other end.
 describe("every provider records a readable transcript", () => {
-    const turn = { prompt: "do the thing" };
+    const turn = { prompt: "do the thing", messageId: "m-1" };
     const events: AgentEvent[] = [
         { kind: "delta", text: "on it" },
         { kind: "text_end" },
@@ -84,7 +94,8 @@ describe("every provider records a readable transcript", () => {
         const id = `${provider}-${harness}`;
         await record.append(id, foldTurn(openingRows(turn, WORKSPACE_ROOT, 1_767_225_600_000), events));
         const restored = await record.read(id);
-        expect(restored[0]).toEqual({ role: "user", text: "do the thing", sentAt: 1_767_225_600_000 });
+        // The id rides the record too: after a restart it is what a rewind and a resent message are recognised by.
+        expect(restored[0]).toEqual({ role: "user", text: "do the thing", sentAt: 1_767_225_600_000, messageId: "m-1" });
         expect(restored.map((message) => message.text)).toContain("on it");
         expect(restored.flatMap((message) => message.tools ?? [])).toEqual([
             { id: "t1", name: "Bash", category: "execute", status: "completed", target: "pnpm test", content: [{ type: "text", text: "1 passed" }] },

@@ -3,6 +3,7 @@ import {
     type ActionApprovalSummary,
     type ApprovalSummary,
     type AutomationApproval,
+    type HookRequest,
     type PostApprovalSummary,
     roleAtLeast,
 } from "@intentic/sandbox-contract";
@@ -33,6 +34,7 @@ import ActionBody from "./ActionBody.vue";
 import ApprovalMeta from "./ApprovalMeta.vue";
 import ApprovalRail, { type ApprovalScope } from "./ApprovalRail.vue";
 import { approvalsAttention } from "./extension";
+import HookSetBody from "./HookSetBody.vue";
 import { host } from "./host";
 import PostBody from "./PostBody.vue";
 import { countdownWords, limitOf, postsATitle } from "./postText";
@@ -40,6 +42,7 @@ import PostEditor from "./PostEditor.vue";
 import ScheduleControl from "./ScheduleControl.vue";
 import { useApprovals } from "./useApprovals";
 import { useHeldWakes, waitingOf } from "./useHeldWakes";
+import { useHookRequests, waitingHooksOf } from "./useHookRequests";
 import { usePlatformCatalog } from "./usePlatformCatalog";
 import { usePostEdit } from "./usePostEdit";
 import { t } from "./i18n.js";
@@ -50,6 +53,7 @@ import { t } from "./i18n.js";
 
 const { approvals, invalid, isLoading, error: listError, save, remove } = useApprovals();
 const { held, error: heldError, approve: approveWake, reject: rejectWake } = useHeldWakes();
+const { hookSets, ledgerUnreadable, error: hooksError, approve: approveHooks, dismiss: dismissHooks } = useHookRequests();
 // Only drawn once the wait has earned it; a warm queue answers within the reveal delay.
 const outline = useLoadingReveal(
     isLoading,
@@ -62,6 +66,13 @@ const listNotice = computed<NoticeModel | undefined>(() =>
 const heldNotice = computed<NoticeModel | undefined>(() =>
     heldError.value === undefined ? undefined : { tone: `danger`, title: t(`approvalsView.couldntReadHeldAutomations`), detail: heldError.value },
 );
+const hooksNotice = computed<NoticeModel | undefined>(() => {
+    if (hooksError.value !== undefined) {
+        return { tone: `danger`, title: t(`approvalsView.couldntReadHooks`), detail: hooksError.value };
+    }
+    // The record of approvals could not be read, so no settings hook runs anywhere until one is approved again.
+    return ledgerUnreadable.value ? { tone: `danger`, title: t(`approvalsView.hookLedgerUnreadable`) } : undefined;
+});
 // Below maintainer, the queue is read-only (the daemon floors the mutation too); a viewer can still watch.
 const canShip = computed(() => roleAtLeast(host().sandbox.role(), `maintainer`));
 const { notice: actionError, run } = useAsyncAction();
@@ -84,6 +95,7 @@ const targetOf = (item: ApprovalSummary): string | undefined => (isPost(item) ? 
 // sort alphabetically; actions and automations sort last.
 const ACTIONS_SCOPE = `actions`;
 const AUTOMATIONS_SCOPE = `automations`;
+const HOOKS_SCOPE = `hooks`;
 const scopeOf = (key: string, label: string, subset: readonly ApprovalSummary[], mark: { logo?: string; icon?: IconName }): ApprovalScope => ({
     key,
     label,
@@ -101,9 +113,22 @@ const wakesScope = computed<ApprovalScope>(() => ({
     waiting: waitingOf(held.value).length,
     failed: 0,
 }));
+// Hook sets the same way; a dismissed one stays listed, kept off on purpose, and is waiting on nobody.
+const hooksScope = computed<ApprovalScope>(() => ({
+    key: HOOKS_SCOPE,
+    label: t(`approvalsView.hooks`),
+    icon: `shield`,
+    total: hookSets.value.length,
+    waiting: waitingHooksOf({ requests: hookSets.value }).length,
+    failed: 0,
+}));
 const allScope = computed<ApprovalScope>(() => {
     const own = scopeOf(``, `All approvals`, approvals.value, { icon: `check-square` });
-    return { ...own, total: own.total + wakesScope.value.total, waiting: own.waiting + wakesScope.value.waiting };
+    return {
+        ...own,
+        total: own.total + wakesScope.value.total + hooksScope.value.total,
+        waiting: own.waiting + wakesScope.value.waiting + hooksScope.value.waiting,
+    };
 });
 const scopes = computed<ApprovalScope[]>(() => {
     const posts = approvals.value.filter(isPost);
@@ -122,6 +147,7 @@ const scopes = computed<ApprovalScope[]>(() => {
         ...platforms,
         ...(actions.length === 0 ? [] : [scopeOf(ACTIONS_SCOPE, `Actions`, actions, { icon: `bolt` })]),
         ...(held.value.length === 0 ? [] : [wakesScope.value]),
+        ...(hookSets.value.length === 0 ? [] : [hooksScope.value]),
     ];
 });
 
@@ -141,13 +167,15 @@ const inScope = (item: ApprovalSummary, key: string): boolean => {
     if (key === ACTIONS_SCOPE) {
         return isAction(item);
     }
-    return key !== AUTOMATIONS_SCOPE && isPost(item) && item.platform === key;
+    return key !== AUTOMATIONS_SCOPE && key !== HOOKS_SCOPE && isPost(item) && item.platform === key;
 };
 const visible = computed<ApprovalSummary[]>(() => approvals.value.filter((item) => inScope(item, activeScope.value.key)));
 // The held wakes are shown on the whole queue and on their own slice, never inside a platform's.
 const heldVisible = computed<AutomationApproval[]>(() =>
     activeScope.value.key === `` || activeScope.value.key === AUTOMATIONS_SCOPE ? held.value : [],
 );
+// Hook sets likewise: on the whole queue and on their own slice.
+const hooksVisible = computed<HookRequest[]>(() => (activeScope.value.key === `` || activeScope.value.key === HOOKS_SCOPE ? hookSets.value : []));
 
 // Soonest first, undated last: undated still goes ahead immediately, but it's owed a decision about when.
 const due = (item: ApprovalSummary): number => item.scheduledAt ?? Number.MAX_SAFE_INTEGER;
@@ -186,7 +214,7 @@ const done = computed(() => ofStatus(`done`).toSorted((left, right) => (right.fi
 // Everything counting down, across every slice; the top strip must never be hidden by a filter.
 const holding = computed(() => approvals.value.filter((item) => item.status === `approved` && imminent(item, now.value)).toSorted(bySoonest));
 
-const isEmpty = computed(() => approvals.value.length === 0 && invalid.value.length === 0 && held.value.length === 0);
+const isEmpty = computed(() => approvals.value.length === 0 && invalid.value.length === 0 && held.value.length === 0 && hookSets.value.length === 0);
 
 // The tile's count is module state a background poll owns, so it survives with nothing mounted to correct it: a
 // reader who opens the queue and finds it empty would otherwise keep the badge that sent them here. Opening the
@@ -210,6 +238,19 @@ const dropWake = (wake: AutomationApproval): Promise<void> =>
     run(async () => {
         await rejectWake.mutateAsync(wake.id);
     }, `Could not drop the held automation.`);
+
+// A yes pins this exact set from the next turn on; dismissing keeps it off without asking again. Each re-reads the badge,
+// which nothing on /work announces for these.
+const letHooksRun = (request: HookRequest): Promise<void> =>
+    run(async () => {
+        await approveHooks.mutateAsync(request.digest);
+        approvalsAttention.refresh();
+    }, t(`approvalsView.couldntApproveHooks`));
+const keepHooksOff = (request: HookRequest): Promise<void> =>
+    run(async () => {
+        await dismissHooks.mutateAsync(request.digest);
+        approvalsAttention.refresh();
+    }, t(`approvalsView.couldntDismissHooks`));
 
 // Reject destroys a file and Approve-all commits the whole queue; each holds the thing it is asking about.
 const rejecting = ref<ApprovalSummary | undefined>(undefined);
@@ -341,7 +382,7 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
     <SplitView :title="t(`approvalsView.approvals`)" scroll="page" :scroll-key="railScope">
         <!-- Whole-page banners: the countdown speaks for every slice, and an unparsed file has no slice to belong to. -->
         <template #strips>
-            <NoticeStack :of="[actionError, listNotice, heldNotice, goingAheadNotice]" />
+            <NoticeStack :of="[actionError, listNotice, heldNotice, hooksNotice, goingAheadNotice]" />
             <Notice v-if="invalid.length > 0" tone="warning">
                 {{ invalid.length }} {{ t(`approvalsView.file`) }}{{ invalid.length === 1 ? "" : "s" }} {{ t(`approvalsView.couldntReadWontRun`) }}
                 <span class="font-mono">{{ invalid.join(", ") }}</span>
@@ -526,6 +567,44 @@ const EDIT_ACTIVE = `bg-overlay text-content`;
                                     <!-- The agent's own note about the post, under everything it is a note about. -->
                                     <p v-if="noteOf(item)" :class="NOTE" v-tooltip.top="noteOf(item)">{{ noteOf(item) }}</p>
                                 </div>
+                            </template>
+                        </Row>
+                    </RowGroup>
+
+                    <!-- Found by a turn, not proposed by one: until the owner says yes to this exact set, turns run with every hook off. -->
+                    <RowGroup v-if="hooksVisible.length > 0" :label="t(`approvalsView.hooksWaiting`)" :count="hooksVisible.length">
+                        <Row v-for="request in hooksVisible" :key="request.digest" :title="t(`approvalsView.hookSetTitle`, { count: request.hooks.length }, request.hooks.length)">
+                            <template #lead>
+                                <span :class="ACTION_MARK" class="h-7 w-7 text-sm"><Icon name="shield" /></span>
+                            </template>
+                            <template #description>
+                                <span class="block truncate">
+                                    {{ t(`approvalsView.hooksFound`) }} {{ timeAgo(request.seenAt) }}
+                                    <template v-if="request.dismissed === true"><span class="text-subtle"> · </span>{{ t(`approvalsView.keptOff`) }}</template>
+                                </span>
+                            </template>
+                            <template #control>
+                                <Button
+                                    v-if="canShip && request.dismissed !== true"
+                                    :label="t(`approvalsView.keepOff`)"
+                                    size="small"
+                                    severity="secondary"
+                                    :text="true"
+                                    :disabled="dismissHooks.isPending.value"
+                                    @click="keepHooksOff(request)"
+                                />
+                                <Button
+                                    v-if="canShip"
+                                    :label="t(`approvalsView.letThemRun`)"
+                                    size="small"
+                                    :disabled="approveHooks.isPending.value"
+                                    @click="letHooksRun(request)"
+                                >
+                                    <template #icon><Icon name="check" /></template>
+                                </Button>
+                            </template>
+                            <template #below>
+                                <div :class="POST_COLUMN"><HookSetBody :request="request" /></div>
                             </template>
                         </Row>
                     </RowGroup>

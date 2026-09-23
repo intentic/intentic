@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, test, expect } from "bun:test";
-import { INTERNAL_SERVERS, mcpServerOf, outsideSourceOf, sealResult } from "./outside-results.js";
+import { CONTROL_MCP_SERVERS, DAEMON_MCP_SERVERS, RESERVED_MCP_SERVER_NAMES } from "@intentic/sandbox-contract";
+import { mcpServerOf, outsideSourceOf, sealResult } from "./outside-results.js";
 
 const ENVELOPE = /^<untrusted-content source="([^"]*)" id="([0-9a-f]{16})">\n([\s\S]*)\n<\/untrusted-content id="\2">$/;
 
@@ -26,7 +27,7 @@ describe("outsideSourceOf, what counts as outside", () => {
     test("a user's MCP server is outside; the daemon's control servers are not", () => {
         expect(outsideSourceOf("mcp__komodo__list_stacks", {})).toBe("komodo");
         expect(outsideSourceOf("mcp__github__get_issue", {})).toBe("github");
-        for (const server of INTERNAL_SERVERS) {
+        for (const server of CONTROL_MCP_SERVERS) {
             expect(outsideSourceOf(`mcp__${server}__anything`, {}), server).toBeUndefined();
         }
     });
@@ -133,14 +134,11 @@ describe("sealResult: the content fields, not the shape", () => {
     });
 });
 
-// Guards against a new daemon-mounted MCP server shipping unclassified: reads server keys from the two mount blocks and
-// asserts each is INTERNAL or WRAPPED_ON_PURPOSE.
-describe("conformance: every daemon-mounted MCP server is classified", () => {
+// Guards against a daemon-mounted MCP server shipping unreserved, which a same-named capability could then shadow. The
+// server names live in the contract (reserved-servers.ts); this discovers what the daemon actually mounts and holds the
+// two equal, so a new mount missing a reserved row fails here and a stale reserved name does too.
+describe("conformance: the reserved list is exactly what the daemon mounts", () => {
     const SRC = join(import.meta.dirname, "..");
-    // Daemon-mounted servers wrapped on purpose:
-    // web: browsers bring back the internet's text.
-    // diagnostics: two tools relay a provider's own sentence verbatim.
-    const WRAPPED_ON_PURPOSE = new Set(["web", "diagnostics"]);
 
     // Reads server keys at the mount block's top level, depth-aware rather than indentation-aware, since a mounted
     // call's own arguments carry keys too. Strings and comments are skipped so a brace inside either doesn't shift the
@@ -184,18 +182,38 @@ describe("conformance: every daemon-mounted MCP server is classified", () => {
         return keys;
     };
 
-    test("agent.ts and the harness arm mount nothing unclassified", () => {
-        const mounted = [
+    // The browser router's two names and the JS backend's name enter the mount blocks by constant, not as a literal
+    // key, so they are discovered from their defining modules as text: a rename there fails this scan too.
+    const constantValue = (file: string, name: string): string => {
+        const match = new RegExp(String.raw`export const ${name}\s*=\s*"([^"]+)"`).exec(readFileSync(join(SRC, file), "utf8"));
+        expect(match, `${name} not found in ${file}`).not.toBeNull();
+        return match?.[1] as string;
+    };
+
+    test("every server the daemon mounts is reserved, and every reserved name is mounted", () => {
+        const discovered = new Set([
             ...mountedIn("agent/run/agent.ts", /mcpServers:\s*\{[\s\S]*?\n\s{8}\}/),
             ...mountedIn("agent/run/harness/harness-servers.ts", /return \{\n\s+\.\.\.turn\.browser\.servers,[\s\S]*?\n {4}\};/),
-        ];
-        // Sanity: the scan found the blocks at all, so a moved block fails loudly here instead of passing vacuously.
-        expect(mounted.length, "server-mount scan found nothing — the blocks moved").toBeGreaterThan(5);
-        for (const server of mounted) {
+            constantValue("browser/tools/browser-tools.ts", "ROUTED_BROWSER_SERVER"),
+            constantValue("browser/tools/browser-tools.ts", "ANONYMOUS_BROWSER_SERVER"),
+            constantValue("execution/js-tool.ts", "JS_SERVER_NAME"),
+        ]);
+        // Sanity: the scans found the blocks at all, so a moved block fails loudly here instead of passing vacuously.
+        expect(discovered.size, "server discovery found nothing — the mount blocks moved").toBeGreaterThan(5);
+        for (const server of discovered) {
             expect(
-                INTERNAL_SERVERS.has(server) || WRAPPED_ON_PURPOSE.has(server),
-                `MCP server "${server}" is mounted by the daemon but not classified — add it to INTERNAL_SERVERS (a control server) or to WRAPPED_ON_PURPOSE (it carries outside content)`,
+                RESERVED_MCP_SERVER_NAMES.has(server),
+                `MCP server "${server}" is mounted by the daemon but not reserved — add it to DAEMON_MCP_SERVERS in the contract (control if its results are the daemon's own, outside if they carry content from beyond the container)`,
             ).toBe(true);
+        }
+        for (const server of RESERVED_MCP_SERVER_NAMES) {
+            expect(discovered.has(server), `reserved server "${server}" is mounted nowhere the scan can see — a stale row in DAEMON_MCP_SERVERS`).toBe(true);
+        }
+    });
+
+    test("the control subset is exactly the servers whose results are never outside content", () => {
+        for (const [server, provenance] of Object.entries(DAEMON_MCP_SERVERS)) {
+            expect(CONTROL_MCP_SERVERS.has(server), server).toBe(provenance === "control");
         }
     });
 });

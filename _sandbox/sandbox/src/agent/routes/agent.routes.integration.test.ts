@@ -1,6 +1,6 @@
 import { rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { test, expect, afterEach } from "bun:test";
+import { afterEach, describe, expect, it, test } from "bun:test";
 import { waitFor, SETTLES } from "@intentic/testing/bun";
 
 import { createApp } from "../../app.js";
@@ -10,7 +10,7 @@ import { conversationExperimentArm } from "../run/decide/experiments.js";
 import { clientFor, collect, errorCode } from "../../harness/route-client.testing.js";
 import { gitOut, realCheckout } from "../../harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "../../harness/route-services.testing.js";
-import { attachedRows, runAgentTurn } from "../../harness/route-turns.testing.js";
+import { attachedRows, runAgentTurn, startedRun } from "../../harness/route-turns.testing.js";
 
 // Exercises the agent routes over the daemon's HTTP surface, as the browser does. Shared fakes and client live in
 // route-services.testing.ts and its siblings.
@@ -36,26 +36,359 @@ test("agent.run rejects an empty prompt", async () => {
     expect(await errorCode(client.agent.run({ prompt: "" }))).toBe("BAD_REQUEST");
 });
 
-test("a second concurrent turn for the same conversation is refused with CONFLICT until the run settles", async () => {
+test("a second message while a turn runs goes into that turn rather than beside it, and the next turn waits for it to settle", async () => {
     let release: (() => void) | undefined;
     const gate = new Promise<void>((resolve) => (release = resolve));
+    let running: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => (running = resolve));
     const client = clientFor(
         createApp(
             services({
                 async *agent() {
+                    running?.();
                     await gate;
                     yield { kind: "done" };
                 },
             }),
         ),
     );
-    const { run: first } = await client.agent.run({ prompt: "long task", conversationId: "conv1", isolated: true });
-    expect(await errorCode(client.agent.run({ prompt: "again", conversationId: "conv1", isolated: true }))).toBe("CONFLICT");
+    const first = await startedRun(client, { prompt: "long task", conversationId: "conv1", isolated: true });
+    await started;
+    // This runtime takes words mid-turn, so they are said into the turn already running.
+    expect(await client.agent.run({ prompt: "again", conversationId: "conv1", isolated: true })).toEqual({ delivered: "steered", run: first });
     release?.();
     const frames = await collect(await client.agent.attach({ conversationId: "conv1" }));
     expect(frames[0]).toMatchObject({ kind: "attached", run: first });
     const { facts } = await runAgentTurn(client, { prompt: "after", conversationId: "conv1", isolated: true });
     expect(facts[0]).toMatchObject({ kind: "worktree" });
+});
+
+// A turn per gate, each held open until released or stopped, so one run can be over while the next is live.
+const gatedTurns = (): { readonly gates: (() => void)[]; readonly services: ReturnType<typeof services> } => {
+    const gates: (() => void)[] = [];
+    return {
+        gates,
+        services: services({
+            async *agent(request) {
+                await new Promise<void>((release) => {
+                    gates.push(release);
+                    request.signal.addEventListener("abort", () => release(), { once: true });
+                });
+                yield { kind: "done" };
+            },
+        }),
+    };
+};
+
+// The press raced the turn's own end, and the conversation has started another since: cancelling "whatever runs" would
+// kill a turn the person never saw.
+test("a stop naming a turn that has ended cancels nothing, and names the run live instead", async () => {
+    const { gates, services: turns } = gatedTurns();
+    const client = clientFor(createApp(turns));
+    const first = await startedRun(client, { prompt: "one", conversationId: "conv-stop", isolated: true, messageId: "m-one" });
+    await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+    gates[0]?.();
+    await collect(await client.agent.attach({ conversationId: "conv-stop" }));
+    const second = await startedRun(client, { prompt: "two", conversationId: "conv-stop", isolated: true, messageId: "m-two" });
+    await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+
+    expect(await client.agent.stop({ conversationId: "conv-stop", run: first })).toEqual({ stopped: false, running: second });
+    expect(await client.agent.stop({ conversationId: "conv-stop", messageId: "m-one" })).toEqual({ stopped: false, running: second });
+    // The message the live turn carries names it as surely as its run does: a send not yet answered knows only that.
+    expect(await client.agent.stop({ conversationId: "conv-stop", messageId: "m-two" })).toEqual({ stopped: true });
+    expect(await client.agent.stop({ conversationId: "conv-stop", run: second })).toEqual({ stopped: false });
+});
+
+test("a stop that cannot name its turn cancels whatever runs", async () => {
+    const { gates, services: turns } = gatedTurns();
+    const client = clientFor(createApp(turns));
+    await client.agent.run({ prompt: "one", conversationId: "conv-live", isolated: true });
+    await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+
+    expect(await client.agent.stop({ conversationId: "conv-live", live: true })).toEqual({ stopped: true });
+    expect(await client.agent.stop({ conversationId: "conv-live", live: true })).toEqual({ stopped: false });
+});
+
+// Another window rewound and a turn ran since this one read the transcript, so position 0 now holds a different
+// message; restoring its checkpoint would put back a point the person never chose.
+test("a rewind naming a message its position no longer holds is refused as stale, before anything is restored", async () => {
+    const restored: string[] = [];
+    const { transcripts, history } = services({});
+    const client = clientFor(
+        createApp(
+            services({
+                transcripts: { ...transcripts, page: async () => ({ rows: [{ role: "user", text: "the reworded ask", messageId: "m-after" }], from: 0, more: false }) },
+                history: {
+                    ...history,
+                    restore: async (id) => {
+                        restored.push(id);
+                        return true;
+                    },
+                },
+            }),
+        ),
+    );
+
+    expect(await errorCode(client.agent.rewind({ conversationId: "conv-rewound", index: 0, messageId: "m-before" }))).toBe("PRECONDITION_FAILED");
+    expect(restored).toEqual([]);
+});
+
+// A send whose answer was lost is sent again under the same id: the sandbox answers with what the first one did.
+test("a message sent again under an id the sandbox took is answered as a duplicate, and starts no second turn", async () => {
+    const { gates, services: turns } = gatedTurns();
+    const client = clientFor(createApp(turns));
+    const send = { prompt: "tidy the docs", conversationId: "conv-again", isolated: true, messageId: "m-1" };
+
+    const first = await client.agent.run(send);
+    expect(first).toEqual({ delivered: "started", run: expect.any(String) });
+    expect(await client.agent.run(send)).toEqual({ delivered: "started", run: first.run, duplicate: true });
+    await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+    gates[0]?.();
+    await collect(await client.agent.attach({ conversationId: "conv-again" }));
+    // Its turn being over does not make the same message a new one.
+    expect(await client.agent.run(send)).toEqual({ delivered: "started", run: first.run, duplicate: true });
+    expect(gates).toHaveLength(1);
+});
+
+// A daemon that restarted since knows the message only from its row: the record keeps each message's id and its run.
+test("a message the record already holds is answered from its row, after a restart forgot the answer", async () => {
+    const asked: string[] = [];
+    const { transcripts } = services({});
+    const client = clientFor(
+        createApp(
+            services({
+                transcripts: {
+                    ...transcripts,
+                    page: async () => ({
+                        rows: [
+                            { role: "user", text: "tidy the docs", messageId: "m-7", run: "r-before" },
+                            { role: "assistant", text: "tidied", run: "r-before" },
+                            { role: "user", text: "and the tests", messageId: "m-8", run: "r-before" },
+                        ],
+                        from: 0,
+                        more: false,
+                    }),
+                },
+                async *agent(request) {
+                    asked.push(request.spec.prompt);
+                    yield { kind: "done" };
+                },
+            }),
+        ),
+    );
+
+    expect(await client.agent.run({ prompt: "tidy the docs", conversationId: "conv-restarted", messageId: "m-7" })).toEqual({
+        delivered: "started",
+        run: "r-before",
+        duplicate: true,
+    });
+    expect(await client.agent.steer({ conversationId: "conv-restarted", text: "and the tests", messageId: "m-8" })).toEqual({
+        delivered: "steered",
+        run: "r-before",
+        duplicate: true,
+    });
+    expect(asked).toEqual([]);
+});
+
+// A runtime that takes no words mid-turn (the opencode loop behind Grok): each turn held open until released or stopped,
+// and every prompt it was handed kept, in order.
+const unsteerableTurns = (): { readonly gates: (() => void)[]; readonly prompts: string[]; readonly services: ReturnType<typeof services> } => {
+    const gates: (() => void)[] = [];
+    const prompts: string[] = [];
+    const { openCode } = services({});
+    return {
+        gates,
+        prompts,
+        services: services({
+            openCode: { ...openCode, connected: async () => true },
+            async *grokAgent(request) {
+                prompts.push(request.spec.prompt);
+                await new Promise<void>((release) => {
+                    gates.push(release);
+                    request.signal.addEventListener("abort", () => release(), { once: true });
+                });
+                yield { kind: "done" };
+            },
+        }),
+    };
+};
+
+// The conversation's queue as every window reads it, off its roster card.
+const queueOf = async (client: ReturnType<typeof clientFor>, conversationId: string) =>
+    (await client.agents.list()).agents.find((agent) => agent.id === conversationId)?.queue;
+
+describe("the conversation's queue", () => {
+    it("holds a message the running turn cannot take, shows it on the card, and starts the next turn with it once this one settles", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-q", agent: "grok", messageId: "m-1" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+
+        expect(await client.agent.run({ prompt: "and the changelog", conversationId: "conv-q", agent: "grok", messageId: "m-2" })).toEqual({
+            delivered: "queued",
+        });
+        expect(await queueOf(client, "conv-q")).toEqual({
+            items: [{ id: "m-2", text: "and the changelog", voice: "person", queuedAt: expect.any(Number), revision: 1 }],
+            revision: 1,
+        });
+
+        gates[0]?.();
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("and the changelog");
+        // The same message sent again is answered with where it went: the turn it started.
+        const again = await client.agent.run({ prompt: "and the changelog", conversationId: "conv-q", agent: "grok", messageId: "m-2" });
+        expect(again).toEqual({ delivered: "started", run: expect.any(String), duplicate: true });
+        expect(await queueOf(client, "conv-q")).toEqual({ items: [], revision: 2 });
+        gates[1]?.();
+    });
+
+    it("rides several waiting messages out as one turn, in the order they were written", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-many", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        await client.agent.run({ prompt: "and the changelog", conversationId: "conv-many", agent: "grok" });
+        await client.agent.run({ prompt: "then tag it", conversationId: "conv-many", agent: "grok" });
+
+        gates[0]?.();
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("and the changelog\n\nthen tag it");
+        gates[1]?.();
+    });
+
+    // A Stop is the person saying the agent must not carry on by itself: whatever waited stays until somebody lets it go.
+    it("is held for everyone by a stop, and a resume lets it go as the next turn", async () => {
+        const { gates, prompts, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        const first = await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-held", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        await client.agent.run({ prompt: "and the changelog", conversationId: "conv-held", agent: "grok", messageId: "m-held" });
+
+        expect(await client.agent.stop({ conversationId: "conv-held", run: first })).toEqual({ stopped: true });
+        await collect(await client.agent.attach({ conversationId: "conv-held" }));
+        expect(await queueOf(client, "conv-held")).toMatchObject({ items: [{ id: "m-held" }], paused: "stopped" });
+        expect(gates).toHaveLength(1);
+
+        const resumed = await client.agent.queueResume({ conversationId: "conv-held" });
+        expect(resumed).toEqual({ run: expect.any(String) });
+        await waitFor(() => expect(gates).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("and the changelog");
+        // Queued, held, let go, and taken out by the turn it started: every one of them a change another window saw.
+        expect(await queueOf(client, "conv-held")).toEqual({ items: [], revision: 4 });
+        gates[1]?.();
+    });
+
+    it("takes back or rewords a waiting message only as it was read, so two devices never write over each other", async () => {
+        const { gates, services: turns } = unsteerableTurns();
+        const client = clientFor(createApp(turns));
+        await startedRun(client, { prompt: "draft the release notes", conversationId: "conv-edit", agent: "grok" });
+        await waitFor(() => expect(gates).toHaveLength(1), SETTLES);
+        await client.agent.run({ prompt: "and the changelog", conversationId: "conv-edit", agent: "grok", messageId: "m-e" });
+
+        expect(await client.agent.queueEdit({ conversationId: "conv-edit", id: "m-e", revision: 1, text: "and the changelog, briefly" })).toMatchObject({
+            items: [{ id: "m-e", text: "and the changelog, briefly", revision: 2 }],
+            revision: 2,
+        });
+        // Another device still holding revision 1 cannot rewrite or take back words it has not seen.
+        expect(await errorCode(client.agent.queueEdit({ conversationId: "conv-edit", id: "m-e", revision: 1, text: "skip it" }))).toBe("PRECONDITION_FAILED");
+        expect(await errorCode(client.agent.queueRemove({ conversationId: "conv-edit", id: "m-e", revision: 1 }))).toBe("PRECONDITION_FAILED");
+        expect(await errorCode(client.agent.queueEdit({ conversationId: "conv-edit", id: "m-e", revision: 2, text: "  " }))).toBe("BAD_REQUEST");
+        expect(await client.agent.queueRemove({ conversationId: "conv-edit", id: "m-e", revision: 2 })).toEqual({ items: [], revision: 3 });
+        expect(await errorCode(client.agent.queueRemove({ conversationId: "conv-edit", id: "m-e", revision: 2 }))).toBe("NOT_FOUND");
+        gates[0]?.();
+    });
+
+    // What waited behind the card is said into the turn it un-parks, the moment the answer lands, whichever window sent it.
+    it("waits behind a parked card, and goes into the turn once the card is answered", async () => {
+        let requestId: ((id: string) => void) | undefined;
+        const raised = new Promise<string>((resolve) => (requestId = resolve));
+        let release: (() => void) | undefined;
+        const held = new Promise<void>((resolve) => (release = resolve));
+        const client = clientFor(
+            createApp(
+                services({
+                    async *agent(request) {
+                        const { id, wait } = request.hooks.cards.create("question", { kind: "question", requestId: "", cancelled: true }, request.spec.conversationId);
+                        yield { kind: "question", requestId: id, questions: [] };
+                        requestId?.(id);
+                        const { resolved } = await wait(request.signal);
+                        yield resolved;
+                        await held;
+                        yield { kind: "done" };
+                    },
+                }),
+            ),
+        );
+        const run = await startedRun(client, { prompt: "rename Credits?", conversationId: "conv-card", isolated: true });
+        const card = await raised;
+
+        expect(await client.agent.run({ prompt: "and keep the old name as an alias", conversationId: "conv-card", isolated: true, messageId: "m-alias" })).toEqual({
+            delivered: "queued",
+        });
+        await client.agent.reply({ kind: "question", requestId: card, answers: {} });
+        await waitFor(async () => expect(await queueOf(client, "conv-card")).toEqual({ items: [], revision: 2 }), SETTLES);
+        expect(await client.agent.run({ prompt: "and keep the old name as an alias", conversationId: "conv-card", isolated: true, messageId: "m-alias" })).toEqual({
+            delivered: "steered",
+            run,
+            duplicate: true,
+        });
+        release?.();
+        const rows = attachedRows(await collect(await client.agent.attach({ conversationId: "conv-card" })));
+        expect(rows.filter((row) => row.role === "user").map(({ text, messageId }) => ({ text, messageId }))).toEqual([
+            { text: "rename Credits?", messageId: expect.any(String) },
+            { text: "and keep the old name as an alias", messageId: "m-alias" },
+        ]);
+    });
+
+    // The composer that sent it no longer keeps a copy: a refusal before the model saw a word hands it back here, held,
+    // since sending it again as it stands would be refused again.
+    it("takes back a message a refusal at the door turned away, held until somebody lets it go", async () => {
+        const client = clientFor(
+            createApp(
+                services({
+                    async *agent() {
+                        yield { kind: "error", code: "sandbox-memory-low", message: "Sandbox memory is low." };
+                        yield { kind: "done" };
+                    },
+                }),
+            ),
+        );
+        await runAgentTurn(client, { prompt: "fix the pipeline", conversationId: "conv-refused", isolated: true, messageId: "m-refused" });
+
+        await waitFor(async () => expect(await queueOf(client, "conv-refused")).toMatchObject({ items: [{ id: "m-refused", text: "fix the pipeline" }], paused: "refused" }), SETTLES);
+        expect(await client.agent.run({ prompt: "fix the pipeline", conversationId: "conv-refused", isolated: true, messageId: "m-refused" })).toEqual({
+            delivered: "queued",
+            duplicate: true,
+        });
+    });
+
+    // Two separate things said: the held words are not dropped for the new ones, nor sent after them.
+    it("lets words a refusal held go with the next thing a person says, the held words first", async () => {
+        const prompts: string[] = [];
+        const client = clientFor(
+            createApp(
+                services({
+                    async *agent(request) {
+                        prompts.push(request.spec.prompt);
+                        if (prompts.length === 1) {
+                            yield { kind: "error", code: "sandbox-memory-low", message: "Sandbox memory is low." };
+                        }
+                        yield { kind: "done" };
+                    },
+                }),
+            ),
+        );
+        await runAgentTurn(client, { prompt: "fix the tests", conversationId: "conv-go", isolated: true, messageId: "m-fix" });
+        await waitFor(async () => expect(await queueOf(client, "conv-go")).toMatchObject({ items: [{ id: "m-fix" }], paused: "refused" }), SETTLES);
+
+        expect(await client.agent.run({ prompt: "go ahead", conversationId: "conv-go", isolated: true, messageId: "m-go" })).toEqual({
+            delivered: "started",
+            run: expect.any(String),
+        });
+        await waitFor(() => expect(prompts).toHaveLength(2), SETTLES);
+        expect(prompts[1]).toContain("fix the tests\n\ngo ahead");
+        expect(await queueOf(client, "conv-go")).toMatchObject({ items: [] });
+    });
 });
 
 test("a chat turn without a conversationId is refused: the run registry has nothing to key it on", async () => {
@@ -420,9 +753,18 @@ test("a steer taken mid-turn lands in the run's frames, and in the record, betwe
         ),
     );
 
-    await client.agent.run({ prompt: "ship it", conversationId: "conv-steer", isolated: true });
+    const { run } = await client.agent.run({ prompt: "ship it", conversationId: "conv-steer", isolated: true });
     await started;
-    expect(await client.agent.steer({ conversationId: "conv-steer", text: "and the tests" })).toEqual({ ok: true });
+    expect(await client.agent.steer({ conversationId: "conv-steer", text: "and the tests", messageId: "m-steer" })).toEqual({
+        delivered: "steered",
+        run,
+    });
+    // The answer was lost and the words sent again: said once, answered as the first time.
+    expect(await client.agent.steer({ conversationId: "conv-steer", text: "and the tests", messageId: "m-steer" })).toEqual({
+        delivered: "steered",
+        run,
+        duplicate: true,
+    });
     taken?.();
 
     const [head] = await collect(await client.agent.attach({ conversationId: "conv-steer" }));

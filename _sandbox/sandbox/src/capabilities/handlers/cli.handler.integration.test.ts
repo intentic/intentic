@@ -35,6 +35,7 @@ const tempCtx = (capabilities: Capability[] = []): { ctx: CapabilityCtx; root: s
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath, mkdir: makeWorkspaceDir },
         capabilities: { list: async () => capabilities },
         extensionsDir: EXTENSIONS_DIR,
+        historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")),
         terminalRun: createTerminalRunner(),
     } as unknown as CapabilityCtx;
     return { ctx, root };
@@ -45,7 +46,7 @@ const hostFor = (capabilities: Capability[]): ExtensionHost =>
         workspace: { root: WORKSPACE_ROOT },
         files: { read: readWorkspaceFile },
         capabilities: { list: async () => capabilities },
-        config: { extensionsDir: EXTENSIONS_DIR },
+        config: { extensionsDir: EXTENSIONS_DIR, historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")) },
     }) as unknown as ExtensionHost;
 
 const discord: Capability = { id: "discord", kind: "cli", config: { provider: "discord", botToken: "tok-123" } };

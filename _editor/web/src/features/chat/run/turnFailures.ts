@@ -3,15 +3,14 @@ import { ref, type Ref } from "vue";
 import type { PickUp } from "./pickUp";
 import { markAccountReauth } from "../accounts/providerAccounts";
 import type { SessionRef } from "./turnRequest";
-import type { TurnContext } from "./turnStream";
 import { bindingWindow, usageStatusFor } from "../session/usageStatus";
 import type { TranscriptView } from "../session/transcriptView";
 import type { TurnClient } from "../session/turnClient";
 import { importOrReload } from "../../../router/staleChunk";
 
-// Maps a turn failure's code to what this window does: whether the user is needed (red line) or merely informed,
-// whether the message is held for retry, and whether the turn returns on its own. The daemon owns the failure's
-// transcript line; recovery state for the two auto-resuming codes lives here.
+// Maps a turn failure's code to what this window does: whether the user is needed (red line) or merely informed, and
+// whether the turn returns on its own. The daemon owns the failure's transcript line and keeps a refused message in the
+// conversation's queue, held; recovery state for the auto-resuming codes lives here.
 
 type TurnError = Extract<TurnFact, { kind: "error" }>;
 
@@ -25,6 +24,8 @@ export interface OutageResume {
 // Renewal probe (1s+25x3s) must outlast the daemon's AUTH_RESUME_DEADLINE_MS (1 minute) re-mint window.
 const RENEWAL_PROBE = { delayMs: 1_000, intervalMs: 3_000, tries: 25 } as const;
 const OUTAGE_PROBE = { delayMs: 10_000, intervalMs: 15_000, tries: 20 } as const;
+// The daemon's held pass opens the fresh session on its next beat (every 5s); 2s+10x3s outlasts several beats.
+const FRESH_SESSION_PROBE = { delayMs: 2_000, intervalMs: 3_000, tries: 10 } as const;
 
 // The subset of a conversation a failure can touch or act on.
 export interface FailureHost {
@@ -40,10 +41,9 @@ export interface FailureHost {
     readonly error: Ref<string | null>;
     // This turn died mid-work with nothing left to fix; one press continues it (pickUp.ts).
     readonly pickUp: Ref<PickUp | undefined>;
-    // The runs: a probe stands down while one is live (the run it was hunting is already here); an undelivered message
-    // goes back to the queue with its own words, since the daemon has already retracted its row; a message behind a
-    // killed turn is held, so it cannot race the daemon's resume and lose; a restarted run is attached to.
-    readonly turn: Pick<TurnClient, "streaming" | "requeueUndelivered" | "hold" | "reattach">;
+    // The runs: a probe stands down while one is live (the run it was hunting is already here); a restarted run is
+    // attached to.
+    readonly turn: Pick<TurnClient, "streaming" | "reattach">;
 }
 
 export class TurnFailures {
@@ -53,18 +53,20 @@ export class TurnFailures {
     // Credential renewal wait; cleared on reattach or timeout. Carries `since`, not a reset instant.
     readonly credentialRenewal = ref<{ since: number } | undefined>();
 
+    // A turn that outgrew the model's window, which the daemon re-runs in a fresh session; watched once the stream ends.
+    private freshSession = false;
+
     // Timer for the pending reattach probe; a fresh failure's schedule replaces whatever was armed before.
     private timer: ReturnType<typeof setTimeout> | undefined;
 
     constructor(private readonly host: FailureHost) {}
 
     // Routes a turn failure by its code to how it is presented and recovered from.
-    apply(error: TurnError, turn: TurnContext): void {
+    apply(error: TurnError): void {
         const { message, code } = error;
         switch (code) {
             case `claude-reauth`:
-                // Credential dead, nothing ran: message isn't in the conversation; return it to the queue.
-                this.host.turn.requeueUndelivered(turn.sent);
+                // Credential dead, nothing ran: the daemon holds the message in the queue until the account is back.
                 // No red line: the composer already shows a reauth banner with the one-click fix.
                 this.markReauth(message);
                 return;
@@ -76,17 +78,11 @@ export class TurnFailures {
             case `claude-token-refused`:
                 this.applyAuthRefusedError(error);
                 return;
+            // Nothing ran, and the daemon holds the message in the queue: an unrecognized command until it is reworded, a
+            // turn too big for the model until a bigger one is picked, low memory until the person says go ahead.
             case `unknown-command`:
-                // Unrecognized command, nothing ran: message goes back to the held queue, not flushed.
-                this.host.turn.requeueUndelivered(turn.sent);
-                return;
             case `context-window-too-small`:
-                // Model can't hold this turn: message held until a bigger model is picked.
-                this.host.turn.requeueUndelivered(turn.sent);
-                return;
             case `sandbox-memory-low`:
-                // Held once so the person can decide; never auto-resent, since the next send is them saying go ahead.
-                this.host.turn.requeueUndelivered(turn.sent);
                 return;
             case `session-not-found`:
                 // Session vanished mid-turn: drop the dead id so the next send starts fresh. No red line.
@@ -99,13 +95,12 @@ export class TurnFailures {
                 this.applyLimitError(error);
                 return;
             case `provider-outage`:
-                this.applyOutageError(error, turn);
+                this.applyOutageError(error);
                 return;
             case `trial-unavailable`:
             case `trial-model-unavailable`:
             case `trial-exhausted`:
-                // Message undelivered and refunded; held for explicit retry, not the outage auto-resume loop.
-                this.host.turn.requeueUndelivered(turn.sent);
+                // Message undelivered and refunded; held in the queue for explicit retry, not the outage auto-resume loop.
                 importOrReload(
                     () => import(`../models/useChat-catalog`),
                     async (chat) => {
@@ -127,30 +122,32 @@ export class TurnFailures {
                 this.host.error.value = message;
                 return;
             default:
-                this.applyUnhandledError(error, turn);
+                this.applyUnhandledError(error);
                 return;
         }
     }
 
-    // Failures with no in-window recovery: the red line, plus a requeue where nothing was processed yet.
-    // `model-unavailable` and `engine-version-floor` get their own handling below; the rest fall straight through.
-    private applyUnhandledError(error: TurnError, turn: TurnContext): void {
+    // Failures this window cannot fix itself: the red line; where nothing was processed yet the daemon holds the message.
+    // `context-overflow`, `model-unavailable` and `engine-version-floor` get their own handling; the rest fall through.
+    private applyUnhandledError(error: TurnError): void {
         const { message, code } = error;
+        if (code === `context-overflow`) {
+            this.applyOverflowError(error);
+            return;
+        }
         if (code === `model-unavailable`) {
-            // Model exists but isn't available on this plan; the daemon already dropped it from the catalog. Held for
-            // retry (nothing was spent) while the catalog reloads and the picker repoints.
+            // Model exists but isn't available on this plan; the daemon already dropped it from the catalog. Held in the
+            // queue for retry (nothing was spent) while the catalog reloads and the picker repoints.
             importOrReload(
                 () => import(`../models/useChat-catalog`),
                 (chat) => chat.loadProviderModels(this.host.provider.value),
             );
-            this.host.turn.requeueUndelivered(turn.sent);
             this.host.error.value = message;
             return;
         }
         if (code === `engine-version-floor`) {
-            // Nothing ran (old engine refused): message held for retry. Error text adds where to install a newer
-            // engine, since the daemon's own message can't say that.
-            this.host.turn.requeueUndelivered(turn.sent);
+            // Nothing ran (old engine refused): message held in the queue for retry. Error text adds where to install a
+            // newer engine, since the daemon's own message can't say that.
             const floor = error.engine?.floor;
             // Where to install is all this adds; that the message is held is the transcript notice's line to say.
             this.host.error.value =
@@ -194,10 +191,9 @@ export class TurnFailures {
 
     // Provider outage with a resume in flight: muted notice naming when it retries, not the red line, since it
     // isn't the user's fault. No `outage` (attempts spent) falls back to the red line and returns the message.
-    private applyOutageError(error: TurnError, turn: TurnContext): void {
+    private applyOutageError(error: TurnError): void {
         const { message, outage } = error;
         if (outage === undefined) {
-            this.host.turn.requeueUndelivered(turn.sent);
             this.host.error.value = message;
             return;
         }
@@ -221,14 +217,32 @@ export class TurnFailures {
             this.markReauth(error.message);
             return;
         }
-        this.host.turn.hold();
-        // Wait opens here; armRenewalProbe (armed once this turn's stream ends) is what closes it.
+        // Wait opens here; armRenewalProbe (armed once this turn's stream ends) is what closes it. What waits in the
+        // queue stays there until the renewed turn is done: the daemon never lets it race a recovery.
         this.credentialRenewal.value = { since: Date.now() };
     }
 
+    // A turn that outgrew the model's window: the daemon re-runs it once in a fresh session by itself, holding its queue
+    // for that run, and this window watches for it rather than reddening. The re-run overflowing too is red.
+    private applyOverflowError(error: TurnError): void {
+        if (error.autoResume !== `scheduled`) {
+            this.host.error.value = error.message;
+            return;
+        }
+        this.host.error.value = null;
+        this.host.pickUp.value = undefined;
+        this.freshSession = true;
+    }
+
     // Armed only once this turn's stream ends, not from this failure frame directly: firing mid-stream would see
-    // the conversation still open and wrongly conclude the resumed run is already here.
+    // the conversation still open and wrongly conclude the resumed run is already here. Covers both runs the daemon
+    // renews by itself: a re-minted credential's, and a fresh session's after the window overflowed.
     armRenewalProbe(): void {
+        if (this.freshSession) {
+            this.freshSession = false;
+            this.scheduleReattach(Date.now(), FRESH_SESSION_PROBE);
+            return;
+        }
         if (this.credentialRenewal.value === undefined) {
             return;
         }
@@ -252,10 +266,11 @@ export class TurnFailures {
         this.scheduleReattach(pending.retryAt * 1000, OUTAGE_PROBE);
     }
 
-    // Called when a turn starts on this conversation: both waits are over, by resume or by the user's own send.
+    // Called when a turn starts on this conversation: every wait is over, by resume or by the user's own send.
     clear(): void {
         this.outageResume.value = undefined;
         this.credentialRenewal.value = undefined;
+        this.freshSession = false;
     }
 
     // Probes for the daemon's restarted run starting at `dueAt` + the profile's delay, then on its interval until

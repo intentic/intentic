@@ -1,11 +1,12 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { readFile, rename } from "node:fs/promises";
+import { basename } from "node:path";
 import { type ManifestProblem, recordManifestProblems } from "./manifest-problems.js";
 import { type ManifestEdit, registerManifestEditor } from "./manifest-repair.js";
+import { queueOnFile, writeTextFile } from "./text-file.js";
 
 // One JSON file, read through a schema and written whole; every `*-store.ts` in the daemon sits on this.
 // - atomicity: writes go to a sibling temp file and rename over the target, so a reader never sees a half-written file
-// - lost updates: `update` serializes read-modify-write through a per-file queue
+// - lost updates: `update` serializes read-modify-write through a per-path queue every handle on the file shares
 // - downgrades: an update over content this build could not read sets it aside first (`<name>.corrupt`), or refuses
 //   outright when the file is one the owner maintains (`onUnreadable`)
 // - silence: every read reports its outcome to the manifest-problems registry, so a clean read clears a prior complaint
@@ -46,13 +47,8 @@ export interface JsonFileOptions<T> {
 
 // Writes one JSON file atomically (temp file, then rename); used by jsonFile and by stores that must own their own read
 // path.
-export const writeJsonFile = async (path: string, value: unknown, mode?: number): Promise<void> => {
-    // Sibling, pid-tagged temp path; leading dot avoids prefix-matching the target in the watcher's path table.
-    const tempPath = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(tempPath, `${JSON.stringify(value, undefined, 2)}\n`, mode === undefined ? undefined : { mode });
-    await rename(tempPath, path);
-};
+export const writeJsonFile = (path: string, value: unknown, mode?: number): Promise<void> =>
+    writeTextFile(path, `${JSON.stringify(value, undefined, 2)}\n`, mode);
 
 export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable = "setAside" }: JsonFileOptions<T>): JsonFile<T> => {
     // Value plus whether it stands in for content that exists but couldn't be read; a plain read answers the same
@@ -88,14 +84,11 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
         return done({ value: parsed, unreadable: false });
     };
 
-    // The chain doubles as the write queue; a failed update still settles it so the next update runs.
-    let queue: Promise<unknown> = Promise.resolve();
-
     // Edits the raw JSON on the same queue as update, for removing a key `parse` already drops before `update` ever
     // sees it.
     // Writes nothing if the edit returns undefined, and never touches a file it could not parse.
-    const editRaw = (edit: ManifestEdit): Promise<boolean> => {
-        const next = queue.then(async () => {
+    const editRaw = (edit: ManifestEdit): Promise<boolean> =>
+        queueOnFile(path, async () => {
             let raw: unknown;
             try {
                 raw = JSON.parse(await readFile(path, "utf8"));
@@ -114,9 +107,6 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
             await writeJsonFile(path, updated, mode);
             return true;
         });
-        queue = next.catch(() => undefined);
-        return next;
-    };
 
     // Registered here so a manifest is never reportable without also being repairable.
     registerManifestEditor(path, editRaw);
@@ -124,8 +114,8 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
     return {
         read: async () => (await readState()).value,
         state: readState,
-        update: (change) => {
-            const next = queue.then(async () => {
+        update: (change) =>
+            queueOnFile(path, async () => {
                 const state = await readState();
                 const updated = change(state.value);
                 if (updated !== state.value) {
@@ -140,9 +130,6 @@ export const jsonFile = <T>(path: string, { parse, fallback, mode, onUnreadable 
                     await writeJsonFile(path, updated, mode);
                 }
                 return updated;
-            });
-            queue = next.catch(() => undefined);
-            return next;
-        },
+            }),
     };
 };

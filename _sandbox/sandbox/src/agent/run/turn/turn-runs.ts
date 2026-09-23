@@ -105,8 +105,8 @@ export class TurnRun implements LiveRun {
         return this.fold.steerRows;
     }
 
-    // Whether this turn was refused before it ran, with its message handed back to the composer; such a run is not
-    // written down (see the settle below).
+    // Whether this turn was refused before it ran, with its message handed back to the conversation's queue; such a run
+    // is not written down (see the settle below).
     get ranNothing(): boolean {
         return this.fold.ranNothing;
     }
@@ -381,7 +381,8 @@ export function startTurnRun(
             }, RUN_RETAINED_MS);
             expiry.unref();
             // Durable transcript, written once the turn is whole, including a settled failure or an abort; a turn
-            // refused before it ran is not written at all, since the composer holds its message for another press.
+            // refused before it ran is not written at all, since the conversation's queue holds its message for another
+            // press.
             if (transcript !== undefined && !run.ranNothing) {
                 try {
                     // Journal deletion is the commit point; await the transcript first so a crash can't lose both.

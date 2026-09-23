@@ -14,6 +14,7 @@ import {
 } from "@intentic/sandbox-contract";
 import { z } from "zod";
 import type { ConversationsDb } from "../../store/conversations-db.js";
+import { TurnQueueSchema } from "../actor/conversation-queue.js";
 
 // The persisted half of the fleet registry: one record per conversation, what must survive a restart, as nested records
 // whose invariants are their types. Runtime-only state (status, attention, activity) lives in the conversation's actor,
@@ -170,6 +171,8 @@ export const PersistedAgentSchema = z.object({
     updatedAt: z.number(),
     // When archived: off the board, checkout retired, branch kept. The record itself survives untouched.
     archivedAt: z.number().optional(),
+    // What waits for its next turn, as its actor last wrote it (conversation-queue.ts); a restart keeps every word of it.
+    queue: TurnQueueSchema.optional(),
 });
 export type PersistedAgent = z.infer<typeof PersistedAgentSchema>;
 

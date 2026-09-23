@@ -65,7 +65,8 @@ const CREDENTIAL_EXTS = new Set([".pem", ".key", ".p12", ".pfx", ".ppk", ".jks",
 // Rule 5: self-identifying patterns only, each naming its own issuer. Exported so src/share redacts against this same
 // list, not a shorter one that would leave a redacted page still refused.
 export const SECRET_PATTERNS = [
-    /-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----/,
+    // The whole armored block, not only its header, since redaction replaces the match; lines split by newlines or `\n`.
+    /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----(?:(?:\s|\\[nr])+(?:[A-Za-z-]+:[^\n\\]*|[A-Za-z0-9+/=]+))*(?:(?:\s|\\[nr])+-----END (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----)?/,
     /\bAKIA[0-9A-Z]{16}\b/,
     /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
     /\bsk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}\b/,

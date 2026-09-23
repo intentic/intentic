@@ -60,8 +60,8 @@ describe(`staleQueryKeys`, () => {
     });
 
     it(`ignores a store's own temp file while it is mid-swap`, () => {
-        // jsonFile's atomic-rename temp name: `.<name>.<pid>.tmp` beside the target.
-        expect(staleQueryKeys([`.intentic/.settings.json.42.tmp`], [])).toEqual([]);
+        // writeTextFile's atomic-rename temp name: `.<name>.<pid>.<n>.tmp` beside the target.
+        expect(staleQueryKeys([`.intentic/.settings.json.42.7.tmp`], [])).toEqual([]);
         expect(staleQueryKeys([`.intentic/config/settings.json`], [])).toEqual([`settings`, `manifests`]);
     });
 

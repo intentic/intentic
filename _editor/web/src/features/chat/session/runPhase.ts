@@ -14,14 +14,14 @@ export type RunPhase =
     | ({ readonly kind: `composing` } & LiveRun)
     // Its words have left and the daemon has not acknowledged them yet.
     | ({ readonly kind: `sending` } & LiveRun)
-    // The daemon took it: acknowledged a send, or streamed a run at an attach.
-    | ({ readonly kind: `running` } & LiveRun);
+    // The daemon took it: acknowledged a send, or streamed a run at an attach; `run` is the name the daemon gave it.
+    | ({ readonly kind: `running`; readonly run: string } & LiveRun);
 
 export type RunEvent =
     | ({ readonly kind: `open`; readonly composing: boolean } & LiveRun)
     | { readonly kind: `composed` }
-    | { readonly kind: `accepted` }
-    | ({ readonly kind: `attached` } & LiveRun)
+    | { readonly kind: `accepted`; readonly run: string }
+    | ({ readonly kind: `attached`; readonly run: string } & LiveRun)
     | { readonly kind: `settled` };
 
 export const IDLE: RunPhase = { kind: `idle`, accepted: false };
@@ -33,8 +33,8 @@ const MOVES: Moves = {
     open: (phase, { composing, controller, startedAt }) =>
         phase.kind === `idle` ? { kind: composing ? `composing` : `sending`, controller, startedAt } : phase,
     composed: (phase) => (phase.kind === `composing` ? { ...phase, kind: `sending` } : phase),
-    accepted: (phase) => (phase.kind === `sending` ? { ...phase, kind: `running` } : phase),
-    attached: (phase, { controller, startedAt }) => (phase.kind === `idle` ? { kind: `running`, controller, startedAt } : phase),
+    accepted: (phase, { run }) => (phase.kind === `sending` ? { ...phase, kind: `running`, run } : phase),
+    attached: (phase, { controller, startedAt, run }) => (phase.kind === `idle` ? { kind: `running`, controller, startedAt, run } : phase),
     settled: (phase) => (phase.kind === `idle` ? phase : { kind: `idle`, accepted: phase.kind === `running` }),
 };
 

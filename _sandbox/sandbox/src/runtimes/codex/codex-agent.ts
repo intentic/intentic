@@ -5,6 +5,7 @@ import { splitAttachments, withFileNote } from "../../agent/prompt/attachment-no
 import { opt } from "../../opt.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, planMode } from "../decorators/plan-mode.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
+import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
 import { transientUpstream } from "../../agent/providers/routed-refusal.js";
 import { resultContent, toolCategoryOf, workspacePath } from "../../agent/tools/tool-calls.js";
 import { openBrowserSession } from "../../browser/sessions/browser-sessions.js";
@@ -204,10 +205,12 @@ const codexError = (message: string): { frames: AgentEvent[]; errored: boolean }
 };
 
 // How Codex's failure sentences are coded, in this order: a spent allowance first, so the client shows a muted reset
-// countdown and holds the turn, then an unusable model, so it reloads the catalog and drops the bad pin.
+// countdown and holds the turn, then an unusable model, so it reloads the catalog and drops the bad pin, then a thread
+// past the model's window, which the daemon re-runs in a fresh one.
 const CODEX_FAILURES: readonly VendorRule[] = [
     [isRateLimited, "rate_limit"],
     [(message) => CODEX_MODEL_INVALID.test(message), "codex-model-invalid"],
+    [isContextOverflowText, "context-overflow"],
 ];
 
 // Waits before re-running a turn the translator never got to the model, in ms: long enough for a stalled resolver or a

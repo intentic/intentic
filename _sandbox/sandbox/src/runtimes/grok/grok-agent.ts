@@ -9,6 +9,8 @@ import { loadAttachments } from "../decorators/attachment-images.js";
 import { type EmulatedPlan, EXECUTE_PROMPT, PLAN_PREAMBLE, planMode } from "../decorators/plan-mode.js";
 import { beforeDeadline, DEFAULT_TURN_TIMEOUTS, EXPIRED, type TurnTimeouts, turnWatchdog } from "../decorators/turn-watchdog.js";
 import { isRateLimited, vendorFailureFrame, type VendorRule } from "../decorators/vendor-errors.js";
+import { isContextOverflowText } from "../../agent/providers/failure-sentences.js";
+import { contextOverflowFrame } from "../../agent/run/error-frames.js";
 import { displayNameOf, editDiffContent, toolCategoryOf, toolLocations, toolTarget } from "../../agent/tools/tool-calls.js";
 import type { CommandGuard } from "../../guard/command-guard.js";
 import { vendorTurnGate } from "../decorators/vendor-gate.js";
@@ -241,11 +243,21 @@ const errorText = (error: unknown): string => {
 const MODEL_INVALID = /model not found|does not exist|no such model|did you mean/i;
 
 // How OpenCode's failure sentences are coded, in this order: a model xAI rejected, then a spent allowance, which gets a
-// retry-later notice instead of a Continue that would just re-fail.
+// retry-later notice instead of a Continue that would just re-fail, then a session past the model's window.
 const GROK_FAILURES: readonly VendorRule[] = [
     [(message) => MODEL_INVALID.test(message), "grok-model-invalid"],
     [isRateLimited, "rate_limit"],
+    [isContextOverflowText, "context-overflow"],
 ];
+
+// A session error as its frame. OpenCode names an overflow its own compaction could not clear, in whatever words the
+// provider used, so the name decides before the sentence rules do.
+const sessionErrorFrame = (error: unknown): AgentEvent => {
+    const message = errorText(error);
+    return (error as { name?: string } | undefined)?.name === "ContextOverflowError"
+        ? contextOverflowFrame(message)
+        : vendorFailureFrame({ kind: "error", message }, GROK_FAILURES);
+};
 
 // Plan phase holds back the assistant text (it becomes the plan) instead of streaming it; `sessionId` is captured from
 // session.created (or the resumed id) for the execute phase to resume.
@@ -412,7 +424,7 @@ async function* streamTurn(
                 ...(isRateLimited(status.message) ? { status: 429 } : {}),
             };
         } else if (event.type === "session.error") {
-            yield vendorFailureFrame({ kind: "error", message: errorText(event.properties.error) }, GROK_FAILURES);
+            yield sessionErrorFrame(event.properties.error);
             capture.errored = true;
             // Terminal: OpenCode doesn't reliably emit session.idle after an error, so ending here is what lets the
             // caller reach `done`.

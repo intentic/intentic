@@ -6,14 +6,13 @@ import { floatingWindowPanel, raiseFloating } from "../../../shell/window/floati
 import { Conversation } from "../session/conversation";
 import { traceFocus } from "./focusTrace";
 import { showRun } from "./chatRun";
-import { snapshotTab, type StoredTab } from "../tabs/tabSnapshot";
+import { snapshotTab } from "../tabs/tabSnapshot";
 import { closeConversations, keepChat } from "../tabs/useChat-tabs";
 import { type Reveal, reveal, type RevealEntry } from "../panel/useChat-reveal";
 
 // How a surface outside the panel changes the chat everywhere: the same reveal applies locally and posts to every
-// window, since panel tab state is per window while everything else converges through the daemon. Portable snapshots
-// ride the wire, never live objects or queued messages (which must send once); an in-panel gesture relays only what it
-// selected, not the act itself.
+// window, since panel tab state is per window while everything else converges through the daemon, the queue included.
+// Portable snapshots ride the wire, never live objects; an in-panel gesture relays only what it selected, not the act.
 
 export type Summons =
     | ({ readonly kind: `reveal` } & Reveal)
@@ -26,14 +25,10 @@ export type Summons =
     // reclaim it) is very often another window's.
     | { readonly kind: `keep`; readonly conversationIds: readonly string[] };
 
-const portable = (entry: RevealEntry): RevealEntry => (entry instanceof Conversation ? { ...snapshotTab(entry), queued: [] } : entry);
+const portable = (entry: RevealEntry): RevealEntry => (entry instanceof Conversation ? snapshotTab(entry) : entry);
 
-// Same rule as portable: the message and its files ride back, queued sends don't.
-const carried = (tab: StoredTab): StoredTab => ({ ...tab, queued: [] });
-
-/** The wire form: live conversations become portable snapshots, queued messages stripped. */
-export const wireSummons = (summons: Summons): Summons =>
-    summons.kind === `reveal` ? { ...summons, entries: summons.entries.map(portable), unsent: summons.unsent?.map(carried) } : summons;
+/** The wire form: live conversations become portable snapshots. */
+export const wireSummons = (summons: Summons): Summons => (summons.kind === `reveal` ? { ...summons, entries: summons.entries.map(portable) } : summons);
 
 const apply = (summons: Summons): void => {
     if (summons.kind === `run`) {
@@ -54,7 +49,7 @@ const apply = (summons: Summons): void => {
     // Only the window holding the chat's own window sends a carried turn: every window applies this summons, and the
     // one that composed it kept the turn for itself unless it draws no chat (summonTurn).
     if (summons.deliver !== undefined && focused !== undefined && floatingWindowPanel.value === `chat`) {
-        void focused.turn.enqueue(summons.deliver);
+        void focused.turn.say(summons.deliver);
     }
 };
 
@@ -115,7 +110,7 @@ export const summonTurn = (conversation: Conversation, prompt: string): void => 
         ...(here ? {} : { deliver: prompt }),
     });
     if (here) {
-        void conversation.turn.enqueue(prompt);
+        void conversation.turn.say(prompt);
         return;
     }
     // Raises the window already holding the chat, so the answer arrives where the eye goes; never opens one.

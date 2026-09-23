@@ -24,6 +24,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "describe",
         description:
             "Which browser this is, how many tabs are open, and — the part you need before anything else — exactly which sites you are allowed to work on and whether each is read-only. Call this first.",
+        effect: "read",
         input: NO_ARGS,
         run: async () => textResult(await describeAccess()),
     }),
@@ -31,6 +32,8 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "tabs",
         description:
             "Every tab open in this browser, with the one in front marked. Sites you have not been allowed on are listed without their address, which is the person's privacy rather than a fault. Pass `select` to bring a tab to the front.",
+        // Listing reads, but `select` brings a tab to the front.
+        effect: "write",
         input: object({ select: number().int().optional().describe("A tab id to switch to. Omit to just list them.") }),
         run: async ({ select }) => textResult(select === undefined ? await listTabs() : await selectTab(select)),
     }),
@@ -38,6 +41,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "open",
         description:
             "Point a tab at a URL and answer with the page. Anyone may open a tab; READING what lands there needs the site to be allowed, and the answer says so plainly when it is not.",
+        effect: "write",
         input: object({
             url: required.describe("The page to open. A bare host like example.com is fine."),
             tab: zEnum(["current", "new"]).default("current").describe("Reuse the tab in front, or open a new one."),
@@ -48,6 +52,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "snapshot",
         description:
             "What the page shows right now: every element you can click or type into, each with a reference like [e12]. Take one before acting. References die with the page — one from an older snapshot is refused rather than clicking whatever now sits in that slot.",
+        effect: "read",
         input: object({ tab }),
         run: async ({ tab: id }) => textResult(await snapshot(id)),
     }),
@@ -55,6 +60,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "read",
         description:
             "The page as readable text — what a person would get by selecting all of it. Use this to ANSWER questions about a page; use snapshot when you intend to act on it.",
+        effect: "read",
         input: object({ tab }),
         run: async ({ tab: id }) => textResult(await readable(id)),
     }),
@@ -62,6 +68,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "click",
         description:
             "Click an element by its [e…] reference. Answers with the page as it stands afterwards. On a page that deals in passwords, money or deletion, the person is asked in their own browser first.",
+        effect: "destructive",
         input: object({ ref: required, tab }),
         run: async ({ ref, tab: id }) => textResult(await click(ref, id)),
     }),
@@ -69,6 +76,8 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "fill",
         description:
             "Type into a field by its [e…] reference: replaces what is there, and fires the events the page's own JavaScript listens for (setting a value without them is how a filled form submits empty). `submit` presses Enter afterwards, which is the half that gets confirmed.",
+        // Replaces what the field held, and `submit` sends the form.
+        effect: "destructive",
         input: object({
             ref: required,
             text: string(),
@@ -80,18 +89,24 @@ const TOOLS: readonly McpTool<undefined>[] = [
     tool({
         name: "select_option",
         description: "Choose in a dropdown by its [e…] reference. Values match either the option's value or the label you can see in the snapshot.",
+        // Another choice undoes it; nothing typed is lost, unlike fill.
+        effect: "write",
         input: object({ ref: required, values: array(required).min(1), tab }),
         run: async ({ ref, values, tab: id }) => textResult(await selectOption(ref, values, id)),
     }),
     tool({
         name: "key",
         description: 'Press a key for the page as a whole: "Enter", "Escape", "PageDown". For typing into a field use fill.',
+        // Enter submits and Delete deletes, whatever has focus.
+        effect: "destructive",
         input: object({ key: required, tab }),
         run: async ({ key, tab: id }) => textResult(await pressKey(key, id)),
     }),
     tool({
         name: "scroll",
         description: "Scroll the page, when what you need has not been rendered into the snapshot yet. Counts as reading, not acting.",
+        // Moves the person's own view and renders more of the page, so a snapshot beside it would race.
+        effect: "write",
         input: object({
             direction: zEnum(["up", "down", "left", "right"]).default("down"),
             amount: number().int().min(1).max(10).default(1).describe("Roughly this many screens."),
@@ -103,6 +118,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "wait_for",
         description:
             "Wait for text to appear (or disappear) on the page, instead of guessing at a delay. This is what to use after a submit: wait for the thing you expect rather than snapshotting into a spinner.",
+        effect: "read",
         input: object({
             text: required.optional().describe("Wait until this appears."),
             textGone: required.optional().describe("Wait until this disappears."),
@@ -119,6 +135,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "screenshot",
         description:
             "The visible tab as an image. For canvas apps, maps and PDF viewers, where the page's own structure says nothing. Needs its own switch on this browser's card, which is off unless the owner turned it on.",
+        effect: "read",
         input: NO_ARGS,
         run: async () => {
             const shot = await screenshot();
@@ -129,6 +146,8 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "ask_access",
         description:
             "Ask the person to allow this browser's agent on a site. Their extension lights up with your reason; only they can grant it, because the browser refuses a permission that was not asked for by a person's own click. Call this and STOP — do not look for another way onto the site.",
+        // Replaces whatever request was already pending: there is one at a time.
+        effect: "write",
         input: object({
             origin: required.describe(`The site, as a host or an origin: "github.com" or "https://github.com".`),
             reason: required.describe("Why you need it, in one plain sentence. They read this."),
@@ -139,6 +158,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "connect_site",
         description:
             "Hand THIS site's signed-in session to the sandbox's own browser, so work can carry on after this browser is closed. Needs the owner's click in their browser every time, and a switch on this card. You never see what moved. Say plainly what it means before offering it: the sandbox will be signed in as them, and some sites end a session that starts appearing from a second place.",
+        effect: "destructive",
         input: object({
             account: required.describe("An existing connected-browser account in the sandbox, the one this session should land in."),
             tab,
@@ -149,6 +169,7 @@ const TOOLS: readonly McpTool<undefined>[] = [
         name: "lend_site",
         description:
             "Borrow a sandbox account's sign-in for THIS site into this browser, so the owner can finish a step no remote browser can do: a passkey, a hardware security key, an SSO or a bank that checks the device. Needs the owner's click every time, and the same switch as connect_site. Reach for this when you are stuck on such a step, not as a shortcut — and tell them to hand the session back with connect_site when they are done, or the sandbox keeps the older one.",
+        effect: "destructive",
         input: object({
             account: required.describe("The connected-browser account in the sandbox whose session should be borrowed."),
             tab,

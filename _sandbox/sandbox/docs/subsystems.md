@@ -90,14 +90,16 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   stranded resume records oldest first, and is the one `dispose` a purge or a discard goes through. The phase is
   `idle`, `running` (the only place a card parks; a chosen ending outranks one) or `rewinding` (the turn mutex's other
   holder); beside it sit the turn's readings and books, the land lease, the check verdict, the resume records and the
-  stop ladder, the steered flag and the steer checkpoint boxes, a restored card's grant, the nudge guard, and what the
-  card lists of its background jobs, watches, loop and workflow step. What a conversation holds that is no value
+  stop ladder, the steered flag and the steer checkpoint boxes, a restored card's grant, the nudge guard, the queue of
+  messages waiting for its next turn ([conversation-queue.ts](../src/agents/actor/conversation-queue.ts), written
+  through to the entry so a restart keeps it), and what the card lists of its background jobs, watches, loop and
+  workflow step. What a conversation holds that is no value
   `decide` could own sits on its actor as holdings
   ([conversation-holdings.ts](../src/agents/actor/conversation-holdings.ts)), each kind declared by the module whose
   records they are: the conversation's detached run (attachable for a minute past its end), parked cards and their
   waiters, spawned children and their seats, the subagent roster and each child's verification ledger, background jobs
   and their endings, armed watches and their timers, a running loop's Stop, the turns it started on other
-  conversations this hour. The registry indexes
+  conversations this hour, and what became of each message it took, by the id its sender gave it. The registry indexes
   every item's id to its holder, so a door holding only an id finds it, keeps what no conversation holds (a card raised
   outside any, the one poll for job exits) in a bucket no dispose reaches, and takes everything held by or filed about
   a conversation on its dispose. Every door is handed the actors it files into (a turn's hooks, a runtime's deps, a
@@ -194,6 +196,17 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   process's `environ`, `cmdline` and `cgroup` are read once in its life, which puts a scan of ~160 processes at
   2–5 ms. It is not the per-minute resource sample (`resource-metrics.ts`): that one is durable and always on,
   this one exists only while watched.
+- What fills the disk is measured only when somebody asks too, and cleaned only a category at a time:
+  [src/platform/resources/storage/](../src/platform/resources/storage) behind `/system/storage`. One table,
+  [storage-catalog.ts](../src/platform/resources/storage/storage-catalog.ts), names the category of every path on the
+  workspace and history volumes; the scan ([storage-scan.ts](../src/platform/resources/storage/storage-scan.ts), over
+  the link-refusing, one-filesystem walk in `storage-walk.ts`) sizes by it, the pure
+  [clean-plan.ts](../src/platform/resources/storage/clean-plan.ts) decides by it, and
+  [storage-clean.ts](../src/platform/resources/storage/storage-clean.ts) asks it again right before each removal.
+  [disk-storage.ts](../src/platform/resources/storage/disk-storage.ts) holds the one scan in flight (a second caller
+  joins it), the last one finished (in memory: a restart forgets it) and the one clean at a time, which cancels a scan
+  first. The clean's pnpm prune is the workspace janitor's own, handed down by `router.ts` so this module never imports
+  `workspace/`.
 - Memory nobody is using is given back, on four clocks that do not share a mechanism because the things they
   watch do not. `memory.high` is set to 90% of `memory.max` in
   [docker-entrypoint.sh](../docker-entrypoint.sh), from inside, where cgroup2 is delegated rw and docker has no flag
@@ -418,6 +431,14 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   themselves live in `@intentic/base/outside-text`, shared with webq's saved pages and fileq's sidecars, which
   must neutralize identically. [src/guard/turn-taint.ts](../src/guard/turn-taint.ts) is the one-way bit the
   wrapping sets and the command gate reads.
+- [src/guard/settings-hooks.ts](../src/guard/settings-hooks.ts) and [src/guard/hook-approvals.ts](../src/guard/hook-approvals.ts):
+  the hooks Claude Code would load for a turn from the user and project sources (settings files, skill, subagent
+  and command frontmatter, and the bytes of the scripts they name), folded to one digest the owner approves, with
+  the ledger and the waiting sets under the history root where no workspace write reaches. A hook runs outside the
+  command gate, so an unapproved set runs the turn with `disableAllHooks`
+  ([src/agent/run/harness/settings-hook-gate.ts](../src/agent/run/harness/settings-hook-gate.ts) applies it, and
+  keeps a turn whose hooks run to the set it started with). The same move for workspace extensions, whose approval
+  is the install moment a folder never had, is [src/extensions/extension-approvals.ts](../src/extensions/extension-approvals.ts).
 - [src/browser/sessions/session-store.ts](../src/browser/sessions/session-store.ts): whose browser an account lives in. An
   IDENTITY (one email address, a capability of its own) owns one persisted Chromium profile; the platform
   accounts born from it share that browser: which is what makes a site's "Continue with Google" one click:

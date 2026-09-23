@@ -4,6 +4,7 @@ import { recordConversationPrompt, recordPrompt } from "../../sessions/transcrip
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type ReplyOf, type SettleFlush } from "./conversation-decide.js";
 import { createHoldingsIndex, type Holding, type Holdings, type Share } from "./conversation-holdings.js";
+import { NO_QUEUE, type TurnQueue } from "./conversation-queue.js";
 import { type ConversationState, idleConversation, type ResumeRecords, type StrandedKind, writing } from "./conversation-state.js";
 
 // One actor per conversation, each holding the conversation's state and applying events to it through `decide`, the
@@ -30,6 +31,8 @@ export interface ConversationBooks {
     readonly broadcast: () => void;
     // Forgets the entries and every projection cache kept beside them; the actors' own half goes first, in dispose.
     readonly remove: (ids: readonly string[]) => Promise<void>;
+    // The queue onto the conversation's entry, for the next `persist` to write; nothing for one with no entry yet.
+    readonly queue: (id: string, queue: TurnQueue) => void;
 }
 
 // A sent event's answer at once, and again once the effects that outlive the send (a write, a probe) have run, for a
@@ -43,6 +46,8 @@ export interface ConversationActors {
     readonly send: <E extends ConversationEvent>(conversationId: string, event: E, now?: number) => Delivered<ReplyOf<E>>;
     // The actor's state, or undefined for a conversation this daemon has not heard from.
     readonly state: (conversationId: string) => ConversationState | undefined;
+    // What waits for the conversation's next turn, read back from its entry by the first ask after a restart.
+    readonly queued: (conversationId: string) => TurnQueue;
     readonly running: (conversationId: string) => boolean;
     // Narrower than `running`: a park or a chosen ending already counts as quiet enough to rebase under.
     readonly writing: (conversationId: string) => boolean;
@@ -120,6 +125,7 @@ const effectsOn = (books: ConversationBooks): { readonly [K in ConversationEffec
     compacted: (id) => books.compacted(id),
     "session-prompt": (_id, effect) => recordPrompt(effect.sessionId, effect.prompt),
     "conversation-prompt": (id, effect) => recordConversationPrompt(id, effect.prompt),
+    "queue-written": (id, effect) => books.queue(id, effect.queue),
 });
 
 export const createConversationActors = (books: ConversationBooks): ConversationActors => {
@@ -142,7 +148,7 @@ export const createConversationActors = (books: ConversationBooks): Conversation
         if (existing !== undefined) {
             return existing;
         }
-        const fresh: Actor = { state: idleConversation(), landChain: undefined, activeTurn: undefined, held: new Map() };
+        const fresh: Actor = { state: idleConversation(books.entry(id)?.queue), landChain: undefined, activeTurn: undefined, held: new Map() };
         actors.set(id, fresh);
         return fresh;
     };
@@ -181,6 +187,11 @@ export const createConversationActors = (books: ConversationBooks): Conversation
     return {
         send,
         state: (id) => actors.get(id)?.state,
+        // An actor is made only for a conversation whose entry kept something waiting: asking must not leave a trace.
+        queued: (id) => {
+            const stored = books.entry(id)?.queue;
+            return actors.get(id)?.state.queue ?? (stored === undefined || stored.items.length === 0 ? (stored ?? NO_QUEUE) : actorOf(id).state.queue);
+        },
         running,
         writing: (id) => {
             const actor = actors.get(id);

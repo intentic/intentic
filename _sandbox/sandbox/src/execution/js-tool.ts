@@ -1,5 +1,6 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../engines/claude-sdk.js";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { resolveCommandSecrets, type SecretAccess } from "../secrets/secret-access.js";
 import type { TurnPlacement } from "../agents/worktrees/isolation.js";
@@ -75,6 +76,8 @@ export const jsExecutionServer = (deps: JsToolDeps): McpSdkServerConfigWithInsta
                         .describe(`Seconds before the run is killed. Default ${JS_TIMEOUT_DEFAULT_S}, max ${JS_TIMEOUT_MAX_S}.`),
                 },
                 async (args) => ({ content: [{ type: "text" as const, text: await runJsTool(deps, args) }] }),
+                // A script can delete what it may write, and send anything it can reach.
+                { annotations: toolAnnotations("destructive") },
             ),
         ],
     });

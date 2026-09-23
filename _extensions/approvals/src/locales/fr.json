@@ -23,8 +23,11 @@
         "automationsHeld": "Automatisations retenues pour vous",
         "backToReviewNothing": "Retour à la revue : il ne se passe rien",
         "cancel": "Annuler",
+        "couldntApproveHooks": "Impossible d'approuver ces hooks.",
+        "couldntDismissHooks": "Impossible de laisser ces hooks désactivés.",
         "couldntReadApprovals": "Impossible de lire vos approbations.",
         "couldntReadHeldAutomations": "Impossible de lire les automatisations retenues.",
+        "couldntReadHooks": "Impossible de lire les hooks en attente d'approbation.",
         "couldntReadWontRun": "n'a pas pu être lu et ne sera pas exécuté :",
         "done": "Terminé",
         "doneEditing": "Fin de l'édition",
@@ -36,7 +39,15 @@
         "fileDeletedAgentWould": "Le fichier est supprimé. Votre agent devrait le proposer à nouveau.",
         "fired": "déclenchée",
         "goingAhead": "Part",
+        "hookLedgerUnreadable": "Le registre des hooks que vous avez approuvés est illisible : aucun hook de l'espace de travail ne s'exécute tant que vous n'en approuvez pas un à nouveau.",
+        "hookSetTitle": "Hook Claude Code | {count} hooks Claude Code",
+        "hooks": "Hooks",
+        "hooksFound": "Trouvé par un tour",
+        "hooksWaiting": "Hooks en attente de votre accord",
         "inProgress": "en cours",
+        "keepOff": "Laisser désactivés",
+        "keptOff": "laissés désactivés",
+        "letThemRun": "Les laisser s'exécuter",
         "needsReview": "Demande votre revue",
         "nothingWaitingPostsAgent": "Rien en attente. Les publications que votre agent veut publier, tout ce qu'il ne doit pas faire sans demander, et les automatisations réglées pour demander d'abord atterrissent toutes ici pour votre approbation.",
         "open": "Ouvrir",
@@ -63,6 +74,11 @@
     "extension": {
         "approvals": "Approbations",
         "waitingOn": "{count} vous attendent"
+    },
+    "hookSetBody": {
+        "filesPinned": "L'approbation couvre aussi ces fichiers, octet pour octet :",
+        "fromProjectSettings": ".claude/settings.json de l'espace de travail",
+        "fromUserSettings": "~/.claude/settings.json"
     },
     "postBody": {
         "showLess": "Afficher moins",

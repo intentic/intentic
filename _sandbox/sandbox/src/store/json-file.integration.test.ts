@@ -1,10 +1,10 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
 import { test, expect, afterEach } from "bun:test";
 import { z } from "zod";
-import { jsonFile, ManifestUnreadableError } from "./json-file.js";
+import { type JsonFile, jsonFile, ManifestUnreadableError, writeJsonFile } from "./json-file.js";
 
 const dirs: string[] = [];
 const tempFile = async (name = "state.json"): Promise<string> => {
@@ -108,6 +108,23 @@ test("concurrent updates serialize instead of losing each other", async () => {
     expect(await file.read()).toEqual(Array.from({ length: 20 }, (_, index) => index));
 });
 
+test("updates through separate handles on one file serialize against each other", async () => {
+    // Stores that build a handle per call share nothing but the path, spelled here once absolute and once relative.
+    const path = await tempFile();
+    const handles: JsonFile<number[]>[] = [numbers(path), numbers(relative(process.cwd(), path))];
+    await Promise.all(Array.from({ length: 20 }, (_, index) => handles[index % 2]?.update((current) => [...current, index])));
+    expect(await numbers(path).read()).toEqual(Array.from({ length: 20 }, (_, index) => index));
+});
+
+test("concurrent writes to one file each land whole: the file is one of them, never a splice", async () => {
+    const path = await tempFile();
+    // Large enough to take several write calls each, so writes sharing one temp file would interleave inside it.
+    const values = Array.from({ length: 8 }, (_, writer) => ({ writer, payload: String(writer).repeat(512 * 1024) }));
+    await Promise.all(values.map((value) => writeJsonFile(path, value)));
+    expect(values).toContainEqual(JSON.parse(await readFile(path, "utf8")));
+    expect(await readdir(join(path, ".."))).toEqual([`state.json`]);
+});
+
 test("an update that throws settles the queue, so the next one still runs", async () => {
     const file = numbers(await tempFile());
     await file.update(() => [1]);
@@ -157,4 +174,5 @@ test("writes leave no temp file behind, and apply the requested mode", async () 
     await file.update(() => [1]);
     // Only the rename target should exist; a leftover *.tmp means the swap never completed.
     expect(await readdir(join(path, ".."))).toEqual([`state.json`]);
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
 });

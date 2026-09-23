@@ -1,6 +1,7 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../engines/claude-sdk.js";
 import type { UsageTurn } from "@intentic/sandbox-contract";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { utcDay, type UsageStore } from "../usage/usage-store.js";
 import { type LevelName, type LogLineResult, readLogLines, readMetricSeries } from "./diagnostics.js";
@@ -161,6 +162,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     // Labeled "browser reports" so a browser's self-account reads as distinct from the daemon's own.
                     return ok(render(result, browser ? "browser reports" : "lines"));
                 },
+                { annotations: toolAnnotations("read") },
             ),
             sdk().tool(
                 "slow",
@@ -186,6 +188,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                     });
                     return ok(render(result, "slow spans"));
                 },
+                { annotations: toolAnnotations("read") },
             ),
             sdk().tool(
                 "turns",
@@ -242,6 +245,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                         ].join("\n"),
                     );
                 },
+                { annotations: toolAnnotations("read") },
             ),
             sdk().tool(
                 "resources",
@@ -282,6 +286,7 @@ export const createDiagnosticsServer = (deps: DiagnosticsToolDeps): McpSdkServer
                         ].join("\n"),
                     );
                 },
+                { annotations: toolAnnotations("read") },
             ),
         ],
     });

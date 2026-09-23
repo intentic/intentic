@@ -81,6 +81,16 @@ test("the tool list is what the model is shown, and every tool describes its own
     }
 });
 
+// The runtime reads these hints: a read-only tool may run beside other reads, and every other one runs alone.
+test("the tool list says which tools only read and which can lose something", async () => {
+    const answer = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/list" }, undefined)) as {
+        result: { tools: { name: string; annotations: { readOnlyHint: boolean; destructiveHint: boolean } }[] };
+    };
+    const { tools } = answer.result;
+    expect(tools.filter((tool) => tool.annotations.readOnlyHint).map((tool) => tool.name)).toEqual(["describe", "snapshot", "read", "wait_for", "screenshot"]);
+    expect(tools.filter((tool) => tool.annotations.destructiveHint).map((tool) => tool.name)).toEqual(["click", "fill", "key", "connect_site", "lend_site"]);
+});
+
 test("a site nobody granted refuses by name and points at the one thing that helps", async () => {
     const result = await call("snapshot");
     expect(result.isError).toBe(true);

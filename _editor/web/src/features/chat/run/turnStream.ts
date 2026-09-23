@@ -6,7 +6,7 @@ import { acquireStreamSlot } from "../../sandbox/client/streamBudget";
 import type { ChatAttachment } from "../transcript/transcript";
 
 // Attach reads a running turn's rows from the daemon and every change after (/agent/attach); the side channel
-// (/agent/steer, /agent/stop, /agent/reply) sends to it. This file owns the connection, slot budget, reconnect
+// (/agent/steer, /agent/reply) sends to it. This file owns the connection, slot budget, reconnect
 // backoff, and give-up rules; the Conversation decides what a fact means.
 
 // What this window handed to a turn, kept so a refusal can put it back in the composer.
@@ -158,8 +158,6 @@ export const followRun = async (
 // The side channel into a running turn, and what each message carries.
 export interface TurnControl {
     readonly reply: ProcedureInput<`agent.reply`>;
-    readonly steer: ProcedureInput<`agent.steer`>;
-    readonly stop: ProcedureInput<`agent.stop`>;
 }
 
 // Sends a turn-control message to the conversation's own box, per followRun's addressing rule: the wrong daemon would
@@ -168,8 +166,6 @@ export const postTurnControl = async <K extends keyof TurnControl>(at: string | 
     const options = { context: { at } };
     const send: { readonly [C in keyof TurnControl]: (input: TurnControl[C]) => Promise<unknown> } = {
         reply: (body) => sandboxRpc.agent.reply(body, options),
-        steer: (body) => sandboxRpc.agent.steer(body, options),
-        stop: (body) => sandboxRpc.agent.stop(body, options),
     };
     return send[control](input).then(
         () => true,

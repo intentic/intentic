@@ -1,5 +1,6 @@
 /* THE REFUSALS THAT TURN A WHOLE TURN AWAY AT THE DOOR: refused before the model saw a word, so nothing ran and the
-   message is still owed to somebody — the composer that sent it, or the sandbox that started the turn itself. */
+   message is still owed to somebody — the conversation's queue, held, for words a person sent, or the sandbox that
+   started the turn itself. */
 
 // A set rather than a run of case labels: what they share is a fact about the turn, not a shape.
 const TURNED_AWAY: ReadonlySet<string> = new Set([

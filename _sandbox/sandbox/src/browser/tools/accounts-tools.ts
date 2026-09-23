@@ -3,6 +3,7 @@ import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-
 import { errorMessage } from "@intentic/base/errors";
 import { sdk } from "../../engines/claude-sdk.js";
 import type { AgentEvent, BrowserConfig, Capability, IdentityConfig } from "@intentic/sandbox-contract";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import type { OpenAccountInput } from "../../capabilities/open-account.js";
 import { browserAccountPage, clearBrowserHelp, raiseBrowserHelp } from "../sessions/browser-sessions.js";
@@ -192,6 +193,8 @@ export const accountsServer =
                         await page.keyboard.type(value, { delay: 30 });
                         return ok(field === "username" ? `typed the stored username: ${value}` : "typed the stored password (not shown)");
                     },
+                    // A typed credential reaches the page, and nothing takes it back.
+                    { annotations: toolAnnotations("destructive") },
                 ),
                 sdk().tool(
                     "create_password",
@@ -227,6 +230,8 @@ export const accountsServer =
                             `generated and stored a strong password for "${account}": focus the site's password field and call type_credential to enter it`,
                         );
                     },
+                    // `replace` overwrites the stored password, and no copy of the old one is kept.
+                    { annotations: toolAnnotations("destructive") },
                 ),
                 sdk().tool(
                     "mark_connected",
@@ -240,6 +245,7 @@ export const accountsServer =
                         await markConnected(deps.root, account);
                         return ok(`"${account}" is marked connected: its browser opens signed in from now on`);
                     },
+                    { annotations: toolAnnotations("write") },
                 ),
                 sdk().tool(
                     "fetch_email_code",
@@ -287,6 +293,8 @@ export const accountsServer =
                             return fail(`could not read the mailbox: ${message}, check the mailbox entry on the identity's card`);
                         }
                     },
+                    // curl fetches BODY[], not BODY.PEEK[], so every mail it opens is marked seen.
+                    { annotations: toolAnnotations("write") },
                 ),
                 sdk().tool(
                     "open_account",
@@ -328,6 +336,7 @@ export const accountsServer =
                             return fail(errorMessage(error));
                         }
                     },
+                    { annotations: toolAnnotations("write") },
                 ),
                 sdk().tool(
                     "roster",
@@ -362,6 +371,7 @@ export const accountsServer =
                         const all = [...sections, ...tail];
                         return ok(all.length === 0 ? "this turn speaks for no identities or accounts" : all.join("\n\n"));
                     },
+                    { annotations: toolAnnotations("read") },
                 ),
                 ...(deps.attended
                     ? [
@@ -403,6 +413,8 @@ export const accountsServer =
                                           : `The owner could not help right now, note where you are stuck and continue with what you can.${note}`,
                                   );
                               },
+                              // The owner acts in the live browser, and a session holds one ask at a time.
+                              { annotations: toolAnnotations("write") },
                           ),
                       ]
                     : []),

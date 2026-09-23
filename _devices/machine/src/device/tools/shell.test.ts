@@ -1,7 +1,7 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 import { ScopeError } from "../policy.js";
-import { destructiveClasses, runCommand } from "./shell.js";
+import { type CommandResult, describeResult, destructiveClasses, runCommand } from "./shell.js";
 
 // `shell` used to check only WHERE a command would start (cwd, against the roots), never WHAT it would do, so
 // an agent could run `rm -rf ~/projects` and the sandbox's command gate never saw it (it hooks Bash and the JS
@@ -46,7 +46,7 @@ test("turning the switch on lets the same command through", async () => {
 // The whole point of one extra switch rather than five: a connected device stays useful with it off.
 test("ordinary work is untouched by the switch", async () => {
     const result = await runCommand({ command: "echo hello" }, scopes());
-    expect(result.stdout.trim()).toBe("hello");
+    expect(result.stdout.text.trim()).toBe("hello");
 });
 
 // Only the classes that destroy something are gated here; the rest are the sandbox rulebook's to hold, with a
@@ -97,4 +97,36 @@ test("the shell switch is still the outer question", async () => {
 test("a crossed command is still judged for what it does, and still needs the shell switch", async () => {
     await expect(runCommand({ command: "rm -rf /tmp/does-not-exist", in: "wsl:Arch" }, scopes())).rejects.toThrow(/Run destructive commands/);
     await expect(runCommand({ command: "echo hello", in: "windows" }, scopes({ shell: "off" }))).rejects.toThrow(/Run commands/);
+});
+
+const ran = (overrides: Partial<Pick<CommandResult, "exitCode" | "timedOut" | "lingering">> = {}): CommandResult => ({
+    exitCode: 0,
+    stdout: { text: "", dropped: 0 },
+    stderr: { text: "", dropped: 0 },
+    timedOut: false,
+    lingering: false,
+    ...overrides,
+});
+
+// The sandbox reads this answer back (hosts/device-commands.ts): a line starting "Exit code 0 (success)" is success, and
+// the streams sit under their fences. Whatever else the summary says has to leave both where they are.
+test("a cut answer says how much was left out, and still opens with the exit code over fenced streams", () => {
+    const text = describeResult(
+        { ...ran(), stdout: { text: "start\n… [4200 characters cut] …\nend", dropped: 4200 }, stderr: { text: "warning", dropped: 0 } },
+        60_000,
+    );
+    expect(text).toBe(
+        "Exit code 0 (success). Too long to return whole: 4200 characters from the middle of stdout are left out, where it says so." +
+            "\n--- stdout ---\nstart\n… [4200 characters cut] …\nend\n--- stderr ---\nwarning",
+    );
+});
+
+test("a command that left something running says its later output is not collected, and how to keep it", () => {
+    expect(describeResult(ran({ lingering: true }), 60_000)).toBe(
+        "Exit code 0 (success). It left something running in the background, and what that prints from now on is not collected: start background work with its output redirected to a file (`> out.log 2>&1`), or it may fail on its next write to a pipe nobody reads.",
+    );
+});
+
+test("a timed-out command is reported as stopped together with what it started", () => {
+    expect(describeResult(ran({ exitCode: null, timedOut: true }), 90_000)).toMatch(/^The command was stopped after 90s, and everything it started with it\./);
 });

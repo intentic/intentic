@@ -62,8 +62,6 @@ export interface StoredTab {
     // When the draft first went unsent, so its age survives reload instead of resetting to "just now".
     readonly draftAt?: number;
     readonly attachments: { name: string; path: string }[];
-    // Messages sent before the agent received them; restored as queued, not draft, and resent on settle.
-    readonly queued: { text: string; attachments: { name: string; path: string }[] }[];
 }
 
 // The one place a Conversation folds into its portable shape (StoredTab), read by both the tab-snapshot watch
@@ -94,10 +92,6 @@ export const snapshotTab = (conversation: Conversation): StoredTab => ({
     draft: conversation.draft.value,
     draftAt: conversation.draftAt.value,
     attachments: conversation.attachments.value.filter((file) => file.status === `done`).map((file) => ({ name: file.name, path: file.path })),
-    queued: conversation.turn.queued.value.map((message) => ({
-        text: message.text,
-        attachments: message.attachments.map((file) => ({ name: file.name, path: file.path })),
-    })),
 });
 
 // A sandbox's whole strip: open tabs, the focused one, and which are on screen (panes, column order). Coherent
@@ -115,8 +109,7 @@ const snapshotKey = (sandboxId: string): string => `intentic.chatTabs.${sandboxI
 // degrades at send time instead.
 const validProvider = (value: unknown): value is AgentProvider => typeof value === `string` && value !== ``;
 
-// Persisted shape of one attachment (upload metadata only; previewUrl/controller are client-session objects),
-// read from both draft and queued entries.
+// Persisted shape of one attachment (upload metadata only; previewUrl/controller are client-session objects).
 const readAttachments = (raw: unknown): { name: string; path: string }[] =>
     (Array.isArray(raw) ? (raw as Record<string, unknown>[]) : [])
         .filter((entry) => typeof entry[`name`] === `string` && typeof entry[`path`] === `string`)
@@ -223,9 +216,6 @@ const readTab = (raw: Record<string, unknown>): StoredTab | undefined => {
         registered: raw[`registered`] === true,
         draft: raw[`draft`],
         attachments: readAttachments(raw[`attachments`]),
-        queued: (Array.isArray(raw[`queued`]) ? (raw[`queued`] as Record<string, unknown>[]) : [])
-            .filter((entry) => typeof entry[`text`] === `string`)
-            .map((entry) => ({ text: entry[`text`] as string, attachments: readAttachments(entry[`attachments`]) })),
         ...readProvider(`provider`, raw[`provider`]),
         ...readMovedFrom(raw[`movedFrom`]),
         ...readText(`account`, raw[`account`]),

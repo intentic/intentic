@@ -51,16 +51,16 @@ export const refusalOf = (answer: CardAnswer): string => {
 };
 
 // What a landed answer does to the turn: a dismissed question ends it (both lines, "Question dismissed." and
-// "Stopped.", are the daemon's own); a denial with nothing to steer by stops it; anything else lets it generate again,
-// so whatever was queued behind the card can go in.
-export const afterReply = (answer: CardAnswer): "end" | "stop" | "drain" => {
+// "Stopped.", are the daemon's own); a denial with nothing to steer by stops it; anything else lets it go on, and the
+// daemon says into it whatever waited behind the card, for every window at once.
+export const afterReply = (answer: CardAnswer): "end" | "stop" | "go on" => {
     if (answer.kind === `question` && answer.cancelled === true) {
         return `end`;
     }
     if (answer.kind === `permission` && answer.decision === `deny` && answer.feedback === undefined) {
         return `stop`;
     }
-    return `drain`;
+    return `go on`;
 };
 
 // A plan's rejection feedback: what was typed, and the staged files as `@`-prefixed workspace paths, the one text field
@@ -81,7 +81,7 @@ export interface RepliesHost {
     readonly box: Ref<string | undefined>;
     readonly transcript: Pick<TranscriptView, "messages" | "attachCard">;
     readonly error: Ref<string | null>;
-    readonly turn: Pick<TurnClient, "drainQueue" | "stop" | "endedByReader">;
+    readonly turn: Pick<TurnClient, "stop" | "endedByReader">;
     // Answering a card the turn is parked on is an act on this chat, whichever card it is: it leaves the peek slot.
     readonly peek: Ref<boolean>;
 }
@@ -127,8 +127,6 @@ export class CardReplies {
             this.host.turn.endedByReader();
         } else if (next === `stop`) {
             this.host.turn.stop();
-        } else {
-            void this.host.turn.drainQueue();
         }
         return true;
     }

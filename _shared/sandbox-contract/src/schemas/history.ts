@@ -25,7 +25,8 @@ export interface SnapshotTurn {
 }
 export const SnapshotsListSchema = z.object({ snapshots: z.array(SnapshotSchema).describe("Every point you can go back to, newest first.") });
 // Restores the workspace to that turn's checkpoint, drops every message after it, and forgets the provider session so
-// the next turn opens fresh.
+// the next turn opens fresh. `messageId` is what makes `index` safe to act on: a position is only as current as the
+// transcript it was read from.
 export const RewindTurnSchema = z.object({
     conversationId: z.string().min(1).describe("Which conversation to rewind."),
     index: z
@@ -34,6 +35,12 @@ export const RewindTurnSchema = z.object({
         .nonnegative()
         .describe(
             "Which message to go back to, counting from the start. It is also how many messages survive: rewinding to the first keeps none of them and puts the files back to before it ran.",
+        ),
+    messageId: z
+        .string()
+        .min(1)
+        .describe(
+            "The id of the message at that position, as its row names it. If that position now holds a different message, nothing is rewound: the transcript has moved since you read it.",
         ),
 });
 export const RewindResultSchema = z.object({

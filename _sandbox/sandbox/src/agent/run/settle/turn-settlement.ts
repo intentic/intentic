@@ -4,7 +4,7 @@ import type { TurnPlacement } from "../../../agents/worktrees/isolation.js";
 import type { RefreshOptions } from "../../../usage/headroom.js";
 import type { VerifyNudge } from "../../verification/verify-nudge.js";
 import type { AgentRequest } from "../../providers/agent-request.js";
-import { ERROR_MESSAGE_CHARS, holdsAsStopped } from "../frames/classify-failure.js";
+import { ERROR_MESSAGE_CHARS, holdsAsStopped, rerunsFresh } from "../frames/classify-failure.js";
 import type { Attribution } from "../frames/frame-decorators.js";
 import type { TurnActivity } from "../frames/frame-effects.js";
 import type { TurnFailure, TurnFrames } from "../frames/frame-reducers.js";
@@ -99,9 +99,18 @@ export const daemonStopConversation = (input: TurnInput, provider: AgentProvider
         ? input.conversationId
         : undefined;
 
+// The hold an ending with nothing to repair leaves: a session past its window, which the pass re-runs fresh, or an
+// uncoded death, re-run as it was; undefined for every other ending.
+const rerunReason = (prompt: string, answered: boolean, failure: TurnFailure | undefined): "overflow" | "stopped" | undefined => {
+    if (rerunsFresh(prompt, failure)) {
+        return "overflow";
+    }
+    return holdsAsStopped(prompt, answered, failure) ? "stopped" : undefined;
+};
+
 // Why a turn is held, so a press re-runs it rather than appending a message after it: a spent allowance holding it
-// whole, a carried session a sibling account refused outright, or an uncoded death with nothing to repair. Nothing held
-// means the run got somewhere, which is the one thing that puts the stop ladder back at its first rung.
+// whole, a carried session a sibling account refused outright, or an ending with nothing to repair (rerunReason).
+// Nothing held means the run got somewhere, which is the one thing that puts the stop ladder back at its first rung.
 export const holdOf = (end: TurnEnd): TurnHold => {
     const { input } = end;
     if (input.conversationId === undefined) {
@@ -124,8 +133,9 @@ export const holdOf = (end: TurnEnd): TurnHold => {
             held: { input: turn, reason: "limit", ...opt("sessionId", sessionId), ran: true, carryRefused: true, move: { account: input.account, carry: false }, ...left },
         };
     }
-    if (holdsAsStopped(input.prompt, silence.answered, failure)) {
-        return { kind: "held", held: { input: turn, reason: "stopped", ...opt("sessionId", sessionId), ran: silence.answered, ...left } };
+    const reason = rerunReason(input.prompt, silence.answered, failure);
+    if (reason !== undefined) {
+        return { kind: "held", held: { input: turn, reason, ...opt("sessionId", sessionId), ran: silence.answered, ...left } };
     }
     return { kind: "got-somewhere", conversationId: input.conversationId };
 };

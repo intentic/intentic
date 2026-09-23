@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { VAULTED } from "@intentic/sandbox-contract";
+import { RESERVED_MCP_SERVER_NAMES, VAULTED } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 
 import { createApp } from "../app.js";
@@ -109,6 +109,27 @@ test("capabilities.rename refuses a name already in use, an unknown connection, 
     expect(await errorCode(client.capabilities.rename({ id: "docker", to: "containers" }))).toBe("CONFLICT");
     // A name the add form would refuse never reaches a handler: the wire schema is the same rule.
     expect(await errorCode(client.capabilities.rename({ id: "notes", to: "-nope" }))).toBe("BAD_REQUEST");
+});
+
+// An mcp capability's id becomes its `mcp__<id>__` server name, so it must not be one a daemon server already owns, or
+// a same-named external server would shadow it. Discovered from the contract's reserved list rather than enumerated.
+test("capabilities.add and rename refuse an id that collides with a daemon server, for a kind whose id becomes a server", async () => {
+    const client = clientFor(
+        createApp(
+            services({
+                workspace: tempWorkspace([]),
+                capabilities: memoryCapabilitiesStore([{ id: "notes", kind: "mcp", config: { url: "https://notes.example.com/mcp" } }]),
+            }),
+        ),
+    );
+    const addFailure = (id: string): Promise<string | undefined> =>
+        errorCode((async () => collect(await client.capabilities.add({ id, kind: "mcp", config: { url: "https://x.example.com/mcp" } })))());
+    for (const reserved of RESERVED_MCP_SERVER_NAMES) {
+        expect(await addFailure(reserved), `add ${reserved}`).toBe("CONFLICT");
+        expect(await errorCode(client.capabilities.rename({ id: "notes", to: reserved })), `rename to ${reserved}`).toBe("CONFLICT");
+    }
+    // An ordinary id for the same kind is not refused by this rule: the add streams and records it.
+    expect(await addFailure("komodo")).toBeUndefined();
 });
 
 test("capabilities.add composes the entry's image fragment into the overlay and nags for the rebuild; remove drops it", async () => {

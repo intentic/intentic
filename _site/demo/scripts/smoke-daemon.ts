@@ -163,6 +163,10 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             runDeviceAgentFlow: { id: host, op: `restart` },
             closeBrowser: { name: `smoke` },
             subagents: undefined,
+            storage: undefined,
+            scanStorage: undefined,
+            cancelStorageScan: undefined,
+            cleanStorage: { category: `logs` },
         },
         agents: {
             list: undefined,
@@ -189,7 +193,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
             attach: { conversationId: fleet.FEATURED_AGENT_ID },
             reply: { kind: `plan`, requestId: `smoke`, approve: true },
             steer: { conversationId: fleet.FEATURED_AGENT_ID, text: `Keep going.` },
-            stop: { conversationId: `smoke-run` },
+            stop: { conversationId: `smoke-run`, live: true },
             commands: {},
             refusals: undefined,
         },
@@ -322,6 +326,7 @@ const samplesOf = ({ fleet, automations, ci, workflows, loops, devices }: Awaite
         },
         approvals: {
             list: undefined,
+            hookRequests: undefined,
         },
     };
 };

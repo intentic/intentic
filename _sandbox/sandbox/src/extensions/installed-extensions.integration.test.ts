@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { STATE_DIR } from "@intentic/constants";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import type { Capability } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
 import type { Services } from "../composition.js";
@@ -10,6 +11,7 @@ import { unstubbed } from "@intentic/testing";
 import { listenerContribution, testConfig } from "../testing.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import { readWorkspaceFile } from "../workspace/files/workspace-files.js";
+import { approveExtension, forgetExtensionApproval } from "./extension-approvals.js";
 import { enabledExtensions, extensionBinDirsOf, extensionInventory, installedExtensions, listenerProvidersOf } from "./installed-extensions.js";
 
 const manifest = (publisher: string, name: string): object => ({
@@ -19,12 +21,15 @@ const manifest = (publisher: string, name: string): object => ({
     engines: { intentic: "^0.2.0" },
 });
 
+// Each workspace root keeps its own approvals beside it, so one test's yes is never another's.
+const historyOf = (root: string): string => `${root}-history`;
+
 const services = (root: string, extensionsDir: string, capabilities: Capability[]): Services =>
     unstubbed<Services>("services", {
         workspace: unstubbed<Services["workspace"]>("workspace", { root }),
         files: unstubbed<Services["files"]>("files", { read: readWorkspaceFile }),
         capabilities: unstubbed<Services["capabilities"]>("capabilities", { list: async () => capabilities }),
-        config: { ...testConfig, extensionsDir },
+        config: { ...testConfig, extensionsDir, historyRoot: historyOf(root) },
     });
 
 const writeManifest = async (dir: string, body: object): Promise<void> => {
@@ -47,9 +52,10 @@ test("enumerates baked extensions from the extensions dir and git-installed capa
     ]);
 });
 
-test("enumerates workspace extensions after the pinned sources, with their own switch", async () => {
+test("enumerates approved workspace extensions after the pinned sources, with their own switch", async () => {
     const root = mkdtempSync(join(tmpdir(), "installed-work-"));
     await writeManifest(join(workspaceExtensionsRoot(root), "notes"), manifest("acme", "notes"));
+    await approveExtension(historyOf(root), "acme.notes", ExtensionManifestSchema.parse(manifest("acme", "notes")));
     await writeEnablement(root, { "acme.notes": false });
 
     const result = await extensionInventory(services(root, "", []));
@@ -167,4 +173,78 @@ test("the switch is keyed by publisher.name, so it survives a git-installed exte
     const capabilities: Capability[] = [{ id: "my-ext-again", kind: "extension", config: { url: "https://x/y.git", ref: "a".repeat(40) } }];
 
     expect(await enabledExtensions(services(root, "", capabilities))).toEqual([]);
+});
+
+// A workspace extension that declares a backend, a PATH entry and a process: the powers approval is about.
+const toolbox = (extra: object = {}): object => ({
+    ...manifest("acme", "toolbox"),
+    server: "server.js",
+    contributes: { bin: "bin", processes: [{ name: "worker", command: "node worker.js", autoStart: true }] },
+    ...extra,
+});
+
+test("a workspace extension nobody approved waits apart: listed with its powers, never among what runs", async () => {
+    const root = mkdtempSync(join(tmpdir(), "installed-work-"));
+    await writeManifest(join(workspaceExtensionsRoot(root), "toolbox"), toolbox());
+    const host = services(root, "", []);
+
+    const inventory = await extensionInventory(host);
+    expect(inventory.extensions).toEqual([]);
+    expect(inventory.pending.map((extension) => ({ id: extension.id, approvedBefore: extension.approval.approvedBefore }))).toEqual([
+        { id: "acme.toolbox", approvedBefore: false },
+    ]);
+    expect(inventory.pending[0]?.approval.powers).toEqual({
+        added: [
+            "runs a backend bundle inside the daemon's extension host",
+            `a background process "worker" (starts on boot)`,
+            "puts its shipped tools on the agent's PATH",
+        ],
+        removed: [],
+        unchanged: [],
+    });
+    expect(await enabledExtensions(host)).toEqual([]);
+    expect(await extensionBinDirsOf(host)).toEqual([]);
+});
+
+test("approval pins the declared powers: a code edit keeps it, a new power sends it back naming what was added", async () => {
+    const root = mkdtempSync(join(tmpdir(), "installed-work-"));
+    const dir = join(workspaceExtensionsRoot(root), "toolbox");
+    await writeManifest(dir, toolbox());
+    const host = services(root, "", []);
+    await approveExtension(historyOf(root), "acme.toolbox", ExtensionManifestSchema.parse(toolbox()));
+    expect((await enabledExtensions(host)).map((extension) => extension.id)).toEqual(["acme.toolbox"]);
+
+    // Same powers, different code and a different version: the owner's own edit loop never re-asks.
+    await writeManifest(dir, { ...toolbox(), version: "1.1.0", contributes: { bin: "bin", processes: [{ name: "worker", command: "node v2.js" }] } });
+    await writeFile(join(dir, "server.js"), "export const activateServer = () => {};");
+    expect((await enabledExtensions(host)).map((extension) => extension.id)).toEqual(["acme.toolbox"]);
+
+    await writeManifest(dir, toolbox({ permissions: { daemon: ["GET /secrets"] } }));
+    const inventory = await extensionInventory(host);
+    expect(inventory.extensions).toEqual([]);
+    expect(inventory.pending[0]?.approval).toMatchObject({
+        approved: false,
+        approvedBefore: true,
+        powers: { added: ["its backend calls the daemon route GET /secrets"], removed: [] },
+    });
+});
+
+test("an approval ledger this build cannot read approves no workspace extension", async () => {
+    const root = mkdtempSync(join(tmpdir(), "installed-work-"));
+    await writeManifest(join(workspaceExtensionsRoot(root), "toolbox"), toolbox());
+    await approveExtension(historyOf(root), "acme.toolbox", ExtensionManifestSchema.parse(toolbox()));
+    await writeFile(join(historyOf(root), "extension-approvals.json"), "{ not json");
+
+    const inventory = await extensionInventory(services(root, "", []));
+    expect(inventory.extensions).toEqual([]);
+    expect(inventory.pending.map((extension) => extension.id)).toEqual(["acme.toolbox"]);
+});
+
+test("a forgotten approval puts the extension back in the queue, whatever it declares", async () => {
+    const root = mkdtempSync(join(tmpdir(), "installed-work-"));
+    await writeManifest(join(workspaceExtensionsRoot(root), "toolbox"), toolbox());
+    await approveExtension(historyOf(root), "acme.toolbox", ExtensionManifestSchema.parse(toolbox()));
+    await forgetExtensionApproval(historyOf(root), "acme.toolbox");
+
+    expect((await extensionInventory(services(root, "", []))).pending.map((extension) => extension.id)).toEqual(["acme.toolbox"]);
 });

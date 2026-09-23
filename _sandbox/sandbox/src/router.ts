@@ -37,11 +37,13 @@ import { createSettingsRoutes } from "./settings/settings.routes.js";
 import { createShareRoutes } from "./share/share.routes.js";
 import { createSkillsRoutes } from "./settings/skills.routes.js";
 import { createAreasRoutes } from "./areas/areas.routes.js";
+import { createStorageRoutes } from "./platform/resources/storage/storage.routes.js";
 import { createSystemRoutes } from "./system/system.routes.js";
 import { createUsageRoutes } from "./usage/usage.routes.js";
 import { createExitRoutes } from "./exit/exit.routes.js";
 import { createVpnRoutes } from "./vpn/vpn.routes.js";
 import { createWorkspaceRoutes } from "./workspace/workspace.routes.js";
+import { pruneStore } from "./workspace/watch/state-janitor.js";
 
 // The implemented oRPC router, the per-domain route factories assembled into the sandboxContract shape. The
 // OpenAPIHandler in app.ts serves it.
@@ -82,9 +84,13 @@ export const createRouter = (services: Services) => ({
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),
     secrets: createSecretsRoutes(services, () => providerSecretEntries(services)),
-    // The device procedures live in hosts/devices.routes.ts, beside the devices they act on; merged here, above both,
-    // so neither subsystem has to import the other's values.
-    system: { ...createSystemRoutes(services), ...createDeviceSystemRoutes(services) },
+    // The device procedures live in hosts/devices.routes.ts beside the devices they act on, the storage ones beside the
+    // disk; merged here, above all three, so no subsystem has to import another's values.
+    system: {
+        ...createSystemRoutes(services),
+        ...createDeviceSystemRoutes(services),
+        ...createStorageRoutes(services, (storeDir) => pruneStore(storeDir, services.logger)),
+    },
     usage: createUsageRoutes(services),
     vpn: createVpnRoutes(services),
     exit: createExitRoutes(services),

@@ -669,6 +669,26 @@ describe("agents registry", () => {
         expect(registry.get("c1")?.status).toBe("idle");
     });
 
+    // The queue is the one piece of a conversation's live state its entry carries: a restart must not lose a word of it.
+    it("keeps what waits in the conversation's queue across a restart, held as it was, and shows it before any turn runs", async () => {
+        const store = memoryStore();
+        const first = createFleet(store, standings(), presences());
+        await first.agents.init();
+        await beginTurn(first.conversations, turn(), 1_000);
+        const item = { id: "m-1", voice: "person", queuedAt: 1_500, turn: { conversationId: "c1", prompt: "and the docs", messageId: "m-1" } } as const;
+        await first.conversations.send("c1", { kind: "queue-joined", item }).settled;
+        await first.conversations.send("c1", { kind: "stop", ending: "stopped" }).settled;
+
+        const after = createFleet(store, standings(), presences());
+        await after.agents.init();
+        expect(after.agents.get("c1")?.queue).toEqual({
+            items: [{ id: "m-1", text: "and the docs", voice: "person", queuedAt: 1_500, revision: 1 }],
+            revision: 2,
+            paused: "stopped",
+        });
+        expect(after.conversations.queued("c1")).toEqual({ items: [{ ...item, revision: 1 }], revision: 2, paused: "stopped" });
+    });
+
     // Dismissal settles immediately, unlike a stop. The card must never read `running` in between, even though the
     // transitional `dismissing` publish is skipped and finish's own broadcast covers the gap.
     it("publishes a dismissal at the press, under the ending it is heading for", async () => {

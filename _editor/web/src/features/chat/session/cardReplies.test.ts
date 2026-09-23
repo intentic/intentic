@@ -92,7 +92,7 @@ const parkedOn = (...events: AgentEvent[]) => {
     }
     const transcript = new TranscriptClock(() => undefined);
     transcript.rebuild(fold.rows);
-    const turn = { drainQueue: mock(async () => undefined), stop: mock(), endedByReader: mock() };
+    const turn = { stop: mock(), endedByReader: mock() };
     const host = { box: ref<string | undefined>(`box-2`), transcript, error: ref<string | null>(null), turn, peek: ref(true) };
     const cardOf = (field: RequestField, requestId: string) => transcript.messages.value.find((row) => row[field]?.requestId === requestId)?.[field];
     return { host, turn, cardOf, replies: new CardReplies(host) };
@@ -122,7 +122,7 @@ describe(`reply`, () => {
             expect(chat.cardOf(`permission`, `p0`)).toMatchObject({ status: `pending` });
             expect(chat.host.peek.value).toBe(false);
             expect(chat.host.error.value).toBeNull();
-            expect(chat.turn.drainQueue).toHaveBeenCalledTimes(1);
+            // The turn goes on: what waited behind the card is the daemon's to say into it, for every window at once.
             expect(chat.turn.stop).not.toHaveBeenCalled();
             expect(chat.turn.endedByReader).not.toHaveBeenCalled();
         });
@@ -138,7 +138,7 @@ describe(`reply`, () => {
         expect(chat.host.error.value).toBe(`Could not record your decision: the offer may have expired.`);
         expect(chat.cardOf(`paymentOffer`, `r1`)).toMatchObject({ status: `pending` });
         expect(chat.replies.isReplying(`r1`)).toBe(false);
-        expect(chat.turn.drainQueue).not.toHaveBeenCalled();
+        expect(chat.turn.stop).not.toHaveBeenCalled();
 
         // The same press again is a fresh answer, not a repeat of the refused one.
         expect(await chat.replies.reply(`r1`, { kind: `payment_offer`, approve: true })).toBe(true);
@@ -188,26 +188,24 @@ describe(`reply`, () => {
         expect(asked.cardOf(`question`, `r1`)).toMatchObject({ status: `cancelled` });
         expect(asked.turn.endedByReader).toHaveBeenCalledTimes(1);
         expect(asked.turn.stop).not.toHaveBeenCalled();
-        expect(asked.turn.drainQueue).not.toHaveBeenCalled();
 
         const denied = parkedOn({ kind: `permission`, requestId: `r1`, toolName: `Bash` });
         await denied.replies.reply(`r1`, { kind: `permission`, decision: `deny` });
         expect(denied.cardOf(`permission`, `r1`)).toMatchObject({ status: `denied` });
         expect(denied.turn.stop).toHaveBeenCalledTimes(1);
         expect(denied.turn.endedByReader).not.toHaveBeenCalled();
-        expect(denied.turn.drainQueue).not.toHaveBeenCalled();
     });
 });
 
 describe(`afterReply`, () => {
-    it(`ends, stops or drains by the answer alone`, () => {
+    it(`ends, stops or lets the turn go on, by the answer alone`, () => {
         expect(afterReply({ kind: `question`, cancelled: true })).toBe(`end`);
-        expect(afterReply({ kind: `question`, answers: { "Which?": [`A`] } })).toBe(`drain`);
+        expect(afterReply({ kind: `question`, answers: { "Which?": [`A`] } })).toBe(`go on`);
         expect(afterReply({ kind: `permission`, decision: `deny` })).toBe(`stop`);
         // A denial with something to steer by carries the turn on instead.
-        expect(afterReply({ kind: `permission`, decision: `deny`, feedback: `use the other file` })).toBe(`drain`);
-        expect(afterReply({ kind: `permission`, decision: `once` })).toBe(`drain`);
-        expect(afterReply({ kind: `plan`, approve: false })).toBe(`drain`);
+        expect(afterReply({ kind: `permission`, decision: `deny`, feedback: `use the other file` })).toBe(`go on`);
+        expect(afterReply({ kind: `permission`, decision: `once` })).toBe(`go on`);
+        expect(afterReply({ kind: `plan`, approve: false })).toBe(`go on`);
     });
 });
 

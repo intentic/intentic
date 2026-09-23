@@ -42,6 +42,7 @@ const { useChat } = await import("./useChat");
 const { Conversation } = await import("../session/conversation");
 const { chatRun } = await import("./chatRun");
 const { claimedSummons, relaySummons, summonChat, summonTurn, wireSummons } = await import("./summon");
+const { snapshotTab } = await import("../tabs/tabSnapshot");
 const { receiveChatNote } = await import("./chatChannel");
 const { closedDrafts, forgetClosedDraft, keepClosedDraft } = await import("../drafts/closedDrafts");
 const { claimFloating, receiveFloatingNote } = await import("../../../shell/window/floating");
@@ -63,7 +64,6 @@ const setAside = (conversationId: string, draft: string): StoredTab => ({
     draft,
     draftAt: 1_700,
     attachments: [],
-    queued: [],
 });
 
 beforeEach(() => {
@@ -106,12 +106,13 @@ it(`carries the caret with a New agent summons, so every window's composer is re
     expect(chat.composerFocus.value).toBe(requests + 1);
 });
 
-// Queued messages are about to be sent; restoring them in another window would send them twice.
-it(`strips queued messages from the wire form`, () => {
+// A live chat crosses windows as the plain snapshot every window restores tabs from; what waits to be sent is the
+// daemon's, so no window carries a copy of it.
+it(`carries a live chat as its portable snapshot`, () => {
     const conversation = new Conversation();
-    conversation.turn.queued.value = [{ id: `q1`, text: `about to be sent`, attachments: [] }];
+    conversation.draft.value = `half a thought`;
     const wire = wireSummons({ kind: `reveal`, verb: `show`, entries: [conversation], focus: conversation.conversationId, caret: false });
-    expect(wire.kind === `reveal` && wire.entries[0]).toMatchObject({ conversationId: conversation.conversationId, queued: [] });
+    expect(wire.kind === `reveal` ? wire.entries[0] : undefined).toEqual(snapshotTab(conversation));
 });
 
 it(`ignores a summons for another sandbox's chats`, () => {
@@ -318,15 +319,15 @@ it(`leaves a carried turn alone in a window only shadowing the chat`, () => {
     expect(turnsSentHere()).toEqual([]);
 });
 
-it(`strips queued turns from the words a summons carries`, () => {
+it(`carries the words a summons sets aside as they are`, () => {
     const wire = wireSummons({
         kind: `reveal`,
         verb: `show`,
         entries: [setAside(`cnv-parked`, ``)],
         focus: `cnv-parked`,
         caret: false,
-        unsent: [{ ...setAside(`cnv-parked`, `still typing`), queued: [{ text: `about to be sent`, attachments: [] }] }],
+        unsent: [setAside(`cnv-parked`, `still typing`)],
     });
 
-    expect(wire.kind === `reveal` && wire.unsent).toMatchObject([{ draft: `still typing`, queued: [] }]);
+    expect(wire.kind === `reveal` ? wire.unsent : undefined).toEqual([setAside(`cnv-parked`, `still typing`)]);
 });

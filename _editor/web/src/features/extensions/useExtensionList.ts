@@ -29,7 +29,7 @@ export interface ExtensionEntry {
 
 export function useExtensionList() {
     const queryClient = useQueryClient();
-    const { extensions, invalid, setEnabled, create, remove, checkUpdates, updatesCheckedAt, isLoading, error } = useExtensions();
+    const { extensions, invalid, pending, setEnabled, approve, create, remove, checkUpdates, updatesCheckedAt, isLoading, error } = useExtensions();
     const { capabilities } = useCapabilities();
 
     // Removal empties three caches beyond the extension list: the capability grid loses the entries added from its
@@ -106,8 +106,10 @@ export function useExtensionList() {
     return {
         entries,
         invalid,
+        pending,
         unlisted,
         setEnabled,
+        approve,
         create,
         remove: removeExtension,
         checkUpdates,

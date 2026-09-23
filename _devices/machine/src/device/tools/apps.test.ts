@@ -1,7 +1,8 @@
 import type { DeviceScopes } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
+import { createIndicator, type Indicator } from "../indicator.js";
 import { ScopeError } from "../policy.js";
-import { fakeDesktop, fakeWindow } from "../testing.js";
+import { fakeDesktop, fakeIndicatorDeps, fakeWindow } from "../testing.js";
 import { describeWindows, focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./apps.js";
 
 // Operating applications, at the layer that decides what is allowed and what gets reported. The scope split:
@@ -18,6 +19,9 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     ...overrides,
 });
 
+// Over fakes: the real indicator would read the pause file in this machine's own home directory.
+const indicator = (): Indicator => createIndicator(fakeIndicatorDeps().deps);
+
 test("listing windows is looking, so it needs the screen grant", async () => {
     const fake = fakeDesktop();
     fake.windows = [fakeWindow({ id: "7", app: "chrome", title: "Gmail" })];
@@ -28,9 +32,9 @@ test("listing windows is looking, so it needs the screen grant", async () => {
 test("focusing is touching, so it needs the control grant, not the screen one", async () => {
     const fake = fakeDesktop();
     fake.windows = [fakeWindow({ id: "7", app: "chrome", title: "Gmail" })];
-    await expect(focusWindow(fake.desktop, "7", scopes({ control: "off" }))).rejects.toThrow(/mouse and keyboard/);
+    await expect(focusWindow(fake.desktop, "7", scopes({ control: "off" }), indicator())).rejects.toThrow(/mouse and keyboard/);
     expect(fake.calls).toEqual([]);
-    await focusWindow(fake.desktop, "7", scopes({ screen: "off" }));
+    await focusWindow(fake.desktop, "7", scopes({ screen: "off" }), indicator());
     expect(fake.calls).toEqual(["focus 7"]);
 });
 
@@ -38,7 +42,7 @@ test("focusing is touching, so it needs the control grant, not the screen one", 
 test("focus reports the window it actually landed on", async () => {
     const fake = fakeDesktop();
     fake.windows = [fakeWindow({ id: "1", app: "code", title: "editor" }), fakeWindow({ id: "2", app: "chrome", title: "Gmail" })];
-    const said = await focusWindow(fake.desktop, "2", scopes());
+    const said = await focusWindow(fake.desktop, "2", scopes(), indicator());
     expect(said).toContain("chrome, Gmail");
     expect(said).toMatch(/Typing now goes here/);
 });
@@ -56,15 +60,15 @@ test("the clipboard splits the same way: reading looks, writing changes", async 
     await expect(readClipboard(fake.desktop, scopes({ screen: "off" }))).rejects.toThrow(ScopeError);
     expect(await readClipboard(fake.desktop, scopes())).toBe("copied earlier");
 
-    await expect(writeClipboard(fake.desktop, "new", scopes({ control: "off" }))).rejects.toThrow(ScopeError);
-    await writeClipboard(fake.desktop, "new", scopes());
+    await expect(writeClipboard(fake.desktop, "new", scopes({ control: "off" }), indicator())).rejects.toThrow(ScopeError);
+    await writeClipboard(fake.desktop, "new", scopes(), indicator());
     expect(fake.clipboard).toBe("new");
 });
 
 // What was PUT on the clipboard is as likely to be a password as anything typed, so it is counted, not echoed.
 test("writing the clipboard reports a length, never the text", async () => {
     const fake = fakeDesktop();
-    const said = await writeClipboard(fake.desktop, "hunter2", scopes());
+    const said = await writeClipboard(fake.desktop, "hunter2", scopes(), indicator());
     expect(said).toContain("7 characters");
     expect(said).not.toContain("hunter2");
 });
@@ -76,7 +80,7 @@ test("an empty clipboard says so rather than answering with nothing", async () =
 
 test("focus refuses an empty id with the sentence that says where ids come from", async () => {
     const fake = fakeDesktop();
-    await expect(focusWindow(fake.desktop, "", scopes())).rejects.toThrow(/window list/);
+    await expect(focusWindow(fake.desktop, "", scopes(), indicator())).rejects.toThrow(/window list/);
 });
 
 // The rendering is what the model reads to choose a window, so it carries the id it must pass back, the app
@@ -100,4 +104,13 @@ test("the window list reads as something to choose from", () => {
 
 test("no windows is a sentence, not an empty string", () => {
     expect(describeWindows([])).toMatch(/No windows/);
+});
+
+test("a local pause holds focus and clipboard writes like any other input, before anything reaches the desktop", async () => {
+    const fake = fakeDesktop();
+    fake.windows = [fakeWindow({ id: "7" })];
+    const paused = createIndicator(fakeIndicatorDeps({ paused: true }).deps);
+    await expect(focusWindow(fake.desktop, "7", scopes(), paused)).rejects.toThrow(/paused by the person at this computer/);
+    await expect(writeClipboard(fake.desktop, "new", scopes(), paused)).rejects.toThrow(ScopeError);
+    expect(fake.calls).toEqual([]);
 });

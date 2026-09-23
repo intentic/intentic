@@ -7,7 +7,7 @@ import { z } from "zod";
 import { audit } from "./audit.js";
 import { assertScope, ScopeError } from "./policy.js";
 import { describeText } from "./tools/describe.js";
-import { listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
+import { editTextFile, listDirectory, readTextFile, trashFile, writeTextFile } from "./tools/files.js";
 import { focusWindow, listWindows, openTarget, readClipboard, writeClipboard } from "./tools/apps.js";
 import { clickElement, fillElement, listTabs, openPage, pressKey, readPage, selectTab, snapshotPage } from "./tools/browser.js";
 import { act, describeAction, settle } from "./tools/device.js";
@@ -67,13 +67,15 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "describe",
         description:
             "What this device is: OS and version, CPU architecture, the exact shell run_command uses, the home directory, the folders you may touch, and which permissions are on. Call this once before your first command here, it is the difference between writing for this machine and guessing.",
+        effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await describeText(scopes)),
     }),
     tool({
         name: "run_command",
         description:
-            "Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). On a Windows PC with WSL, `in: \"wsl:<distro>\"` runs the command inside that distro through sh -lc instead, and inside a WSL distro `in: \"windows\"` runs it in PowerShell on the Windows side: the same PC, the other environment, with no quoting through the first shell. There is no terminal for anyone to type into: a command that prompts will fail rather than wait. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device's \"Run destructive commands\" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody's laptop.",
+            "Run a command on this device and get back its exit code, stdout and stderr. The shell is PowerShell on Windows and the user's login shell elsewhere (see describe). On a Windows PC with WSL, `in: \"wsl:<distro>\"` runs the command inside that distro through sh -lc instead, and inside a WSL distro `in: \"windows\"` runs it in PowerShell on the Windows side: the same PC, the other environment, with no quoting through the first shell. There is no terminal for anyone to type into: a command that prompts will fail rather than wait. At the deadline the command is stopped together with everything it started. The call returns once the command itself exits: a process it leaves running in the background keeps running, but nothing it prints after that is collected, so start one with its output redirected to a file (`> out.log 2>&1`). Very long output comes back as its start and its end, with the middle cut and counted. Commands that DELETE (a recursive delete, a formatted disk, a removed Docker volume) need this device's \"Run destructive commands\" switch, which is off unless its owner turned it on: they are refused with a message naming the switch, so ask the owner to turn it on rather than looking for a spelling that gets past it. Prefer one script that does the whole job over many small calls, every call is a network round trip to somebody's laptop.",
+        effect: "destructive",
         input: z.object({
             command: required.describe("The command line to run, in the shell of the environment it runs in."),
             cwd: required
@@ -103,20 +105,58 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
     }),
     tool({
         name: "read_file",
-        description: "Read a text file on this device. Bounded by the folders this machine allows.",
-        input: z.object({ path: required }),
-        run: async ({ path }, scopes) => textResult(await readTextFile(path, scopes)),
+        description:
+            "Read a text file on this device, within the folders this machine allows. Answers with the text, then a note giving the file's revision, which write_file and edit_file need to change it, and, when you read part of it, how much remains and the offset to continue from. Without offset and limit it is the whole file; one too long for a single answer is refused with its line count, to be read in parts. Line endings come back as LF whatever the file uses. Binary files are refused.",
+        effect: "read",
+        input: z.object({
+            path: required,
+            offset: z.int().positive().optional().describe("The line to start from, counting from 1. Default 1."),
+            limit: z.int().positive().optional().describe("How many lines to read from there. Default: to the end of the file."),
+        }),
+        run: async ({ path, offset, limit }, scopes) => {
+            const read = await readTextFile(path, { offset, limit }, scopes);
+            // The text alone in the first block, which is where a program reading a file through this tool looks for it.
+            return {
+                content: [
+                    { type: "text", text: read.text },
+                    { type: "text", text: read.note },
+                ],
+                isError: false,
+            };
+        },
     }),
     tool({
         name: "write_file",
         description:
-            "Create a file or replace its contents. Requires the 'Create and change files' permission, which is OFF unless the user turned it on. Overwrites whole: read first if you mean to edit.",
-        input: z.object({ path: required, content: z.string() }),
-        run: async ({ path, content }, scopes) => textResult(await writeTextFile(path, content, scopes)),
+            "Create a file, or replace a file's whole contents. Replacing a file that exists needs the `revision` your last read_file, write_file or edit_file of it answered with, and is refused if the file has changed since; creating one needs none. A replaced file keeps its encoding (UTF-8, UTF-8 with BOM, UTF-16LE) and its line endings (CRLF or LF), whatever you send. To change part of a file, edit_file is cheaper and safer. Requires the 'Create and change files' permission, which is OFF unless the user turned it on.",
+        // Replaces a whole file on a revision a partial read also gives, so what it replaced may be nowhere else.
+        effect: "destructive",
+        input: z.object({
+            path: required,
+            content: z.string(),
+            revision: required.optional().describe("The file's revision from read_file. Required to replace a file that exists; omit it to create one."),
+        }),
+        run: async ({ path, content, revision }, scopes) => textResult(await writeTextFile(path, content, revision, scopes)),
+    }),
+    tool({
+        name: "edit_file",
+        description:
+            "Replace one exact piece of a file's text with another. `old_string` has to appear in the file exactly once, whitespace and indentation included, as read_file shows it (LF line endings): include a line or two around it to make it unique. Needs the `revision` your last read_file, write_file or edit_file of the file answered with, and is refused if the file has changed since; it answers with the new revision, so a run of edits needs no re-read. The file keeps its encoding and line endings. Requires the 'Create and change files' permission, which is OFF unless the user turned it on.",
+        // What it replaces is in the call itself, so the reverse edit undoes it.
+        effect: "write",
+        input: z.object({
+            path: required,
+            old_string: required.describe("The text to replace, exactly as read_file shows it."),
+            new_string: z.string().describe("What replaces it."),
+            revision: required.describe("The file's revision from read_file, or from the write or edit that last changed it."),
+        }),
+        run: async ({ path, old_string: oldString, new_string: newString, revision }, scopes) =>
+            textResult(await editTextFile(path, { oldString, newString, revision }, scopes)),
     }),
     tool({
         name: "list_dir",
         description: "List a directory, with each entry's kind, size and modification time.",
+        effect: "read",
         input: z.object({ path: required }),
         run: async ({ path }, scopes) => textResult(JSON.stringify(await listDirectory(path, scopes), undefined, 2)),
     }),
@@ -124,6 +164,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "trash_file",
         description:
             "Move a file into this agent's trash folder, from which the user can restore it. There is deliberately no permanent-delete tool. Requires the 'Create and change files' permission.",
+        // Nothing but the owner empties that folder, so the move is always undone by moving it back.
+        effect: "write",
         input: z.object({ path: required }),
         run: async ({ path }, scopes) => textResult(await trashFile(path, scopes)),
     }),
@@ -131,6 +173,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "list_windows",
         description:
             "Every window open on this device: its app, title, size, position, and which one has focus. Call this before any GUI work, it is how you find the application you were asked about, and how you know where your typing will land. Requires the 'See the screen' permission.",
+        effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await listWindows(desktop(), scopes)),
     }),
@@ -138,6 +181,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "focus_window",
         description:
             "Bring a window to the front and give it the keyboard, by the id from list_windows. ALWAYS do this before typing: text goes to whatever window has focus, not to where the pointer is. Requires the 'Use the mouse and keyboard' permission.",
+        effect: "write",
         input: z.object({ id: required }),
         run: async ({ id }, scopes) => textResult(await focusWindow(desktop(), id, scopes)),
     }),
@@ -145,6 +189,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "open",
         description:
             "Start an application, or open a URL or file with whatever this device has registered for it: the usual first step of a task ('open the browser at this page'). Use this rather than working out the platform's own incantation. Requires the 'Run commands' permission.",
+        // Opening a script or an installer runs it.
+        effect: "destructive",
         input: z.object({ target: required.describe("An application name, a file path, or a URL.") }),
         run: async ({ target }, scopes) => textResult(await openTarget(desktop(), target, scopes)),
     }),
@@ -152,6 +198,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "clipboard",
         description:
             "Read or replace this device's clipboard: the reliable way to move text between applications, and often easier than reading it off a screenshot. Reading needs 'See the screen'; writing needs 'Use the mouse and keyboard'.",
+        // A write replaces what the owner had copied, which nothing else keeps.
+        effect: "destructive",
         // `text` is required by the write and meaningless to the read, so it rides as a rule on the object rather than
         // splitting into two schemas: a union would publish `anyOf` at the root, not the `type: "object"` an MCP
         // client expects.
@@ -173,6 +221,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "browser_open",
         description:
             "Open a page in a browser on this device and answer with what is on it: the page's title, its URL, and every element you can click or type into, each with a reference like [e12]. THIS IS THE RIGHT WAY TO USE A WEBSITE, act on elements by reference, never by clicking pixels, because references survive scrolling, resizing and re-rendering. The browser is a separate instance with its own profile, so the user's own tabs and session are untouched; the first time it opens they may need to sign in. Requires the 'Run commands' permission.",
+        effect: "write",
         input: z.object({ url: required.describe("The page to open. A bare host like example.com is fine.") }),
         run: async ({ url }, scopes) => textResult(await openPage(web(), url, scopes)),
     }),
@@ -180,6 +229,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "browser_snapshot",
         description:
             "What the current page shows right now, with fresh [e…] references. Take one after anything that might have changed the page: references from an older snapshot are refused rather than clicking the wrong thing. Requires the 'See the screen' permission.",
+        effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await snapshotPage(web(), scopes)),
     }),
@@ -187,6 +237,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "browser_read",
         description:
             "The current page as readable text: what a person would get by selecting all of it. Use this to ANSWER QUESTIONS about a page; use browser_snapshot when you intend to act on it. Requires the 'See the screen' permission.",
+        effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await readPage(web(), scopes)),
     }),
@@ -194,6 +245,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "browser_click",
         description:
             "Click an element by its [e…] reference from the last snapshot. Answers with the page as it stands afterwards, so you see the result without asking. Requires the 'Use the mouse and keyboard' permission.",
+        // A click can buy, send or delete on any site the owner signed into in that browser.
+        effect: "destructive",
         input: z.object({ ref: required }),
         run: async ({ ref }, scopes) => textResult(await clickElement(web(), ref, scopes)),
     }),
@@ -201,6 +254,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "browser_fill",
         description:
             "Type into a field by its [e…] reference: replaces what is there, and fires the events a page's own JavaScript listens for (setting a value without them is how a filled form submits empty). Set submit to press Enter afterwards. Requires the 'Use the mouse and keyboard' permission.",
+        // Replaces what the field held, and `submit` sends the form.
+        effect: "destructive",
         input: z.object({
             ref: required,
             text: z.string(),
@@ -212,6 +267,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "browser_key",
         description:
             'Press a key on the page as a whole: "Return", "Escape", "Tab". For typing into a field use browser_fill. Requires the \'Use the mouse and keyboard\' permission.',
+        // Enter submits and Delete deletes, whatever has focus.
+        effect: "destructive",
         input: z.object({ key: required }),
         run: async ({ key }, scopes) => textResult(await pressKey(web(), key, scopes)),
     }),
@@ -219,6 +276,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "browser_tabs",
         description:
             "Every tab open in that browser, and which one these tools are acting on. Pass an id to `select` to switch. Reading the list needs 'See the screen'; switching needs 'Use the mouse and keyboard'.",
+        // Listing reads, but `select` switches the tab every other browser tool acts on.
+        effect: "write",
         input: z.object({ select: required.optional().describe("The id of the tab to switch to. Omit to just list them.") }),
         run: async ({ select }, scopes) => textResult(select === undefined ? await listTabs(web(), scopes) : await selectTab(web(), select, scopes)),
     }),
@@ -226,6 +285,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "device",
         description:
             "Use this device's mouse and keyboard: click what is on the screen, type into the focused window, press a key combination, scroll, drag. Coordinates are PIXELS IN THE LAST SCREENSHOT, take one first and read them off it. Every action answers with a fresh screenshot so you can see what happened. Requires the 'Use the mouse and keyboard' permission, which is OFF unless the user turned it on. Prefer a command over the GUI when both would work: a command is exact, and a click is a guess about where something is.",
+        // The owner's own mouse and keyboard: anything they could do at the desk, a terminal included.
+        effect: "destructive",
         input: z.object({
             action: z.enum([
                 "mouse_move",
@@ -264,6 +325,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "screenshot",
         description:
             "Capture what is on this device's screen right now, as an image. Use it to read a dialog, check on a window, or see what the user is describing. Requires the 'See the screen' permission.",
+        effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => await screenshotResult(scopes),
     }),
@@ -271,6 +333,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "list_sandboxes",
         description:
             "The Intentic sandboxes on this device, as JSON: each one's slug, whether it is running, whether its tunnel is up, and its share of this machine under `resources` (memory cap in bytes, CPU cap, privileged, GPU, and which of those the approved environment demands versus the owner asked for). Only sandbox containers; nothing else on the machine is listed. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+        effect: "read",
         input: NO_ARGS,
         run: async (_args, scopes) => textResult(await listSandboxes(scopes)),
     }),
@@ -278,6 +341,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "manage_sandbox",
         description:
             "Start, stop or restart one Intentic sandbox on this device, by its slug from list_sandboxes. Stopping one interrupts whoever is working in it, and stopping the sandbox you are calling from severs your own connection. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
+        effect: "write",
         input: z.object({ op: SandboxOpSchema, slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ op, slug }, scopes) => textResult(await manageSandbox(op, slug, scopes)),
     }),
@@ -287,6 +351,8 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "swap_sandbox",
         description:
             "Move one Intentic sandbox on this device onto a different image: 'update' pulls the newest image of its release channel, 'rollback' returns it to the image it ran before its last update, and 'rebuild' rebuilds the owner-approved environment overlay. Files (/work) and history are kept in all three. Takes MINUTES, it pulls an image and recreates the container, and the sandbox is down while it happens. 'prepare' is the exception and the one to reach for first: it does the downloading and building of the next update WITHOUT touching the container, so the sandbox keeps running throughout and the 'update' that follows is a restart of seconds instead of a wait of minutes. Requires the 'Manage sandboxes on this device' permission.",
+        // Files and history are kept, and 'rollback' returns the image an update replaced.
+        effect: "write",
         input: z.object({
             op: SandboxSwapSchema,
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
@@ -298,6 +364,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "reshape_sandbox",
         description:
             "Change how much of this device one Intentic sandbox may use, or its privileges: a memory cap in whole GiB, a CPU cap in whole cores, whether the container runs privileged, and whether this device's NVIDIA GPUs are passed through. Give only what should change; `null` for a cap means back to the default (the memory share derived from this machine; every core). The sandbox RESTARTS onto the same image — about a minute, whoever is working in it is interrupted, and reshaping the sandbox you are calling from severs your own connection until it is back — and the new values live on the container, surviving every later update. A privilege the sandbox's approved environment demands (the Docker capability's --privileged) cannot be withdrawn here, only the owner's own ask. Requires the 'Manage sandboxes on this device' permission.",
+        effect: "write",
         input: SandboxResourcesAskFieldsSchema.extend({ slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ slug, ...ask }, scopes) => textResult(await reshapeSandbox(slug, ask, scopes, () => {})),
     }),
@@ -305,6 +372,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "remove_sandbox",
         description:
             "Remove one Intentic sandbox from this device: its container stops and leaves the listing. Its files and its history are kept for a week, so `ic sandbox restore <slug>` on the device brings it back whole; after that week they are deleted for good. This is not what stopping it does, so confirm with the user before calling it. Requires the 'Manage sandboxes on this device' permission, which is OFF unless the user turned it on.",
+        effect: "destructive",
         input: z.object({ slug: required.describe("The sandbox's slug, from list_sandboxes.") }),
         run: async ({ slug }, scopes) => textResult(await removeSandbox(slug, scopes, () => {})),
     }),
@@ -312,6 +380,7 @@ const TOOLS: readonly McpTool<DeviceScopes>[] = [
         name: "sandbox_logs",
         description:
             "The tail of one Intentic sandbox's container log on this device: how you find out why it will not start or what it did before it stopped. Requires 'Run commands' or 'Manage sandboxes on this device'.",
+        effect: "read",
         input: z.object({
             slug: required.describe("The sandbox's slug, from list_sandboxes."),
             // The prose and the rule come off the same two numbers, so the sentence the model reads cannot promise a

@@ -11,6 +11,7 @@ import {
     type FailureWrite,
     holdsAsStopped,
     outageFrame,
+    rerunsFresh,
 } from "./classify-failure.js";
 
 const NOW = 1_800_000_000_000;
@@ -374,6 +375,76 @@ describe("an uncoded death", () => {
             autoResume: "available",
         });
     });
+});
+
+describe("a session past its window", () => {
+    const overflow: ErrorFrame = { kind: "error", code: "context-overflow", message: "Prompt is too long" };
+
+    // Resuming the session that overflowed only overflows again, so no policy is asked: the daemon opens a fresh one.
+    test("is promised a fresh session at once, on no policy, asking nothing", async () => {
+        const queries = answering({ policy: "wait" });
+        const plan = await classifyFailure(overflow, context(), queries);
+        expect(plan).toStrictEqual({
+            ending: "fresh-session",
+            frame: {
+                kind: "error",
+                code: "context-overflow",
+                message:
+                    "Prompt is too long. Resuming this session would only overflow again, so the turn is being sent again in a fresh session that carries the conversation so far and where the work stands.",
+                held: { ran: true },
+                autoResume: "scheduled",
+            },
+            writes: [],
+            log: {
+                level: "error",
+                message: "turn failed",
+                fields: {
+                    turnId: "t-1",
+                    provider: "claude",
+                    harness: "native",
+                    code: "context-overflow",
+                    model: "opus",
+                    account: "acct",
+                    actor: "ada@example.com",
+                    conversationId: "c-1",
+                    sessionId: "s-1",
+                    reason: "Prompt is too long",
+                },
+            },
+            walls: {},
+        });
+        expect(queries.asked).toStrictEqual([]);
+    });
+
+    // At most once per turn: the fresh re-run overflowing as well means no session can hold the turn as asked.
+    test("on the fresh re-run itself ends, telling the reader to split the task", async () => {
+        const rerun = context({ turn: { prompt: `${RESUME_NOTES.overflow}\n\nship it`, conversationId: "c-1" } });
+        const plan = await classifyFailure({ ...overflow, message: "Prompt is too long." }, rerun, answering());
+        expect(plan.ending).toBe("bare");
+        expect(plan.frame).toStrictEqual({
+            kind: "error",
+            code: "context-overflow",
+            message:
+                "Prompt is too long. A fresh session could not hold this turn either: the message, an attachment or a tool output it read is larger than the model's context window. Split the task into smaller steps, or read large files and command output in parts.",
+        });
+        expect(plan.walls).toStrictEqual({});
+    });
+
+    test("without a conversation goes out bare, in the provider's words", async () => {
+        const plan = await classifyFailure(overflow, context({ turn: { prompt: "ship it" } }), answering());
+        expect(plan.ending).toBe("bare");
+        expect(plan.frame).toBe(overflow);
+    });
+});
+
+test.each([
+    ["a first overflow", "go", { code: "context-overflow" }, true],
+    ["the fresh re-run's own overflow", `${RESUME_NOTES.overflow}\n\ngo`, { code: "context-overflow" }, false],
+    ["an overflow on a stopped resume", `${RESUME_NOTES.stopped}\n\ngo`, { code: "context-overflow" }, true],
+    ["an uncoded death", "go", { code: undefined }, false],
+    ["no failure", "go", undefined, false],
+] as const)("re-runs fresh: %s", (_case, prompt, failure, fresh) => {
+    expect(rerunsFresh(prompt, failure)).toBe(fresh);
 });
 
 test("a coded failure with a remedy of its own is logged as a failure and goes out bare", async () => {

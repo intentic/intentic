@@ -1,5 +1,6 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import type { SecretAccess } from "../../secrets/secret-access.js";
 import { type NamedSecret, secretReference } from "../../secrets/secret-registry.js";
@@ -78,6 +79,8 @@ export const secretsServer = (deps: SecretsToolsDeps): McpSdkServerConfigWithIns
                     deps.secrets.used({ name, lane: "browser", detail: host, ...(approvedBy !== undefined ? { approvedBy } : {}) });
                     return ok(`typed ${secretReference(name)} into the focused field on ${host} (value not shown)`);
                 },
+                // A typed secret reaches the page, and nothing takes it back.
+                { annotations: toolAnnotations("destructive") },
             ),
         ],
     });

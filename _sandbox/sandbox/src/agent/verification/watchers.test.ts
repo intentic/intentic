@@ -173,15 +173,20 @@ describe("watchers", () => {
         expect(harness.doors.started).toHaveLength(0);
     });
 
-    it("delivery retries until the conversation is free: an unsteerable live turn only delays the wake", async () => {
+    // The conversation delivers it once free, so the watch hands it over once and is done with it.
+    it("a turn that takes no words queues the report in its conversation, and the watch never sends it twice", async () => {
         harness.doors.busy = Number.POSITIVE_INFINITY;
         await armWatcher(specOf());
         harness.check = { exitCode: 0, output: "done" };
         await advanceTimersByTimeAsync(10_000);
+        expect(harness.doors.queued).toHaveLength(1);
+        expect(harness.doors.queued[0]?.turn.prompt).toMatch(/^Watch fired/);
         expect(harness.doors.started).toHaveLength(0);
         harness.doors.busy = 0;
         await advanceTimersByTimeAsync(15_000);
-        expect(harness.doors.started).toHaveLength(1);
+        expect(harness.doors.queued).toHaveLength(1);
+        expect(harness.doors.started).toHaveLength(0);
+        expect(await harness.journal.list()).toEqual([]);
     });
 
     it("the wake reproduces the arming turn's identity and posture", async () => {
@@ -488,7 +493,7 @@ describe("watchers", () => {
         });
 
         it("delivers a wake the daemon died in the middle of delivering", async () => {
-            harness.doors.busy = Number.POSITIVE_INFINITY;
+            harness.doors.stuck = true;
             await armWatcher(specOf({ timeoutSeconds: 600 }));
             harness.check = { exitCode: 0, output: "conclusion: success" };
             await advanceTimersByTimeAsync(10_000);

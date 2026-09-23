@@ -52,6 +52,11 @@ const REFUSING_CODES: ReadonlySet<string> = new Set(["rate_limit", "claude-token
 export const holdsAsStopped = (prompt: string, providerAnswered: boolean, failure: { readonly code: string | undefined } | undefined): boolean =>
     failure !== undefined && failure.code === undefined && (providerAnswered || !prompt.startsWith(RESUME_NOTES.stopped));
 
+// A session past the model's window is re-run once, in a fresh session carrying the hand-off; a re-run that overflows
+// as well has no session left to try. Asked by the frame and by the settle, which must agree.
+export const rerunsFresh = (prompt: string, failure: { readonly code?: string | undefined } | undefined): boolean =>
+    failure?.code === "context-overflow" && !prompt.startsWith(RESUME_NOTES.overflow);
+
 // Everything classifying one failure frame reads, as it stood when the frame arrived.
 export interface FailureContext {
     readonly turn: TurnInput;
@@ -104,8 +109,9 @@ export type FailureWrite =
     | { readonly kind: "model-cooldown"; readonly provider: AgentProvider; readonly model: string; readonly cooldown: StoredCooldown };
 
 export interface FailurePlan {
-    // Which dressing the frame took: a spent allowance, an outage's retry, a stopped hold, a promised re-mint, or none.
-    readonly ending: "limit" | "outage" | "stopped" | "auto-resume" | "bare";
+    // Which dressing the frame took: a spent allowance, an outage's retry, a stopped hold, a promised re-mint, a
+    // promised fresh session, or none.
+    readonly ending: "limit" | "outage" | "stopped" | "auto-resume" | "fresh-session" | "bare";
     readonly frame: ErrorFrame;
     readonly writes: readonly FailureWrite[];
     // An unclassified failure logs at `error`; an already-filed refusal at `warn`.
@@ -283,6 +289,31 @@ const dressLimit = async (event: ErrorFrame, context: FailureContext, queries: F
     return { ending: "limit", frame, walls, writes };
 };
 
+// What an overflow's frame adds to the provider's words: where the turn goes next, which the reader cannot see.
+const FRESH_RERUN =
+    "Resuming this session would only overflow again, so the turn is being sent again in a fresh session that carries the conversation so far and where the work stands.";
+const TOO_LARGE =
+    "A fresh session could not hold this turn either: the message, an attachment or a tool output it read is larger than the model's context window. Split the task into smaller steps, or read large files and command output in parts.";
+
+// The provider's sentence, then the daemon's; one the provider left unpunctuated ("Prompt is too long") gets its stop.
+const withClause = (message: string, clause: string): string => {
+    const said = message.trimEnd();
+    return `${said}${/[.!?]$/.test(said) ? "" : "."} ${clause}`;
+};
+
+// A session past its window, on a conversation: the first time, held for a fresh session the daemon opens at once and
+// on no policy, since resuming only overflows again; a re-run that overflows too ends, and says to split the task.
+const dressOverflow = (event: ErrorFrame, context: FailureContext): Dressed => {
+    if (context.turn.conversationId === undefined) {
+        return { ending: "bare", frame: event, walls: {}, writes: [] };
+    }
+    if (!rerunsFresh(context.turn.prompt, event)) {
+        return { ending: "bare", frame: { ...event, message: withClause(event.message, TOO_LARGE) }, walls: {}, writes: [] };
+    }
+    const frame: ErrorFrame = { ...event, message: withClause(event.message, FRESH_RERUN), held: { ran: context.answered }, autoResume: "scheduled" };
+    return { ending: "fresh-session", frame, walls: {}, writes: [] };
+};
+
 const dress = async (event: ErrorFrame, context: FailureContext, queries: FailureQueries): Promise<Dressed> => {
     const conversationId = context.turn.conversationId;
     // The provider failed, not the workspace; past the attempt budget the frame goes out bare.
@@ -299,6 +330,9 @@ const dress = async (event: ErrorFrame, context: FailureContext, queries: Failur
     }
     if (event.code === "rate_limit") {
         return dressLimit(event, context, queries);
+    }
+    if (event.code === "context-overflow") {
+        return dressOverflow(event, context);
     }
     // The same promise for an uncoded death the exit is about to hold.
     if (conversationId !== undefined && holdsAsStopped(context.turn.prompt, context.answered, { code: event.code })) {

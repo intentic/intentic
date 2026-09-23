@@ -124,3 +124,70 @@ export const ApprovalsListSchema = z.object({
 export type ApprovalsList = z.infer<typeof ApprovalsListSchema>;
 // entryId, not a bare string: the id becomes a filename under .intentic/config/approvals/.
 export const ApprovalIdParamSchema = z.object({ id: entryId.describe("Which approval.") });
+
+/* WORKSPACE HOOKS: what Claude Code would run on a turn from its settings files and skill or subagent definitions, held
+ * off until the owner approves that exact set by its digest. Never a workspace file: whoever can write the hooks must not
+ * also be able to write their yes, so the record lives with the daemon and only the owner's routes below move it. */
+
+const hookDigest = z.string().regex(/^[0-9a-f]{64}$/);
+
+export const SettingsHookSchema = z.object({
+    source: z
+        .enum(["user", "project"])
+        .describe("Whose configuration declares it: the sandbox's own (~/.claude) or the workspace's (.claude/ in the project)."),
+    declaredIn: z
+        .string()
+        .optional()
+        .describe(
+            "The skill, subagent or command whose frontmatter declares it, spelled like a script path. Absent when it comes from the settings.json of its source.",
+        ),
+    event: z.string().describe("When it runs, in Claude Code's own words: before a tool, after one, when a prompt is sent, when a session starts."),
+    matcher: z.string().optional().describe("Which tools it is limited to, when it is limited at all."),
+    type: z.string().describe("What kind of hook it is: a shell command, an address it calls, a prompt it asks a model."),
+    run: z.string().describe("Exactly what it runs: the command line, the address, the prompt."),
+});
+export type SettingsHook = z.infer<typeof SettingsHookSchema>;
+
+export const HookScriptSchema = z.object({
+    path: z
+        .string()
+        .describe(
+            "A file one of the hooks runs, spelled the way the hook names it: inside the workspace as $CLAUDE_PROJECT_DIR/…, under the home directory as ~/…, otherwise absolute.",
+        ),
+    sha256: z
+        .string()
+        .describe(
+            "Its contents when the hooks were found. The approval covers these bytes, so editing the file asks again, the same as editing the command would.",
+        ),
+});
+export type HookScript = z.infer<typeof HookScriptSchema>;
+
+export const HookRequestSchema = z.object({
+    digest: hookDigest.describe(
+        "The set's fingerprint: every hook as declared plus the bytes of every file they run. Approving it approves exactly this, and nothing that differs from it by a character.",
+    ),
+    seenAt: z.number().describe("When a turn first found this set, in milliseconds."),
+    conversationId: z.string().optional().describe("The conversation whose turn found it, when one did."),
+    hooks: z
+        .array(SettingsHookSchema)
+        .describe("Every hook in the set. Until it is approved, turns run with all of them off, and so with every other hook the agent would load."),
+    scripts: z.array(HookScriptSchema).describe("The files those hooks run by name, which the approval pins byte for byte."),
+    dismissed: z
+        .boolean()
+        .optional()
+        .describe("Kept off on purpose: no longer counted as waiting, and still approvable. Present only when it was dismissed."),
+});
+export type HookRequest = z.infer<typeof HookRequestSchema>;
+
+export const HookRequestsSchema = z.object({
+    requests: z.array(HookRequestSchema).describe("Hook sets waiting for a yes, newest first, then the dismissed ones."),
+    ledgerUnreadable: z
+        .boolean()
+        .optional()
+        .describe(
+            "The record of what was approved could not be read, so no settings-file hook runs anywhere until a set is approved again. Present only when that is the case.",
+        ),
+});
+export type HookRequests = z.infer<typeof HookRequestsSchema>;
+
+export const HookDigestParamSchema = z.object({ digest: hookDigest.describe("Which hook set, by its fingerprint.") });

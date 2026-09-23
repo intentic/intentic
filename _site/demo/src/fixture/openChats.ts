@@ -11,8 +11,8 @@ export const MAYA_CHAT_ID = `cnv_maya_support`;
 export const OWEN_CHAT_ID = `cnv_owen_launch`;
 export const PRIYA_CHAT_ID = `cnv_priya_payouts`;
 
-// Every seeded tab has the same ordinary shape (registered, shared tree, nothing typed or queued); only id, title and
-// persona differ.
+// Every seeded tab has the same ordinary shape (registered, shared tree, nothing typed); only id, title and persona
+// differ.
 const tab = (conversationId: string, title: string, sessionId: string, actsAs?: string): StoredTab => ({
     conversationId,
     isolated: false,
@@ -29,7 +29,6 @@ const tab = (conversationId: string, title: string, sessionId: string, actsAs?: 
     title,
     draft: ``,
     attachments: [],
-    queued: [],
 });
 
 const OPEN_TABS: readonly StoredTab[] = [

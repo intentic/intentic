@@ -85,7 +85,6 @@ describe(`the chat channel`, () => {
             title: undefined,
             draft: ``,
             attachments: [],
-            queued: [],
         });
 
         expect(() => postChatNote({ kind: `closed-drafts`, tabs: [tab] })).not.toThrow();
@@ -103,7 +102,6 @@ describe(`the chat channel`, () => {
                     movedFrom: { provider: `codex`, value: `gpt-5-codex` },
                     draft: ``,
                     attachments: [],
-                    queued: [],
                 },
             ],
         });

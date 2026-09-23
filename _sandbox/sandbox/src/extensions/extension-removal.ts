@@ -11,6 +11,7 @@ import type { Services } from "../composition.js";
 import { syncEndpointCompat } from "../endpoints/endpoint-translator.js";
 import { mintsEndpointProvider } from "../endpoints/local-model.js";
 import { composeEnvironment } from "../environment/environment.js";
+import { forgetExtensionApproval } from "./extension-approvals.js";
 import { forgetExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses } from "./extension-processes.js";
 import { forgetExtensionSettings, readAllExtensionSettings } from "./extension-settings.js";
@@ -234,6 +235,7 @@ export const removeExtension = async (
     await Promise.all([
         forgetExtensionSettings(root, services.extensionSecretVault, identity),
         forgetExtensionEnablement(root, identity),
+        forgetExtensionApproval(services.config.historyRoot, identity),
         forgetExtensionUsage(root, identity),
         forgetUpdateState(root, identity),
     ]);

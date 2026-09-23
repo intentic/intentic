@@ -1,5 +1,6 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import type { DependencyRequestOrigin } from "./dependency-origin.js";
 import type { DependencyCoordinator } from "./reconcile-deps.js";
@@ -92,6 +93,8 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
                         ].join("\n"),
                     );
                 },
+                // The drift repair status() may queue is the reconciler's own, and it runs only once no conversation is mid-turn.
+                { annotations: toolAnnotations("read") },
             ),
             ...(deps.canInstall
                 ? [
@@ -133,6 +136,7 @@ export const createDepsServer = (deps: DepsToolDeps): McpSdkServerConfigWithInst
                                       .join("\n"),
                               );
                           },
+                          { annotations: toolAnnotations("write") },
                       ),
                   ]
                 : []),

@@ -26,6 +26,12 @@ verbs it always had (approve / reject, start now / cancel), but it is deliberate
 (`useHeldWakes.ts` explains): a held wake is daemon-minted, consumed on release and carries a webhook's payload,
 none of which belongs in the versioned queue the agent writes.
 
+It also lists the **workspace hooks waiting for a yes**: a set of Claude Code hooks a turn found in the settings
+files or a skill's frontmatter that nobody approved in that exact form, drawn with every hook's command and the
+files whose bytes the approval pins (let them run / keep off). The daemon finds these rather than an agent writing
+them, and keeps them under the history root, off `/work`: an agent that can write the hooks must not also be able
+to write their approval. Until one is approved, turns run with every hook switched off.
+
 What is deliberately NOT here: the Issues inbox (facts that arrived from a stranger's browser, whose verbs are
 resolve / ignore / investigate, with nothing prepared to release), and the holds a *running* turn is blocked on
 (a permission card, a spend offer), which live in the conversation because a queue is the wrong latency for a
@@ -37,7 +43,7 @@ click somebody is spinning on.
 - Approve, edit (posts only), reschedule, reject: every affordance gated to the ship tier (`api.sandbox.role()`),
   because below maintainer the queue is a read and buttons the daemon would refuse teach people that buttons lie.
 - Carry the rail badge: what the queue owes its owner, and danger only once something is broken rather than
-  merely waiting.
+  merely waiting, or when the record of approved hooks could not be read, since then no hook runs.
 
 ## Key files
 
@@ -47,8 +53,10 @@ click somebody is spinning on.
   as a post; an action is a headline, its specifics, and the agent's brief folded under them.
 - [src/useApprovals.ts](src/useApprovals.ts): the list and the writes, plus `owedOf`, the one definition of what
   the queue owes (the badge, the view and the phone's Review tab all count with it).
-- [src/useHeldWakes.ts](src/useHeldWakes.ts): the daemon's held-wake queue (`GET /automations/pending`), its
-  approve / reject, and `waitingOf`, which of those wakes genuinely want a person.
+- [src/useHeldWakes.ts](src/useHeldWakes.ts) and [src/useHookRequests.ts](src/useHookRequests.ts): the two holds the
+  daemon finds rather than an agent writes, held wakes (`GET /automations/pending`) and hook sets
+  (`GET /approvals/hooks`, read only at the maintainer tier the daemon answers), each with its verbs and the one
+  definition of which entries genuinely want a person (`waitingOf`, `waitingHooksOf`).
 - [src/usePostEdit.ts](src/usePostEdit.ts): editing a post's words in place, saved as typed. Posts only: an owner
   rewriting an action's brief is approving something nobody proposed.
 - [src/postText.ts](src/postText.ts): platform caps, countdown words, and what makes a post a title.

@@ -1,6 +1,7 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
 import { AgentHarnessSchema, AgentProviderSchema } from "@intentic/sandbox-contract";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import type { ChildSupervisor } from "./children.js";
 import type { SubagentWaitUntil } from "./subagents.js";
@@ -57,6 +58,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               }
                               return answer({ ok: true, providers: await children.providers() });
                           },
+                          { annotations: toolAnnotations("read") },
                       ),
                       sdk().tool(
                           "spawn",
@@ -111,6 +113,8 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                                       : { ok: false, message: result.message },
                               );
                           },
+                          // Commits a provider's allowance to a new agent, and nothing later gives it back.
+                          { annotations: toolAnnotations("destructive") },
                       ),
                       sdk().tool(
                           "send",
@@ -128,6 +132,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               }
                               return answer(await children.send(args.child, args.message));
                           },
+                          { annotations: toolAnnotations("write") },
                       ),
                       sdk().tool(
                           "answer",
@@ -148,6 +153,7 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                               }
                               return answer(await children.answer(args.child, args.answers));
                           },
+                          { annotations: toolAnnotations("write") },
                       ),
                   ]),
             sdk().tool(
@@ -185,6 +191,8 @@ export const subagentWaitServer = (deps: SubagentWaitDeps): McpSdkServerConfigWi
                         ...(result.outcome === "unknown-target" ? { note: NOTHING_TO_WAIT_FOR } : {}),
                     });
                 },
+                // Moves only which endings this conversation was told, marked as a wait settles, so parallel waits never share one.
+                { annotations: toolAnnotations("read") },
             ),
         ],
     });

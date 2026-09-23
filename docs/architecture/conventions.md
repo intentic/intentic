@@ -1,7 +1,7 @@
 # Conventions, so the layout is predictable
 
 The rules the tree is held to: one concept per file, what a package group means, what may live in `_shared/`,
-and how an import names its target.
+what may ship, and how an import names its target.
 
 ## Conventions (so the layout is predictable)
 
@@ -24,11 +24,12 @@ and how an import names its target.
   package whose directory disagrees with its npm name.
 - **What may live in `_shared/`** ([_shared/README.md](../../_shared/README.md)): a package imported by three or
   more groups, or by both hubs (`_editor` and `_sandbox`), or belonging to the SDK an extension author may
-  depend on. Nothing in `_shared/` may import from another group — a shared package that reached back into
-  the daemon would hand every consumer the part it was supposed to be free of. App-specific scripts live in
-  that app's `scripts/` dir (e.g. `_sandbox/sandbox/scripts/`); the user-facing connect/sync/cleanup scripts
-  are tracked site assets in `_site/site/public/scripts/`, served at intentic.dev vanity URLs by
-  [worker.ts](../../_site/site/worker.ts).
+  depend on. Nothing in `_shared/` may depend on another group but `_tools/`, by manifest or by import (a
+  type-only one included) — a shared package that reached back into the daemon would hand every consumer the
+  part it was supposed to be free of — and [`shared-boundary.mjs`](../../_tools/checks/shared-boundary.mjs)
+  holds it, naming each standing exception with its reason. App-specific scripts live in that app's `scripts/`
+  dir (e.g. `_sandbox/sandbox/scripts/`); the user-facing connect/sync/cleanup scripts are tracked site assets
+  in `_site/site/public/scripts/`, served at intentic.dev vanity URLs by [worker.ts](../../_site/site/worker.ts).
 - **Imports:** import from the true source (no re-exports/aliases). The `@intentic/src` package export
   condition resolves workspace imports straight to `src/`, so agents can edit across packages without
   building.
@@ -71,9 +72,23 @@ agent conversations (`docs/audits/directory-structure-audit.md`), not a preferen
 
 - `_shared/` holds what more than one part is written against: a package imported by three or more parts, or
   by both hubs (`_editor` and `_sandbox`), or belonging to the SDK an extension author may depend on. **Nothing
-  in `_shared/` may import from another part** ([_shared/README.md](../../_shared/README.md)).
+  in `_shared/` may depend on another part** but the `_tools/` foundation ([_shared/README.md](../../_shared/README.md)),
+  held by [`shared-boundary.mjs`](../../_tools/checks/shared-boundary.mjs).
 - Everything else lives in the part that owns it, and a package that grows a second owner is a candidate for
   `_shared/` rather than a reason to reach across.
+
+## What may ship
+
+Anything intentic hands to somebody else — an npm package, the sandbox image, the desktop app, the browser
+extension, the GitHub Action — carries its production dependencies with it, and each of those has to be licensed
+so it may be handed on. [`licences.mjs`](../../_tools/checks/licences.mjs) reads what ships from where each
+artifact is built (the npm publish set and the release's other versioned artifacts, the image's trees and the
+packages it prunes by hand, every Tauri app, every `action.yml`), walks each one's production closure through the
+installed `node_modules`, and refuses AGPL, GPL, SSPL, BUSL, Elastic, PolyForm, non-commercial Creative Commons
+and a package that states no licence; LGPL, MPL and any licence it does not know are held for a review. What the
+owner has accepted is its `REVIEWED` list, each entry with the licence it was read at and why. The Rust crates the
+desktop app and `_sandbox/ic` compile in, and the mobile shells installed outside the workspace, are not read by
+it.
 
 ## One name per concept, across the three tiers
 

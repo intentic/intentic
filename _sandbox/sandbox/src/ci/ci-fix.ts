@@ -101,8 +101,9 @@ export const startCiFix = async (services: Services, request: CiFixRequest, fetc
         {
             roster: () => services.agents.list(),
             archivedIds: () => services.agents.listArchived().map((agent) => agent.id),
+            // Whatever runs on the earlier attempt goes: it is being set aside, whichever turn it is on.
             stop: async (conversationId) => {
-                await services.turns.stop(conversationId);
+                await services.turns.stop({ conversationId, live: true });
             },
             archive: async (conversationId) => {
                 const { failed } = await archiveAgents(services, [conversationId], Date.now());

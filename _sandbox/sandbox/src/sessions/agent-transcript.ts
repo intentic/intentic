@@ -27,8 +27,8 @@ const stampAnchors = (messages: readonly TranscriptRow[], anchors: ReadonlyMap<n
         const index = from + offset;
         // Only user messages can carry an anchor; what rides along is its identity (a checkpoint id, or the turn's own
         // commit name), with the index rewind addresses, so the client never counts rows or opens the checkpoint
-        // itself.
-        const anchor = message.role === "user" ? anchors.get(index) : undefined;
+        // itself. A message with no id is offered none, since a rewind has to name the message it means.
+        const anchor = message.role === "user" && message.messageId !== undefined ? anchors.get(index) : undefined;
         const checkpointId = anchor === undefined ? undefined : anchor.kind === "tree" ? anchor.snapshot : `worktree:${index}`;
         stamped.push(checkpointId === undefined ? message : { ...message, checkpointId, rewindIndex: index });
     }

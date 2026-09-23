@@ -45,7 +45,7 @@ const renameOver = async (from: string, to: string): Promise<void> => {
 let staging = 0;
 
 // A reader sees the previous file or the new one whole, never a torn write: the bytes land beside it, then replace it.
-export const writeFileAtomic = async (path: string, contents: string, mode = 0o644): Promise<void> => {
+export const writeFileAtomic = async (path: string, contents: string | Uint8Array, mode = 0o644): Promise<void> => {
     staging += 1;
     const staged = `${path}.${process.pid}-${staging}.tmp`;
     try {

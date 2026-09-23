@@ -100,14 +100,143 @@ const PACKAGE_PUBLISH = [
     /\btwine\s+upload\b/,
 ];
 
-// The loopback hosts, as a whole host not a prefix: localhost.attacker.com must not inherit the exemption.
-const LOOPBACK = String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(?=[/?#\s'"\x60]|$)`;
+// The loopback hosts, the one destination that never leaves the container; one list for the URL lookahead and the
+// whole-host test, so localhost.attacker.com inherits the exemption from neither.
+const LOOPBACK_NAMES = String.raw`localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|::1`;
+const LOOPBACK = String.raw`(?:${LOOPBACK_NAMES})(?::\d+)?(?=[/?#\s'"\x60]|$)`;
+const LOOPBACK_HOST = new RegExp(String.raw`^(?:${LOOPBACK_NAMES})$`, "i");
 
-// Loopback traffic never leaves the container, so this class means reaching OUT, not curl specifically.
-const NETWORK_OUTBOUND = [
-    new RegExp(String.raw`\b(?:curl|wget)\b[^|;&]*\bhttps?://(?!${LOOPBACK})`),
-    // The JS backend's own curl: a literal non-loopback URL handed to fetch(); a runtime-built URL walks past it.
-    new RegExp(String.raw`\bfetch\(\s*['"\x60]https?://(?!${LOOPBACK})`),
+// The JS backend's own curl: a literal non-loopback URL handed to fetch(). A runtime-built URL walks past this one on
+// purpose: a script's variables are not shell expansions, and wrapping every fetch(url) would tax ordinary scripts.
+const FETCH_LITERAL = new RegExp(String.raw`\bfetch\(\s*['"\x60]https?://(?!${LOOPBACK})`, "g");
+
+// Where each network program takes its destination: a URL (curl), a bare host or user@host (nc, ssh), a remote spec
+// such as host:path (scp, rsync), or a socket address such as TCP:host:port (socat). The shape decides what counts as
+// a literal destination.
+type DestinationShape = "url" | "host" | "spec" | "socket";
+
+const NETWORK_PROGRAMS: ReadonlyMap<string, DestinationShape> = new Map([
+    ["curl", "url"],
+    ["wget", "url"],
+    ["nc", "host"],
+    ["ncat", "host"],
+    ["netcat", "host"],
+    ["telnet", "host"],
+    ["ftp", "host"],
+    ["ssh", "host"],
+    ["scp", "spec"],
+    ["sftp", "spec"],
+    ["rsync", "spec"],
+    ["socat", "socket"],
+]);
+
+// A program name in command position: not part of a longer word or path segment (ssh-keygen, this.nc, $curl), and
+// followed by an argument rather than by JS punctuation, so a script's `const nc = …` is not a netcat.
+const programPattern = (names: readonly string[]): RegExp =>
+    new RegExp(String.raw`(?<![\w.$-])(${names.join("|")})(?:\.exe)?(?=\s+[^\s=(),:;|&<>?+*/%!\]}])`, "g");
+
+const NETWORK_PROGRAM = programPattern([...NETWORK_PROGRAMS.keys()]);
+
+// Interpreters that can open a socket from inline code; a file they run is out of reach, so only -c/-e/-r counts.
+const INTERPRETER = programPattern([String.raw`python[23]?(?:\.\d+)?`, "node", "nodejs", "deno", "bun", "ruby", "perl", "php"]);
+const INLINE_CODE_FLAG = /\s(?:-[ceEpr]|--eval|--print|eval)(?=[\s='"]|$)/;
+
+// Inline code that reaches the network: a library import or call, in the spellings of the interpreters above. Read as a
+// whole program's intent, since the URL it opens is computed and cannot be audited from the text.
+const NETWORK_CODE =
+    /\b(?:urllib\d?|http\.client|httplib|httpx|requests|aiohttp|socket|urlopen|websocket|Net::HTTP|open-uri|LWP|HTTP::Tiny|IO::Socket|fsockopen|file_get_contents|curl_exec|XMLHttpRequest|WebSocket)\b|\bfetch\s*\(|\b(?:require|import)\s*\(\s*['"](?:node:)?(?:https?|net|tls|dgram|http2)['"]|\bfrom\s+['"](?:node:)?(?:https?|net|tls|dgram|http2)['"]/;
+
+// A shell expansion: its value, and so the host it names, exists only when the command runs.
+const DYNAMIC = /[$`][^\s'"]*/;
+
+// One simple command: everything up to the first list or pipeline operator outside quotes. An unterminated quote runs
+// to the end, as a shell waiting for more input would read it. Each alternative opens on a different character, so
+// the walk is linear.
+const SEGMENT = /^(?:[^|;&\n'"`\\]|\\[\s\S]|'[^']*(?:'|$)|"(?:[^"\\]|\\[\s\S])*(?:"|$)|`[^`]*(?:`|$))*/;
+const segmentEnd = (command: string, from: number): number => from + (SEGMENT.exec(command.slice(from))?.[0].length ?? 0);
+
+const URL_LITERAL = /[a-zA-Z][\w+.-]*:\/\/[^\s'"\x60)]*/g;
+const WORD = /\S+/g;
+const DOTTED_HOST = /^[\w-]+(?:\.[\w-]+)+$/;
+// [user@]host:path and rsync's host::module; `C:\` is a Windows drive, not a host.
+const REMOTE_SPEC = /^(?:[^\s@/:]+@)?([^\s@/:]+):(?!\\)/;
+// sftp's bare user@host, which carries no colon.
+const USER_AT_HOST = /^[^\s@/:]+@([^\s@/:]+)$/;
+// socat's network address types only: TCP-LISTEN, OPEN, EXEC and the rest name no remote host.
+const SOCKET_ADDRESS = /^(?:tcp|udp|sctp|openssl|socks4a?|proxy)[46]?:([^\s:,]+)/i;
+
+// The host a URL names: past the scheme and any userinfo (localhost@evil.example is evil.example), before the port.
+const urlHost = (url: string): string => {
+    const authority = url.replace(/^[a-zA-Z][\w+.-]*:\/\//, "").split(/[/?#]/)[0] ?? "";
+    const host = authority.slice(authority.lastIndexOf("@") + 1);
+    return host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : (host.split(":")[0] ?? "");
+};
+
+// nc/ssh's destination: a word that is a dotted host or a loopback name, after any user@ and before any :port. An
+// undotted word is not read as a host, since flags' values (a key file, a port) look exactly like one.
+const bareHost = (word: string): string | undefined => {
+    if (/^-|[=/]/.test(word)) {
+        return undefined;
+    }
+    const host = word.slice(word.lastIndexOf("@") + 1);
+    const named = LOOPBACK_HOST.test(host) ? host : (host.split(":")[0] ?? "");
+    return LOOPBACK_HOST.test(named) || DOTTED_HOST.test(named) ? named : undefined;
+};
+
+const remoteHost = (word: string): string | undefined =>
+    /^[a-zA-Z][\w+.-]*:\/\//.test(word) ? urlHost(word) : (REMOTE_SPEC.exec(word) ?? USER_AT_HOST.exec(word))?.[1];
+
+const HOST_OF: Readonly<Record<DestinationShape, (word: string) => string | undefined>> = {
+    url: urlHost,
+    host: bareHost,
+    spec: remoteHost,
+    socket: (word) => SOCKET_ADDRESS.exec(word)?.[1],
+};
+
+// A literal destination in one command's arguments, and where it ends relative to the program name.
+interface Destination {
+    readonly loopback: boolean;
+    readonly end: number;
+}
+
+const destinationsOf = (args: string, shape: DestinationShape): Destination[] =>
+    [...args.matchAll(shape === "url" ? URL_LITERAL : WORD)].flatMap((match) => {
+        const host = HOST_OF[shape](unquote(match[0]));
+        return host === undefined || host === "" ? [] : [{ loopback: LOOPBACK_HOST.test(host), end: match.index + match[0].length }];
+    });
+
+// Whether one network program invocation reaches out, as the span from its name to the evidence. A literal destination
+// decides alone. With none, a shell expansion stands in for one: its host is unknowable, so an unknown `$BASE_URL` counts
+// as outbound. A literal loopback destination beside an expansion (a dynamic port, header or payload) keeps it inside.
+const networkReach = (command: string, start: number, shape: DestinationShape): CommandSpan | undefined => {
+    const args = command.slice(start, segmentEnd(command, start));
+    const destinations = destinationsOf(args, shape);
+    const outward = destinations.find((destination) => !destination.loopback);
+    if (outward !== undefined) {
+        return { start, end: start + outward.end };
+    }
+    const dynamic = destinations.length === 0 ? DYNAMIC.exec(args) : null;
+    return dynamic === null ? undefined : { start, end: start + dynamic.index + dynamic[0].length };
+};
+
+// Inline code given to an interpreter that opens the network; spans the name through the library or call that does.
+const interpreterReach = (command: string, start: number): CommandSpan | undefined => {
+    const code = command.slice(start, segmentEnd(command, start));
+    const reach = INLINE_CODE_FLAG.test(code) ? NETWORK_CODE.exec(code) : null;
+    return reach === null ? undefined : { start, end: start + reach.index + reach[0].length };
+};
+
+const networkOutbound = (command: string): CommandSpan[] => [
+    ...spansOf([FETCH_LITERAL], command),
+    ...[...command.matchAll(NETWORK_PROGRAM)].flatMap((match) => {
+        const shape = NETWORK_PROGRAMS.get(match[1] as string);
+        const span = shape === undefined ? undefined : networkReach(command, match.index, shape);
+        return span === undefined ? [] : [span];
+    }),
+    ...[...command.matchAll(INTERPRETER)].flatMap((match) => {
+        const span = interpreterReach(command, match.index);
+        return span === undefined ? [] : [span];
+    }),
 ];
 
 // One parse feeds both rm classes, since only the operand tells build-dir from root apart.
@@ -263,7 +392,6 @@ const GIT_BRANCH_SWITCH_G = globally(GIT_BRANCH_SWITCH);
 const SECRET_REFERENCES_G = globally(SECRET_REFERENCES);
 const CREDENTIAL_PATHS_G = globally(CREDENTIAL_PATHS);
 const PACKAGE_PUBLISH_G = globally(PACKAGE_PUBLISH);
-const NETWORK_OUTBOUND_G = globally(NETWORK_OUTBOUND);
 const BLOCK_DEVICE_G = globally(BLOCK_DEVICE);
 const CONTAINER_STATE_G = globally(CONTAINER_STATE);
 
@@ -314,7 +442,7 @@ const MATCHES: Readonly<Record<CommandClass, (command: string, context: CommandC
     "container.state": (command) => spansOf(CONTAINER_STATE_G, command),
     "secrets.access": credentialReads,
     "package.publish": (command) => spansOf(PACKAGE_PUBLISH_G, command),
-    "network.outbound": (command) => spansOf(NETWORK_OUTBOUND_G, command),
+    "network.outbound": networkOutbound,
 };
 
 // Every class the command falls in, with its fragments, in the catalog's own order. `context` is now required: its
@@ -403,7 +531,11 @@ export const COMMAND_CLASS_PATTERNS: Readonly<Record<CommandClass, readonly Comm
         { code: "twine upload" },
     ],
     "network.outbound": [
-        { code: "curl https://…", qualifier: "also wget; loopback does not count" },
+        { code: "curl https://…", qualifier: "also wget; a literal loopback address does not count, even with a variable port" },
+        { code: "curl $URL", qualifier: "a destination built at run time counts, since its host can't be read beforehand" },
+        { code: "nc host.example 443", qualifier: "also ncat, netcat, telnet, ftp and ssh" },
+        { code: "scp file host:/path", qualifier: "also sftp and rsync with a remote side, and socat TCP:host:port" },
+        { code: "python3 -c 'import urllib…'", qualifier: "any interpreter's inline code that opens a connection" },
         { code: 'fetch("https://…")', qualifier: "in a script" },
     ],
 };

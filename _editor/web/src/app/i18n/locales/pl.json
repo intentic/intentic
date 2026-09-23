@@ -1062,8 +1062,6 @@
             "moreComposerSettings": "Więcej ustawień kompozytora",
             "openNewChatHere": "Otwórz stąd nowy czat z tym, co wpisałeś: ten zachowa swoją odpowiedź",
             "providerModel": "Dostawca i model: {providerName} · {modelLabelText}",
-            "removeMessageNotSent": "Usuń: ta wiadomość nie zostanie wysłana",
-            "removeQueuedMessage": "Usuń wiadomość z kolejki",
             "replacedSend": "zostanie zastąpiona przy wysyłce.",
             "runMessageThrough": "Przepuść tę wiadomość przez",
             "sandboxBusyKeepTyping": "Sandbox jest zajęty: pisz dalej; wysłać będzie można, gdy będzie gotowy.",
@@ -1137,6 +1135,24 @@
             "submit": "Wyślij",
             "typeAnswer": "Wpisz swoją odpowiedź…",
             "writeAnswerToSubmit": "Napisz odpowiedź, żeby ją wysłać."
+        },
+        "chatQueue": {
+            "cancel": "Anuluj",
+            "fromAgent": "Od innego agenta",
+            "fromSandbox": "Od sandboksa",
+            "goesAfterAnswer": "Trafi dalej, gdy odpowiesz na prośbę powyżej",
+            "goesAfterTurn": "Wyjdzie, gdy ta tura się skończy",
+            "goesWhenFree": "Wyjdzie, gdy tylko agent będzie wolny",
+            "heldRefused": "Wstrzymane: ostatnia próba została odrzucona, zanim ruszyła. Usuń przyczynę, potem wznów.",
+            "heldStopped": "Wstrzymane od zatrzymania tury: nic nie wyjdzie, dopóki ktoś nie wznowi.",
+            "removeHint": "Wycofaj: ta wiadomość nie zostanie wysłana",
+            "removeLabel": "Wycofaj oczekującą wiadomość",
+            "resume": "Wznów",
+            "resumeHint": "Wyślij teraz to, co czeka, na modelu i koncie tego czatu",
+            "rewordHint": "Zmień treść, zachowując jej miejsce w kolejce",
+            "rewordLabel": "Przeredaguj oczekującą wiadomość",
+            "save": "Zapisz",
+            "sendNow": "Wyślij teraz"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Twój agent na Ciebie czeka",
@@ -1349,28 +1365,13 @@
         "chatTurnStatus": {
             "atCapacity": "na granicy przepustowości",
             "attemptNothingLost": "(próba {attempt}, nic nie przepadło)",
-            "loader": {
-                "brewing": "Warzy",
-                "cogitating": "Rozmyśla",
-                "conjuring": "Przywołuje",
-                "musing": "Duma",
-                "noodling": "Dłubie",
-                "percolating": "Przesącza",
-                "perusing": "Przegląda",
-                "pondering": "Zastanawia się",
-                "ruminating": "Przeżuwa",
-                "scheming": "Knuje",
-                "synthesizing": "Syntetyzuje",
-                "thinking": "Myśli",
-                "tinkering": "Majstruje",
-                "untangling": "Rozplątuje"
-            },
             "modelProvider": "Dostawcą modelu jest",
             "notResponding": "nie odpowiada",
             "rateLimiting": "ogranicza tempo",
             "retrying": "ponawia",
             "retryingAt": "ponawia {when}",
             "retryingIn": "ponawia za {wait}",
+            "thinking": "Myśli",
             "waitingOnSubagents": "Czeka na {count} podagenta | Czeka na {count} podagenty | Czeka na {count} podagentów"
         },
         "composerIntent": {
@@ -2638,17 +2639,26 @@
             "topicOnRepositoryNightly": "na swoim repozytorium, a nocne zadanie otworzy wpis za Ciebie. Bez konta, bez wgrywania, bez kolejki."
         },
         "extensionsInstalled": {
+            "approve": "Zatwierdź",
+            "approvedNow": "Zatwierdzono {manifest}.",
+            "asksForNothing": "Nie prosi o żadne uprawnienia.",
             "clearFilter": "Wyczyść filtr",
+            "couldntApprove": "Nie udało się zatwierdzić {manifest}.",
             "couldntListSandboxsExtensions": "Nie udało się wypisać rozszerzeń tego sandboxa.",
             "discoverWhatPeoplePublished": "Odkryj, co opublikowali inni →",
             "installed": "Zainstalowane",
             "invalid": "nieprawidłowe",
             "needsAttention": "Wymaga uwagi",
+            "newPowersSinceApproved": "Nowe uprawnienia od twojego zatwierdzenia:",
             "notLoadable": "Nie da się wczytać",
+            "pendingBadge": "oczekuje",
             "publishedMatches": "{count} opublikowane rozszerzenie pasuje do „{query}” → | {count} opublikowane rozszerzenia pasują do „{query}” → | {count} opublikowanych rozszerzeń pasuje do „{query}” →",
             "readingSandboxsExtensions": "Odczytywanie rozszerzeń tego sandboxa…",
             "removed": "Usunięto {manifest}.",
-            "runningNotListed": "Działa, ale nie jest wypisane"
+            "runningNotListed": "Działa, ale nie jest wypisane",
+            "waitingCaption": "Napisane w tej przestrzeni roboczej. Żaden jego kod nie działa, dopóki nie zatwierdzisz tego, o co prosi.",
+            "waitingForApproval": "Czeka na twoje zatwierdzenie",
+            "whatItAsksFor": "O co prosi:"
         },
         "folderPicker": {
             "change": "Zmień",
@@ -3225,6 +3235,30 @@
             "showLess": "Pokaż mniej",
             "showMoreAccounts": "Pokaż więcej kont ({collapsedCredentialCount})"
         },
+        "sandboxStorageCard": {
+            "clean": "Wyczyść",
+            "confirmHeader": "Wyczyścić „{category}”?",
+            "couldntRead": "Nie udało się odczytać ostatniego pomiaru",
+            "diskUsed": "Zajęte {used} z {total}",
+            "failedItems": "Nie udało się usunąć {count} elementu. | Nie udało się usunąć {count} elementów. | Nie udało się usunąć {count} elementów.",
+            "firstScan": "Czytanie każdego pliku na woluminach sandboxa. To może potrwać minutę.",
+            "free": "Zwolnij {bytes}",
+            "freed": "Zwolniono {bytes} z kategorii „{category}”.",
+            "heading": "Dysk",
+            "intro": "Zobacz, co zapełnia dysk tego sandboxa, i zwolnij to, co może bezpiecznie zniknąć. Skan czyta każdy plik na woluminach sandboxa, więc może potrwać minutę.",
+            "keptItems": "{count} element został: w użyciu albo zmieniony w ciągu ostatniej doby. | {count} elementy zostały: w użyciu albo zmienione w ciągu ostatniej doby. | {count} elementów zostało: w użyciu albo zmienionych w ciągu ostatniej doby.",
+            "measured": "Zmierzono {when}",
+            "measuring": "Trwa pomiar…",
+            "partial": "Skan osiągnął limit czasu, zanim przeczytał wszystko, więc każdy rozmiar jest co najmniej taki, jak podano.",
+            "scan": "Skanuj",
+            "scanAgain": "Skanuj ponownie",
+            "stop": "Zatrzymaj",
+            "uncounted": "Poza skanem",
+            "uncountedHint": "Miejsce, które dysk zgłasza jako zajęte, a które nie należy do żadnej kategorii: sam system, inne programy dzielące ten dysk i własne dane systemu plików.",
+            "unreadable": "Nie udało się odczytać {count} pliku lub folderu, więc nie został policzony. | Nie udało się odczytać {count} plików lub folderów, więc nie zostały policzone. | Nie udało się odczytać {count} plików lub folderów, więc nie zostały policzone.",
+            "waiting": "Na razie nic do zwolnienia",
+            "waitingHint": "Wszystko tutaj zmieniło się w ciągu ostatniej doby albo jest w użyciu, więc czyszczenie zostawiłoby wszystko na miejscu."
+        },
         "sandboxSwitcher": {
             "addSandbox": "Dodaj sandbox",
             "alsoDelete": "Usuń go także z",
@@ -3422,6 +3456,98 @@
             "never": "Nigdy",
             "runsAsksAfterOutside": "działa, pyta po treściach z zewnątrz"
         },
+        "storageCategories": {
+            "artifacts": {
+                "label": "Pliki od agentów",
+                "reason": "Wygenerowane obrazy, raporty i inne pliki, które agenci wytworzyli podczas pracy.",
+                "warning": "Rozmowy, które do nich linkują, pokażą je jako brakujące. Wszystko zmienione w ciągu ostatniej doby zostaje."
+            },
+            "browserCaptures": {
+                "label": "Zrzuty z przeglądarki",
+                "reason": "Zrzuty ekranu i migawki stron, które przeglądarka agenta zrobiła podczas pracy.",
+                "warning": "Rozmowy, które je pokazują, pokażą zamiast nich brakujący obraz. Te z ostatniej doby zostają."
+            },
+            "browserProfiles": {
+                "label": "Logowania w przeglądarce",
+                "reason": "Profile przeglądarki agenta, ze stronami, na których jest zalogowany.",
+                "warning": "Agent zostanie wylogowany ze wszystkich stron w wyczyszczonym profilu i może potrzebować Twojej pomocy, by zalogować się ponownie; jego konta nadal będą widoczne jako połączone. Przeglądarka otwarta lub używana w ciągu ostatniej doby zostaje, a klucze dostępu nigdy nie są ruszane."
+            },
+            "buildCaches": {
+                "label": "Pamięć podręczna buildów",
+                "reason": "Zapisane wyniki narzędzi do budowania, odtwarzane, gdy znów będą potrzebne. Czyszczenie zostawia te z ostatniej doby."
+            },
+            "checkouts": {
+                "label": "Checkouty rozmów",
+                "reason": "Własna kopia repozytoriów każdej otwartej rozmowy, z zależnościami, które zainstalowała. Zarchiwizowanie zakończonej rozmowy zwalnia jej kopię."
+            },
+            "conversations": {
+                "label": "Rozmowy",
+                "reason": "Transkrypcje, załączniki i zapisy każdej rozmowy, także zarchiwizowanych. Usunięcie rozmowy z archiwum zwalnia jej część."
+            },
+            "docker": {
+                "label": "Docker",
+                "reason": "Obrazy, kontenery i woluminy własnego Dockera sandboxa. Polecenie docker system prune w terminalu usuwa to, czego nic nie używa."
+            },
+            "engines": {
+                "label": "Silniki agentów",
+                "reason": "Zainstalowane wersje środowisk uruchomieniowych agentów: ta w użyciu i ta zachowana do cofnięcia. Zarządzane na karcie Silniki agentów."
+            },
+            "exports": {
+                "label": "Wyeksportowane paczki",
+                "reason": "Kopie tego sandboxa spakowane do pobrania.",
+                "warning": "Najpierw pobierz każdą paczkę, której jeszcze potrzebujesz. Paczka, która właśnie się pakuje, zostaje."
+            },
+            "extensions": {
+                "label": "Rozszerzenia",
+                "reason": "Zainstalowane rozszerzenia i ich pliki robocze."
+            },
+            "indexes": {
+                "label": "Indeksy wyszukiwania",
+                "reason": "Indeksy wyszukiwania kodu i rozmów, które sandbox sam aktualizuje."
+            },
+            "logs": {
+                "label": "Logi",
+                "reason": "Własne logi sandboxa i zapisy terminali. Czyszczenie zostawia te z ostatniej doby."
+            },
+            "modelWeights": {
+                "label": "Wagi modeli lokalnych",
+                "reason": "Wagi pobrane dla modeli, które ten sandbox uruchamia sam.",
+                "warning": "Wyczyszczony model przy następnym starcie pobierze wagi ponownie, co może chwilę potrwać. Wagi używane przez działający model zostają."
+            },
+            "other": {
+                "label": "Pliki niczyje",
+                "reason": "Pliki, do których nie przyznaje się żadna część sandboxa, np. ręcznie zrobione kopie zapasowe. Przejrzyj je, zanim sam je usuniesz."
+            },
+            "packageStores": {
+                "label": "Pobrane pakiety",
+                "reason": "Magazyn pnpm z pobranymi pakietami. Czyszczenie usuwa to, czego nie używa żaden projekt; następna instalacja pobierze ponownie to, czego potrzebuje."
+            },
+            "repositories": {
+                "label": "Historia repozytoriów",
+                "reason": "Dane git Twoich repozytoriów: każdy commit i każda gałąź, także te nigdy nigdzie niewypchnięte."
+            },
+            "restorePoints": {
+                "label": "Punkty przywracania",
+                "reason": "Migawki robione co minutę, gdy pliki się zmieniają, i przy każdej turze, aby Historia mogła przywrócić dowolny moment."
+            },
+            "scratch": {
+                "label": "Pliki tymczasowe",
+                "reason": "Pliki tymczasowe, które zostawiają agenci i sprawdzenia. Czyszczenie zostawia te z ostatniej doby i wszystko, co jest w użyciu."
+            },
+            "state": {
+                "label": "Ustawienia i zapisy",
+                "reason": "Konfiguracja, zalogowania, dane uwierzytelniające oraz zapisy tego, co wydano i zrobiono."
+            },
+            "trash": {
+                "label": "Usunięte repozytoria",
+                "reason": "Dane git i checkouty repozytoriów usuniętych z przestrzeni roboczej.",
+                "warning": "Mogą zawierać commity nigdy nigdzie niewypchnięte. Po wyczyszczeniu nie da się ich odzyskać."
+            },
+            "workspace": {
+                "label": "Pliki przestrzeni roboczej",
+                "reason": "Twoje repozytoria, ich zależności i wszystko inne w przestrzeni roboczej. Usuń to, czego już nie potrzebujesz, w Plikach albo w terminalu."
+            }
+        },
         "usageChart": {
             "allTime": "Cały czas",
             "more": "{count} więcej",
@@ -3452,6 +3578,10 @@
             "sandboxClosedConnection": "Sandbox zamknął połączenie.",
             "sandboxNeverReportedAddress": "Ten sandbox nigdy nie zgłosił adresu.",
             "sandboxStoppedResponding": "Sandbox przestał odpowiadać."
+        },
+        "useSandboxStorage": {
+            "couldntClean": "Nie udało się wyczyścić: {category}",
+            "couldntMeasure": "Nie udało się zmierzyć dysku"
         }
     },
     "settings": {

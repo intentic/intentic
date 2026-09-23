@@ -672,6 +672,18 @@ test("turn failures and thrown runners become error events followed by done", as
     ]);
 });
 
+// Codex's own sentence once its compaction cannot make room, and the Responses API's under it: either way the thread is
+// past the window, so the daemon re-runs the turn in a fresh one instead of resuming this into the same wall.
+test("a thread past the model's window is coded context-overflow, in Codex's words or the API's", async () => {
+    const codex = "Codex ran out of room in the model's context window. Start a new thread or clear earlier history before retrying.";
+    const own = fakeCodexRunner([{ type: "turn.failed", error: { message: codex } }]);
+    expect(await collect(createTestAgent(own.runner), request)).toEqual([{ kind: "error", code: "context-overflow", message: codex }, { kind: "done" }]);
+
+    const api = "Your input exceeds the context window of this model. Please adjust your input and try again.";
+    const upstream = fakeCodexRunner([{ type: "error", message: api }]);
+    expect(await collect(createTestAgent(upstream.runner), request)).toEqual([{ kind: "error", code: "context-overflow", message: api }, { kind: "done" }]);
+});
+
 // Verbatim from the daemon log, minus the wrapping: the translator's answer when its Go transport never reached the
 // model, which wears the same words as a plan that excludes it.
 const DNS_STALL =

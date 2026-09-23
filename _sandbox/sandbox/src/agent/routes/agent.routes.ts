@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
     type AgentEvent,
+    type AgentReply,
     type AgentTurn,
     agentContract,
     capabilitiesOf,
     type ContextTrim,
+    type ConversationQueue,
     type SnapshotTurn,
     type TranscriptRow,
     type TurnNote,
@@ -22,13 +24,12 @@ import { REPO_SYNC_NOTE_TITLE, type RepoSync, syncAdvisory, syncWorkspaceRepos }
 import { resolveExistingWithin, resolveWithin } from "../../workspace/files/workspace-files-paths.js";
 import { startAnchor, type TurnPlacement } from "../../agents/worktrees/isolation.js";
 import { authResumable } from "../../agents/actor/conversation-decide.js";
+import { type QueueChange, queueView } from "../../agents/actor/conversation-queue.js";
 import { type PersistedAgent, worktreeOf } from "../../agents/registry/agents-store.js";
 import { holdAccount } from "../../runtimes/claude/claude-credentials.js";
 import { ensureComposedWorktree } from "../context/conversation-context.js";
-import { checkpointSteeredMessage } from "../checkpoints/steer-checkpoints.js";
 import { settleLandingInBackground, versionMainTree } from "../../agents/land/version-landed.js";
 import { routeLandBreakage } from "../../agents/land/land-breakage.js";
-import { recordConversationPrompt, recordPrompt } from "../../sessions/transcript-search.js";
 import { handoffHistory, turnStartIndex } from "../../sessions/turn-transcript.js";
 import { type ChildSupervisor, childSupervisor, isSpawnedChild } from "../subagents/children.js";
 import type { AgentRequest, TurnBase, TurnHooks, TurnSpec } from "../providers/agent-request.js";
@@ -41,16 +42,16 @@ import { commandsOf } from "../providers/agent-commands.js";
 import { limitReopensAt } from "../models/limit-reset.js";
 import { actorOf, areasOf, ownerOf } from "../../auth/principal.js";
 import type { TurnInput } from "../../seams/turn-starter.js";
-import { turnRunOf } from "../../agents/actor/conversation-holdings.js";
+import { type LiveRun, turnRunOf } from "../../agents/actor/conversation-holdings.js";
 import { provenanceOf, refuseUnlessVisible } from "../../auth/fleet-scope.js";
 import { refuseUnlessReachable } from "../../personas/persona-reach.js";
 import { opt } from "../../opt.js";
-import { SteeringQueue, steerTurn } from "../checkpoints/agent-steering.js";
+import { SteeringQueue } from "../checkpoints/agent-steering.js";
 import { recordProviderFailure } from "../providers/provider-health.js";
 import { breakPolicyFor, type HeldTurn, stopResumeAt } from "../run/turn/turn-resume.js";
 import { dispatchRemoteTurn } from "../../runners/runner-dispatch.js";
 import { forgetRemoteRequest, remoteRequestOf } from "../../runners/runner-requests.js";
-import { applyReply, composeSteerText, editorContextNote } from "../run/turn/turn-interactions.js";
+import { applyReply, editorContextNote } from "../run/turn/turn-interactions.js";
 import { withRuntimeHistory } from "../providers/runtime-history.js";
 import { handoffStateNote } from "../prompt/handoff-state.js";
 import { limitWayOf } from "../models/limit-way.js";
@@ -204,6 +205,15 @@ async function* runConversationTurn(
     const snapshot: SnapshotTurn = { conversationId, index: await turnStartIndex(services, { ...input, conversationId }) };
     yield* placedTurn(services.conversations, conversationId, placementOf(services, input, signal, steering, { id: conversationId, snapshot, runner, isolated }));
 }
+
+// What a settled plan answer leaves in the transcript: the decision's notice, and a rejection's feedback, which stays
+// visible as the user's own row or vanishes though the agent still has it. Staged files ride as @-paths in the one field.
+const notePlanAnswer = (run: LiveRun | undefined, answer: Extract<AgentReply, { kind: "plan" }>): void => {
+    run?.note({ role: "notice", text: answer.approve ? "Plan approved." : "Kept planning." });
+    if (!answer.approve && answer.feedback !== undefined && answer.feedback.trim().length > 0) {
+        run?.note(userRow(answer.feedback, Date.now(), mentionPaths(answer.feedback)));
+    }
+};
 
 // Preflight is a few hundred ms plus one throttled fetch; past this it's a defect, not ordinary load.
 const SLOW_PREFLIGHT_MS = 5_000;
@@ -709,13 +719,23 @@ export const createAgentRoutes = (services: Services) => {
             refuseUnlessVisible(context.identity, provenanceOf(entry));
         }
     };
+    // A change to a waiting message answered with the queue it left, or refused as the change found it.
+    const queueAnswer = (conversationId: string, change: QueueChange): ConversationQueue => {
+        if (change === "stale") {
+            throw new ORPCError("PRECONDITION_FAILED", { message: "That message was changed since you read it: look again before changing it." });
+        }
+        if (change === "missing") {
+            throw new ORPCError("NOT_FOUND", { message: "That message is no longer waiting: it has gone out, or somebody took it back." });
+        }
+        return queueView(services.conversations.queued(conversationId));
+    };
     // The conversation a parked request belongs to: held here, or minted on a runner. Undefined when neither knows it,
     // which the reply below reports as NOT_FOUND on its own.
     const conversationOfRequest = (requestId: string): string | undefined =>
         services.cards.conversationOf(requestId) ?? remoteRequestOf(requestId)?.conversationId;
     return {
-        // Starts the turn detached: the ack carries the run id, and it keeps running regardless of this request.
-        // CONFLICT means another window is already mid-turn.
+        // Starts the turn detached, says the words into the running one, or queues them for the next; the answer says
+        // which, with the run the message is in, and the turn keeps running regardless of this request.
         run: i.run.handler(async ({ input, context }) => {
             if (input.conversationId === undefined) {
                 throw new ORPCError("BAD_REQUEST", { message: "conversationId required" });
@@ -733,22 +753,21 @@ export const createAgentRoutes = (services: Services) => {
             own(context, conversationId);
             // Who is asking, from what the middleware verified on this request, never from the body.
             const actor = actorOf(context.identity, context.principal);
-            // Push rides the run's own lifecycle, not this request, since a tab may be asleep. The caller holds these
-            // words, so a refusal at the door hands them back rather than the sandbox keeping a second copy.
-            const run = await services.turns.start(
-                {
+            // Push rides the run's own lifecycle, not this request, since a tab may be asleep.
+            const receipt = await services.turns.say({
+                voice: "person",
+                turn: {
                     ...input,
                     conversationId,
                     ...opt("actor", actor),
                     ...opt("owner", ownerOf(context.identity)),
                     ...opt("areas", areasOf(context.identity)),
                 },
-                { senderKeeps: true },
-            );
-            if (run === undefined) {
-                throw new ORPCError("CONFLICT", { message: "a turn is already running for this conversation" });
+            });
+            if ("invalid" in receipt) {
+                throw new ORPCError("BAD_REQUEST", { message: receipt.invalid });
             }
-            return { run: run.id };
+            return receipt;
         }),
         // Re-runs a turn a spent allowance refused or a dead runtime cut short, with everything but who serves it,
         // renamed by the press. NOT_FOUND when nothing is held; never CONFLICT, since a running turn already cleared
@@ -797,13 +816,10 @@ export const createAgentRoutes = (services: Services) => {
             }
             if (applied === "settled") {
                 if (input.kind === "plan") {
-                    run?.note({ role: "notice", text: input.approve ? "Plan approved." : "Kept planning." });
-                    // The rejection's feedback stays visible, or it vanishes though the agent still has it.
-                    if (!input.approve && input.feedback !== undefined && input.feedback.trim().length > 0) {
-                        // As the user's own row: staged files travel as @-paths inside the one text field.
-                        run?.note(userRow(input.feedback, Date.now(), mentionPaths(input.feedback)));
-                    }
+                    notePlanAnswer(run, input);
                 }
+                // What waited behind the card goes into the turn it un-parked, for every window alike.
+                void (held === undefined ? undefined : services.turns.drain(held));
                 return { ok: true } as const;
             }
             // Remote: nothing held here is unusual, the question was minted on the runner instead.
@@ -824,74 +840,55 @@ export const createAgentRoutes = (services: Services) => {
             }
             throw new ORPCError("NOT_FOUND", { message: `no pending ${input.kind} for that request` });
         }),
-        // Injects a message into a running turn, between tool calls; NOT_FOUND means the client queues it for later.
+        // Injects a message into a running turn, between tool calls; NOT_FOUND means nothing running takes words.
         // Composed exactly like a turn's own prompt, so a mid-turn attachment reads like one on a fresh message.
         steer: i.steer.handler(async ({ input, context }) => {
             own(context, input.conversationId);
-            // Remote turns get words uncomposed: paths only resolve in the runner's own workspace.
-            const runnerId = worktreeOf(services.agents.entry(input.conversationId))?.runner;
-            if (runnerId !== undefined) {
-                const client = services.runnerHub.client(runnerId);
-                if (client === undefined) {
-                    throw new ORPCError("NOT_FOUND", { message: `the runner "${runnerId}" is offline, so nothing is running to say this to.` });
-                }
-                const delivered = await client.steer({
-                    conversationId: input.conversationId,
-                    text: input.text,
-                    attachments: input.attachments?.slice(),
-                    mentions: input.mentions?.slice(),
-                    editorContext: input.editorContext,
-                });
-                if (delivered.invalid !== undefined) {
-                    throw new ORPCError("BAD_REQUEST", { message: delivered.invalid });
-                }
-                if (!delivered.applied) {
-                    throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
-                }
-            } else {
-                const composed = await composeSteerText(services.workspace.root, input);
-                if (composed.invalid !== undefined) {
-                    throw new ORPCError("BAD_REQUEST", { message: composed.invalid });
-                }
-                if (!steerTurn(services.conversations, input.conversationId, { text: composed.text, voice: "person" })) {
-                    throw new ORPCError("NOT_FOUND", { message: "no steerable turn running for that conversation" });
-                }
+            const { conversationId, ...steer } = input;
+            const steered = await services.turns.steerIn(conversationId, steer);
+            if ("invalid" in steered) {
+                throw new ORPCError("BAD_REQUEST", { message: steered.invalid });
             }
-            // Pushed synchronously, after the queue accepts it and before this handler answers.
-            turnRunOf(services.conversations, input.conversationId)?.push({
-                kind: "steer",
-                text: input.text,
-                sentAt: Date.now(),
-                ...((input.attachments ?? []).length > 0 ? { attachments: [...(input.attachments ?? [])] } : {}),
-            });
-            // Reserves this steer's rewind slot in the same synchronous breath as the frame.
-            await checkpointSteeredMessage(services, input.conversationId);
-            // Indexed here, since the prompt index reads a session file once and would miss this.
-            const sessionId = services.conversations.sessionIdOf(input.conversationId);
-            recordConversationPrompt(input.conversationId, input.text);
-            if (sessionId !== undefined) {
-                recordPrompt(sessionId, input.text);
+            if ("why" in steered) {
+                throw new ORPCError("NOT_FOUND", { message: steered.why });
             }
-            return { ok: true } as const;
+            return steered;
         }),
-        // Hard-cancels the conversation's running turn daemon-side; the browser's own fetch abort can't.
+        // Hard-cancels the conversation's running turn daemon-side; the browser's own fetch abort can't. Answers, rather
+        // than refuses, a stop that found its run already over: the press raced the turn's own end.
         stop: i.stop.handler(async ({ input, context }) => {
             own(context, input.conversationId);
-            if (!(await services.turns.stop(input.conversationId))) {
-                throw new ORPCError("NOT_FOUND", { message: "no running turn for that conversation" });
+            return services.turns.stop(input);
+        }),
+        queueEdit: i.queueEdit.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
+            // Taking words back is what removal is for; an edit to nothing would send a message with nothing in it.
+            if (input.text.trim().length === 0) {
+                throw new ORPCError("BAD_REQUEST", { message: "A waiting message needs words: take it back instead of emptying it." });
             }
-            return { ok: true } as const;
+            return queueAnswer(input.conversationId, await services.turns.reword(input));
+        }),
+        queueRemove: i.queueRemove.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
+            return queueAnswer(input.conversationId, await services.turns.unqueue(input));
+        }),
+        queueResume: i.queueResume.handler(async ({ input, context }) => {
+            own(context, input.conversationId);
+            return services.turns.release(input);
         }),
         // Rewinds a message, its files, transcript and session together. CONFLICT rather than queuing behind a running
         // turn: by the time it finished, the workspace would have moved on from what the user is looking at.
         rewind: i.rewind.handler(async ({ input, context }) => {
             own(context, input.conversationId);
-            const outcome = await rewindConversation(services, input.conversationId, input.index);
+            const outcome = await rewindConversation(services, input.conversationId, input);
             if (outcome === "busy") {
                 throw new ORPCError("CONFLICT", { message: "This agent is running a turn, stop it before going back." });
             }
             if (outcome === "no-checkpoint") {
                 throw new ORPCError("NOT_FOUND", { message: "That message has no saved file state to go back to." });
+            }
+            if (outcome === "stale") {
+                throw new ORPCError("PRECONDITION_FAILED", { message: "That message is no longer where you saw it: the conversation has moved since." });
             }
             return outcome;
         }),

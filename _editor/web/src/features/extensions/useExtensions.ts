@@ -1,5 +1,11 @@
 import type { CapabilityContribution } from "@intentic/extension-manifest";
-import type { CapabilityKind, ExtensionUpdatePolicy, InvalidWorkspaceExtension, ExtensionSummary } from "@intentic/sandbox-contract";
+import type {
+    CapabilityKind,
+    ExtensionUpdatePolicy,
+    InvalidWorkspaceExtension,
+    ExtensionSummary,
+    PendingWorkspaceExtension,
+} from "@intentic/sandbox-contract";
 import { computed } from "vue";
 import { rpcQuery } from "../sandbox/client/rpcQuery";
 import { sandboxRpc } from "../sandbox/client/sandboxRpc";
@@ -22,12 +28,20 @@ export function useExtensions() {
     const extensions = computed<ExtensionSummary[]>(() => query.data.value?.extensions ?? []);
     // Workspace-extension directories that failed to enumerate, and why; the only feedback their author gets.
     const invalid = computed<InvalidWorkspaceExtension[]>(() => query.data.value?.invalid ?? []);
+    // Workspace extensions waiting for the owner's approval: listed apart, and never loaded by the host.
+    const pending = computed<PendingWorkspaceExtension[]>(() => query.data.value?.pending ?? []);
     // A disabled extension stays listed but wires nothing; read this list, not `extensions`, for contributions.
     const enabledExtensions = computed<ExtensionSummary[]>(() => extensions.value.filter((extension) => extension.enabled));
     // Flips one extension's switch and re-reads the list. The daemon converges its own half; the caller's
     // reloadExtensions() activates or retires it without a page reload.
     const setEnabled = async (id: string, enabled: boolean): Promise<void> => {
         await sandboxRpc.extensions.setEnabled({ id, enabled });
+        await query.refetch();
+    };
+    // The owner's yes for the powers they were shown (`digest`); the daemon refuses one that changed since. The caller's
+    // reloadExtensions() then loads what the approval let in.
+    const approve = async (id: string, digest: string): Promise<void> => {
+        await sandboxRpc.extensions.approve({ id, digest });
         await query.refetch();
     };
     // Authors a new extension in this workspace; the row exists before the caller's reloadExtensions() makes it run, so
@@ -75,8 +89,10 @@ export function useExtensions() {
     return {
         extensions,
         invalid,
+        pending,
         enabled: enabledExtensions,
         setEnabled,
+        approve,
         create,
         remove,
         contributionOf,

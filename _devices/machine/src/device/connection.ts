@@ -5,6 +5,7 @@ import { dialPeer, PEER_LINK_BACKOFF, peerLinkSilenceMs, type PeerLink } from "@
 import { RPCHandler } from "@orpc/server/websocket";
 import { type DaemonBase, resolveDaemonBase } from "../daemon-base.js";
 import { type HostLink, rememberScopes, removeLinks } from "./config.js";
+import { type Indicator, machineIndicator } from "./indicator.js";
 import { createHostRouter } from "./router.js";
 
 // This device's one instance of sandbox-contract's peer-dial (the socket, handler-before-hello, backoff, the
@@ -23,7 +24,14 @@ const realDial: Dial = { resolveBase: resolveDaemonBase, socket: (url) => new We
 // What a revoked link is dropped with; the resident's next pass then closes nothing more, since the loop already ended.
 const forgetLink = async (sandboxUrl: string): Promise<void> => void (await removeLinks(sandboxUrl));
 
-export const connect = (config: HostLink, version: string, log: Log, dial: Dial = realDial, forget = forgetLink): PeerLink => {
+export const connect = (
+    config: HostLink,
+    version: string,
+    log: Log,
+    dial: Dial = realDial,
+    forget = forgetLink,
+    indicator: Indicator = machineIndicator(),
+): PeerLink => {
     // Every line this link writes names the sandbox it is about. One agent holds a link per sandbox and the dial
     // agent's own complaints carry no address, so a machine with five links wrote "disconnected (1002); 7172 failed
     // attempts" for two days without ever saying whose — and nothing in the log could tell the dead ones apart.
@@ -31,14 +39,16 @@ export const connect = (config: HostLink, version: string, log: Log, dial: Dial 
     // The live grant, replaced by the sandbox's `setScopes` on every connect, so a scope turned off is enforced
     // from the new session's first call.
     let scopes: DeviceScopes = config.scopes;
+    // The socket this link is on now.
+    let held: WebSocket | undefined;
     const handler = new RPCHandler(
         createHostRouter({
+            sandboxUrl: config.sandboxUrl,
             scopes: () => scopes,
             setScopes: (next) => {
                 scopes = next;
-                // The persistence for this link's cache alone: the router doesn't know which of several sandboxes
-                // pushed, so
-                // the connection, which owns the identity, writes it. Unawaited: the live grant above already enforces.
+                // The persistence for this link's cache alone, written by the connection, which owns the link's entry
+                // in the file. Unawaited: the live grant above already enforces.
                 void rememberScopes(config.sandboxUrl, next);
             },
             log,
@@ -59,7 +69,16 @@ export const connect = (config: HostLink, version: string, log: Log, dial: Dial 
             };
         },
         hello: () => ({ type: "hello", token: config.token, version }),
-        attach: (ws) => handler.upgrade(ws),
+        attach: (ws) => {
+            held = ws;
+            // A link that is gone drives nothing; only its latest socket speaks for it, as one abandoned may close late.
+            ws.addEventListener("close", () => {
+                if (held === ws) {
+                    indicator.release(config.sandboxUrl);
+                }
+            });
+            handler.upgrade(ws);
+        },
         backoff: createBackoff(PEER_LINK_BACKOFF),
 /* The deadline that makes a dead link NOTICEABLE, and on this door it is the one that matters most. */
         silenceMs: peerLinkSilenceMs(HOST_HEARTBEAT_MS),

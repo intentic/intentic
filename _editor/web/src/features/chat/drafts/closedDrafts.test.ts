@@ -32,7 +32,6 @@ const tab = (conversationId: string, draft: string): StoredTab => ({
     draft,
     draftAt: 1_700,
     attachments: [],
-    queued: [],
 });
 
 beforeEach(() => {

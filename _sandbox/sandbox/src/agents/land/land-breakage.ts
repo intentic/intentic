@@ -11,9 +11,6 @@ import type { LandBreakage } from "../../workspace/deps/verify-deps.js";
 
 // Follow-ups one conversation is sent while one project stays red; past this the breakage is not its to keep chasing.
 const SENDS_PER_STREAK = 2;
-// A live conversation takes the words as a steer; an idle one is started. Two minutes of retries rides out a turn ending.
-const DELIVER_ATTEMPTS = 24;
-const DELIVER_RETRY_MS = 5_000;
 // Failures listed in the follow-up before the rest are counted.
 const LISTED = 30;
 
@@ -100,13 +97,13 @@ export const routeLandBreakage = async (services: BreakageRouter, breakage: Land
             ...(land.title === undefined ? {} : { title: land.title }),
         })
         .catch((error: unknown) => services.logger.warn({ err: error }, "land breakage: activity append failed"));
+    // A live conversation takes the words as a steer, an idle one is started, and a busy one queues them for its next turn.
     void deliverWake(
         { turns: services.turns, sessionIdOf: (conversationId) => services.conversations.sessionIdOf(conversationId) },
         { conversationId: land.agentId, prompt: promptFor(breakage), voice: "sandbox", profile: conversationProfile(entry) },
-        { attempts: DELIVER_ATTEMPTS, retryMs: DELIVER_RETRY_MS, logger: services.logger, context: { breakage: breakage.project } },
-    ).then((landing) => {
-        if (landing === "busy") {
-            services.logger.warn({ conversationId: land.agentId, project: breakage.project }, "land breakage: the conversation never took the follow-up");
+    ).then((receipt) => {
+        if ("invalid" in receipt) {
+            services.logger.warn({ conversationId: land.agentId, project: breakage.project, invalid: receipt.invalid }, "land breakage: the conversation could not take the follow-up");
         }
     });
     return true;

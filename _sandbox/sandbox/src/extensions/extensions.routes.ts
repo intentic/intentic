@@ -1,14 +1,15 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { errorMessage } from "@intentic/base/errors";
 import { extensionApiVersion, satisfiesEngines } from "@intentic/extension-api/protocol";
 import { extensionIdOf, type ProcessContribution } from "@intentic/extension-manifest";
 import { type ExtensionSummary, extensionsContract, previewUrl, zoneFromUrl } from "@intentic/sandbox-contract";
 import { sandboxIdFromToken } from "@intentic/sandbox-contract/tunnel-ids";
 import { implement, ORPCError } from "@orpc/server";
-import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
+import { requireMaintainer } from "../auth/owner-gates.js";
 import { extensionDir, workspaceExtensionsRoot } from "../capabilities/extension-dirs.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { approveExtension } from "./extension-approvals.js";
 import { writeExtensionEnablement } from "./extension-enablement.js";
 import { extensionProcessKey, reconcileListenerProcesses, startAutoStartProcesses, startExtensionProcess } from "./extension-processes.js";
 import { planExtensionRemoval, removeExtension } from "./extension-removal.js";
@@ -27,7 +28,7 @@ import {
     writeUpdatePolicy,
 } from "./extension-updates.js";
 import { readExtensionUsage, recordExtensionUsage } from "./extension-usage.js";
-import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { ESSENTIAL_EXTENSIONS, extensionInventory, type InstalledExtension, installedExtensions, type PendingExtension } from "./installed-extensions.js";
 import { writeWorkspaceExtension } from "./workspace-extension-scaffold.js";
 
 // Installed extensions (git-installed ∪ image-baked) resolved to manifests and settings; boots the web extension host.
@@ -38,17 +39,10 @@ export const createExtensionsRoutes = (services: Services) => {
     const zone = services.config.zone !== "" ? services.config.zone : zoneFromUrl(services.config.sandbox.publicUrl);
     const sandboxId = sandboxIdFromToken(services.config.connectToken);
     // Same operating-tier gate the add route holds over installing: update/revert/policy are the same decision.
-    const authorizeOperator = async (context: OrpcContext): Promise<void> => {
-        if (services.auth === undefined) {
-            return;
-        }
-        try {
-            await authorizeMaintainer(services.auth, bearerFrom(context.headers.get("authorization") ?? undefined));
-        } catch {
-            throw new ORPCError("FORBIDDEN", { message: "only a sandbox maintainer can do this" });
-        }
-    };
-    // Every id-addressed route resolves here against the full list; a disabled extension still renders its row.
+    const authorizeOperator = (context: OrpcContext): Promise<void> =>
+        requireMaintainer(services, context.headers, "only a sandbox maintainer can do this");
+    // Every id-addressed route that configures or runs an extension resolves here: a disabled one still renders its row,
+    // one waiting for approval is not found until approved.
     const find = async (id: string): Promise<InstalledExtension> => {
         const extension = (await installedExtensions(services)).find((e) => e.id === id);
         if (extension === undefined) {
@@ -56,6 +50,24 @@ export const createExtensionsRoutes = (services: Services) => {
         }
         return extension;
     };
+    // For the routes that only read an extension's files, stop it, or delete it: one still waiting for approval too.
+    const findAny = async (id: string): Promise<InstalledExtension> => {
+        const inventory = await extensionInventory(services);
+        const extension = [...inventory.extensions, ...inventory.pending].find((e) => e.id === id);
+        if (extension === undefined) {
+            throw new ORPCError("NOT_FOUND", { message: "no extension with that id" });
+        }
+        return extension;
+    };
+    // The pending row as the list sends it: the folder, and the powers a yes allows.
+    const pendingRow = (extension: PendingExtension) => ({
+        id: extension.id,
+        dir: basename(extension.dir),
+        manifest: extension.manifest,
+        powers: extension.approval.powers,
+        approvedBefore: extension.approval.approvedBefore,
+        digest: extension.approval.digest,
+    });
     // One row's `backend` field, only for a manifest with a server; the supervisor's state wins if present.
     // Otherwise the host's own state (starting/restarting/stopped) answers; a disabled extension reports nothing.
     const backendStateOf = (extension: InstalledExtension): Pick<ExtensionSummary, "backend"> => {
@@ -72,8 +84,12 @@ export const createExtensionsRoutes = (services: Services) => {
         };
     };
     // Extension and declared process a process route addresses; an undeclared name answers NOT_FOUND.
-    const processOf = async (id: string, name: string): Promise<{ extension: InstalledExtension; process: ProcessContribution }> => {
-        const extension = await find(id);
+    const processOf = async (
+        id: string,
+        name: string,
+        lookup: (id: string) => Promise<InstalledExtension>,
+    ): Promise<{ extension: InstalledExtension; process: ProcessContribution }> => {
+        const extension = await lookup(id);
         const process = (extension.manifest.contributes?.processes ?? []).find((declared) => declared.name === name);
         if (process === undefined) {
             throw new ORPCError("NOT_FOUND", { message: `the extension declares no process "${name}"` });
@@ -119,10 +135,11 @@ export const createExtensionsRoutes = (services: Services) => {
             return {
                 extensions,
                 invalid: inventory.invalid,
+                pending: inventory.pending.map(pendingRow),
                 ...(updates.checkedAt !== undefined ? { updatesCheckedAt: updates.checkedAt } : {}),
             };
         }),
-        create: i.create.handler(async ({ input }) => {
+        create: i.create.handler(async ({ input, context }) => {
             const id = `${input.publisher}.${input.name}`;
             // "Already taken" fails two ways: an id collision leaves it unenumerable, never shadowing a baked one.
             // A directory collision is somebody's existing work, possibly mid-edit and already sitting in `invalid`.
@@ -141,15 +158,44 @@ export const createExtensionsRoutes = (services: Services) => {
             }
             // Same ping a workspace file write sends: this is the owner's edit, made on their behalf.
             services.history.notifyUserWrite();
+            // A person creating one approves the scaffold as written; a machine credential's creation waits like any folder.
+            const written = (await extensionInventory(services)).pending.find((extension) => extension.id === id);
+            const byOperator = await authorizeOperator(context).then(
+                () => true,
+                () => false,
+            );
+            if (written !== undefined && byOperator) {
+                await approveExtension(services.config.historyRoot, id, written.manifest);
+            }
             return { id, dir: `.intentic/config/workspace-extensions/${input.name}` };
+        }),
+        // The install moment a workspace folder never had, for the powers the owner was shown: a mismatch is a change made
+        // while they read, refused rather than approved unseen.
+        approve: i.approve.handler(async ({ input, context }) => {
+            await requireMaintainer(services, context.headers, "only the owner or a maintainer can let an extension run");
+            const extension = (await extensionInventory(services)).pending.find((entry) => entry.id === input.id);
+            if (extension === undefined) {
+                throw new ORPCError("NOT_FOUND", { message: "no workspace extension with that id is waiting for approval" });
+            }
+            if (extension.approval.digest !== input.digest) {
+                throw new ORPCError("CONFLICT", { message: "the powers it declares changed since they were shown, read them again" });
+            }
+            await approveExtension(services.config.historyRoot, extension.id, extension.manifest);
+            // Converges the way switching one on does: its processes now, its gateway and backend on the new set.
+            if (extension.enabled) {
+                await startAutoStartProcesses(services, extension);
+            }
+            void reconcileListenerProcesses(services);
+            services.extensionBackend.restart();
+            return { ok: true } as const;
         }),
         // A read, ungated: knowing what a removal would cost is not itself a change, and the refusal for an extension
         // that can't be removed is part of the answer rather than an error.
-        removalPlan: i.removalPlan.handler(async ({ input }) => planExtensionRemoval(services, await find(input.id))),
+        removalPlan: i.removalPlan.handler(async ({ input }) => planExtensionRemoval(services, await findAny(input.id))),
         // Gated like install: this deletes code, connections and the credentials configured against them.
         remove: i.remove.handler(async ({ input, context }) => {
             await authorizeOperator(context);
-            const extension = await find(input.id);
+            const extension = await findAny(input.id);
             const plan = await planExtensionRemoval(services, extension);
             if (plan.blocked !== undefined) {
                 throw new ORPCError("PRECONDITION_FAILED", { message: plan.blocked });
@@ -218,7 +264,7 @@ export const createExtensionsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         readiness: i.readiness.handler(async ({ input }) => {
-            const extension = await find(input.id);
+            const extension = await findAny(input.id);
             const usage = (await readExtensionUsage(root))[extensionIdOf(extension.manifest)];
             // Extension's directory: where it sits for workspace/baked, or the checkout for a git install.
             const checks = await extensionReadiness(extension, satisfiesEngines(extension.manifest.engines.intentic, extensionApiVersion), usage);
@@ -293,7 +339,7 @@ export const createExtensionsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         processStatus: i.processStatus.handler(async ({ input }) => {
-            const { process } = await processOf(input.id, input.name);
+            const { process } = await processOf(input.id, input.name, findAny);
             const key = extensionProcessKey(input.id, input.name);
             const service = services.serviceProcesses.statusOf(key);
             const url = process.preview === true ? previewUrl(key, zone, sandboxId) : undefined;
@@ -306,7 +352,7 @@ export const createExtensionsRoutes = (services: Services) => {
             };
         }),
         processStart: i.processStart.handler(async ({ input }) => {
-            const { extension, process } = await processOf(input.id, input.name);
+            const { extension, process } = await processOf(input.id, input.name, find);
             // Stop/status stay reachable while disabled (a lingering process needs killing); starting one would not.
             if (!extension.enabled) {
                 throw new ORPCError("PRECONDITION_FAILED", { message: "the extension is disabled" });
@@ -319,7 +365,7 @@ export const createExtensionsRoutes = (services: Services) => {
             return { ok: true } as const;
         }),
         processStop: i.processStop.handler(async ({ input }) => {
-            await processOf(input.id, input.name);
+            await processOf(input.id, input.name, findAny);
             services.serviceProcesses.stop(extensionProcessKey(input.id, input.name));
             return { ok: true } as const;
         }),

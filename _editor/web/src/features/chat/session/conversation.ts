@@ -1,5 +1,5 @@
-import { type AgentCommand, type ContextUsage, newConversationId, type TurnFact } from "@intentic/sandbox-contract";
-import { computed, ref } from "vue";
+import { type AgentCommand, type ContextUsage, type ConversationQueue, newConversationId, type TurnFact } from "@intentic/sandbox-contract";
+import { computed, ref, shallowRef } from "vue";
 import type { AgentStanding } from "../../agents/fleet/agentStatus";
 import type { PendingAttachment } from "../drafts/useChatAttachments";
 import type { PickUp } from "../run/pickUp";
@@ -13,7 +13,7 @@ import { applyTurnEntry } from "./turnFacts";
 
 // One chat conversation, self-contained so several run at once: what it is (identity, placement, the tab's own facts)
 // and the units that do its work — `transcript` (rows, pages, fork/rewind/edit), `selection` (the next turn's picks),
-// `turn` (sending, streaming, the queue, stop), `requests` (answering a card), `failures` (what a failed turn does).
+// `turn` (sending, streaming, the queue's doors, stop), `requests` (answering a card), `failures` (what a failed turn does).
 // It is their composition and nothing else: every behaviour is one unit's, reached through it.
 
 // What a conversation is doing right now, surfaced as the tab's status icon.
@@ -93,16 +93,19 @@ export class Conversation {
     // Speed the harness actually served the last turn at, with its reason if not the one asked for; kept across turns.
     readonly fastMode = ref<Extract<TurnFact, { kind: `fast_mode` }> | undefined>();
 
+    // What waits for this conversation's next turn, as the daemon last told this window: the conversation's, the same in
+    // every window, fed from its card by the pane showing it and from the answers to this window's own changes.
+    readonly queue = shallowRef<ConversationQueue | undefined>();
+
     readonly transcript: TranscriptView;
     readonly selection: ComposerSelection;
     readonly turn: TurnClient;
     readonly failures: TurnFailures;
     readonly requests: CardReplies;
 
-    // Whether this window holds words nowhere else does (draft, attachment, queued message); guards a tab from closing.
-    readonly unsent = computed<boolean>(
-        () => this.draft.value.trim() !== `` || this.attachments.value.length > 0 || this.turn.queued.value.length > 0,
-    );
+    // Whether this window holds words nowhere else does (a draft, an attachment); guards a tab from closing. What waits in
+    // the queue is the daemon's, kept whatever this window does.
+    readonly unsent = computed<boolean>(() => this.draft.value.trim() !== `` || this.attachments.value.length > 0);
 
     // What this conversation is doing, for the tab's status icon.
     readonly status = computed<ConversationStatus>(() => {

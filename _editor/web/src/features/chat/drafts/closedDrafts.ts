@@ -5,7 +5,7 @@ import { onChatNote, postChatNote } from "../run/chatChannel";
 import { readStoredTabs, type StoredTab } from "../tabs/tabSnapshot";
 import { useSandbox } from "../../sandbox/client/useSandbox";
 
-// Composer drafts (words, staged attachments, queued messages) a chat close would otherwise lose, kept per
+// Composer drafts (words, staged attachments) a chat close would otherwise lose, kept per
 // browser (not per window) in localStorage and broadcast over chatChannel so every window's board reflects them
 // immediately. Scoped per sandbox; an entry leaves only when claimed (reopened) or dismissed, never by expiry.
 

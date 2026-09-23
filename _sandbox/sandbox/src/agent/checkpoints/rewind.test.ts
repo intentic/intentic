@@ -4,6 +4,8 @@ import { rewindConversation, type RewindDeps } from "./rewind.js";
 import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
 const CONVERSATION = "conv-1";
+// The message the rewind means: the third in the record, as the reader saw it there.
+const TARGET = { index: 2, messageId: "m-3" };
 
 // Only the services rewind touches, each recording what it was asked; these tests are about order and the lease guard,
 // not what git or the filesystem actually do.
@@ -15,6 +17,8 @@ const deps = (overrides: {
     readonly entry?: boolean;
     // Which repos of a worktree checkpoint refuse to reset: the checkout that is no longer there.
     readonly resetFails?: readonly string[];
+    // The id of the message the record holds at the target's position; omitted ⇒ the one the reader saw there.
+    readonly held?: string;
 }) => {
     const calls: string[] = [];
     let leaseHeld = false;
@@ -62,6 +66,12 @@ const deps = (overrides: {
             },
         },
         transcripts: {
+            // One row at the position asked for, as the record's page answers it.
+            page: async (_agent: unknown, window: { readonly before: number }) => {
+                expect(leaseHeld).toBe(true);
+                calls.push("read");
+                return { rows: [{ role: "user", text: "tidy the docs", messageId: overrides.held ?? TARGET.messageId }], from: window.before - 1, more: true };
+            },
             truncate: async (_agent: unknown, keep: number) => {
                 expect(leaseHeld).toBe(true);
                 calls.push(`truncate:${keep}`);
@@ -86,37 +96,37 @@ const deps = (overrides: {
 
 test("restores, truncates and clears the session: in that order, all under the lease", async () => {
     const { services, calls } = deps({});
-    const outcome = (await rewindConversation(services, CONVERSATION, 2)) as RewindResult;
+    const outcome = (await rewindConversation(services, CONVERSATION, TARGET)) as RewindResult;
 
     expect(outcome).toEqual({ snapshot: "snap-1", dropped: 4 });
     // Files before transcript, so a failed restore leaves the conversation intact rather than an unrecoverable
     // transcript cut.
-    expect(calls).toEqual(["of", "restore", "truncate:2", "forgetCheckpoints:3", "clearSession"]);
+    expect(calls).toEqual(["read", "of", "restore", "truncate:2", "forgetCheckpoints:3", "clearSession"]);
 });
 
 test("a running turn refuses the rewind before anything is touched", async () => {
     const { services, calls } = deps({ running: true });
-    expect(await rewindConversation(services, CONVERSATION, 2)).toBe("busy");
+    expect(await rewindConversation(services, CONVERSATION, TARGET)).toBe("busy");
     expect(calls).toEqual([]);
 });
 
 test("a message with no checkpoint refuses without restoring or truncating", async () => {
     const { services, calls } = deps({ checkpoint: null });
-    expect(await rewindConversation(services, CONVERSATION, 2)).toBe("no-checkpoint");
-    expect(calls).toEqual(["of"]);
+    expect(await rewindConversation(services, CONVERSATION, TARGET)).toBe("no-checkpoint");
+    expect(calls).toEqual(["read", "of"]);
 });
 
 test("a checkpoint that vanishes between lookup and restore leaves the transcript alone", async () => {
     const { services, calls } = deps({ restored: false });
-    expect(await rewindConversation(services, CONVERSATION, 2)).toBe("no-checkpoint");
-    expect(calls).toEqual(["of", "restore"]);
+    expect(await rewindConversation(services, CONVERSATION, TARGET)).toBe("no-checkpoint");
+    expect(calls).toEqual(["read", "of", "restore"]);
 });
 
 // An unknown conversation still restores: files are what matters, and there's no transcript to shorten.
 test("an unknown conversation restores with nothing dropped", async () => {
     const { services, calls } = deps({ entry: false });
-    expect(await rewindConversation(services, CONVERSATION, 2)).toEqual({ snapshot: "snap-1", dropped: 0 });
-    expect(calls).toEqual(["of", "restore", "forgetCheckpoints:3", "clearSession"]);
+    expect(await rewindConversation(services, CONVERSATION, TARGET)).toEqual({ snapshot: "snap-1", dropped: 0 });
+    expect(calls).toEqual(["read", "of", "restore", "forgetCheckpoints:3", "clearSession"]);
 });
 
 // An isolated conversation goes back to the commits its branch stood on, not a workspace checkpoint: the same three
@@ -132,11 +142,11 @@ test("an isolated conversation resets its own checkout, per repo, and names no t
         },
     });
 
-    const outcome = (await rewindConversation(services, CONVERSATION, 2, git)) as RewindResult;
+    const outcome = (await rewindConversation(services, CONVERSATION, TARGET, git)) as RewindResult;
 
     // No `snapshot`: this moved the conversation's own branch; the workspace timeline has no row for it.
     expect(outcome).toEqual({ dropped: 4 });
-    expect(calls).toEqual(["of", "reset:root", "clean:root", "reset:intent", "clean:intent", "truncate:2", "forgetCheckpoints:3", "clearSession"]);
+    expect(calls).toEqual(["read", "of", "reset:root", "clean:root", "reset:intent", "clean:intent", "truncate:2", "forgetCheckpoints:3", "clearSession"]);
 });
 
 test("a repo whose checkout is gone is skipped, and the rest still go back", async () => {
@@ -151,8 +161,8 @@ test("a repo whose checkout is gone is skipped, and the rest still go back", asy
         resetFails: ["gone"],
     });
 
-    expect(await rewindConversation(services, CONVERSATION, 2, git)).toEqual({ dropped: 4 });
-    expect(calls).toEqual(["of", "reset:root", "clean:root", "truncate:2", "forgetCheckpoints:3", "clearSession"]);
+    expect(await rewindConversation(services, CONVERSATION, TARGET, git)).toEqual({ dropped: 4 });
+    expect(calls).toEqual(["read", "of", "reset:root", "clean:root", "truncate:2", "forgetCheckpoints:3", "clearSession"]);
 });
 
 // All repos failing is the same as a vanished checkpoint: nothing to go back to, transcript untouched.
@@ -162,6 +172,14 @@ test("an isolated rewind with no checkout left refuses and leaves the transcript
         resetFails: ["gone"],
     });
 
-    expect(await rewindConversation(services, CONVERSATION, 2, git)).toBe("no-checkpoint");
-    expect(calls).toEqual(["of"]);
+    expect(await rewindConversation(services, CONVERSATION, TARGET, git)).toBe("no-checkpoint");
+    expect(calls).toEqual(["read", "of"]);
+});
+
+// The reader's position is only as current as the transcript they read it from: another window rewound and a turn ran
+// since, so the third message is now a different one, and going back to its checkpoint would restore the wrong point.
+test("a position that now holds another message refuses before any checkpoint is looked up", async () => {
+    const { services, calls } = deps({ held: "m-after-another-rewind" });
+    expect(await rewindConversation(services, CONVERSATION, TARGET)).toBe("stale");
+    expect(calls).toEqual(["read"]);
 });

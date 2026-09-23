@@ -2,8 +2,9 @@ import { linuxApps } from "./apps-linux.js";
 import { windowsApps } from "./apps-windows.js";
 import { linuxInput } from "./input-linux.js";
 import { windowsInput } from "./input-windows.js";
+import { windowsNotice } from "./notice-windows.js";
 import { capture, frame } from "./screen.js";
-import { type Desktop, DesktopError } from "./types.js";
+import { type Desktop, DesktopError, type Notice, type NoticeEvents } from "./types.js";
 
 export { windowsSession } from "./apps-windows.js";
 export { parseChord, windowsChord, wtypeArgs, xdotoolChord, type Chord, type Modifier } from "./keys.js";
@@ -14,6 +15,8 @@ export {
     type Desktop,
     type ForegroundWindow,
     type MouseButton,
+    type Notice,
+    type NoticeEvents,
     type Point,
     type ScreenFrame,
     type ScrollDirection,
@@ -64,3 +67,7 @@ export const desktop = (): Desktop => {
         writeClipboard: unsupported,
     };
 };
+
+// Windows only. Elsewhere there is no notice to open, and a caller treats that as nothing to show.
+export const notice = (hotkey: string, events: NoticeEvents): Notice | undefined =>
+    process.platform === "win32" ? windowsNotice(hotkey, events) : undefined;

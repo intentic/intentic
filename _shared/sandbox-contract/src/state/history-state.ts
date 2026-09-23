@@ -113,5 +113,11 @@ export const HISTORY_STATE_FILES: readonly StateFile[] = [
     { path: "runner-pair-consumed.json", portability: "identity" },
     // This container's own identity and reconnect token; elsewhere it would dial the parent as this runner.
     { path: "runner-identity.json", portability: "identity" },
+    // The owner's yes to a workspace's hooks, pinned to their bytes: a trust decision the target's owner makes again.
+    { path: "hook-approvals.json", portability: "identity", note: "Approve the workspace's Claude Code hooks again from Approvals." },
+    // The hook sets waiting for that yes; the next turn that finds them lists them again.
+    { path: "hook-requests.json", portability: "derived" },
+    // The owner's yes to each workspace extension's declared powers, decided again by the target's owner.
+    { path: "extension-approvals.json", portability: "identity", note: "Approve the extensions written in this workspace again from Extensions." },
     { path: "local-cert/", portability: "identity" },
 ];

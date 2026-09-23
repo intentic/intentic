@@ -1,6 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
 import { DEFAULT_SAFETY_POLICY, type SafetyPolicy } from "@intentic/sandbox-contract";
+import { queueOnFile, writeTextFile } from "../store/text-file.js";
 
 // The owner's safety policy on disk (.intentic/config/safety.md); the judge reads it before a flagged command. A text
 // file, not a manifest: it travels verbatim, with no shape to validate. `custom` reflects whether the file exists, not
@@ -20,15 +20,6 @@ export interface SafetyPolicyStore {
 // Heading and blurb `append` writes under, once, the first time a policy gets a card-added line.
 const ADDED_HEADING = `## Added from permission cards`;
 const ADDED_NOTE = `Lines you accepted on a card, newest last. Edit or delete them like anything else here.`;
-
-// Atomic write: rename after a temp write, so a reader never sees a half-written policy. The temp name is prefixed so
-// the watcher's prefix match does not treat it as a write to the policy file itself.
-const writeAtomic = async (path: string, text: string): Promise<void> => {
-    const tempPath = join(dirname(path), `.${basename(path)}.${process.pid}.tmp`);
-    await mkdir(dirname(path), { recursive: true });
-    await writeFile(tempPath, text, "utf8");
-    await rename(tempPath, path);
-};
 
 // Ensures the text ends with exactly one newline, so an append cannot merge onto the last line.
 const terminated = (text: string): string => (text.endsWith(`\n`) ? text : `${text}\n`);
@@ -59,10 +50,12 @@ export const fileSafetyPolicyStore = (path: string): SafetyPolicyStore => {
     return {
         get: read,
         text: async () => (await read()).text,
-        set: (text) => writeAtomic(path, terminated(text)),
-        append: async (line) => {
-            const { text } = await read();
-            await writeAtomic(path, withAddedLine(text, line));
-        },
+        set: (text) => queueOnFile(path, () => writeTextFile(path, terminated(text))),
+        // Read and write on the file's queue: two cards accepted at once must both land.
+        append: (line) =>
+            queueOnFile(path, async () => {
+                const { text } = await read();
+                await writeTextFile(path, withAddedLine(text, line));
+            }),
     };
 };

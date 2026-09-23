@@ -214,6 +214,14 @@ export const SteerSchema = z
     .object({
         conversationId: z.string().min(1).describe("Which running conversation to interrupt."),
         text: z.string().max(20_000).describe("What to say to it. It arrives mid-turn without stopping the turn."),
+        messageId: z
+            .string()
+            .min(1)
+            .max(128)
+            .optional()
+            .describe(
+                "Your id for this message. Sending again under an id the sandbox already took is answered with what it did with it the first time, never a second delivery. Leave it out and the sandbox names the message itself.",
+            ),
         attachments: z
             .array(z.string().min(1))
             .max(20)
@@ -233,8 +241,42 @@ export const SteerSchema = z
     .refine((steer) => steer.text.trim().length > 0 || (steer.attachments?.length ?? 0) > 0, {
         message: "text or attachments required",
     });
-// True cancel, aborted daemon-side; unlike closing the /agent fetch, which sends no cancel frame.
-export const StopTurnSchema = z.object({ conversationId: z.string().min(1).describe("Which conversation's running turn to cancel.") });
+// True cancel, aborted daemon-side; unlike closing the /agent fetch, which sends no cancel frame. A stop names the run
+// it means, so one arriving after that run settled cannot cancel whatever the conversation started next.
+export const StopTurnSchema = z.union([
+    z.object({
+        conversationId: z.string().min(1).describe("Which conversation's running turn to cancel."),
+        run: z
+            .string()
+            .min(1)
+            .describe(
+                "The run you mean to cancel, as starting or attaching to it named it. If another turn has started since, nothing is cancelled and the answer names the one running instead.",
+            ),
+    }),
+    // A send not yet answered has no run to name, only the id it gave its message.
+    z.object({
+        conversationId: z.string().min(1).describe("Which conversation's running turn to cancel."),
+        messageId: z
+            .string()
+            .min(1)
+            .describe(
+                "The message you sent, while its run is not named yet: cancels the turn it is in. If none is, nothing is cancelled: the message has not become a turn, or its turn has already ended.",
+            ),
+    }),
+    // Only for a turn nobody can name: one the sandbox runs with no run to attach to (a scheduled automation's).
+    z.object({
+        conversationId: z.string().min(1).describe("Which conversation's running turn to cancel."),
+        live: z
+            .literal(true)
+            .describe("Cancel whatever turn is running now, whichever that is. Only for a turn you cannot name: one that has no run to attach to."),
+    }),
+]);
+export type StopTurn = z.infer<typeof StopTurnSchema>;
+export const StopResultSchema = z.object({
+    stopped: z.boolean().describe("Whether a turn was cancelled."),
+    running: z.string().optional().describe("The run that is live instead of the one you named, left running. Absent when nothing else runs."),
+});
+export type StopResult = z.infer<typeof StopResultSchema>;
 // The press carries WHO serves the re-run; the daemon keeps WHAT the turn is (prompt, attachments, worktree) from its
 // own record, since re-deriving from a stripped client transcript would replay a different turn.
 export const ResumeRoutingSchema = z.object({
@@ -261,3 +303,26 @@ export const ResumeTurnSchema = z.object({
         "Who serves the re-run, when the conversation has been re-pointed since it was refused. Leave it out to run it on whatever the turn carried.",
     ),
 });
+// Names one queued message as it was read, so a change made against an older copy is refused rather than written over
+// somebody else's.
+export const QueuedMessageRefSchema = z.object({
+    conversationId: z.string().min(1).describe("Whose queue."),
+    id: z.string().min(1).describe("Which waiting message."),
+    revision: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("The message's revision as you read it. If it has been changed since, from this window or another, nothing happens."),
+});
+export type QueuedMessageRef = z.infer<typeof QueuedMessageRefSchema>;
+export const QueueEditSchema = QueuedMessageRefSchema.extend({
+    text: z.string().describe("What the message should say instead. It keeps its place in the queue."),
+});
+export type QueueEdit = z.infer<typeof QueueEditSchema>;
+export const QueueResumeSchema = z.object({
+    conversationId: z.string().min(1).describe("Whose queue to let go."),
+    routing: ResumeRoutingSchema.optional().describe(
+        "Who serves the turn the waiting messages start, when the conversation has been re-pointed since they were queued: the usual answer to a refusal that held them. Leave it out to send them as they were queued.",
+    ),
+});
+export type QueueResume = z.infer<typeof QueueResumeSchema>;

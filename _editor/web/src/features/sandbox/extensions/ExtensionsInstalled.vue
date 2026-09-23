@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { extensionIdOf } from "@intentic/extension-manifest";
-import type { ExtensionSummary } from "@intentic/sandbox-contract";
+import type { ExtensionSummary, PendingWorkspaceExtension } from "@intentic/sandbox-contract";
 import { Button, ui, type NoticeModel, Row, RowGroup, SkeletonRows, StatusBadge } from "@intentic/ui";
 import { noticeFrom } from "@intentic/ui/async";
 import { computed, ref, watch } from "vue";
@@ -39,7 +39,7 @@ const emit = defineEmits<{
     clear: [];
 }>();
 
-const { entries, invalid, unlisted, setEnabled, remove, isLoading, error } = useExtensionList();
+const { entries, invalid, pending: waiting, unlisted, setEnabled, approve, remove, isLoading, error } = useExtensionList();
 const outline = useSandboxOutline(isLoading);
 // The list query's own message, in the words of the view that asked for it.
 watch(
@@ -129,6 +129,19 @@ const toggle = async (extension: ExtensionSummary, enabled: boolean): Promise<vo
     }
 };
 
+// The yes a workspace extension waits for, given for the powers on screen; the daemon starts what it runs, and the reload
+// loads its UI here. Returned as a promise so the button holds its own spinner.
+const approveExtension = async (extension: PendingWorkspaceExtension): Promise<void> => {
+    emit(`notice`, undefined);
+    try {
+        await approve(extension.id, extension.digest);
+        await reloadExtensions();
+        emit(`notice`, { tone: `info`, title: t(`sandbox.extensionsInstalled.approvedNow`, { manifest: extension.id }) });
+    } catch (failure) {
+        emit(`notice`, noticeFrom(failure, t(`sandbox.extensionsInstalled.couldntApprove`, { manifest: extension.id })));
+    }
+};
+
 // Removal lives here rather than on the row: the row is torn down by the refetch that removal causes, so a component
 // that unmounts mid-call is the wrong place to hold the call's outcome.
 const removing = ref<ExtensionSummary | undefined>(undefined);
@@ -168,6 +181,39 @@ const confirmRemove = async (): Promise<void> => {
 
 <template>
     <div class="flex flex-col gap-5">
+        <!-- Written in this workspace and not approved in its current shape: nothing of it runs until the yes, so it leads. -->
+        <RowGroup v-if="waiting.length > 0" :label="t(`sandbox.extensionsInstalled.waitingForApproval`)" :caption="t(`sandbox.extensionsInstalled.waitingCaption`)">
+            <Row v-for="extension in waiting" :key="extension.id">
+                <template #title>
+                    <span class="block truncate">{{ extension.id }}</span>
+                </template>
+                <template #description>
+                    <span class="block truncate">.intentic/config/workspace-extensions/{{ extension.dir }}</span>
+                </template>
+                <template #meta><StatusBadge variant="warning" :label="t(`sandbox.extensionsInstalled.pendingBadge`)" size="xs" /></template>
+                <template #control>
+                    <Button size="small" :label="t(`sandbox.extensionsInstalled.approve`)" @click="approveExtension(extension)" />
+                </template>
+                <!-- The same vocabulary and marks the update card reads out: what a yes allows, and what it no longer asks for. -->
+                <template #below>
+                    <div class="flex flex-col gap-1 pb-2">
+                        <p v-if="extension.powers.added.length === 0" class="text-2xs text-subtle">{{ t(`sandbox.extensionsInstalled.asksForNothing`) }}</p>
+                        <template v-else>
+                            <p class="text-2xs text-muted">
+                                {{ extension.approvedBefore ? t(`sandbox.extensionsInstalled.newPowersSinceApproved`) : t(`sandbox.extensionsInstalled.whatItAsksFor`) }}
+                            </p>
+                            <ul class="flex flex-col gap-0.5">
+                                <li v-for="power in extension.powers.added" :key="power" class="text-2xs text-content">+ {{ power }}</li>
+                            </ul>
+                        </template>
+                        <ul v-if="extension.powers.removed.length > 0" class="flex flex-col gap-0.5">
+                            <li v-for="power in extension.powers.removed" :key="power" class="text-2xs text-subtle">− {{ power }}</li>
+                        </ul>
+                    </div>
+                </template>
+            </Row>
+        </RowGroup>
+
         <RowGroup v-for="section in sections" :key="section.id" :label="section.label" :caption="section.caption">
             <ExtensionRow
                 v-for="entry in section.entries"

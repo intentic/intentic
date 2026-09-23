@@ -26,7 +26,7 @@ const composerOf = () => {
     providerAccounts.value = { ...providerAccounts.value, claude: [{ id: `a1`, label: `Claude`, connectedAt: 1 }] };
     const chat = new Conversation(`c1`);
     const view = conversationView(computed(() => chat));
-    const enqueue = spyOn(chat.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(chat.turn, `say`).mockResolvedValue(undefined);
     const host = {
         view,
         voiceAgent: ref(false),
@@ -52,7 +52,7 @@ const composerOf = () => {
     });
     app.mount(document.createElement(`div`));
     unmount = () => app.unmount();
-    return { chat, view, host, enqueue, send: send! };
+    return { chat, view, host, say, send: send! };
 };
 
 afterEach(() => {
@@ -64,13 +64,13 @@ afterEach(() => {
 
 describe(`a message`, () => {
     it(`goes with its chips, and the box is spent: cleared, recalled, followed, refocused`, async () => {
-        const { chat, host, enqueue, send } = composerOf();
+        const { chat, host, say, send } = composerOf();
         chat.draft.value = `  fix the header `;
         chat.attachments.value = [CHIP];
 
         send.submit();
 
-        expect(enqueue.mock.calls).toEqual([[`fix the header`, [{ name: `shot.png`, path: `${STATE_DIR}/a/shot.png` }], undefined]]);
+        expect(say.mock.calls).toEqual([[`fix the header`, [{ name: `shot.png`, path: `${STATE_DIR}/a/shot.png` }], undefined]]);
         expect(chat.draft.value).toBe(``);
         expect(chat.attachments.value).toEqual([]);
         expect(host.editorContext.include.value).toBe(false);
@@ -81,7 +81,7 @@ describe(`a message`, () => {
     });
 
     it(`waits for a routed chat's one reading before it goes`, async () => {
-        const { chat, host, enqueue, send } = composerOf();
+        const { chat, host, say, send } = composerOf();
         let read = (): void => undefined;
         host.route.beforeSend.mockImplementationOnce(
             () =>
@@ -92,16 +92,16 @@ describe(`a message`, () => {
         chat.draft.value = `the invoice totals are off`;
 
         send.submit();
-        expect(enqueue).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
         expect(host.route.beforeSend.mock.calls).toEqual([[`the invoice totals are off`, true]]);
 
         read();
         await Promise.resolve();
-        expect(enqueue.mock.calls).toEqual([[`the invoice totals are off`, [], undefined]]);
+        expect(say.mock.calls).toEqual([[`the invoice totals are off`, [], undefined]]);
     });
 
     it(`rejects a pending plan with the words as its feedback, files as @-paths`, () => {
-        const { chat, enqueue, send } = composerOf();
+        const { chat, say, send } = composerOf();
         const rows: ChatMessage[] = [
             { id: 1, role: `user`, text: `plan it` },
             { id: 2, role: `assistant`, text: ``, plan: { requestId: `d1`, text: `the plan`, status: `pending` } },
@@ -114,14 +114,14 @@ describe(`a message`, () => {
         send.submit();
 
         expect(reply.mock.calls).toEqual([[`d1`, { kind: `plan`, approve: false, feedback: `not like that\n@.intentic/a/shot.png` }]]);
-        expect(enqueue).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
         expect(chat.attachments.value).toEqual([]);
     });
 });
 
 describe(`what intercepts a press`, () => {
     it(`places the words as the agent's when the voice is armed, and keeps them when the place is refused`, async () => {
-        const { chat, host, enqueue, send } = composerOf();
+        const { chat, host, say, send } = composerOf();
         const place = spyOn(chat.transcript, `placeAsAgent`).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
         host.voiceAgent.value = true;
         chat.draft.value = `I checked the tests.`;
@@ -138,11 +138,11 @@ describe(`what intercepts a press`, () => {
         expect(chat.draft.value).toBe(``);
         // Speaking as the agent is a deliberate act each time.
         expect(host.voiceAgent.value).toBe(false);
-        expect(enqueue).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
     });
 
     it(`spends an armed edit in place of a message`, () => {
-        const { chat, enqueue, send } = composerOf();
+        const { chat, say, send } = composerOf();
         const rows: ChatMessage[] = [{ id: 1, role: `user`, text: `first`, rewindIndex: 0 }];
         chat.transcript.adopt(rows);
         chat.transcript.beginEdit(chat.transcript.messages.value[0]!);
@@ -152,41 +152,41 @@ describe(`what intercepts a press`, () => {
         send.submit();
 
         expect(submitEdit.mock.calls).toEqual([[`first, better`, [], undefined]]);
-        expect(enqueue).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
     });
 
     it(`lets a run-through badge take the press, and sends nothing of its own`, () => {
-        const { chat, host, enqueue, send } = composerOf();
+        const { chat, host, say, send } = composerOf();
         host.runThrough.claimSend.mockReturnValueOnce(true);
         chat.draft.value = `ship it`;
 
         send.submit();
 
         expect(host.runThrough.clearFailures).toHaveBeenCalledTimes(1);
-        expect(enqueue).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
         expect(chat.draft.value).toBe(`ship it`);
     });
 
     it(`opens the model list when nothing could answer, keeping the words for the model chosen`, () => {
-        const { chat, host, enqueue, send } = composerOf();
+        const { chat, host, say, send } = composerOf();
         providerAccounts.value = { ...providerAccounts.value, claude: [] };
         chat.draft.value = `hello`;
 
         send.submit();
 
         expect(host.openModels).toHaveBeenCalledTimes(1);
-        expect(enqueue).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
         expect(chat.draft.value).toBe(`hello`);
     });
 
     it(`does nothing while the sandbox can't be reached`, () => {
-        const { chat, host, enqueue, send } = composerOf();
+        const { chat, host, say, send } = composerOf();
         host.reachable.value = false;
         chat.draft.value = `hello`;
 
         send.submit();
 
-        expect(enqueue).not.toHaveBeenCalled();
+        expect(say).not.toHaveBeenCalled();
         expect(chat.draft.value).toBe(`hello`);
         expect(send.sendHint.value).toBe(t(`chat.chatPane.sandboxBusyKeepTyping`));
     });
@@ -210,19 +210,19 @@ describe(`what intercepts a press`, () => {
 describe(`what the composer says`, () => {
     it(`names Stop and the queue by what they will do to the turn`, () => {
         const { chat, host, send } = composerOf();
-        expect(send.queuedHint.value).toBe(`Sends with your next message`);
+        expect(send.queuedHint.value).toBe(`Goes out as soon as the agent is free`);
 
         runningTurn(chat.turn);
         expect(send.stopLabel.value).toBe(`Stop generating`);
         expect(send.stopHint.value).toBe(`Stop generating (Esc)`);
-        expect(send.queuedHint.value).toBe(`Sends when this turn ends`);
+        expect(send.queuedHint.value).toBe(`Goes when this turn ends`);
         host.mobile.value = true;
         expect(send.stopHint.value).toBe(`Stop generating`);
 
         chat.transcript.adopt([{ id: 1, role: `assistant`, text: ``, permission: { requestId: `p1`, toolName: `Bash`, status: `pending` } }]);
         expect(send.stopLabel.value).toBe(`Stop the turn`);
         expect(send.stopHint.value).toBe(`Stop the turn, discards the request above`);
-        expect(send.queuedHint.value).toBe(`Sends once you answer the request above`);
+        expect(send.queuedHint.value).toBe(`Goes in once you answer the request above`);
     });
 
     it(`keeps Send in the slot mid-turn only while the box holds something`, () => {

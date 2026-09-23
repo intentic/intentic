@@ -131,6 +131,7 @@ test("a started turn records its settled transcript, whatever provider ran it", 
     const record = fileTranscriptRecord(root);
     const started = await startConversationTurn(fakeServices(root), fakeWake([], [{ kind: "delta", text: "shipped" }, { kind: "done" }]), {
         prompt: "ship it",
+        messageId: "m-ship",
         conversationId: "tr-record",
         agent: "codex",
         harness: "native",
@@ -140,7 +141,7 @@ test("a started turn records its settled transcript, whatever provider ran it", 
     // The run each row came from is part of the record: within its retention window that run is still attachable, and
     // a window redrawing from here has to recognise its rows when the head arrives.
     expect(await record.read("tr-record")).toEqual([
-        { role: "user", text: "ship it", sentAt: expect.any(Number), run: started!.id },
+        { role: "user", text: "ship it", sentAt: expect.any(Number), messageId: "m-ship", run: started!.id },
         { role: "assistant", text: "shipped", run: started!.id },
     ]);
 });
@@ -716,7 +717,7 @@ const journalServices = async (root: string, autoResumeOnRestart = true): Promis
 
 const journalled = (conversationId: string, extra: Partial<JournalledTurn> = {}): JournalledTurn => ({
     kind: "turn",
-    turn: { prompt: "finish the report", conversationId, isolated: true },
+    turn: { prompt: "finish the report", messageId: "m-report", conversationId, isolated: true },
     startedAt: 10_000,
     attempts: 0,
     ...extra,
@@ -811,7 +812,7 @@ test("autoResumeOnRestart off records the interruption and re-runs nothing", asy
     expect(await services.turnJournal.list()).toEqual([]);
     // Written to the transcript with an explicit notice before the journal entry drains.
     expect(await fileTranscriptRecord(root).read("rs-off")).toEqual([
-        { role: "user", text: "finish the report", sentAt: 10_000 },
+        { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" },
         {
             role: "notice",
             text: "The sandbox restarted before this turn finished. Send another message to continue from the saved worktree.",
@@ -840,8 +841,8 @@ test("an interrupted turn is recorded from the work it did, not from its prompt 
     await resumeInterruptedTurns(drivenBy(services, fakeWake([])), BOOT_AT);
 
     expect(await fileTranscriptRecord(root).read("rs-work")).toEqual([
-        // sentAt is the turn's own start time, not the provider's, matching every other user row.
-        { role: "user", text: "finish the report", sentAt: 10_000 },
+        // sentAt is the turn's own start time, not the provider's, and the id is its sender's, as on every other user row.
+        { role: "user", text: "finish the report", sentAt: 10_000, messageId: "m-report" },
         // Reads the session the journal recorded; the registry entry may predate it if the daemon died early.
         { role: "assistant", text: "two chapters in, on s-partial" },
         {
@@ -1365,6 +1366,7 @@ test("a turn the sandbox started is kept when the door turns it away, its messag
     const services = fakeServices(root);
     const started = await startConversationTurn(services, fakeWake([], TURNED_AWAY), {
         prompt: "fix the pipeline",
+        messageId: "m-fix",
         conversationId: "door-kept",
         isolated: true,
     });
@@ -1373,11 +1375,11 @@ test("a turn the sandbox started is kept when the door turns it away, its messag
     expect(heldTurn(services, "door-kept")).toMatchObject({ reason: "door", ran: false, run: started!.id, input: { prompt: "fix the pipeline", isolated: true } });
     await waitFor(async () => expect(await record.read("door-kept")).toHaveLength(2), SETTLES);
     expect(await record.read("door-kept")).toEqual([
-        { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), run: started!.id },
+        { role: "user", text: "fix the pipeline", sentAt: expect.any(Number), messageId: "m-fix", run: started!.id },
         expect.objectContaining({ role: "notice", noticeAction: "sendAnyway", sandboxHeld: true, run: started!.id }),
     ]);
 
-    // POST /agent's composer holds its own words and hands them back: a second copy kept here would be sent twice.
+    // A person's words go back to the conversation's queue: a second copy kept here would be sent twice.
     await startConversationTurn(services, fakeWake([], TURNED_AWAY), { prompt: "fix the pipeline", conversationId: "door-sent" }, { senderKeeps: true });
     await settle(services, "door-sent");
     expect(heldTurn(services, "door-sent")).toBeUndefined();
@@ -1475,6 +1477,49 @@ test("a stopped turn whose provider never answered opens fresh, since its sessio
     expect(turns[0]!.prompt).toMatch(/stopped before it finished/i);
 
     clearPendingResume(services, "stop-2");
+});
+
+// The session that overflowed is the one thing that cannot be resumed: however much ran, the re-run opens fresh, seeded
+// from the record, and its note replaces whatever note the overflowing attempt carried.
+test("a turn whose session outgrew the model's window is sent again in a fresh session, under a note saying so", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const turns: AgentTurn[] = [];
+    recordHeldTurn(services, {
+        reason: "overflow",
+        input: { prompt: withResumeNote("ship the parser", RESUME_NOTES.stopped), conversationId: "over-1", isolated: true },
+        sessionId: "s-full",
+        ran: true,
+    });
+
+    await fireHeldResume(drivenBy(services, heldWake(turns)), "over-1");
+    await settle(services, "over-1");
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.sessionId).toBeUndefined();
+    expect(turns[0]!.prompt).toBe(withResumeNote("ship the parser", RESUME_NOTES.overflow));
+
+    clearPendingResume(services, "over-1");
+});
+
+// The daemon's own remedy, not a wall the reader answers for: it fires on the next pass whatever the stop policy says,
+// and once, since a fresh session that overflows too is held no longer.
+test("an overflow is re-run fresh on the next pass, on no policy, and only once", async () => {
+    const services = fakeServices(mkdtempSync(join(tmpdir(), "held-")));
+    const settings = await services.sandboxSettings.get();
+    await services.sandboxSettings.set({ ...settings, stopPolicy: "wait" });
+    const turns: AgentTurn[] = [];
+    const scheduler = createTurnResumeScheduler(drivenBy(services, heldWake(turns)));
+    recordHeldTurn(services, { reason: "overflow", input: { prompt: "ship the parser", conversationId: "over-2", isolated: true }, sessionId: "s-full", ran: true }, RECORDED);
+
+    await scheduler.tick(RECORDED + 5_000);
+    await settle(services, "over-2");
+    await scheduler.tick(RECORDED + 10_000);
+    await settle(services, "over-2");
+
+    expect(turns).toHaveLength(1);
+    expect(turns[0]!.sessionId).toBeUndefined();
+    expect(turns[0]!.prompt).toBe(withResumeNote("ship the parser", RESUME_NOTES.overflow));
+    clearPendingResume(services, "over-2");
 });
 
 test("the next turn on the conversation supersedes the held one, whatever started it", async () => {

@@ -10,10 +10,10 @@ import {
     resumeDisclosure,
     type TranscriptRow,
     withoutResumeNote,
-    withResumeNote,
+    withResumeNote,type MessageReceipt
 } from "@intentic/sandbox-contract";
 import { TranscriptFold, userRow } from "@intentic/sandbox-contract/transcript-fold";
-import { toRaw, watch } from "vue";
+import { watch } from "vue";
 import { describe, it, expect, beforeEach, afterEach, mock, jest } from "bun:test";
 import { waitFor, stubGlobal, unstubAllGlobals, advanceTimersByTimeAsync, hoisted } from "@intentic/testing/bun";
 import { SandboxHttpError } from "../../sandbox/client/sandboxHttpError";
@@ -62,9 +62,9 @@ mock.module("../../sandbox/client/sandboxRpc", () => ({
             run: procedureOf(`agent.run`),
             attach: procedureOf(`agent.attach`),
             reply: procedureOf(`agent.reply`),
-            steer: procedureOf(`agent.steer`),
             stop: procedureOf(`agent.stop`),
             resume: procedureOf(`agent.resume`),
+            queueResume: procedureOf(`agent.queueResume`),
             rewind: procedureOf(`agent.rewind`),
         },
         agents: { place: procedureOf(`agents.place`), transcript: procedureOf(`agents.transcript`) },
@@ -133,10 +133,15 @@ interface LiveRun {
 }
 const turnDaemon = (
     events: AgentEvent[],
-    options?: { stayOpen?: boolean; head?: () => Partial<{ run: string; prompt: string; rows: TranscriptRow[]; startedAt: number }> },
+    options?: {
+        stayOpen?: boolean;
+        head?: () => Partial<{ run: string; prompt: string; rows: TranscriptRow[]; startedAt: number }>;
+        // What the daemon does with a message said while a run is live: into it, or into the queue behind it.
+        midTurn?: `steered` | `queued`;
+    },
 ): ((procedure: string, input: unknown, call?: CallOptions) => Promise<unknown>) => {
     // The turn the last `agent.run` asked for: the head's opening row is built from it.
-    let requested: { readonly prompt: string; readonly attachments: readonly string[] } | undefined;
+    let requested: { readonly prompt: string; readonly attachments: readonly string[]; readonly messageId: string | undefined } | undefined;
     // A stop that landed after the ack and before the attach: the run is over by the time its head goes out.
     let stopRequested = false;
     let live: LiveRun | undefined;
@@ -153,7 +158,7 @@ const turnDaemon = (
         stopRequested = false;
     };
     const ok = (): Promise<{ ok: true }> => Promise.resolve({ ok: true });
-    const started = (): Promise<{ run: string }> => Promise.resolve({ run: runId });
+    const started = (): Promise<MessageReceipt> => Promise.resolve({ delivered: `started`, run: runId });
     const emit = (state: LiveRun, patches: ReturnType<TranscriptFold[`apply`]>): void => {
         for (const patch of patches) {
             const stamped = patch.op === `append` || patch.op === `replace` ? { ...patch, row: { ...patch.row, run: state.run } } : patch;
@@ -165,6 +170,21 @@ const turnDaemon = (
         emit(state, state.fold.finish(ending));
         state.controller.enqueue(frameOf({ kind: `end` }));
         state.controller.close();
+    };
+    // A stop names its turn: by run, by a message it carries, or whatever is live for a caller naming neither. A run
+    // taken and not attached to yet is over by the time its head goes out.
+    const stopNamed = (body: Record<string, unknown>): boolean => {
+        const names = (run: string, messages: readonly (string | undefined)[]): boolean =>
+            body[`live`] === true || body[`run`] === run || (typeof body[`messageId`] === `string` && messages.includes(body[`messageId`]));
+        if (live !== undefined) {
+            const named = names(live.run, live.fold.rows.map((row) => row.messageId));
+            if (named) {
+                end(live, `stopped`);
+            }
+            return named;
+        }
+        stopRequested = requested !== undefined && names(runId, [requested.messageId]);
+        return stopRequested;
     };
     // Stream the queued events until they run out, or a card parks the turn on the user.
     const serve = (state: LiveRun): void => {
@@ -185,28 +205,32 @@ const turnDaemon = (
             end(state, `settled`);
         }
     };
+    // A message said while a run is live goes into it, or waits in the queue behind it; otherwise it starts a turn.
+    const said = (body: Record<string, unknown>): Promise<MessageReceipt> => {
+        if (live !== undefined) {
+            return Promise.resolve(options?.midTurn === `queued` ? { delivered: `queued` } : { delivered: `steered`, run: live.run });
+        }
+        startTurn();
+        requested = {
+            prompt: String(body[`prompt`] ?? ``),
+            attachments: (body[`attachments`] as string[] | undefined) ?? [],
+            messageId: body[`messageId`] as string | undefined,
+        };
+        return started();
+    };
     return (procedure, input, call) => {
         const body = input === undefined ? undefined : wire(input);
         if (procedure === `agent.run`) {
-            startTurn();
-            requested = { prompt: String(body?.[`prompt`] ?? ``), attachments: (body?.[`attachments`] as string[] | undefined) ?? [] };
-            return started();
+            return said(body ?? {});
         }
-        // Resume runs the held turn as a new turn on its own prompt copy; the head that follows opens its own run
-        // rather than replacing the refused attempt's rows.
-        if (procedure === `agent.resume`) {
+        // Resume runs the held turn as a new turn on its own prompt copy, as letting a held queue go does with its
+        // words; the head that follows opens its own run rather than replacing the refused attempt's rows.
+        if (procedure === `agent.resume` || procedure === `agent.queueResume`) {
             startTurn();
-            return started();
+            return Promise.resolve({ run: runId });
         }
         if (procedure === `agent.stop`) {
-            if (live !== undefined) {
-                end(live, `stopped`);
-            } else if (requested !== undefined) {
-                stopRequested = true;
-            } else {
-                return Promise.reject(daemonRefusal(404));
-            }
-            return ok();
+            return Promise.resolve({ stopped: stopNamed(body ?? {}) });
         }
         if (procedure === `agent.reply` && live !== undefined) {
             const state = live;
@@ -238,7 +262,7 @@ const turnDaemon = (
         const opening =
             overrides.rows ??
             (overrides.prompt === undefined
-                ? openingOf(requested?.prompt ?? `hi`, startedAt, requested?.attachments ?? [])
+                ? openingOf(requested?.prompt ?? `hi`, startedAt, requested?.attachments ?? [], requested?.messageId)
                 : openingOf(overrides.prompt, startedAt));
         const stream = new ReadableStream<AttachFrame>({
             start(controller) {
@@ -265,13 +289,14 @@ const turnDaemon = (
 };
 
 // A run's opening rows, matching the daemon's openingRows (turn-transcript.ts): a resumed run opens on its notice,
-// an answered park opens on the answer under a note, otherwise the prompt itself.
-const openingOf = (prompt: string, sentAt: number, attachments: readonly string[] = []): TranscriptRow[] => {
+// an answered park opens on the answer under a note, otherwise the prompt itself, under the id its sender gave it or
+// one the daemon names.
+const openingOf = (prompt: string, sentAt: number, attachments: readonly string[] = [], messageId = `m-daemon`): TranscriptRow[] => {
     const resume = resumeDisclosure(prompt);
     if (resume?.kind === `notice`) {
         return [{ role: `notice`, text: resume.text }];
     }
-    const row = userRow(withoutResumeNote(prompt), sentAt, attachments);
+    const row = userRow(withoutResumeNote(prompt), sentAt, attachments, messageId);
     return [resume?.kind === `note` ? { ...row, notes: [resume.note] } : row];
 };
 
@@ -1120,9 +1145,11 @@ describe(`Conversation`, () => {
                 controller.enqueue(frameOf(run.head()));
             },
         });
+        let sends = 0;
         daemon.mockImplementation((procedure: string) => {
             if (procedure === `agent.run`) {
-                return Promise.resolve({ run: `r1` });
+                sends += 1;
+                return Promise.resolve(sends === 1 ? { delivered: `started`, run: `r1` } : { delivered: `steered`, run: `r1` });
             }
             return Promise.resolve(procedure === `agent.attach` ? body : { ok: true });
         });
@@ -1136,9 +1163,10 @@ describe(`Conversation`, () => {
         emit({ kind: `delta`, text: `5` });
         await waitFor(() => expect(conversation.transcript.messages.value[1]?.text).toBe(`5`));
 
-        await conversation.turn.enqueue(`2+6?`);
-        // The daemon took it, so it left the queue, and the run's own frame is what draws it.
-        expect(conversation.turn.queued.value).toHaveLength(0);
+        await conversation.turn.say(`2+6?`);
+        // The daemon said it into the running turn, so nothing is drawn here: the run's own frame draws it.
+        expect(turnBodies().map((sent) => sent[`prompt`])).toEqual([`2+3?`, `2+6?`]);
+        expect(conversation.transcript.messages.value).toHaveLength(2);
         emit({ kind: `steer`, text: `2+6?`, sentAt: 1_767_225_600_000 });
         await waitFor(() => expect(conversation.transcript.messages.value).toHaveLength(3));
 
@@ -1180,8 +1208,8 @@ describe(`Conversation`, () => {
             { role: `user`, text: `check the tests too` },
             { role: `assistant`, text: `will do` },
         ]);
-        // Nothing was typed here, so nothing was queued here either.
-        expect(conversation.turn.queued.value).toHaveLength(0);
+        // Nothing was typed here, so nothing was sent from here either.
+        expect(turnBodies()).toHaveLength(1);
     });
 
     it(`sends a steered message's attachments and editor context with it, so a mid-turn file isn't a lesser message`, async () => {
@@ -1202,14 +1230,14 @@ describe(`Conversation`, () => {
         );
 
         const turn = conversation.turn.send(`start`, settings);
-        await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
-        await conversation.turn.enqueue(`look at this`, [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }], {
+        // Said once the run is live daemon-side, as the daemon decides by that whether words go into it.
+        await waitFor(() => expect(conversation.transcript.messages.value.some((message) => message.role === `assistant`)).toBe(true));
+        await conversation.turn.say(`look at this`, [{ name: `shot.png`, path: `.intentic/records/artifacts/attachments/u1/shot.png` }], {
             file: `src/app.ts`,
         });
 
-        const steer = daemon.mock.calls.find(([procedure]) => procedure === `agent.steer`);
-        expect(wire(steer![1])).toMatchObject({
-            text: `look at this`,
+        expect(turnBodies()[1]).toMatchObject({
+            prompt: `look at this`,
             attachments: [`.intentic/records/artifacts/attachments/u1/shot.png`],
             editorContext: { file: `src/app.ts` },
         });
@@ -1242,31 +1270,33 @@ describe(`Conversation`, () => {
         expect(wire(started![1])).toMatchObject({ attachments: [chip], mentions: [`src/app.ts`] });
     });
 
-    // The queue rides the tab snapshot, so what is still in it is what a reload brings back. A window can die between
-    // the press and the daemon's ack (a dev-server reload, a closed tab); dropping the message at the POST would leave
-    // the words nowhere and no turn anywhere.
-    it(`holds a message in the queue until the daemon has the turn`, async () => {
+    // The press is the send: the bubble reads as sent and the composer is free while the daemon's answer is on its way.
+    it(`draws a message as sent at the press, while the daemon's answer is still on its way`, async () => {
         const conversation = new Conversation(`c1`);
-        let ack!: (started: { run: string }) => void;
+        let ack!: (receipt: MessageReceipt) => void;
         daemon.mockImplementation((procedure: string) =>
             procedure === `agent.run`
-                ? new Promise<{ run: string }>((resolve) => {
+                ? new Promise<MessageReceipt>((resolve) => {
                       ack = resolve;
                   })
                 : Promise.resolve({ ok: true }),
         );
 
-        const sending = conversation.turn.enqueue(`fix the failing check`);
+        const sending = conversation.turn.say(`fix the failing check`);
         await waitFor(() => expect(turnBodies()).toHaveLength(1));
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`fix the failing check`]);
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([{ role: `user`, text: `fix the failing check` }]);
+        expect(conversation.draft.value).toBe(``);
 
-        ack({ run: `r1` });
+        ack({ delivered: `started`, run: `r1` });
         await sending;
 
-        expect(conversation.turn.queued.value).toHaveLength(0);
+        expect(conversation.draft.value).toBe(``);
+        expect(conversation.error.value).toBeNull();
     });
 
-    it(`keeps a message the running turn can't take, then sends it as the next turn once that one settles`, async () => {
+    // A turn that takes no words mid-way leaves the message in the daemon's queue, which starts it once that turn settles;
+    // this window follows it there, since the queue is shown on the card.
+    it(`follows the turn the daemon's queue starts once the running one settles`, async () => {
         const conversation = new Conversation(`c1`);
         let controller!: ReadableStreamDefaultController<AttachFrame>;
         const body = new ReadableStream<AttachFrame>({
@@ -1275,106 +1305,65 @@ describe(`Conversation`, () => {
                 c.enqueue(frameOf(head()));
             },
         });
-        // A native codex/grok/ACP turn has no steering queue, so the daemon answers 404; the message must survive and
-        // go
-        // out on its own.
-        const followUp = turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
+        const followUp = turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }], {
+            head: () => ({ run: `r2`, prompt: `also update the tests` }),
+        });
         let attaches = 0;
+        let sends = 0;
         daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
             if (procedure === `agent.attach`) {
                 attaches += 1;
-                return attaches === 1 ? Promise.resolve(body) : followUp(procedure, input, options);
-            }
-            if (procedure === `agent.steer`) {
-                return Promise.reject(daemonRefusal(404));
-            }
-            return Promise.resolve({ run: `r1` });
-        });
-
-        const turn = conversation.turn.send(`start`, settings);
-        await conversation.turn.enqueue(`also update the tests`);
-        expect(toRaw(conversation.turn.queued.value)).toMatchObject([{ text: `also update the tests` }]);
-        expect(turnBodies()).toHaveLength(1);
-
-        // The turn ends on its own: the queue goes out as the next turn.
-        controller.enqueue(frameOf({ kind: `end` }));
-        controller.close();
-        await turn;
-
-        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)?.text).toBe(`on it`));
-        expect(turnBodies()[1]).toMatchObject({ prompt: `also update the tests` });
-        expect(conversation.turn.queued.value).toHaveLength(0);
-    });
-
-    it(`carries several queued messages into ONE follow-up turn, in the order they were written`, async () => {
-        const conversation = new Conversation(`c1`);
-        let controller!: ReadableStreamDefaultController<AttachFrame>;
-        const body = new ReadableStream<AttachFrame>({
-            start(c) {
-                controller = c;
-                c.enqueue(frameOf(head()));
-            },
-        });
-        const followUp = turnDaemon([{ kind: `done` }]);
-        let attaches = 0;
-        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
-            if (procedure === `agent.attach`) {
-                attaches += 1;
-                return attaches === 1 ? Promise.resolve(body) : followUp(procedure, input, options);
-            }
-            if (procedure === `agent.steer`) {
-                return Promise.reject(daemonRefusal(404));
-            }
-            return Promise.resolve({ run: `r1` });
-        });
-
-        const turn = conversation.turn.send(`start`, settings);
-        await conversation.turn.enqueue(`also the tests`, [{ name: `spec.md`, path: `${STATE_DIR}/records/artifacts/attachments/u1/spec.md` }]);
-        await conversation.turn.enqueue(`and the docs`);
-        controller.enqueue(frameOf({ kind: `end` }));
-        controller.close();
-        await turn;
-
-        // Two thoughts about the same work are one request, not a turn each.
-        await waitFor(() => expect(turnBodies()).toHaveLength(2));
-        expect(turnBodies()[1]).toMatchObject({
-            prompt: `also the tests\n\nand the docs`,
-            attachments: [`.intentic/records/artifacts/attachments/u1/spec.md`],
-        });
-    });
-
-    it(`holds the queue when the user stops the turn, then sends it with their next message`, async () => {
-        const conversation = new Conversation(`c1`);
-        const followUp = turnDaemon([{ kind: `done` }]);
-        const parked = turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true });
-        // One fake per turn: a stop must reach the run it's stopping, since the daemon ending that run's stream is what
-        // the window waits for.
-        let turns = 0;
-        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
-            if (procedure === `agent.steer`) {
-                return Promise.reject(daemonRefusal(404));
+                if (attaches === 1) {
+                    return Promise.resolve(body);
+                }
+                // The card, once the queue started its turn: nothing waits any more.
+                conversation.queue.value = { items: [], revision: 2 };
+                return followUp(procedure, input, options);
             }
             if (procedure === `agent.run`) {
-                turns += 1;
+                sends += 1;
+                return Promise.resolve(sends === 1 ? { delivered: `started`, run: `r1` } : { delivered: `queued` });
             }
-            return turns <= 1 ? parked(procedure, input, options) : followUp(procedure, input, options);
+            return Promise.resolve({ ok: true });
         });
+
+        const turn = conversation.turn.send(`start`, settings);
+        await waitFor(() => expect(conversation.transcript.messages.value.map(({ text }) => text)).toEqual([`hi`]));
+        await conversation.turn.say(`also update the tests`);
+        // What the card says waits, in every window.
+        conversation.queue.value = { items: [{ id: `m-2`, text: `also update the tests`, voice: `person`, queuedAt: 1, revision: 1 }], revision: 1 };
+        expect(turnBodies().map((sent) => sent[`prompt`])).toEqual([`start`, `also update the tests`]);
+        expect(conversation.transcript.messages.value.map(({ text }) => text)).toEqual([`hi`]);
+
+        // The turn ends on its own, and the daemon starts the next with what waited.
+        controller.enqueue(frameOf({ kind: `end` }));
+        controller.close();
+        await turn;
+
+        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)?.text).toBe(`on it`), { timeout: 5_000 });
+        expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
+            { role: `user`, text: `hi` },
+            { role: `user`, text: `also update the tests` },
+            { role: `assistant`, text: `on it` },
+        ]);
+    });
+
+    // The daemon joins what waits into one turn; each message leaves this window as it is typed, files and all.
+    it(`sends each message said mid-turn to the daemon as it is typed, with its files`, async () => {
+        const conversation = new Conversation(`c1`);
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `working` }], { stayOpen: true, midTurn: `queued` }));
 
         const turn = conversation.turn.send(`start`, settings);
         await waitFor(() => expect(conversation.turn.streaming.value).toBe(true));
-        await conversation.turn.enqueue(`and the docs`);
+        await conversation.turn.say(`also the tests`, [{ name: `spec.md`, path: `${STATE_DIR}/records/artifacts/attachments/u1/spec.md` }]);
+        await conversation.turn.say(`and the docs`);
+
+        expect(turnBodies().slice(1)).toMatchObject([
+            { prompt: `also the tests`, attachments: [`.intentic/records/artifacts/attachments/u1/spec.md`] },
+            { prompt: `and the docs` },
+        ]);
         conversation.turn.stop();
         await turn;
-
-        // Stopping the agent is not a request for another turn: the message waits where the user can see it.
-        expect(turnBodies()).toHaveLength(1);
-        expect(toRaw(conversation.turn.queued.value)).toMatchObject([{ text: `and the docs` }]);
-
-        // Their next message takes it along.
-        await conversation.turn.enqueue(`actually, start with the docs`);
-        await waitFor(() => expect(turnBodies()).toHaveLength(2));
-        expect(turnBodies()[1]).toMatchObject({ prompt: `and the docs\n\nactually, start with the docs` });
-        expect(conversation.turn.queued.value).toHaveLength(0);
     });
 
     it(`waits for the stopped daemon run to release its lock before starting the next message`, async () => {
@@ -1405,7 +1394,7 @@ describe(`Conversation`, () => {
         conversation.turn.stop();
         await first;
 
-        const next = conversation.turn.enqueue(`try again`);
+        const next = conversation.turn.say(`try again`);
         await Promise.resolve();
         // The local attach is already gone, but the stop has not yet confirmed daemon-side settlement.
         expect(turnBodies()).toHaveLength(1);
@@ -1549,12 +1538,12 @@ describe(`Conversation`, () => {
     it(`dismissing a question stops the turn: the fork the agent could not call is not one it may now guess at`, async () => {
         const conversation = new Conversation(`c1`);
         const questions = [{ question: `Which?`, header: `Pick`, multiSelect: false, options: [{ label: `A`, description: `a` }] }];
-        daemon.mockImplementation(turnDaemon([{ kind: `question`, requestId: `q1`, questions }], { stayOpen: true }));
+        daemon.mockImplementation(turnDaemon([{ kind: `question`, requestId: `q1`, questions }], { stayOpen: true, midTurn: `queued` }));
 
         const turn = conversation.turn.send(`ask me`, settings);
         await waitFor(() => expect(conversation.transcript.awaitingDecision.value).toBe(true));
-        // Queued behind the card: a stopped turn must not fire it, the way an answered one would.
-        await conversation.turn.enqueue(`and then the docs`);
+        // Queued behind the card, in the daemon: the stop holds it there, where an answer would have let it go in.
+        await conversation.turn.say(`and then the docs`);
         await conversation.requests.reply(`q1`, { kind: `question`, cancelled: true });
         await turn;
 
@@ -1571,8 +1560,7 @@ describe(`Conversation`, () => {
             { role: `notice`, text: `Question dismissed.` },
             { role: `notice`, text: `Stopped.` },
         ]);
-        expect(turnBodies()).toHaveLength(1);
-        expect(toRaw(conversation.turn.queued.value)).toMatchObject([{ text: `and then the docs` }]);
+        expect(turnBodies().map((sent) => sent[`prompt`])).toEqual([`ask me`, `and then the docs`]);
     });
 
     it(`denying a permission stops the turn, and allowing one leaves it running`, async () => {
@@ -1799,7 +1787,7 @@ describe(`Conversation`, () => {
         const run = liveRun();
         daemon.mockImplementation((procedure: string) => {
             if (procedure !== `agent.attach`) {
-                return Promise.resolve({ run: `r1` });
+                return Promise.resolve({ delivered: `started`, run: `r1` });
             }
             const frames = [
                 run.head(),
@@ -1961,10 +1949,10 @@ describe(`Conversation`, () => {
 
         expect(conversation.error.value).toContain(`does not have access`);
         expect(loadProviderModelsMock).toHaveBeenCalledWith(`kimi`);
-        // The prompt returns to the queue rather than sitting unanswered in the transcript, as any refusal that ran
-        // nothing does.
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`hi`]);
+        // The daemon takes the prompt back into the conversation's queue, held, rather than leaving it unanswered in the
+        // transcript, as any refusal that ran nothing does; nothing of it stays in this window.
         expect(conversation.transcript.messages.value.some((message) => message.role === `user`)).toBe(false);
+        expect(conversation.draft.value).toBe(``);
     });
 
     it(`renders a codex-advisory as a muted notice under the answer the turn actually produced`, async () => {
@@ -2380,7 +2368,7 @@ describe(`Conversation`, () => {
         expect(providerAccounts.value[`claude`]?.[0]?.needsReauth).toBe(true);
     });
 
-    it(`hands the message back and says so plainly once the retries are spent`, async () => {
+    it(`says so plainly once the retries are spent`, async () => {
         const conversation = new Conversation(`c1`);
         // No `outage` block: the daemon's attempts are gone, so nothing is coming back.
         daemon.mockImplementation(
@@ -2388,13 +2376,12 @@ describe(`Conversation`, () => {
         );
         await conversation.turn.send(`hello`, settings);
 
-        // The red line is honest here, and the typed words return to the queue rather than being lost.
+        // The red line is honest here, and nothing is armed to bring the turn back.
         expect(conversation.error.value).toContain(`500`);
         expect(conversation.failures.outageResume.value).toBeUndefined();
-        expect(conversation.turn.queued.value.some((message) => message.text === `hello`)).toBe(true);
     });
 
-    it(`holds and refunds a failed free-trial message without arming generic outage recovery`, async () => {
+    it(`refunds a failed free-trial message without arming generic outage recovery`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.selection.apply({ kind: `set`, picks: { provider: `endpoint/free-trial` } });
         daemon.mockImplementation(
@@ -2407,111 +2394,41 @@ describe(`Conversation`, () => {
         await conversation.turn.send(`hello`, { ...settings, agent: `endpoint/free-trial` });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        expect(conversation.turn.queued.value.map((message) => message.text)).toContain(`hello`);
         expect(conversation.transcript.messages.value.at(-1)?.role).toBe(`notice`);
         expect(conversation.error.value).toBeNull();
         expect(conversation.failures.outageResume.value).toBeUndefined();
         expect(loadTrialStatusMock).toHaveBeenCalledTimes(1);
     });
 
-    // A refused turn returns its words to the queue, which flushes as one message; repeated presses must retry that
-    // held message rather than stacking another copy in front of it.
-    it(`retries the held nudge on a second Continue instead of stacking another copy of it`, async () => {
+    // A refused turn's words wait at the head of the daemon's queue, held; pressing the same nudge again lets them go
+    // rather than stacking another copy behind them.
+    it(`lets the held nudge go on a second Continue instead of saying it twice`, async () => {
         const conversation = new Conversation(`c1`);
         conversation.selection.apply({ kind: `set`, picks: { provider: `endpoint/free-trial` } });
-        const trialSettings = { ...settings, agent: `endpoint/free-trial` } as const;
         let turns = 0;
         // Built once, not per call: a fake minted inside the mock implementation would miss the POST that started the
-        // run
-        // it serves.
+        // run it serves.
         const refused = turnDaemon([
             { kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable, failed messages aren't counted.` },
             { kind: `done` },
         ]);
         const landed = turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
         daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
-            if (procedure === `agent.run`) {
-                turns += 1;
-            }
-            return turns <= 2 ? refused(procedure, input, options) : landed(procedure, input, options);
-        });
-
-        await conversation.turn.send(`Continue`, trialSettings);
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`Continue`]);
-
-        // A repeat press retries the held message rather than adding a second one; the queue doesn't grow while it
-        // keeps
-        // bouncing.
-        await conversation.turn.enqueue(`Continue`);
-        await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(turnBodies()[1]).toMatchObject({ prompt: `Continue` });
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`Continue`]);
-
-        // A third press lands the turn, still on the one word.
-        await conversation.turn.enqueue(`Continue`);
-        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)?.text).toBe(`on it`));
-        expect(turnBodies()[2]).toMatchObject({ prompt: `Continue` });
-        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `Continue` }]);
-    });
-
-    // A press landing while the turn is failing meets the words coming back from the other side, since the flush
-    // already emptied the queue by the time they return. Steering is refused here, so the two collide.
-    it(`hands back a refused nudge as the one already pressed, not as a second copy in front of it`, async () => {
-        const conversation = new Conversation(`c1`);
-        const run = liveRun({ prompt: `Continue` });
-        let controller!: ReadableStreamDefaultController<AttachFrame>;
-        const body = new ReadableStream<AttachFrame>({
-            start(c) {
-                controller = c;
-                c.enqueue(frameOf(run.head()));
-            },
-        });
-        daemon.mockImplementation((procedure: string) => {
-            if (procedure === `agent.attach`) {
-                return Promise.resolve(body);
-            }
-            if (procedure === `agent.steer`) {
-                return Promise.reject(daemonRefusal(404));
-            }
-            return Promise.resolve({ run: `r1` });
-        });
-
-        const turn = conversation.turn.send(`Continue`, settings);
-        // Pressed again while it hangs: unsteerable, so it waits in the queue.
-        await conversation.turn.enqueue(`Continue`);
-        expect(conversation.turn.queued.value).toHaveLength(1);
-        for (const frame of run.frames({ kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` })) {
-            controller.enqueue(frameOf(frame));
-        }
-        controller.enqueue(frameOf({ kind: `end` }));
-        controller.close();
-        await turn;
-        await new Promise((resolve) => setTimeout(resolve, 0));
-
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`Continue`]);
-    });
-
-    // A held message plus a follow-up nudge are two separate things said; the queue carries both.
-    it(`keeps a nudge written behind a real message that never left`, async () => {
-        const conversation = new Conversation(`c1`);
-        let turns = 0;
-        const refused = turnDaemon([{ kind: `error`, code: `trial-unavailable`, message: `Free trial temporarily unavailable.` }, { kind: `done` }]);
-        const landed = turnDaemon([{ kind: `delta`, text: `on it` }, { kind: `done` }]);
-        daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
-            if (procedure === `agent.run`) {
+            if (procedure === `agent.run` || procedure === `agent.queueResume`) {
                 turns += 1;
             }
             return turns <= 1 ? refused(procedure, input, options) : landed(procedure, input, options);
         });
 
-        await conversation.turn.send(`fix the tests`, settings);
+        await conversation.turn.send(`Continue`, { ...settings, agent: `endpoint/free-trial` });
         await new Promise((resolve) => setTimeout(resolve, 0));
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`fix the tests`]);
+        // What every window's card then shows.
+        conversation.queue.value = { items: [{ id: `m-1`, text: `Continue`, voice: `person`, queuedAt: 1, revision: 1 }], revision: 2, paused: `refused` };
 
-        await conversation.turn.enqueue(`go ahead`);
+        await conversation.turn.say(`Continue`);
         await waitFor(() => expect(conversation.transcript.messages.value.at(-1)?.text).toBe(`on it`));
-        expect(turnBodies()[1]).toMatchObject({ prompt: `fix the tests\n\ngo ahead` });
+        expect(turnBodies()).toHaveLength(1);
+        expect(daemon.mock.calls.filter(([procedure]) => procedure === `agent.queueResume`)).toHaveLength(1);
     });
 
     it(`offers turning outage auto-resume on when the daemon only remembered the turn`, async () => {
@@ -2663,7 +2580,7 @@ describe(`Conversation`, () => {
                 controller.close();
                 return Promise.resolve({ ok: true });
             }
-            return Promise.resolve({ run: `r1` });
+            return Promise.resolve({ delivered: `started`, run: `r1` });
         });
 
         const turn = conversation.turn.send(`go`, settings);
@@ -2749,15 +2666,16 @@ describe(`Conversation`, () => {
         // Where the tab snapshot reads it (snapshotTab) and a rebuilt tab puts it back (restoreTab).
         expect(fork.pendingForkOf.value).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
 
-        // Refused at the door: nothing ran daemon-side, so the linkage isn't spent; the words are held and the retry
-        // still names the source.
+        // Refused at the door: nothing ran daemon-side, so the linkage isn't spent; the words are back in the composer
+        // and the retry still names the source.
         daemon.mockRejectedValue(daemonRefusal(400, `nope`));
         await fork.turn.send(`carry on differently`, settings);
         expect(fork.pendingForkOf.value).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
+        expect(fork.draft.value).toBe(`carry on differently`);
 
-        // The user sends again; the held words ride the fresh turn, and the cut rides with them.
+        // The user sends the words again, and the cut rides with them.
         daemon.mockImplementation(turnDaemon([{ kind: `session`, sessionId: `s-2` }]));
-        await fork.turn.enqueue(``);
+        await fork.turn.say(fork.draft.value);
         const retry = turnBodies().at(-1)!;
         expect(retry[`forkOf`]).toEqual({ conversationId: `c1`, keep: 2, files: `now` });
         // The ack is what spends it: from here the fork's record stands on its own.
@@ -2843,7 +2761,7 @@ describe(`Conversation`, () => {
         const run = liveRun();
         daemon.mockImplementation((procedure: string, input: unknown, options?: CallOptions) => {
             if (procedure === `agent.run`) {
-                return Promise.resolve({ run: `r1` });
+                return Promise.resolve({ delivered: `started`, run: `r1` });
             }
             attachBodies.push(wire(input));
             const body =
@@ -2875,7 +2793,7 @@ describe(`Conversation`, () => {
         const other = liveRun({ run: `r2`, prompt: `someone else's turn` });
         daemon.mockImplementation((procedure: string) => {
             if (procedure === `agent.run`) {
-                return Promise.resolve({ run: `r1` });
+                return Promise.resolve({ delivered: `started`, run: `r1` });
             }
             attaches += 1;
             const body =
@@ -3144,7 +3062,7 @@ describe(`Conversation`, () => {
     });
 
     /* The daemon refused the turn before running any of it, so the message was never part of the conversation. */
-    it(`holds an undelivered message in the queue when the Claude credential is revoked`, async () => {
+    it(`leaves an undelivered message to the daemon when the Claude credential is revoked`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockImplementation(
             turnDaemon([{ kind: `error`, code: `claude-reauth`, message: `Claude sign-in was revoked, reconnect the account.` }]),
@@ -3162,15 +3080,16 @@ describe(`Conversation`, () => {
             account: `acct-dead`,
         });
 
+        // The daemon keeps the words in the conversation's queue until the account is back; nothing of them stays here.
         expect(conversation.transcript.messages.value.map((message) => message.role)).toEqual([`notice`]);
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`land the branch`]);
+        expect(conversation.draft.value).toBe(``);
         // Muted, not the red error line: the fix is one click away on the banner this raises.
         expect(conversation.error.value).toBeNull();
     });
 
-    // The harness reads a leading `/` as an unknown command and discards the rest, so the model never sees it and the
-    // daemon has no record; this window's bubble is the only copy, held like a revoked credential.
-    it(`holds the message when the harness ate it as an unknown slash command`, async () => {
+    // The harness reads a leading `/` as an unknown command and discards the rest, so the model never sees it; the
+    // daemon takes the words back into the conversation's queue, held like a revoked credential's.
+    it(`leaves the words to the daemon when the harness ate them as an unknown slash command`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockImplementation(
             turnDaemon([
@@ -3194,16 +3113,16 @@ describe(`Conversation`, () => {
             fast: false,
         });
 
+        // The bubble goes, and no copy lands in the composer: the daemon's queue holds the words, leading slash and all.
         expect(conversation.transcript.messages.value.map((message) => message.role)).toEqual([`notice`]);
-        // Held verbatim, leading slash and all: retyping it is exactly what the user should not have to do.
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`/workspace view does not remember the file tree`]);
+        expect(conversation.draft.value).toBe(``);
         // Muted: sending again is the fix, and the daemon now knows the command list well enough to let it past.
         expect(conversation.error.value).toBeNull();
     });
 
-    // The model is too small to hold the turn, and the daemon knows before sending, so the words stay in this
-    // window; held and muted like the refusals above.
-    it(`holds the message when the model's own window cannot hold the turn`, async () => {
+    // The model is too small to hold the turn, and the daemon knows before sending, so it keeps the words in the
+    // conversation's queue; muted like the refusals above.
+    it(`leaves the words to the daemon when the model's own window cannot hold the turn`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockImplementation(
             turnDaemon([
@@ -3228,12 +3147,12 @@ describe(`Conversation`, () => {
         });
 
         expect(conversation.transcript.messages.value.map((message) => message.role)).toEqual([`notice`]);
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`Are you there?`]);
+        expect(conversation.draft.value).toBe(``);
         expect(conversation.error.value).toBeNull();
     });
 
     // A door-refused turn (no error frame) needs both halves handled explicitly: the daemon's own sentence surfaced
-    // as the error, and the words held in the queue rather than lost or re-sent blindly.
+    // as the error, and the words back in the composer rather than lost or re-sent blindly.
     it(`says why the daemon refused the turn, and takes the undelivered message back`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockRejectedValue(daemonRefusal(400, `invalid attachment path: ../../etc/passwd`));
@@ -3251,82 +3170,16 @@ describe(`Conversation`, () => {
         });
 
         expect(conversation.error.value).toBe(
-            `invalid attachment path: ../../etc/passwd Your message is held below: send it again once that's sorted.`,
+            `invalid attachment path: ../../etc/passwd Your message is back in the composer: send it again once that's sorted.`,
         );
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`redesign the settings page`]);
+        expect(conversation.draft.value).toBe(`redesign the settings page`);
         // Out of the transcript entirely: nothing about this send is part of the conversation, here or daemon-side.
         expect(conversation.transcript.messages.value).toEqual([]);
     });
 
-    // A 409 means a turn this window isn't following owns the conversation: the words wait in the queue for it to end,
-    // not as a bubble drawn over a turn they never reached.
-    it(`holds the words in the queue when the refusal is that a turn is already running`, async () => {
-        const conversation = new Conversation(`c1`);
-        daemon.mockRejectedValue(daemonRefusal(409, `a turn is already running`));
-
-        await conversation.turn.send(`and the docs`, {
-            agent: `claude`,
-            harness: `native`,
-            actsAs: undefined,
-            startIn: undefined,
-            account: undefined,
-            model: `opus`,
-            effort: `medium`,
-            thinking: false,
-            fast: false,
-        });
-
-        await waitFor(() => expect(conversation.error.value).toContain(`already has a turn running`));
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`and the docs`]);
-        expect(conversation.transcript.messages.value).toEqual([]);
-    });
-
-    // The burst behind a wall of "Continue" bubbles: a queued nudge the door refused as busy was resent at once, one
-    // drawn bubble per round trip, until the unseen turn ended. Refused once, it now waits for that turn instead.
-    it(`sends a queued message once when the door says a turn is already running, rather than resending it in a loop`, async () => {
-        const conversation = new Conversation(`c1`);
-        daemon.mockImplementation((procedure) =>
-            Promise.reject(procedure === `agent.run` ? daemonRefusal(409, `a turn is already running`) : daemonRefusal(404, `nothing is running`)),
-        );
-
-        await conversation.turn.enqueue(CONTINUATIONS.plain);
-        await waitFor(() => expect(conversation.error.value).toContain(`held below`));
-
-        expect(turnBodies()).toHaveLength(1);
-        expect(conversation.transcript.messages.value).toEqual([]);
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([CONTINUATIONS.plain]);
-    });
-
-    it(`follows the turn the door said is running, and sends the queued words once it ends`, async () => {
-        const conversation = new Conversation(`c1`);
-        const unseen = turnDaemon([{ kind: `delta`, text: `back on it` }, { kind: `done` }], {
-            head: () => ({ run: `rung-2`, prompt: withResumeNote(`ship the parser`, RESUME_NOTES.stopped), startedAt: Date.now() }),
-        });
-        const after = turnDaemon([{ kind: `delta`, text: `docs done` }, { kind: `done` }]);
-        let busy = true;
-        daemon.mockImplementation((procedure, input, options) => {
-            if (busy && procedure === `agent.run`) {
-                return Promise.reject(daemonRefusal(409, `a turn is already running`));
-            }
-            if (busy && procedure === `agent.attach`) {
-                busy = false;
-                return unseen(procedure, input, options);
-            }
-            return after(procedure, input, options);
-        });
-
-        await conversation.turn.enqueue(`and the docs`);
-        await waitFor(() => expect(conversation.transcript.messages.value.at(-1)).toMatchObject({ role: `assistant`, text: `docs done` }));
-
-        // Refused once, delivered once: the unseen turn's end is what sent them.
-        expect(turnBodies().map((body) => body[`prompt`])).toEqual([`and the docs`, `and the docs`]);
-        expect(conversation.transcript.messages.value.filter((message) => message.role === `user`)).toMatchObject([{ text: `and the docs` }]);
-        expect(conversation.transcript.messages.value.some((message) => message.text === `back on it`)).toBe(true);
-        expect(conversation.turn.queued.value).toEqual([]);
-    });
-
     // A request that never completed (unreachable daemon, dropped tunnel) is neither a status nor a frame, and must
-    // not be treated as a mid-turn crash: the words return to the queue rather than sitting shown-but-unsent.
+    // not be treated as a mid-turn crash: once its tries are spent, the words return to the composer rather than
+    // sitting shown-but-unsent.
     it(`hands the words back when the request never reached the daemon`, async () => {
         const conversation = new Conversation(`c1`);
         const shot = { name: `setup.png`, path: `${STATE_DIR}/records/artifacts/attachments/a1/setup.png` };
@@ -3335,12 +3188,11 @@ describe(`Conversation`, () => {
         await conversation.turn.send(`the setup view is too scary`, settings, [shot]);
 
         expect(conversation.error.value).toBe(
-            `Your sandbox isn't reachable yet, finish setup so it registers its address. Your message is held below, send it again to deliver it.`,
+            `Your sandbox isn't reachable yet, finish setup so it registers its address. Your message is back in the composer, send it again to deliver it.`,
         );
-        // Held whole, attachment and all: the queue is the only place this survives.
-        expect(conversation.turn.queued.value.map((message) => [message.text, message.attachments])).toEqual([
-            [`the setup view is too scary`, [shot]],
-        ]);
+        // Back whole, attachment and all: the composer is the only place this survives.
+        expect(conversation.draft.value).toBe(`the setup view is too scary`);
+        expect(conversation.attachments.value.map(({ name, path, status }) => ({ name, path, status }))).toEqual([{ ...shot, status: `done` }]);
         // And out of the transcript: no daemon anywhere has a record of it.
         expect(conversation.transcript.messages.value).toEqual([]);
     });
@@ -3350,8 +3202,7 @@ describe(`Conversation`, () => {
     it(`stands the continue offer down when the stopped send never became a turn`, async () => {
         const conversation = new Conversation(`c1`);
         daemon.mockImplementation((procedure, input, options) => {
-            // No run to cancel since the send never became one; the daemon's 404 is what sends the stop back to this
-            // window.
+            // The stop never reaches the daemon either, so this window draws the ending itself.
             if (procedure === `agent.stop`) {
                 return Promise.reject(daemonRefusal(404));
             }
@@ -3370,7 +3221,7 @@ describe(`Conversation`, () => {
         await turn;
 
         expect(conversation.pickUp.value).toBeUndefined();
-        expect(conversation.turn.queued.value.map((message) => message.text)).toEqual([`the setup view is too scary`]);
+        expect(conversation.draft.value).toBe(`the setup view is too scary`);
         // A Stop is the user's own doing, so it says so and nothing more: no red line over a send they cancelled.
         expect(conversation.transcript.messages.value.map((message) => [message.role, message.text])).toEqual([[`notice`, `Stopped.`]]);
         expect(conversation.error.value).toBeNull();
@@ -3393,12 +3244,13 @@ describe(`Conversation`, () => {
             account: `acct-dead`,
         });
 
-        // The reconnect: a new credential id, and the hold released.
-        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `Landed.` }]));
+        // The reconnect: a new credential id, and the daemon's hold on the words released on it.
+        daemon.mockImplementation(turnDaemon([{ kind: `delta`, text: `Landed.` }], { head: () => ({ prompt: `land the branch` }) }));
         conversation.selection.apply({ kind: `rebindAccount`, account: `acct-new` });
         await conversation.turn.resume();
 
-        expect(conversation.turn.queued.value).toEqual([]);
+        const released = daemon.mock.calls.find(([procedure]) => procedure === `agent.queueResume`);
+        expect(wire(released?.[1])).toMatchObject({ conversationId: `c1`, routing: { agent: `claude`, account: `acct-new` } });
         expect(conversation.transcript.messages.value.map(({ role, text }) => ({ role, text }))).toEqual([
             { role: `notice`, text: expect.stringContaining(`revoked`) as unknown as string },
             { role: `user`, text: `land the branch` },
@@ -3473,16 +3325,6 @@ describe(`Conversation`, () => {
         expect(conversation.transcript.messages.value).toHaveLength(0);
         expect(conversation.turn.streaming.value).toBe(false);
         expect(conversation.error.value).toBeNull();
-    });
-
-    it(`surfaces a genuine 409 start without claiming which window owns the turn`, async () => {
-        const conversation = new Conversation(`c1`);
-        daemon.mockRejectedValue(daemonRefusal(409));
-
-        await conversation.turn.send(`Hi`, settings);
-
-        await waitFor(() => expect(conversation.error.value).toContain(`already has a turn running`));
-        expect(conversation.turn.streaming.value).toBe(false);
     });
 
     it(`ignores empty prompts and re-entrant sends while streaming`, async () => {
@@ -3590,7 +3432,12 @@ describe(`the transcript's clock`, () => {
         daemon.mockResolvedValue({ snapshot: `cp-1`, dropped: 2 });
         expect(await conversation.transcript.rewindTo(user!)).toBe(true);
 
-        expect(daemon).toHaveBeenLastCalledWith(`agent.rewind`, { conversationId: `c-rewind`, index: 0 }, { context: { at: undefined } });
+        expect(daemon).toHaveBeenLastCalledWith(
+            `agent.rewind`,
+            { conversationId: `c-rewind`, index: 0, messageId: user?.messageId },
+            { context: { at: undefined } },
+        );
+        expect(user?.messageId).toEqual(expect.any(String));
         // Everything from the rewound message on is gone and the session drops; the notice is the only place that says
         // so, including that the workspace moved too.
         expect(conversation.transcript.messages.value).toEqual([
@@ -3614,6 +3461,23 @@ describe(`the transcript's clock`, () => {
         expect(conversation.transcript.messages.value).toHaveLength(before);
         expect(conversation.session.value).toEqual(expect.any(Object));
         expect(conversation.error.value).toContain(`running a turn`);
+    });
+
+    // Another window rewound and a turn ran since this tab read the transcript: the position it names holds some other
+    // message now, and the daemon refuses rather than restore the wrong point.
+    it(`says the conversation moved on when the message is no longer where this tab saw it`, async () => {
+        const conversation = new Conversation(`c-moved`);
+        daemon.mockImplementation(
+            turnDaemon([{ kind: `session`, sessionId: `s-1` }, { kind: `checkpoint`, id: `cp-1`, index: 0 }, { kind: `done` }]),
+        );
+        await conversation.turn.send(`first`, settings);
+        const before = conversation.transcript.messages.value.length;
+
+        daemon.mockRejectedValue(daemonRefusal(412));
+        expect(await conversation.transcript.rewindTo(conversation.transcript.messages.value[0]!)).toBe(false);
+
+        expect(conversation.transcript.messages.value).toHaveLength(before);
+        expect(conversation.error.value).toBe(`This conversation has moved on since you opened it: reload it and try again.`);
     });
 });
 
@@ -4093,7 +3957,7 @@ describe(`TurnClient.startErrand`, () => {
 
         expect(conversation.transcript.messages.value).toEqual([]);
         expect(conversation.turn.streaming.value).toBe(false);
-        expect(conversation.turn.queued.value).toEqual([]);
+        expect(conversation.draft.value).toBe(``);
         expect(asked()).toEqual([]);
     });
 
@@ -4121,7 +3985,7 @@ describe(`TurnClient.startErrand`, () => {
         expect(conversation.turn.streaming.value).toBe(false);
         expect(conversation.error.value).toBeNull();
         // A stopped errand leaves no words to send again: nothing of the user's was ever in it.
-        expect(conversation.turn.queued.value).toEqual([]);
+        expect(conversation.draft.value).toBe(``);
     });
 
     // Not every read honours an abort (a re-judging land already on its way, a transport that keeps going): the Stop is

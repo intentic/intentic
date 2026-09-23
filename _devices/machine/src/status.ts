@@ -4,6 +4,7 @@ import type { PeerLinkState } from "@intentic/sandbox-contract/peer-dial";
 import { buildCommand, type CommandContext } from "@stricli/core";
 import { agentBuildSkew, agentStalled } from "@intentic/sandbox-contract";
 import { auditPath, readLinks, readLinkStates } from "./device/config.js";
+import { PAUSE_HOTKEY, readPausedAt } from "./device/indicator.js";
 import { runLogPath } from "./config.js";
 import { childrenOf, readMachineConfig } from "./environments/machine.js";
 import { readResidentPid } from "./resident.js";
@@ -24,7 +25,11 @@ export interface DeviceStatus {
     // The whole answer as one sentence, for surfaces with room for exactly one line (the desktop app's tray row
     // above all). Composed here so the tray cannot drift from the terminal.
     readonly summary: string;
-    readonly device: { readonly links: readonly StatusLink[] };
+    readonly device: {
+        readonly links: readonly StatusLink[];
+        // When the person at this computer paused agents' mouse and keyboard (ISO 8601), absent while nothing is paused.
+        readonly pausedAt?: string;
+    };
     readonly sync: DeviceReport;
 }
 
@@ -80,19 +85,27 @@ export const statusSummary = (running: number | undefined, links: number, sync: 
 };
 
 export const deviceStatus = async (mutagen: string | undefined): Promise<DeviceStatus> => {
-    const [pid, links, sync, stamped] = await Promise.all([readResidentPid(), readLinks(), deviceReport(mutagen), readLinkStates()]);
+    const [pid, links, sync, stamped, pausedAt] = await Promise.all([
+        readResidentPid(),
+        readLinks(),
+        deviceReport(mutagen),
+        readLinkStates(),
+        readPausedAt(),
+    ]);
     /* A agent that is not running holds no sockets, so every link is closed and that needs no stamp to know;. */
     const states: readonly (PeerLinkState | undefined)[] = links.map((link) => (pid === undefined ? "closed" : stamped?.[link.sandboxUrl]?.state));
     const connected = states.every((state) => state !== undefined) ? states.filter((state) => state === "open").length : undefined;
     return {
         version: MACHINE_VERSION,
         ...(pid === undefined ? {} : { running: pid }),
-        summary: statusSummary(pid, links.length, sync, Date.now(), connected),
+        // On the tray's one line too: it is the only place a person at this machine reads without asking.
+        summary: `${statusSummary(pid, links.length, sync, Date.now(), connected)}${pausedAt === undefined ? "" : " · mouse and keyboard paused"}`,
         device: {
             links: links.map((link, at) => {
                 const state = states[at];
                 return { sandboxUrl: link.sandboxUrl, id: link.id, scopes: link.scopes, ...(state === undefined ? {} : { state }) };
             }),
+            ...(pausedAt === undefined ? {} : { pausedAt: pausedAt.toISOString() }),
         },
         sync,
     };
@@ -370,6 +383,11 @@ export const status = buildCommand<StatusFlags>({
         }
         out(`Logs:  ${runLogPath}`);
         out(`Audit: ${auditPath}`);
+        if (report.device.pausedAt !== undefined) {
+            out(
+                `Mouse and keyboard: PAUSED by the person at this computer since ${report.device.pausedAt}. Agents are refused until ${PAUSE_HOTKEY} is pressed while their notice is on screen.`,
+            );
+        }
         printLinks(report.device.links, out);
         printReport(report.sync, out);
         if (mutagen !== undefined) {

@@ -24,6 +24,7 @@ const tempCtx = (): { ctx: CapabilityCtx; root: string } => {
         files: { write: writeWorkspaceFile, read: readWorkspaceFile, remove: removeWorkspacePath },
         capabilities: { list: async () => [] },
         extensionsDir: EXTENSIONS_DIR,
+        historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")),
         hosts: { enrolled: async () => false },
         hostHub: { online: () => false },
     } as unknown as CapabilityCtx;
@@ -34,7 +35,7 @@ const host: ExtensionHost = {
     workspace: { root: WORKSPACE_ROOT },
     files: { read: readWorkspaceFile },
     capabilities: { list: async () => [] },
-    config: { extensionsDir: EXTENSIONS_DIR },
+    config: { extensionsDir: EXTENSIONS_DIR, historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")) },
 } as unknown as ExtensionHost;
 
 const laptop: Capability = {

@@ -15,10 +15,17 @@ export const startBootResumes = ({ logger, role, services, shutdown }: BootPhase
         turnResume.start();
     }
 
-    // Detached: an interrupted turn is a whole turn, and an interrupted automation fire a whole fire.
-    void resumeInterruptedTurns(services).catch((error: unknown) =>
-        logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"),
-    );
+    // Detached: an interrupted turn is a whole turn, and an interrupted automation fire a whole fire. What waited in a
+    // queue goes after them: behind a resumed turn when its conversation has one, at once when it has none.
+    void resumeInterruptedTurns(services)
+        .catch((error: unknown) => logger.error({ err: error }, "interrupted turns could not be resumed, they stand on the record as interrupted"))
+        .then(() => {
+            for (const conversationId of services.agents.ids()) {
+                if ((services.agents.entry(conversationId)?.queue?.items.length ?? 0) > 0) {
+                    void services.turns.drain(conversationId);
+                }
+            }
+        });
     void resumeInterruptedFires(services).catch((error: unknown) =>
         logger.error({ err: error }, "interrupted automation fires could not be re-fired, they stand on the record as interrupted"),
     );

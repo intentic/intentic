@@ -1,4 +1,5 @@
-import type { Desktop, MouseButton, Point, ScrollDirection, WindowInfo } from "@intentic/desktop-automation";
+import type { Desktop, MouseButton, NoticeEvents, Point, ScrollDirection, WindowInfo } from "@intentic/desktop-automation";
+import type { IndicatorDeps } from "./indicator.js";
 
 // The fake desktop the tool tests drive (this repo's `testing.ts` convention, excluded from the build), so both
 // tool suites share one double. @intentic/desktop-automation's methods move a real cursor on a real screen and
@@ -63,5 +64,63 @@ export const fakeDesktop = (): FakeDesktop => {
         set clipboard(next: string) {
             state.clipboard = next;
         },
+    };
+};
+
+// One helper the indicator opened: every text it was shown, whether it was closed, and the events to play back
+// through it, which stand in for the person at the keyboard and for a helper that dies.
+export interface FakeHelper {
+    readonly shown: string[];
+    closed: boolean;
+    readonly events: NoticeEvents;
+}
+
+// The indicator's seams over fakes: helpers that record instead of drawing (none at all with `notices: false`, as
+// off Windows), the pause as a value rather than a file, and the audit log as a list.
+export interface FakeIndicatorDeps {
+    readonly deps: IndicatorDeps;
+    readonly helpers: FakeHelper[];
+    readonly audited: { tool: string; ok: boolean; detail: string }[];
+    // The pause as saved: what the next agent to start would read back.
+    readonly saved: () => boolean;
+}
+
+export const fakeIndicatorDeps = ({
+    paused = false,
+    notices = true,
+}: { readonly paused?: boolean; readonly notices?: boolean } = {}): FakeIndicatorDeps => {
+    const helpers: FakeHelper[] = [];
+    const audited: FakeIndicatorDeps["audited"] = [];
+    let saved = paused;
+    return {
+        deps: {
+            open: (events) => {
+                if (!notices) {
+                    return undefined;
+                }
+                const helper: FakeHelper = { shown: [], closed: false, events };
+                helpers.push(helper);
+                return {
+                    // The real helper drops a line sent after close; one sent here is a bug in the caller, said loudly.
+                    show: (text) => {
+                        if (helper.closed) {
+                            throw new Error(`"${text}" was shown on a notice already closed`);
+                        }
+                        helper.shown.push(text);
+                    },
+                    close: () => {
+                        helper.closed = true;
+                    },
+                };
+            },
+            paused: async () => saved,
+            setPaused: async (next) => {
+                saved = next;
+            },
+            audit: async (entry) => void audited.push(entry),
+        },
+        helpers,
+        audited,
+        saved: () => saved,
     };
 };

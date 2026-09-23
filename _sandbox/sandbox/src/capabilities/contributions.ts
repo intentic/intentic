@@ -23,7 +23,7 @@ export const hostOf = (ctx: CapabilityCtx): ExtensionHost => ({
     workspace: ctx.workspace,
     files: ctx.files,
     capabilities: ctx.capabilities,
-    config: { extensionsDir: ctx.extensionsDir },
+    config: { extensionsDir: ctx.extensionsDir, historyRoot: ctx.historyRoot },
 });
 
 export const contributionRegistry = async (host: ExtensionHost): Promise<Map<string, ResolvedContribution>> => {

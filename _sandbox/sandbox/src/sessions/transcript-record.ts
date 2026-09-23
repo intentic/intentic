@@ -1,7 +1,8 @@
-import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { isConversationId, type TranscriptRow, TranscriptRowSchema } from "@intentic/sandbox-contract";
 import { conversationUnit } from "../store/conversation-units.js";
+import { writeTextFile } from "../store/text-file.js";
 
 // One JSONL file per conversation, in its unit on the HISTORY volume, appended per settled turn. Not the live path; a
 // running turn is served from its frame log and lands here once it settles.
@@ -243,15 +244,13 @@ export const fileTranscriptRecord = (historyRoot: string): TranscriptRecord => (
         if (rows.length <= keep) {
             return 0;
         }
-        const temp = `${path}.${process.pid}.tmp`;
-        await writeFile(
-            temp,
+        await writeTextFile(
+            path,
             rows
                 .slice(0, keep)
                 .map((line) => `${line}\n`)
                 .join(""),
         );
-        await rename(temp, path);
         return rows.length - keep;
     },
 });

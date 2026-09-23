@@ -44,6 +44,12 @@ test("the machine's name becomes an id the agent can address it by", () => {
     expect(hostIdFrom("MACHINE_01")).toBe("machine-01");
 });
 
+test("a machine named like one of the daemon's own tool servers is set apart, so its tools still mount", () => {
+    expect(hostIdFrom("web")).toBe("web-device");
+    expect(hostIdFrom("Code.lan")).toBe("code-device");
+    expect(hostIdFrom("webby")).toBe("webby");
+});
+
 test("a machine that reports no usable name still gets one", () => {
     expect(hostIdFrom("")).toBe("this-device");
     expect(hostIdFrom("   ")).toBe("this-device");

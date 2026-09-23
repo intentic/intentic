@@ -99,7 +99,7 @@ const FACTS: { readonly [K in TurnFact["kind"]]: (conversation: Conversation, fa
     fast_mode: (conversation, fact) => {
         conversation.fastMode.value = fact;
     },
-    error: (conversation, fact, turn) => conversation.failures.apply(fact, turn),
+    error: (conversation, fact) => conversation.failures.apply(fact),
     // The live gate, not a headroom reading: `account_usage` carries every pool for the readouts.
     rate_limit_info: () => undefined,
 };

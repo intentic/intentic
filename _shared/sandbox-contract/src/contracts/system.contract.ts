@@ -12,7 +12,7 @@ import {
     DevicesListSchema,
 } from "../schemas/devices.js";
 import { PresenceReportSchema } from "../schemas/logs.js";
-import { SandboxMetricsSchema } from "../schemas/metrics.js";
+import { SandboxMetricsSchema, StorageCleanInputSchema, StorageCleanResultSchema, StorageReportSchema } from "../schemas/metrics.js";
 import { OkSchema } from "../schemas/shared.js";
 import { DaemonSessionSchema, InfoSchema, ManifestProblemsSchema, ManifestRepairSchema } from "../schemas/system.js";
 import {
@@ -121,6 +121,47 @@ export const systemContract = {
                 "CPU and memory for the sandbox as a whole, for the daemon that runs it, for each kind of process, and for each conversation's own processes. Measured when you ask and never in between, so CPU is the use since the previous reading: the first reading after a quiet spell has memory and no CPU, and the next one a few seconds later has both.",
         })
         .output(SandboxMetricsSchema),
+    // Answered from memory, never by walking the disk; a daemon restart forgets the last scan.
+    storage: systemRoute
+        .route({
+            method: "GET",
+            path: "/system/storage",
+            summary: "What is filling the disk",
+            description:
+                "The last measurement of the sandbox's disk, by what the space is for: conversations, checkouts, restore points, caches, logs, the trash and the rest, each with its biggest parts and whether it can be cleaned from here. Reading it measures nothing; ask for a scan to measure again.",
+        })
+        // Names every conversation's checkout and every repository on the box: the operator's reading.
+        .meta({ floor: "maintainer" })
+        .output(StorageReportSchema),
+    // Joins a scan already running instead of starting a second one; a time limit bounds it, so it always answers.
+    scanStorage: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/storage/scan",
+            summary: "Measure what is filling the disk",
+            description:
+                "Walks the sandbox's volumes and answers with the new measurement once it is done. A scan already running is joined rather than doubled. It stops at a time limit and says so, since a size it could not finish is still worth reading. A cancelled scan answers with the previous measurement.",
+        })
+        .output(StorageReportSchema),
+    cancelStorageScan: systemRoute
+        .route({
+            method: "DELETE",
+            path: "/system/storage/scan",
+            summary: "Stop measuring the disk",
+            description: "Stops a running scan. Whoever was waiting on it gets the previous measurement back; nothing is lost but the time.",
+        })
+        .output(OkSchema),
+    // Re-classifies every path right before removing it; one clean at a time, and it cancels a running scan first.
+    cleanStorage: systemRoute
+        .route({
+            method: "POST",
+            path: "/system/storage/clean",
+            summary: "Free the space one category holds",
+            description:
+                "Removes what one cleanable category holds, and says how much space that gave back. Only what is old enough and not in use goes: today's logs, a browser that is open, the weights a running model reads and a pack still being written all stay. Nothing outside the sandbox's own volumes, and nothing a category may not hold, is ever removed. Categories that cannot be cleaned are refused.",
+        })
+        .input(StorageCleanInputSchema)
+        .output(StorageCleanResultSchema),
     // Control plane only; live I/O is /system/terminal WebSocket, exempt from the Bearer auth these routes take.
     terminals: systemRoute
         .route({

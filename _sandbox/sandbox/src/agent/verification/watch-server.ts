@@ -1,5 +1,6 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { classifyCommand, matchCommand, type TurnProfile } from "@intentic/sandbox-contract";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { briefDuration } from "@intentic/base/format";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { sdk } from "../../engines/claude-sdk.js";
@@ -162,6 +163,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                         note: "You can end this turn, the watch runs without you and this conversation is woken when it fires or times out.",
                     });
                 },
+                { annotations: toolAnnotations("write") },
             ),
             sdk().tool(
                 "stop",
@@ -186,6 +188,7 @@ export const watchServer = (deps: WatchServerDeps): McpSdkServerConfigWithInstan
                               note: "No armed watch of this conversation has that id, it may have fired, timed out, or been stopped already.",
                           });
                 },
+                { annotations: toolAnnotations("write") },
             ),
         ],
     });

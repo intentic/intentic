@@ -4,6 +4,7 @@ import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-
 import { sdk } from "../engines/claude-sdk.js";
 import type { AgentEvent } from "@intentic/sandbox-contract";
 import { agentSessionName } from "@intentic/sandbox-contract/session-names";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { z } from "zod";
 import { wrapOutsideContent } from "@intentic/base/outside-text";
 import { publishRuntimeChange } from "../seams/runtime-feed.js";
@@ -165,6 +166,8 @@ export const terminalHelpServer = (deps: TerminalHelpDeps): McpSdkServerConfigWi
                             : `\n\nThe terminal now reads:\n${wrapOutsideContent(screen.text, { source: "terminal" })}`;
                     return ok(`The owner stepped in and is done.${note}${tail}`);
                 },
+                // The owner's keystrokes move the waiting command on, and a session holds one ask at a time.
+                { annotations: toolAnnotations("write") },
             ),
         ],
     });

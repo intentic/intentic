@@ -26,9 +26,6 @@ const MAX_TIMEOUT_S = 24 * 3_600;
 export const DEFAULT_TIMEOUT_S = 2 * 3_600;
 // A conversation's watch budget: eight concurrent outside conditions is a workflow, more is a leak.
 export const MAX_PER_CONVERSATION = 8;
-// Delivery retries, in ms, for as long as a watch may wait: a turn parked on a card can sit that long.
-const DELIVER_RETRY_MS = 15_000;
-const DELIVER_ATTEMPTS = (MAX_TIMEOUT_S * 1000) / DELIVER_RETRY_MS;
 // Short, since the agent types ids back; random, so a restart never reissues an id an old chat row still names.
 const ID_ALPHABET_SPAN = 36 ** 4;
 
@@ -232,24 +229,23 @@ const report = (record: WatcherRecord, outcome: WatchOutcome): string =>
         output: checkSays(record.last, record.spec.outside),
     });
 
-// A wake continues the arming turn on its own routing, not a new one.
+// A wake continues the arming turn on its own routing, not a new one; a conversation busy with a turn that cannot take
+// it queues it, where every window sees it until it goes.
 const deliver = async (live: WatcherRuntime, record: WatcherRecord, outcome: WatchOutcome): Promise<void> => {
     const prompt = report(record, outcome);
-    const landing = await deliverWake(
-        live,
-        {
-            conversationId: record.spec.conversationId,
-            prompt,
-            voice: "sandbox",
-            ...(record.spec.outside === undefined ? {} : { outside: record.spec.outside }),
-            profile: record.spec.profile,
-        },
-        { attempts: DELIVER_ATTEMPTS, retryMs: DELIVER_RETRY_MS, logger: live.logger, context: { watch: record.id, outcome } },
-    );
-    if (landing === "busy") {
+    const receipt = await deliverWake(live, {
+        conversationId: record.spec.conversationId,
+        prompt,
+        voice: "sandbox",
+        ...(record.spec.outside === undefined ? {} : { outside: record.spec.outside }),
+        profile: record.spec.profile,
+    });
+    if ("invalid" in receipt) {
         // The report goes into the log rather than nowhere.
-        live.logger.error({ watch: record.id, conversationId: record.spec.conversationId, report: prompt }, "watch: report could not be delivered");
+        live.logger.error({ watch: record.id, conversationId: record.spec.conversationId, report: prompt, invalid: receipt.invalid }, "watch: report could not be delivered");
+        return;
     }
+    live.logger.info({ watch: record.id, outcome, conversationId: record.spec.conversationId, delivered: receipt.delivered }, "watch: report delivered");
 };
 
 const entryOf = (record: WatcherRecord): JournalledWatch => ({

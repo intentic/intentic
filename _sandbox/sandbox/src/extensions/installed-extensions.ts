@@ -9,6 +9,7 @@ import {
     readExtensionManifest,
     workspaceExtensionsRoot,
 } from "../capabilities/extension-dirs.js";
+import { type ExtensionApproval, extensionApprovals } from "./extension-approvals.js";
 import { readExtensionEnablement } from "./extension-enablement.js";
 
 // Structural subset of Services the enumerator needs; callers pass `services` or a small adapter with the same fields.
@@ -16,7 +17,8 @@ export interface ExtensionHost {
     readonly workspace: { readonly root: string };
     readonly files: { readonly read: (absPath: string) => Promise<string | undefined> };
     readonly capabilities: { readonly list: () => Promise<Capability[]> };
-    readonly config: { readonly extensionsDir: string };
+    // historyRoot holds the owner's approvals of workspace extensions (extension-approvals.ts).
+    readonly config: { readonly extensionsDir: string; readonly historyRoot: string };
 }
 
 // Enumerates image-baked, git-installed, and workspace extensions as one list every consumer iterates.
@@ -32,6 +34,19 @@ export interface InstalledExtension {
     readonly source: ExtensionSummary["source"];
     // Owner's switch; a disabled extension stays listed (its row still renders) but drops from enabledExtensions().
     readonly enabled: boolean;
+}
+
+// A workspace extension the owner has not approved with the powers it declares now: enumerated for its row and the
+// routes that only read or delete it, never among the extensions anything runs.
+export interface PendingExtension extends InstalledExtension {
+    readonly approval: ExtensionApproval;
+}
+
+// What one enumeration finds: what runs, the folders that failed to parse, and what waits for the owner's approval.
+export interface ExtensionInventory {
+    readonly extensions: InstalledExtension[];
+    readonly invalid: InvalidWorkspaceExtension[];
+    readonly pending: PendingExtension[];
 }
 
 const bakedExtensions = async (services: ExtensionHost, enabledOf: (manifest: ExtensionManifest) => boolean): Promise<InstalledExtension[]> => {
@@ -57,12 +72,13 @@ const bakedExtensions = async (services: ExtensionHost, enabledOf: (manifest: Ex
 };
 
 // Workspace-extension directories, plus ones that failed to be one; `taken` holds every id other sources answer for.
-// A collision is reported like a parse failure, since there's no install moment to reject it at.
+// A collision is reported like a parse failure, and the owner's approval stands in for the install moment a folder
+// never has: one not approved with the powers it declares now is pending, and still holds its id.
 const workspaceExtensions = async (
     services: ExtensionHost,
     enabledOf: (manifest: ExtensionManifest) => boolean,
     taken: ReadonlySet<string>,
-): Promise<{ extensions: InstalledExtension[]; invalid: InvalidWorkspaceExtension[] }> => {
+): Promise<ExtensionInventory> => {
     const root = workspaceExtensionsRoot(services.workspace.root);
     let names: string[];
     try {
@@ -71,10 +87,13 @@ const workspaceExtensions = async (
             .map((entry) => entry.name)
             .toSorted();
     } catch {
-        return { extensions: [], invalid: [] };
+        return { extensions: [], invalid: [], pending: [] };
     }
     const extensions: InstalledExtension[] = [];
     const invalid: InvalidWorkspaceExtension[] = [];
+    const pending: PendingExtension[] = [];
+    // Read only once a folder parses, so a workspace with none never touches the ledger.
+    let approvalOf: Awaited<ReturnType<typeof extensionApprovals>> | undefined;
     const seen = new Set(taken);
     for (const name of names) {
         const dir = join(root, name);
@@ -89,9 +108,16 @@ const workspaceExtensions = async (
             continue;
         }
         seen.add(id);
-        extensions.push({ id, dir, manifest: result.manifest, source: "workspace", enabled: enabledOf(result.manifest) });
+        approvalOf ??= await extensionApprovals(services.config.historyRoot);
+        const extension: InstalledExtension = { id, dir, manifest: result.manifest, source: "workspace", enabled: enabledOf(result.manifest) };
+        const approval = approvalOf(id, result.manifest);
+        if (approval.approved) {
+            extensions.push(extension);
+        } else {
+            pending.push({ ...extension, approval });
+        }
     }
-    return { extensions, invalid };
+    return { extensions, invalid, pending };
 };
 
 // Baked first (a safety net; install already rejects the collision), then git-installed, then workspace.
@@ -102,9 +128,7 @@ const workspaceExtensions = async (
 // maintenance is not here because its probe sweep runs only while that extension is installed and on.
 export const ESSENTIAL_EXTENSIONS: ReadonlySet<string> = new Set(["intentic.automations", "intentic.workflows"]);
 
-export const extensionInventory = async (
-    services: ExtensionHost,
-): Promise<{ extensions: InstalledExtension[]; invalid: InvalidWorkspaceExtension[] }> => {
+export const extensionInventory = async (services: ExtensionHost): Promise<ExtensionInventory> => {
     const capabilities = await services.capabilities.list();
     // Keyed by publisher.name so the switch survives remove/re-add; essential reads enabled despite a stale false.
     const enablement = await readExtensionEnablement(services.workspace.root);
@@ -126,7 +150,7 @@ export const extensionInventory = async (
     const pinned = [...baked, ...installed.filter((extension) => !bakedIds.has(extension.id))];
     const taken = new Set(pinned.flatMap((extension) => [extension.id, extensionIdOf(extension.manifest)]));
     const workspace = await workspaceExtensions(services, enabledOf, taken);
-    return { extensions: [...pinned, ...workspace.extensions], invalid: workspace.invalid };
+    return { extensions: [...pinned, ...workspace.extensions], invalid: workspace.invalid, pending: workspace.pending };
 };
 
 export const installedExtensions = async (services: ExtensionHost): Promise<InstalledExtension[]> => (await extensionInventory(services)).extensions;

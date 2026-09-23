@@ -31,6 +31,7 @@ const tempCtx = (): { ctx: CapabilityCtx; root: string; capabilities: Capability
             get: async (id: string) => capabilities.find((entry) => entry.id === id),
         },
         extensionsDir: EXTENSIONS_DIR,
+        historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")),
     } as unknown as CapabilityCtx;
     return { ctx, root, capabilities };
 };
@@ -55,7 +56,7 @@ const host: ExtensionHost = {
     workspace: { root: WORKSPACE_ROOT },
     files: { read: readWorkspaceFile },
     capabilities: { list: async () => [] },
-    config: { extensionsDir: EXTENSIONS_DIR },
+    config: { extensionsDir: EXTENSIONS_DIR, historyRoot: mkdtempSync(join(tmpdir(), "cap-history-")) },
 } as unknown as ExtensionHost;
 
 const reddit: Capability = { id: "reddit", kind: "browser", config: { platform: "reddit" } };

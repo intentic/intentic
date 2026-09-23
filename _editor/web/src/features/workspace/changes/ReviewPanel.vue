@@ -27,7 +27,7 @@ import {
     summarizeOrigins,
     YOURS,
 } from "./changeOrigins";
-import { formatElapsed, unfinishedMark } from "../../agents/fleet/agentStatus";
+import { currentAction, formatElapsed, unfinishedMark } from "../../agents/fleet/agentStatus";
 import { diffRawUrls } from "./diffRaw";
 import { repoOfPath, turnWrites } from "../files/liveWrites";
 import { ahead, behind, syncable, unpublished } from "../push/outgoingWork";
@@ -139,7 +139,7 @@ const originNote = (id: string): string | undefined => {
         return undefined;
     }
     const turn = agent.turns !== undefined && agent.turns > 0 ? `turn ${agent.turns + 1}` : undefined;
-    const doing = agent.activity?.tool !== undefined ? [agent.activity.tool, agent.activity.target].filter(Boolean).join(` `) : agent.activity?.todo;
+    const doing = currentAction(agent.activity);
     const since = agent.startedAt !== undefined ? formatElapsed(agent.startedAt, Date.now()) : undefined;
     return [mark.label, turn, doing, since].filter((part) => part !== undefined && part !== ``).join(` · `);
 };

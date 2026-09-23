@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { errorMessage } from "@intentic/base/errors";
-import { type Capability, capabilitiesContract, CapabilitySchema, isVaulted } from "@intentic/sandbox-contract";
+import { type Capability, capabilitiesContract, CapabilitySchema, collidesWithReservedServer, isVaulted } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
 import { authorizeMaintainer, bearerFrom } from "../auth/auth.js";
 import type { Services } from "../composition.js";
@@ -93,6 +93,16 @@ const keptToken = async (services: Services, token: string | undefined, keeping:
     return typeof value === "string" && !isVaulted(value) ? value : undefined;
 };
 
+// Refuses an id that would become a `mcp__<id>__` server name shadowing one of the daemon's own tools; a no-op for the
+// kinds and ids that mint no server. Kept off the handlers' own complexity as a throw, since a shadow is not a rename.
+const refuseReservedServerId = (kind: string, id: string): void => {
+    if (collidesWithReservedServer(kind, id)) {
+        throw new ORPCError("CONFLICT", {
+            message: `"${id}" is a name the sandbox reserves for one of its own tools; give this ${kind} connection a different id`,
+        });
+    }
+};
+
 // `add` streams progress frames, then records the manifest entry, then a terminal `result`. `list` fans each
 // handler's status() out concurrently.
 export const createCapabilitiesRoutes = (services: Services) => {
@@ -125,6 +135,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
         }),
         add: i.add.handler(async function* ({ input, context }) {
             const handler = registry[input.kind];
+            // Its id would become the `mcp__<id>__` server name for the turn, which must not shadow a daemon server.
+            refuseReservedServerId(input.kind, input.id);
             if (adding.has(input.id)) {
                 throw new ORPCError("CONFLICT", { message: `"${input.id}" is already being added, wait for it to finish` });
             }
@@ -201,6 +213,8 @@ export const createCapabilitiesRoutes = (services: Services) => {
             if (input.to === capability.id) {
                 return { ok: true } as const;
             }
+            // The new name would become this kind's `mcp__<id>__` server name, so it can't be a daemon server's.
+            refuseReservedServerId(capability.kind, input.to);
             if ((await services.capabilities.get(input.to)) !== undefined) {
                 throw new ORPCError("CONFLICT", { message: `"${input.to}" is already the name of another connection` });
             }

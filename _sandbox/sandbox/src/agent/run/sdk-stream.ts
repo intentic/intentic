@@ -1,14 +1,14 @@
 // Normalizes the SDK's message stream onto AgentEvents: sdkTurns finds the turn boundary in streaming-input mode, and
 // TurnFold maps each message onto typed frames. An SDK message with no mapping is dropped; the terminal `done` frame is
 // emitted by runAgent, not here.
-import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand } from "@anthropic-ai/claude-agent-sdk";
+import type { Options, SDKAssistantMessage, SDKMessage, SDKUserMessage, SlashCommand, TerminalReason } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
 import { type AgentEvent, type FastModeState, type PermissionMode, PermissionModeSchema, type TodoItem, type UsageWindow } from "@intentic/sandbox-contract";
 import { agentSessionName, browserSessionName } from "@intentic/sandbox-contract/session-names";
 import { browserServerOfTool } from "../../browser/sessions/browser-sessions.js";
 import { localCommandText, unknownCommandName } from "../providers/agent-commands.js";
 import type { SteeringQueue } from "../checkpoints/agent-steering.js";
-import { errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, trialRetryFrame } from "./error-frames.js";
+import { contextOverflowFrame, errorFrame, modelUnavailableFrame, rateLimitFrame, retryStormFrame, trialRetryFrame } from "./error-frames.js";
 import { probeRoutedEndpoint, type RoutedEndpoint } from "../providers/routed-refusal.js";
 import type { TurnAllowance } from "../providers/harness-credentials.js";
 import { opt } from "../../opt.js";
@@ -96,6 +96,9 @@ const noteBashTask = (turn: SubagentTurn, message: SubagentTaskMessage): void =>
 
 // Consecutive refusals before ending the turn for the breaker (provider-health.ts) instead of spinning.
 const MAX_IN_TURN_RETRIES = 8;
+
+// The CLI's endings for a session its window can no longer hold, compaction included; resuming it ends there again.
+const OVERFLOW_ENDINGS: ReadonlySet<TerminalReason> = new Set<TerminalReason>(["prompt_too_long", "blocking_limit", "rapid_refill_breaker"]);
 
 // Live in-process background work off the SDK's own level signal (replace semantics; a missed edge can't wedge a stale
 // hold). Undefined on every other message, so the caller keeps its last count.
@@ -231,6 +234,8 @@ export interface StreamSdkArgs {
     readonly subagents: SubagentTurn | undefined;
     // The checklist the resumed session already holds (task-store.ts); adopted once the fold sees the session id.
     readonly checklistSeed: ChecklistSeed | undefined;
+    // What the resumed session already spent (carried-cost.ts), which its first result counts again; 0 when fresh.
+    readonly carriedCostUsd: number;
     // The live permission posture, seeded with the turn's own mode; mutated here and read by the gate.
     readonly posture: TurnPosture;
 }
@@ -305,10 +310,15 @@ class TurnFold {
     private readonly textBlocks = new Map<string, number>();
     // Fast-mode speed, de-duplicated on the (state, reason) pair, since a changing reason alone is informative.
     private fastReported: string | undefined;
+    // The query's running total as of the last result, in USD: the SDK reports that total, a frame only its growth.
+    private spentUsd: number;
+    // Whether this turn already said its session outgrew the window; the result's ending repeats the assistant's error.
+    private overflowed = false;
 
     constructor(args: StreamSdkArgs, session: AgentQuery) {
         this.args = args;
         this.session = session;
+        this.spentUsd = args.carriedCostUsd;
     }
 
     // One SDK message onto its frames; returns true when the message ends the whole stream (a terminal rate_limit
@@ -429,7 +439,9 @@ class TurnFold {
     // rendered as their own live list).
     private async *onAssistant(message: SDKAssistantMessage, sessionId: unknown, parent: string | undefined): AsyncGenerator<AgentEvent> {
         if (message.error !== undefined) {
-            yield await errorFrame(message, this.args.allowance, this.args.trial);
+            const failure = await errorFrame(message, this.args.allowance, this.args.trial);
+            this.overflowed ||= failure.code === "context-overflow";
+            yield failure;
             return;
         }
         yield* this.showInheritedChecklist();
@@ -751,12 +763,41 @@ class TurnFold {
         };
     }
 
+    // This result's own spend, off the running total the SDK reports: carried in from a resumed transcript, cumulative
+    // across results. A total below the last means the count started over (a /clear, a zeroed crash result).
+    private spentSince(total: number | undefined): number | undefined {
+        if (total === undefined) {
+            return undefined;
+        }
+        const previous = total < this.spentUsd ? 0 : this.spentUsd;
+        this.spentUsd = total;
+        return total - previous;
+    }
+
+    // How the turn ended when it didn't succeed. A session past its window outranks the subtype and is said once, since
+    // the assistant's error usually said it first; otherwise the subtype decides the code and rides the sentence.
+    private endingFrame(message: SdkOf<"result">): AgentEvent | undefined {
+        if (message.terminal_reason !== undefined && OVERFLOW_ENDINGS.has(message.terminal_reason)) {
+            const repeated = this.overflowed;
+            this.overflowed = true;
+            return repeated ? undefined : contextOverflowFrame(`agent stopped: the session no longer fits the model's context window (${message.terminal_reason})`);
+        }
+        if (this.overflowed || message.subtype === "success") {
+            return undefined;
+        }
+        return {
+            kind: "error",
+            code: message.subtype === "error_max_turns" ? "turn-cap" : "harness-incomplete",
+            message: `agent did not complete (${message.subtype})`,
+        };
+    }
+
     private async *onResult(message: SdkOf<"result">): AsyncGenerator<AgentEvent> {
         // Only surface accounting when the SDK actually reported it; an empty frame on every turn would be noise.
         if (message.usage !== undefined || message.total_cost_usd !== undefined) {
             yield {
                 kind: "usage",
-                ...opt("costUsd", message.total_cost_usd),
+                ...opt("costUsd", this.spentSince(message.total_cost_usd)),
                 ...opt("inputTokens", message.usage?.input_tokens),
                 ...opt("outputTokens", message.usage?.output_tokens),
                 ...opt("cacheReadTokens", message.usage?.cache_read_input_tokens),
@@ -788,14 +829,9 @@ class TurnFold {
         if (speed !== undefined) {
             yield speed;
         }
-        // How the turn ended when it didn't succeed: the subtype decides the code (turn-cap vs. harness-incomplete),
-        // and the raw subtype still rides the sentence since it's the only thing telling several endings apart.
-        if (message.subtype !== "success") {
-            yield {
-                kind: "error",
-                code: message.subtype === "error_max_turns" ? "turn-cap" : "harness-incomplete",
-                message: `agent did not complete (${message.subtype})`,
-            };
+        const ending = this.endingFrame(message);
+        if (ending !== undefined) {
+            yield ending;
         }
         // The account's headroom, re-read now the turn has settled; an empty read yields no frame, not an empty list.
         const windows = this.args.readUsage === undefined ? [] : await this.args.readUsage();

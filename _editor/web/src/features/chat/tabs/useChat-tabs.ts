@@ -144,8 +144,8 @@ export const active = computed<Conversation>(() => {
     return list.find((conversation) => conversation.conversationId === activeId.value) ?? list[0]!;
 });
 
-// Everything waiting to be sent, back in the composer: message, age, staged files, queued turns. Its own
-// function since two arrivals restore a composer (a snapshot restore, a reopened closed draft).
+// Everything waiting to be sent, back in the composer: message, age, staged files. Its own function since two arrivals
+// restore a composer (a snapshot restore, a reopened closed draft).
 export const restoreComposer = (conversation: Conversation, tab: StoredTab): void => {
     conversation.draft.value = tab.draft;
     // The stamping watch only fills an empty stamp, so this keeps the restored instant, not a fresh one.
@@ -157,7 +157,6 @@ export const restoreComposer = (conversation: Conversation, tab: StoredTab): voi
         status: `done` as const,
         progress: 1,
     }));
-    conversation.turn.queued.value = tab.queued.map((message) => ({ id: uuid(), text: message.text, attachments: message.attachments }));
 };
 
 // How the next turn runs, restored per tab: these describe THIS chat, never picks made in another tab since. The

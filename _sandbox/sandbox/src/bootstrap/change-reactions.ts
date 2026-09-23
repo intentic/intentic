@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { startVanishedRepoSweep } from "../agents/registry/vanished-repos.js";
 import { startSidecarService } from "../derived/sidecar-service.js";
+import { stopPendingExtensionProcesses } from "../extensions/extension-processes.js";
 import { onListenerStatusMoved } from "../extensions/listener-status.js";
 import { startRefWatch, subscribeRefChanges } from "../git/remote/ref-watch.js";
 import { ignoreFileMode } from "../git/remote/repo-git-dirs.js";
@@ -21,10 +22,12 @@ const extensionSource = (path: string): boolean =>
 export const startChangeReactions = ({ logger, services, shutdown, traits }: BootPhase): void => {
     startWorkspaceWatch(services.workspace.root, logger);
     subscribeWorkspaceChanges(() => services.iq.markDirty());
-    // Loaded code can't be unloaded, so a debounced restart is the reload.
+    // Loaded code can't be unloaded, so a debounced restart is the reload; one that declares new powers waits for approval
+    // again, and keeps none of its processes meanwhile.
     subscribeWorkspaceChanges((paths) => {
         if (paths.some(extensionSource)) {
             services.extensionBackend.restart();
+            void stopPendingExtensionProcesses(services);
         }
     });
     // The `sidecars` setting is read fresh each pass, so the switch works without a restart.

@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ExtensionManifestSchema } from "@intentic/extension-manifest";
 import { test, expect, afterEach } from "bun:test";
 import { createApp } from "../../app.js";
 import type { Services } from "../../composition.js";
@@ -9,6 +10,7 @@ import { services } from "../../harness/route-services.testing.js";
 import { testConfig } from "../../testing.js";
 import { workspaceExtensionsRoot } from "../../capabilities/extension-dirs.js";
 import { workspacePaths } from "../../workspace/workspace.js";
+import { approveExtension } from "../extension-approvals.js";
 import { createExtensionBackend, type ExtensionBackend } from "./backend-supervisor.js";
 
 // Extension backend system end-to-end against a real spawned host process (supervisor, /x proxy, containment rules).
@@ -46,14 +48,19 @@ const echoServer = `export const activateServer = (api, context) => {
 };
 `;
 
-const writeExtension = async (root: string, name: string, server: string): Promise<void> => {
+// Each root keeps the owner's approvals beside it, so one test's yes is never another's.
+const historyOf = (root: string): string => `${root}-history`;
+
+// Written and approved, as the owner's own extension would be, unless the test is about one nobody approved.
+const writeExtension = async (root: string, name: string, server: string, approved = true): Promise<void> => {
     const dir = join(workspaceExtensionsRoot(root), name);
+    const manifest = { publisher: "acme", name, version: "1.0.0", engines: { intentic: "^2.1.0" }, server: "server.js" };
     await mkdir(dir, { recursive: true });
-    await writeFile(
-        join(dir, "intentic-extension.json"),
-        JSON.stringify({ publisher: "acme", name, version: "1.0.0", engines: { intentic: "^2.1.0" }, server: "server.js" }),
-    );
+    await writeFile(join(dir, "intentic-extension.json"), JSON.stringify(manifest));
     await writeFile(join(dir, "server.js"), server);
+    if (approved) {
+        await approveExtension(historyOf(root), `acme.${name}`, ExtensionManifestSchema.parse(manifest));
+    }
 };
 
 // Wires the real supervisor into the route harness's services through a holder, resolving their circular construction.
@@ -68,7 +75,7 @@ const harness = (root: string): { svc: Services; backend: ExtensionBackend } => 
     );
     const svc = services({
         workspace: workspacePaths(root),
-        config: { ...testConfig, extensionsDir: "" },
+        config: { ...testConfig, extensionsDir: "", historyRoot: historyOf(root) },
         extensionBackend: backend,
     });
     holder.current = svc;
@@ -111,6 +118,19 @@ test("a workspace extension's backend serves its /x namespace through the daemon
     const stopped = await app.request("http://sandbox.test/x/acme.echo/ping");
     expect(stopped.status).toBe(503);
     expect(((await stopped.json()) as { error: string }).error).toContain("stopped");
+});
+
+test("a workspace extension nobody approved never loads into the host, beside one that did", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ext-backend-pending-"));
+    await writeExtension(root, "echo", echoServer);
+    await writeExtension(root, "stranger", echoServer, false);
+    const { svc, backend } = harness(root);
+    await backend.start();
+
+    expect(backend.statusOf("acme.stranger")).toBeUndefined();
+    const app = createApp(svc);
+    expect((await app.request("http://sandbox.test/x/acme.stranger/ping")).status).toBe(404);
+    expect((await app.request("http://sandbox.test/x/acme.echo/ping")).status).toBe(200);
 });
 
 // A handler that never answers: the shape that took a hosted sandbox down, where every other route queued behind it.

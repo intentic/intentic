@@ -63,6 +63,8 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
         sentAt: z.number(),
         attachments: z.array(z.string()).optional(),
         voice: z.enum(["sandbox", "agent"]).optional(),
+        // The message's own id, stamped on the row it becomes (TranscriptRow.messageId).
+        messageId: z.string().optional(),
     }),
     z.object({ kind: z.literal("delta"), text: z.string(), parentToolUseId: z.string().optional() }),
     // Closes the prose block `delta` frames were writing; a turn emits several as it narrates, and without this
@@ -233,6 +235,9 @@ export const AgentEventSchema = z.discriminatedUnion("kind", [
                 // The model cannot hold a turn this size, refused before sending; retrying the same request never
                 // helps.
                 "context-window-too-small",
+                // The session outgrew the model's context window mid-turn; resuming that session only overflows again,
+                // so the daemon re-runs the turn once in a fresh session carrying the hand-off.
+                "context-overflow",
                 "subscription-required",
                 "agent-busy",
                 // The sandbox is short of memory, held before anything spawned: a person once per spell, after which

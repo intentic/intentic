@@ -34,6 +34,7 @@ import { useComposerPopovers } from "./pane/composerPopovers";
 import { useComposerKeys, useRecallRing } from "./pane/composerKeys";
 import ChatCommandPopover from "../composer/ChatCommandPopover.vue";
 import ChatContinueStrip from "./ChatContinueStrip.vue";
+import ChatQueue from "../composer/ChatQueue.vue";
 import ChatAudioChip from "../transcript/attachments/ChatAudioChip.vue";
 import ChatFileChip from "../transcript/attachments/ChatFileChip.vue";
 import ChatMentionPopover from "../composer/ChatMentionPopover.vue";
@@ -83,7 +84,7 @@ const emit = defineEmits<{ focus: []; close: [] }>();
 const chat = computed(() => props.conversation);
 const paneView = conversationView(chat);
 provide(PANE_VIEW, paneView);
-const { messages, streaming, awaitingDecision, mode, provider, model, draft, attachments, staged, connected, queued, editing } = paneView;
+const { messages, streaming, awaitingDecision, mode, provider, model, draft, attachments, staged, connected, editing } = paneView;
 const { reachable, connection } = useSandbox();
 // The daemon refused this account outright, unlike "not connected yet": waiting won't fix it.
 const denied = computed(() => connection.value.failure?.kind === `forbidden`);
@@ -460,33 +461,8 @@ const { onKeydown, onInput, composerHint } = useComposerKeys({
                         <ChatPaneNotices />
                         <!-- The turn stopped before finishing, and the way on (ChatContinueStrip). -->
                         <ChatContinueStrip :visible="continueStrip" :ready="continueOffer" @continue="continueTurn" />
-                        <!-- Queued messages stay outside the transcript until the agent receives them. -->
-                        <div v-if="queued.length > 0" class="flex flex-col gap-1">
-                            <div
-                                v-for="message in queued"
-                                :key="message.id"
-                                class="flex items-start gap-2 rounded-xl border border-dashed border-line-strong bg-card px-3 py-2"
-                            >
-                                <Icon name="clock" class="mt-0.5 shrink-0 text-2xs text-subtle" />
-                                <div class="min-w-0 flex-1">
-                                    <p v-if="message.text" class="truncate text-2xs text-muted">{{ message.text }}</p>
-                                    <p v-if="message.attachments.length > 0" class="truncate text-2xs text-subtle">
-                                        <Icon name="file" class="text-2xs" />
-                                        {{ message.attachments.map((file) => file.name).join(`, `) }}
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    class="composer-ghost h-5 w-5 shrink-0"
-                                    @click="conversation.turn.removeQueued(message.id)"
-                                    v-tooltip.top="t(`chat.chatPane.removeMessageNotSent`)"
-                                    :aria-label="t(`chat.chatPane.removeQueuedMessage`)"
-                                >
-                                    <Icon name="times" class="text-2xs" />
-                                </button>
-                            </div>
-                            <p class="px-1 text-2xs text-subtle">{{ queuedHint }}</p>
-                        </div>
+                        <!-- What waits for the next turn: the conversation's queue, the same in every window. -->
+                        <ChatQueue :hint="queuedHint" />
                         <!-- The edit notice identifies the message and its two actions. -->
                         <div
                             v-if="editing !== undefined"

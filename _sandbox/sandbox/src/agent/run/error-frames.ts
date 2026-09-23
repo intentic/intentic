@@ -4,6 +4,7 @@ import type { TurnAllowance } from "../providers/harness-credentials.js";
 import type { TurnLimit } from "../../usage/fleet-limit.js";
 import {
     isAuthFailureText,
+    isContextOverflowText,
     isEntitlementRefusalText,
     isUnsentParameterRefusalText,
     mentionsSpentAllowance,
@@ -93,6 +94,10 @@ export const modelUnavailableFrame = (model: string, refusal: string): ErrorEven
     message: `${refusal} Nothing here can retry past that: pick another model for this chat (${model} is off the list until the plan covers it).`,
 });
 
+// A session past the model's window, in the provider's own words; coded so the daemon re-runs the turn in a fresh
+// session, since resuming this one only overflows again (classify-failure.ts).
+export const contextOverflowFrame = (explained: string): ErrorEvent => ({ kind: "error", code: "context-overflow", message: explained });
+
 // A parameter refusal coded `provider-outage` since the request isn't at fault: the breaker retries the turn from its
 // existing session. Reached from the Claude, Codex, and OpenCode adapters.
 export const unsentParameterFrame = (explained: string): ErrorEvent => ({
@@ -101,27 +106,31 @@ export const unsentParameterFrame = (explained: string): ErrorEvent => ({
     message: `${explained} This parameter was not sent by intentic. Usually clears on retry; work so far is kept.`,
 });
 
+// A platform-owned trial turn's failure: the pool's own refusals, then a session past its window, which a fresh session
+// on the same model can hold; anything else is a model the trial cannot run.
+const trialFrame = (message: SDKAssistantMessage): ErrorEvent => {
+    const explained = apiErrorMessage(message);
+    if (explained.includes(`trial_exhausted`) || /free trial used up/i.test(explained)) {
+        return trialExhaustedFrame(explained);
+    }
+    if (message.error === "rate_limit" || message.error === "server_error" || message.error === "overloaded" || explained.includes(`trial_unavailable`)) {
+        return trialUnavailableFrame();
+    }
+    if (isContextOverflowText(explained)) {
+        return contextOverflowFrame(explained);
+    }
+    return {
+        kind: "error",
+        code: "trial-model-unavailable",
+        message: `This model could not run through the free trial. ${explained} Choose another model or connect Google.`,
+    };
+};
+
 // Reads `rate_limit`, `server_error`, and `overloaded` from the SDK's category, since a resume must be safe regardless
 // of wording; everything else is decided from the message text.
 export const errorFrame = async (message: SDKAssistantMessage, allowance: TurnAllowance | undefined, trial = false): Promise<ErrorEvent> => {
     if (trial) {
-        const explained = apiErrorMessage(message);
-        if (explained.includes(`trial_exhausted`) || /free trial used up/i.test(explained)) {
-            return trialExhaustedFrame(explained);
-        }
-        if (
-            message.error === "rate_limit" ||
-            message.error === "server_error" ||
-            message.error === "overloaded" ||
-            explained.includes(`trial_unavailable`)
-        ) {
-            return trialUnavailableFrame();
-        }
-        return {
-            kind: "error",
-            code: "trial-model-unavailable",
-            message: `This model could not run through the free trial. ${explained} Choose another model or connect Google.`,
-        };
+        return trialFrame(message);
     }
     // Tagged as a usage cap, not a workspace fault; the only path that can read the translator's own reset.
     if (message.error === "rate_limit") {
@@ -157,6 +166,10 @@ const sentenceFrame = (explained: string): ErrorEvent => {
     // A credential the CLI stopped using; coded so the route can re-mint and resume rather than leave a dead tab.
     if (isAuthFailureText(explained)) {
         return { kind: "error", code: "claude-token-refused", message: explained };
+    }
+    // A routed model's words for a session past its window, or the CLI's; below the refusals, which each outrank it.
+    if (isContextOverflowText(explained)) {
+        return contextOverflowFrame(explained);
     }
     // The 4xx that isn't the request's fault; last, so an allowance or credential match above still wins.
     if (isUnsentParameterRefusalText(explained)) {

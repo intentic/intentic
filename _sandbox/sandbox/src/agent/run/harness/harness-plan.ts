@@ -5,6 +5,7 @@ import { browserServersOf, type BrowserTurnTools } from "../../../browser/tools/
 import { pluginDirsOf } from "../../../capabilities/plugin-dirs.js";
 import type { Services } from "../../../composition.js";
 import { extensionAgentDirsOf } from "../../../extensions/installed-extensions.js";
+import { withSettingsHookGate } from "./settings-hook-gate.js";
 import { personaKitPlugin } from "../../../personas/persona-kit.js";
 import { type TurnPersona, turnPersona } from "../../../personas/personas.js";
 import { standing } from "../../../rules/rules.js";
@@ -220,12 +221,18 @@ export const planHarnessTurn = async (
         // trading away.
         secrets,
     };
+    // Hooks in Claude Code's settings files that the owner has not approved in this form switch every hook off.
+    const gated = await deps.perf.track("turn.plan.hooks", {}, () =>
+        withSettingsHookGate(deps.config.historyRoot, input.conversationId, {
+            spec: harnessSpec(deps, input, context, resolved.credentials),
+            policy: harnessPolicy(context.base.policy, input, settings, safetyPolicy, turnEndingRules),
+        }),
+    );
     return armPlan(
         deps.agent,
         {
             ...context.base,
-            spec: harnessSpec(deps, input, context, resolved.credentials),
-            policy: harnessPolicy(context.base.policy, input, settings, safetyPolicy, turnEndingRules),
+            ...gated,
             tools,
             credential: harnessCredentialOf(resolved.credentials),
             hooks: {

@@ -1,6 +1,6 @@
 // agents: the conversation fleet
 import { z } from "zod";
-import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ForkedFromSchema } from "./agent.js";
+import { AgentHarnessSchema, AgentOriginSchema, AgentProviderSchema, ConversationQueueSchema, ForkedFromSchema } from "./agent.js";
 import { LoopStateSchema } from "./loops.js";
 import { LimitPolicySchema, RetryPolicySchema, TurnBreakPolicySchema, TurnBreakSchema } from "./turn-break.js";
 import { EMOJI_MAX_LENGTH, isSingleEmoji } from "../text/emoji.js";
@@ -351,6 +351,16 @@ export const AgentSummarySchema = z.object({
         "What this conversation's merged work is called, once the drafting above has finished. It arrives on the same push that ends the draft, so the promise and the answer travel together.",
     ),
     startedAt: z.number().optional().describe("When the running turn started, in milliseconds. Absent when none is running."),
+    run: z
+        .string()
+        .optional()
+        .describe(
+            "The run under way right now: what a stop names, so it cannot cancel a turn that started after it was pressed. Absent when none is running, and for a turn with no run to attach to.",
+        ),
+    // On the card because every window and the board read it here: the queue is the conversation's, not any window's.
+    queue: ConversationQueueSchema.optional().describe(
+        "Messages waiting for its next turn, and whether they are held. Absent for a conversation nothing has ever waited for.",
+    ),
     updatedAt: z.number().describe("When it last did something, in milliseconds. Reading it does not count."),
     // Daemon-side, not browser-side: read state is a fact about the work, so clearing site data or switching devices
     // can't resurrect a badge.

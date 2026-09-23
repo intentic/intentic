@@ -11,8 +11,20 @@ import type { TurnCheckpoint } from "./turn-checkpoints.js";
 
 export type RewindDeps = Pick<Services, "agents" | "conversations" | "agentWorktrees" | "history" | "transcripts" | "turnCheckpoints" | "logger">;
 
-// Refusal reasons as values, not throws; the route maps each to its own status, both ordinary outcomes.
-export type RewindRefusal = "busy" | "no-checkpoint";
+// Refusal reasons as values, not throws; the route maps each to its own status, all ordinary outcomes.
+export type RewindRefusal = "busy" | "no-checkpoint" | "stale";
+
+// Which message a rewind means: the position it addresses, and the id of the message the caller saw there.
+export interface RewindTarget {
+    readonly index: number;
+    readonly messageId: string;
+}
+
+// The id of the message the record holds at `index`; undefined past the end, where the page clamps to the last row.
+const messageAt = async (services: Pick<RewindDeps, "transcripts">, conversationId: string, index: number): Promise<string | undefined> => {
+    const page = await services.transcripts.page({ id: conversationId }, { before: index + 1, maxRows: 1 });
+    return page.from === index ? page.rows[0]?.messageId : undefined;
+};
 
 // Resets an isolated checkout to its anchored commits (`reset --hard` + clean); ignored files (node_modules) survive,
 // as in a main-tree restore. A missing repo is skipped, not fatal; only none landing is a failure.
@@ -39,10 +51,14 @@ const resetWorktree = async (
 export const rewindConversation = async (
     services: RewindDeps,
     conversationId: string,
-    index: number,
+    { index, messageId }: RewindTarget,
     git: GitRunner = defaultGit,
 ): Promise<RewindResult | RewindRefusal> => {
     const outcome = await services.conversations.withRewindLease(conversationId, async (): Promise<RewindResult | RewindRefusal> => {
+        // Read inside the lease like the checkpoint below: another rewind, or a settled turn, moves what `index` names.
+        if ((await messageAt(services, conversationId, index)) !== messageId) {
+            return "stale";
+        }
         // Resolved inside the lease, since checkpoints aren't frozen; a lookup before the lease could get a stale answer.
         const checkpoint = await services.turnCheckpoints.of(conversationId, index);
         if (checkpoint === undefined) {

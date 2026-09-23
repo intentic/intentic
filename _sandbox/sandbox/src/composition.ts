@@ -1002,7 +1002,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
             workspace: { root: workspace.root },
             files: { read: readWorkspaceFile },
             capabilities: capabilityManifest,
-            config: { extensionsDir: config.extensionsDir },
+            config: { extensionsDir: config.extensionsDir, historyRoot: config.historyRoot },
         });
     const onUnvaultable = (id: string, fields: readonly string[]): void =>
         logger.warn(
@@ -1014,7 +1014,7 @@ export const createServices = (config: Config, logger: Logger): Services => {
         workspace: { root: workspace.root },
         files: { read: readWorkspaceFile },
         capabilities: capabilityManifest,
-        config: { extensionsDir: config.extensionsDir },
+        config: { extensionsDir: config.extensionsDir, historyRoot: config.historyRoot },
     };
     const settingSecretKeys = async (): Promise<SecretKeyResolver> => {
         const declared = new Map<string, ReadonlySet<string>>(
@@ -1575,4 +1575,6 @@ export const wireReactions = (services: Services): void => {
     services.events.subscribe("tree.changed", ({ label }) =>
         services.history.snapshot("turn", label).catch((error: unknown) => services.logger.warn({ err: error }, "history: turn snapshot failed")),
     );
+    // A turn ending is when what waited behind it goes, whoever queued it (turn-admission.ts).
+    services.events.subscribe("run.settled", ({ conversationId }) => void services.turns.drain(conversationId));
 };

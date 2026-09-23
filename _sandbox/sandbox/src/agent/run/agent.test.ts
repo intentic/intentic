@@ -1355,6 +1355,73 @@ test("an API error surfaces the API's own sentence, not the SDK's error category
     expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", message: apiError }, { kind: "done" }]);
 });
 
+// Uncoded, a session past its window is held as stopped and re-run on the same session, which overflows again; coded,
+// the daemon re-runs it in a fresh one. The CLI's own sentences, then each routed model's words as the CLI relays them.
+test.each([
+    "Prompt is too long",
+    "Prompt is too long · automatic compaction failed: the summary request was refused",
+    "Autocompact is thrashing: the context refilled to the limit within 3 turns of the previous compact, 3 times in a row.",
+    "API Error: 400 prompt is too long: 214535 tokens > 200000 maximum",
+    'API Error: 400 {"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Input tokens exceed the configured limit"}}',
+    "API Error: 400 This model's maximum context length is 128000 tokens. However, your messages resulted in 130533 tokens.",
+    "API Error: 400 Your input exceeds the context window of this model. Please adjust your input and try again.",
+    "API Error: 400 This model's maximum prompt length is 131072 but the request contains 145312 tokens.",
+    "API Error: 400 The input token count (1210004) exceeds the maximum number of tokens allowed (1048576).",
+    "API Error: 400 Invalid request: Your request exceeded model token limit: 262144",
+])("a session past its window is coded context-overflow, keeping the words: %s", async (explained) => {
+    const events = await collect(
+        request,
+        fakeQuery({ type: "assistant", session_id: "s", error: "invalid_request", message: { content: [{ type: "text", text: explained }] } }),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "context-overflow", message: explained }, { kind: "done" }]);
+});
+
+// The CLI's own verdict, for a result no recognized sentence came before: each of these ends the same session the same
+// way again, the compaction breaker included (the window refilled to its limit right after each compaction).
+test.each(["prompt_too_long", "blocking_limit", "rapid_refill_breaker"])("a result ending on %s is coded context-overflow", async (reason) => {
+    const events = await collect(
+        request,
+        fakeQuery({ type: "result", subtype: "success", is_error: true, result: "context exhausted", terminal_reason: reason, session_id: "s" }),
+    );
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "context-overflow", message: `agent stopped: the session no longer fits the model's context window (${reason})` },
+        { kind: "done" },
+    ]);
+});
+
+// The CLI says it twice, the assistant's error and then the result's ending; one failure, one frame, and no generic
+// "did not complete" after it to stand as the turn's last word.
+test("an overflow the assistant's error already said is not said again by the result", async () => {
+    const events = await collect(
+        request,
+        fakeQuery(
+            { type: "assistant", session_id: "s", error: "invalid_request", message: { content: [{ type: "text", text: "Prompt is too long" }] } },
+            { type: "result", subtype: "error_during_execution", is_error: true, errors: ["Prompt is too long"], terminal_reason: "api_error", session_id: "s" },
+        ),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "context-overflow", message: "Prompt is too long" }, { kind: "done" }]);
+});
+
+// Not every ending is a full window: an ordinary API failure keeps its subtype's code.
+test("a failed result with another ending is still the harness failing", async () => {
+    const events = await collect(request, fakeQuery({ type: "result", subtype: "error_during_execution", terminal_reason: "model_error", session_id: "s" }));
+    expect(events).toEqual([
+        { kind: "session", sessionId: "s" },
+        { kind: "error", code: "harness-incomplete", message: "agent did not complete (error_during_execution)" },
+        { kind: "done" },
+    ]);
+});
+
+// The trial's catch-all names a model the trial cannot run; an outgrown session is not that, and a fresh one can hold it.
+test("a trial turn past its window is an overflow, not a model the trial cannot run", async () => {
+    const events = await collect(
+        { ...request, credential: { kind: "trial", baseUrl: "http://127.0.0.1:8788", authToken: "local" } },
+        fakeQuery({ type: "assistant", session_id: "s", error: "invalid_request", message: { content: [{ type: "text", text: "Prompt is too long" }] } }),
+    );
+    expect(events).toEqual([{ kind: "session", sessionId: "s" }, { kind: "error", code: "context-overflow", message: "Prompt is too long" }, { kind: "done" }]);
+});
+
 test("a rate_limit_event surfaces the subscription usage snapshot (window, utilization, reset)", async () => {
     const events = await collect(
         request,
@@ -1612,12 +1679,34 @@ test("a steered stream survives each turn's result: the queued message's own tur
             { type: "result", subtype: "success", total_cost_usd: 0.2 },
         ),
     );
+    // Each result carries the query's running total; a frame carries that result's own spend, since every reader sums.
     expect(events).toEqual([
         { kind: "session", sessionId: "s" },
         { kind: "delta", text: "5" },
         { kind: "usage", costUsd: 0.1 },
         { kind: "delta", text: "8" },
-        { kind: "usage", costUsd: 0.2 },
+        { kind: "usage", costUsd: 0.1 },
+        { kind: "done" },
+    ]);
+});
+
+// A mid-session /clear (or a crash's zeroed result) starts the SDK's running total again; the lower total is that
+// result's own spend, not a refund of everything before it.
+test("a running total that falls is a count started over: the frame carries the new total whole", async () => {
+    const steering = new SteeringQueue();
+    steering.push("/clear");
+    const events = await collect(
+        { ...request, spec: { ...request.spec, steering } },
+        fakeQuery(
+            { type: "result", subtype: "success", total_cost_usd: 0.3 },
+            { type: "result", subtype: "success", total_cost_usd: 0.05 },
+            { type: "result", subtype: "success", total_cost_usd: 0.125 },
+        ),
+    );
+    expect(events).toEqual([
+        { kind: "usage", costUsd: 0.3 },
+        { kind: "usage", costUsd: 0.05 },
+        { kind: "usage", costUsd: 0.075 },
         { kind: "done" },
     ]);
 });
@@ -1748,7 +1837,8 @@ test("a result with a backgrounded child in flight holds the stream open for the
         { kind: "usage", costUsd: 0.1 },
         { kind: "subagent_update", id: "call-1", status: "completed", summary: "found 3 gaps" },
         { kind: "delta", text: "Consolidating." },
-        { kind: "usage", costUsd: 0.2 },
+        // The wake turn's result reports the running total, 0.2; its own share is what it added.
+        { kind: "usage", costUsd: 0.1 },
         { kind: "done" },
     ]);
 });
@@ -2159,6 +2249,28 @@ test("the bundled CLI-only skills are hidden from the model on every turn, fast 
 
     await collect({ ...request, spec: { ...request.spec, fast: true } }, capture);
     expect(captured.at(-1)?.settings).toEqual({ skillOverrides: hidden, fastMode: true, fastModePerSessionOptIn: true });
+});
+
+// The flag layer is the one place the CLI takes disableAllHooks from without the workspace's own files overriding it;
+// the harness's gates and checks ride as SDK callbacks, which it leaves running.
+test("a turn whose settings hooks the owner has not approved runs with every hook off, and only that turn", async () => {
+    const captured: Options[] = [];
+    const capture: QueryFn = async function* (args) {
+        captured.push(args.options);
+        yield { type: "result", subtype: "success" } as SDKMessage;
+    };
+
+    await collect({ ...request, policy: { ...request.policy, settingsHooks: { held: true } } }, capture);
+    expect(captured.at(-1)?.settings).toMatchObject({ disableAllHooks: true });
+    expect(captured.at(-1)?.settingSources).toEqual(["user", "project"]);
+    expect(Object.keys(captured.at(-1)?.hooks ?? {})).toContain("PreToolUse");
+    // With every hook already off, no edit mid-turn can bring one in, so nothing guards the settings.
+    expect(Object.keys(captured.at(-1)?.hooks ?? {})).not.toContain("ConfigChange");
+
+    await collect({ ...request, policy: { ...request.policy, settingsHooks: { held: false } } }, capture);
+    expect(captured.at(-1)?.settings).not.toHaveProperty("disableAllHooks");
+    // The CLI applies a settings edit live, so a turn whose hooks run keeps them to the set it started with.
+    expect(Object.keys(captured.at(-1)?.hooks ?? {})).toContain("ConfigChange");
 });
 
 // Fast mode can decline silently for reasons the composer can't see (plan, model, pool, endpoint); without this frame,

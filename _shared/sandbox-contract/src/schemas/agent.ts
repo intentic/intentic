@@ -91,7 +91,8 @@ export const CommandClassSchema = z.enum([
     "secrets.access",
     // Publishes outward and irreversibly: npm/pnpm/yarn/cargo publish, gh release create, docker push.
     "package.publish",
-    // curl/wget to a non-local address, the general exfiltration channel under the per-provider actionRules.
+    // A network program (curl, nc, ssh, scp, …) or interpreter one-liner aimed at a non-loopback or run-time-built
+    // destination, the general exfiltration channel under the per-provider actionRules.
     "network.outbound",
 ]);
 export type CommandClass = z.infer<typeof CommandClassSchema>;
@@ -128,6 +129,15 @@ export type ForkedFrom = z.infer<typeof ForkedFromSchema>;
 // The turn's fields before the cross-field refinements below, so a subset (TurnProfileSchema) can be picked from them.
 const AgentTurnFieldsSchema = z.object({
     prompt: z.string().describe("What to say to the agent. May be empty if you are only attaching files."),
+    // Minted by the sender so a send whose answer was lost can be sent again without being delivered twice.
+    messageId: z
+        .string()
+        .min(1)
+        .max(128)
+        .optional()
+        .describe(
+            "Your id for this message. Sending again under an id the sandbox already took is answered with what it did with it the first time, never a second delivery. Leave it out and the sandbox names the message itself.",
+        ),
     // Seeds a fresh registry entry's title; an existing entry's title always wins over this.
     title: z
         .string()
@@ -392,16 +402,78 @@ export type ModelPin = z.infer<typeof ModelPinSchema>;
 // POST /agent's ack: the daemon-minted id of the detached run it started. The turn runs daemon-side regardless of any
 // client connection; every window renders it via /agent/attach.
 export const StartedTurnSchema = z.object({
-    run: z.string().describe("The id of the run that just started. Hand it back when you attach, so the stream resumes rather than replaying."),
+    run: z
+        .string()
+        .describe(
+            "The id of the run that just started. Hand it back when you attach: the stream always opens on the conversation's newest run, so a different id there means another turn has started since.",
+        ),
 });
 export type StartedTurn = z.infer<typeof StartedTurnSchema>;
-// Attaches to a conversation's run (live, or finished within retention); no cursor to resume from, the head carries all
-// rows. `run` names what the client was watching, so a newer run's head id tells it to catch up.
+// What the sandbox did with one message, keyed by the id its sender gave it: the same id sent again gets this answer
+// back as a duplicate, never a second delivery.
+export const MessageReceiptSchema = z.object({
+    delivered: z
+        .enum(["started", "steered", "queued"])
+        .describe(
+            "What became of the message: it started a turn, it was said into the turn already running, or it waits in the conversation's queue for the next one.",
+        ),
+    run: z
+        .string()
+        .optional()
+        .describe(
+            "The run the message is in: the turn it started, or the one it was said into. Hand it back when you attach. Absent while the message waits in the queue.",
+        ),
+    duplicate: z
+        .literal(true)
+        .optional()
+        .describe("The sandbox had already taken a message under this id: this is what became of it, and nothing new happened."),
+});
+export type MessageReceipt = z.infer<typeof MessageReceiptSchema>;
+// Who a message to a conversation is from: a person (a composer, an API caller), the sandbox itself (a watch that fired,
+// a job that ended, a land that broke something), or another agent (a child reporting back).
+export const MessageVoiceSchema = z.enum(["person", "sandbox", "agent"]);
+export type MessageVoice = z.infer<typeof MessageVoiceSchema>;
+// One message waiting for the conversation's next turn, as every window shows it.
+export const QueuedMessageSchema = z.object({
+    id: z.string().describe("The message's id: what its sender named it, or what the sandbox did."),
+    text: z.string().describe("The words, as they will go out."),
+    attachments: z.array(z.string()).optional().describe("Files that go with it, as workspace paths."),
+    voice: MessageVoiceSchema.describe("Who it is from: a person, the sandbox itself, or another agent."),
+    queuedAt: z.number().describe("When it joined the queue, in milliseconds."),
+    revision: z
+        .number()
+        .int()
+        .nonnegative()
+        .describe("The queue's revision when this message was last written. An edit or a removal names it, and is refused if the message has changed since."),
+});
+export type QueuedMessage = z.infer<typeof QueuedMessageSchema>;
+// Why a queue holds its messages rather than letting them go when the conversation is free.
+export const QueuePauseSchema = z.enum(["stopped", "refused"]);
+export type QueuePause = z.infer<typeof QueuePauseSchema>;
+// What waits for a conversation's next turn: messages that arrived while a turn that could not take them ran, and
+// held ones. Conversation state, the same for every window and kept across a restart.
+export const ConversationQueueSchema = z.object({
+    items: z.array(QueuedMessageSchema).describe("What waits, in the order it goes out."),
+    revision: z.number().int().nonnegative().describe("Moves with every change to the queue, so of two copies the higher is the newer."),
+    paused: QueuePauseSchema.optional().describe(
+        "Why nothing goes out by itself: somebody stopped the turn, or the turn these messages started was refused before it ran. Resuming, or sending another message, lets them go.",
+    ),
+});
+export type ConversationQueue = z.infer<typeof ConversationQueueSchema>;
+// What resuming a queue did: started a turn with what waited, when nothing else ran.
+export const QueueResumedSchema = z.object({
+    run: z.string().optional().describe("The turn the waiting messages started. Absent when a turn was already running, and they go after it."),
+});
+export type QueueResumed = z.infer<typeof QueueResumedSchema>;
+// Attaches to a conversation's newest run (live, or finished within retention); no cursor to resume from, the head
+// carries all rows. `run` names what the client was watching, so a newer run's head id tells it to catch up.
 export const AttachTurnSchema = z.object({
     conversationId: ConversationIdSchema.describe("Which conversation to watch."),
     run: z
         .string()
         .optional()
-        .describe("The run you were watching. If a newer turn has started since, the head names that one instead, and its rows are that turn's."),
+        .describe(
+            "The run you were watching. The stream opens on the conversation's newest run whatever you name: if a newer turn has started since, the head names that one instead, and its rows are that turn's.",
+        ),
 });
 export type AttachTurn = z.infer<typeof AttachTurnSchema>;

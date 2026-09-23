@@ -7,11 +7,8 @@ import { subagentEndingReported } from "./subagents.js";
 import type { DomainEventMap } from "../../seams/domain-events.js";
 import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 
-// A child's settled turn reaches its parent one way: a parked `wait` took it, or it is delivered like any wake.
-
-// Delivery pacing, in ms; past the window the report stays in the child's own chat.
-const REPORT_RETRY_MS = 15_000;
-const REPORT_WINDOW_MS = 6 * 3_600_000;
+// A child's settled turn reaches its parent one way: a parked `wait` took it, or it is delivered like any wake, queued
+// behind a parent busy with a turn that cannot take it.
 
 export interface ChildReportDeps {
     readonly doors: WakeDoors;
@@ -70,22 +67,15 @@ export const reportChildTurn = async (deps: ChildReportDeps, settled: DomainEven
             report: reportText(settled),
             verification: childVerification(deps.conversations, settled.conversationId),
         });
-        const landing = await deliverWake(
-            deps.doors,
-            { conversationId: target.parent, prompt, voice: "sandbox", profile: target.profile },
-            {
-                attempts: REPORT_WINDOW_MS / REPORT_RETRY_MS,
-                retryMs: REPORT_RETRY_MS,
-                logger: deps.logger,
-                context: { child: settled.conversationId },
-            },
-        );
-        if (landing === "busy") {
+        const receipt = await deliverWake(deps.doors, { conversationId: target.parent, prompt, voice: "sandbox", profile: target.profile });
+        if ("invalid" in receipt) {
             deps.logger.error(
-                { child: settled.conversationId, parent: target.parent, report: prompt },
-                "child report: its parent never took it, it stays in the child's own chat",
+                { child: settled.conversationId, parent: target.parent, report: prompt, invalid: receipt.invalid },
+                "child report: its parent could not take it, it stays in the child's own chat",
             );
+            return;
         }
+        deps.logger.info({ child: settled.conversationId, parent: target.parent, delivered: receipt.delivered }, "child report: delivered");
     } catch (error) {
         deps.logger.warn({ err: error, child: settled.conversationId }, "child report: could not be delivered");
     }

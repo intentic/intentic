@@ -28,7 +28,7 @@ export interface TabFacts {
     readonly sessionId?: string;
     // Model the next turn will run on; what a prepared-message card names as its spend.
     readonly model: string;
-    // Words in the composer, a staged attachment, or a queued message.
+    // Words in the composer, or a staged attachment.
     readonly unsent: boolean;
     // When the composer first held something (Conversation.draftAt), for an age readout.
     readonly draftAt?: number;

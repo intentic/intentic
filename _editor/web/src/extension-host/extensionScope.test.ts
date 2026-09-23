@@ -20,7 +20,7 @@ const state = hoisted(() => ({
     // bundle fetch would need, which no node test environment can perform.
     builtins: new Map<string, { manifest: ExtensionManifest; activate: () => void }>(),
     // The daemon's extension list, as a thunk so a test can hold the answer and stage a switch mid-pass.
-    list: (): Promise<ProcedureOutput<`extensions.list`>> => Promise.resolve({ extensions: [], invalid: [] }),
+    list: (): Promise<ProcedureOutput<`extensions.list`>> => Promise.resolve({ extensions: [], invalid: [], pending: [] }),
     // What runActivate awaits before it registers: the seam the overtaking test squeezes into.
     settingsLoad: (): Promise<void> => Promise.resolve(),
 }));
@@ -66,7 +66,7 @@ const bindings = { repos: () => [], capabilities: () => [] };
 
 beforeEach(() => {
     state.builtins.clear();
-    state.list = () => Promise.resolve({ extensions: [], invalid: [] });
+    state.list = () => Promise.resolve({ extensions: [], invalid: [], pending: [] });
     state.settingsLoad = () => Promise.resolve();
     retireExtensions();
     state.activated.length = 0;
@@ -75,7 +75,7 @@ beforeEach(() => {
 
 test(`an ordinary pass activates what the sandbox lists and reports it as final`, async () => {
     const only = compiled(`maintenance`);
-    state.list = () => Promise.resolve({ extensions: [only], invalid: [] });
+    state.list = () => Promise.resolve({ extensions: [only], invalid: [], pending: [] });
 
     await loadExtensions(bindings);
 
@@ -88,7 +88,7 @@ test(`an ordinary pass activates what the sandbox lists and reports it as final`
 // (sandboxScope.ts): a language change must not blank a badge, a chat or an edit buffer.
 test(`retiring drops the activations and the record of them, and leaves the extensions' own state as it was`, async () => {
     const badge = sandboxRef(() => 0);
-    state.list = () => Promise.resolve({ extensions: [compiled(`maintenance`)], invalid: [] });
+    state.list = () => Promise.resolve({ extensions: [compiled(`maintenance`)], invalid: [], pending: [] });
     await loadExtensions(bindings);
     badge.value = 21;
 
@@ -105,7 +105,7 @@ test(`a pass whose list arrives after a switch activates nothing`, async () => {
     let answer = (): void => {};
     state.list = () =>
         new Promise((resolve) => {
-            answer = () => resolve({ extensions: [only], invalid: [] });
+            answer = () => resolve({ extensions: [only], invalid: [], pending: [] });
         });
 
     const pass = loadExtensions(bindings);
@@ -125,7 +125,7 @@ test(`a pass overtaken while activating registers nothing and publishes nothing`
         release = resolve;
     });
     state.settingsLoad = () => held;
-    state.list = () => Promise.resolve({ extensions: [compiled(`maintenance`, true)], invalid: [] });
+    state.list = () => Promise.resolve({ extensions: [compiled(`maintenance`, true)], invalid: [], pending: [] });
 
     const pass = loadExtensions(bindings);
     // Let the list resolve and the activation reach its held read.
@@ -144,7 +144,7 @@ test(`the pass after a switch is the one that counts: its writes land`, async ()
     badge.value = 21;
 
     retireExtensions();
-    state.list = () => Promise.resolve({ extensions: [compiled(`maintenance`)], invalid: [] });
+    state.list = () => Promise.resolve({ extensions: [compiled(`maintenance`)], invalid: [], pending: [] });
     await loadExtensions(bindings);
     badge.value = 3;
 

@@ -6,6 +6,7 @@ import {
     type AgentWatch,
     type ForkedFrom,
     RESUME_NOTES,
+    type ResumeRouting,
     RETRY_LADDER_TRIES,
     type SessionOwner,
     type TodoItem,
@@ -17,6 +18,7 @@ import type { AuthFailure, HeldTurn, OutageFailure } from "../../agent/run/turn/
 import type { CheckRun, CheckVerdict } from "../../agent/verification/turn-checks.js";
 import { opt } from "../../opt.js";
 import type { FailedEnding, PersistedAgent } from "../registry/agents-store.js";
+import { edited, hold, joined, type QueueChange, type QueuedItem, released, removed, rerouted, returned, taken, type TurnQueue } from "./conversation-queue.js";
 import {
     type ConversationState,
     freshRuntime,
@@ -141,7 +143,18 @@ export type ConversationEvent =
     // Where its loop stands, at each iteration boundary and once more at the end.
     | { readonly kind: "loop-shown"; readonly loop: NonNullable<AgentSummary["loop"]> }
     // The workflow step it runs, as that step starts.
-    | { readonly kind: "workflow-shown"; readonly workflow: NonNullable<AgentSummary["workflow"]> };
+    | { readonly kind: "workflow-shown"; readonly workflow: NonNullable<AgentSummary["workflow"]> }
+    // A message joins the queue: it arrived while a turn that could not take it ran, or behind others waiting.
+    | { readonly kind: "queue-joined"; readonly item: Omit<QueuedItem, "revision"> }
+    // A turn delivered these waiting messages: it started with them, or they were said into it.
+    | { readonly kind: "queue-taken"; readonly ids: readonly string[] }
+    // A refusal at the door handed these back: at the head again, held.
+    | { readonly kind: "queue-returned"; readonly items: readonly Omit<QueuedItem, "revision">[] }
+    // Somebody took one back, or reworded it, as it read at `revision`; answers what the change found.
+    | { readonly kind: "queue-removed"; readonly id: string; readonly revision: number }
+    | { readonly kind: "queue-edited"; readonly id: string; readonly revision: number; readonly text: string }
+    // A held queue is let go, what a person waits with pointed at who the press names to serve it.
+    | { readonly kind: "queue-released"; readonly routing?: ResumeRouting };
 
 export type ConversationEffect =
     // Publishes the whole roster; readers take the state as it is by then.
@@ -166,7 +179,9 @@ export type ConversationEffect =
     | { readonly kind: "compacted" }
     // The prompt filed for search under a provider session, and under the conversation itself.
     | { readonly kind: "session-prompt"; readonly sessionId: string; readonly prompt: string }
-    | { readonly kind: "conversation-prompt"; readonly prompt: string };
+    | { readonly kind: "conversation-prompt"; readonly prompt: string }
+    // The queue onto the entry, for the persist after it to carry.
+    | { readonly kind: "queue-written"; readonly queue: TurnQueue };
 
 // What each event answers; every other event answers nothing.
 interface Replies {
@@ -180,6 +195,8 @@ interface Replies {
     readonly "verdict-taken": CheckVerdict | undefined;
     readonly "resume-abandoned": boolean;
     readonly "rewind-leased": boolean;
+    readonly "queue-removed": QueueChange;
+    readonly "queue-edited": QueueChange;
 }
 
 export type ReplyOf<E extends ConversationEvent> = E["kind"] extends keyof Replies ? Replies[E["kind"]] : undefined;
@@ -226,6 +243,13 @@ const promptCacheOf = (event: Extract<AgentEvent, { kind: "context_usage" }>, la
 const unchanged = <R>(state: ConversationState, reply: R): Decision<R> => ({ state, effects: [], reply });
 
 const BROADCAST: readonly ConversationEffect[] = [{ kind: "broadcast" }];
+
+// A queue that moved is written onto the entry, persisted, and shown, in that order; one that did not writes nothing.
+const queueWrites = (before: TurnQueue, after: TurnQueue): readonly ConversationEffect[] =>
+    before === after ? [] : [{ kind: "queue-written", queue: after }, { kind: "persist" }];
+
+const withQueue = <R>(state: ConversationState, queue: TurnQueue, reply: R): Decision<R> =>
+    queue === state.queue ? unchanged(state, reply) : { state: { ...state, queue }, effects: [...queueWrites(state.queue, queue), ...BROADCAST], reply };
 
 // A frame that changes only the turn's runtime, and is card-visible.
 const shown = (state: ConversationState, turn: TurnRuntime): Decision<undefined> => ({
@@ -364,6 +388,8 @@ const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: 
         },
         effects: [
             { kind: "entry-opened", turn, ...opt("inFlight", staged) },
+            // An entry opened just now missed what already waits: a message sent while the first turn was starting.
+            ...(entry === undefined && state.queue.items.length > 0 ? [{ kind: "queue-written", queue: state.queue } as const] : []),
             ...(session === undefined ? [] : [{ kind: "session-prompt", sessionId: session, prompt: turn.prompt } as const]),
             { kind: "conversation-prompt", prompt: turn.prompt },
             // Published before the write: this is the frame that moves every board's card into Active.
@@ -375,13 +401,19 @@ const onBegin = (state: ConversationState, turn: BeginTurn, now: number, entry: 
 };
 
 // Nothing running means nothing to say; marking a settled conversation would leak `stopping` onto its next turn. Every
-// parked card goes here, since a `resolved` frame may never make it out of a dying stream.
+// parked card goes here, since a `resolved` frame may never make it out of a dying stream. What waits is held for
+// everyone, so a stopped agent does not start again on its own.
 const onStop = (state: ConversationState, ending: StopEnding): Decision<undefined> => {
     const running = runningPhase(state);
     if (running === undefined || running.stopping !== undefined) {
         return unchanged(state, undefined);
     }
-    return { state: { ...state, phase: { ...running, stopping: ending, parked: [] } }, effects: BROADCAST, reply: undefined };
+    const queue = hold(state.queue, "stopped");
+    return {
+        state: { ...state, phase: { ...running, stopping: ending, parked: [] }, queue },
+        effects: [...queueWrites(state.queue, queue), ...BROADCAST],
+        reply: undefined,
+    };
 };
 
 // The turn's books go into the entry and are zeroed; the readings a card keeps showing stay. A settle on a rewinding
@@ -590,6 +622,19 @@ const HANDLERS: { readonly [K in ConversationEvent["kind"]]: Handler<K> } = {
             { ...state, steers: { ...state.steers, slots: [] } },
             state.steers.slots.map((box) => box.checkpoint),
         ),
+    "queue-joined": (state, event) => withQueue(state, joined(state.queue, event.item), undefined),
+    "queue-taken": (state, event) => withQueue(state, taken(state.queue, event.ids), undefined),
+    "queue-returned": (state, event) => withQueue(state, returned(state.queue, event.items), undefined),
+    "queue-removed": (state, event) => {
+        const { queue, change } = removed(state.queue, event.id, event.revision);
+        return withQueue(state, queue, change);
+    },
+    "queue-edited": (state, event) => {
+        const { queue, change } = edited(state.queue, event.id, event.revision, event.text);
+        return withQueue(state, queue, change);
+    },
+    "queue-released": (state, event) =>
+        withQueue(state, released(event.routing === undefined ? state.queue : rerouted(state.queue, event.routing)), undefined),
 };
 
 /* ONE EVENT, APPLIED WHOLE: the next state, the effects in the order they must run, and the sender's answer. */

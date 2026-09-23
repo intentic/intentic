@@ -181,6 +181,8 @@ export interface LiveRun {
     readonly id: string;
     readonly startedAt: number;
     readonly done: boolean;
+    // Turned away at the door before anything ran, its words handed back to whoever keeps them rather than recorded.
+    readonly ranNothing: boolean;
     // The transcript as it stands, live.
     readonly rows: readonly TranscriptRow[];
     // Finished, and past RUN_RETAINED_MS.
@@ -225,6 +227,12 @@ export const turnRunOf = (actors: Pick<HoldingsIndex, "holdings">, conversationI
         return undefined;
     }
     return run;
+};
+
+// The conversation's run while it is live; undefined once it has settled, however recently.
+export const liveRunOf = (actors: Pick<HoldingsIndex, "holdings">, conversationId: string): LiveRun | undefined => {
+    const run = turnRunOf(actors, conversationId);
+    return run === undefined || run.done ? undefined : run;
 };
 
 // The one conversation with a live run, when exactly one exists. Two are an honest "don't know": guessing would park a

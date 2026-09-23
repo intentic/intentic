@@ -35,11 +35,11 @@ test("traversal is normalized before it is judged", () => {
     expect(withinRoots("/home/me/projects/../notes.txt", ["/home/me"])).toBe(true);
 });
 
-test("a path outside the roots is refused with the roots named, so the user knows what to widen", () => {
+test("a path outside the roots is refused with the roots named, so the user knows what to widen", async () => {
     const allowed = scopes({ roots: "/srv/app" });
-    expect(() => assertPath("/etc/shadow", allowed, "read")).toThrow(ScopeError);
-    expect(() => assertPath("/etc/shadow", allowed, "read")).toThrow(/\/srv\/app/);
-    expect(assertPath("/srv/app/config.json", allowed, "read")).toBe(resolve("/srv/app/config.json"));
+    await expect(assertPath("/etc/shadow", allowed, "read")).rejects.toThrow(ScopeError);
+    await expect(assertPath("/etc/shadow", allowed, "read")).rejects.toThrow(/\/srv\/app/);
+    expect(await assertPath("/srv/app/config.json", allowed, "read")).toBe(resolve("/srv/app/config.json"));
 });
 
 test("each switch refuses by naming the control on the card, not a mechanism", () => {

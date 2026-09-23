@@ -212,6 +212,13 @@ export const TranscriptRowSchema = z.object({
         .describe(
             "When it was sent, in milliseconds. On the user's rows only, because that is the only moment actually known: a turn's own frames arrive with no clock, so stamping the agent's rows could only ever mean the whole turn's start or end.",
         ),
+    // A position moves under a rewind and a message's words can repeat, so this is the one name a message keeps.
+    messageId: z
+        .string()
+        .optional()
+        .describe(
+            "The message's own id, on the rows of messages sent to the agent: what its sender named it, or what the sandbox did. A rewind names the message by it, and the same id sent again is recognised rather than delivered twice.",
+        ),
     // Uploaded files only (user rows); a path already @-mentioned inline is not drawn again as a chip.
     attachments: z.array(z.string()).optional().describe("Files attached to this message, as workspace paths."),
     // Never stored: looked up each read from the daemon's rewind points, matching what's still there.
@@ -252,12 +259,12 @@ export const TranscriptRowSchema = z.object({
         .enum(["landHold", "depsInstall", "watchStop", "sandboxMemory", "sendAnyway", "sendAgain"])
         .optional()
         .describe("A one-press follow-up this notice offers, by name. The chat decides what it does and whether it still applies."),
-    // Where a refused turn's words wait decides what the notice's press does: the composer's queue, or the sandbox.
+    // Where a refused turn's words wait decides what the notice's press does: the conversation's queue, or the sandbox.
     sandboxHeld: z
         .boolean()
         .optional()
         .describe(
-            "The sandbox kept this refused turn whole, its message still above, so the notice's press runs that turn again instead of sending anything from the composer, which never held these words.",
+            "The sandbox kept this refused turn whole, its message still above, so the notice's press runs that turn again instead of letting the conversation's queue go, which never held these words.",
         ),
     // An unfinished wait this notice describes, by name; whether it's still running is live state, not stored here.
     noticeWait: z

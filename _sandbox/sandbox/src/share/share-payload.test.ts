@@ -163,3 +163,35 @@ describe("both levels", () => {
         expect(pictures.map((picture) => picture.published)).toEqual(["files/1-shot.png", "files/2-shot.png"]);
     });
 });
+
+// Redaction replaces what the pattern matches, so a pattern that stopped at the header published the key's body.
+describe("a private key in what the agent read", () => {
+    it("is redacted whole, header to footer, whether its lines are real newlines or JSON escapes", () => {
+        const pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAu1SU1LfVLPHCozMxH2Mo\n4lgOEePzNm0tRgeLezV6ffAt0gunVTLw7onL\n-----END RSA PRIVATE KEY-----";
+        const serviceAccount = '{"private_key": "-----BEGIN PRIVATE KEY-----\\nMIIEvQIBADANBgkqhkiG9w0BAQEF\\n-----END PRIVATE KEY-----\\n", "client_email": "bot@example.iam"}';
+        const { messages } = shareTranscript(
+            [
+                {
+                    role: "assistant",
+                    text: "Read both.",
+                    tools: [
+                        { id: "t1", name: "Read", category: "read", status: "completed", content: [{ type: "text", text: `${pem}\nend of file` }] },
+                        { id: "t2", name: "Read", category: "read", status: "completed", content: [{ type: "text", text: serviceAccount }] },
+                    ],
+                },
+            ],
+            "everything",
+        );
+        expect(messages[0]?.tools?.map((tool) => tool.content)).toEqual([
+            [{ type: "text", text: `${REDACTED}\nend of file` }],
+            [{ type: "text", text: `{"private_key": "${REDACTED}\\n", "client_email": "bot@example.iam"}` }],
+        ]);
+    });
+
+    it("redacts an encrypted key's headers and a key the output cut short", () => {
+        const encrypted = "-----BEGIN RSA PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\nDEK-Info: AES-128-CBC,0A1B2C3D\n\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----";
+        const cut = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmU";
+        const { messages } = shareTranscript([{ role: "user", text: `${encrypted}\nand\n${cut}` }], "messages");
+        expect(messages[0]?.text).toBe(`${REDACTED}\nand\n${REDACTED}`);
+    });
+});

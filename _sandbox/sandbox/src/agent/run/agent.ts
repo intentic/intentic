@@ -25,6 +25,7 @@ import {
     sendableThinking,
     type UsageWindow,
 } from "@intentic/sandbox-contract";
+import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { join, relative, sep } from "node:path";
 import { z } from "zod";
 import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../agents/worktrees/isolation.js";
@@ -59,7 +60,9 @@ import { readClaudeUsage } from "../../usage/claude-usage.js";
 import { routedEndpointOf } from "../providers/routed-refusal.js";
 import { defaultQuery, promptInput, type QueryFn, streamSdk, type TurnPosture } from "./sdk-stream.js";
 import { checklistCloseHooks } from "./checklist-close.js";
+import { settingsHookChangeHooks } from "./harness/settings-hook-gate.js";
 import { checklistSeedOf } from "./task-store.js";
+import { carriedCostOf } from "./carried-cost.js";
 import { promptInputOf, sdkSystemPrompt, terminalMounted } from "../prompt/system-prompt.js";
 import { noteChildWork } from "../subagents/child-verification.js";
 import { closeSubagents, subagentInParentTree, subagentHooks, type SubagentTurn } from "../subagents/subagents.js";
@@ -167,6 +170,15 @@ const CHECKLIST_ENV: Record<string, string> = {
 const HEADLESS_SETTINGS: Exclude<NonNullable<Options["settings"]>, string> = {
     skillOverrides: { loop: "off", schedule: "off", "keybindings-help": "off", "update-config": "off" },
 };
+
+// The flag layer, above the owner's settings.json. Fast mode is asked per session so it never persists sandbox-wide,
+// and omitted rather than false so it never overrides theirs. Unapproved settings hooks switch off every file and
+// plugin hook; the gate, rules and checks wired below are SDK callbacks, which still run.
+const turnSettings = (request: HarnessRequest): Exclude<NonNullable<Options["settings"]>, string> => ({
+    ...HEADLESS_SETTINGS,
+    ...(request.spec.fast === true ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
+    ...(request.policy.settingsHooks?.held === true ? { disableAllHooks: true } : {}),
+});
 
 // Concatenates hook matchers per event instead of spreading, so two producers of the same event (e.g. PreToolUse:Bash)
 // both fire.
@@ -299,14 +311,10 @@ const baseOptions = (
         abortController,
         // Loads the workspace's .claude/ config: skills, subagents, settings, hooks, .mcp.json; else none. Not the
         // owner's standing rules — those are composed for every runtime alike (workspace-memory.ts), so a CLAUDE.md
-        // this still picks up is a repo's own file, not this product's memory.
+        // this still picks up is a repo's own file, not this product's memory. Its hooks run only once the owner
+        // approved them (guard/hook-approvals.ts).
         settingSources: ["user", "project"],
-        // Fast-mode opt-in, per-session so the choice doesn't persist sandbox-wide; omitted (not false) so it never
-        // overrides the owner's settings.json.
-        settings: {
-            ...HEADLESS_SETTINGS,
-            ...(request.spec.fast === true ? { fastMode: true, fastModePerSessionOptIn: true } : {}),
-        },
+        settings: turnSettings(request),
         env: {
             ...process.env,
             // cli-kind capability credentials the shell reads, rebuilt every turn; tmux panes get key names, not
@@ -393,6 +401,8 @@ const baseOptions = (
             // The harness's own ask beside the owner's rules: a checklist about to be left open is said back once, since
             // the board reads that list to tell a finished session from one that stopped short.
             checklistCloseHooks({ sessionStore: request.spec.sessionStore }),
+            // Refuses a mid-turn edit that would change which settings or skill hooks run, which the CLI applies live.
+            settingsHookChangeHooks(request),
             // Apply worktree redirection only when no anchor already resolves paths.
             request.spec.isolation !== undefined && request.spec.isolation.anchor === undefined
                 ? worktreeRedirectHooks(request.spec.isolation.plan)
@@ -523,6 +533,8 @@ const askServer = (
                     await syncOnAnswer(conversations, request, push, shell, !reply.cancelled && reply.answers !== undefined);
                     return { content: [{ type: "text", text: formatAnswers(questions, reply) }] };
                 },
+                // An answer rebases the conversation's tree (syncOnAnswer), so it must not run beside reads.
+                { annotations: toolAnnotations("write") },
             ),
         ],
     });
@@ -788,6 +800,10 @@ export async function* runAgent(
         },
         // Backs AskUserQuestion; withheld on an unattended turn, since nobody is there to answer.
         mcpServers: {
+            // External MCP capabilities first, so every daemon-owned server below wins a name collision: a capability
+            // whose id is `ui`, `code` or a browser router can't replace the real one. The capability routes refuse
+            // those ids (reserved-servers.ts), and this last-wins order is the structural backstop behind that refusal.
+            ...mcpServersOf(request.tools.remote ?? []),
             ...(request.policy.unattended === true ? {} : { ui: askServer(conversations, request, push, shell, documents) }),
             // Accounts tools get the same live stream and abort signal handles the ask tool does.
             ...(request.tools.accountsServer === undefined ? {} : { accounts: request.tools.accountsServer(push, request.signal) }),
@@ -818,7 +834,6 @@ export async function* runAgent(
                       }),
                   }),
             ...request.tools.sdkServers,
-            ...mcpServersOf(request.tools.remote ?? []),
         },
         // Aliases `Code` beside the built-in, so skills/prompts address the execution backend the way they address
         // Bash.
@@ -842,6 +857,8 @@ export async function* runAgent(
     let redelivered = false;
     // Checklist rows the session already holds, read off the CLI's own store before it starts writing.
     const checklistSeed = await checklistSeedOf(request.spec);
+    // What the resumed session already spent, which the CLI counts again in its first result.
+    const carriedCostUsd = await carriedCostOf(request.spec);
     const redeliver =
         steering === undefined
             ? undefined
@@ -868,6 +885,7 @@ export async function* runAgent(
                 ...streamCredentialOf(credential, request.spec.model),
                 subagents,
                 checklistSeed,
+                carriedCostUsd,
                 posture,
             })) {
                 // Turn's shell is named after this frame's session id (tmux session), so cards learn it here.

@@ -523,8 +523,12 @@ export const standingChip = (agent: AgentStanding & { readonly unread: boolean; 
     return { label: badge.label, tone: UNREAD_TONE, ...(badge.seenAt === undefined ? {} : { seenAt: badge.seenAt }) };
 };
 
+// The concrete step a turn is on: the tool with what it reached for, else the checklist item it is working through.
+export const currentAction = (activity: AgentSummary["activity"]): string | undefined =>
+    activity?.tool !== undefined ? [activity.tool, activity.target].filter(Boolean).join(` `) : activity?.todo;
+
 /* A working child's activity takes precedence over its parent's idle tool. */
-export const activityLine = (agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
+export const activityLine =(agent: Pick<AgentSummary, "activity" | "subagents">): string | undefined => {
     const activity = agent.activity;
     const own = activity === undefined ? undefined : (activity.todo ?? activity.tool);
     const running = agent.subagents?.running ?? 0;

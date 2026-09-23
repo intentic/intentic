@@ -103,6 +103,9 @@ export interface TurnPolicy {
     readonly dependencyInstallAllowed?: boolean;
     // Owner's rules standing at turn.ending, read at Stop; empty wires nothing.
     readonly turnEndingRules?: readonly Rule[];
+    // What the settings-hook gate found (guard/hook-approvals.ts): `held` runs the turn with every hook off; otherwise
+    // `digest` names the approved set, absent when there is none, and a mid-turn edit may not move it.
+    readonly settingsHooks?: { readonly held: boolean; readonly digest?: string };
     // Harness's delegation ceilings: concurrent, per-turn, nesting; undefined leaves the CLI default in place.
     readonly subagentsAtOnce?: number;
     readonly subagentsPerTurn?: number;

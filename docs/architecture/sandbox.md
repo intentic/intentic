@@ -34,13 +34,36 @@ survive reconnects. Its subsystems:
   something reads it, and `agent-catalog.test.ts` walks PROVIDERS × HARNESSES so a new provider cannot arrive
   without a row
   ([webchat/](../../_sandbox/sandbox/src/webchat/)). A chat turn executes as a **detached run**
-  ([agent/turn-runs.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-runs.ts)): `POST /agent` acks with a run id, the
+  ([agent/turn-runs.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-runs.ts)): `POST /agent` answers with what
+  became of the message (the run it `started`, the live run it was `steered` into, or `queued`), the
   daemon folds the provider's frames into the conversation's rows as they arrive (one fold, the contract's
   [transcript-fold.ts](../../_shared/sandbox-contract/src/text/transcript-fold.ts), shared with the demo), and any number
   of clients render them via `/agent/attach`: the head carries the run's rows whole, then every change lands as
   a patch and every fact about the turn (session, worktree, usage, error) as itself. The browser applies patches
   and folds nothing, so a turn survives reloads and dropped connections, and every window or device on the
-  conversation streams it concurrently. Only `/agent/stop` cancels it. A turn also survives **the
+  conversation streams it concurrently. Only `/agent/stop` cancels it, and a stop names its turn: by run id, or by
+  the message it carries while the send is unanswered, so a press landing after its turn ended cancels nothing the
+  conversation started since and the answer says what is running instead. The bare `live` form is for callers that
+  set a conversation aside whatever it is doing: a CI fix starting over retires its earlier attempt, whichever turn
+  that is on. Every message goes out under an id its sender mints; the daemon stamps it on the user's transcript row
+  and remembers what it did with it
+  ([message-receipts.ts](../../_sandbox/sandbox/src/agent/run/turn/message-receipts.ts)), so a retry after a lost
+  answer, even across a daemon restart, gets the first receipt back marked `duplicate` rather than a second
+  delivery. A rewind names the message by that id as well as its index, and is refused as stale once the transcript
+  has moved under it.
+  What waits for a conversation's next turn is **its queue**, and the queue is the daemon's: kept on the
+  conversation's actor, written through to the agent record so a restart keeps it
+  ([agents/actor/conversation-queue.ts](../../_sandbox/sandbox/src/agents/actor/conversation-queue.ts)), and shown
+  on the roster card (`AgentSummary.queue`), so every window lists the same messages and takes one back or rewords
+  it against the revision it read (`/agent/queue/remove`, `/agent/queue/edit`; an older copy is refused). Every
+  message, a person's or a sandbox wake's (a watcher, a helper's report, a land that broke the build), comes through
+  one admission ([turn-admission.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-admission.ts)): said into the
+  live run where that runtime takes words, a turn of its own when nothing runs, and otherwise queued, which is what
+  an unsteerable runtime, a turn parked on a card, a recovery or rewind going first, or a held queue get. A run
+  settling drains it, a person's consecutive messages joined into one turn on the newest sender's pick. A Stop holds
+  the queue for everyone until somebody lets it go (`/agent/queue/resume`, or a person sending again), and a refusal
+  at the door that ran nothing puts a person's words back at its head, held, rather than in whichever composer sent
+  them. A turn also survives **the
   daemon**: every in-flight turn and automation fire is written to a **turn journal** on the history volume
   ([agent/turn-journal.ts](../../_sandbox/sandbox/src/agent/run/turn/turn-journal.ts)) and cleared when it settles, so whatever
   is still there at boot is exactly what the process died under: and `resumeInterruptedTurns`
@@ -188,9 +211,42 @@ survive reconnects. Its subsystems:
   filtering every process in the container by a label, so another daemon's work is not something it can decide
   wrongly about: it is not in the set. The label that survives says only WHOSE turn a process belongs to, read
   after group membership has already answered whose daemon it is.
+- **Disk**: what fills the sandbox's volumes, by what the space is for, and a clean for what may go
+  ([platform/resources/storage/](../../_sandbox/sandbox/src/platform/resources/storage/), the Disk card on the
+  sandbox's Overview). The volumes only grow otherwise: restore points, checkouts, package stores and the trash all
+  accumulate, and a 10 GB hosted volume that fills fails every turn and rebuild with ENOSPC. A scan is asked for,
+  never scheduled (`POST /system/storage/scan`, maintainer-floored like the spend ledger): one walk of the workspace
+  and history volumes, and on a hosted machine of the one volume holding both, never following a link or leaving a
+  filesystem, counting each file once however many links it has, and answering `partial` at a two-minute limit
+  rather than never. Every path is sorted by one pure table
+  ([storage-catalog.ts](../../_sandbox/sandbox/src/platform/resources/storage/storage-catalog.ts)) that the scan,
+  the plan and the cleaner all read; which categories may be cleaned, and which ask the owner first, is the
+  contract's `STORAGE_CLEANABILITY`. State, credentials, conversation records, restore points, repositories and every
+  live checkout are `none`; caches that come back and yesterday's logs are `safe`; the trash (it may hold commits
+  never pushed), agent-made files, browser captures and sign-ins, exported bundles and local model weights ask
+  first. A clean re-reads its candidates from disk, keeps what changed in the last day and whatever a running
+  program names (a model server's weights, a shell's working folder, an open browser's profile, a pack still being
+  written), asks the table about each path again right before removing it, and answers with the bytes really given
+  back. A package store goes to `pnpm store prune`, never while pnpm runs.
 - **Environment overlays**: agent-proposed Dockerfile layers, applied only after owner approval, by `ic` on
   a docker host or by the platform's builder on a hosted machine
   ([environment/](../../_sandbox/sandbox/src/environment/)).
+- **Workspace hooks**: the hooks Claude Code would load for a turn from its user and project sources run only once
+  the owner has approved that exact set. A hook runs outside the command guard, unattended automations included,
+  and the files declaring one are ones an agent (or a cloned repository) writes. Before each Claude-harness turn
+  the planner folds every declaration into one sha256
+  ([guard/settings-hooks.ts](../../_sandbox/sandbox/src/guard/settings-hooks.ts)): the `hooks` of
+  `~/.claude/settings.json` and of the project's `.claude/settings.json` (read through the turn's worktree), the
+  `hooks` in any skill, subagent or command frontmatter under either, and the bytes of every script a hook names
+  by a path that exists. A set not in the ledger runs the turn with `disableAllHooks` in the SDK's flag settings,
+  which switches off every settings-file, frontmatter and plugin hook while the guard, rules and checks (SDK
+  callbacks) keep running; the message says so, and the set lands in Approvals, where the owner approves it from
+  the next turn on ([guard/hook-approvals.ts](../../_sandbox/sandbox/src/guard/hook-approvals.ts)). The ledger and
+  the waiting sets live under the history root, never in `/work`, keyed by digest; one this build cannot read
+  approves nothing; the approve route is withheld from every machine credential. Claude Code applies an edit to
+  its settings or skills live, so a turn whose hooks run carries a `ConfigChange` callback refusing any edit that
+  would change the set it started with. What a hook's script reads without naming it, and the bytes of a named
+  script changed mid-turn, are outside the pin.
 - **Discord**, chat/stream/voice integration, now an image-baked extension: a gateway `process` +
   `listener` in [\_extensions/discord](../../_extensions/discord).
 

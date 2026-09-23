@@ -1062,8 +1062,6 @@
             "moreComposerSettings": "More composer settings",
             "openNewChatHere": "Open a new chat from here with what you have typed: this one keeps its answer",
             "providerModel": "Provider and model: {providerName} · {modelLabelText}",
-            "removeMessageNotSent": "Remove: this message will not be sent",
-            "removeQueuedMessage": "Remove queued message",
             "replacedSend": "it is replaced when you send.",
             "runMessageThrough": "Run this message through",
             "sandboxBusyKeepTyping": "The sandbox is busy: keep typing; Send is available when it is ready.",
@@ -1137,6 +1135,24 @@
             "submit": "Submit",
             "typeAnswer": "Type your answer…",
             "writeAnswerToSubmit": "Write your answer to submit."
+        },
+        "chatQueue": {
+            "cancel": "Cancel",
+            "fromAgent": "From another agent",
+            "fromSandbox": "From the sandbox",
+            "goesAfterAnswer": "Goes in once you answer the request above",
+            "goesAfterTurn": "Goes when this turn ends",
+            "goesWhenFree": "Goes out as soon as the agent is free",
+            "heldRefused": "Held: the last try was refused before it ran. Sort out what refused it, then resume.",
+            "heldStopped": "Held since the turn was stopped: nothing goes out until somebody resumes.",
+            "removeHint": "Take back: this message will not be sent",
+            "removeLabel": "Take back waiting message",
+            "resume": "Resume",
+            "resumeHint": "Send what waits now, on the model and account this chat is set to",
+            "rewordHint": "Change what it says, keeping its place",
+            "rewordLabel": "Reword waiting message",
+            "save": "Save",
+            "sendNow": "Send now"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Your agent is waiting for you",
@@ -1349,28 +1365,13 @@
         "chatTurnStatus": {
             "atCapacity": "at capacity",
             "attemptNothingLost": "(attempt {attempt}, nothing lost)",
-            "loader": {
-                "brewing": "Brewing",
-                "cogitating": "Cogitating",
-                "conjuring": "Conjuring",
-                "musing": "Musing",
-                "noodling": "Noodling",
-                "percolating": "Percolating",
-                "perusing": "Perusing",
-                "pondering": "Pondering",
-                "ruminating": "Ruminating",
-                "scheming": "Scheming",
-                "synthesizing": "Synthesizing",
-                "thinking": "Thinking",
-                "tinkering": "Tinkering",
-                "untangling": "Untangling"
-            },
             "modelProvider": "The model provider is",
             "notResponding": "not responding",
             "rateLimiting": "rate-limiting",
             "retrying": "retrying",
             "retryingAt": "retrying at {when}",
             "retryingIn": "retrying in {wait}",
+            "thinking": "Thinking",
             "waitingOnSubagents": "Waiting on {count} subagent | Waiting on {count} subagents"
         },
         "composerIntent": {
@@ -2630,17 +2631,26 @@
             "topicOnRepositoryNightly": "topic on its repository and a nightly job opens the listing for you. No account, no upload, no queue."
         },
         "extensionsInstalled": {
+            "approve": "Approve",
+            "approvedNow": "Approved {manifest}.",
+            "asksForNothing": "It asks for no powers.",
             "clearFilter": "Clear filter",
+            "couldntApprove": "Could not approve {manifest}.",
             "couldntListSandboxsExtensions": "Couldn't list this sandbox's extensions.",
             "discoverWhatPeoplePublished": "Discover what people have published →",
             "installed": "Installed",
             "invalid": "invalid",
             "needsAttention": "Needs attention",
+            "newPowersSinceApproved": "New powers since you approved it:",
             "notLoadable": "Not loadable",
+            "pendingBadge": "pending",
             "publishedMatches": "{count} published extension matches “{query}” → | {count} published extensions match “{query}” →",
             "readingSandboxsExtensions": "Reading this sandbox's extensions…",
             "removed": "Removed {manifest}.",
-            "runningNotListed": "Running but not listed"
+            "runningNotListed": "Running but not listed",
+            "waitingCaption": "Written in this workspace. None of its code runs until you approve what it asks for.",
+            "waitingForApproval": "Waiting for your approval",
+            "whatItAsksFor": "What it asks for:"
         },
         "folderPicker": {
             "change": "Change",
@@ -3452,6 +3462,126 @@
             "onDevice": "on that device.",
             "rebuildStoppedReportingNever": "That rebuild stopped reporting, and never said how it ended.",
             "waitingFirstLineDevice": "Waiting for the first line from that device…"
+        },
+        "useSandboxStorage": {
+            "couldntMeasure": "Couldn't measure the disk",
+            "couldntClean": "Couldn't clean {category}"
+        },
+        "sandboxStorageCard": {
+            "heading": "Disk",
+            "measured": "Measured {when}",
+            "measuring": "Measuring…",
+            "stop": "Stop",
+            "scan": "Scan",
+            "scanAgain": "Scan again",
+            "couldntRead": "Couldn't read the last measurement",
+            "intro": "See what is filling this sandbox's disk, and free what can safely go. A scan reads every file on the sandbox's volumes, so it can take a minute.",
+            "firstScan": "Reading every file on the sandbox's volumes. This can take a minute.",
+            "diskUsed": "{used} of {total} used",
+            "partial": "The scan reached its time limit before it read everything, so each size is at least what it says.",
+            "clean": "Clean",
+            "free": "Free {bytes}",
+            "waiting": "Nothing to free yet",
+            "waitingHint": "Everything here changed in the last day or is in use, so a clean would leave it all in place.",
+            "uncounted": "Not counted by the scan",
+            "uncountedHint": "Space the disk reports as used that no category holds: the system itself, other programs sharing the disk, and the filesystem's own bookkeeping.",
+            "unreadable": "{count} file or folder could not be read and is not counted. | {count} files or folders could not be read and are not counted.",
+            "confirmHeader": "Clean {category}?",
+            "freed": "Freed {bytes} from {category}.",
+            "keptItems": "{count} item stayed: in use, or changed in the last day. | {count} items stayed: in use, or changed in the last day.",
+            "failedItems": "{count} item could not be removed. | {count} items could not be removed."
+        },
+        "storageCategories": {
+            "workspace": {
+                "label": "Workspace files",
+                "reason": "Your repositories, their dependencies and everything else in the workspace. Remove what you no longer need from Files or a terminal."
+            },
+            "conversations": {
+                "label": "Conversations",
+                "reason": "Transcripts, attachments and records of every conversation, archived ones included. Deleting a conversation from the archive frees its share."
+            },
+            "checkouts": {
+                "label": "Conversation checkouts",
+                "reason": "Each open conversation's own copy of the repositories, with the dependencies it installed. Archiving a conversation you are done with frees its copy."
+            },
+            "restorePoints": {
+                "label": "Restore points",
+                "reason": "Snapshots taken every minute while files change and at every turn, so History can bring any moment back."
+            },
+            "repositories": {
+                "label": "Repository history",
+                "reason": "Your repositories' own git data: every commit and branch, including ones never pushed anywhere."
+            },
+            "engines": {
+                "label": "Agent engines",
+                "reason": "Installed versions of the agent runtimes: the one in use and the one kept for going back. Managed from the Agent engines card."
+            },
+            "indexes": {
+                "label": "Search indexes",
+                "reason": "Code and conversation search indexes the sandbox keeps up to date by itself."
+            },
+            "extensions": {
+                "label": "Extensions",
+                "reason": "Installed extensions and their working files."
+            },
+            "docker": {
+                "label": "Docker",
+                "reason": "Images, containers and volumes of the sandbox's own Docker. Running docker system prune in a terminal removes what nothing uses."
+            },
+            "state": {
+                "label": "Settings and records",
+                "reason": "Configuration, sign-ins, credentials and the records of what was spent and done."
+            },
+            "other": {
+                "label": "Unclaimed files",
+                "reason": "Files no part of the sandbox claims, such as backups someone made by hand. Look at them before deleting them yourself."
+            },
+            "trash": {
+                "label": "Deleted repositories",
+                "reason": "Git data and checkouts of repositories that were deleted from the workspace.",
+                "warning": "They may hold commits that were never pushed anywhere. Once cleaned, they cannot be brought back."
+            },
+            "exports": {
+                "label": "Exported bundles",
+                "reason": "Copies of this sandbox packed for download.",
+                "warning": "Download any bundle you still need first. One being packed right now is kept."
+            },
+            "artifacts": {
+                "label": "Files agents made",
+                "reason": "Generated images, reports and other files agents produced while working.",
+                "warning": "Conversations that link to them will show them as missing. Anything changed in the last day is kept."
+            },
+            "browserCaptures": {
+                "label": "Browser screenshots",
+                "reason": "Screenshots and page snapshots the agent's browser took while working.",
+                "warning": "Conversations that show them will show a missing image instead. The last day's are kept."
+            },
+            "browserProfiles": {
+                "label": "Browser sign-ins",
+                "reason": "The agent browser's profiles, with the sites it is signed in to.",
+                "warning": "The agent is signed out of every site in a cleaned profile and may need your help to sign in again; its accounts stay listed as connected. A browser that is open or was used in the last day is kept, and passkeys are never touched."
+            },
+            "modelWeights": {
+                "label": "Local model weights",
+                "reason": "Weights downloaded for the models this sandbox runs itself.",
+                "warning": "A cleaned model downloads its weights again the next time it starts, which can take a while. Weights a running model is using are kept."
+            },
+            "logs": {
+                "label": "Logs",
+                "reason": "The sandbox's own logs and terminal captures. Cleaning keeps the last day's."
+            },
+            "scratch": {
+                "label": "Scratch files",
+                "reason": "Temporary files agents and checks leave behind. Cleaning keeps the last day's and anything in use."
+            },
+            "packageStores": {
+                "label": "Package downloads",
+                "reason": "pnpm's store of downloaded packages. Cleaning removes what no project uses; the next install fetches anything it needs again."
+            },
+            "buildCaches": {
+                "label": "Build caches",
+                "reason": "Build tools' saved outputs, made again the next time they are needed. Cleaning keeps the last day's."
+            }
         }
     },
     "settings": {

@@ -20,6 +20,8 @@ import type { JournalledTurn, TurnJournalRows } from "../../agent/run/turn/turn-
 import { opt } from "../../opt.js";
 import { parentOfActor } from "../../auth/principal.js";
 import { subagentCountsOf } from "../../agent/subagents/subagents.js";
+import { liveRunOf } from "../actor/conversation-holdings.js";
+import { queueView } from "../actor/conversation-queue.js";
 import { MAX_NOTE_LENGTH, MAX_SUBJECT_LENGTH } from "../../git/ops/commit-message.js";
 import type { ConversationUnits } from "../../store/conversation-units.js";
 import { type ConversationActors, type ConversationBooks, createConversationActors } from "../actor/conversation-actors.js";
@@ -364,6 +366,9 @@ const restored = (entry: PersistedAgent): PersistedAgent =>
         ? { ...entry, ending: { kind: "limited", ...opt("failure", entry.ending.failure), ...opt("resetsAt", entry.ending.resetsAt), held: false, scheduled: false } }
         : entry;
 
+// Written onto the entry at every change, so a conversation no actor has heard of since a restart shows it too.
+const queueClause = ({ queue }: PersistedAgent): Pick<AgentSummary, "queue"> => (queue === undefined ? {} : { queue: queueView(queue) });
+
 // What the card says the conversation is: where it works, where it came from and as whom, its name, who answers for it
 // and what people left on it, and the settings its last turn ran under.
 const describedBy = ({ placement, identity, profile, social, sessionId, archivedAt }: PersistedAgent) => ({
@@ -640,6 +645,12 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
                 void persist();
             }
         },
+        queue: (id, queue) => {
+            const entry = entryOf(id);
+            if (entry !== undefined) {
+                replace({ ...entry, queue });
+            }
+        },
         // The begun run's row as it changes: still waiting on the write that opens the turn, it goes with that write;
         // otherwise it is written now, on its own, since a turn in flight must not wait on anything else's write.
         journal: async (id, turn) => {
@@ -724,6 +735,9 @@ export const createFleet = (store: FleetStore, standings: LandStandings, presenc
             ...postures(entry.postures),
             ...spentBy(entry.totals, state?.turn.usage ?? NO_USAGE, subagentCountsOf(conversations, entry.id).running),
             ...liveReadings(entry, state),
+            // Only while its turn runs: a settled card must not name the run it just finished as under way.
+            ...(state?.phase.kind === "running" ? opt("run", liveRunOf(conversations, entry.id)?.id) : {}),
+            ...queueClause(entry),
             ...landingClause(entry, status),
         };
     };

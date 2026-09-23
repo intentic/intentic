@@ -107,10 +107,10 @@ const landedRow = (event: Extract<AgentEvent, { kind: "landed" }>): TranscriptRo
     };
 };
 
-// The clause after a refusal that ran nothing. A turn somebody typed is held in the composer for another press; a turn
-// that started itself — an automation, a loop, a watch wake — has no typed message and nobody watching, so promising a
-// resend there names a composer the reader is not looking at. Neither version promises a retry: whether one comes is
-// the scheduler's decision, not this row's to state.
+// The clause after a refusal that ran nothing. A turn somebody typed is held in its conversation's queue for another
+// press; a turn that started itself — an automation, a loop, a watch wake — has no typed message and nobody watching,
+// so promising a resend there names a composer the reader is not looking at. Neither version promises a retry: whether
+// one comes is the scheduler's decision, not this row's to state.
 const undelivered = (unattended: boolean): string =>
     unattended
         ? `Nothing ran, and nothing is held: this run started on its own, so there is no message waiting to be sent again.`
@@ -186,13 +186,13 @@ const retryClause = (event: Extract<AgentEvent, { kind: "error" }>): string | un
     return retries.made >= retries.max ? `Retried ${retries.made} of ${retries.max} times by itself; nothing more is sent automatically.` : undefined;
 };
 
-// The turn's opening user row: text, timestamp, attachments, and whatever the daemon later stamps onto it (checkpoint,
-// notes).
-export const userRow = (text: string, sentAt: number, attachments: readonly string[]): TranscriptRow => {
+// The turn's opening user row: text, timestamp, attachments, the message's id, and whatever the daemon later stamps onto
+// it (checkpoint, notes).
+export const userRow = (text: string, sentAt: number, attachments: readonly string[], messageId?: string): TranscriptRow => {
     // Drops an attachment already inline as an @-mention, unless it's a generated upload path (its own thumbnail).
     const inline = new Set(mentionedPathTokens(text));
     const chips = attachments.filter((path) => !inline.has(path) || path.includes(`/records/artifacts/attachments/`));
-    return { role: "user", text, sentAt, ...(chips.length > 0 ? { attachments: chips } : {}) };
+    return { role: "user", text, sentAt, ...(chips.length > 0 ? { attachments: chips } : {}), ...(messageId === undefined ? {} : { messageId }) };
 };
 
 export class TranscriptFold {
@@ -208,7 +208,7 @@ export class TranscriptFold {
     private readonly parked = new Map<string, number>();
     // The turn's opening user row, where the checkpoint and daemon notes land; cleared once `retract` takes it back.
     private opener: number | undefined;
-    // Set by `retract`: this turn was refused before it ran, and its message went back to the composer.
+    // Set by `retract`: this turn was refused before it ran, and its message went back to the conversation's queue.
     private unrun = false;
 
     constructor(
@@ -438,6 +438,7 @@ export class TranscriptFold {
             text: event.text,
             sentAt: event.sentAt,
             ...(event.attachments === undefined ? {} : { attachments: [...event.attachments] }),
+            ...(event.messageId === undefined ? {} : { messageId: event.messageId }),
         });
         // Anchors pair by position with the checkpoints only a person's steer reserves.
         if (event.voice === undefined) {
@@ -473,9 +474,9 @@ export class TranscriptFold {
         );
     }
 
-    // Attended refusals only: the composer holds those words for another press, so a bubble left standing repeats them
-    // once per press. Splicing is safe because nothing ran — no open bubble, no parked card, no steer above it. A turn
-    // the sandbox kept (`held`) keeps its message and is recorded: no composer anywhere holds a copy of it.
+    // Attended refusals only: the conversation's queue holds those words for another press, so a bubble left standing
+    // repeats them once per press. Splicing is safe because nothing ran — no open bubble, no parked card, no steer above
+    // it. A turn the sandbox kept (`held`) keeps its message and is recorded: no queue holds a copy of it.
     private retract(event: Extract<AgentEvent, { kind: "error" }>): TranscriptPatch[] {
         if (!this.turnedAway(event) || event.held !== undefined) {
             return [];

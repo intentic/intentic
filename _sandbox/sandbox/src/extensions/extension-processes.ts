@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { ProcessContribution } from "@intentic/extension-manifest";
 import type { Services } from "../composition.js";
 import { extensionRuntimeAbsent } from "./extension-readiness.js";
-import { enabledExtensions, type ExtensionHost, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
+import { enabledExtensions, type ExtensionHost, extensionInventory, type InstalledExtension, installedExtensions } from "./installed-extensions.js";
 import { listenerProcessesDesired, listenerState } from "./listener-state.js";
 
 // Service key for a declared extension process (`svc-ext-<id>-<name>`); dots in the id are sanitized.
@@ -94,6 +94,30 @@ export const reconcileListenerProcesses = async (services: Services): Promise<vo
         }
     } catch (error) {
         services.logger.warn({ err: error }, "listener process reconcile failed");
+    }
+};
+
+// Stops whatever a workspace extension left running once it waits for approval again, including a process it has
+// since renamed. A key another extension declares is spared: the dashed ids make a bare prefix match ambiguous.
+export const stopPendingExtensionProcesses = async (services: Services): Promise<void> => {
+    try {
+        const inventory = await extensionInventory(services);
+        if (inventory.pending.length === 0) {
+            return;
+        }
+        const prefixes = inventory.pending.map((extension) => extensionProcessKey(extension.id, ""));
+        const claimed = new Set(
+            inventory.extensions.flatMap((extension) =>
+                (extension.manifest.contributes?.processes ?? []).map((process) => extensionProcessKey(extension.id, process.name)),
+            ),
+        );
+        for (const service of services.serviceProcesses.list()) {
+            if (!claimed.has(service.key) && prefixes.some((prefix) => service.key.startsWith(prefix))) {
+                services.serviceProcesses.stop(service.key);
+            }
+        }
+    } catch (error) {
+        services.logger.warn({ err: error }, "stopping pending extensions' processes failed");
     }
 };
 

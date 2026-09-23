@@ -8,7 +8,9 @@ Every check that reads the checkout and nothing else, listed once and run everyw
 - Run them side by side, each in its own process, from a clone that has never installed (`run.mjs`).
 - Hold the repository's structural promises: the lockfile records the manifests, every test file is in a
   type-check program and under a budget, the workflows keep the fork boundary and the permission ceilings, a
-  shrunk wire contract arrives declared, the daemon's module seams stay where they are, no build script removes
+  shrunk wire contract arrives declared, the daemon's module seams stay where they are and no value import closes
+  a new cycle between its subsystems, nothing in `_shared/` reaches back into another part, every third-party
+  package something intentic ships carries may be handed on under its licence, no build script removes
   a directory agent turns have mounted over, the UI draws from its design system, a mark beside a run of text is
   placed by the rule that computes it rather than by a hand-tuned offset, no tracked text file carries a control
   byte, every skill description fits the budget the prompt pays for on every call, no `.astro` frontmatter holds a
@@ -51,10 +53,13 @@ snapshot has none, so every line it printed would read as newly introduced.
 
 Every check works on a bare checkout, which decides how they are written: a relative import of
 `@intentic/constants`' hand-written JavaScript rather than a bare specifier, a line scanner over
-`pnpm-lock.yaml` and the workflow files rather than a YAML parser, and a `vue/compiler-sfc` that is attempted and
-vouched for less when it is absent. The four judgments the daemon also makes (the assertion measure, the
-wire-contract shrink, the control-byte table, the overlay mirror roots) live in `@intentic/constants` for the
-same reason, one copy each.
+`pnpm-lock.yaml` and the workflow files rather than a YAML parser, one pattern scanner for the modules a file
+imports (`lib/imports.mjs`, read by the daemon's cycle rule and the `_shared/` rule alike) rather than a
+TypeScript parser, and a `vue/compiler-sfc` or an installed `node_modules` that is attempted and vouched for less
+when it is absent: `licences.mjs` reads each shipped package's licence from its installed `package.json`, so
+before the install it names the units it could not read and passes. The four judgments the daemon also makes (the
+assertion measure, the wire-contract shrink, the control-byte table, the overlay mirror roots) live in
+`@intentic/constants` for the same reason, one copy each.
 
 ## Two gates: what a failure means decides where it may refuse
 
@@ -124,8 +129,20 @@ That is the on-ramp, and it is a rule about **process**, not about the check:
 ## Ratchets fail on growth, and only on growth
 
 A check that cannot be met today is ratcheted, never switched off: a baseline it may shrink and not grow
-(`baselines/layout.json`, `baselines/path-literals.json`, and the `UNAUDITED`, `NARROW_TAKERS` and
-`MUTUAL_PAIRS` lists inside the daemon's two structural checks). A new finding fails by name.
+(`baselines/layout.json`, `baselines/path-literals.json`, `baselines/daemon-cycles.json`, and the `UNAUDITED` and
+`NARROW_TAKERS` lists inside the daemon's two structural checks). A new finding fails by name.
+
+`baselines/daemon-cycles.json` holds every value import between two daemon subsystems whose target already
+reaches back to its source, a cycle of any length, keyed `from -> to`; a value beside an edge is the reason it
+stands, where one was ever written down. A new edge that closes a cycle fails with the cycle it closes, the files
+that import across it, and one import for each step of the way back, which is where to cut: a type-only port, an
+event, or a module above both. Two subsystems importing each other are a cycle of two, and the reason they do
+sits on both edges.
+
+An exception list is not a ratchet. `EXCEPTIONS` in `shared-boundary.mjs` and `REVIEWED` in `licences.mjs` hold
+the owner's decisions, one entry per break that stands, and every entry carries its reason; `REVIEWED` also
+carries the licence the package was read at, so a package that changes its terms is read again instead of riding
+an old yes. An entry the tree no longer needs is reported beside the verdict, never refused.
 
 A stale entry — one the tree has already beaten — does **not** fail. It is tightened in place by the check
 itself, wherever the write can become a commit, and merely reported everywhere else: in an agent's worktree it

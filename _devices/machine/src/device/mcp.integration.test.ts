@@ -17,11 +17,13 @@ const scopes = (overrides: Partial<DeviceScopes> = {}): DeviceScopes => ({
     ...overrides,
 });
 
-const call = async (name: string, args: Record<string, unknown>, grant: DeviceScopes): Promise<{ text: string; isError: boolean }> => {
+// `text` is the first block, the one a program reading a tool's answer takes; `texts` is every block, in order.
+const call = async (name: string, args: Record<string, unknown>, grant: DeviceScopes): Promise<{ text: string; texts: string[]; isError: boolean }> => {
     const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }, grant)) as {
         result: { content: { text?: string }[]; isError: boolean };
     };
-    return { text: response.result.content[0]?.text ?? "", isError: response.result.isError };
+    const texts = response.result.content.map((block) => block.text ?? "");
+    return { text: texts[0] ?? "", texts, isError: response.result.isError };
 };
 
 test("initialize advertises tools and identifies the agent", async () => {
@@ -40,6 +42,7 @@ test("tools/list is the machine's whole surface, and there is no delete", async 
         "run_command",
         "read_file",
         "write_file",
+        "edit_file",
         "list_dir",
         "trash_file",
         "list_windows",
@@ -132,14 +135,72 @@ test("writing outside the allowed folders is refused", async () => {
     expect(refused.text).toMatch(/outside the folders/);
 });
 
-test("a write says whether it created or replaced, and a read gets it back", async () => {
+test("a write says whether it created or replaced, and replacing takes the revision a read answered with", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-fs-"));
     const path = join(root, "notes", "todo.txt");
     const created = await call("write_file", { path, content: "hello" }, scopes({ roots: root }));
     expect(created.text).toMatch(/^Created /);
-    const overwritten = await call("write_file", { path, content: "hello again" }, scopes({ roots: root }));
+    const blind = await call("write_file", { path, content: "hello again" }, scopes({ roots: root }));
+    expect(blind.isError).toBe(true);
+    expect(blind.text).toMatch(/already exists\. Read it first/);
+    const revision = /Revision ([0-9a-f]{16})/.exec((await call("read_file", { path }, scopes({ roots: root }))).texts[1] ?? "")?.[1];
+    const overwritten = await call("write_file", { path, content: "hello again", revision }, scopes({ roots: root }));
     expect(overwritten.text).toMatch(/^Overwrote /);
     expect((await call("read_file", { path }, scopes({ roots: root }))).text).toBe("hello again");
+});
+
+// The setup import reads files through this tool from the sandbox (migrations/host-scan.ts) and takes the first text
+// block as the file: the note has to ride in a block of its own.
+test("read_file answers with the file's text alone in its first block, and the note after it", async () => {
+    const root = mkdtempSync(join(tmpdir(), "host-fs-"));
+    const path = join(root, "config.yaml");
+    await writeFile(path, "model: big\n");
+    const read = await call("read_file", { path }, scopes({ roots: root }));
+    expect(read.isError).toBe(false);
+    expect(read.texts).toEqual(["model: big\n", expect.stringMatching(/^All 1 line\. Revision [0-9a-f]{16}: /)]);
+});
+
+test("edit_file changes one exact piece of a file, on the revision it was read at", async () => {
+    const root = mkdtempSync(join(tmpdir(), "host-fs-"));
+    const path = join(root, "app.ts");
+    await writeFile(path, "const port = 3000;\n");
+    const revision = /Revision ([0-9a-f]{16})/.exec((await call("read_file", { path }, scopes({ roots: root }))).texts[1] ?? "")?.[1];
+    const edited = await call("edit_file", { path, old_string: "3000", new_string: "4000", revision }, scopes({ roots: root }));
+    expect(edited.text).toMatch(/^Edited /);
+    expect(await readFile(path, "utf8")).toBe("const port = 4000;\n");
+    const refused = await call("edit_file", { path, old_string: "4000", new_string: "5000", revision }, scopes({ write: "off", roots: root }));
+    expect(refused.text).toMatch(/Create and change files/);
+});
+
+// What a runtime may run side by side (read-only) and what it must treat as able to lose something. Every other tool
+// is a `write`: it changes something that can be put back.
+test("every tool says what a call can do to the device", async () => {
+    const response = (await handleMcpMessage({ jsonrpc: "2.0", id: 2, method: "tools/list" }, scopes())) as {
+        result: { tools: { name: string; annotations: { readOnlyHint: boolean; destructiveHint: boolean } }[] };
+    };
+    const tools = response.result.tools;
+    expect(tools.filter((entry) => entry.annotations.readOnlyHint).map((entry) => entry.name)).toEqual([
+        "describe",
+        "read_file",
+        "list_dir",
+        "list_windows",
+        "browser_snapshot",
+        "browser_read",
+        "screenshot",
+        "list_sandboxes",
+        "sandbox_logs",
+    ]);
+    expect(tools.filter((entry) => entry.annotations.destructiveHint).map((entry) => entry.name)).toEqual([
+        "run_command",
+        "write_file",
+        "open",
+        "clipboard",
+        "browser_click",
+        "browser_fill",
+        "browser_key",
+        "device",
+        "remove_sandbox",
+    ]);
 });
 
 test("trash moves the file somewhere recoverable instead of deleting it", async () => {

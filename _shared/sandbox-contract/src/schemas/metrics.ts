@@ -105,3 +105,151 @@ export const SandboxMetricsSchema = z.object({
         .describe("Every process in the sandbox but the daemon, by what kind of work it is. A kind with nothing running is absent."),
 });
 export type SandboxMetrics = z.infer<typeof SandboxMetricsSchema>;
+
+// What is filling the sandbox's disk, by what it is for (GET /system/storage). Sizes are apparent bytes, and a file
+// with several hard links counts once, toward the first place the scan met it.
+
+// Every category a byte on the sandbox's volumes can belong to; STORAGE_CLEANABILITY below says which may be cleaned.
+export const STORAGE_CATEGORIES = [
+    // The workspace's own files: repositories, their dependencies, anything the owner or an agent put there.
+    "workspace",
+    // Transcripts, runtime session stores, attachments and loop memory of every conversation, archived ones included.
+    "conversations",
+    // Each open conversation's own checkout of the repositories, and the dependencies its turns installed over them.
+    "checkouts",
+    // The minute-by-minute and per-turn snapshots the History timeline restores from.
+    "restorePoints",
+    // The repositories' own git data: every commit and branch, pushed or not.
+    "repositories",
+    // Installed versions of the agent runtimes: the one turns use and the one kept for Revert.
+    "engines",
+    // Search indexes and caches the sandbox keeps up to date by itself while it runs.
+    "indexes",
+    // Installed extensions and their scratch.
+    "extensions",
+    // The sandbox's own Docker: images, containers, volumes.
+    "docker",
+    // Settings, credentials, sign-ins and the ledgers of what was spent and done.
+    "state",
+    // Anything no part of the sandbox claims.
+    "other",
+    // Git data and checkouts of repositories deleted from the workspace.
+    "trash",
+    // Copies of the sandbox packed for download.
+    "exports",
+    // Files agents produced: generated images, reports, harness output.
+    "artifacts",
+    // Screenshots and page snapshots the agent's browser took.
+    "browserCaptures",
+    // The agent browser's profiles, with the sites it is signed in to.
+    "browserProfiles",
+    // Weights downloaded for local models.
+    "modelWeights",
+    // The sandbox's own logs and terminal captures.
+    "logs",
+    // Scratch space agents and checks leave behind.
+    "scratch",
+    // Package managers' content stores, which the next install refills.
+    "packageStores",
+    // Build tools' output caches.
+    "buildCaches",
+] as const;
+export const StorageCategoryIdSchema = z.enum(STORAGE_CATEGORIES);
+export type StorageCategoryId = z.infer<typeof StorageCategoryIdSchema>;
+
+// none: never removed from here; safe: comes back by itself, removed without asking; confirm: removed only once the
+// owner has read what it costs.
+export const StorageCleanabilitySchema = z.enum(["none", "safe", "confirm"]);
+export type StorageCleanability = z.infer<typeof StorageCleanabilitySchema>;
+
+// Which categories may be cleaned, and which ask first: the daemon's cleaner refuses by it, the editor words its
+// confirm by it. State, credentials and live work are `none`; what regenerates is `safe`; the owner's own data asks.
+export const STORAGE_CLEANABILITY = {
+    workspace: "none",
+    conversations: "none",
+    // A live conversation's working copy; archiving the conversation is what frees it.
+    checkouts: "none",
+    // No compaction is safe to offer: `git gc --auto` already runs after every snapshot, and every object is reachable.
+    restorePoints: "none",
+    repositories: "none",
+    // The Engines card keeps two versions and owns which is which; removing one here would strand its Revert.
+    engines: "none",
+    // Held open by what maintains them: removing a file frees nothing until they close it.
+    indexes: "none",
+    extensions: "none",
+    docker: "none",
+    state: "none",
+    other: "none",
+    // Nothing reads it again, but it may hold commits never pushed anywhere.
+    trash: "confirm",
+    exports: "confirm",
+    artifacts: "confirm",
+    browserCaptures: "confirm",
+    browserProfiles: "confirm",
+    modelWeights: "confirm",
+    logs: "safe",
+    scratch: "safe",
+    packageStores: "safe",
+    buildCaches: "safe",
+} as const satisfies Record<StorageCategoryId, StorageCleanability>;
+
+export const StorageItemSchema = z.object({
+    path: z.string().describe("Where it is, as an absolute path inside the sandbox."),
+    bytes: z.number().describe("Its size in bytes."),
+});
+export type StorageItem = z.infer<typeof StorageItemSchema>;
+
+export const StorageCategoryUsageSchema = z.object({
+    id: StorageCategoryIdSchema,
+    cleanability: StorageCleanabilitySchema.describe("Whether this category can be cleaned from here, and whether cleaning it asks first."),
+    bytes: z.number().describe("Its size in bytes."),
+    files: z.number().describe("How many files it holds."),
+    cleanableBytes: z
+        .number()
+        .optional()
+        .describe(
+            "What cleaning it would free right now: only what is old enough and not in use. Absent where nothing here may be cleaned, and for a package store, whose own tool decides what no project needs.",
+        ),
+    items: z.array(StorageItemSchema).describe("Its biggest parts, largest first, at most eight."),
+});
+export type StorageCategoryUsage = z.infer<typeof StorageCategoryUsageSchema>;
+
+export const StorageScanSchema = z.object({
+    startedAt: z.number().describe("When the scan began, in milliseconds."),
+    finishedAt: z.number().describe("When it ended, in milliseconds: the moment these sizes describe."),
+    outcome: z
+        .enum(["complete", "partial"])
+        .describe("`partial` when the scan hit its time limit first, so every size is at least what it says rather than exactly it."),
+    disk: z
+        .object({
+            usedBytes: z.number().describe("Space used on the volume the workspace lives on."),
+            totalBytes: z.number().describe("That volume's size."),
+        })
+        .optional()
+        .describe("The volume as a whole. Absent when the volume would not say."),
+    categories: z.array(StorageCategoryUsageSchema).describe("Every category that holds anything, largest first."),
+    unreadable: z.number().describe("Files and folders the scan could not read, and so did not count."),
+});
+export type StorageScan = z.infer<typeof StorageScanSchema>;
+
+export const StorageReportSchema = z.object({
+    scan: StorageScanSchema.optional().describe("The last scan that finished. Absent until one has, and again after the daemon restarts."),
+    scanning: z.boolean().describe("Whether a scan is running now."),
+});
+export type StorageReport = z.infer<typeof StorageReportSchema>;
+
+export const StorageCleanInputSchema = z.object({
+    category: StorageCategoryIdSchema.describe("The category to clean; one whose cleanability is `none` is refused."),
+});
+export type StorageCleanInput = z.infer<typeof StorageCleanInputSchema>;
+
+export const StorageCleanResultSchema = z.object({
+    category: StorageCategoryIdSchema,
+    freedBytes: z.number().describe("Space the removals gave back, in bytes. A file that is still linked elsewhere frees nothing and is not counted."),
+    removed: z.number().describe("How many items were removed."),
+    kept: z
+        .number()
+        .describe("How many were left in place: changed too recently, in use by a running program, or no longer this category's."),
+    failed: z.number().describe("How many removals the filesystem refused."),
+});
+export type StorageCleanResult = z.infer<typeof StorageCleanResultSchema>;

@@ -27,6 +27,7 @@ import { type DemoGrant, grantAccess, grants, revokeAccess } from "./fixture/acc
 import { automationApprovals, automationCatalog, automationsList, deleteAutomation, resolveApproval, saveAutomation } from "./fixture/automations";
 import { demoDevices } from "./fixture/devices";
 import { demoMetrics } from "./fixture/metrics";
+import { demoStorageClean, demoStorageReport, demoStorageScan } from "./fixture/storage";
 import { demoLoops } from "./fixture/loops";
 import { demoRuns, demoWorkflows } from "./fixture/workflows";
 import { choresReport, writeLedger } from "./fixture/chores";
@@ -230,7 +231,7 @@ const agentFlow = (id: string, op: string): Frames<DeviceFlowLine> => {
 // Prefixes for the rail's isolated extension runs (xt-/dg-/mt-), refused here; a prefixless run still works.
 const EXTENSION_RUN_PREFIXES = [`xt-`, `dg-`, `mt-`];
 
-const startTurn = ({ conversationId = FEATURED_ID, prompt }: SandboxHandlerInput<`agent`, `run`>): { run: string } => {
+const startTurn = ({ conversationId = FEATURED_ID, prompt }: SandboxHandlerInput<`agent`, `run`>): { delivered: `started`; run: string } => {
     if (EXTENSION_RUN_PREFIXES.some((prefix) => conversationId.startsWith(prefix))) {
         return refuse(`This is the demo workspace: a run needs your repositories and a sandbox to walk them in. Start one and this button works.`);
     }
@@ -246,7 +247,7 @@ const startTurn = ({ conversationId = FEATURED_ID, prompt }: SandboxHandlerInput
         attention: { plan: false, question: false, permission: false, capability: false, credential: false, conflict: false },
         conflictCauses: undefined,
     });
-    return { run: run.id };
+    return { delivered: `started`, run: run.id };
 };
 
 const reply = (answer: SandboxHandlerInput<`agent`, `reply`>): { ok: true } => {
@@ -260,10 +261,11 @@ const reply = (answer: SandboxHandlerInput<`agent`, `reply`>): { ok: true } => {
     return { ok: true };
 };
 
-const stopTurn = ({ conversationId }: SandboxHandlerInput<`agent`, `stop`>): { ok: true } => {
-    runs.get(conversationId)?.stop();
+const stopTurn = ({ conversationId }: SandboxHandlerInput<`agent`, `stop`>): { stopped: boolean } => {
+    const run = runs.get(conversationId);
+    run?.stop();
     patchAgent(conversationId, { status: `stopped`, updatedAt: Date.now() });
-    return { ok: true };
+    return { stopped: run !== undefined };
 };
 
 // Moves the agent's delta into the main tree on success (fixture/workspace.ts) and broadcasts
@@ -429,6 +431,11 @@ export const procedures = {
         usage: () => ({ accounts: [] }),
         // Asked only while the board is open with geek metrics on; it drifts per request, so the polling is visible.
         metrics: () => demoMetrics(Date.now(), roster.agents),
+        // The Overview's Disk card: a scan already on hand, a rescan on request, and a clean that frees its category.
+        storage: () => demoStorageReport(),
+        scanStorage: () => demoStorageScan(Date.now()),
+        cancelStorageScan: () => ({ ok: true }),
+        cleanStorage: ({ category }) => demoStorageClean(category),
         terminals: () => ({
             sessions: [{ name: `agent-checkout-stripe`, label: `checkout-stripe`, kind: `agent`, running: true, activityAt: Date.now() }],
         }),
@@ -470,7 +477,7 @@ export const procedures = {
         run: startTurn,
         attach: ({ conversationId }) => attach(conversationId),
         reply,
-        steer: () => ({ ok: true }),
+        steer: () => ({ delivered: `steered` as const }),
         stop: stopTurn,
         commands: () => ({ commands: DEMO_COMMANDS }),
         refusals: () => ({ refusals: {} }),
@@ -656,8 +663,8 @@ export const procedures = {
         stop: () => refuse(`This is the demo workspace: nothing is running to stop.`),
     },
     extensions: {
-        // `invalid` is required by the contract; omitting it fails the whole list to parse.
-        list: () => ({ extensions: demoExtensions(), invalid: [] }),
+        // `invalid` and `pending` are required by the contract; omitting either fails the whole list to parse.
+        list: () => ({ extensions: demoExtensions(), invalid: [], pending: [] }),
         setEnabled: ({ id, enabled }) => okAfter(() => setExtensionEnabled(id, enabled)),
         // Loaded before an extension's activate(), so `api.settings.get` is synchronous; missing here means the
         // extension never activates.
@@ -666,6 +673,8 @@ export const procedures = {
     },
     approvals: {
         list: () => ({ approvals: [], invalid: [] }),
+        // The demo's Claude settings declare no hooks, so no turn ever held one for approval.
+        hookRequests: () => ({ requests: [] }),
     },
 } satisfies FixtureRouter;
 

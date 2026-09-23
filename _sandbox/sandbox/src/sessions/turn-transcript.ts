@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
     type AgentTurn,
     capabilitiesOf,
@@ -26,11 +27,15 @@ const unspokenRow = (prompt: string): TranscriptRow | undefined => {
     return resume?.kind === "notice" ? { role: "notice", text: resume.text } : undefined;
 };
 
+// The id the opening message's row carries: its sender's, or one the sandbox names, since a rewind can only name a
+// message that has an id.
+const messageIdOf = (turn: { readonly messageId?: string | undefined }): string => turn.messageId ?? randomUUID();
+
 // Strips the daemon's own layers off `turn.prompt` (an outer resume note, a trailing attachment note) to recover the
 // user's words; the preamble frame is never among them. `turn.attachments` is authoritative when present; paths are
 // workspace-root-relative.
 export const openingRows = (
-    turn: { readonly prompt: string; readonly attachments?: readonly string[] | undefined },
+    turn: { readonly prompt: string; readonly attachments?: readonly string[] | undefined; readonly messageId?: string | undefined },
     root: string,
     // When the turn started; the user row is stamped with this (`TranscriptRow.sentAt`).
     sentAt: number,
@@ -47,7 +52,7 @@ export const openingRows = (
     if (text.length === 0 && attachments.length === 0) {
         return [];
     }
-    const row = userRow(text, sentAt, attachments);
+    const row = userRow(text, sentAt, attachments, messageIdOf(turn));
     // An answered-park resume's note rides the user's own row, like every other daemon note.
     return [resume?.kind === "note" ? { ...row, notes: [resume.note] } : row];
 };
@@ -177,7 +182,7 @@ const interruptedTurnRows = async (
         return [] as TranscriptRow[];
     });
     const [opening, ...rest] = rows;
-    return opening === undefined ? [] : [opening.role === "user" ? { ...opening, sentAt } : opening, ...rest];
+    return opening === undefined ? [] : [opening.role === "user" ? { ...opening, sentAt, messageId: messageIdOf(turn) } : opening, ...rest];
 };
 
 // Writes a turn the daemon died under, at the boot that still finds its journal entry (turn-resume.ts); prefers

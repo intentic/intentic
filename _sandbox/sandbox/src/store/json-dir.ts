@@ -49,7 +49,7 @@ export const jsonDir = <T>(dir: string, parse: (raw: unknown) => T | undefined):
             }
             const entries: (T & { id: string })[] = [];
             const invalid: string[] = [];
-            // Filters to `.json` so an in-progress `.<id>.json.<pid>.tmp` write is never read as a malformed entry.
+            // Filters to `.json` so an in-progress `.<id>.json.<pid>.<n>.tmp` write is never read as a malformed entry.
             for (const name of names.filter((candidate) => candidate.endsWith(".json"))) {
                 const entry = await read(name.slice(0, -".json".length));
                 if (entry === undefined) {

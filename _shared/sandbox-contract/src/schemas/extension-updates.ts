@@ -206,12 +206,42 @@ export const InvalidWorkspaceExtensionSchema = z.object({
     error: z.string().describe("Why it could not be read."),
 });
 export type InvalidWorkspaceExtension = z.infer<typeof InvalidWorkspaceExtensionSchema>;
+// A workspace extension nobody has approved in its current shape. It stands in for the install moment a folder
+// otherwise never has: until the owner says yes, none of its code runs and none of its contributions are wired.
+export const PendingWorkspaceExtensionSchema = z.object({
+    id: extensionId.describe("The extension's id."),
+    dir: z.string().describe("Which folder under .intentic/config/workspace-extensions/."),
+    manifest: ExtensionManifestSchema.describe("What it declares about itself."),
+    powers: PowersDiffSchema.describe(
+        "What saying yes allows, as plain sentences. Against what was approved before when something was: `added` is what it asks for now that it did not then. Never approved before, everything it declares is `added`.",
+    ),
+    approvedBefore: z
+        .boolean()
+        .describe("An earlier shape of it was approved, and the powers it declares have changed since, which is what put it back here."),
+    digest: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .describe("The fingerprint of the powers shown, sent back with the approval so a change made while you were reading is caught rather than approved."),
+});
+export type PendingWorkspaceExtension = z.infer<typeof PendingWorkspaceExtensionSchema>;
+export const ExtensionApproveInputSchema = z.object({
+    id: extensionId.describe("Which extension."),
+    digest: z
+        .string()
+        .regex(/^[0-9a-f]{64}$/)
+        .describe("The fingerprint of the powers you read, from the pending list. A mismatch means they changed since, and nothing is approved."),
+});
 export const ExtensionsListSchema = z.object({
     extensions: z.array(ExtensionSummarySchema).describe("What is installed."),
     invalid: z
         .array(InvalidWorkspaceExtensionSchema)
         .describe(
             "Extensions written here that could not be read at all. Listed rather than dropped, because there is no install moment at which to reject a broken one, so this is its only way of saying anything.",
+        ),
+    pending: z
+        .array(PendingWorkspaceExtensionSchema)
+        .describe(
+            "Extensions written in this workspace that wait for the owner's approval before anything of theirs runs: never approved, or approved when they declared less than they do now.",
         ),
     updatesCheckedAt: z
         .string()

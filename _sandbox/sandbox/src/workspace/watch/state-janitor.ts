@@ -47,15 +47,15 @@ const sweepAgedCaptures = async (dir: string, now: number, log: Logger): Promise
     );
 };
 
-// Prunes the auto-created .intentic pnpm store; only removes blobs no node_modules links, so a missing pnpm costs
-// nothing but disk.
-const pruneStore = (storeDir: string, log: Logger): Promise<void> =>
+// Prunes a pnpm store; only removes blobs no node_modules links, so a missing pnpm costs nothing but disk. Resolves
+// whether the prune ran, never rejects: the boot sweep carries on either way, the storage clean counts a failure.
+export const pruneStore = (storeDir: string, log: Logger): Promise<boolean> =>
     new Promise((resolve) => {
         execFile("pnpm", ["store", "prune", "--store-dir", storeDir], { timeout: PRUNE_TIMEOUT_MS }, (error) => {
             if (error !== null) {
                 log.info({ err: error }, "state janitor: pnpm store prune skipped");
             }
-            resolve();
+            resolve(error === null);
         });
     });
 

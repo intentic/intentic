@@ -18,6 +18,15 @@ import type { TurnClient } from "./turnClient";
 // the local mirror a reopened tab paints from, and the three ways back into it — fork, rewind, edit. What a turn's
 // entries mean beyond the rows is the conversation's (`applied`); this unit never starts a turn of its own.
 
+// Why the daemon would not go back, by its answer: a turn holds the conversation, or the message clicked is no longer
+// where it was, since another window rewound or a turn ran after this one read it; anything else, no saved state.
+const rewindRefusal = (status: number): string => {
+    if (status === 409) {
+        return `This agent is running a turn, stop it before going back.`;
+    }
+    return status === 412 ? `This conversation has moved on since you opened it: reload it and try again.` : `That message can no longer be gone back to.`;
+};
+
 // What an edit and a rewind need from the conversation around the transcript.
 export interface TranscriptHost {
     readonly conversationId: string;
@@ -31,7 +40,7 @@ export interface TranscriptHost {
     // The session a rewind or a place retires: the next turn opens a fresh one.
     readonly session: Ref<SessionRef | undefined>;
     // The runs: a live one a mirror must never paint over, and the send an edit makes once its rewind has landed.
-    readonly turn: Pick<TurnClient, "streaming" | "enqueue">;
+    readonly turn: Pick<TurnClient, "streaming" | "say">;
 }
 
 export class TranscriptView extends TranscriptClock {
@@ -145,17 +154,16 @@ export class TranscriptView extends TranscriptClock {
     // Go back to a message: the daemon restores the checkpoint, drops later messages, and forgets the session.
     // `message.rewindIndex` addresses the daemon's transcript; the slice below is over the bubbles, with local notices.
     async rewindTo(message: ChatMessage, reason: "rewind" | "edit" = `rewind`): Promise<boolean> {
-        const index = message.rewindIndex;
+        const { rewindIndex: index, messageId } = message;
         const bubble = this.messages.value.indexOf(message);
-        if (index === undefined || bubble < 0) {
+        if (index === undefined || messageId === undefined || bubble < 0) {
             return false;
         }
         const rewound = await orRefusal(
-            sandboxRpc.agent.rewind({ conversationId: this.host.conversationId, index }, { context: { at: this.host.box.value } }),
+            sandboxRpc.agent.rewind({ conversationId: this.host.conversationId, index, messageId }, { context: { at: this.host.box.value } }),
         );
         if (rewound instanceof SandboxHttpError) {
-            this.host.error.value =
-                rewound.status === 409 ? `This agent is running a turn, stop it before going back.` : `That message can no longer be gone back to.`;
+            this.host.error.value = rewindRefusal(rewound.status);
             return false;
         }
         const dropped = this.messages.value.length - bubble;
@@ -224,7 +232,7 @@ export class TranscriptView extends TranscriptClock {
             return false;
         }
         this.editing.value = undefined;
-        await this.host.turn.enqueue(text, attachments, editorContext);
+        await this.host.turn.say(text, attachments, editorContext);
         return true;
     }
 

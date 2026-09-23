@@ -208,7 +208,7 @@ afterEach(() => {
 
 it(`offers the stopped turn a way on, and sends the sentence when it is pressed`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Turn stopped short · work kept`);
@@ -217,24 +217,24 @@ it(`offers the stopped turn a way on, and sends the sentence when it is pressed`
     continueButton()!.click();
     await settle();
 
-    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
+    expect(say).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
 it(`makes Enter on an empty composer continue, and says so under the box`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
 
     expect(composerText()).toContain(`Enter to continue`);
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
 
-    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
+    expect(say).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
 it(`stands down the moment the user types something of their own`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
     expect(continueButton()).toEqual(expect.any(Object));
 
@@ -245,7 +245,7 @@ it(`stands down the moment the user types something of their own`, async () => {
     expect(composerText()).not.toContain(`stopped`);
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
-    expect(enqueue).toHaveBeenCalledWith(`actually, run the tests first`, [], undefined);
+    expect(say).toHaveBeenCalledWith(`actually, run the tests first`, [], undefined);
 });
 
 // The question the card exists to ask. One answer is selected at all times, so no state of this card can promise two
@@ -308,7 +308,7 @@ it(`offers only the answers this ending can take`, async () => {
 // An unheld allowance means the daemon has no copy of the refused turn, so nothing can be resumed before it resets.
 it(`counts an unheld allowance down instead of going quiet, and keeps the press inert until it resets`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 3_600_000 };
     await mountPanel();
 
@@ -318,12 +318,12 @@ it(`counts an unheld allowance down instead of going quiet, and keeps the press 
     expect(composerText()).not.toContain(`Enter to continue`);
     composer().dispatchEvent(new KeyboardEvent(`keydown`, { key: `Enter`, bubbles: true }));
     await settle();
-    expect(enqueue).not.toHaveBeenCalled();
+    expect(say).not.toHaveBeenCalled();
 });
 
 it(`offers a held allowance the press straight away, and re-runs the turn instead of saying anything`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     const rerun = spyOn(conversation.turn, `resumeHeldTurn`).mockResolvedValue(true);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() + 8 * 3_600_000, held: { ran: false } };
     await mountPanel();
@@ -337,7 +337,7 @@ it(`offers a held allowance the press straight away, and re-runs the turn instea
     await settle();
 
     expect(rerun).toHaveBeenCalledTimes(1);
-    expect(enqueue).not.toHaveBeenCalled();
+    expect(say).not.toHaveBeenCalled();
 });
 
 // Held vs. refused picks the resume note (RESUME_NOTES.refused vs .limit): the wrong one either invents context for the
@@ -353,7 +353,7 @@ it(`tells a mid-turn allowance failure apart from one that refused the turn outr
 
 it(`hands the press over once the allowance has reset`, async () => {
     const conversation = stoppedChat();
-    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     conversation.pickUp.value = { reason: `limit`, readyAt: Date.now() - 1_000 };
     await mountPanel();
 
@@ -362,7 +362,7 @@ it(`hands the press over once the allowance has reset`, async () => {
     continueButton()!.click();
     await settle();
 
-    expect(enqueue).toHaveBeenCalledWith(CONTINUATIONS.plain);
+    expect(say).toHaveBeenCalledWith(CONTINUATIONS.plain);
 });
 
 // The outage asks the same question in the same words, in the same card: nothing about it is a second shape.

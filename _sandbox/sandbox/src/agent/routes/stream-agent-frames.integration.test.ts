@@ -621,6 +621,58 @@ test("a runtime that dies with no code after answering is held as stopped, logge
     ).toStrictEqual([{ outcome: "error", errorMessage: "Google turn timed out waiting for OpenCode.", verification: "no-code", toolCalls: 0 }]);
 });
 
+// The frame promises the fresh session and the settle holds the turn for it, never as stopped, whose ladder would
+// resume the session that overflowed; the fresh re-run overflowing too is told to split the task and holds nothing.
+test("a session past its window is held for one fresh re-run, and the re-run's own overflow ends it", async () => {
+    const input: TurnInput = { prompt: "summarise the logs", conversationId: "frames-overflow" };
+    const overflow: AgentEvent[] = [
+        { kind: "session", sessionId: "s-full" },
+        { kind: "delta", text: "reading" },
+        { kind: "error", code: "context-overflow", message: "Prompt is too long" },
+        { kind: "done" },
+    ];
+    const first = turnServices(scripted(overflow));
+
+    expect((await collect(streamAgent(first.services, input, undefined))).slice(-2)).toStrictEqual([
+        {
+            kind: "error",
+            code: "context-overflow",
+            message:
+                "Prompt is too long. Resuming this session would only overflow again, so the turn is being sent again in a fresh session that carries the conversation so far and where the work stands.",
+            held: { ran: true },
+            autoResume: "scheduled",
+        },
+        { kind: "done" },
+    ]);
+    expect(resumes.filter(({ event }) => event.kind === "turn-held")).toStrictEqual([
+        {
+            conversationId: "frames-overflow",
+            event: {
+                kind: "turn-held",
+                held: {
+                    input: { ...input, conversationId: "frames-overflow" },
+                    reason: "overflow",
+                    sessionId: "s-full",
+                    ran: true,
+                    standing: { state: "no-code", paths: [], check: undefined },
+                },
+            },
+        },
+    ]);
+
+    resumes.length = 0;
+    const rerun: TurnInput = { prompt: `${RESUME_NOTES.overflow}\n\nsummarise the logs`, conversationId: "frames-overflow" };
+    const again = turnServices(scripted(overflow));
+    const ended = (await collect(streamAgent(again.services, rerun, undefined))).find((frame) => frame.kind === "error");
+    expect(ended).toStrictEqual({
+        kind: "error",
+        code: "context-overflow",
+        message:
+            "Prompt is too long. A fresh session could not hold this turn either: the message, an attachment or a tool output it read is larger than the model's context window. Split the task into smaller steps, or read large files and command output in parts.",
+    });
+    expect(resumes.filter(({ event }) => event.kind === "turn-held")).toStrictEqual([]);
+});
+
 test("a turn that ends with nothing to show gets its failure synthesized ahead of done, and is held like any stopped turn", async () => {
     const { services: s, writes } = turnServices(
         scripted([

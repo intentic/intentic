@@ -50,18 +50,11 @@ type UpdateRecord = z.infer<typeof RecordSchema>;
 const StateSchema = z.object({ checkedAt: z.string().optional(), extensions: z.record(z.string(), RecordSchema) });
 type UpdateState = z.infer<typeof StateSchema>;
 
-// Memoized per root: the write queue lives on the file object, so a fresh instance would drop concurrent writes.
-const stateFiles = new Map<string, JsonFile<UpdateState>>();
-const stateFile = (root: string): JsonFile<UpdateState> => {
-    const path = statePath(root, ".intentic/records/extension-updates.json");
-    const existing = stateFiles.get(path);
-    if (existing !== undefined) {
-        return existing;
-    }
-    const file = jsonFile<UpdateState>(path, { parse: (raw) => StateSchema.safeParse(raw).data, fallback: () => ({ extensions: {} }) });
-    stateFiles.set(path, file);
-    return file;
-};
+const stateFile = (root: string): JsonFile<UpdateState> =>
+    jsonFile<UpdateState>(statePath(root, ".intentic/records/extension-updates.json"), {
+        parse: (raw) => StateSchema.safeParse(raw).data,
+        fallback: () => ({ extensions: {} }),
+    });
 
 export const readExtensionUpdateState = async (root: string): Promise<UpdateState> => stateFile(root).read();
 

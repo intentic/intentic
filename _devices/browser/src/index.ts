@@ -14,6 +14,9 @@ export { BrowserError, type Browser } from "./types.js";
 // at the request, not later as a stray socket error. Actions go through the page (real click/focus+input events),
 // not synthesized mouse coordinates, since only that survives scrolling between snapshot and click.
 
+// The most of a page's text `text()` answers with; beyond it the answer says how much it left out.
+const MAX_TEXT = 20_000;
+
 const evaluate = async <T>(session: CdpSession, expression: string): Promise<T> => {
     const result = await session.send<{ result?: { value?: T }; exceptionDetails?: { text?: string } }>("Runtime.evaluate", {
         expression,
@@ -118,9 +121,9 @@ export const browser = (port: number = DEFAULT_PORT): Browser => {
         },
 
         text: async () => {
-            const body = await evaluate<string>(await connect(targetId), "document.body ? document.body.innerText : ''");
-            // A page's innerText can be enormous; what a caller wants is the readable part, not a novel.
-            return (body ?? "").replace(/\n{3,}/g, "\n\n").slice(0, 20_000);
+            const body = ((await evaluate<string>(await connect(targetId), "document.body ? document.body.innerText : ''")) ?? "").replace(/\n{3,}/g, "\n\n");
+            // A page's innerText can be enormous; what a caller wants is the readable part, not a novel, and told so.
+            return body.length <= MAX_TEXT ? body : `${body.slice(0, MAX_TEXT)}\n\n(Cut here: the page's text goes on for ${body.length - MAX_TEXT} more characters.)`;
         },
 
         screenshot: async () => {

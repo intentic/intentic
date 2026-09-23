@@ -28,7 +28,7 @@ import { clientFor, collect, errorCode, postJson, proven, rejectAuth, rejectForb
 import { fakeFiles, fakeHistory } from "./harness/route-fakes.testing.js";
 import { codexConnectedProxy, services, withTranslator } from "./harness/route-services.testing.js";
 import { automationRecord, memoryAutomationsStore, memoryCapabilitiesStore } from "./harness/route-stores.testing.js";
-import { runAgentTurn } from "./harness/route-turns.testing.js";
+import { runAgentTurn, startedRun } from "./harness/route-turns.testing.js";
 import { toolChildrenOf, transcriptPageOf } from "./sessions/agent-transcript.js";
 
 // A raw route exists only under its declaration and every declaration is served, in the declared order: the order the
@@ -1191,13 +1191,13 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
             }),
         ),
     );
-    await client.agent.run({ prompt: "long task", conversationId: "conv1", isolated: true });
+    const run = await startedRun(client, { prompt: "long task", conversationId: "conv1", isolated: true });
     // The run is detached: the route acks the id, and the generator chain walks after it.
     // The adapter's first yield is the barrier proving the abort handle is registered; stopping before that would find
     // nothing to cancel.
     await running;
     // Resolves only once the run has unwound, which is the same barrier the browser's Stop waits on.
-    expect(await client.agent.stop({ conversationId: "conv1" })).toEqual({ ok: true });
+    expect(await client.agent.stop({ conversationId: "conv1", run })).toEqual({ stopped: true });
 
     const { agents } = await client.agents.list();
     expect(agents[0]).toMatchObject({ id: "conv1", status: "stopped" });
@@ -1209,8 +1209,8 @@ test("a stopped turn settles as stopped, with no error frame reaching the client
     // composer.
     expect(await client.agents.transcript({ id: "conv1" })).toMatchObject({ ending: { reason: "stopped" } });
 
-    // A stop with nothing running is still NOT_FOUND: the client retires its own control on that answer.
-    expect(await errorCode(client.agent.stop({ conversationId: "conv1" }))).toBe("NOT_FOUND");
+    // A second press, arriving after the run it names has ended, is answered rather than refused: nothing was cancelled.
+    expect(await client.agent.stop({ conversationId: "conv1", run })).toEqual({ stopped: false });
 });
 
 test("environment: lower roles read state, maintainers approve/reject, and failures map to statuses", async () => {

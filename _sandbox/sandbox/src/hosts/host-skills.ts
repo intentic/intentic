@@ -16,8 +16,9 @@ the ones you need). Then:
 | --- | --- |
 | \`mcp__\${id}__describe\` | This machine's OS, shell, home directory, and the roots you may touch. |
 | \`mcp__\${id}__run_command\` | Run a command and get stdout/stderr/exit code back. |
-| \`mcp__\${id}__read_file\` | Read a file under the allowed roots. |
-| \`mcp__\${id}__write_file\` | Create or overwrite a file under the allowed roots. |
+| \`mcp__\${id}__read_file\` | Read a file under the allowed roots, whole or a range of lines; answers the revision a change needs. |
+| \`mcp__\${id}__edit_file\` | Replace one exact, unique piece of a file, given the revision from your read. |
+| \`mcp__\${id}__write_file\` | Create a file, or replace one given the revision from your read: a file that changed since is refused. |
 | \`mcp__\${id}__list_dir\` | List a directory under the allowed roots. |
 | \`mcp__\${id}__trash_file\` | Move a file to the recycle bin / trash: there is no delete tool, on purpose. |
 | \`mcp__\${id}__screenshot\` | Capture the screen as an image, with its pixel size. |

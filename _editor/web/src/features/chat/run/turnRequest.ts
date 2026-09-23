@@ -72,6 +72,8 @@ const filePaths = (attachments: string[], mentions: string[]): Pick<ProcedureInp
 // Builds the turn request body. An omitted `model`/`harness`/`sessionId` each resolve to the daemon's own
 // default; `isolated` picks the conversation's worktree over /work.
 export const turnRequestBody = (input: {
+    // This window's name for the message, so the daemon recognises a resend of it and a Stop can name it.
+    readonly messageId: string;
     readonly text: string;
     readonly conversationId: string;
     readonly title: string | null;
@@ -101,6 +103,7 @@ export const turnRequestBody = (input: {
     // Whether this body targets this sandbox; fields scoped to another box's store are dropped otherwise.
     const here = input.box === undefined;
     return {
+        messageId: input.messageId,
         prompt: input.text,
         // Seeds a fresh registry entry's title; an existing entry keeps its own.
         ...(input.title !== null ? { title: input.title } : {}),

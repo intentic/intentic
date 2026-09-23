@@ -61,6 +61,7 @@ const connectedPair = (initial: DeviceScopes = scopes()) => {
     const logged: string[] = [];
     const handler = new RPCHandler(
         createHostRouter({
+            sandboxUrl: "https://sandbox.example.dev",
             scopes: () => live,
             setScopes: (next) => {
                 live = next;

@@ -38,6 +38,8 @@ export interface CapabilityCtx {
     readonly syncEndpoints: () => Promise<void>;
     // Image-baked extensions dir; lets the cli handler build the connector registry without holding Services.
     readonly extensionsDir: string;
+    // Where the owner's approvals of workspace extensions live, which that same registry reads.
+    readonly historyRoot: string;
     // Create-or-fetch the owner's platform wallet for its address (wallet/wallet-signer.ts), the wallet
     // handler's whole platform reach, closure-wrapped so it stays testable. The caps are not this side's to send.
     readonly walletEnsure: (network: string) => Promise<{ readonly status: number; readonly body: string }>;
@@ -96,6 +98,7 @@ export const capabilityCtx = (services: Services): CapabilityCtx => {
         endpointModels: services.endpointModels,
         syncEndpoints: () => syncEndpointCompat(services),
         extensionsDir: services.config.extensionsDir,
+        historyRoot: services.config.historyRoot,
         walletEnsure: (network) => relayWalletEnsure(services.config, network),
         fleetWhoami: (token) => fleetWhoami(services.config, token),
         scaffoldNeutralLedger: (session) => scaffoldNeutralLedger(services, session),

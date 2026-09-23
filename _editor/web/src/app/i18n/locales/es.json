@@ -1062,8 +1062,6 @@
             "moreComposerSettings": "Más ajustes del compositor",
             "openNewChatHere": "Abrir desde aquí un chat nuevo con lo que has escrito: este conserva su respuesta",
             "providerModel": "Proveedor y modelo: {providerName} · {modelLabelText}",
-            "removeMessageNotSent": "Quitar: este mensaje no se enviará",
-            "removeQueuedMessage": "Quitar el mensaje en cola",
             "replacedSend": "se reemplaza al enviar.",
             "runMessageThrough": "Pasar este mensaje por",
             "sandboxBusyKeepTyping": "El sandbox está ocupado: sigue escribiendo; podrás enviar cuando esté listo.",
@@ -1137,6 +1135,24 @@
             "submit": "Enviar",
             "typeAnswer": "Escribe tu respuesta…",
             "writeAnswerToSubmit": "Escribe tu respuesta para enviarla."
+        },
+        "chatQueue": {
+            "cancel": "Cancelar",
+            "fromAgent": "De otro agente",
+            "fromSandbox": "Del sandbox",
+            "goesAfterAnswer": "Entra en cuanto respondas a la solicitud de arriba",
+            "goesAfterTurn": "Sale cuando termine este turno",
+            "goesWhenFree": "Sale en cuanto el agente esté libre",
+            "heldRefused": "En espera: el último intento se rechazó antes de ejecutarse. Resuelve lo que lo rechazó y reanuda.",
+            "heldStopped": "En espera desde que se detuvo el turno: no sale nada hasta que alguien reanude.",
+            "removeHint": "Retirar: este mensaje no se enviará",
+            "removeLabel": "Retirar el mensaje en espera",
+            "resume": "Reanudar",
+            "resumeHint": "Enviar ya lo que espera, con el modelo y la cuenta de este chat",
+            "rewordHint": "Cambiar lo que dice sin perder su lugar",
+            "rewordLabel": "Reformular el mensaje en espera",
+            "save": "Guardar",
+            "sendNow": "Enviar ya"
         },
         "chatQuickBar": {
             "agentWaitingForYou": "Tu agente te está esperando",
@@ -1349,28 +1365,13 @@
         "chatTurnStatus": {
             "atCapacity": "al límite de capacidad",
             "attemptNothingLost": "(intento {attempt}, no se ha perdido nada)",
-            "loader": {
-                "brewing": "Preparando",
-                "cogitating": "Cavilando",
-                "conjuring": "Conjurando",
-                "musing": "Meditando",
-                "noodling": "Trasteando",
-                "percolating": "Filtrando",
-                "perusing": "Ojeando",
-                "pondering": "Reflexionando",
-                "ruminating": "Rumiando",
-                "scheming": "Tramando",
-                "synthesizing": "Sintetizando",
-                "thinking": "Pensando",
-                "tinkering": "Enredando",
-                "untangling": "Desenredando"
-            },
             "modelProvider": "El proveedor del modelo es",
             "notResponding": "sin responder",
             "rateLimiting": "limitando la tasa",
             "retrying": "reintentando",
             "retryingAt": "reintentando el {when}",
             "retryingIn": "reintentando en {wait}",
+            "thinking": "Pensando",
             "waitingOnSubagents": "Esperando a {count} subagente | Esperando a {count} subagentes"
         },
         "composerIntent": {
@@ -2638,17 +2639,26 @@
             "topicOnRepositoryNightly": "en su repositorio y un trabajo nocturno abre el listado por ti. Sin cuenta, sin subida, sin cola."
         },
         "extensionsInstalled": {
+            "approve": "Aprobar",
+            "approvedNow": "{manifest} aprobada.",
+            "asksForNothing": "No pide ningún poder.",
             "clearFilter": "Vaciar el filtro",
+            "couldntApprove": "No se pudo aprobar {manifest}.",
             "couldntListSandboxsExtensions": "No se pudieron listar las extensiones de este sandbox.",
             "discoverWhatPeoplePublished": "Descubre lo que otros han publicado →",
             "installed": "Instaladas",
             "invalid": "inválida",
             "needsAttention": "Necesita atención",
+            "newPowersSinceApproved": "Nuevos poderes desde que la aprobaste:",
             "notLoadable": "No cargable",
+            "pendingBadge": "pendiente",
             "publishedMatches": "{count} extensión publicada coincide con «{query}» → | {count} extensiones publicadas coinciden con «{query}» →",
             "readingSandboxsExtensions": "Leyendo las extensiones de este sandbox…",
             "removed": "{manifest} eliminada.",
-            "runningNotListed": "En marcha pero sin listar"
+            "runningNotListed": "En marcha pero sin listar",
+            "waitingCaption": "Escrita en este espacio de trabajo. Nada de su código se ejecuta hasta que apruebes lo que pide.",
+            "waitingForApproval": "Esperando tu aprobación",
+            "whatItAsksFor": "Lo que pide:"
         },
         "folderPicker": {
             "change": "Cambiar",
@@ -3225,6 +3235,30 @@
             "showLess": "Mostrar menos",
             "showMoreAccounts": "Mostrar {collapsedCredentialCount} cuentas más"
         },
+        "sandboxStorageCard": {
+            "clean": "Limpiar",
+            "confirmHeader": "¿Limpiar {category}?",
+            "couldntRead": "No se pudo leer la última medición",
+            "diskUsed": "{used} de {total} en uso",
+            "failedItems": "{count} elemento no se pudo eliminar. | {count} elementos no se pudieron eliminar.",
+            "firstScan": "Leyendo cada archivo de los volúmenes del sandbox. Puede tardar un minuto.",
+            "free": "Liberar {bytes}",
+            "freed": "Liberados {bytes} de {category}.",
+            "heading": "Disco",
+            "intro": "Mira qué está llenando el disco de este sandbox y libera lo que puede irse sin riesgo. Un análisis lee cada archivo de los volúmenes del sandbox, así que puede tardar un minuto.",
+            "keptItems": "{count} elemento se quedó: en uso o modificado en el último día. | {count} elementos se quedaron: en uso o modificados en el último día.",
+            "measured": "Medido {when}",
+            "measuring": "Midiendo…",
+            "partial": "El análisis alcanzó su límite de tiempo antes de leerlo todo, así que cada tamaño es como mínimo el indicado.",
+            "scan": "Analizar",
+            "scanAgain": "Analizar de nuevo",
+            "stop": "Detener",
+            "uncounted": "Sin contar en el análisis",
+            "uncountedHint": "Espacio que el disco da por usado y que no pertenece a ninguna categoría: el propio sistema, otros programas que comparten el disco y la contabilidad interna del sistema de archivos.",
+            "unreadable": "{count} archivo o carpeta no se pudo leer y no se cuenta. | {count} archivos o carpetas no se pudieron leer y no se cuentan.",
+            "waiting": "Nada que liberar aún",
+            "waitingHint": "Todo lo de aquí cambió en el último día o está en uso, así que una limpieza lo dejaría todo en su sitio."
+        },
         "sandboxSwitcher": {
             "addSandbox": "Añadir un sandbox",
             "alsoDelete": "Eliminarlo también de",
@@ -3422,6 +3456,98 @@
             "never": "Nunca",
             "runsAsksAfterOutside": "se ejecuta, pregunta tras contenido externo"
         },
+        "storageCategories": {
+            "artifacts": {
+                "label": "Archivos hechos por agentes",
+                "reason": "Imágenes generadas, informes y otros archivos que los agentes produjeron mientras trabajaban.",
+                "warning": "Las conversaciones que los enlazan los mostrarán como ausentes. Todo lo modificado en el último día se conserva."
+            },
+            "browserCaptures": {
+                "label": "Capturas del navegador",
+                "reason": "Capturas de pantalla e instantáneas de páginas que tomó el navegador del agente mientras trabajaba.",
+                "warning": "Las conversaciones que las muestran enseñarán una imagen ausente. Se conservan las del último día."
+            },
+            "browserProfiles": {
+                "label": "Sesiones del navegador",
+                "reason": "Los perfiles del navegador del agente, con los sitios en los que tiene sesión iniciada.",
+                "warning": "El agente cierra sesión en todos los sitios de un perfil limpiado y puede necesitar tu ayuda para volver a entrar; sus cuentas siguen apareciendo como conectadas. Se conserva un navegador abierto o usado en el último día, y las passkeys nunca se tocan."
+            },
+            "buildCaches": {
+                "label": "Cachés de compilación",
+                "reason": "Resultados guardados de las herramientas de compilación, que se regeneran la próxima vez que hagan falta. Al limpiar se conservan los del último día."
+            },
+            "checkouts": {
+                "label": "Checkouts de conversaciones",
+                "reason": "La copia propia de los repositorios de cada conversación abierta, con las dependencias que instaló. Archivar una conversación que ya terminaste libera su copia."
+            },
+            "conversations": {
+                "label": "Conversaciones",
+                "reason": "Transcripciones, adjuntos y registros de cada conversación, incluidas las archivadas. Eliminar una conversación del archivo libera su parte."
+            },
+            "docker": {
+                "label": "Docker",
+                "reason": "Imágenes, contenedores y volúmenes del Docker propio del sandbox. Ejecutar docker system prune en una terminal quita lo que nada usa."
+            },
+            "engines": {
+                "label": "Motores de agente",
+                "reason": "Versiones instaladas de los entornos de ejecución de los agentes: la que está en uso y la que se guarda para volver atrás. Se gestionan desde la tarjeta Motores de agente."
+            },
+            "exports": {
+                "label": "Paquetes exportados",
+                "reason": "Copias de este sandbox empaquetadas para descargar.",
+                "warning": "Descarga antes cualquier paquete que aún necesites. Uno que se esté empaquetando ahora se conserva."
+            },
+            "extensions": {
+                "label": "Extensiones",
+                "reason": "Extensiones instaladas y sus archivos de trabajo."
+            },
+            "indexes": {
+                "label": "Índices de búsqueda",
+                "reason": "Índices de búsqueda de código y conversaciones que el sandbox mantiene al día por sí mismo."
+            },
+            "logs": {
+                "label": "Registros",
+                "reason": "Los registros propios del sandbox y las capturas de terminal. Al limpiar se conservan los del último día."
+            },
+            "modelWeights": {
+                "label": "Pesos de modelos locales",
+                "reason": "Pesos descargados para los modelos que este sandbox ejecuta por sí mismo.",
+                "warning": "Un modelo limpiado vuelve a descargar sus pesos la próxima vez que arranque, lo que puede tardar. Se conservan los pesos que usa un modelo en ejecución."
+            },
+            "other": {
+                "label": "Archivos sin dueño",
+                "reason": "Archivos que ninguna parte del sandbox reclama, como copias de seguridad hechas a mano. Revísalos antes de borrarlos tú mismo."
+            },
+            "packageStores": {
+                "label": "Descargas de paquetes",
+                "reason": "El almacén de pnpm con los paquetes descargados. Al limpiar se quita lo que ningún proyecto usa; la próxima instalación vuelve a descargar lo que necesite."
+            },
+            "repositories": {
+                "label": "Historial de repositorios",
+                "reason": "Los datos git de tus repositorios: cada commit y cada rama, incluidos los que nunca se enviaron a ninguna parte."
+            },
+            "restorePoints": {
+                "label": "Puntos de restauración",
+                "reason": "Instantáneas tomadas cada minuto mientras cambian los archivos y en cada turno, para que el Historial pueda recuperar cualquier momento."
+            },
+            "scratch": {
+                "label": "Archivos temporales",
+                "reason": "Archivos temporales que dejan agentes y comprobaciones. Al limpiar se conservan los del último día y todo lo que está en uso."
+            },
+            "state": {
+                "label": "Ajustes y registros",
+                "reason": "Configuración, sesiones iniciadas, credenciales y los registros de lo gastado y lo hecho."
+            },
+            "trash": {
+                "label": "Repositorios eliminados",
+                "reason": "Datos git y checkouts de repositorios que se eliminaron del espacio de trabajo.",
+                "warning": "Pueden contener commits que nunca se enviaron a ninguna parte. Una vez limpiados, no se pueden recuperar."
+            },
+            "workspace": {
+                "label": "Archivos del espacio de trabajo",
+                "reason": "Tus repositorios, sus dependencias y todo lo demás del espacio de trabajo. Quita lo que ya no necesites desde Archivos o una terminal."
+            }
+        },
         "usageChart": {
             "allTime": "Todo el tiempo",
             "more": "{count} más",
@@ -3452,6 +3578,10 @@
             "sandboxClosedConnection": "El sandbox cerró la conexión.",
             "sandboxNeverReportedAddress": "Este sandbox nunca ha informado de una dirección.",
             "sandboxStoppedResponding": "El sandbox dejó de responder."
+        },
+        "useSandboxStorage": {
+            "couldntClean": "No se pudo limpiar {category}",
+            "couldntMeasure": "No se pudo medir el disco"
         }
     },
     "settings": {

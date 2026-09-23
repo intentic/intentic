@@ -126,7 +126,7 @@ afterEach(() => {
 // network. A message with no anchor (the assistant rows) offers no edit.
 it(`loads the old prompt into the box and destroys nothing`, async () => {
     const conversation = editableChat();
-    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
 
     conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
@@ -134,7 +134,7 @@ it(`loads the old prompt into the box and destroys nothing`, async () => {
 
     expect(composer().value).toBe(`fix the bug`);
     expect(conversation.transcript.messages.value).toHaveLength(4);
-    expect(enqueue).not.toHaveBeenCalled();
+    expect(say).not.toHaveBeenCalled();
 });
 
 // Arming costs nothing: the transcript stays whole, the daemon is asked for nothing, and the old
@@ -194,7 +194,7 @@ it(`abandons the edit on Escape`, async () => {
 it(`sends the replacement through the edit path, not as a new message`, async () => {
     const conversation = editableChat();
     const submitEdit = spyOn(conversation.transcript, `submitEdit`).mockResolvedValue(true);
-    const enqueue = spyOn(conversation.turn, `enqueue`).mockResolvedValue(undefined);
+    const say = spyOn(conversation.turn, `say`).mockResolvedValue(undefined);
     await mountPanel();
 
     conversation.transcript.beginEdit(conversation.transcript.messages.value[0]!);
@@ -206,7 +206,7 @@ it(`sends the replacement through the edit path, not as a new message`, async ()
     await settle();
 
     expect(submitEdit).toHaveBeenCalledWith(`fix the OTHER bug`, [], undefined);
-    expect(enqueue).not.toHaveBeenCalled();
+    expect(say).not.toHaveBeenCalled();
     expect(composer().value).toBe(``);
 });
 

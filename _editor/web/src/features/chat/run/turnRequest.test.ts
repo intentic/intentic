@@ -18,6 +18,7 @@ const settings = {
 // means its own catalog default, native loop, /work).
 describe(`turnRequestBody`, () => {
     const base = {
+        messageId: `m-1`,
         text: `do the thing`,
         conversationId: `c1`,
         title: null,
@@ -39,6 +40,11 @@ describe(`turnRequestBody`, () => {
 
         expect(sent).not.toHaveProperty(`model`);
         expect(wire(turnRequestBody(base))).toMatchObject({ model: `opus` });
+    });
+
+    // The daemon answers a resend under the same id with what it did the first time, rather than delivering it twice.
+    it(`carries the id this window gave the message`, () => {
+        expect(wire(turnRequestBody(base))).toMatchObject({ messageId: `m-1`, prompt: `do the thing` });
     });
 
     it(`sends the harness only for claude-code, since native is the daemon's own default`, () => {

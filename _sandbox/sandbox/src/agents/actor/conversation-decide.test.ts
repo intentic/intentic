@@ -4,6 +4,7 @@ import { isolatedAgent } from "../../testing.js";
 import type { JournalledTurn } from "../../agent/run/turn/turn-journal.js";
 import type { PersistedAgent } from "../registry/agents-store.js";
 import { type BeginTurn, type ConversationEffect, type ConversationEvent, decide, type SettleFlush } from "./conversation-decide.js";
+import { hold, joined, NO_QUEUE } from "./conversation-queue.js";
 import { type ConversationState, freshRuntime, idleConversation, NO_USAGE, type ParkedCard, type StopEnding } from "./conversation-state.js";
 
 // Every transition the conversation's one writer makes, as a table: the state an event meets, what it leaves, the
@@ -38,6 +39,9 @@ const FAILED: AgentEvent = { kind: "error", message: "  the runtime\n died  " };
 const BROADCAST: ConversationEffect[] = [{ kind: "broadcast" }];
 const JOB: AgentJob = { id: "j-1", label: "pnpm build", session: "agent-c1", startedAt: 1_000 };
 const WATCH: AgentWatch = { id: "watch-k3f9", note: "CI green", intervalSeconds: 60, deadlineAt: 9_000 };
+// A person's message waiting for the next turn, and the queue holding it.
+const QUEUED = { id: "m-1", voice: "person", queuedAt: 900, turn: { conversationId: "c1", prompt: "and the docs", messageId: "m-1" } } as const;
+const WAITING = joined(NO_QUEUE, QUEUED);
 
 interface Row {
     readonly name: string;
@@ -656,6 +660,46 @@ const rows: readonly Row[] = [
         event: { kind: "session-cleared" },
         to: running({}, { sessionId: "s-1" }),
         effects: [],
+    },
+    {
+        name: "a message joining the queue is written onto the entry and shown",
+        from: idle(),
+        event: { kind: "queue-joined", item: QUEUED },
+        to: { ...idle(), queue: WAITING },
+        effects: [{ kind: "queue-written", queue: WAITING }, { kind: "persist" }, { kind: "broadcast" }],
+    },
+    {
+        name: "a stop holds what waits, for everyone, and writes the hold onto the entry",
+        from: { ...running(), queue: WAITING },
+        event: { kind: "stop", ending: "stopped" },
+        to: { ...running({ stopping: "stopped" }), queue: hold(WAITING, "stopped") },
+        effects: [{ kind: "queue-written", queue: hold(WAITING, "stopped") }, { kind: "persist" }, { kind: "broadcast" }],
+    },
+    {
+        name: "a begin that opens a new entry writes onto it what already waits: a message sent while the first turn started",
+        from: idleConversation(WAITING),
+        event: { kind: "begin", turn: OPENING },
+        to: {
+            ...idleConversation(WAITING),
+            phase: { kind: "running", startedAt: NOW, parked: [], stopping: undefined },
+            turn: { ...freshRuntime(), lastAt: NOW, promptToFile: OPENING.prompt },
+        },
+        effects: [
+            { kind: "entry-opened", turn: OPENING },
+            { kind: "queue-written", queue: WAITING },
+            { kind: "conversation-prompt", prompt: OPENING.prompt },
+            { kind: "broadcast" },
+            { kind: "persist" },
+        ],
+        reply: true,
+    },
+    {
+        name: "a rewording made against an older copy changes nothing, and says it was stale",
+        from: { ...idle(), queue: WAITING },
+        event: { kind: "queue-edited", id: "m-1", revision: 0, text: "and the tests" },
+        to: { ...idle(), queue: WAITING },
+        effects: [],
+        reply: "stale",
     },
 ];
 

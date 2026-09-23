@@ -28,7 +28,7 @@ same distribution. Tool upgrades take effect when the sandbox image is rebuilt a
   has to answer, and write down what happened.
 - **Own the fleet**: one worktree per conversation, review, land, and the record of where each agent's work went.
 - **Own the box**: the environment overlay, the capabilities the owner connected, the secrets they hold, the
-  terminals, the watchers, the tunnel and the boot.
+  terminals, the watchers, the tunnel, the boot, and what fills its disk, with a clean for what may safely go.
 - **Keep the workspace true**: the tree, the search, the changes, the pushes, and the state files every view
   refreshes from.
 
@@ -81,8 +81,9 @@ What that buys is the second-richest capability row in the catalog. The daemon's
 (`customTools`), so a Cursor turn gets a real question card while Cursor's own `askQuestion` is withheld — in
 headless runs it has been reported to answer itself with a fabricated "Questions skipped by the user", which is
 consent nobody gave. Plan mode is Cursor's own read-only posture rather than this repo's prompt-level
-emulation. A message from `/agent/steer` is injected into the live run (`Run.steer`) rather than forcing an
-abort-and-resend, and only a `complete_delivered` ack counts as delivered. And the owner's command rulebook is
+emulation. A message said into the live run (on `/agent` while the run takes words, or on `/agent/steer`) is
+injected there (`Run.steer`) rather than forcing an abort-and-resend, and only a `complete_delivered` ack
+counts as delivered. And the owner's command rulebook is
 enforced at the full `hooks` tier, the only foreign runtime that reaches it: the daemon writes Cursor's
 machine-wide hooks file and answers it over a Unix socket
 ([src/runtimes/cursor/cursor-hooks.ts](src/runtimes/cursor/cursor-hooks.ts)), so a `hold` genuinely parks on a card while Cursor waits on a
@@ -101,7 +102,8 @@ script wherever it was written, and it seals a result whose script reached the n
 upstream, so the envelope goes on here or nowhere.
 
 That transport is bidirectional, which is what lifts the native Codex runtime off the foreign-loop floor. A
-mid-turn message from `/agent/steer` is delivered as `turn/steer` rather than forcing an abort-and-resend; the
+mid-turn message (on `/agent` or `/agent/steer`) is delivered as `turn/steer` rather than forcing an
+abort-and-resend; the
 thread's skills are published as the composer's `/` commands and a picked one rides back as a structured skill
 input; and the experimental question request (`item/tool/requestUserInput`, which Codex only offers the model
 once the thread config asks for it) raises the same card the Claude Code loop's `ask` tool does. Approvals stay

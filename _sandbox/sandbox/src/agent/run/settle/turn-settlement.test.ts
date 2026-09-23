@@ -225,6 +225,28 @@ describe("a held turn", () => {
         });
     });
 
+    // Held as `stopped`, the ladder would resume the very session that overflowed; `overflow` makes the pass open a fresh
+    // one, carrying what the dead turn's ledgers measured.
+    test("on a session past its window is held for a fresh re-run, never as stopped", () => {
+        const end = ended([
+            { kind: "session", sessionId: "s-1" },
+            { kind: "delta", text: "reading the log" },
+            { kind: "context_usage", tokens: 199_000, contextWindow: 200_000 },
+            { kind: "error", code: "context-overflow", message: "Prompt is too long" },
+        ]);
+        expect(holdOf(end)).toStrictEqual({
+            kind: "held",
+            held: { input, reason: "overflow", sessionId: "s-1", ran: true, standing: noCode, contextTokens: 199_000 },
+        });
+    });
+
+    // The fresh re-run overflowing too has no session left to try: nothing is held, so nothing fires again.
+    test("is not one for a fresh re-run that overflowed as well", () => {
+        const rerun: TurnInput & { conversationId: string } = { prompt: `${RESUME_NOTES.overflow}\n\nship the parser`, conversationId: "c-1" };
+        const end = ended([{ kind: "error", code: "context-overflow", message: "Prompt is too long" }], { input: rerun });
+        expect(holdOf(end)).toStrictEqual({ kind: "got-somewhere", conversationId: "c-1" });
+    });
+
     test("is not one when the turn named its own remedy, which resets the ladder instead", () => {
         expect(holdOf(ended([{ kind: "error", code: "context-window-too-small", message: "too small" }]))).toStrictEqual({ kind: "got-somewhere", conversationId: "c-1" });
         expect(holdOf(ended([{ kind: "delta", text: "done" }]))).toStrictEqual({ kind: "got-somewhere", conversationId: "c-1" });

@@ -151,3 +151,30 @@ const PARAMETER_REFUSAL_SHAPE = /invalid_parameter|invalid_request_error|unsuppo
 
 export const isUnsentParameterRefusalText = (text: string): boolean =>
     UNSENT_PARAMETERS.some((parameter) => text.toLowerCase().includes(parameter)) && PARAMETER_REFUSAL_SHAPE.test(text);
+
+// Each provider's own words for a request larger than the model's window, matched whole: a looser match ("too long")
+// would read an oversized tool argument as a session to abandon.
+const CONTEXT_OVERFLOW_MARKERS = [
+    // Anthropic's 400, and the Claude CLI's own sentence for it.
+    "prompt is too long",
+    // OpenAI's error code, as it rides a routed error body.
+    "context_length_exceeded",
+    // OpenAI chat completions, DeepSeek, vLLM.
+    "maximum context length",
+    // OpenAI Responses.
+    "exceeds the context window",
+    // The Codex CLI's own.
+    "ran out of room in the model's context window",
+    // xAI.
+    "maximum prompt length",
+    // Gemini.
+    "exceeds the maximum number of tokens allowed",
+    // Kimi.
+    "exceeded model token limit",
+    // The Claude CLI's compaction breaker: the window refilled to its limit right after each compaction.
+    "autocompact is thrashing",
+];
+
+// A session that outgrew the model's context window, in whichever provider's words; every runtime's failure rules read
+// this one list, since resuming such a session only overflows again.
+export const isContextOverflowText = (text: string): boolean => CONTEXT_OVERFLOW_MARKERS.some((marker) => text.toLowerCase().includes(marker));

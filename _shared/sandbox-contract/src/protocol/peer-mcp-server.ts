@@ -12,11 +12,22 @@ export const MCP_PROTOCOL_VERSION = "2025-06-18";
 // whole surface. A failed tool returns isError, never a JSON-RPC error. Each tool's zod schema is both what tools/list
 // advertises and what a call is checked against.
 
+// What one call can do to the world: `read` changes nothing, so a runtime may run several at once and allow it where
+// writes are held; `write` changes something recoverable; `destructive` may lose something.
+export type ToolEffect = "read" | "write" | "destructive";
+
+// MCP tool annotations for an effect. Both hints are always spelled out: an absent destructiveHint reads as true.
+export const toolAnnotations = (effect: ToolEffect): { readonly readOnlyHint: boolean; readonly destructiveHint: boolean } => ({
+    readOnlyHint: effect === "read",
+    destructiveHint: effect === "destructive",
+});
+
 export interface McpTool<Ctx> {
     readonly name: string;
     readonly description: string;
     // JSON Schema for `tools/list`, derived from the zod schema once at module load, not per request.
     readonly inputSchema: Record<string, unknown>;
+    readonly annotations: ReturnType<typeof toolAnnotations>;
     readonly call: (args: unknown, ctx: Ctx) => Promise<Record<string, unknown>>;
 }
 
@@ -48,6 +59,7 @@ export const converterReadable = (value: unknown): unknown => {
 export const tool = <Schema extends z.ZodType, Ctx>(spec: {
     readonly name: string;
     readonly description: string;
+    readonly effect: ToolEffect;
     readonly input: Schema;
     readonly run: (args: z.output<Schema>, ctx: Ctx) => Promise<Record<string, unknown>>;
 }): McpTool<Ctx> => {
@@ -56,6 +68,7 @@ export const tool = <Schema extends z.ZodType, Ctx>(spec: {
         name: spec.name,
         description: spec.description,
         inputSchema: converterReadable(inputSchema) as Record<string, unknown>,
+        annotations: toolAnnotations(spec.effect),
         call: async (args, ctx) => {
             const parsed = spec.input.safeParse(args);
             // Readable enough for a model to fix its own call: which field, and what was expected.
@@ -92,7 +105,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 // mid-session takes effect on the next call.
 export const createMcpServer = <Ctx>(spec: McpServerSpec<Ctx>): ((message: unknown, ctx: Ctx) => Promise<Record<string, unknown> | undefined>) => {
     const byName = new Map(spec.tools.map((entry) => [entry.name, entry]));
-    const listing = spec.tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
+    const listing = spec.tools.map(({ name, description, inputSchema, annotations }) => ({ name, description, inputSchema, annotations }));
     const audited = async (entry: McpAuditEntry): Promise<void> => {
         try {
             await spec.audit(entry);

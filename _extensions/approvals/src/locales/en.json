@@ -23,8 +23,11 @@
         "automationsHeld": "Automations held for you",
         "backToReviewNothing": "Back to review: nothing happens",
         "cancel": "Cancel",
+        "couldntApproveHooks": "Could not approve those hooks.",
+        "couldntDismissHooks": "Could not keep those hooks off.",
         "couldntReadApprovals": "Couldn't read your approvals.",
         "couldntReadHeldAutomations": "Couldn't read the held automations.",
+        "couldntReadHooks": "Couldn't read the hooks waiting for approval.",
         "couldntReadWontRun": "couldn't be read and won't run:",
         "done": "Done",
         "doneEditing": "Done editing",
@@ -36,7 +39,15 @@
         "fileDeletedAgentWould": "The file is deleted. Your agent would have to propose it again.",
         "fired": "fired",
         "goingAhead": "Going ahead",
+        "hookLedgerUnreadable": "The record of which hooks you approved could not be read, so no workspace hook runs until you approve one again.",
+        "hookSetTitle": "Claude Code hook | {count} Claude Code hooks",
+        "hooks": "Hooks",
+        "hooksFound": "Found by a turn",
+        "hooksWaiting": "Hooks waiting for your yes",
         "inProgress": "in progress",
+        "keepOff": "Keep off",
+        "keptOff": "kept off",
+        "letThemRun": "Let them run",
         "needsReview": "Needs your review",
         "nothingWaitingPostsAgent": "Nothing waiting. Posts your agent wants to publish, anything else it should not do unasked, and automations set to ask first all land here for you to approve.",
         "open": "Open",
@@ -63,6 +74,11 @@
     "extension": {
         "approvals": "Approvals",
         "waitingOn": "{count} waiting on you"
+    },
+    "hookSetBody": {
+        "filesPinned": "The approval also covers these files, byte for byte:",
+        "fromProjectSettings": "workspace .claude/settings.json",
+        "fromUserSettings": "~/.claude/settings.json"
     },
     "postBody": {
         "showLess": "Show less",

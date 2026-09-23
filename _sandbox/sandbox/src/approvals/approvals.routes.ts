@@ -1,8 +1,10 @@
 import type { ApprovalSummary } from "@intentic/sandbox-contract";
 import { APPROVAL_HOLD_MS, approvalsContract } from "@intentic/sandbox-contract";
 import { implement, ORPCError } from "@orpc/server";
+import { requireMaintainer } from "../auth/owner-gates.js";
 import type { Services } from "../composition.js";
 import type { OrpcContext } from "../app-env.js";
+import { approveHookSet, dismissHookSet, hookRequests } from "../guard/hook-approvals.js";
 import { approvalsExecutorFor } from "./approvals-executor.js";
 
 // An approved item with no date gets one hold into the future as a plain scheduledAt; that date is the whole countdown
@@ -35,6 +37,23 @@ export const createApprovalsRoutes = (services: Services) => {
                 throw new ORPCError("NOT_FOUND", { message: "no approval with that id" });
             }
             rearm();
+            return { ok: true } as const;
+        }),
+        hookRequests: i.hookRequests.handler(() => hookRequests(services.config.historyRoot)),
+        // The contract already withholds these from the panel and control tokens; the bearer check refuses every other
+        // machine credential, so only a person's session gives this yes.
+        approveHooks: i.approveHooks.handler(async ({ input, context }) => {
+            await requireMaintainer(services, context.headers, "only the owner or a maintainer can let hooks run");
+            if (!(await approveHookSet(services.config.historyRoot, input.digest))) {
+                throw new ORPCError("NOT_FOUND", { message: "no turn has found a hook set with that fingerprint" });
+            }
+            return { ok: true } as const;
+        }),
+        dismissHooks: i.dismissHooks.handler(async ({ input, context }) => {
+            await requireMaintainer(services, context.headers, "only the owner or a maintainer can dismiss hooks");
+            if (!(await dismissHookSet(services.config.historyRoot, input.digest))) {
+                throw new ORPCError("NOT_FOUND", { message: "no turn has found a hook set with that fingerprint" });
+            }
             return { ok: true } as const;
         }),
     };

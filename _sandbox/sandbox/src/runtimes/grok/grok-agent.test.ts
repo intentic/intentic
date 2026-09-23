@@ -373,6 +373,26 @@ test("a spent allowance is coded rate_limit, whatever wording the provider refus
     expect(failure?.message).toContain(unsent);
 });
 
+// OpenCode compacts an overflowing session itself; what reaches the turn is an overflow it could not clear, which the
+// daemon re-runs in a fresh session instead of resuming this one into the same wall.
+test("a session past the model's window is coded context-overflow, by OpenCode's own name or the provider's words", async () => {
+    const failed = (error: unknown): unknown[] => [
+        { type: "session.error", properties: { sessionID: "s1", error } },
+        { type: "session.idle", properties: { sessionID: "s1" } },
+    ];
+    const named = { name: "ContextOverflowError", data: { message: "Input exceeds the model's limit" } };
+    expect(await collect(createGrokAgent(fakeRunner(failed(named)).runner), request)).toEqual([
+        { kind: "error", code: "context-overflow", message: "Input exceeds the model's limit" },
+        { kind: "done" },
+    ]);
+    // xAI's own sentence, reaching OpenCode as a plain API error when its compaction is switched off.
+    const xai = "This model's maximum prompt length is 131072 but the request contains 145312 tokens.";
+    expect(await collect(createGrokAgent(fakeRunner(failed({ name: "APIError", data: { message: xai } })).runner), request)).toEqual([
+        { kind: "error", code: "context-overflow", message: xai },
+        { kind: "done" },
+    ]);
+});
+
 test("an in-turn retry surfaces as provider_retry, naming a rate limit when that is what it is", async () => {
     const next = Date.now() + 42_000;
     const { runner } = fakeRunner([

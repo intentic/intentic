@@ -20,7 +20,8 @@ import { sessionsDir } from "./sessions/session-store.js";
 import type { CodexEvent, CodexRunner, CodexTurn } from "./runtimes/codex/codex-app-server.js";
 import type { Config } from "./env.config.js";
 import type { Services } from "./composition.js";
-import type { Steer, TurnInput, TurnStarter } from "./seams/turn-starter.js";
+import type { Said, Steer, TurnInput, TurnStarter } from "./seams/turn-starter.js";
+import { opt } from "./opt.js";
 
 // Test-support seams specific to this daemon; the generic stand-in for a wide interface is `unstubbed` in
 // @intentic/testing. Excluded from the build but type-checked via tsconfig.test.json, alongside every *.test.ts.
@@ -217,41 +218,43 @@ export const drivenBy = (services: Services, body: TurnStarter["stream"]): Servi
     return driven;
 };
 
-// The TurnStarter port's two wake doors, recording what they were handed: a steer lands while `live`, and a start finds a
-// turn already running while `busy` counts down (Infinity: every start until reset). `throwsFirst` fails the first start.
+// The TurnStarter port's wake door, recording what it was handed the way admission would take it: said into the live turn
+// while `live`, queued while `busy` counts down (Infinity: every one until reset), a turn of its own otherwise; never
+// answered while `stuck`, as a daemon dying mid-delivery.
 export interface FakeTurns {
-    readonly turns: Pick<TurnStarter, "steer" | "start">;
+    readonly turns: Pick<TurnStarter, "say">;
     readonly steers: Steer[];
     readonly started: (TurnInput & { readonly conversationId: string })[];
+    readonly queued: Said[];
     live: boolean;
     busy: number;
+    stuck: boolean;
 }
 
-export const fakeTurns = (over: { readonly live?: boolean; readonly busy?: number; readonly throwsFirst?: boolean } = {}): FakeTurns => {
-    let throws = over.throwsFirst === true;
+export const fakeTurns = (over: { readonly live?: boolean; readonly busy?: number } = {}): FakeTurns => {
     const fake: FakeTurns = {
         steers: [],
         started: [],
+        queued: [],
         live: over.live === true,
         busy: over.busy ?? 0,
+        stuck: false,
         turns: {
-            steer: async (_conversationId, steer) => {
-                if (fake.live) {
-                    fake.steers.push(steer);
+            say: async (said) => {
+                if (fake.stuck) {
+                    return new Promise<never>(() => undefined);
                 }
-                return fake.live;
-            },
-            start: async (turn) => {
-                if (throws) {
-                    throws = false;
-                    throw new Error("the provider is down");
+                if (fake.live) {
+                    fake.steers.push({ text: said.turn.prompt, voice: said.voice, ...opt("outside", said.outside) });
+                    return { delivered: "steered", run: "run-live" };
                 }
                 if (fake.busy > 0) {
                     fake.busy -= 1;
-                    return undefined;
+                    fake.queued.push(said);
+                    return { delivered: "queued" };
                 }
-                fake.started.push(turn);
-                return { id: `run-${fake.started.length}`, async *frames() {} };
+                fake.started.push({ ...said.turn, ...opt("outsideWake", said.outside) });
+                return { delivered: "started", run: `run-${fake.started.length}` };
             },
         },
     };

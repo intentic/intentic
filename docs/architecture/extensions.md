@@ -81,7 +81,7 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   sandbox is itself without them (`_extensions/README.md` has the rule and the table); `rtk` too, since its
   environment fragment composes per capability entry.
 - **Workspace**, a directory per extension under `.intentic/config/workspace-extensions/`, consumed in place: no
-  clone, no capability entry, no install moment. The path for extensions authored *inside* the sandbox,
+  clone, no capability entry. The path for extensions authored *inside* the sandbox,
   typically by an agent with its own file tools: `.intentic/config` is tracked, so one written from an
   isolated worktree rides the agent's branch and reaches the daemon when the turn lands, reviewable in the
   agent's diff like any code, and an edit to its UI entry is simply a new bundle identity (the bundle route
@@ -89,6 +89,23 @@ First-party extensions live in `_extensions/` and reach the product by one of **
   or installed one, and a directory that fails to enumerate: no manifest, a manifest that doesn't parse, a
   taken id, is *reported* on `GET /extensions` (`invalid`) and rendered by the tab: with no install step to
   reject it, the list is the author's feedback channel.
+
+  **The owner's approval is its install moment.** Whoever can write that folder, an agent included, could
+  otherwise have code running in the daemon's backend host, in autoStart processes holding the panel token, and in
+  every turn's plugins and PATH. So a workspace extension nobody approved enumerates as `pending` on
+  `GET /extensions`, apart from the list everything else iterates: no backend, no process, no bundle, no
+  contribution. The tab shows it with the powers it declares and an Approve action
+  (`POST /extensions/{id}/approve`), which pins the id and a digest of those powers' stable keys (the same fold
+  the update dialog diffs, `powersOf` in `@intentic/extension-manifest`) in `extension-approvals.json` under the
+  history root, off `/work`, where no workspace write reaches it
+  ([extension-approvals.ts](../../_sandbox/sandbox/src/extensions/extension-approvals.ts)). Editing its code under
+  the same powers keeps the approval, so the owner's own edit loop never re-asks; declaring a new power puts it
+  back in `pending` with the difference shown, its processes stopped by the workspace watcher, and the host
+  restarted without it. The approve route is withheld from the panel and control tokens, and refuses any caller
+  without a maintainer's session, so no program's token gives this yes; the owner's own `extensions.create`
+  approves the scaffold it writes, the same call from a machine credential does not. A ledger this build cannot
+  read approves nothing. Removal forgets the approval with the rest of the identity's ledgers, so the same folder
+  written again later asks again. Git-installed and baked extensions keep the install moment they already have.
 
 Any of them can be **switched off**: `POST /extensions/{id}/enabled`, recorded in
 `.intentic/config/extension-enablement.json` by `publisher.name`. A disabled extension stays listed (that is what

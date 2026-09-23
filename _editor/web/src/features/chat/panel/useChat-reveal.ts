@@ -78,7 +78,7 @@ const withClosedDraft = (entry: StoredTab, kept: StoredTab | undefined): StoredT
     const stated = Object.fromEntries(Object.entries(entry).filter(([, value]) => value !== undefined)) as Partial<StoredTab>;
     const merged = entry.registered ? { ...kept, ...stated } : { ...stated, ...kept };
     // The kept tab's composer always wins; that's the reason this entry exists.
-    return { ...merged, draft: kept.draft, draftAt: kept.draftAt, attachments: kept.attachments, queued: kept.queued };
+    return { ...merged, draft: kept.draft, draftAt: kept.draftAt, attachments: kept.attachments };
 };
 
 // Puts closed-out words back into a tab this window already has open. Only into an empty composer, never over words
@@ -261,7 +261,6 @@ export const agentTabOf = (agent: AgentTabSeed): StoredTab => {
                 : { id: agent.sessionId, provider: agent.provider, harness: agent.harness, account: agent.account },
         draft: ``,
         attachments: [],
-        queued: [],
     };
 };
 

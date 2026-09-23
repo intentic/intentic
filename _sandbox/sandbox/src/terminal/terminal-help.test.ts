@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
-import { INTERNAL_SERVERS, outsideSourceOf } from "../guard/outside-results.js";
+import { CONTROL_MCP_SERVERS } from "@intentic/sandbox-contract";
+import { outsideSourceOf } from "../guard/outside-results.js";
 import { clearTerminalHelp, raiseTerminalHelp, settleTerminalHelpFor, terminalHelpFor } from "./terminal-help.js";
 import { parkedCards } from "../agents/actor/parked-cards.js";
 import { memoryFleet } from "../testing.js";
@@ -45,7 +46,7 @@ test("killing the session settles its open ask as not-helped", async () => {
 // The server is internal (unwrapped), but the pane text it returns is a command's output, so the tool wraps that field
 // itself; dropping either half is a silent way to launder untrusted output.
 test("the terminal server is internal: its own results are not wrapped as a stranger's", () => {
-    expect(INTERNAL_SERVERS.has("terminal")).toBe(true);
+    expect(CONTROL_MCP_SERVERS.has("terminal")).toBe(true);
     expect(outsideSourceOf("mcp__terminal__request_help", {})).toBeUndefined();
 });
 

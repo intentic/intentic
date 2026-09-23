@@ -73,6 +73,24 @@ export interface Desktop {
     readonly writeClipboard: (text: string) => Promise<void>;
 }
 
+// A line of text pinned to the top of the screen for the person sitting at it, which nothing driving the machine can
+// touch: it never takes focus, lets every click through, and is left out of screen captures.
+export interface Notice {
+    // Shows the text, or re-words it where it stands. It opens on the display the pointer is on.
+    readonly show: (text: string) => void;
+    // Takes it down for good; no event fires after this.
+    readonly close: () => void;
+}
+
+export interface NoticeEvents {
+    // The person pressed the notice's hotkey, which it holds only while it is open.
+    readonly hotkey: () => void;
+    // Another program already holds that hotkey, so pressing it will not reach `hotkey`.
+    readonly hotkeyTaken: () => void;
+    // It went away without being closed; `said` is why, as far as it said.
+    readonly exited: (said: string) => void;
+}
+
 // Thrown rather than returned, so every call site handles it the same way. `install` carries a one-line remedy
 // when the cause is a missing program, kept separate from the message.
 export class DesktopError extends Error {

@@ -513,8 +513,8 @@ describe("patches", () => {
     });
 });
 
-// A refusal that ran nothing offers the message back to the composer — true where somebody typed one, false for a run
-// that started itself, where there is no composer and no typed message.
+// A refusal that ran nothing offers the message back for another press — true where somebody typed one, false for a
+// run that started itself, where there is no composer and no typed message.
 describe(`a refusal that ran nothing`, () => {
     const REFUSED = { kind: `error`, code: `context-window-too-small`, message: `This model accepts 16,384 tokens.` } as const satisfies AgentEvent;
 
@@ -569,9 +569,9 @@ describe(`a refusal that ran nothing`, () => {
         expect(foldOf(`land it`, [REFUSED]).at(-1)?.noticeAction).toBeUndefined();
     });
 
-    // The bug this retraction exists for: the composer keeps the words for another press, so a bubble left standing
-    // here is the SAME message a second time, and a third, once per press against a gate that keeps refusing.
-    it(`takes the message back out, leaving the composer's copy as the only one`, () => {
+    // The bug this retraction exists for: the conversation's queue keeps the words for another press, so a bubble left
+    // standing here is the SAME message a second time, and a third, once per press against a gate that keeps refusing.
+    it(`takes the message back out, leaving the queue's copy as the only one`, () => {
         const fold = new TranscriptFold(openingOf(`land it`));
         const patches = fold.apply(REFUSED);
 

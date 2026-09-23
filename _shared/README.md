@@ -19,9 +19,15 @@ A package belongs in `_shared/` when one of these is true:
 - it is **house material** — a stylesheet or asset that two parts both paint, where keeping it in either one
   would make the other's own look a dependency on it.
 
-And one rule holds without exception: **nothing in `_shared/` may import from any other part.** A shared
-package that reached back into the daemon or the web app would make the middle a cycle, and every consumer
-would inherit the part it was supposed to be free of.
+And one rule holds: **nothing in `_shared/` may depend on any other part**, through its manifest or through an
+import, a type-only one included. The ground under it is `_tools/`, where a package lives because every part
+needs it ([`_tools/README.md`](../_tools/README.md)), and only a `_tools/` package that itself stays inside the
+two. A shared package that reached back into the daemon or the web app would make the middle a cycle, and every
+consumer would inherit the part it was supposed to be free of.
+
+[`_tools/checks/shared-boundary.mjs`](../_tools/checks/shared-boundary.mjs) holds the rule at every edit, turn
+and push. Its `EXCEPTIONS` names each break that stands, with the reason it stands: a decision for the owner to
+keep or cut, not a precedent for the next one.
 
 `_deploy/graph` and `_deploy/resources` are the near misses, and they stay where they are: seven of ten and
 three of four of their dependents are deploy-internal, so moving them would only widen the middle.

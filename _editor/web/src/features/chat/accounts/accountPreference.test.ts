@@ -79,7 +79,6 @@ session.set(
                 // A session missing its runtime is dropped, not completed from the tab's own picks.
                 session: { id: `sess-a`, provider: `claude`, harness: `native`, account: `first` },
                 attachments: [],
-                queued: [],
             },
             {
                 conversationId: `tab-b`,
@@ -90,7 +89,6 @@ session.set(
                 account: `second`,
                 harness: `native`,
                 attachments: [],
-                queued: [],
             },
         ],
     }),

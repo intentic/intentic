@@ -23,8 +23,11 @@
         "automationsHeld": "Automatizaciones retenidas para ti",
         "backToReviewNothing": "Volver a la revisión: no pasa nada",
         "cancel": "Cancelar",
+        "couldntApproveHooks": "No se pudieron aprobar esos hooks.",
+        "couldntDismissHooks": "No se pudieron dejar apagados esos hooks.",
         "couldntReadApprovals": "No se pudieron leer tus aprobaciones.",
         "couldntReadHeldAutomations": "No se pudieron leer las automatizaciones retenidas.",
+        "couldntReadHooks": "No se pudieron leer los hooks que esperan aprobación.",
         "couldntReadWontRun": "no se pudo leer y no se ejecutará:",
         "done": "Hecho",
         "doneEditing": "Terminar de editar",
@@ -36,7 +39,15 @@
         "fileDeletedAgentWould": "El archivo está eliminado. Tu agente tendría que proponerlo otra vez.",
         "fired": "disparada",
         "goingAhead": "Sigue adelante",
+        "hookLedgerUnreadable": "No se pudo leer el registro de los hooks que aprobaste, así que ningún hook del espacio de trabajo se ejecuta hasta que vuelvas a aprobar uno.",
+        "hookSetTitle": "Hook de Claude Code | {count} hooks de Claude Code",
+        "hooks": "Hooks",
+        "hooksFound": "Encontrado por un turno",
+        "hooksWaiting": "Hooks que esperan tu sí",
         "inProgress": "en curso",
+        "keepOff": "Dejar apagados",
+        "keptOff": "apagados a propósito",
+        "letThemRun": "Dejar que se ejecuten",
         "needsReview": "Necesita tu revisión",
         "nothingWaitingPostsAgent": "Nada esperando. Las publicaciones que tu agente quiere publicar, cualquier otra cosa que no deba hacer sin pedirlo, y las automatizaciones puestas a preguntar primero, todas aterrizan aquí para que las apruebes.",
         "open": "Abrir",
@@ -63,6 +74,11 @@
     "extension": {
         "approvals": "Aprobaciones",
         "waitingOn": "{count} esperándote"
+    },
+    "hookSetBody": {
+        "filesPinned": "La aprobación también cubre estos archivos, byte a byte:",
+        "fromProjectSettings": ".claude/settings.json del espacio de trabajo",
+        "fromUserSettings": "~/.claude/settings.json"
     },
     "postBody": {
         "showLess": "Mostrar menos",

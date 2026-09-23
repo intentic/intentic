@@ -55,3 +55,11 @@ test("a prompt that is not a resume discloses nothing", () => {
     expect(resumeDisclosure("just a question")).toBeUndefined();
     expect(resumeDisclosure("")).toBeUndefined();
 });
+
+// A fresh session after an overflow is neither a carried session nor a switched account; it says which wall it was.
+test("a re-run after the window overflowed discloses as its own notice", () => {
+    expect(resumeDisclosure(withResumeNote("ship the parser", RESUME_NOTES.overflow))).toEqual({
+        kind: "notice",
+        text: "Sent again in a fresh session after the last one outgrew the model's context window.",
+    });
+});

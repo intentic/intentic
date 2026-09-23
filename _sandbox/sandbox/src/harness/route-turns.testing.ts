@@ -1,4 +1,4 @@
-import type { AttachFrame, sandboxContract, TranscriptRow, TurnFact } from "@intentic/sandbox-contract";
+import type { AgentTurn, AttachFrame, sandboxContract, TranscriptRow, TurnFact } from "@intentic/sandbox-contract";
 import { applyTranscriptPatch } from "@intentic/sandbox-contract/transcript-fold";
 import type { ContractRouterClient } from "@orpc/contract";
 import { expect } from "bun:test";
@@ -17,6 +17,15 @@ export interface TurnOutcome {
     readonly rows: TranscriptRow[];
 }
 
+// Sends a message as the browser does and answers the run it started, throwing when the sandbox did anything else with it.
+export const startedRun = async (client: ContractRouterClient<typeof sandboxContract>, input: AgentTurn): Promise<string> => {
+    const receipt = await client.agent.run(input);
+    if (receipt.delivered !== "started" || receipt.run === undefined) {
+        throw new Error(`the message was ${receipt.delivered}, not started: ${JSON.stringify(receipt)}`);
+    }
+    return receipt.run;
+};
+
 // Drives a chat turn like the browser: start, attach, and keep what the stream said; awaiting the attach's `end` is the
 // settle barrier. Ids are minted per turn unless pinned; the run registry is keyed by conversationId process-wide.
 let turnCounter = 0;
@@ -25,7 +34,7 @@ export const runAgentTurn = async (
     input: Record<string, unknown> & { prompt: string; conversationId?: string },
 ): Promise<TurnOutcome> => {
     const conversationId = input.conversationId ?? `turn-${(turnCounter += 1)}`;
-    const { run } = await client.agent.run({ ...input, conversationId });
+    const run = await startedRun(client, { ...input, conversationId });
     const frames = await collect(await client.agent.attach({ conversationId }));
     const head = frames[0];
     if (head?.kind !== "attached" || head.run !== run) {

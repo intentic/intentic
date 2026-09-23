@@ -17,9 +17,29 @@ The **device half** (`src/device/`, the machine side of the `host` capability):
   machine *serves* `deviceContract`, so no port ever opens here. Where it dials is the shared resolver's answer
   (below), re-asked on every reconnect, so a sandbox on this very machine stays connected with its tunnel down.
 - Expose the tool surface (`run_command`, files, screenshot, `describe`; deliberately no delete — trash is
-  recoverable) as MCP carried verbatim, so a machine can learn a tool without a daemon release.
+  recoverable) as MCP carried verbatim, so a machine can learn a tool without a daemon release. Each tool says what
+  a call can do — only read, change something that can be put back, or lose something — as MCP annotations, so a
+  runtime may run the reads side by side.
 - Enforce the owner's scopes **here**, never in the sandbox, and append every call to an audit log that
   survives uninstall.
+- **Show the person at the machine when an agent is driving it, and let them pause it** (see **What the person at
+  the machine sees**).
+- Judge every path **where it really leads** ([src/device/policy.ts](src/device/policy.ts)): links and junctions
+  are resolved, on the path and on the roots, before the check, and the tool then acts on the resolved path, so a
+  link inside an allowed folder cannot carry a read or a write out of it. A new file is judged by the folder it would
+  land in. `trash_file` alone judges a link where it sits, because it moves the link and not what it points at.
+- **Change a file only as it was read** ([src/device/tools/files.ts](src/device/tools/files.ts)). `read_file`
+  answers with the file's revision (a hash of its bytes) and takes a line range, saying where to continue;
+  replacing a file with `write_file`, or one exact piece of it with `edit_file`, needs that revision and is refused
+  when the file has changed since. A file keeps its encoding (UTF-8, UTF-8 with a BOM, and UTF-16LE with a BOM,
+  which is what Windows PowerShell 5.1 writes) and its line endings, and is replaced by a rename, never rewritten
+  in place. Binary files are refused; text in a legacy code page is shown but never written back.
+- **A command ends whole** ([src/device/tools/shell.ts](src/device/tools/shell.ts)). `run_command` starts its
+  shell in a process group of its own: at the deadline the group gets SIGTERM and, two seconds later, SIGKILL
+  (Windows has no groups, so `taskkill /T /F` ends the process tree), so nothing it started outlives it. The call
+  returns when the command exits, not when the last process it left in the background lets go of its output: one
+  second's grace, then the pipes are closed and the answer says something is still running. Each stream keeps its
+  first and last 50,000 characters and counts what fell between.
 - Manage this machine's sandboxes for a browser button or a model, under the `sandboxes` switch: list them
   with their **share of the machine** (one `docker inspect` per listing: memory and CPU caps, privileged, GPU,
   and who asked for each directive, the approved environment or the owner), start/stop/restart, run the `ic`
@@ -100,6 +120,36 @@ to dial the public URL and nothing else, so a sandbox whose tunnel was down read
 tab, with every button there gone, while this same process was polling it over loopback. The watcher re-probes
 a pairing sitting on the public URL each minute, so a container started later is promoted with no restart; the
 socket re-resolves on every reconnect.
+
+## What the person at the machine sees
+
+While an agent is driving this computer's mouse and keyboard, a small notice sits at the top of the display the
+pointer was on ([src/device/indicator.ts](src/device/indicator.ts); the window is `@intentic/desktop-automation`'s
+`notice`):
+
+> Intentic agent is controlling this computer · sandbox-host.example.dev · Ctrl+Alt+Shift+P pauses
+
+- **What counts as driving** is the `device` tool's pointer and keyboard actions. A screenshot or a `wait` moves
+  nothing and shows nothing.
+- **It never gets in the agent's way.** It never takes focus, so typing still lands in the focused window; every
+  click goes through it to what is underneath; and it is left out of screen captures, so no screenshot the model
+  reads has it in it.
+- **It goes** 30 seconds after the last action, at once when the link that drove it disconnects, and with the agent
+  when it exits. The hidden `powershell.exe` behind it is started by the first action and ended with the notice. It
+  fails toward hidden: a helper that dies is not restarted until the links go quiet, one that will not quit is
+  killed, and a notice that cannot be shown costs the notice, never the action.
+- **Ctrl+Alt+Shift+P pauses**, pressed while the notice is on screen. From then on every sandbox's mouse and keyboard
+  actions here are refused with `Refused: paused by the person at this computer: …`, and the notice reads
+  `Intentic agent paused · … · Ctrl+Alt+Shift+P resumes`. The same keys lift it, again while a notice is up: an agent
+  that tries while paused puts one up, which is also how the person learns an agent is waiting on them. Every press
+  and every refusal is in the audit log.
+- **A pause survives a restart.** It is a file (`~/.intentic/machine/paused`), because a sandbox can ask for this
+  agent to restart. `status` prints it, `status --json` carries it as `device.pausedAt`, and the summary the tray
+  shows ends in `mouse and keyboard paused`.
+- **It is not a lock** against an agent that may also run commands here: the capability card's switches are the
+  owner's lever for that. When another program already holds Ctrl+Alt+Shift+P, the notice leaves the keys off and
+  the agent's log says so.
+- **Windows only.** Elsewhere nothing is shown and nothing can be paused.
 
 ## The resident agent
 
@@ -213,7 +263,7 @@ said so in a log nobody had been pointed at.
 - [src/status.ts](src/status.ts) — both halves as one answer; `--json` is what the desktop app and tray read.
 - [src/device/router.ts](src/device/router.ts) — the `deviceContract` this machine serves, including `report`, the reading the sandbox's Devices tab is built from.
 - [src/wsl.ts](src/wsl.ts) — whether this is a WSL distro, and which one. WSL hands a distro the Windows machine's own hostname, so without this the sandbox cannot tell a distro from the Windows install hosting it, or one distro from its neighbour; reported at connect (`describe`) as well as in the status report, so it is known even with "Run commands" off.
-- [src/device/tools/shell.ts](src/device/tools/shell.ts) — `run_command`, and its `in:` crossing: `wsl:<distro>` from Windows runs `wsl.exe --exec sh -lc` with the script as one argument, `windows` from a distro runs PowerShell through interop; no quoting through the first shell either way.
+- [src/device/tools/shell.ts](src/device/tools/shell.ts) — `run_command`, its process group and bounded output, and its `in:` crossing: `wsl:<distro>` from Windows runs `wsl.exe --exec sh -lc` with the script as one argument, `windows` from a distro runs PowerShell through interop; no quoting through the first shell either way.
 - [src/device/policy.ts](src/device/policy.ts) — what the sandbox is permitted to do here; the security surface.
 - [src/device/tools/sandboxes.ts](src/device/tools/sandboxes.ts) — the fleet: the `docker ps`/`inspect` readers, the docker verbs, and the `ic` flows (swap, reshape, remove, runners) with the pure argv builders beside them.
 - [src/sync/mirror.ts](src/sync/mirror.ts) — the sync tick: ports reconcile, git bridge, revocation handling.

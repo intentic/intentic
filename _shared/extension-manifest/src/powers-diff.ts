@@ -15,7 +15,8 @@ export interface PowersDiff {
 const viewerPower = (viewer: { edit?: boolean | undefined; compare?: boolean | undefined; extensions: readonly string[]; fetch: string }): string =>
     `${viewer.edit === true ? "opens and edits" : "opens"}${viewer.compare === true ? " and compares" : ""} .${viewer.extensions.join(", .")} files (${viewer.fetch})`;
 
-const powersOf = (manifest: ExtensionManifest): Map<string, string> => {
+// The fold itself: every power a manifest declares, its stable key to the sentence shown for it.
+export const powersOf = (manifest: ExtensionManifest): Map<string, string> => {
     const powers = new Map<string, string>();
     if (manifest.entry !== undefined) {
         powers.set("entry", "runs a UI bundle in your browser");
@@ -76,11 +77,8 @@ const powersOf = (manifest: ExtensionManifest): Map<string, string> => {
     return powers;
 };
 
-// `before` absent covers a first install: everything the manifest declares is `added`, the same vocabulary the install
-// dialog already renders.
-export const diffPowers = (before: ExtensionManifest | undefined, after: ExtensionManifest): PowersDiff => {
-    const from = before === undefined ? new Map<string, string>() : powersOf(before);
-    const to = powersOf(after);
+// The arithmetic over two folds, for a caller that kept a fold (key to sentence) rather than the manifest it came from.
+export const diffPowerMaps = (from: ReadonlyMap<string, string>, to: ReadonlyMap<string, string>): PowersDiff => {
     const added: string[] = [];
     const removed: string[] = [];
     const unchanged: string[] = [];
@@ -94,3 +92,8 @@ export const diffPowers = (before: ExtensionManifest | undefined, after: Extensi
     }
     return { added, removed, unchanged };
 };
+
+// `before` absent covers a first install: everything the manifest declares is `added`, the same vocabulary the install
+// dialog already renders.
+export const diffPowers = (before: ExtensionManifest | undefined, after: ExtensionManifest): PowersDiff =>
+    diffPowerMaps(before === undefined ? new Map<string, string>() : powersOf(before), powersOf(after));

@@ -11,7 +11,7 @@ import { queryClient } from "../../../lib/queryPersistence";
 import { projectScope } from "../../../app/projectScope";
 import { ensureProjectPersona, projectPersonaId } from "../../sandbox/personas/projectPersona";
 import { router } from "../../../router";
-import { refreshAcross } from "../../sandbox/live/fleetAcross";
+import { otherBoxes, refreshAcross } from "../../sandbox/live/fleetAcross";
 import { refreshChangesAcross } from "../../workspace/changes/changesAcross";
 import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { agentBlockers, blockersOf, resolvePrompt, userBlockers } from "../review/conflictResolution";
@@ -273,17 +273,25 @@ export const deleteAgentScratch = async (id: string, repo: string, paths: readon
     await sandboxRpc.agents.deleteScratch({ id, repo, paths: [...paths] }, { context: { at } });
 };
 
+// The run a card shows under way, from whichever roster it came from; undefined for a turn with none to name.
+const shownRun = (id: string, at: AgentReach): string | undefined =>
+    (at === undefined ? useAgents().agentById(id) : otherBoxes.value.find((box) => box.sandbox.id === at)?.agents.find((agent) => agent.id === id))
+        ?.run;
+
 // True cancel for an in-flight turn, the card reading `stopping` from the press: an open streaming tab runs its own
-// stop(), else the daemon is told; another box's card never takes the tab branch, since an id repeats across boxes.
-export const stopAgent = (id: string, at: AgentReach = undefined): Promise<void> =>
+// stop(), else the daemon is told; another box's card never takes the tab branch, since an id repeats across boxes. The
+// press names the run its card shows, so it cannot cancel a turn that started after it; `live` is for a caller setting
+// the conversation aside whichever turn it is on.
+export const stopAgent = (id: string, at: AgentReach = undefined, options: { readonly live?: true } = {}): Promise<void> =>
     underClaim(id, at, `stop`, async () => {
         const { conversations } = useChat();
         const conversation = at === undefined ? conversations.value.find((candidate) => candidate.conversationId === id) : undefined;
-        if (conversation !== undefined && conversation.turn.streaming.value) {
+        if (conversation !== undefined && conversation.turn.streaming.value && options.live === undefined) {
             conversation.turn.stop();
             return;
         }
-        await sandboxRpc.agent.stop({ conversationId: id }, { context: { at } });
+        const run = options.live === undefined ? shownRun(id, at) : undefined;
+        await sandboxRpc.agent.stop(run === undefined ? { conversationId: id, live: true } : { conversationId: id, run }, { context: { at } });
     });
 
 // After a land or discard, invalidate the agent's review plus the workspace-wide changes and snapshot history so every
