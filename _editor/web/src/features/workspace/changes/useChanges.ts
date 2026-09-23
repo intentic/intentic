@@ -298,7 +298,7 @@ const afterPull = async (): Promise<void> => {
 };
 
 // Fetches every repo with a remote in one busy span, each failing on its own GitActionResult rather than a
-// generic error. Pull and push route through the panel's sync door instead, so nothing bypasses the pre-push check.
+// generic error. Pull and push route through the panel's sync door instead, where a refusal becomes a question.
 const fetchRepos = (repos: readonly string[]): Promise<void> =>
     runBatch(
         repos.map((repo) => ({

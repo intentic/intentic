@@ -3,8 +3,7 @@ import { errorMessage } from "@intentic/ui/async";
 import { computed, type ComputedRef, ref } from "vue";
 import { importOrReload } from "../../../router/staleChunk";
 
-// Watches a command the daemon runs on click: start it, follow it to a verdict, stop it. One watcher over two
-// sources (the check in usePrepush.ts, the push in usePushRun.ts), since both need the same rules:
+// Watches a command the daemon runs on click (a push, usePushRun.ts): start it, follow it to a verdict, stop it.
 //
 // - the output isn't here: the daemon runs it in a tmux window, so this opens the terminal panel on it instead
 //   of re-printing a captured tail.
@@ -21,22 +20,19 @@ const POLL_MS = 700;
 
 // What a source says about its run: where it starts, is read, stops, and its words for the terminal panel and
 // error line. Everything else (cadence, reveal, settle) is the watcher's, shared by every source.
-// `A` is what a start needs to know, for a source whose run isn't the same every time: the pre-push check is about the
-// repositories going out, while a push run is already bound to its own. Defaults to nothing, so a source that takes no
-// argument declares none and its callers keep writing `start()`.
-export interface RunSource<R extends CommandRun, A = void> {
+export interface RunSource<R extends CommandRun> {
     // The shape at rest: what the watcher shows before the first poll and after `forget`.
     readonly idle: R;
-    readonly start: (args: A) => Promise<unknown>;
+    readonly start: () => Promise<unknown>;
     readonly state: () => Promise<R>;
     readonly cancel: () => Promise<unknown>;
     // What the terminal panel is told it's opening on, since the panel can't know; undefined means no panel to open.
     readonly reveal: (run: R) => { readonly title: string; readonly detail: string } | undefined;
-    // The noun in error lines: "Could not start the checks.", "Lost contact with the push."
+    // The noun in error lines: "Could not start the push.", "Lost contact with the push."
     readonly subject: string;
 }
 
-export interface RunWatcher<R extends CommandRun, A = void> {
+export interface RunWatcher<R extends CommandRun> {
     readonly run: ComputedRef<R>;
     readonly error: ComputedRef<string | undefined>;
     readonly running: ComputedRef<boolean>;
@@ -44,7 +40,7 @@ export interface RunWatcher<R extends CommandRun, A = void> {
     readonly terminal: ComputedRef<string | undefined>;
     // Starts a run and follows it to a terminal state, resolving with the settled run so a call site reads as one
     // sentence. The daemon arbitrates "one at a time", so calling it again just joins a run already going.
-    readonly start: (args: A) => Promise<R>;
+    readonly start: () => Promise<R>;
     // Stops the run; the daemon settles it as `cancelled`, so the wording matches any other outcome's.
     readonly cancel: () => Promise<void>;
     // Drops the run from view without touching the daemon (what closing the surface does); a run still going
@@ -54,7 +50,7 @@ export interface RunWatcher<R extends CommandRun, A = void> {
     readonly showTerminal: () => void;
 }
 
-export const createRunWatcher = <R extends CommandRun, A = void>(source: RunSource<R, A>): RunWatcher<R, A> => {
+export const createRunWatcher = <R extends CommandRun>(source: RunSource<R>): RunWatcher<R> => {
     const run = ref(source.idle) as { value: R };
     const error = ref<string | undefined>(undefined);
     // The follow in progress, aborted by `forget` and the next `start`; one at a time per watcher.
@@ -79,13 +75,13 @@ export const createRunWatcher = <R extends CommandRun, A = void>(source: RunSour
         }
     };
 
-    const start = async (args: A): Promise<R> => {
+    const start = async (): Promise<R> => {
         stopFollowing();
         error.value = undefined;
         shown = false;
         run.value = { ...source.idle, status: `running` };
         try {
-            await source.start(args);
+            await source.start();
         } catch (cause) {
             error.value = errorMessage(cause, `Could not start the ${source.subject}.`);
             run.value = source.idle;

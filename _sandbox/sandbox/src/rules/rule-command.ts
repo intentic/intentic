@@ -4,9 +4,9 @@ import type { Services } from "../composition.js";
 import { plainText } from "@intentic/base/plain-text";
 import { markCheckRunning } from "../workspace/deps/checks-in-flight.js";
 
-// Engine under every `command` action, lifted out of the pre-push check so turn.ending gets the same guarantees: a real
-// tmux terminal, a ceiling that times out to `failed` rather than silence, a kill that tags itself timeout or cancel
-// while the difference is visible, and a plain-text tail with escape codes resolved before the cap.
+// Engine under every `command` action and the push run: a real tmux terminal, a ceiling that times out to `failed`
+// rather than silence, a kill that tags itself timeout or cancel while the difference is visible, and a plain-text tail
+// with escape codes resolved before the cap.
 
 // `passed`/`failed` are verdicts about the work; `error` means the command never ran, so nobody should be sent to fix
 // anything.

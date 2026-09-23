@@ -2,6 +2,7 @@ import { queueWhole } from "../agent/tools/agent-terminals.js";
 import type { Services } from "../composition.js";
 import type { DependencyOrigin } from "../workspace/deps/dependency-origin.js";
 import { queueVerify, type VerifyDeps } from "../workspace/deps/verify-deps.js";
+import { adoptedLandCheck } from "../rules/repo-checks.js";
 import { type BreakageRouter, breakageSettled, routeLandBreakage } from "../agents/land/land-breakage.js";
 import { announceUnwatchedWrite, subscribeWorkspaceChanges } from "../workspace/watch/workspace-watch.js";
 
@@ -32,7 +33,10 @@ const attribution = (origin: DependencyOrigin): { conversationId?: string; title
 };
 
 export const wireDependencyCoordinator = (
-    services: Pick<Services, "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "events" | "heavyCommands" | "dependencies"> &
+    services: Pick<
+        Services,
+        "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "events" | "heavyCommands" | "dependencies" | "sandboxSettings"
+    > &
         BreakageRouter,
 ): void => {
     const dependencyChecks: VerifyDeps = {
@@ -46,6 +50,7 @@ export const wireDependencyCoordinator = (
         queue: queueWhole(services.heavyCommands.read),
         route: (breakage) => routeLandBreakage(services, breakage),
         settled: breakageSettled,
+        landCheck: async (dir) => adoptedLandCheck(services.workspace.root, dir, (await services.sandboxSettings.get()).adoptedChecks),
     };
     services.dependencies.subscribe(({ dir, origin }) => {
         const named = dir === "" ? `the workspace root` : dir;

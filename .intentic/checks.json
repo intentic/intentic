@@ -1,6 +1,7 @@
 {
     "checks": [
         { "when": "edit", "run": "node _tools/checks/run.mjs --paths {file}", "label": "checks that can read one file" },
+        { "when": "edit", "run": "node _tools/oxlint/lint-edit.mjs {file}", "label": "Lint the edit" },
         { "when": "turn", "run": "pnpm verify:turn", "label": "Verify before you finish" }
     ]
 }

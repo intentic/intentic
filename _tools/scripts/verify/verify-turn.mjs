@@ -1,16 +1,11 @@
 #!/usr/bin/env node
-// `pnpm verify:turn`: what a turn can answer for at Stop, scoped to what it actually touched, since a model can
-// only act on its own diff (the full repository runs after the land, on main, in verify.mjs/verify-deps.ts). Three
-// independent readers, each judged against what the turn did: (1) the checks, diffed against the main-line base line by line
-// (turn-findings.mjs), so a problem already standing before this turn is reported but not held against it and a new one
-// is refused whatever its gate — which is the whole of what `tidy` means here, and why nothing coarser than a turn can
-// enforce it; (2) the linter, over the turn's own changed files, falling back to the whole repo when the changed set
-// isn't smaller; (3) typecheck+test over the affected closure (lib/workspace-graph.mjs), the packages holding a dirty
-// file plus everything that transitively depends on one.
-// The dirty set is everything since the main-line base, committed on the branch or not (in the primary checkout, everyone's uncommitted work). All
-// three readers report at once (lib/steps.mjs): the Stop sends a model back at most twice (MAX_FOLLOW_UPS,
-// sandbox/src/rules/turn-ending.ts), so a gate that stopped at its first failure could only ever name two of a
-// turn's problems.
+// `pnpm verify:turn`: what a turn can answer for at Stop, scoped to what it touched since its main-line base, committed
+// on the branch or not (the full repository runs after the land, in verify.mjs). Four independent readers, each judged
+// against that base: (1) the checks, line by line (turn-findings.mjs), a new line refused whatever its gate; (2) the
+// linter over the changed files; (3) the assertion ratchet over the changed test files; (4) typecheck+test over the
+// affected closure (lib/workspace-graph.mjs), re-run once before a failure is charged.
+// Every reader reports before the digest (lib/steps.mjs): the Stop sends a model back at most twice (MAX_FOLLOW_UPS,
+// sandbox/src/rules/turn-ending.ts), and quotes only the last ~4,000 bytes, which the digest is sized to fit.
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,7 +16,8 @@ import { changedPaths, changedSince, mainLineBase } from "../lib/git.mjs";
 import { createSteps } from "../lib/steps.mjs";
 import { ago, verdictForBase } from "../lib/tree-verdict.mjs";
 import { checkVerdicts, reportsAt } from "./check-snapshot.mjs";
-import { againstBaseline, failedTasks, takeSummary, unitsOf } from "./failure-units.mjs";
+import { weakenings } from "./assertion-ratchet.mjs";
+import { againstBaseline, failedTasks, failureLines, rerunCommand, takeSummary, taskOf, unitsOf } from "./failure-units.mjs";
 import { fixChecks, formatCrates, regenerateContractLock, rustfmtAvailable, touchedCrates } from "./fixers.mjs";
 import { recordFlakes, rerunFailures } from "./flakes.mjs";
 import { LINTABLE } from "./land-tiers.mjs";
@@ -33,6 +29,8 @@ const { say, step, skip, fail, finish } = createSteps("verify:turn", root);
 // Past this many changed paths the turn is not a delta any more (a rename, a generated bundle, a land in the
 // primary checkout), and a command line naming each of them is worse than the one that names none.
 const LINT_FILE_CEILING = 200;
+// One oxlint `unix` diagnostic, `path:line:col: message [Severity/rule]`.
+const LINT_FINDING = /^(\S.*?):\d+:\d+: .* \[\w+\/.+\]$/;
 
 // The main-line commit this turn builds on; its work is everything since, committed on the branch or not.
 const base = mainLineBase(root);
@@ -113,6 +111,7 @@ if (verdicts === undefined) {
     }
 }
 
+/* 2. the linter, over the changed files */
 // Staged, unstaged and untracked alike, a rename by its new name (lib/git.mjs). `undefined` (git couldn't answer)
 // widens this and the closure below to everything, rather than narrowing to nothing.
 const changed = turnPaths();
@@ -131,7 +130,7 @@ if (changed === undefined || lintable.length > LINT_FILE_CEILING) {
     // paths it's handed, and exits 1 with "No files found to lint" when all of them are ignored, the one non-zero exit
     // here that means success.
     const label = `lint (${lintable.length} changed file${lintable.length === 1 ? "" : "s"})`;
-    const lint = spawnSync("pnpm", ["lint", ...lintable], {
+    const lint = spawnSync("pnpm", ["lint", "--format=unix", ...lintable], {
         cwd: root,
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
@@ -144,13 +143,33 @@ if (changed === undefined || lintable.length > LINT_FILE_CEILING) {
         say(`lint: all ${lintable.length} of this turn's files are ones the linter's config ignores`);
     } else if (lint.status !== 0) {
         process.stderr.write(output);
-        fail(label, `exit ${lint.status ?? "signal"} · pnpm lint ${lintable.join(" ")}`);
+        const findings = output.split("\n").filter((line) => LINT_FINDING.test(line));
+        const files = [...new Set(findings.map((line) => LINT_FINDING.exec(line)[1]))];
+        fail(label, `exit ${lint.status ?? "signal"} · pnpm lint ${(files.length > 0 ? files : lintable).join(" ")}`, findings);
     } else {
         say(`${label}: clean`);
     }
 }
 
-/* 3. the affected closure */
+/* 3. the assertion ratchet */
+if (base === undefined) {
+    say("assertion ratchet: no main-line base to measure the changed test files against");
+} else {
+    const { findings, declared } = weakenings(root, base);
+    if (findings.length === 0) {
+        say("assertion ratchet: no test file got weaker");
+    } else if (declared) {
+        say(`assertion ratchet: ${findings.length} test file(s) got weaker, declared by a \`test!:\` subject or \`Test-Note:\` trailer in the turn's commits`);
+    } else {
+        fail(
+            "assertion ratchet",
+            "a test file got weaker than on the main line: restore the assertions (update the expected value, not the matcher), or commit the weakening with a `Test-Note: <why>` trailer and end your final message with the same line",
+            findings,
+        );
+    }
+}
+
+/* 4. the affected closure */
 const graph = readWorkspaceGraph(root);
 const { global, seeds, affected } = affectedBy(graph, changed ?? [...graph.packages.values()].map(({ dir }) => dir));
 if (global !== undefined) {
@@ -199,8 +218,51 @@ const judgeClosure = (tasks, units) => {
     if (held.length === 0) {
         return { ok: true, note: `every failure was already red on ${measuredAt(found)}; nothing this turn introduced` };
     }
-    process.stderr.write(`\n✗ ${held.length} failure(s) this turn introduced:\n${list(held)}\n`);
-    return { ok: false, why: found === undefined ? `no land verdict covers this turn's base, so every failure counts` : `${held.length} introduced by this turn` };
+    const failing = tasks.filter(({ taskId }) => held.some((unit) => taskOf(unit) === taskId));
+    return {
+        ok: false,
+        why: found === undefined ? `${held.length} failure(s); no land verdict covers this turn's base, so every one counts` : `${held.length} failure(s) this turn introduced`,
+        spelling: rerunCommand(failing),
+        details: [`failing tasks: ${failing.map(({ taskId }) => taskId).join(", ")}`, ...failureLines(root, held, tasks)],
+    };
+};
+
+// The failed tasks of the turbo run that started at `at` (epoch ms), and their units.
+const measure = (at, junitDir) => {
+    const tasks = failedTasks(takeSummary(root, at));
+    return { tasks, units: unitsOf(root, tasks, junitDir) };
+};
+
+// A failed closure runs once more before it is judged; turbo replays cached passes, so only the failed tasks execute.
+const judgeAfterRerun = (args, env, since, junitDir) => {
+    const first = measure(since, junitDir);
+    const found = base === undefined ? undefined : verdictForBase(root, base);
+    if (first.units.length > 0 && againstBaseline(first.units, found?.verdict).held.length === 0) {
+        return judgeClosure(first.tasks, first.units);
+    }
+    const failed = first.tasks.map(({ taskId }) => taskId).join(", ") || "the run";
+    say(`typecheck and test: ${failed} failed; running it once more`);
+    const again = Date.now();
+    const rerun = spawnSync("pnpm", [...args, "--output-logs=errors-only"], {
+        cwd: root,
+        stdio: "inherit",
+        shell: process.platform === "win32",
+        env: { ...process.env, ...env },
+    });
+    const second = measure(again, junitDir);
+    if (rerun.status === 0) {
+        recordFlakes(root, first.units);
+        return { ok: true, note: `${failed} failed, then passed on a re-run: flaky, logged` };
+    }
+    if (second.units.length === 0) {
+        return judgeClosure(first.tasks, first.units);
+    }
+    const cleared = first.units.filter((unit) => !second.units.includes(unit));
+    if (cleared.length > 0) {
+        recordFlakes(root, cleared);
+        process.stderr.write(`\n~ ${cleared.length} failure(s) passed on the re-run: flaky, logged, not held:\n${list(cleared)}\n`);
+    }
+    return judgeClosure(second.tasks, second.units);
 };
 
 // The emit is the one thing the closure's check reads; after a failed one, typecheck would report missing modules
@@ -212,13 +274,13 @@ if (affected.size > 0) {
         }
         const filters = global !== undefined ? [] : [...affected].flatMap((name) => ["--filter", name]);
         const junitDir = mkdtempSync(join(tmpdir(), "verify-turn-junit-"));
+        const args = ["turbo", "run", "typecheck", "test", "--only", "--continue=dependencies-successful", "--summarize", ...filters];
+        const env = { TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0", SUITES_JUNIT_DIR: junitDir };
         const since = Date.now();
-        step("typecheck and test", "pnpm", ["turbo", "run", "typecheck", "test", "--only", "--continue=dependencies-successful", "--summarize", ...filters], {
-            env: { TEST_WORKERS: testWorkers(), INDEXNOW_ENABLED: "0", SUITES_JUNIT_DIR: junitDir },
-            judge: () => {
-                const tasks = failedTasks(takeSummary(root, since));
-                return judgeClosure(tasks, unitsOf(root, tasks, junitDir));
-            },
+        step("typecheck and test", "pnpm", args, {
+            env,
+            shown: `pnpm turbo run typecheck test --only over the ${affected.size}-package closure`,
+            judge: () => judgeAfterRerun(args, env, since, junitDir),
         });
         takeSummary(root, since);
         rmSync(junitDir, { recursive: true, force: true });
@@ -229,6 +291,6 @@ if (affected.size > 0) {
 
 finish(() =>
     affected.size === 0
-        ? "the checkout gates and the linter; nothing in this turn's closure to measure"
+        ? "the checkout gates, the linter and the assertion ratchet; nothing in this turn's closure to measure"
         : `the turn's closure: ${affected.size} package${affected.size === 1 ? "" : "s"}`,
 );

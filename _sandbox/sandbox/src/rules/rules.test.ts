@@ -9,7 +9,7 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "moment" | "action">): Rul
 });
 
 const command = (id: string, over: Partial<Rule> = {}): Rule =>
-    rule({ id, moment: "push.starting", action: { kind: "command", command: `run ${id}`, timeoutMs: 900_000 }, ...over });
+    rule({ id, moment: "turn.ending", action: { kind: "command", command: `run ${id}`, timeoutMs: 900_000 }, ...over });
 
 const verdict = (id: string, v: "allow" | "hold", over: Partial<Rule> = {}): Rule =>
     rule({ id, moment: "agent.finished", action: { kind: "verdict", verdict: v }, ...over });
@@ -32,7 +32,7 @@ describe(`conditions`, () => {
         expect(conditionHolds({ sample: 0.25 }, { draw: 0.1 })).toBe(true);
         expect(conditionHolds({ sample: 0.25 }, { draw: 0.25 })).toBe(false);
         expect(conditionHolds({ sample: 0.25 }, { draw: 0.9 })).toBe(false);
-        // A push or a landing decision draws nothing, so a sample there narrows nothing rather than silently switching the rule off.
+        // A landing decision draws nothing, so a sample there narrows nothing rather than silently switching the rule off.
         expect(conditionHolds({ sample: 0.25 }, {})).toBe(true);
     });
 
@@ -75,7 +75,7 @@ describe(`which repositories a change is in`, () => {
 describe(`matching`, () => {
     test(`a moment that DOES things runs everything that matches, in the owner's order`, () => {
         const rules = [command(`lint`), command(`test`)];
-        expect(matching(rules, `push.starting`).map((r) => r.id)).toEqual([`lint`, `test`]);
+        expect(matching(rules, `turn.ending`).map((r) => r.id)).toEqual([`lint`, `test`]);
     });
 
     test(`a moment that DECIDES stops at the first match, so a narrow rule above a broad one means something`, () => {
@@ -86,12 +86,12 @@ describe(`matching`, () => {
 
     test(`disabled rules and rules for another moment are not consulted`, () => {
         const rules = [command(`off`, { enabled: false }), verdict(`elsewhere`, `allow`), command(`on`)];
-        expect(matching(rules, `push.starting`).map((r) => r.id)).toEqual([`on`]);
+        expect(matching(rules, `turn.ending`).map((r) => r.id)).toEqual([`on`]);
     });
 
-    test(`an empty command is OFF, not a no-op run: the pre-push row has no second switch to disagree with`, () => {
-        const rules = [rule({ id: `blank`, moment: `push.starting`, action: { kind: `command`, command: `   `, timeoutMs: 900_000 } })];
-        expect(matching(rules, `push.starting`)).toEqual([]);
+    test(`an empty command is OFF, not a no-op run`, () => {
+        const rules = [rule({ id: `blank`, moment: `turn.ending`, action: { kind: `command`, command: `   `, timeoutMs: 900_000 } })];
+        expect(matching(rules, `turn.ending`)).toEqual([]);
     });
 });
 

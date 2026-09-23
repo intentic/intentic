@@ -1820,22 +1820,13 @@
             "includeReleaseNoteEach": "Incluir una nota de versión con cada commit."
         },
         "agentChecks": {
-            "askAboutAssertionsGot": "Preguntar por las aserciones que se han debilitado, y por un test nuevo que pasa sin el cambio.",
-            "askAboutRemovedCode": "Preguntar por el código eliminado que el historial del proyecto defiende.",
-            "beforeEveryPush": "Antes de cada push",
-            "checkBeforePush": "Comprueba antes de hacer push",
-            "checkWhatDeleted": "Comprueba qué ha borrado",
-            "checkWhatDidTo": "Comprueba qué ha hecho con las pruebas",
-            "checks": "Comprobaciones",
+            "lastAsked": "Última petición {ago}",
             "lookAtWhatChanged": "Mira qué ha cambiado",
-            "pnpmTest": "pnpm test",
-            "prePushCheckCommand": "Comando de comprobación previa al push",
+            "neverAsked": "Nunca lo pidió",
             "promptAssistantToOpen": "Pedir al asistente que abra la vista tras cambios en la interfaz.",
-            "promptAssistantToRun": "Pedir al asistente que ejecute una comprobación tras cambios en el código.",
             "repairAfterLanding": "Reparar lo que se rompe tras integrar",
             "repairAfterLandingNote": "Cuando una integración deja en rojo la comprobación del árbol principal, vuelve a la conversación que la integró. Cuando la CI de main sigue en rojo por un mismo fallo, arranca un agente de reparación en cuanto dejan de llegar pushes, y relanza un fallo de los propios runners de CI.",
-            "runOneCheckBefore": "Ejecutar una comprobación antes de cualquier push, salga el repositorio que salga. La compilación propia de un repositorio va en el repositorio, abajo.",
-            "verifyBeforeFinishing": "Verificar antes de terminar"
+            "reviews": "Revisiones"
         },
         "agentClock": {
             "clock": "Reloj",
@@ -1970,23 +1961,8 @@
             "oneRepositoryWaitingOn": "Un repositorio te está esperando. Hasta que lo actives, sus propias comprobaciones no se ejecutan.",
             "readingWhatWorkspacesRepositories": "Leyendo qué declaran los repositorios de este espacio de trabajo…",
             "repositoriesWaitingOnUntil": "{waiting} repositorios te están esperando. Hasta que los actives, sus propias comprobaciones no se ejecutan.",
-            "repositoryCarryOwnCheck": "Un repositorio puede llevar su propio comando de comprobación en .intentic/checks.json, junto a los scripts que nombra, en vez de que un comando de aquí valga para todos.",
-            "repositoryChecks": "Comprobaciones del repositorio"
-        },
-        "agentRules": {
-            "addRule": "Añadir una regla",
-            "enable": "Activar {label}",
-            "in": "en",
-            "moveDown": "Bajar",
-            "moveUp": "Subir",
-            "newRule": "Regla nueva",
-            "noCustomRulesAdded": "Todavía no se han añadido reglas propias.",
-            "onlyTouching": "solo al tocar",
-            "readingSandboxsRules": "Leyendo las reglas de este sandbox…",
-            "ruleActions": "Acciones de la regla",
-            "rules": "Reglas",
-            "run": "ejecutar",
-            "say": "decir:"
+            "repositoryChecks": "Comprobaciones del repositorio",
+            "repositoryDeclaresOwnChecks": "Un repositorio declara en .intentic/checks.json qué se ejecuta sobre su propio código: tras cada edición, antes de que acabe un turno o después de que su trabajo se integre. Un push lo controla el propio hook pre-push de git del repositorio."
         },
         "agentSafetyJudge": {
             "changeInModels": "Cambiar en Modelos",
@@ -2916,55 +2892,21 @@
             "viewAccounts": "Ver cuentas"
         },
         "repoCheckRow": {
+            "afterEachEdit": "tras cada edición",
+            "afterItLands": "tras integrarse",
+            "beforeTurnEnds": "antes de que acabe un turno",
             "changedSinceSwitchedOn": "Esto cambió desde que lo activaste, así que no se está ejecutando. Léelo arriba y vuelve a activarlo para aceptarlo.",
             "checksFileCouldNot": "No se pudo leer su archivo de comprobaciones: {error}",
             "declaredNotRunningNothing": "Declarado, sin ejecutarse. Nada de lo que pide un repositorio se ejecuta hasta que tú lo digas.",
+            "lastFlagged": "último aviso {ago}",
+            "neverFlagged": "nunca avisó",
             "onlyTouching": "solo al tocar",
+            "packageScript": "(script del paquete)",
             "runChecksDeclares": "Ejecutar las comprobaciones que declara {name}"
         },
         "restartWatch": {
             "seeLog": "Ver el registro",
             "youreRunningNewImage": "Estás usando la imagen nueva."
-        },
-        "ruleForm": {
-            "addAnother": "añadir otra…",
-            "addRule": "Añadir la regla",
-            "anywhereInWorkspace": "En cualquier parte del espacio de trabajo",
-            "appliesToEveryChange": "Se aplica a todos los cambios.",
-            "applyToEveryChange": "Aplicar a todos los cambios",
-            "called": "Llamada",
-            "commandToRun": "Comando a ejecutar",
-            "docs": "docs/**",
-            "onlyTouches": "Solo cuando toque…",
-            "onlyTouches2": "Solo si toca",
-            "paths": "Rutas",
-            "pnpmLint": "pnpm lint",
-            "remove": "Quitar {glob}",
-            "repository": "Qué repositorio",
-            "repositoryRuleAbout": "De qué repositorio trata esta regla",
-            "ruleName": "Nombre de la regla",
-            "ruleRuns": "Cuándo se ejecuta esta regla",
-            "runsIn": "Se ejecuta en",
-            "saveChanges": "Guardar los cambios",
-            "then": "Entonces",
-            "updateChangelogBeforeFinish": "Actualiza el registro de cambios antes de terminar.",
-            "whatToTellAssistant": "Qué decirle al asistente",
-            "when": "Cuándo",
-            "where": "Dónde",
-            "workspaceRoot": "la raíz del espacio de trabajo",
-            "writeCommandWouldIn": ", así que escribe el comando como lo harías en un terminal allí."
-        },
-        "ruleWords": {
-            "afterEditsFile": "Después de editar un archivo",
-            "afterWorkAccepted": "Después de que su trabajo se acepte",
-            "agentFinishes": "Cuando un agente termina",
-            "beforeAssistantFinishes": "Antes de que el asistente termine",
-            "beforePush": "Antes de hacer push",
-            "holdWork": "Retener el trabajo",
-            "landWork": "Integrar el trabajo",
-            "runCommand": "Ejecutar un comando",
-            "saveVersion": "Guardar una versión",
-            "tellSomething": "Decirle algo"
         },
         "rules": {
             "landFinishedWorkAutomatically": "Integrar automáticamente el trabajo terminado",
@@ -4114,8 +4056,6 @@
         },
         "pushQuestionBody": {
             "fixAgentOpenConversation": "Arreglar el agente: {toLowerCase} — abre la conversación",
-            "runAgain": "Ejecutar de nuevo",
-            "runCheckAgainOn": "Volver a pasar la comprobación sobre el árbol tal y como está ahora",
             "setAttemptAsideStart": "Apartar este intento y empezar uno nuevo: primero abre el selector",
             "showTerminal": "Mostrar el terminal",
             "startOver": "Empezar de cero"
@@ -4709,12 +4649,10 @@
             "allChecksInSandbox": "Todas las comprobaciones de este sandbox",
             "appearHereTravelRepository": "y aparecerá aquí, y viajará con el repositorio a cualquiera que lo clone.",
             "checksIn": "Comprobaciones en {dir}",
-            "commandRunsInFolder": ", y el comando se ejecuta en esta carpeta, así que escríbelo como lo harías en un terminal aquí.",
-            "is": "es",
-            "or": "o",
             "repositoryDeclaresIn": "Este repositorio las declara en",
             "repositoryDoesntDeclareAny": "Este repositorio no declara comprobaciones propias. Pon un archivo en",
-            "theyTravelSwitchingOn": ", para que viajen con él. Activarlas es lo que permite a este sandbox ejecutarlas."
+            "theyTravelSwitchingOn": ", para que viajen con él. Activarlas es lo que permite a este sandbox ejecutarlas.",
+            "whenIsOneOf": "{when} es {edit}, {turn} o {land}, y el comando se ejecuta en esta carpeta, así que escríbelo como lo harías en un terminal aquí."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Añadir una nueva en su lugar",
@@ -4884,7 +4822,6 @@
             "unchangedParagraphs": "{count} párrafo sin cambios | {count} párrafos sin cambios"
         },
         "pushBadge": {
-            "checksRunningBeforePush": "Se están ejecutando comprobaciones antes de tu push",
             "pushWaitingOn": "{title}, tu push te está esperando",
             "sendingCommits": "Enviando tus commits"
         },
@@ -4950,11 +4887,9 @@
             "staged2": "Preparado",
             "stagesEveryChangeCommits": "Prepara todos los cambios y luego hace commit",
             "stagesFilesFrom": "Prepara el {count} archivo de {filter} y luego hace commit: no entra nada más | Prepara los {count} archivos de {filter} y luego hace commit: no entra nada más",
-            "stopChecksPushStays": "Detén las comprobaciones. El push sigue esperando tu respuesta",
             "unfinishedOrigins": "{origins} no ha terminado; este commit registra los {files} integrados hasta ahora. | {origins} no han terminado; este commit registra los {files} integrados hasta ahora.",
             "unstaged": "Sin preparar",
             "untrackedLeave": "{count} archivo sin seguimiento sale del disco: nunca se le hizo commit, así que git no tiene copia: | {count} archivos sin seguimiento salen del disco: nunca se les hizo commit, así que git no tiene copia:",
-            "watchChecksRun": "Ver ejecutarse las comprobaciones",
             "watchRun": "Verlo ejecutarse",
             "you": "tú"
         },
@@ -5021,9 +4956,6 @@
         },
         "useChanges": {
             "accessToSandboxRead": "Tu acceso a este sandbox es de solo lectura: esto necesita acceso de responsable."
-        },
-        "usePrepush": {
-            "runningPrePushCheck": "Ejecutando tu comprobación previa al push"
         },
         "usePushFlow": {
             "failed": "{verb} falló",

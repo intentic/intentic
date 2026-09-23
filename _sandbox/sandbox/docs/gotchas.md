@@ -127,22 +127,16 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   end, awaited, so their verdict reaches the land decision the way a hook's does, and hands what they found to the
   follow-up below as its first paragraph. One follow-up, not two: the nudge's own guard already stops a follow-up
   from answering a follow-up, and a turn still red after it is held on its branch like a Claude turn is.
-- **And the follow-up that asks for proof now fires on every runtime** (`src/agent/verification/verify-nudge.ts`). The
-  owner's `verify-edits` rule — a turn that changed code and ran no check after its last edit gets one bounded
-  follow-up naming the checks this workspace actually has — reached the model through the Claude Agent SDK's
-  Stop hook, which is to say it worked on one of six runtimes. On a Codex, Grok, Gemini, Cursor, Pi or ACP turn
-  the rule sat in the list looking armed and did nothing, and the owner had no way to see that. What was
-  missing was never the follow-up but the ledger: nothing outside the Claude arm knew which files a turn had
-  edited or which of its commands were checks, and the frame-fed ledger above is exactly that. The Claude arm
-  keeps its hooks, because an in-turn Stop follow-up costs no new session and no re-read of the context;
-  everywhere else the follow-up arrives as its own turn down the ordinary daemon-started road, resuming the
-  conversation's provider session. A fresh turn rather than a steer even where a steer exists (Pi): the
-  decision is made while the turn is unwinding and its steering queue is on its way to closed, and a mechanism
-  about unverified work must not be able to lose its own message. It spends a turn on the owner's behalf, so
-  the guards are the point — the rule has to be standing with its conditions holding against the files this
-  turn really touched, the work has to be genuinely unproven, the turn has to have ended `ok` (a cancelled one
-  is never answered by the daemon starting another), it is never a spawned child (whose reader is its parent,
-  already told what it proved), and a nudge never answers a nudge.
+- **The turn-end follow-up fires on every runtime** (`src/agent/verification/verify-nudge.ts`). A repository's red
+  `turn` check and the `verify-ui-edits` look reach a Claude turn through the Agent SDK's Stop hook; on Codex, Grok,
+  Gemini, Cursor, Pi and ACP turns the daemon runs the checks itself once the frames end, and the look reads the
+  frame-fed ledger above. Which road a turn takes is decided by `capabilities.runtime === "claude-code"`, not by the
+  rulebook: Cursor's hooks gate commands but hold no Stop, and a turn keyed on the rulebook ran no check at all.
+  Everywhere but Claude the follow-up arrives as its own turn down the ordinary daemon-started road, resuming the
+  conversation's provider session; a fresh turn rather than a steer even where a steer exists (Pi), since the
+  steering queue is closing while the turn unwinds. It spends a turn on the owner's behalf, so the guards are the
+  point: a rule standing with its conditions holding, a turn that ended `ok`, never a spawned child (whose reader is
+  its parent), and a nudge never answers a nudge.
 - **A turn that continues another runs as it — every field of it** (`TurnProfile` and `profileOf` in
   `@intentic/sandbox-contract`'s `schemas/agent.ts`). A nudge, a watch wake, a background job's wake, a child's
   report and a peer's message all start a turn that picks an earlier one's thread back up, so each carries that
@@ -176,7 +170,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   nothing to trust, every shell takes it from `getcwd()`, which `--wdns` already made correct.
 - **A `turn.ending` check says in the log where it ran** (`src/agent/run/harness/harness-hooks.ts`): `checks: check started`
   and `checks: check settled` carry the command, `anchored`, the status, the exit code and the duration, the
-  same shape `prepush` has. Without them a check that exited 127 over a missing workspace binary left the only
+  same shape the push run has. Without them a check that exited 127 over a missing workspace binary left the only
   record of itself in a model's transcript.
 - **A worktree's dependency mirrors take their form from the TURN's runtime, not the container's capability**
   (`entersNamespace` in `src/agent/routes/agent.routes.ts` → `ensure` → `linkMirrors` in `src/agents/worktrees/worktrees.ts`).
@@ -241,7 +235,7 @@ The decisions this daemon is built on and the traps that cost somebody a day —
   delta. The retry's own reason for existing is unchanged — a landed prefix main really does hold still drops,
   which is what keeps a rebase from stacking redundant commits on top of the user's own copy of them.
 - **A rendered surface gets a different question asked of it than a parser does** (`src/agent/verification/agent-viewing.ts`,
-  the `verify-ui-edits` built-in beside `verify-edits`, `verify-removals` and `verify-tests`). The proof ledger weighs edited
+  the `verify-ui-edits` built-in). The proof ledger weighs edited
   code against the checks that ran, and for a reducer or a route that is the whole story. It is structurally
   unable to speak to a clipped label: a stylesheet edit type-checks, keeps every test green, and ships a button
   with its text cut off. So a second ledger counts a different population against different evidence — which

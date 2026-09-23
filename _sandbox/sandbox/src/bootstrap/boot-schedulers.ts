@@ -7,7 +7,6 @@ import { startWatchers } from "../agent/verification/watchers.js";
 import { approvalsExecutorFor } from "../approvals/approvals-executor.js";
 import { createAutomationsScheduler } from "../automations/scheduler.js";
 import { createCiPoller } from "../ci/poller.js";
-import { prepushCheck } from "../prepush/prepush.js";
 import type { BootPhase } from "./boot-phase.js";
 
 // Each scheduler registers its stop whether or not this role starts it, so every role unwinds cleanly.
@@ -45,8 +44,6 @@ export const startBootSchedulers = ({ role, services, logger, shutdown }: BootPh
     // Armed, not polled: the deadline is the item's own scheduledAt on disk, so dropping the timer loses nothing.
     const approvalsExecutor = approvalsExecutorFor(services);
     shutdown.push(() => approvalsExecutor.stop());
-    // A pre-push suite left alone at exit burns CPU with nothing to report to.
-    shutdown.push(() => prepushCheck(services).cancel());
     if (role.container) {
         void approvalsExecutor.arm().catch((error: unknown) => logger.warn({ err: error }, "approvals executor not armed"));
     }

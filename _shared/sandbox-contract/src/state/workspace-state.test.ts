@@ -346,8 +346,6 @@ describe(`VERSIONED_STATE_PATHS`, () => {
             // Which commands count as heavy, and how many may run at once; a shared-box decision worth a `git log`
             // line.
             `${STATE_DIR}/config/heavy-commands.json`,
-            // The exclude list carves entries out by name; an unlisted directory is invisible to git and to land.
-            `${STATE_DIR}/config/hooks/`,
             `${STATE_DIR}/config/loop-designs.json`,
             `${STATE_DIR}/config/personas.json`,
             // A persona's prompt and reachable skills: the text that decides how it behaves, same reason as its card.

@@ -96,7 +96,7 @@ const plan = (change: Partial<SettlementPlan> = {}): SettlementPlan => ({
     completion: { type: "turn.completed" },
     headroomRefresh: undefined,
     usage: { provider: "claude", harness: "native", outcome: "ok", turns: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd: 0, durationMs: 0 },
-    daemonStop: { conversationId: undefined, findings: { conversationId: undefined, isolated: false, request, edited: [], cwd: "/w", isolation: undefined }, nudge: undefined },
+    daemonStop: { conversationId: undefined, findings: { conversationId: undefined, isolated: false, request, edited: [], cwd: "/w" }, nudge: undefined },
     snapshot: undefined,
     ...change,
 });
@@ -120,7 +120,7 @@ const finding =
 describe("a settlement", () => {
     test("records the resume first, then closes the turn, re-reads, bills, runs the Stop, nudges, flushes and snapshots", async () => {
         const { deps, writes } = traced();
-        const stopped = { conversationId: "settle-1", isolated: true, request: redSuite, edited: ["/w/a.ts"], cwd: "/w", isolation: undefined };
+        const stopped = { conversationId: "settle-1", isolated: true, request: redSuite, edited: ["/w/a.ts"], cwd: "/w" };
         const nudge = { conversationId: "settle-1", profile: {}, rules: [suite], ledger: { edited: () => [], verdict: () => undefined, standing: () => noCode, noteEdit: () => {}, noteCommand: () => {} } };
         await performSettlement(
             deps,
@@ -167,7 +167,7 @@ describe("a settlement", () => {
 });
 
 describe("the daemon's Stop", () => {
-    const stop = { conversationId: "settle-1", isolated: true, request: redSuite, edited: [], cwd: "/w", isolation: undefined };
+    const stop = { conversationId: "settle-1", isolated: true, request: redSuite, edited: [], cwd: "/w" };
 
     test("runs the command rules on a daemon-stopped isolated turn and words what they found", async () => {
         expect(await daemonStopFindings(services(), stop)).toStrictEqual([finding]);

@@ -144,6 +144,47 @@ export const unitsOf = (root, tasks, junitDir) =>
 // The task a unit belongs to: everything before its first space.
 export const taskOf = (unit) => unit.split(" ", 1)[0];
 
+// Lines of a task's log quoted under a failure no diagnostic or test case could be read out of.
+export const LOG_TAIL_LINES = 8;
+
+const ESCAPE = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+
+// The last non-blank lines of a task log, escape codes dropped.
+export const logTail = (log, lines = LOG_TAIL_LINES) =>
+    log
+        .replace(ESCAPE, "")
+        .split("\n")
+        .map((line) => line.trimEnd())
+        .filter((line) => line.trim() !== "")
+        .slice(-lines);
+
+// One line per unit, and under a whole-task unit (nothing could be read out of it) that task's log tail. Taken a unit
+// per task in turn, so a cut list still names every failing task's first failure.
+export const failureLines = (root, units, tasks) => {
+    const byTask = new Map(tasks.map((task) => [task.taskId, task]));
+    const blocks = new Map();
+    for (const unit of units) {
+        const task = byTask.get(unit);
+        const block = task === undefined ? [unit] : [unit, ...logTail(readOr(join(root, task.logFile ?? ""))).map((line) => `  ${line.replaceAll(`${root}/`, "")}`)];
+        blocks.set(taskOf(unit), [...(blocks.get(taskOf(unit)) ?? []), block]);
+    }
+    const queues = [...blocks.values()];
+    const depth = Math.max(0, ...queues.map((queue) => queue.length));
+    return Array.from({ length: depth }, (_, at) => queues.flatMap((queue) => queue[at] ?? [])).flat();
+};
+
+// Packages a re-run command names before the rest are counted.
+const COMMAND_PACKAGES = 8;
+
+// The turbo command that re-runs only `tasks`, never the closure's whole filter list.
+export const rerunCommand = (tasks) => {
+    const names = [...new Set(tasks.map(({ name }) => name))];
+    const kinds = [...new Set(tasks.map(({ task }) => task))].sort();
+    const filters = names.slice(0, COMMAND_PACKAGES).map((name) => `--filter ${name}`);
+    const more = names.length > COMMAND_PACKAGES ? ` (+${names.length - COMMAND_PACKAGES} more)` : "";
+    return `pnpm turbo run ${kinds.join(" ")} --only ${filters.join(" ")}${more}`;
+};
+
 // Counted per unit, so one more copy of a standing failure is still `mine`; a whole-task unit matches only itself.
 export const judgeUnits = (current, known) => {
     const left = new Map();

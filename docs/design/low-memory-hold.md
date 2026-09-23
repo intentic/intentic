@@ -52,7 +52,7 @@ wakes. They are refused on every short reading, at double the reserve (2 GiB), a
 is at a composer to weigh the risk, and a turn a person sends should find the room first. The refusal is
 recorded, because it is the only evidence the run was skipped. Nothing retries it; the next fire is the retry.
 
-Shell commands behind queue-run and the pre-push checks are inside a turn that was already admitted. They wait
+Shell commands behind queue-run and the checks are inside a turn that was already admitted. They wait
 for headroom up to a deadline and then start anyway (`waitForMemoryHeadroom`).
 
 ## What it was chosen over

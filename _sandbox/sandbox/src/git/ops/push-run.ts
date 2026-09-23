@@ -8,13 +8,13 @@ import { CHECKS_SESSION } from "../../terminal/terminal-session.js";
 import { pushRefusal, pushRefusalReason } from "../git.js";
 import { pushPlan } from "../remote/remote.js";
 
-// Runs a push the way the pre-push check runs (prepush/prepush.ts): started and answered at once, executed in the
-// `job-checks` terminal, polled for its verdict. Serialized per repo (a second start for a running repo just joins it);
+// Started and answered at once, executed in the `job-checks` terminal, polled for its verdict; the repository's own
+// pre-push hook is the only gate a push passes. Serialized per repo (a second start for a running repo joins it);
 // nothing is persisted or polled at rest — a run exists only while it runs.
 
 // Generous ceiling since the hook may be a whole suite (usually cached, fast); past this it's a hang.
 const PUSH_TIMEOUT_MS = 15 * 60_000;
-// Same output budget as the check (prepush.ts), so a quoted refusal is the same size either way.
+// Enough of a hook's output for the fix a refusal proposes.
 const PUSH_OUTPUT_BYTES = 24_000;
 
 // What this needs from the daemon, stated explicitly so a test stands up a handful of seams, not all of Services.
@@ -65,8 +65,7 @@ export const createPushRuns = (
             ? { reason: pushRefusalReason(run.output, "git refused the push"), refusedBy: pushRefusal(run.output, run.exitCode) }
             : {};
 
-    // Feed row answering "why isn't my work on the remote", same as a blocking rule earns (prepush.ts); a pass says
-    // nothing.
+    // Feed row answering "why isn't my work on the remote"; a pass says nothing.
     const feedLine = (settled: PushRun): string =>
         settled.timedOut === true
             ? `\`${settled.command}\` in ${settled.repo} hit its time limit and was killed, the push did not go.`

@@ -103,7 +103,6 @@ const turnNotes = (
     ...[gatedCredentialsNote(withheld)].filter((note) => note !== undefined),
     // The other reason an account can be missing: nobody is at the composer, so the turn acts as no one.
     ...[unattendedAccountsNote(persona, personaWithheldAccounts(installed, persona))].filter((note) => note !== undefined),
-    // Every runtime: the Claude Code loop runs command rules at its Stop, the daemon for the rest once the frames end.
     ...(turnEnding ? [turnEndingNote(settings.rules)].filter((note) => note !== undefined) : []),
 ];
 
@@ -175,7 +174,15 @@ export const honoured = (
                 // First, when there is one: who the turn acts as belongs ahead of anything about files or tools.
                 ...(placement.userNotes ?? []),
                 ...workspaceNotes(facts, context, capabilities, send, isolated),
-                ...turnNotes(context, settings, persona, send.turnEnding, access.withheld, facts.installed),
+                // The Claude Code loop runs the checks at its own Stop; the daemon runs them for the rest on an isolated turn only.
+                ...turnNotes(
+                    context,
+                    settings,
+                    persona,
+                    send.turnEnding && (capabilities.runtime === "claude-code" || isolated),
+                    access.withheld,
+                    facts.installed,
+                ),
             ]),
             systemPromptMode: prompt.mode,
             ...opt("systemPrompt", placement.systemPrompt),

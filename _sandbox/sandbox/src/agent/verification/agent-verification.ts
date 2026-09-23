@@ -1,12 +1,8 @@
-import { readFile } from "node:fs/promises";
-import { dirname, extname, join, resolve } from "node:path";
+import { extname } from "node:path";
 import type { AgentEvent, ToolCallContent, ToolCallStatus } from "@intentic/sandbox-contract";
-import { inWorktree, type IsolationPlan } from "../../agents/worktrees/isolation.js";
-import { onPath } from "../../platform/boot/on-path.js";
 
-// Ledger over the turn, not a per-edit check: tracks which code files changed and what commands ran, and asks once
-// whether a passing check followed the last edit. Edits and evidence share one counter so order is exact; per-turn,
-// in-memory only. Never runs a command itself and never nudges on a turn that only touched prose.
+// Ledger over the turn: which code files changed and whether a passing check followed the last edit. Edits and evidence
+// share one counter so order is exact; per-turn, in-memory only, and it never runs a command itself.
 
 // Extensions no suite speaks to; a turn that touched only these is done when it says it is.
 const PROSE_EXTENSIONS = new Set([".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc", ".org", ".csv", ".tsv", ".log"]);
@@ -16,9 +12,6 @@ const PROSE_FILENAMES = new Set(["license", "licence", "notice", "authors", "con
 
 // How much of a failing check's own output rides back with the nudge; enough to act on, not a full re-paste.
 const EVIDENCE_DETAIL_MAX = 800;
-
-// Scripts worth suggesting, most important first; offered only if the workspace actually defines them.
-const SUGGESTED_SCRIPTS = ["test", "typecheck", "check", "lint", "build"] as const;
 
 export type VerificationKind = "test" | "typecheck" | "lint" | "build";
 
@@ -260,99 +253,4 @@ export const createFrameLedger = (): FrameLedger => {
             settle(event.id, event.status, event.content);
         },
     };
-};
-
-// Commands a user would type, from the nearest project above the file; undefined means no project, empty means nothing
-// recognizable there. An unmatched command reads to the model as a bug found.
-export type ChecksProbe = (fromPath: string) => Promise<readonly string[] | undefined>;
-
-const fileText = (path: string): Promise<string | undefined> => readFile(path, "utf8").catch(() => undefined);
-
-const nodeChecks = async (dir: string): Promise<readonly string[] | undefined> => {
-    const raw = await fileText(join(dir, "package.json"));
-    if (raw === undefined) {
-        return undefined;
-    }
-    try {
-        const scripts = Object.keys((JSON.parse(raw) as { scripts?: Record<string, unknown> }).scripts ?? {});
-        return SUGGESTED_SCRIPTS.filter((name) => scripts.includes(name)).map((name) => `pnpm ${name}`);
-    } catch {
-        // A manifest that fails to parse is not this project's answer; keep walking rather than call it empty.
-        return undefined;
-    }
-};
-
-// Where a python config can live, most specific first; pytest.ini/tox.ini are evidence by existing alone.
-const PYTHON_CONFIGS = ["pytest.ini", "tox.ini", "pyproject.toml", "setup.cfg"] as const;
-
-// Environment's own `.venv/bin/pytest` first, since bare `pytest` is routinely off PATH; `uv run pytest` next since it
-// resolves the project's own environment; the bare name is the last resort.
-const pytestCommand = async (dir: string, pyproject: boolean): Promise<string> =>
-    (await fileText(join(dir, ".venv", "bin", "pytest"))) === undefined ? (pyproject ? "uv run pytest" : "pytest") : ".venv/bin/pytest";
-
-const pythonChecks = async (dir: string): Promise<readonly string[] | undefined> => {
-    const found = await Promise.all(PYTHON_CONFIGS.map(async (name) => [name, await fileText(join(dir, name))] as const));
-    const config = found.find(([, text]) => text !== undefined);
-    if (config === undefined) {
-        return undefined;
-    }
-    const [name, text] = config;
-    const pyproject = found.some(([candidate, candidateText]) => candidate === "pyproject.toml" && candidateText !== undefined);
-    const suite = name === "pytest.ini" || name === "tox.ini" || (text ?? "").includes("pytest");
-    // ruff is named only where the project configures it and this image carries it: the pack may not be here.
-    const lint = (text ?? "").includes("[tool.ruff") && (await onPath("ruff"));
-    return [...(suite ? [await pytestCommand(dir, pyproject)] : []), ...(lint ? ["ruff check ."] : [])];
-};
-
-export const projectChecks: ChecksProbe = async (fromPath) => {
-    for (let dir = dirname(resolve(fromPath)); ;) {
-        // Node first: a python project keeping a package.json is described by whichever manifest says something.
-        const checks = (await nodeChecks(dir)) ?? (await pythonChecks(dir));
-        if (checks !== undefined) {
-            return checks;
-        }
-        const parent = dirname(dir);
-        if (parent === dir) {
-            return undefined;
-        }
-        dir = parent;
-    }
-};
-
-const nudgeText = (verdict: VerificationVerdict, commands: readonly string[]): string => {
-    const paths = verdict.paths.slice(0, 8).map((path) => `- ${path}`);
-    const remaining = verdict.paths.length - Math.min(verdict.paths.length, 8);
-    const fileList = [...paths, ...(remaining > 0 ? [`- ... and ${remaining} more`] : [])].join("\n");
-    const instruction =
-        commands.length > 0
-            ? `Run the check that covers it: ${commands.map((command) => `\`${command}\``).join(" or ")}, or a targeted subset of it (a single test file is fine and is often the better answer).`
-            : `Nothing above this file names a check this recognises, so run whatever actually exercises the change, the project's own test binary, a targeted type-check, or a short throwaway script, and say which you chose.`;
-    const failedNote =
-        verdict.failed === undefined
-            ? ""
-            : `\n\nThe last check after those edits did NOT pass:\n\`${verdict.failed.command}\`\n${verdict.failed.detail}\nRepair that before finishing.`;
-    return [
-        `This turn changed code and no check has passed since the last edit:`,
-        fileList,
-        "",
-        instruction,
-        `Then state plainly what passed and what it covered: do not report a targeted check as the suite being green.${failedNote}`,
-    ].join("\n");
-};
-
-// verify-edits, as one function rather than a rule: it compares what the turn edited against what it proved, which only
-// the daemon can see live. Undefined means nothing to ask for, the common case, at no cost.
-export const verifyEditsMessage = async (
-    ledger: VerificationLedger,
-    isolation?: IsolationPlan,
-    checks: ChecksProbe = projectChecks,
-): Promise<string | undefined> => {
-    const verdict = ledger.verdict();
-    if (verdict === undefined) {
-        return undefined;
-    }
-    // The paths the agent named are read back; the probe needs the daemon's view, which differs when isolated.
-    const first = verdict.paths[0];
-    const defined = first === undefined ? undefined : await checks(inWorktree(first, isolation));
-    return nudgeText(verdict, defined ?? []);
 };

@@ -96,7 +96,7 @@ export function useSaveActions() {
               ? t(`workspace.savePanel.notBackedUpYet`)
               : t(`workspace.savePanel.versionsNotBackedUp`, { count: backupCommits.value }, backupCommits.value);
     });
-    // Through askSync, like every other door to a push: a second one would be a way past the checks a project asked for.
+    // Through askSync, like every other door to a push: a second one would leave a hook's refusal unasked.
     const doBackUp = (): void =>
         pushFlow.askSync(
             words.value.push,

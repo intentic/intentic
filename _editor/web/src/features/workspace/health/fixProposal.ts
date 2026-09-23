@@ -1,38 +1,13 @@
-import { type CommandRun, commandRunOutcome, type PushRun } from "@intentic/sandbox-contract";
+import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
 
-// What a red run says and the prompt it proposes, for the pre-push check and the push itself, kept in one
-// module so the two stay in the same wording. The prompt is a suggestion, so it states the situation rather
-// than issuing directives. Its output rides in the prompt, fenced to survive markdown, dropped when a killed run leaves
-// none.
+// What a refused push says and the fix it proposes. The prompt is a suggestion, so it states the situation rather than
+// issuing directives; its output rides fenced to survive markdown, dropped when a killed run leaves none.
 
-// The shared skeleton (situation, ask, output) both prompts render into, so the fence, tail heading, and
-// order can't drift between them.
+// The skeleton (situation, ask, output) the opening prompt and the nudge share.
 const proposal = (situation: string, ask: string, output: string): string => {
     const tail = output.trim();
     return [situation, ask, ...(tail === `` ? [] : [`Its output (tail):\n\n\`\`\`\n${tail}\n\`\`\``])].join(`\n\n`);
 };
-
-const ending = (run: CommandRun): string =>
-    run.timedOut === true
-        ? `did not finish, it hit its time limit and was killed. Treat that as a failure: something hangs, and finding what is part of the fix.`
-        : `failed (exit ${run.exitCode ?? `unknown`}).`;
-
-// The ask must say the worktree skips the build step (pnpm hardlinks after a build, EXDEV on this filesystem),
-// or the agent fights the filesystem or reports a pass short of the one that failed.
-export const checkFixPrompt = (run: CommandRun): string =>
-    proposal(
-        `\`${run.command}\` ${ending(run)} This is what blocks the push, and it is what CI would have said a few minutes later.`,
-        `Find the cause and fix it, then re-run \`${run.command}\` yourself to confirm. You are in a worktree, so that run skips the build step (it cannot run in one) and measures everything else; if the build is what failed, say so rather than reporting a pass it did not cover.`,
-        run.output,
-    );
-
-/* WHAT A CONTINUED ATTEMPT IS TOLD, as against the opening prompt above: the check ran again and here is its current tail. */
-export const checkNudgePrompt = (run: CommandRun): string =>
-    proposal(
-        `\`${run.command}\` ran again and ${ending(run)} The push is still blocked on it.`,
-        `Carry on from where you left off: the tail below is the current output, and it is what has to pass. Re-run \`${run.command}\` yourself to confirm.`,
-        run.output,
-    );
 
 // The hook is the workspace's gate, so its own refusal is the one about the code. Several repos refused in
 // one push become sections of one turn; `git push --dry-run` confirms without sending, since git still runs the hook.
@@ -80,8 +55,8 @@ export const fixSignature = (output: string): string => {
     return (lines.at(-1) ?? ``).replace(/\d+/g, `#`);
 };
 
-// A predicate following the command (drawn in the same monospace) so the sentence reads the same on either
-// side of the verdict. Empty for a plain failure; the terminal and proposal below already say the rest.
+// A predicate following the command (drawn in the same monospace). Empty for a plain failure; the terminal and proposal
+// already say the rest.
 export const outcomeSummary = (run: CommandRun): string => {
     if (run.timedOut === true) {
         return `never finished: it hit its time limit and was killed.`;
@@ -95,8 +70,8 @@ export const outcomeSummary = (run: CommandRun): string => {
     return ``;
 };
 
-// The equivalent line for a push, which says more since git explains itself. A hook's refusal just names the
-// hook (the proposal covers the rest); remote and transport failures carry git's own reason as the advice.
+// A hook's refusal just names the hook (the proposal covers the rest); remote and transport failures carry git's own
+// reason as the advice.
 // git's own lines end how they end; the sentence around one must not add a second full stop.
 const sentence = (text: string): string => (/[.!?]$/.test(text) ? text : `${text}.`);
 
@@ -115,6 +90,3 @@ export const refusalSummary = (run: PushRun): string => {
     }
     return outcomeSummary(run);
 };
-
-// Heading over a settled check: commandRunOutcome's shared wording with the check's own subject.
-export const checkOutcome = (run: CommandRun): string => commandRunOutcome(run, `Checks`);

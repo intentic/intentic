@@ -1,9 +1,6 @@
 import type { CommandRun, PushRun } from "@intentic/sandbox-contract";
 import { test, expect } from "bun:test";
-import { checkFixPrompt, checkOutcome, fixSignature, outcomeSummary, pushFixPrompt, refusalSummary } from "./fixProposal";
-
-// Every case runs the check's words and the push's words side by side, so a sentence or prompt shape that
-// changes for one but not the other fails here, by name.
+import { fixSignature, outcomeSummary, pushFixPrompt, refusalSummary } from "./fixProposal";
 
 const check: CommandRun = { status: `failed`, command: `pnpm check`, exitCode: 1, output: `FAIL src/a.test.ts\n  ✗ adds` };
 const push: PushRun = {
@@ -15,19 +12,6 @@ const push: PushRun = {
     reason: `error: failed to push some refs to 'origin'`,
     refusedBy: `hook`,
 };
-
-test(`the heading over a settled run is the same vocabulary for the check and the push`, () => {
-    const pairs: readonly (readonly [Partial<CommandRun>, string])[] = [
-        [{ status: `failed` }, `failed`],
-        [{ status: `failed`, timedOut: true }, `timed out`],
-        [{ status: `error` }, `couldn't run`],
-        [{ status: `cancelled` }, `stopped`],
-        [{ status: `idle` }, `didn't run`],
-    ];
-    for (const [over, ending] of pairs) {
-        expect(checkOutcome({ ...check, ...over })).toBe(`Checks ${ending}`);
-    }
-});
 
 test(`the line under the command names how the run ended, and says nothing for a plain failure the evidence explains`, () => {
     expect(outcomeSummary(check)).toBe(``);
@@ -47,22 +31,12 @@ test(`a push's line says who refused it, in the words that decide what the owner
     );
     // A push that never ran carries git's situation rather than its words.
     expect(refusalSummary({ ...push, status: `error`, reason: `no remote configured`, output: `` })).toBe(`could not run: no remote configured.`);
-    // The rest is the check's own vocabulary, unchanged.
+    // The rest is how any run ended, unchanged.
     expect(refusalSummary({ ...push, timedOut: true })).toBe(outcomeSummary({ ...push, timedOut: true }));
     expect(refusalSummary({ ...push, status: `cancelled` })).toBe(outcomeSummary({ ...push, status: `cancelled` }));
 });
 
-test(`the check's proposal states what ran, what to do, and quotes the tail in a fence`, () => {
-    expect(checkFixPrompt(check)).toBe(
-        [
-            "`pnpm check` failed (exit 1). This is what blocks the push, and it is what CI would have said a few minutes later.",
-            "Find the cause and fix it, then re-run `pnpm check` yourself to confirm. You are in a worktree, so that run skips the build step (it cannot run in one) and measures everything else; if the build is what failed, say so rather than reporting a pass it did not cover.",
-            "Its output (tail):\n\n```\nFAIL src/a.test.ts\n  ✗ adds\n```",
-        ].join(`\n\n`),
-    );
-});
-
-test(`the push's proposal has the check's shape with the hook's situation in it`, () => {
+test(`the proposal states what the hook refused, what to do, and quotes the tail in a fence`, () => {
     expect(pushFixPrompt([push])).toBe(
         [
             "`git push origin main` in intentic was refused by the repository's own pre-push hook (exit 1). The hook is the workspace's gate, so this is what blocks the push, and it is what CI would have said a few minutes later.",
@@ -72,20 +46,10 @@ test(`the push's proposal has the check's shape with the hook's situation in it`
     );
 });
 
-test(`both proposals drop the fence when there is nothing to quote, and both name the CI round-trip`, () => {
-    const quiet = checkFixPrompt({ ...check, output: `  \n` });
-    const quietPush = pushFixPrompt([{ ...push, output: `` }]);
-    for (const prompt of [quiet, quietPush]) {
-        expect(prompt).not.toContain("```");
-        expect(prompt).toContain(`it is what CI would have said a few minutes later.`);
-    }
-    // A killed run says so instead of an exit code, and asks for the hang to be found.
-    expect(checkFixPrompt({ ...check, timedOut: true, output: `` })).toBe(
-        [
-            "`pnpm check` did not finish, it hit its time limit and was killed. Treat that as a failure: something hangs, and finding what is part of the fix. This is what blocks the push, and it is what CI would have said a few minutes later.",
-            "Find the cause and fix it, then re-run `pnpm check` yourself to confirm. You are in a worktree, so that run skips the build step (it cannot run in one) and measures everything else; if the build is what failed, say so rather than reporting a pass it did not cover.",
-        ].join(`\n\n`),
-    );
+test(`the proposal drops the fence when there is nothing to quote, and still names the CI round-trip`, () => {
+    const quiet = pushFixPrompt([{ ...push, output: `` }]);
+    expect(quiet).not.toContain("```");
+    expect(quiet).toContain(`it is what CI would have said a few minutes later.`);
 });
 
 test(`several repos refused in one push are several sections of one turn`, () => {

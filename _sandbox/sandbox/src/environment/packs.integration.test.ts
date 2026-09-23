@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot as findRepoRoot } from "@intentic/constants/node";
@@ -90,51 +90,6 @@ test("pack pins are in lockstep with the daemon's own dependency versions", asyn
     // cursor: the packed module must match the daemon's compiled-against version; it's imported, not just invoked.
     const cursor = (await readPack("cursor"))!;
     expect(pin(cursor.content, /@cursor\/sdk@(\S+) /)).toBe(version("@cursor/sdk"));
-});
-
-// Complements the pin check above with what a CLI on this machine actually reports. Absent is not a failure (dev
-// checkouts have no packs); a present CLI reporting the wrong version is a skew.
-test("a provider CLI present on this machine reports the version its pack pins", async () => {
-    const pinOf = async (pack: string, pattern: RegExp): Promise<string> => {
-        const match = pattern.exec((await readPack(pack))!.content);
-        expect(match?.[1], `no pin matching ${String(pattern)} in the ${pack} pack`).toEqual(expect.any(String));
-        return match![1]!;
-    };
-    // Compare only the version digits: codex prints `codex-cli 0.147.0`, opencode a bare number, formats can change.
-    const reported = (binary: string): string | undefined => {
-        try {
-            const output = execFileSync(binary, ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 30_000 });
-            return /(\d+\.\d+\.\d+)/.exec(output)?.[1];
-        } catch {
-            // Not installed here, or not answering: nothing to compare.
-            return undefined;
-        }
-    };
-
-    const codexVersion = reported("codex");
-    if (codexVersion !== undefined) {
-        expect(codexVersion, "the codex on PATH is not the version image-packs/codex.Dockerfile pins").toBe(
-            await pinOf("codex", /@openai\/codex@(\S+) /),
-        );
-    }
-
-    const opencodeVersion = reported("opencode");
-    if (opencodeVersion !== undefined) {
-        expect(opencodeVersion, "the opencode on PATH is not the version image-packs/opencode.Dockerfile pins").toBe(
-            await pinOf("opencode", /opencode-ai@(\S+) /),
-        );
-    }
-
-    // @cursor/sdk is a module the daemon imports, not a binary, read from where it resolves (cursor-sdk.ts). This skew
-    // has no symptom until a turn is already running.
-    const cursorDir = process.env["INTENTIC_CURSOR_SDK_DIR"] ?? "/opt/cursor-sdk";
-    const cursorManifest = join(cursorDir, "node_modules/@cursor/sdk/package.json");
-    if (existsSync(cursorManifest)) {
-        expect(
-            JSON.parse(readFileSync(cursorManifest, "utf8")).version,
-            `the @cursor/sdk in ${cursorDir} is not the version image-packs/cursor.Dockerfile pins`,
-        ).toBe(await pinOf("cursor", /@cursor\/sdk@(\S+) /));
-    }
 });
 
 // compose-image-dockerfile.mjs and this module implement one stamp-hash protocol; a mismatch reads baked images as

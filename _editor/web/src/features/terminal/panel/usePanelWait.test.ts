@@ -34,12 +34,12 @@ afterEach(() => {
 describe(`the empty panel`, () => {
     it(`holds itself empty for six seconds on a session on its way, then says what it still waits for`, async () => {
         const { tabs, wait } = stage();
-        tabs.pending.value = `pre-push`;
+        tabs.pending.value = `push-web`;
         await nextTick();
         jest.advanceTimersByTime(5_999);
         expect(wait.waited.value).toBe(false);
         jest.advanceTimersByTime(1);
-        expect({ waited: wait.waited.value, named: wait.named.value }).toEqual({ waited: true, named: `pre-push` });
+        expect({ waited: wait.waited.value, named: wait.named.value }).toEqual({ waited: true, named: `push-web` });
         expect(wait.emptyHint.value).toBe(
             `It hasn't appeared yet: the sandbox is probably still starting it. This panel keeps looking and shows it the moment it's listed.`,
         );
@@ -64,10 +64,10 @@ describe(`the empty panel`, () => {
 
     it(`takes a request it is handed and focuses its session`, async () => {
         const { tabs, wait } = stage();
-        await wait.openRequested({ name: `pre-push`, title: `Running your pre-push check` });
+        await wait.openRequested({ name: `push-web`, title: `Pushing web` });
         expect({ about: wait.about.value, focused: tabs.focus.mock.calls }).toEqual({
-            about: { name: `pre-push`, title: `Running your pre-push check` },
-            focused: [[`pre-push`]],
+            about: { name: `push-web`, title: `Pushing web` },
+            focused: [[`push-web`]],
         });
     });
 });

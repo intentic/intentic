@@ -11,7 +11,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
 - [src/agents](../src/agents), **plural**: the fleet — `registry/` (the roster and its record), `worktrees/` (`worktrees.ts`, `isolation.ts`: the isolated checkout), `land/` (`land.ts`, `origins.ts`, `landed-presence.ts`, `landed-history.ts`: work coming back into the main tree) and `recall/` (`fleet-recall.ts` + `fleet.routes.ts`, what one conversation can learn about another, see below).
 - [src/runtimes/cursor](../src/runtimes/cursor), the Cursor runtime, run in this process: the account store and its browser sign-in (`cursor-credentials.ts`), the adapter (`cursor-agent.ts`), the delta→frame mapping (`cursor-events.ts`), the socket-backed command gate Cursor calls back into (`cursor-hooks.ts`), the dynamic module resolution that lets the daemon boot without it (`cursor-sdk.ts`), and the provider module that registers all of it (`cursor-provider.ts`).
 - [src/git/changes/scratch.ts](../src/git/changes/scratch.ts): what a stage-everything leaves out, untracked paths shaped like scratch, read by every capture of a checkout and by the Changes panel alike (see gotchas.md).
-- [src/git/git.routes.ts](../src/git/git.routes.ts) (status/commit/push over the wire; [src/workspace](../src/workspace)) the repo layout the daemon serves; `workspace-bytes.routes.ts` is its byte surface, the raw and ranged-media reads and the three upload doors, off oRPC because their bodies are streamed bytes. The push is not a request but a RUN ([src/git/ops/push-run.ts](../src/git/ops/push-run.ts)): it runs the repository's own pre-push hook, which in a gated workspace is the whole suite, so it starts at once in the same terminal as the pre-push check ([src/prepush](../src/prepush)), is polled for its verdict, and settles with git's last word and who refused it (the hook, the remote, or the transport: `pushRefusal` in `git.ts`, read off real transcripts). Both runs are one shape (`CommandRun` in the contract) over one engine (`rules/rule-command.ts`), which is what lets the app show a refused push with the card, the terminal link and the proposed fix a red check already gets. [src/workspace/layout/workspace-scope.ts](../src/workspace/layout/workspace-scope.ts) decides WHOSE copy a file read means: the shared `/work` tree, or one conversation's own checkout when the request names it (`?agent=`). Reads only (no write route can name a checkout) and a request naming one that was archived away says so specifically instead of reporting a missing file.
+- [src/git/git.routes.ts](../src/git/git.routes.ts) (status/commit/push over the wire; [src/workspace](../src/workspace)) the repo layout the daemon serves; `workspace-bytes.routes.ts` is its byte surface, the raw and ranged-media reads and the three upload doors, off oRPC because their bodies are streamed bytes. The push is not a request but a RUN ([src/git/ops/push-run.ts](../src/git/ops/push-run.ts)): it runs the repository's own pre-push hook, which in a gated workspace is the whole suite, so it starts at once in the checks terminal, is polled for its verdict, and settles with git's last word and who refused it (the hook, the remote, or the transport: `pushRefusal` in `git.ts`, read off real transcripts). It is a `CommandRun` (the contract) over the rule engine's own runner (`rules/rule-command.ts`), which is what lets the app show a refused push with the card, the terminal link and the proposed fix a red check gets. [src/workspace/layout/workspace-scope.ts](../src/workspace/layout/workspace-scope.ts) decides WHOSE copy a file read means: the shared `/work` tree, or one conversation's own checkout when the request names it (`?agent=`). Reads only (no write route can name a checkout) and a request naming one that was archived away says so specifically instead of reporting a missing file.
 - [src/composition.ts](../src/composition.ts) (what is wired to what; [src/main.ts](../src/main.ts)) the entrypoint that builds it and serves. `main.ts` settles the process and then calls one phase per subject, each its own file under [src/bootstrap](../src/bootstrap), in the order that is behavior, handing each the same `BootPhase` shape ([src/bootstrap/boot-phase.ts](../src/bootstrap/boot-phase.ts)) and letting each register its own teardown, so nothing enumerates what to stop: [daemon-env.ts](../src/bootstrap/daemon-env.ts) (what the process needs before a daemon exists: the unauthenticated-and-reachable refusal, the env every spawned child inherits, the crash handlers, the boot marker), [daemon-metrics.ts](../src/bootstrap/daemon-metrics.ts) (the resource series and every git run's timing), [boot-pairings.ts](../src/bootstrap/boot-pairings.ts) (the enrollment tokens it was started with), [boot-chain.ts](../src/bootstrap/boot-chain.ts) (the declared steps every held data route waits on, in order — `BOOT_STEPS` is there and `boot-order.test.ts` pins it), [daemon-listeners.ts](../src/bootstrap/daemon-listeners.ts) (every port it answers on and the one it dials out from) with [platform-presence.ts](../src/bootstrap/platform-presence.ts) (what the platform is told, and the quiet window after which this machine stops itself), and past the gate [boot-sweeps.ts](../src/bootstrap/boot-sweeps.ts) (the recurring passes over its own state), [boot-restores.ts](../src/bootstrap/boot-restores.ts) (container-local state re-derived from manifests that outlived the container), [boot-schedulers.ts](../src/bootstrap/boot-schedulers.ts) (what fires between turns), [boot-resumes.ts](../src/bootstrap/boot-resumes.ts) (what was in flight when the last daemon died), [version-watches.ts](../src/bootstrap/version-watches.ts) (the version it stamps and the newer ones it watches for), [change-reactions.ts](../src/bootstrap/change-reactions.ts) (what re-derives when a file or a git ref moves), [workspace-apps.ts](../src/bootstrap/workspace-apps.ts) (restarting the dev servers the workspace declares, and observing whether the starter answered) and [deps-coordination.ts](../src/bootstrap/deps-coordination.ts) (the activity entry and the queued verify around a dependency install the coordinator decided on).
 - [src/environment](../src/environment): the overlay Dockerfile pipeline (capability fragments + the owner-approved
   custom section), and the image boundary held by the harness rather than by prose. The install-steering hook
@@ -45,43 +45,22 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   at CI's pace instead of a maintainer's memory. [src/engines/claude-sdk.ts](../src/engines/claude-sdk.ts) is the loader that
   makes it real for the engine loaded IN this process: both halves of the Claude SDK come from one installed
   prefix, resolved at turn start so a version can never change under a turn already running. Its `/engines` routes are `engines.routes.ts`.
-- [src/agent/verification/agent-tests.ts](../src/agent/verification/agent-tests.ts): the `verify-tests` built-in, what a turn did to its tests,
-  read at the Stop over every test file the tree says the turn touched. Two measurements: the assertion ratchet
-  (the file's exact matchers, loose matchers and pinned literal text against the same file at HEAD, reporting a
-  downgrade or a narrowing; the same measure the push gate refuses an undeclared weakening with,
-  `_tools/constants/src/assertion-measure.mjs`, and the two are held to each other by a test), and the fault check
-  below. That measure reads two languages: a TypeScript file by its matchers, a python file by what its `assert`
-  statements and unittest methods pin down, and the same module owns which files are test files at all — pytest's
-  collection rule as well as `*.test.ts`, one copy, so the push gate and the Stop cannot measure different sets.
-  The first test file a turn edits is also told the two rules that apply at that moment, once. Reports,
-  never refuses: a refactor from prose to structure and a test written ahead of its implementation both pass
-  honestly.
-- [src/agent/verification/agent-test-strength.ts](../src/agent/verification/agent-test-strength.ts): whether a test the agent wrote would have
-  passed BEFORE the change it tests. A test that passes against the old code does not test the new code, and
-  nothing else in the loop can see it: it type-checks, it lints, the suite is green. The check re-runs the one file
-  with the turn's changed source served from HEAD through a vite `load` hook, so the working tree is never written
-  over — a check that reverted files in place would trade a whole turn's work for a lint-grade signal the first
-  time it died between the revert and the restore. Same package only, because a sibling package resolves to its
-  built output where there is nothing to swap. Asked at the Stop by `verify-tests` (above) rather than on the
-  first edit of each test file, where it measured the first draft under a 20-second budget and only where the edit
-  tools could see the edit. The `load` hook is vitest's, so this answers only for a test vitest runs: a python
-  suite the ratchet measures gets no answer here, and says nothing rather than reporting a pass it never observed.
-  Off with the rule; off runs no suite.
 - [src/agent/tools/agent-shell-edits.ts](../src/agent/tools/agent-shell-edits.ts): which files a shell command changed, for the
   hooks that only ever heard the edit tools. The dirty paths of the turn's repos and their mtimes are snapshotted
   before every Bash command and compared after it, so a file `sed -i` or a heredoc rewrote gets the same type
   diagnostics an Edit does (agent-diagnostics.ts), in the agent's own names. Two snapshots rather than a rolling
   comparison, so the edit tools' work between two commands is never charged to the second.
 - [src/rules/repo-checks.ts](../src/rules/repo-checks.ts): the checks a REPOSITORY declares for itself, at
-  `<repo>/.intentic/checks.json`, read into ordinary rules aimed at that repository. The line between this and the
-  owner's own rule table is authority rather than subject: a repository may say WHAT to run, because the command
-  belongs beside the `package.json` scripts it names and travels with the checkout; only the settings say what happens
-  when it fails, so no repository can decide that its own work lands or that a push goes. Nothing declared runs until
-  the owner adopts it (settings `adoptedChecks`, keyed by repo id and holding the fingerprint of what was declared at
-  the time), and a declaration rewritten afterwards is held rather than inherited — git's own rule for hooks, which are
-  never cloned. Merged into the rule list at one point per moment (turn planning, `prepush.ts`), so the note, the Stop,
-  the push gate and the firing stamps read one list; and a rule naming a repository runs IN it
-  ([src/rules/rule-cwd.ts](../src/rules/rule-cwd.ts)), which is what a command spelled `cd x && …` was working around.
+  `<repo>/.intentic/checks.json`, and the only place a command check lives: `edit` and `turn` checks are read into
+  ordinary rules aimed at that repository, and a `land` check replaces the package's own `verify`/`test` script in the
+  daemon's run after a land (`workspace/deps/verify-deps.ts`). A push is gated by the repository's own git pre-push
+  hook, which the app's push runs too. The line between this and the owner's rule table is authority rather than
+  subject: a repository may say WHAT to run, because the command belongs beside the `package.json` scripts it names
+  and travels with the checkout; only the settings decide what lands. Nothing declared runs until the owner adopts it
+  (settings `adoptedChecks`, keyed by repo id and holding the fingerprint of what was declared at the time), and a
+  declaration rewritten afterwards is held rather than inherited — git's own rule for hooks, which are never cloned.
+  Merged into the rule list once, at turn planning, so the note, the Stop and the firing stamps read one list; and a
+  check runs IN its repository ([src/rules/rule-cwd.ts](../src/rules/rule-cwd.ts)).
 - [src/agents/actor/](../src/agents/actor): one actor per conversation, the only writer of its in-memory life.
   [conversation-decide.ts](../src/agents/actor/conversation-decide.ts) is the pure transition: an event and the state
   it meets become the next state, the effects to run (entry writes, the roster broadcast, the transcript index) and the
@@ -149,7 +128,7 @@ A reader's tour of `src/`: which directory answers which question, and the file 
   with no child process and no output). A watch or a dev server is exempt from the queue instead of bounded by it,
   since outliving its command is what it is for. Ahead of the
   slot, [bin/memory-gate](../src/platform/resources/memory-gate.ts) runs the daemon's OWN admission policy
-  (`memory-admission.ts`, previously reachable only from the pre-push check) as a command, so the numbers that
+  (`memory-admission.ts`) as a command, so the numbers that
   refuse a turn and the numbers that hold a suite are one set of numbers. Both are bounded and both fail open:
   past the deadline the command runs anyway, because a queue that can block forever turns one stuck suite into
   a dead sandbox — except under a rule that answers `onDeadline: "skip"`, which exits 75 having run nothing:

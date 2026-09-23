@@ -1,4 +1,4 @@
-import { type CommandRun, commandRunOutcome, type PushNotification, type PushRun } from "@intentic/sandbox-contract";
+import { commandRunOutcome, type PushNotification, type PushRun } from "@intentic/sandbox-contract";
 
 // Every notification's fixed wording, kept out of the subsystems that trigger it so the vocabulary a user can receive
 // lives in one place.
@@ -43,17 +43,6 @@ export const turnAwaiting = (conversationId: string, kind: AwaitingKind): PushNo
     url: conversationUrl(conversationId),
     // One tag across all three kinds: a new prompt replaces the one on screen instead of queuing behind it.
     tag: `awaiting-${conversationId}`,
-    requireInteraction: true,
-});
-
-// Sent when a pre-push check refuses or fails to run; a pass or a user-initiated cancel sends nothing.
-// requireInteraction: the check is blocked on an answer, so the notice must not auto-dismiss.
-export const prepushFailed = (run: CommandRun): PushNotification => ({
-    title: commandRunOutcome(run, "Checks"),
-    body: `${run.command}, your push is waiting on you.`,
-    url: "/workspace",
-    // One tag for the single check this daemon runs; a new verdict replaces rather than stacks.
-    tag: "prepush",
     requireInteraction: true,
 });
 

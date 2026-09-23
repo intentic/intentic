@@ -7,6 +7,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { parseCatalog } from "./lib/catalog.mjs";
 import { cannotMeasure, finish } from "./lib/report.mjs";
 import { root, subjectFiles, subjectScope, trackedFiles, untrackedFiles } from "./lib/repo.mjs";
 
@@ -24,17 +25,30 @@ const CATALOGS = [
 const leaves = (tree, prefix = "") =>
     Object.entries(tree).flatMap(([name, value]) => (typeof value === "object" && value !== null ? leaves(value, `${prefix}${name}.`) : [`${prefix}${name}`]));
 
-const read = (path) => JSON.parse(readFileSync(join(root, path), "utf8"));
+// Catalogs that cannot be parsed; one stops the check, since every key it holds would otherwise read as missing.
+const unreadable = [];
+const read = (path) => {
+    const { tree, problem } = parseCatalog(path, readFileSync(join(root, path), "utf8"));
+    if (problem !== undefined) {
+        unreadable.push(problem);
+    }
+    return tree ?? {};
+};
+
+const withKeys = (catalog, tree) => ({ ...catalog, tree, keys: new Set(leaves(tree).map((key) => `${catalog.prefix}${key}`)) });
 
 // One entry per catalog: the keys it answers to, from where a call site stands.
 const catalogs = [
-    ...CATALOGS.map((catalog) => ({ ...catalog, keys: new Set(leaves(read(`${catalog.dir}/en.json`)).map((key) => `${catalog.prefix}${key}`)) })),
+    ...CATALOGS.map((catalog) => withKeys(catalog, read(`${catalog.dir}/en.json`))),
     // An extension's own catalog, reached from its own files only. Untracked too: a catalog added in the same change
     // as the words it holds is not committed yet, and that is exactly when a missing key is cheapest to hear about.
     ...[...trackedFiles(), ...untrackedFiles()]
         .filter((path) => /^_extensions\/[^/]+\/src\/locales\/en\.json$/.test(path))
-        .map((path) => ({ dir: dirname(path), prefix: "", owns: [`${path.split("/").slice(0, 2).join("/")}/`], keys: new Set(leaves(read(path))) })),
+        .map((path) => withKeys({ dir: dirname(path), prefix: "", owns: [`${path.split("/").slice(0, 2).join("/")}/`] }, read(path))),
 ];
+if (unreadable.length > 0) {
+    finish([["A message catalog that cannot be parsed, so none of its keys can be checked", unreadable]], []);
+}
 
 const reachableFrom = (path) => catalogs.filter((catalog) => catalog.owns.some((dir) => path.startsWith(dir)));
 
@@ -97,14 +111,13 @@ const compiler = (() => {
     }
 })();
 if (compiler !== undefined) {
-    for (const catalog of catalogs) {
-        const tree = read(`${catalog.dir}/en.json`);
+    for (const { dir, tree } of catalogs) {
         const i18n = compiler.createI18n({ legacy: false, locale: "en", fallbackLocale: "en", messages: { en: tree }, missingWarn: false, fallbackWarn: false });
         for (const key of leaves(tree)) {
             try {
                 i18n.global.t(key);
             } catch (error) {
-                uncompilable.push(`${catalog.dir}/en.json: ${key}: ${String(error.message).split("\n")[0]}`);
+                uncompilable.push(`${dir}/en.json: ${key}: ${String(error.message).split("\n")[0]}`);
             }
         }
     }

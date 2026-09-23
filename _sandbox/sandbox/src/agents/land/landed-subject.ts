@@ -71,8 +71,8 @@ const breakingNote = (removed: readonly string[], written: string, wantsNote: bo
     return wantsNote ? written : ``;
 };
 
-// The Test-Note line the conversation's last word ended with, declaring a test it weakened on purpose; the verify-tests
-// follow-up asks for one only when it found a weakening.
+// The Test-Note line the conversation's last word ended with, declaring a test it weakened on purpose; the push's
+// assertion ratchet reads it in the landed commit.
 export const conversationTestNote = async (services: Services, entry: PersistedAgent): Promise<string | undefined> => {
     try {
         const said = (await services.transcripts.read(entry)).findLast((row) => row.role === "assistant")?.text;

@@ -23,10 +23,7 @@ export default {
     coverageAnalysis: "off",
     mutate: [
         "_sandbox/sandbox/src/agent/verification/agent-diagnostics.ts",
-        "_sandbox/sandbox/src/agent/verification/agent-removals.ts",
         "_sandbox/sandbox/src/agent/tools/agent-shell-edits.ts",
-        "_sandbox/sandbox/src/agent/verification/agent-test-strength.ts",
-        "_sandbox/sandbox/src/agent/verification/agent-tests.ts",
         "_sandbox/sandbox/src/agent/verification/agent-verification.ts",
         "_sandbox/sandbox/src/agent/verification/agent-viewing.ts",
         "_sandbox/sandbox/src/agent/verification/turn-checks.ts",

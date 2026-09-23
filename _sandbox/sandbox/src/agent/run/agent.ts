@@ -28,7 +28,7 @@ import {
 import { toolAnnotations } from "@intentic/sandbox-contract/peer-mcp-server";
 import { join, relative, sep } from "node:path";
 import { z } from "zod";
-import { daemonMountNs, inWorktree, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../agents/worktrees/isolation.js";
+import { daemonMountNs, type IsolationAnchor, nsenterArgv, TMUX_NS_ENV } from "../../agents/worktrees/isolation.js";
 import { worktreeRedirectHooks } from "../../agents/worktrees/worktree-redirect.js";
 import { browserArtifactHooks } from "../../browser/cast/browser-artifacts.js";
 import { browserSessionHooks } from "../../browser/sessions/browser-sessions.js";
@@ -383,17 +383,14 @@ const baseOptions = (
             // Persona's folder limit and config-edit permission; the only layer between an unattended wake and a bad
             // path.
             request.policy.personaScope !== undefined ? personaScopeHooks(request.policy.personaScope) : {},
-            // Every owner rule standing at turn.ending: the proof ledger, a standing instruction, a required command.
+            // Every rule standing at turn.ending: a repository's own check, and the look after a surface edit.
             turnEndingHooks(request.policy.turnEndingRules ?? [], {
-                isolation: request.spec.isolation?.plan,
-                inWorktree: (path) => inWorktree(path, request.spec.isolation?.plan),
                 runCommand: request.hooks.runRuleCommand,
                 installing: request.hooks.dependencyInstalling,
                 cwd: request.spec.cwd,
                 onFired: request.hooks.onRuleFired,
                 onCheckRun: request.hooks.onCheckRun,
                 onFollowUpOutcome: request.hooks.onFollowUpOutcome,
-                tests: request.hooks.verifyTests,
                 changedPaths: request.hooks.changedPaths,
                 repos: request.hooks.turnRepos,
                 syncBeforeChecks: stopSync(conversations, request, push, shell),

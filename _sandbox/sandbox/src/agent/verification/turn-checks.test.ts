@@ -38,13 +38,13 @@ test(`conversations do not share a verdict`, () => {
 
 test(`only a command rule records anything`, () => {
     const { conversations } = memoryFleet();
-    record(conversations, "c4", { ...CHECK, action: { kind: "instruct", text: "say hi" } }, "failed");
+    record(conversations, "c4", { ...CHECK, action: { kind: "builtin", name: "verify-ui-edits" } }, "failed");
     expect(conversations.send("c4", { kind: "verdict-taken" }).reply).toBeUndefined();
 });
 
 test(`a run names its command only when its rule is one`, () => {
     expect(checkRunOf(CHECK, { status: "error", output: "" })).toStrictEqual({ ruleId: "pre-land", label: "Verify before you finish", command: "pnpm verify", status: "error" });
-    expect(checkRunOf({ ...CHECK, action: { kind: "instruct", text: "say hi" } }, { status: "failed", output: "" })).toStrictEqual({
+    expect(checkRunOf({ ...CHECK, action: { kind: "builtin", name: "verify-ui-edits" } }, { status: "failed", output: "" })).toStrictEqual({
         ruleId: "pre-land",
         label: "Verify before you finish",
         status: "failed",

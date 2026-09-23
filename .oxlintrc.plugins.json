@@ -3,13 +3,10 @@
     // unmeasured backlog, not how they load: the root config already carries a JS plugin of its own, so
     // `@oxlint/plugins` is a dependency `pnpm lint` itself needs.
     //
-    // INSTALLED AND RUNNABLE (`pnpm lint:plugins`), NOT YET WHAT THE EDIT HOOK HOLDS EDITS TO. `@oxlint/plugins`
-    // is pinned to the `oxlint` version exactly (the JS plugin ABI is explicitly not semver-stable, and a
-    // mismatched pair fails at config-load time). To turn it on, point CONFIG in .claude/hooks/oxlint-edit.mjs
-    // at this file instead of .oxlintrc.agent.json. `pnpm lint:plugins` over the repo says how big the backlog
-    // is, and the answer decides whether these land as errors or as the next ratchet entry.
+    // Run by `pnpm lint:plugins` only; _tools/oxlint/lint-edit.mjs reads .oxlintrc.json, not this file.
+    // `@oxlint/plugins` must equal the `oxlint` version exactly: the JS plugin ABI is not semver-stable.
     "$schema": "./node_modules/oxlint/configuration_schema.json",
-    "extends": ["./.oxlintrc.agent.json"],
+    "extends": ["./.oxlintrc.json"],
     // `extends` merges `jsPlugins`, so the plugin the root config registers is loaded here too and only the
     // two this file adds are listed.
     "jsPlugins": [{ "name": "anti-slop", "specifier": "./_tools/oxlint/anti-slop/index.ts" }, "oxlint-plugin-complexity"],
@@ -35,13 +32,7 @@
         // band sampled as textbook algorithms (Kahn's sort, a fuzzy matcher, a streaming line reader) whose only
         // "fix" is fragmenting them into helpers that exist for the number. 21 and up is where three-deep
         // nesting starts, which is what the metric is for.
-        //
-        // NOT the same meter as the builtin `complexity` in .oxlintrc.agent.json: that one also counts `?.`
-        // (describeAction in _devices/machine: 19 there, 14 here), so the two cannot be made to agree by
-        // sharing a number. The builtin is off here so a function is measured once, by the rule that also names
-        // the lines that cost the most.
         "complexity/complexity": ["error", { "cyclomatic": 20, "cognitive": 20 }],
-        "complexity": "off",
         // Vendored from dmmulroy/anti-slop @ 6d53855. These are the only rules in this repo written for a
         // specific author rather than a specific bug: they reject code that TYPE-CHECKS AND RUNS but has
         // thrown away the evidence that it is correct — the shape a model reaches for when it does not know

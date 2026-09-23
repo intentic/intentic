@@ -62,7 +62,6 @@ const AREAS: Readonly<Record<string, { label: string; where: string }>> = {
     panels: { label: `Panels`, where: `the operator panels in the sidebar` },
     personas: { label: `Personas`, where: `the identities the agent speaks as` },
     ports: { label: `Ports`, where: `what this sandbox listens on, and previews` },
-    prepush: { label: `Pre-push checks`, where: `what stands between a change and a push` },
     providers: { label: `AI accounts`, where: `the accounts your agents run on` },
     public: { label: `Outbox`, where: `files published at the sandbox's public address` },
     push: { label: `Pushing`, where: `sending work to a repository` },

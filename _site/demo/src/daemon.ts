@@ -975,24 +975,34 @@ const DEMO_SYSTEM_PROMPT: ConversationPrompt = {
     },
 };
 
-/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running. */
+/* The checks each repository declares for itself (`<repo>/.intentic/checks.json`), one repository per state the group can be in: `web` running beside its package script, `api` waiting on the owner, the workspace held since its file changed. */
 const DEMO_REPO_CHECKS: RepoChecksList = {
     repos: [
         {
             repo: `web`,
             path: `web/${REPO_CHECKS_FILE}`,
             checks: [
-                { when: `turn`, run: `pnpm -C web lint` },
-                { when: `push`, run: `pnpm -C web test` },
+                { when: `edit`, run: `pnpm exec eslint {file}`, paths: [`src/**`] },
+                { when: `turn`, run: `pnpm lint` },
             ],
+            fired: [Date.now() - 11 * 60_000, null],
             adopted: true,
             changed: false,
+            landDefault: `pnpm test`,
         },
-        { repo: `api`, path: `api/${REPO_CHECKS_FILE}`, checks: [{ when: `push`, run: `pnpm -C api test` }], adopted: false, changed: false },
+        {
+            repo: `api`,
+            path: `api/${REPO_CHECKS_FILE}`,
+            checks: [{ when: `land`, run: `pnpm test:integration` }],
+            fired: [null],
+            adopted: false,
+            changed: false,
+        },
         {
             repo: `root`,
             path: REPO_CHECKS_FILE,
-            checks: [{ when: `push`, run: `./scripts/release-guard.sh --strict` }],
+            checks: [{ when: `turn`, run: `./scripts/release-guard.sh --strict` }],
+            fired: [null],
             adopted: false,
             changed: true,
         },

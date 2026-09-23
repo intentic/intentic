@@ -1820,22 +1820,13 @@
             "includeReleaseNoteEach": "Zu jedem Commit eine Release-Notiz hinzufügen."
         },
         "agentChecks": {
-            "askAboutAssertionsGot": "Nach Zusicherungen fragen, die schwächer geworden sind, und nach einem neuen Test, der auch ohne die Änderung besteht.",
-            "askAboutRemovedCode": "Nach entferntem Code fragen, den die Historie des Projekts verteidigt.",
-            "beforeEveryPush": "Vor jedem Push",
-            "checkBeforePush": "Prüfen, bevor Sie pushen",
-            "checkWhatDeleted": "Prüfen, was es gelöscht hat",
-            "checkWhatDidTo": "Prüfen, was es mit den Tests gemacht hat",
-            "checks": "Prüfungen",
+            "lastAsked": "Zuletzt nachgefragt {ago}",
             "lookAtWhatChanged": "Ansehen, was es geändert hat",
-            "pnpmTest": "pnpm test",
-            "prePushCheckCommand": "Prüfbefehl vor dem Push",
+            "neverAsked": "Nie nachgefragt",
             "promptAssistantToOpen": "Den Assistenten auffordern, die Ansicht nach Änderungen an der Oberfläche zu öffnen.",
-            "promptAssistantToRun": "Den Assistenten auffordern, nach Codeänderungen eine Prüfung laufen zu lassen.",
             "repairAfterLanding": "Reparieren, was nach dem Landen kaputtgeht",
             "repairAfterLandingNote": "Wenn eine gelandete Arbeit die Prüfung des Hauptbaums rot macht, geht sie an die Unterhaltung zurück, die sie gelandet hat. Bleibt die CI von main bei einem Fehler rot, startet ein Reparatur-Agent, sobald keine Pushes mehr kommen; ein Fehler der CI-Runner selbst wird neu gestartet.",
-            "runOneCheckBefore": "Vor jedem Push eine Prüfung laufen lassen, gleich welches Repository hinausgeht. Der eigene Build eines Repositorys gehört ins Repository, siehe unten.",
-            "verifyBeforeFinishing": "Vor dem Abschließen verifizieren"
+            "reviews": "Durchsichten"
         },
         "agentClock": {
             "clock": "Uhr",
@@ -1970,23 +1961,8 @@
             "oneRepositoryWaitingOn": "Ein Repository wartet auf Sie. Bis Sie es einschalten, laufen seine eigenen Prüfungen nicht.",
             "readingWhatWorkspacesRepositories": "Es wird gelesen, was die Repositorys dieses Workspace deklarieren…",
             "repositoriesWaitingOnUntil": "{waiting} Repositorys warten auf Sie. Bis Sie sie einschalten, laufen ihre eigenen Prüfungen nicht.",
-            "repositoryCarryOwnCheck": "Ein Repository kann seinen eigenen Prüfbefehl in .intentic/checks.json tragen, neben den Skripten, die es nennt, statt dass ein Befehl hier für alle einsteht.",
-            "repositoryChecks": "Repository-Prüfungen"
-        },
-        "agentRules": {
-            "addRule": "Eine Regel hinzufügen",
-            "enable": "{label} aktivieren",
-            "in": "in",
-            "moveDown": "Nach unten",
-            "moveUp": "Nach oben",
-            "newRule": "Neue Regel",
-            "noCustomRulesAdded": "Noch keine eigenen Regeln hinzugefügt.",
-            "onlyTouching": "nur beim Anfassen von",
-            "readingSandboxsRules": "Die Regeln dieser Sandbox werden gelesen…",
-            "ruleActions": "Regel-Aktionen",
-            "rules": "Regeln",
-            "run": "ausführen",
-            "say": "sagen:"
+            "repositoryChecks": "Repository-Prüfungen",
+            "repositoryDeclaresOwnChecks": "Ein Repository deklariert in .intentic/checks.json, was auf seinem eigenen Code läuft: nach jeder Änderung, bevor ein Zug endet, oder nachdem seine Arbeit gelandet ist. Über einen Push entscheidet der eigene Git-pre-push-Hook des Repositorys."
         },
         "agentSafetyJudge": {
             "changeInModels": "In „Modelle“ ändern",
@@ -2916,55 +2892,21 @@
             "viewAccounts": "Konten ansehen"
         },
         "repoCheckRow": {
+            "afterEachEdit": "nach jeder Änderung",
+            "afterItLands": "nachdem es gelandet ist",
+            "beforeTurnEnds": "bevor ein Zug endet",
             "changedSinceSwitchedOn": "Das hat sich geändert, seit Sie es eingeschaltet haben, deshalb läuft es nicht. Lesen Sie es oben und schalten Sie es erneut ein, um es anzunehmen.",
             "checksFileCouldNot": "Seine Prüfdatei ließ sich nicht lesen: {error}",
             "declaredNotRunningNothing": "Deklariert, läuft nicht. Nichts, worum ein Repository bittet, läuft, bis Sie es sagen.",
+            "lastFlagged": "zuletzt gemeldet {ago}",
+            "neverFlagged": "nie etwas gemeldet",
             "onlyTouching": "nur beim Anfassen von",
+            "packageScript": "(Paket-Skript)",
             "runChecksDeclares": "Die Prüfungen ausführen, die {name} deklariert"
         },
         "restartWatch": {
             "seeLog": "Das Protokoll ansehen",
             "youreRunningNewImage": "Sie laufen auf dem neuen Image."
-        },
-        "ruleForm": {
-            "addAnother": "weitere hinzufügen…",
-            "addRule": "Regel hinzufügen",
-            "anywhereInWorkspace": "Überall im Workspace",
-            "appliesToEveryChange": "Gilt für jede Änderung.",
-            "applyToEveryChange": "Auf jede Änderung anwenden",
-            "called": "Genannt",
-            "commandToRun": "Auszuführender Befehl",
-            "docs": "docs/**",
-            "onlyTouches": "Nur, wenn es Folgendes anfasst…",
-            "onlyTouches2": "Nur wenn es anfasst",
-            "paths": "Pfade",
-            "pnpmLint": "pnpm lint",
-            "remove": "{glob} entfernen",
-            "repository": "Welches Repository",
-            "repositoryRuleAbout": "Um welches Repository es in dieser Regel geht",
-            "ruleName": "Regelname",
-            "ruleRuns": "Wann diese Regel läuft",
-            "runsIn": "Läuft in",
-            "saveChanges": "Änderungen speichern",
-            "then": "Dann",
-            "updateChangelogBeforeFinish": "Aktualisiere das Änderungsprotokoll, bevor du fertig wirst.",
-            "whatToTellAssistant": "Was dem Assistenten gesagt wird",
-            "when": "Wenn",
-            "where": "Wo",
-            "workspaceRoot": "das Wurzelverzeichnis des Workspace",
-            "writeCommandWouldIn": ", schreiben Sie den Befehl also so, wie Sie es dort in einem Terminal täten."
-        },
-        "ruleWords": {
-            "afterEditsFile": "Nachdem er eine Datei bearbeitet hat",
-            "afterWorkAccepted": "Nachdem seine Arbeit angenommen wurde",
-            "agentFinishes": "Wenn ein Agent fertig wird",
-            "beforeAssistantFinishes": "Bevor der Assistent fertig wird",
-            "beforePush": "Bevor Sie pushen",
-            "holdWork": "Die Arbeit zurückhalten",
-            "landWork": "Die Arbeit landen",
-            "runCommand": "Einen Befehl ausführen",
-            "saveVersion": "Eine Fassung sichern",
-            "tellSomething": "Ihm etwas sagen"
         },
         "rules": {
             "landFinishedWorkAutomatically": "Fertige Arbeit automatisch landen",
@@ -4114,8 +4056,6 @@
         },
         "pushQuestionBody": {
             "fixAgentOpenConversation": "Agent reparieren: {toLowerCase} — Unterhaltung öffnen",
-            "runAgain": "Erneut ausführen",
-            "runCheckAgainOn": "Die Prüfung am Baum laufen lassen, wie er jetzt ist",
             "setAttemptAsideStart": "Diesen Versuch beiseitelegen und einen neuen beginnen — öffnet zuerst die Auswahl",
             "showTerminal": "Terminal zeigen",
             "startOver": "Von vorn beginnen"
@@ -4709,12 +4649,10 @@
             "allChecksInSandbox": "Alle Prüfungen in dieser Sandbox",
             "appearHereTravelRepository": "und sie erscheint hier und reist mit dem Repository zu jedem anderen, der es klont.",
             "checksIn": "Prüfungen in {dir}",
-            "commandRunsInFolder": ", und der Befehl läuft in diesem Ordner, schreiben Sie ihn also so, wie Sie es hier in einem Terminal täten.",
-            "is": "ist",
-            "or": "oder",
             "repositoryDeclaresIn": "Dieses Repository deklariert diese in",
             "repositoryDoesntDeclareAny": "Dieses Repository deklariert keine eigenen Prüfungen. Legen Sie eine Datei ab unter",
-            "theyTravelSwitchingOn": ", damit sie mit ihm reisen. Sie einzuschalten ist das, was diese Sandbox sie ausführen lässt."
+            "theyTravelSwitchingOn": ", damit sie mit ihm reisen. Sie einzuschalten ist das, was diese Sandbox sie ausführen lässt.",
+            "whenIsOneOf": "{when} ist {edit}, {turn} oder {land}, und der Befehl läuft in diesem Ordner, schreiben Sie ihn also so, wie Sie es hier in einem Terminal täten."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Stattdessen eine neue hinzufügen",
@@ -4884,7 +4822,6 @@
             "unchangedParagraphs": "{count} unveränderter Absatz | {count} unveränderte Absätze"
         },
         "pushBadge": {
-            "checksRunningBeforePush": "Vor Ihrem Push laufen Prüfungen",
             "pushWaitingOn": "{title}, Ihr Push wartet auf Sie",
             "sendingCommits": "Ihre Commits werden gesendet"
         },
@@ -4950,11 +4887,9 @@
             "staged2": "Gestaged",
             "stagesEveryChangeCommits": "Staged jede Änderung und committet dann",
             "stagesFilesFrom": "Staged die {count} Datei aus {filter} und committet dann: sonst geht nichts hinein | Staged die {count} Dateien aus {filter} und committet dann: sonst geht nichts hinein",
-            "stopChecksPushStays": "Die Prüfungen stoppen. Der Push wartet weiter auf Ihre Antwort",
             "unfinishedOrigins": "{origins} ist noch nicht fertig, dieser Commit zeichnet die {files} auf, die bisher gelandet sind. | {origins} sind noch nicht fertig, dieser Commit zeichnet die {files} auf, die bisher gelandet sind.",
             "unstaged": "Nicht gestaged",
             "untrackedLeave": "{count} nicht verfolgte Datei verlässt die Platte: sie wurde nie committet, git hat also keine Kopie: | {count} nicht verfolgte Dateien verlassen die Platte: sie wurden nie committet, git hat also keine Kopie:",
-            "watchChecksRun": "Den Prüfungen zusehen",
             "watchRun": "Ihm zusehen",
             "you": "Sie"
         },
@@ -5021,9 +4956,6 @@
         },
         "useChanges": {
             "accessToSandboxRead": "Ihr Zugriff auf diese Sandbox ist nur lesend: dafür braucht es Maintainer-Zugriff."
-        },
-        "usePrepush": {
-            "runningPrePushCheck": "Ihre Prüfung vor dem Push läuft"
         },
         "usePushFlow": {
             "failed": "{verb} fehlgeschlagen",

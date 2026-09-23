@@ -7,9 +7,12 @@ import { test } from "node:test";
 import {
     againstBaseline,
     failedTasks,
+    failureLines,
     judgeUnits,
     junitFailures,
     junitFile,
+    logTail,
+    rerunCommand,
     takeSummary,
     typeDiagnostics,
     unhandledErrors,
@@ -143,4 +146,35 @@ test("a verdict keeps a capped list and says when it cut one", () => {
     assert.equal(kept.failures.length, 400);
     assert.equal(kept.truncated, true);
     assert.deepEqual(kept.failedTasks, ["t#test"]);
+});
+
+test("a log tail keeps the last lines that say anything, escape codes dropped", () => {
+    assert.deepEqual(logTail("start\n\u001b[31merror: boom\u001b[0m\n\n   \n  at x  \n", 2), ["error: boom", "  at x"]);
+});
+
+test("failure lines name every failing task's first failure before any task's second, and quote a whole task's log", () => {
+    const root = mkdtempSync(join(tmpdir(), "failure-lines-"));
+    try {
+        mkdirSync(join(root, "other/.turbo"), { recursive: true });
+        writeFileSync(join(root, "other/.turbo/turbo-test.log"), `$ bun test\nerror: ${root}/other/setup.ts failed to load\n`);
+        const tasks = [{ taskId: "@s/other#test", name: "@s/other", task: "test", directory: "other", logFile: "other/.turbo/turbo-test.log" }];
+        const units = ["@s/pkg#typecheck a.ts: TS1 one", "@s/pkg#typecheck b.ts: TS1 two", "@s/other#test", "@s/web#test c.test.ts › works"];
+        assert.deepEqual(failureLines(root, units, tasks), [
+            "@s/pkg#typecheck a.ts: TS1 one",
+            "@s/other#test",
+            "  $ bun test",
+            "  error: other/setup.ts failed to load",
+            "@s/web#test c.test.ts › works",
+            "@s/pkg#typecheck b.ts: TS1 two",
+        ]);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test("a re-run command names only the failing packages, and counts past eight rather than listing them", () => {
+    const task = (name, kind) => ({ taskId: `${name}#${kind}`, name, task: kind });
+    assert.equal(rerunCommand([task("@s/a", "typecheck"), task("@s/a", "test"), task("@s/b", "test")]), "pnpm turbo run test typecheck --only --filter @s/a --filter @s/b");
+    const many = Array.from({ length: 10 }, (_, index) => task(`@s/p${index}`, "test"));
+    assert.match(rerunCommand(many), /--filter @s\/p7 \(\+2 more\)$/);
 });

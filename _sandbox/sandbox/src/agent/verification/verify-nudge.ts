@@ -3,16 +3,14 @@ import { type AgentTurn, type Rule, type RuleBuiltin, type TurnProfile, verifyNu
 import type { Logger } from "pino";
 import type { ConversationActors } from "../../agents/actor/conversation-actors.js";
 import type { Services } from "../../composition.js";
-import type { IsolationPlan } from "../../agents/worktrees/isolation.js";
 import { conditionHolds } from "../../rules/rules.js";
 import { workspaceRelative } from "../../rules/turn-ending.js";
-import { type VerificationLedger, verifyEditsMessage } from "./agent-verification.js";
+import type { VerificationLedger } from "./agent-verification.js";
 import { type ViewLedger, verifyUiEditsMessage } from "./agent-viewing.js";
 
-// Delivers the turn.ending follow-up on the runtimes with no Stop hook: the built-ins read off the frame ledgers, and
-// what the daemon's own run of the command rules found.
-// Claude keeps its cheaper in-turn hook. Spends a turn on the user's behalf, so it is gated: the rule must stand, its
-// conditions must hold, the work unproven, and a nudge never answers a nudge.
+// Delivers the turn.ending follow-up on the runtimes with no Stop hook: what the daemon's own run of the repositories'
+// turn checks found, and the look the frame ledger says was skipped. Spends a turn on the user's behalf, so a nudge
+// never answers a nudge.
 
 // Delivery pacing: a nudge fails only while another turn is live, and turns end, so a bounded retry converges.
 const RETRY_MS = 5_000;
@@ -28,9 +26,7 @@ export interface VerifyNudgeRuntime {
 
 let runtime: VerifyNudgeRuntime | undefined;
 
-// The rule the owner stood here, if any, re-checked against `moment` even though the planner filtered it, the same belt
-// the hook path keeps. Only builtins that read a record or the tree; instruct/command rules are the hook path's to
-// deliver.
+// The built-in the owner stood here, if any, re-checked against `moment` even though the planner filtered it.
 const builtinRule = (rules: readonly Rule[], name: RuleBuiltin, paths: readonly string[], draw: number): Rule | undefined =>
     rules.find(
         (rule) =>
@@ -48,12 +44,9 @@ export interface VerifyNudge {
     readonly ledger: VerificationLedger;
     // What the turn drew against whether it looked; optional, so a caller with no such ledger can't fire that rule.
     readonly view?: ViewLedger | undefined;
-    readonly isolation?: IsolationPlan | undefined;
     // The turn's own tree, so a rule spelled `src/**` matches paths the way the owner spells them.
     readonly cwd?: string | undefined;
     readonly onFired?: ((rule: Rule) => void) | undefined;
-    // The verify-tests built-in's answer, bound to the turn's tree; optional for the same reason `view` is.
-    readonly tests?: (() => Promise<string | undefined>) | undefined;
     // What the turn.ending command rules found when the daemon ran them after the turn (rules/turn-ending.ts
     // commandRuleFindings), each already worded for the model; absent or empty when they passed or did not run.
     readonly findings?: readonly string[] | undefined;
@@ -66,25 +59,11 @@ const asksOf = async (nudge: VerifyNudge): Promise<{ readonly rule: Rule; readon
     const paths = nudge.ledger.edited().map((path) => workspaceRelative(path, nudge.cwd));
     const draw = Math.random();
     const asks: { readonly rule: Rule; readonly message: string }[] = [];
-    const verify = builtinRule(nudge.rules, "verify-edits", paths, draw);
-    if (verify !== undefined) {
-        const message = await verifyEditsMessage(nudge.ledger, nudge.isolation);
-        if (message !== undefined) {
-            asks.push({ rule: verify, message });
-        }
-    }
     const viewing = nudge.view === undefined ? undefined : builtinRule(nudge.rules, "verify-ui-edits", paths, draw);
     if (viewing !== undefined && nudge.view !== undefined) {
         const message = verifyUiEditsMessage(nudge.view);
         if (message !== undefined) {
             asks.push({ rule: viewing, message });
-        }
-    }
-    const tests = nudge.tests === undefined ? undefined : builtinRule(nudge.rules, "verify-tests", paths, draw);
-    if (tests !== undefined && nudge.tests !== undefined) {
-        const message = await nudge.tests();
-        if (message !== undefined) {
-            asks.push({ rule: tests, message });
         }
     }
     return asks;

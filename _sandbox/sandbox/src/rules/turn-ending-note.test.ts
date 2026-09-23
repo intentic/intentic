@@ -22,7 +22,7 @@ test("says nothing when no automatic command runs at turn end", () => {
 
     expect(turnEndingNote([])).toBeUndefined();
     expect(turnEndingNote([command({ enabled: false })])).toBeUndefined();
-    expect(turnEndingNote([command({ moment: "push.starting" })])).toBeUndefined();
+    expect(turnEndingNote([command({ moment: "file.edited" })])).toBeUndefined();
     expect(turnEndingNote([command({ action: { kind: "command", command: " ", timeoutMs: 900_000 } })])).toBeUndefined();
     expect(turnEndingNote([builtin])).toBeUndefined();
 });

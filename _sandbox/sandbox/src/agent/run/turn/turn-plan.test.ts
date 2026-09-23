@@ -391,14 +391,13 @@ test("iq search teaching reaches native Codex and OpenCode as the shipped nudge,
 
 // The turn-ending note only needs to be said once per conversation: by the second turn it is already in the session's
 // own history. Compaction erases that history, so it is the one event that re-earns the note.
-const CHECKED_SETTINGS = unstubbed<Services["sandboxSettings"]>("sandboxSettings", {
-    get: async () =>
-        SandboxSettingsSchema.parse({
-            rules: [
-                { id: "pre-land", label: "Verify before you finish", moment: "turn.ending", action: { kind: "command", command: "pnpm verify" } },
-            ],
-        }),
+// A repository's turn check as it stands in the merged list the decision reads (repo-checks.ts compiles a declaration
+// into this shape); settings alone refuse a command, so it is laid over the parsed defaults.
+const withTurnCheck = (command: string): SandboxSettings => ({
+    ...SandboxSettingsSchema.parse({}),
+    rules: [{ id: "repo-check-root-1", label: "Verify before you finish", moment: "turn.ending", action: { kind: "command", command, timeoutMs: 900_000 }, enabled: true }],
 });
+const CHECKED_SETTINGS = unstubbed<Services["sandboxSettings"]>("sandboxSettings", { get: async () => withTurnCheck("pnpm verify") });
 // A conversation as the registry has it: turns run, the turn a compaction happened under (compactedTurn), and the
 // account its last turn actually ran on.
 const conversationAt = (fields: { readonly turns: number; readonly compactedTurn?: number; readonly account?: string }): Services["agents"] =>
@@ -663,28 +662,21 @@ test("a main-tree turn has no worktree to name, so it says nothing", async () =>
     expect(wire(plan)).toBe("do the thing");
 });
 
-test("every runtime is told which automatic check runs when its turn ends", async () => {
-    const gated = SandboxSettingsSchema.parse({
-        rules: [
-            {
-                id: "pre-land",
-                label: "Verify before you finish",
-                moment: "turn.ending",
-                action: { kind: "command", command: "cd intentic && pnpm lint && pnpm verify", timeoutMs: 900_000 },
-                enabled: true,
-            },
-        ],
-    });
+test("every runtime whose checks will run is told which automatic check runs when its turn ends", async () => {
+    const gated = withTurnCheck("pnpm lint && pnpm verify");
+    const isolated: TurnContext = { ...context, localCwd: `${HISTORY_ROOT}/worktrees/abc/work`, effectiveCwd: `${HISTORY_ROOT}/worktrees/abc/work` };
 
-    // Claude Code runs the command rules at its Stop; a native runtime gets the same rules from the daemon once its
-    // frames end (settle/settle-turn.ts daemonStopFindings), so neither is promised a check nothing runs.
+    // Claude Code runs the checks at its own Stop, anywhere; a native runtime gets them from the daemon once its frames
+    // end (settle/settle-turn.ts daemonStopFindings), on an isolated turn only.
     for (const plan of [
         await planTurn(withSettings(harnessServices(), gated), turn(), context),
-        await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), context),
+        await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), isolated),
     ]) {
-        expect(wire(plan)).toContain("**Verify before you finish:** `cd intentic && pnpm lint && pnpm verify`");
+        expect(wire(plan)).toContain("**Verify before you finish:** `pnpm lint && pnpm verify`");
         expect(wire(plan)).toContain("Do not run or announce them yourself");
     }
+    // A native turn on the main tree has no daemon Stop, so it is promised nothing.
+    expect(wire(await planTurn(withSettings(codexServices(), gated), turn({ agent: "codex" }), context))).not.toContain("Verify before you finish");
 
     // No command rule stands, so nothing is promised.
     expect(wire(await planTurn(harnessServices(), turn(), context))).toBe("do the thing");

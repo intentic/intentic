@@ -1,11 +1,5 @@
 {
-    // THE LANDABLE STANDARD. Everything in this file is green on main and `pnpm lint` gates it.
-    //
-    // There is a second, stricter config next door — .oxlintrc.agent.json — which extends this one
-    // and is applied ONLY to files an agent has just written (see .claude/hooks/oxlint-edit.mjs). That split is
-    // deliberate: a standard the repo cannot currently meet is a standard agents learn to disable, so the rules
-    // that still have a legacy backlog live on the authoring side of the line and ratchet inward from there,
-    // instead of sitting here red.
+    // Green on main; `pnpm lint` gates it, and _tools/oxlint/lint-edit.mjs holds every written file to it.
     //
     // Rules are ENUMERATED rather than pulled in by category. Oxlint's categories are buckets of available
     // rules, not curated presets (there is no `recommended` preset yet — oxc-project/oxc#20758), and the wide
@@ -62,7 +56,7 @@
                 ]
             }
         ],
-        // `fix.imports` lets --fix delete an unused import outright, which is the whole point of the edit hook:
+        // `fix.imports` lets --fix delete an unused import outright, which is the whole point of lint-edit.mjs:
         // the agent never sees a diagnostic for something a tool could just remove. Variable removal stays off —
         // deleting a binding can delete an initialiser's side effect with it.
         "no-unused-vars": ["error", { "args": "none", "varsIgnorePattern": "^_", "fix": { "imports": "safe-fix", "variables": "off" } }],
@@ -94,7 +88,7 @@
         "promise/param-names": "off", // Promise executor arg naming, 74 sites
         // OFF BECAUSE ITS AUTOFIX IS NOT VALUE-SAFE. appendChild() returns the node it appended; append()
         // returns undefined. Oxlint ships the rewrite as a plain --fix, and it silently broke two call sites
-        // here that used the return value — caught by tsc, not by the linter. The edit hook applies --fix
+        // here that used the return value — caught by tsc, not by the linter. lint-edit.mjs applies --fix
         // without showing the agent what it changed, so a fix that can alter a value is the one kind this
         // setup must not carry.
         "unicorn/prefer-dom-node-append": "off",

@@ -3,6 +3,29 @@
 // broken tree; `finish` prints every failure and skip in one block, where a truncated output tail can't lose it.
 import { spawnSync } from "node:child_process";
 
+// Bytes of failure lines the digest prints across every failed step, so the digest fits the ~4,000-byte tail a Stop quotes.
+const DETAIL_BYTES = 2_600;
+// One failure line's ceiling, so a single long message cannot spend the whole budget.
+const LINE_BYTES = 240;
+
+const clip = (line) => (line.length > LINE_BYTES ? `${line.slice(0, LINE_BYTES - 1)}…` : line);
+
+// `lines` cut to about `budget` bytes, what was cut counted on a closing line.
+const within = (lines, budget) => {
+    const kept = [];
+    let used = 0;
+    for (const [index, line] of lines.entries()) {
+        const next = clip(line);
+        used += next.length + 7;
+        if (used > budget) {
+            kept.push(`…and ${lines.length - index} more`);
+            break;
+        }
+        kept.push(next);
+    }
+    return kept;
+};
+
 // A step's command as a pasteable line: `process.execPath` shown as `node`, and paths under `root` shortened to
 // relative.
 const spell = (command, args, root) => {
@@ -20,11 +43,13 @@ export const createSteps = (name, root) => {
 
     // Runs one step; returns pass/fail and never exits, so an independent step still runs. A command that can't start
     // is recorded as a failure, not silently skipped.
-    // `judge` reads a non-zero exit before it is recorded: `{ ok: true, note }` clears it, `{ ok: false, why }` names it.
-    const step = (label, command, args, { env = {}, judge } = {}) => {
+    // `judge` reads a non-zero exit before it is recorded: `{ ok: true, note }` clears it, `{ ok: false, why }` names it,
+    // `spelling` replaces the command the digest shows and `details` are the failure lines it prints under it.
+    // `shown` stands in for the spelled command where the real one is too long to be worth a line of the digest.
+    const step = (label, command, args, { env = {}, judge, shown } = {}) => {
         say(`${label} …`);
         const result = spawnSync(command, args, { cwd: root, stdio: "inherit", shell: process.platform === "win32", env: { ...process.env, ...env } });
-        const spelling = spell(command, args, root);
+        const spelling = shown ?? spell(command, args, root);
         if (result.error !== undefined) {
             say(`${label}: ${result.error.message}`);
             results.push({ label, spelling, status: "failed", why: result.error.message });
@@ -43,7 +68,7 @@ export const createSteps = (name, root) => {
             return true;
         }
         say(`${label} failed`);
-        results.push({ label, spelling, status: "failed", why: verdict.why ?? `exit ${status ?? "signal"}` });
+        results.push({ label, spelling: verdict.spelling ?? spelling, status: "failed", why: verdict.why ?? `exit ${status ?? "signal"}`, details: verdict.details ?? [] });
         return false;
     };
 
@@ -58,9 +83,9 @@ export const createSteps = (name, root) => {
 
     // Records a failure found by reading rather than spawning (no command to spell); goes in the same digest as the
     // rest.
-    const fail = (label, why) => {
+    const fail = (label, why, details = []) => {
         say(`${label} failed`);
-        results.push({ label, status: "failed", why });
+        results.push({ label, status: "failed", why, details });
     };
 
 
@@ -78,8 +103,20 @@ export const createSteps = (name, root) => {
         const width = Math.max(...[...failed, ...skipped].map(({ label }) => label.length));
         console.error("");
         say(`${failed.length} of ${results.length} steps failed in ${seconds}s: ${failed.map(({ label }) => label).join(", ")}`);
-        for (const { label, spelling, why } of failed) {
+        // An even share per step with details, what one leaves unspent passing to the next.
+        let left = DETAIL_BYTES;
+        let sharing = failed.filter(({ details = [] }) => details.length > 0).length;
+        for (const { label, spelling, why, details = [] } of failed) {
             console.error(`  ✗ ${label.padEnd(width)}  ${spelling === undefined ? why : `${why} · ${spelling}`}`);
+            if (details.length === 0) {
+                continue;
+            }
+            const shown = within(details, Math.floor(left / sharing));
+            for (const line of shown) {
+                console.error(`      ${line}`);
+            }
+            left -= shown.reduce((sum, line) => sum + line.length + 7, 0);
+            sharing -= 1;
         }
         for (const { label, why } of skipped) {
             console.error(`  – ${label.padEnd(width)}  not run: ${why}`);

@@ -151,15 +151,9 @@ export const CiFixResponseSchema = z.object({
     conversationId: z.string().describe("The conversation that was opened, already holding the failure. Open it to watch, or attach to its turn."),
 });
 export type CiFixResponse = z.infer<typeof CiFixResponseSchema>;
-// The workspace's own answer to "would this push go red": front-runs CI at the push itself, the last moment before work
-// leaves the machine and the first at which what's pushed is finally settled. Runs at the push rather than the land,
-// where the tree keeps moving and a verdict would need staleness tracking to answer a question the push gets for free.
-// No stored verdict, nothing polled at rest: a run exists while it runs and is gone after, since the next push asks
-// again.
-
-// One shape for any command the daemon runs on a click with a verdict and a quotable tail (the pre-push check, and the
-// push itself via PushRunSchema in schemas/git/git.ts), so the fields the browser reads (terminal, tail, kill vs timeout)
-// can't drift between them.
+// One shape for any command the daemon runs on a click with a verdict and a quotable tail (the push via PushRunSchema in
+// schemas/git/git.ts, which runs the repository's own pre-push hook), so the fields the browser reads (terminal, tail,
+// kill vs timeout) have one definition.
 // idle: nothing has run yet, or the last run was cleared
 // running: live; its output is the terminal's, not this object's
 // passed: exited 0

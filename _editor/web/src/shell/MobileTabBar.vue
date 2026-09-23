@@ -89,7 +89,7 @@ const reviewBadge = computed<ViewBadge | undefined>(() => {
     // is still 0 until the land's patch is in the tree.
     const landing: Pick<ViewBadge, `running`> = changes.landing.value === undefined ? {} : { running: changes.landing.value };
     // A push in flight or unsent comes first: it's happening now, and its panel is two taps away.
-    const push = pushBadge(pushFlow.stage.value, pushFlow.question.value, pushFlow.held.value);
+    const push = pushBadge(pushFlow.running.value, pushFlow.question.value, pushFlow.held.value);
     if (push !== undefined) {
         return { ...push, ...landing };
     }

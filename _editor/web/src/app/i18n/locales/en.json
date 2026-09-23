@@ -1820,22 +1820,13 @@
             "includeReleaseNoteEach": "Include a release note with each commit."
         },
         "agentChecks": {
-            "askAboutAssertionsGot": "Ask about assertions that got weaker, and a new test that passes without the change.",
-            "askAboutRemovedCode": "Ask about removed code the project's history defends.",
-            "beforeEveryPush": "Before every push",
-            "checkBeforePush": "Check before you push",
-            "checkWhatDeleted": "Check what it deleted",
-            "checkWhatDidTo": "Check what it did to the tests",
-            "checks": "Checks",
+            "lastAsked": "Last asked {ago}",
             "lookAtWhatChanged": "Look at what it changed",
-            "pnpmTest": "pnpm test",
-            "prePushCheckCommand": "Pre-push check command",
+            "neverAsked": "Never asked",
             "promptAssistantToOpen": "Prompt the assistant to open the view after changes to the interface.",
-            "promptAssistantToRun": "Prompt the assistant to run a check after code changes.",
             "repairAfterLanding": "Repair what breaks after landing",
             "repairAfterLandingNote": "When a land turns the main tree's check red, send it back to the conversation that landed it. When main's CI stays red on one failure, start a fix agent once pushes go quiet, and re-run a failure on the CI fleet itself.",
-            "runOneCheckBefore": "Run one check before any push, whichever repository is going out. A repository's own build belongs in the repository, below.",
-            "verifyBeforeFinishing": "Verify before finishing"
+            "reviews": "Reviews"
         },
         "agentClock": {
             "clock": "Clock",
@@ -1970,23 +1961,8 @@
             "oneRepositoryWaitingOn": "One repository is waiting on you. Until you switch it on, its own checks do not run.",
             "readingWhatWorkspacesRepositories": "Reading what this workspace's repositories declare…",
             "repositoriesWaitingOnUntil": "{waiting} repositories are waiting on you. Until you switch them on, their own checks do not run.",
-            "repositoryCarryOwnCheck": "A repository can carry its own check command in .intentic/checks.json, beside the scripts it names, instead of one command here standing in for all of them.",
-            "repositoryChecks": "Repository checks"
-        },
-        "agentRules": {
-            "addRule": "Add a rule",
-            "enable": "Enable {label}",
-            "in": "in",
-            "moveDown": "Move down",
-            "moveUp": "Move up",
-            "newRule": "New rule",
-            "noCustomRulesAdded": "No custom rules added yet.",
-            "onlyTouching": "only when touching",
-            "readingSandboxsRules": "Reading this sandbox's rules…",
-            "ruleActions": "Rule actions",
-            "rules": "Rules",
-            "run": "run",
-            "say": "say:"
+            "repositoryChecks": "Repository checks",
+            "repositoryDeclaresOwnChecks": "A repository declares what runs on its own code in .intentic/checks.json: after each edit, before a turn ends, or after its work lands. A push is gated by the repository's own git pre-push hook."
         },
         "agentSafetyJudge": {
             "changeInModels": "Change in Models",
@@ -2908,55 +2884,21 @@
             "viewAccounts": "View accounts"
         },
         "repoCheckRow": {
+            "afterEachEdit": "after each edit",
+            "afterItLands": "after it lands",
+            "beforeTurnEnds": "before a turn ends",
             "changedSinceSwitchedOn": "This changed since you switched it on, so it is not running. Read it above and switch it on again to accept it.",
             "checksFileCouldNot": "Its checks file could not be read: {error}",
             "declaredNotRunningNothing": "Declared, not running. Nothing a repository asks for runs until you say so.",
+            "lastFlagged": "last flagged {ago}",
+            "neverFlagged": "never flagged",
             "onlyTouching": "only when touching",
+            "packageScript": "(package script)",
             "runChecksDeclares": "Run the checks {name} declares"
         },
         "restartWatch": {
             "seeLog": "See the log",
             "youreRunningNewImage": "You're running the new image."
-        },
-        "ruleForm": {
-            "addAnother": "add another…",
-            "addRule": "Add rule",
-            "anywhereInWorkspace": "Anywhere in the workspace",
-            "appliesToEveryChange": "Applies to every change.",
-            "applyToEveryChange": "Apply to every change",
-            "called": "Called",
-            "commandToRun": "Command to run",
-            "docs": "docs/**",
-            "onlyTouches": "Only when it touches…",
-            "onlyTouches2": "Only if it touches",
-            "paths": "Paths",
-            "pnpmLint": "pnpm lint",
-            "remove": "Remove {glob}",
-            "repository": "Which repository",
-            "repositoryRuleAbout": "Which repository this rule is about",
-            "ruleName": "Rule name",
-            "ruleRuns": "When this rule runs",
-            "runsIn": "Runs in",
-            "saveChanges": "Save changes",
-            "then": "Then",
-            "updateChangelogBeforeFinish": "Update the changelog before you finish.",
-            "whatToTellAssistant": "What to tell the assistant",
-            "when": "When",
-            "where": "Where",
-            "workspaceRoot": "the workspace root",
-            "writeCommandWouldIn": ", so write the command as you would in a terminal there."
-        },
-        "ruleWords": {
-            "afterEditsFile": "After it edits a file",
-            "afterWorkAccepted": "After its work is accepted",
-            "agentFinishes": "When an agent finishes",
-            "beforeAssistantFinishes": "Before the assistant finishes",
-            "beforePush": "Before you push",
-            "holdWork": "Hold the work",
-            "landWork": "Land the work",
-            "runCommand": "Run a command",
-            "saveVersion": "Save a version",
-            "tellSomething": "Tell it something"
         },
         "rules": {
             "landFinishedWorkAutomatically": "Land finished work automatically",
@@ -4114,8 +4056,6 @@
         },
         "pushQuestionBody": {
             "fixAgentOpenConversation": "Fix agent: {toLowerCase} — open the conversation",
-            "runAgain": "Run again",
-            "runCheckAgainOn": "Run the check again on the tree as it is now",
             "setAttemptAsideStart": "Set this attempt aside and start a fresh one — opens the picker first",
             "showTerminal": "Show terminal",
             "startOver": "Start over"
@@ -4745,12 +4685,10 @@
             "allChecksInSandbox": "All checks in this sandbox",
             "appearHereTravelRepository": "and it will appear here, and travel with the repository to anyone else who clones it.",
             "checksIn": "Checks in {dir}",
-            "commandRunsInFolder": ", and the command runs in this folder, so write it as you would in a terminal here.",
-            "is": "is",
-            "or": "or",
             "repositoryDeclaresIn": "This repository declares these in",
             "repositoryDoesntDeclareAny": "This repository doesn't declare any checks of its own. Put a file at",
-            "theyTravelSwitchingOn": ", so they travel with it. Switching them on is what lets this sandbox run them."
+            "theyTravelSwitchingOn": ", so they travel with it. Switching them on is what lets this sandbox run them.",
+            "whenIsOneOf": "{when} is {edit}, {turn} or {land}, and the command runs in this folder, so write it as you would in a terminal here."
         },
         "directoryPersonas": {
             "addNewOneInstead": "Add a new one instead",
@@ -4876,7 +4814,6 @@
             "unchangedParagraphs": "{count} unchanged paragraph | {count} unchanged paragraphs"
         },
         "pushBadge": {
-            "checksRunningBeforePush": "Checks are running before your push",
             "pushWaitingOn": "{title}, your push is waiting on you",
             "sendingCommits": "Sending your commits"
         },
@@ -4942,11 +4879,9 @@
             "staged2": "Staged",
             "stagesEveryChangeCommits": "Stages every change, then commits",
             "stagesFilesFrom": "Stages the {count} file from {filter}, then commits: nothing else goes in | Stages the {count} files from {filter}, then commits: nothing else goes in",
-            "stopChecksPushStays": "Stop the checks. The push stays waiting on your answer",
             "unfinishedOrigins": "{origins} hasn't finished, this commit records the {files} landed so far. | {origins} haven't finished, this commit records the {files} landed so far.",
             "unstaged": "Unstaged",
             "untrackedLeave": "{count} untracked file leaves the disk: it was never committed, so git has no copy: | {count} untracked files leave the disk: they were never committed, so git has no copy:",
-            "watchChecksRun": "Watch the checks run",
             "watchRun": "Watch it run",
             "you": "you"
         },
@@ -5013,9 +4948,6 @@
         },
         "useChanges": {
             "accessToSandboxRead": "Your access to this sandbox is read-only: this needs maintainer access."
-        },
-        "usePrepush": {
-            "runningPrePushCheck": "Running your pre-push check"
         },
         "usePushFlow": {
             "failed": "{verb} failed",

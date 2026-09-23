@@ -13,6 +13,7 @@
 // are dropped, and everything is sorted. That is the command to run before a translation pass, and after one.
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { parseCatalog } from "./lib/catalog.mjs";
 import { cannotMeasure, finish } from "./lib/report.mjs";
 import { root, trackedFiles, untrackedFiles } from "./lib/repo.mjs";
 
@@ -68,6 +69,7 @@ if (catalogs.length === 0) {
     cannotMeasure(`no catalogs found: expected at least one **/locales/${BASE}.json`);
 }
 
+const unreadable = [];
 const missingFiles = [];
 const missingKeys = [];
 const orphanKeys = [];
@@ -77,7 +79,11 @@ const written = [];
 
 for (const catalog of catalogs) {
     const dir = dirname(join(root, catalog));
-    const base = JSON.parse(readFileSync(join(dir, `${BASE}.json`), "utf8"));
+    const { tree: base, problem } = parseCatalog(catalog, readFileSync(join(dir, `${BASE}.json`), "utf8"));
+    if (problem !== undefined) {
+        unreadable.push(problem);
+        continue;
+    }
     const expected = leaves(base).sort();
     let untranslated = 0;
 
@@ -90,7 +96,13 @@ for (const catalog of catalogs) {
             continue;
         }
 
-        let tree = source === undefined ? {} : JSON.parse(source);
+        const parsed = source === undefined ? { tree: {} } : parseCatalog(where, source);
+        // Never rewritten by --fix: reshaping what could not be read would drop every translation in it.
+        if (parsed.problem !== undefined) {
+            unreadable.push(parsed.problem);
+            continue;
+        }
+        let { tree } = parsed;
         if (fix) {
             const next = `${JSON.stringify(reshape(base, tree), null, 4)}\n`;
             if (next !== source) {
@@ -122,6 +134,7 @@ for (const catalog of catalogs) {
 
 finish(
     [
+        [`Catalogs that cannot be parsed (resolve them by hand; --fix leaves them alone)`, unreadable],
         [`Language files missing (run with --fix to create them)`, missingFiles],
         [`Keys missing from a translation (run with --fix to seed them from ${BASE})`, missingKeys],
         [`Keys a translation has and ${BASE}.json does not (run with --fix to drop them)`, orphanKeys],

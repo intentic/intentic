@@ -53,11 +53,6 @@ export const DEFINITION_WORKSPACE: readonly { readonly path: string; readonly no
         path: [STATE_DIR, "config", "areas.json"].join("/"),
         note: "The named parts of the workspace arrive with their folders, and nobody holding them: the roster is the target's own, so who sees which area is granted again there.",
     },
-    {
-        // Via stateRelPath so the state union type checks this name; the trailing slash is re-added after trimming.
-        path: `${stateRelPath(".intentic/config/hooks/")}/`,
-        note: "The scripts a file.edited rule runs, beside the settings that name them; one that finds nothing it recognises on the target stays silent rather than failing every edit.",
-    },
     { path: ".intentic/config/approvals/", note: "Approvals arrive awaiting a yes, which is the only state they act in." },
     {
         path: ".intentic/config/automations.json",

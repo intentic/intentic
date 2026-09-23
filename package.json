@@ -22,7 +22,6 @@
         "check": "pnpm checks && pnpm lint && pnpm typecheck",
         "lint": "oxlint --deny-warnings",
         "lint:fix": "oxlint --fix",
-        "lint:agent": "oxlint --deny-warnings -c .oxlintrc.agent.json",
         "lint:plugins": "oxlint --deny-warnings -c .oxlintrc.plugins.json",
         "lint:types": "oxlint --type-aware --deny-warnings",
         "knip": "knip",

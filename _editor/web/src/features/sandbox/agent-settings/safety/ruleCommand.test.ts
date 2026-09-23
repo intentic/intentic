@@ -20,14 +20,14 @@ afterEach(() => {
 });
 
 it(`renders the rule command with the syntax highlighting hook`, () => {
-    const host = mount(`node .intentic/config/hooks/lint-edit.mjs {file}`);
+    const host = mount(`node _tools/oxlint/lint-edit.mjs {file}`);
     const code = host.querySelector(`code`);
     expect(code).not.toBeNull();
     expect(code?.className).toContain(`rule-command-code`);
 });
 
 it(`tokenizes command into syntax-colored spans`, async () => {
-    const host = mount(`node .intentic/config/hooks/lint-edit.mjs {file}`);
+    const host = mount(`node _tools/oxlint/lint-edit.mjs {file}`);
     const until = performance.now() + 10_000;
     const coloured = (): HTMLElement[] => [...host.querySelectorAll<HTMLElement>(`code span`)].filter((span) => span.style.color !== ``);
     while (coloured().length === 0 && performance.now() < until) {

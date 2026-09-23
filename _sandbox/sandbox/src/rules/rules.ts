@@ -1,11 +1,11 @@
 import type { Rule, RuleCondition, RuleMoment, RuleOutcome } from "@intentic/sandbox-contract";
 import { globToRegExp } from "@intentic/iq-engine";
 
-// Rule resolution is a pure function over data the caller already has: no registry, the owner's rules are a list in
-// settings. `matching` returns what matched; the caller decides what an empty result means, since each moment's default
-// (land, hold, or nothing) differs.
+// Rule resolution is a pure function over data the caller already has: the owner's rules and the repositories' checks
+// as one list. `matching` returns what matched; the caller decides what an empty result means, since each moment's
+// default (land, hold, or nothing) differs.
 
-// Rule count per moment differs by purpose: one that does things (a push check) runs every match, in order; one that
+// Rule count per moment differs by purpose: one that does things (a turn check) runs every match, in order; one that
 // decides (agent.finished) runs until a rule decides, first match wins, list order is the priority owners can reorder.
 const decidesAt = (moment: RuleMoment): boolean => moment === "agent.finished";
 
@@ -43,7 +43,7 @@ const pathsHold = (when: RuleCondition, facts: RuleFacts): boolean =>
     when.paths === undefined || when.paths.length === 0 || touches(facts.paths ?? [], when.paths);
 const outcomeHolds = (when: RuleCondition, facts: RuleFacts): boolean =>
     when.outcome === undefined || when.outcome.length === 0 || (facts.outcome !== undefined && when.outcome.includes(facts.outcome));
-// A moment that draws nothing never samples: a sampled rule at the push or the landing decision fires every time.
+// A moment that draws nothing never samples: a sampled rule at the landing decision fires every time.
 const sampleHolds = (when: RuleCondition, facts: RuleFacts): boolean => when.sample === undefined || facts.draw === undefined || facts.draw < when.sample;
 
 export const conditionHolds = (when: RuleCondition | undefined, facts: RuleFacts): boolean =>

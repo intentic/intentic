@@ -27,7 +27,6 @@ import { createPanelsRoutes } from "./panels/panels.routes.js";
 import { createPortsRoutes } from "./ports/ports.routes.js";
 import { createPublicRoutes } from "./public/public.routes.js";
 import { createNetdiskRoutes } from "./netdisk/netdisk.routes.js";
-import { createPrepushRoutes } from "./prepush/prepush.routes.js";
 import { createPushRoutes } from "./push/push.routes.js";
 import { createSecretsRoutes } from "./secrets/secrets.routes.js";
 import { providerSecretEntries } from "./agent/providers/provider-registry.js";
@@ -79,7 +78,6 @@ export const createRouter = (services: Services) => ({
     panels: createPanelsRoutes(services),
     ports: createPortsRoutes(services),
     public: createPublicRoutes(services),
-    prepush: createPrepushRoutes(services),
     providers: createProvidersRoutes(services),
     push: createPushRoutes(services),
     translator: createTranslatorRoutes(services),

@@ -93,8 +93,8 @@ export const outgoingAcross = computed(() => outgoingWork(changeBoxes.value.flat
 // Uncommitted work isn't part of `outgoingWork` (which counts commits only), so it's summed separately here.
 export const uncommittedAcross = computed(() => ledgerRows.value.reduce((total, row) => total + row.uncommitted, 0));
 
-// Pushes one row's commits directly, without the sandbox's pre-push check — that check's output has nowhere to
-// appear for a box you aren't standing in. Switching to that sandbox to push there is one press away.
+// Pushes one row's commits directly, outside the push flow: a refusal's terminal is on a box you aren't standing in, so
+// the row carries the reason instead. Switching to that sandbox to push there is one press away.
 export const pushRow = async (row: LedgerRow): Promise<void> => {
     const key = ledgerKey(row);
     if (pushing.value !== undefined) {

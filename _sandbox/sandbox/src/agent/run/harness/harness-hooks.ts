@@ -1,29 +1,30 @@
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import type { AgentTurn, ModelPin, Rule, SandboxSettings } from "@intentic/sandbox-contract";
 import { shellQuote } from "@intentic/sandbox-run/quote";
 import { fromWorktree, inWorktree, type IsolationAnchor, nsenterPrefix } from "../../../agents/worktrees/isolation.js";
 import type { Services } from "../../../composition.js";
 import { dirtyPathsAcross, turnPathsAcross } from "../../../git/changes/changes.js";
 import type { CommandGuardOptions } from "../../../guard/command-guard.js";
+import { editBytesReviewer } from "../../../rules/edit-bytes.js";
 import { fileEditedReviewer, spawnEditCommand } from "../../../rules/file-edited.js";
 import { type RuleCommandDeps, type RuleCommandRun, runRuleCommand } from "../../../rules/rule-command.js";
 import { repoCwd } from "../../../rules/rule-cwd.js";
-import type { FollowUpOutcome } from "../../../rules/turn-ending.js";
+import { type FollowUpOutcome, workspaceRelative } from "../../../rules/turn-ending.js";
 import { CHECKS_SESSION } from "../../../terminal/terminal-session.js";
 import { discoverRepos } from "../../../workspace/layout/repo-discovery.js";
 import type { TurnContext } from "../../providers/adapter.js";
 import type { TurnHooks } from "../../providers/agent-request.js";
-import { passesAgainstHead } from "../../verification/agent-test-strength.js";
-import { verifyTestsMessage } from "../../verification/agent-tests.js";
 import { checkRunOf } from "../../verification/turn-checks.js";
 import { opt } from "../../../opt.js";
 
-// What the daemon answers while a harness turn runs: the owner's rules at every edit and at the Stop, the safety judge
-// and its log, and the ledgers a turn feeds. Every write here is best-effort, since the turn must settle regardless.
+// What the daemon answers while a turn runs: the checks at every edit and at the Stop, the safety judge and its log, and
+// the ledgers a turn feeds. Every write here is best-effort, since the turn must settle regardless.
 
-// What the harness's hooks reach for: the rule runner's own deps, the ledgers they write, and the judge.
-export type HarnessHooksDeps = RuleCommandDeps &
-    Pick<Services, "activity" | "conversations" | "dependencies" | "judgeCommand" | "ruleFirings" | "runtimeInstalls" | "safetyLog" | "safetyPolicy">;
+// What the turn-end hooks reach for, on every runtime: the rule runner's own deps and the ledgers they write.
+export type TurnEndingHooksDeps = RuleCommandDeps & Pick<Services, "activity" | "conversations" | "dependencies" | "ruleFirings">;
+
+// What the harness's hooks reach for: the turn-end hooks' deps, the per-edit reviewers', and the judge.
+export type HarnessHooksDeps = TurnEndingHooksDeps & Pick<Services, "judgeCommand" | "runtimeInstalls" | "safetyLog" | "safetyPolicy">;
 
 // Bytes of a failed turn-ending command's output forwarded to the model; smaller than the pre-push budget since this
 // turn is still running and only needs enough to act on.
@@ -49,29 +50,38 @@ const stampFiring = (deps: Pick<Services, "logger" | "ruleFirings">, rule: Rule)
         .catch((error: unknown) => deps.logger.warn({ err: error, rule: rule.id }, "rule firing stamp failed"));
 };
 
-// The `file.edited` moment as one reviewer per written file, run where the Stop's command would run and named as the
-// agent sees it. Firings stamp the settings list only, so a per-edit rule doesn't spam a feed row per save.
-const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {
-    if (rules.length === 0) {
-        return {};
+// A path under one of the tree's roots, as the tree names it; undefined for one outside all of them.
+const underRoots = (file: string, roots: readonly string[]): string | undefined => {
+    if (!isAbsolute(file)) {
+        return file;
     }
+    return roots.map((root) => workspaceRelative(file, root)).find((relative) => relative !== file);
+};
+
+// The `file.edited` moment: the byte scan on every written file, then each repository's own edit checks, run where the
+// Stop's command would run and named as the agent sees it. Firings stamp the settings list only, so a per-edit check
+// doesn't spam a feed row per save.
+const editReviewersOf = (deps: HarnessHooksDeps, context: TurnContext, rules: readonly Rule[]): Pick<TurnHooks, "editReviewers"> => {
     const isolation = context.base.spec.isolation;
-    const reviewer = fileEditedReviewer(rules, {
+    const roots = [context.localCwd, isolation?.plan?.root, deps.workspace.root].filter((root): root is string => root !== undefined);
+    // Read by the daemon itself, so an isolated turn's file is its worktree's copy whether or not a namespace is entered.
+    const bytes = editBytesReviewer({ onDisk: (file) => inWorktree(file, isolation?.plan), relative: (file) => underRoots(file, roots) });
+    const commands = fileEditedReviewer(rules, {
         // In the repository the rule named, as at every other moment; the file itself travels as an absolute path, so
         // where the command runs changes without what it is given changing.
         run: (command, timeoutMs, repo) =>
             spawnEditCommand(repoCwd(context.localCwd, repo))(ruleCommandIn(command, isolation?.anchor, repo), timeoutMs),
         repos: () => discoverRepos(context.localCwd),
-        roots: [context.localCwd, isolation?.plan?.root, deps.workspace.root].filter((root): root is string => root !== undefined),
+        roots,
         place: (file) => (isolation?.anchor === undefined ? inWorktree(file, isolation?.plan) : file),
         onFired: (rule: Rule) => stampFiring(deps, rule),
     });
-    return { editReviewers: [reviewer].filter((each) => each !== undefined) };
+    return { editReviewers: [bytes, commands].filter((each) => each !== undefined) };
 };
 
 // A rule that fires at the Stop continued a turn the model had finished; stamped to the settings list and the feed.
 const ruleFiredAt =
-    (deps: HarnessHooksDeps, input: AgentTurn) =>
+    (deps: TurnEndingHooksDeps, input: AgentTurn) =>
     (rule: Rule): void => {
         stampFiring(deps, rule);
         void deps.activity
@@ -86,7 +96,7 @@ const ruleFiredAt =
 
 // What a follow-up bought, in counts, so the rule's cost can be weighed against what it changed.
 const followUpAt =
-    (deps: HarnessHooksDeps, input: AgentTurn) =>
+    (deps: TurnEndingHooksDeps, input: AgentTurn) =>
     (rule: Rule, outcome: FollowUpOutcome): void => {
         const did = [
             outcome.edits > 0 ? `${outcome.edits} edit${outcome.edits === 1 ? "" : "s"}` : undefined,
@@ -107,7 +117,7 @@ const followUpAt =
 // Logged like the pre-push check, since a red `turn.ending` command has two very different causes (broken work, or a
 // check that never saw the workspace's dependencies) told apart only by whether it ran anchored in the turn's namespace.
 const ruleRunnerIn =
-    (deps: HarnessHooksDeps, context: TurnContext): NonNullable<TurnHooks["runRuleCommand"]> =>
+    (deps: TurnEndingHooksDeps, context: TurnContext): NonNullable<TurnHooks["runRuleCommand"]> =>
     async (command, timeoutMs, repo) => {
         const anchor = context.base.spec.isolation?.anchor;
         const from = Date.now();
@@ -137,27 +147,21 @@ const ruleRunnerIn =
         return run;
     };
 
-// What the tree says an isolated turn changed, and the verify-tests built-in over the same set. Only there: its branch
-// holds nothing but its own work since the main-line base, committed by a sync or not, while the main checkout's test
-// files are everyone's.
-const isolatedStopHooks = (deps: HarnessHooksDeps, context: TurnContext): Pick<TurnHooks, "changedPaths" | "verifyTests"> => {
-    if (context.localCwd === deps.workspace.root) {
-        return {};
-    }
-    const changed = async (): Promise<string[]> => turnPathsAcross(context.localCwd, await discoverRepos(context.localCwd));
-    return {
-        changedPaths: changed,
-        verifyTests: () =>
-            verifyTestsMessage({
-                root: context.localCwd,
-                changed,
-                faults: (testFile: string) => passesAgainstHead(testFile, { repoRoot: context.localCwd }),
-            }),
-    };
-};
+// What the tree says an isolated turn changed. Only there: its branch holds nothing but its own work since the
+// main-line base, while the main checkout's dirty set is everyone's.
+const isolatedStopHooks = (deps: TurnEndingHooksDeps, context: TurnContext): Pick<TurnHooks, "changedPaths"> =>
+    context.localCwd === deps.workspace.root
+        ? {}
+        : { changedPaths: async () => turnPathsAcross(context.localCwd, await discoverRepos(context.localCwd)) };
 
-// Everything the Stop reads when `turn.ending` rules stand; nothing at all when none do, so no hook is wired.
-const turnEndingHooksOf = (deps: HarnessHooksDeps, input: AgentTurn, context: TurnContext, rules: readonly Rule[]): Omit<TurnHooks, "cards"> => {
+// Everything the Stop reads when `turn.ending` rules stand, whichever runtime runs it (the Claude Code loop's own Stop
+// hook, or the daemon's after the frames end); nothing at all when none do, so no hook is wired.
+export const turnEndingHooksOf = (
+    deps: TurnEndingHooksDeps,
+    input: AgentTurn,
+    context: TurnContext,
+    rules: readonly Rule[],
+): Omit<TurnHooks, "cards"> => {
     if (rules.length === 0) {
         return {};
     }
@@ -202,7 +206,7 @@ export const harnessHooks = (
     deps: HarnessHooksDeps,
     input: AgentTurn,
     context: TurnContext,
-    rules: { readonly fileEdited: readonly Rule[]; readonly turnEnding: readonly Rule[] },
+    fileEdited: readonly Rule[],
     safety: { readonly settings: SandboxSettings; readonly policy: string },
 ): TurnHooks => ({
     ...context.base.hooks,
@@ -220,8 +224,7 @@ export const harnessHooks = (
             const onDisk = join(context.localCwd, path);
             return { onDisk, path: fromWorktree(onDisk, context.base.spec.isolation?.plan) };
         }),
-    ...editReviewersOf(deps, context, rules.fileEdited),
-    ...turnEndingHooksOf(deps, input, context, rules.turnEnding),
+    ...editReviewersOf(deps, context, fileEdited),
     ...safetyHooksOf(deps, safety.settings, safety.policy),
     // The rebase the cards take back while the user is answering them; isolated turns only.
     ...opt("resync", context.resync),

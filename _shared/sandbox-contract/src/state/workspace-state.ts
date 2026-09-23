@@ -120,20 +120,6 @@ const STATE_FILES = [
     // Bash command. `carry`: a property of the workspace, not the machine. `versioned`: raising the limit is a decision
     // worth a diff.
     { path: ".intentic/config/heavy-commands.json", invalidates: ["settings"], portability: "carry", versioned: true },
-    // Scripts the rule table runs, one per reader (settings.json points at them per event, e.g. `file.edited`).
-    // `versioned`: this is code that runs against every file an agent writes, more consequential than the rule naming
-    // it. `carry`: authored text, no credential. Invalidates nothing: the settings screen renders the rules from
-    // settings.json, not these scripts.
-    {
-        path: ".intentic/config/hooks/",
-        invalidates: [],
-        why: "The settings screen renders the rules that name these scripts, out of settings.json; nothing in the browser reads the scripts themselves.",
-        portability: "carry",
-        versioned: true,
-        // The daemon only runs these scripts by path; it never builds them, so there's no `statePath` call for the
-        // coverage guard to find.
-        outsideWriter: "the owner or an agent, authoring them; the daemon only ever RUNS one, by the path a rule's command names",
-    },
     // Last-fired stamps for the rule table. `derived`: records what happened on this machine, not carried.
     {
         path: ".intentic/local/rule-firings.json",

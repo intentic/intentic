@@ -13,39 +13,28 @@ export const SystemPromptModeSchema = z.enum(["intentic", "claude", "custom"]);
 export type SystemPromptMode = z.infer<typeof SystemPromptModeSchema>;
 // Excludes "custom": there is nothing to fetch, it's whatever the owner already typed into the settings field.
 export const BuiltinPromptSchema = z.object({ base: z.enum(["intentic", "claude"]) });
-// Rules: "at this moment, if this is true, do this" — one table replacing three settings that were the same idea built
-// three ways; a fourth is now a row here, not a release. Moments are named to match `WorkspaceEventKind`, so folding
-// chores in later won't rename what users wrote.
-
-// Five places the daemon already stops to decide something; this names those decisions rather than inventing new ones.
+// Rules: "at this moment, if this is true, do this". The owner's rules decide (land, hold, version) and switch the
+// daemon's built-in reviews; every command a moment runs is a repository's own check (`<repo>/.intentic/checks.json`),
+// compiled into this same table by the daemon, so no command lives in settings.
 export const RuleMomentSchema = z.enum([
     // A command here runs on the just-written file (`{file}` is its path); the cheapest moment to catch a defect.
     "file.edited",
     // The assistant is about to stop. A rule here can send it back to work, which is the only moment that can.
     "turn.ending",
-    // Code is about to leave the machine. A rule here gates the push on its own exit code.
-    "push.starting",
     // An agent's turn is over and its delta is sitting on its branch. A rule here decides whether it lands.
     "agent.finished",
     // An agent's delta has just reached the main tree. A rule here decides what becomes of it there.
     "agent.landed",
 ]);
 export type RuleMoment = z.infer<typeof RuleMomentSchema>;
-// What a rule does; the split is functional since the three settings this table replaces each needed a different shape.
-// command: runs a shell command; its exit code is the verdict.
-// instruct: says something to the assistant before it finishes.
-// verdict: allows or holds what is about to happen (a pass with nothing to run, told which way to go).
-// builtin: invokes a named daemon behaviour the table has no business expressing itself.
-// Each reads a record only the daemon keeps, which is what makes it a built-in rather than a command.
-// verify-edits: what a turn edited, against what it ran.
-// verify-removals: what a turn deleted, against the repo's own history (a `git log` question, not a shell one-liner).
+// command: a repository's check; its exit code is the verdict.
+// verdict: allows or holds what is about to happen.
+// builtin: a daemon behaviour that reads a record only the daemon keeps.
 // verify-ui-edits: rendered surfaces a turn changed, against whether it ever looked at one.
-// verify-tests: whether a touched test's assertions got weaker than at HEAD, or would have passed before its own
-// change.
 // version-landed: commits what a land brought, in the main tree, under the subject drafted for it, and the tree's own
 // remainder before the next isolated turn starts; the only way a person who never commits keeps every agent seeing
 // the latest tree, since worktrees are cut from HEAD.
-export const RuleBuiltinSchema = z.enum(["verify-edits", "verify-removals", "verify-ui-edits", "verify-tests", "version-landed"]);
+export const RuleBuiltinSchema = z.enum(["verify-ui-edits", "version-landed"]);
 export type RuleBuiltin = z.infer<typeof RuleBuiltinSchema>;
 export const RuleActionSchema = z.discriminatedUnion("kind", [
     z.object({
@@ -54,7 +43,6 @@ export const RuleActionSchema = z.discriminatedUnion("kind", [
         // Past this, the process group is killed and the run is `failed`, never a silent pass.
         timeoutMs: z.number().min(60_000).max(3_600_000).default(900_000),
     }),
-    z.object({ kind: z.literal("instruct"), text: z.string().min(1).max(4000) }),
     z.object({ kind: z.literal("verdict"), verdict: z.enum(["allow", "hold"]) }),
     z.object({ kind: z.literal("builtin"), name: RuleBuiltinSchema }),
 ]);
@@ -63,8 +51,7 @@ export type RuleAction = z.infer<typeof RuleActionSchema>;
 // defaults to HELD unless a rule explicitly allows it.
 export const RuleOutcomeSchema = z.enum(["clean", "error", "conflict", "checks-failed"]);
 export type RuleOutcome = z.infer<typeof RuleOutcomeSchema>;
-// Three keys covering "only this repo" and "skip docs-only changes" without a query language; every key absent means
-// the rule always matches.
+// Every key absent means the rule always matches.
 export const RuleConditionSchema = z.object({
     // A workspace repo id, or "root". Absent ⇒ any.
     repo: z.string().min(1).optional(),
@@ -80,15 +67,13 @@ export type RuleCondition = z.infer<typeof RuleConditionSchema>;
 // validated here, not left to the consumer — the alternative is a rule that saves cleanly and silently does nothing.
 const MOMENT_ACTIONS: Record<RuleMoment, readonly RuleAction["kind"][]> = {
     "file.edited": ["command"],
-    "turn.ending": ["builtin", "instruct", "command"],
-    "push.starting": ["command"],
+    "turn.ending": ["builtin", "command"],
     "agent.finished": ["verdict"],
     "agent.landed": ["builtin"],
 };
-// A built-in reads a record only one moment keeps, so it stands at that moment alone: the verifiers read a turn's
-// ledgers, the versioner reads a landing's claim.
+// A built-in reads a record only one moment keeps, so it stands at that moment alone.
 const MOMENT_BUILTINS: Partial<Record<RuleMoment, readonly RuleBuiltin[]>> = {
-    "turn.ending": ["verify-edits", "verify-removals", "verify-ui-edits", "verify-tests"],
+    "turn.ending": ["verify-ui-edits"],
     "agent.landed": ["version-landed"],
 };
 export const RuleSchema = z
@@ -429,14 +414,17 @@ export const SandboxSettingsSchema = z.object({
         .describe(
             "Which repositories may run the checks they declare for themselves, and exactly which version of those checks you agreed to. A repository's declaration does nothing until it appears here, the same rule git keeps for hooks, which are never cloned; and a declaration that changes afterwards is held until you look at it again.",
         ),
-    // Lives in the owner's own settings, not the workspace: a rule can hold work and gate a push, so it answers to the
-    // sandbox owner alone. A repository may declare a COMMAND of its own (see `adoptedChecks`), never a verdict.
+    // The owner's alone, since a rule can hold work. A command is refused here: it belongs to the repository it checks,
+    // in that repository's `.intentic/checks.json`, never in settings.
     rules: z
         .array(RuleSchema)
         .max(50)
         .default([])
+        .refine((rules) => rules.every((rule) => rule.action.kind !== "command"), {
+            message: "a command belongs in the repository's own .intentic/checks.json, not in settings",
+        })
         .describe(
-            "Standing instructions you give the sandbox about its own work: ask for proof before a turn ends, run something before a push, hold or release finished work. Empty is the default and is exactly the behaviour of a fresh sandbox, because each of those defaults is what no rule matched means at its own moment.",
+            "Standing decisions about the sandbox's own work: land or hold finished work, save a version of what landed, ask the assistant to look at an interface it changed. Empty is the default and is exactly the behaviour of a fresh sandbox, because each of those defaults is what no rule matched means at its own moment. A command to run is a repository's own check, declared in its .intentic/checks.json.",
         ),
     automationFailureLimit: z
         .number()
@@ -608,27 +596,23 @@ export type SavingsReport = z.infer<typeof SavingsReportSchema>;
 // spelling for the daemon that reads it, the screen that names it and the demo that mimics it.
 export const REPO_CHECKS_FILE = `${STATE_DIR}/checks.json`;
 
-// Named for the occasion as a repository would say it, not for the daemon's wire moment: `edit` is `file.edited`,
-// `turn` is `turn.ending` and `push` is `push.starting` (rules/repo-checks.ts maps them). Three, because these are the
-// occasions whose command a repository actually owns; a verdict moment has nothing here to express.
-//
-// `edit` is the cheapest of the three and the only one that reaches the model while it still holds the line it wrote:
-// the command runs on that one file (`{file}`), and its output rides back in the edit's own response. A repository
-// that declares a whole-tree command here pays it per edit, so the command has to take the file.
-export const RepoCheckMomentSchema = z.enum(["edit", "turn", "push"]);
+// Named for the occasion as a repository would say it: `edit` is `file.edited`, `turn` is `turn.ending`, and `land` is
+// the daemon's run over the main tree after an install a land caused (rules/repo-checks.ts maps them). A push is gated by
+// the repository's own git pre-push hook, which every push runs, the app's included.
+// `edit` runs on one file (`{file}`) and its output rides back in the edit's own response, so a command declared there is
+// paid per edit and has to take the file.
+export const RepoCheckMomentSchema = z.enum(["edit", "turn", "land"]);
 export type RepoCheckMoment = z.infer<typeof RepoCheckMomentSchema>;
 
 export const RepoCheckSchema = z.object({
     when: RepoCheckMomentSchema.describe(
-        "When to run it: `edit` on each file as it is written (`{file}` is its path), `turn` before the assistant finishes, `push` before code leaves the machine.",
+        "When to run it: `edit` on each file as it is written (`{file}` is its path), `turn` before the assistant finishes, `land` on the main tree after finished work lands (absent, the package's own verify or test script runs there).",
     ),
     run: z.string().min(1).max(500).describe("The command, run in this repository's own directory, so it reads as it would in a terminal there."),
     label: z.string().min(1).max(80).optional().describe("What to call it on screen. Absent names it after the command."),
-    // Same ceiling as a rule's own command; past it the process group is killed and the run is a failure, never a
-    // silent pass.
+    // Same ceiling as a rule's own command; past it the process group is killed and the run is a failure.
     timeoutMs: z.number().min(60_000).max(3_600_000).optional().describe("How long it may take before it is killed and counted as failed."),
-    // Repo-relative, as anybody reading this file would write them; the daemon prefixes the repo id before matching,
-    // since a rule's globs are workspace-relative.
+    // Repo-relative; the daemon prefixes the repo id before matching, since a rule's globs are workspace-relative.
     paths: z
         .array(z.string().min(1))
         .max(20)
@@ -638,7 +622,16 @@ export const RepoCheckSchema = z.object({
 export type RepoCheck = z.infer<typeof RepoCheckSchema>;
 
 // The file itself. One key, so a second concern can be added later without breaking a file anyone has written.
-export const RepoChecksFileSchema = z.object({ checks: z.array(RepoCheckSchema).max(10).default([]) });
+export const RepoChecksFileSchema = z.object({
+    checks: z
+        .array(RepoCheckSchema)
+        .max(10)
+        .default([])
+        // One land check per repository: it is THE verdict on the main tree the push hook replays, not one of several.
+        .refine((checks) => checks.filter((check) => check.when === "land").length <= 1, { message: "a repository declares at most one land check" })
+        // A land checks the whole tree an install settled, not a change, so there is nothing for a glob to narrow.
+        .refine((checks) => checks.every((check) => check.when !== "land" || check.paths === undefined), { message: "a land check takes no paths" }),
+});
 export type RepoChecksFile = z.infer<typeof RepoChecksFileSchema>;
 
 // One repository, as a screen reads it: what it declares, and where that stands with the owner.
@@ -646,6 +639,11 @@ export const RepoChecksSummarySchema = z.object({
     repo: z.string().describe('Which repository, by its workspace id ("root" is the workspace itself).'),
     path: z.string().describe("Where the declaration lives, relative to the workspace, whether or not the file exists yet."),
     checks: z.array(RepoCheckSchema).describe("What it declares, in the order the file lists them."),
+    fired: z
+        .array(z.number().nullable())
+        .describe(
+            "When each declared check last reported something, in the file's order, as epoch milliseconds; null for one that never has, or for the land check, whose verdict the activity feed records instead.",
+        ),
     adopted: z
         .boolean()
         .describe("Whether these are running. False means declared and inert: nothing a repository writes runs until the owner switches it on."),
@@ -655,10 +653,16 @@ export const RepoChecksSummarySchema = z.object({
             "Whether the declaration changed since it was adopted, which holds it until the owner looks again. True only for a repository that was adopted before.",
         ),
     error: z.string().optional().describe("Why the file could not be read, when it exists but does not parse. The checks list is empty in that case."),
+    landDefault: z
+        .string()
+        .optional()
+        .describe(
+            "What runs on the main tree after a land when the file declares no `land` check: the package's own verify or test script. Absent when the repository has neither.",
+        ),
 });
 export type RepoChecksSummary = z.infer<typeof RepoChecksSummarySchema>;
 export const RepoChecksListSchema = z.object({
-    repos: z.array(RepoChecksSummarySchema).describe("Every repository that declares checks, plus any the owner has adopted before, sorted by id."),
+    repos: z.array(RepoChecksSummarySchema).describe("Every repository that declares checks or has a package check that runs after a land, in id order."),
 });
 export type RepoChecksList = z.infer<typeof RepoChecksListSchema>;
 export const RepoChecksAdoptSchema = z.object({

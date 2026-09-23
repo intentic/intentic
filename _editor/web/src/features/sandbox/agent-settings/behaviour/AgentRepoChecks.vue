@@ -8,7 +8,7 @@ import { useT } from "@intentic/ui/i18n";
 
 const t = useT();
 
-/* Repository checks appear above the sandbox-wide checks. */
+/* What each repository runs on its own code: what it declares, and its package script after a land. */
 
 const { repos, pending, error, adopt } = useRepoChecks();
 const outline = useSandboxOutline(computed(() => repos.value === undefined));
@@ -39,7 +39,7 @@ const waiting = computed(() => (repos.value ?? []).filter((entry) => !entry.adop
             v-else-if="repos.length === 0"
             icon="shield"
             :title="t(`sandbox.agentRepoChecks.noRepositoryDeclaresOwn`)"
-            :description="t(`sandbox.agentRepoChecks.repositoryCarryOwnCheck`)"
+            :description="t(`sandbox.agentRepoChecks.repositoryDeclaresOwnChecks`)"
         />
 
         <template v-else>

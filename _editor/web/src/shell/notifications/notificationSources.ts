@@ -331,7 +331,7 @@ export const startNotificationSources = (): void => {
             // Wider only when carrying a proposed turn; a composed session needs more than the lane's default width.
             wide: pushFlow.proposedFix.value !== undefined,
             body: PushQuestionBody,
-            // Empty on purpose: "Push anyway" lives in the body next to "Show terminal", not as a separate lane action.
+            // Empty on purpose: "Try again" lives in the body next to "Show terminal", not as a separate lane action.
             actions: [],
             // Only the user retires it; a timed-out question would be a decision nobody made.
             dismiss: pushFlow.dismiss,

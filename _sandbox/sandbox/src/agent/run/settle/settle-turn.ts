@@ -39,7 +39,6 @@ export const daemonStopFindings = async (deps: Pick<Services, "logger">, turn: D
                 onFired: request.hooks.onRuleFired,
                 installing: request.hooks.dependencyInstalling,
                 cwd: turn.cwd,
-                ...(turn.isolation !== undefined ? { isolation: turn.isolation.plan } : {}),
             },
         );
         return withSyncedNote(findings, commits);

@@ -773,46 +773,22 @@ const syncSummary = computed<string>(() => {
     return (counts.length > 0 ? counts.join(` `) : t(`workspace.reviewPanel.noUpstreamYet`)) + spread;
 });
 const syncRepoSpread = computed(() => (syncRepos.value.length > 1 ? plural(syncRepos.value.length, `repo`) : undefined));
-// Every push funnels through `pushFlow.askSync` (the bar and both row pills) — a second door to the same verb
-// would be a way around the pre-push check, which is also why useChanges exports no one-repo push.
+// Every push funnels through `pushFlow.askSync` (the bar and both row pills), the one place a refusal becomes a
+// question, which is also why useChanges exports no one-repo push.
 
-// How far through the suite is, against usePushFlow's remembered typical duration per sandbox — an elapsed
-// clock alone can't say whether 2s in is almost done or barely started. Capped short of 100%; undefined (no memory yet)
-// reads as indeterminate, not idle.
-const CHECK_FILL_CAP = 0.92;
-const checkElapsed = computed(() => now.value - pushFlow.since.value);
-const checkOverrun = computed(() => pushFlow.typicalMs.value !== undefined && checkElapsed.value > pushFlow.typicalMs.value);
-const checkFill = computed<number | undefined>(() => {
-    const typical = pushFlow.typicalMs.value;
-    return pushFlow.stage.value !== `checking` || typical === undefined || typical <= 0
-        ? undefined
-        : Math.min(checkElapsed.value / typical, CHECK_FILL_CAP);
-});
-
-// One line, the width this ~270px panel can spend on status; the duration scale rides the same line.
+// One line, the width this ~270px panel can spend on status.
 const stageLine = computed<string | undefined>(() => {
-    const elapsed = formatElapsed(pushFlow.since.value, now.value);
-    if (pushFlow.stage.value === `checking`) {
-        const typical = pushFlow.typicalMs.value;
-        if (typical === undefined) {
-            return `Checking · ${elapsed}`;
-        }
-        return checkOverrun.value ? `Checking · ${elapsed} · taking longer` : `Checking · ${elapsed} of ~${formatElapsed(0, typical)}`;
-    }
-    if (pushFlow.stage.value === `pushing`) {
-        return `${pushFlow.pending.value?.verb ?? `Push`}ing · ${elapsed}`;
+    if (pushFlow.running.value) {
+        return `${pushFlow.pending.value?.verb ?? `Push`}ing · ${formatElapsed(pushFlow.since.value, now.value)}`;
     }
     const sent = pushFlow.pushed.value;
     return sent === undefined ? undefined : `Pushed ${sent.what}`;
 });
 
-// The one fact the line has no room for: the command running. Undefined once nothing is in flight.
-const stageHint = computed<string | undefined>(() => {
-    if (pushFlow.stage.value === `checking`) {
-        return pushFlow.command.value === `` ? undefined : pushFlow.command.value;
-    }
-    return pushFlow.stage.value === `pushing` ? `Sending ${pushFlow.pending.value?.what ?? `your commits`} to the remote` : undefined;
-});
+// The one fact the line has no room for: what is going out. Undefined once nothing is in flight.
+const stageHint = computed<string | undefined>(() =>
+    pushFlow.running.value ? `Sending ${pushFlow.pending.value?.what ?? `your commits`} to the remote` : undefined,
+);
 
 /* Closing a card hides its question but does not change the verdict. */
 const heldLine = computed<string | undefined>(() => {
@@ -820,21 +796,12 @@ const heldLine = computed<string | undefined>(() => {
     return held === undefined ? undefined : `${held.question.title} · ${timeAgo(held.at, { now: now.value })}`;
 });
 
-// Whether the button beside the line would spend the suite again. Only a settled failure over an untouched tree is
-// still an answer; a stopped run, one that couldn't start, and a tree written to since all mean measure it again.
-const heldReruns = computed(() => pushFlow.held.value?.check?.status !== `failed` || pushFlow.heldStale.value);
-
-// What the press costs, which is the one thing the line can't say and the whole reason the block is here.
+// What the press shows, and what the button beside it does instead.
 const heldHint = computed<string | undefined>(() => {
     const held = pushFlow.held.value;
-    if (held === undefined) {
-        return undefined;
-    }
-    const verb = syncMeta.value?.label ?? `Push`;
-    const shown = `Show what happened: ${held.question.command ?? held.question.title}.`;
-    return heldReruns.value
-        ? `${shown} ${verb} runs the check again`
-        : `${shown} Nothing has been written since, so ${verb} shows this instead of spending the check`;
+    return held === undefined
+        ? undefined
+        : `Show what happened: ${held.question.command ?? held.question.title}. ${syncMeta.value?.label ?? `Push`} tries it again, hook and all`;
 });
 
 // The offer and the run are one control in three states, not stacked rows — the control that was clicked is the
@@ -1089,7 +1056,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
              place, and a closed card's verdict in front of the counts it did not change. -->
         <div
             v-if="outgoing !== undefined"
-            class="relative flex shrink-0 items-center"
+            class="flex shrink-0 items-center"
             :class="outgoing === `held` ? `gap-3 px-3 py-3` : `gap-1.5 px-2 py-1.5`"
             v-tooltip.right="outgoing === `flow` && !mobile ? stageHint : undefined"
         >
@@ -1101,8 +1068,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     :class="pushFlow.running.value ? `text-link` : `text-success`"
                 />
                 <span class="flex min-w-0 flex-1 flex-col">
-                    <!-- Lifts to full contrast only when it's news: a suite already running past its usual duration. -->
-                    <span class="truncate whitespace-nowrap text-2xs" :class="checkOverrun ? `text-content` : `text-muted`">{{ stageLine }}</span>
+                    <span class="truncate whitespace-nowrap text-2xs text-muted">{{ stageLine }}</span>
                     <span v-if="mobile && stageHint" class="truncate whitespace-nowrap font-mono text-3xs text-subtle">{{ stageHint }}</span>
                 </span>
                 <!-- Show terminal controls only when a terminal exists. -->
@@ -1112,21 +1078,10 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     :class="[ICON_BUTTON, 'max-md:h-8 max-md:w-8']"
                     @click="pushFlow.showTerminal"
                     v-tooltip.top="t(`workspace.reviewPanel.watchRun`)"
-                    :aria-label="t(`workspace.reviewPanel.watchChecksRun`)"
+                    :aria-label="t(`workspace.reviewPanel.watchRun`)"
                 >
                     <Icon name="terminal" class="text-2xs" />
                 </button>
-                <!-- Stopping the suite isn't cancelling the push — it settles as stopped and the push still waits on an answer. -->
-                <Button
-                    v-if="pushFlow.stage.value === `checking`"
-                    size="small"
-                    severity="secondary"
-                    class="shrink-0 whitespace-nowrap"
-                    @click="pushFlow.stopChecks"
-                    v-tooltip.top="t(`workspace.reviewPanel.stopChecksPushStays`)"
-                >
-                    {{ t(`ui.action.stop`) }}
-                </Button>
             </template>
             <template v-else>
                 <!-- The verdict the card was closed on, kept where the press that raised it lives. -->
@@ -1138,11 +1093,7 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     v-tooltip.right="heldHint"
                     @click="pushFlow.reopen"
                 >
-                    <span
-                        class="flex size-7 shrink-0 items-center justify-center rounded-md"
-                        :class="heldReruns ? `bg-warning/10 text-warning` : `bg-danger/10 text-danger`"
-                        aria-hidden="true"
-                    >
+                    <span class="flex size-7 shrink-0 items-center justify-center rounded-md bg-warning/10 text-warning" aria-hidden="true">
                         <Icon name="exclamation-circle" class="text-base" />
                     </span>
                     <span class="flex min-w-0 flex-1 flex-col gap-1">
@@ -1207,16 +1158,6 @@ const WARNING = `flex items-start gap-1.5 rounded-md border border-warning/40 bg
                     <Icon :name="syncMeta.icon" />{{ syncMeta.label }}
                 </Button>
             </template>
-
-            <!-- The block's own bottom edge doubles as the progress bar, so the wait is drawn in pixels the panel already spends. -->
-            <div v-if="pushFlow.stage.value === `checking`" class="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 overflow-hidden">
-                <div
-                    v-if="checkFill !== undefined"
-                    class="h-full bg-link transition-[width] duration-1000 ease-linear"
-                    :style="{ width: `${Math.round(checkFill * 100)}%` }"
-                ></div>
-                <div v-else class="h-full w-full bg-link/40"></div>
-            </div>
         </div>
 
         <!-- A fetch or push that failed in a repo the list isn't showing; named by repo since it has no row to sit under. -->

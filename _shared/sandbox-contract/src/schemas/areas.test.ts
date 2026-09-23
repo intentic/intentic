@@ -22,7 +22,7 @@ describe("AreaFolderSchema", () => {
     });
 
     test("the sandbox's own configuration and its outbox can never be named", () => {
-        for (const folder of [STATE_DIR, `${STATE_DIR}/config`, `${STATE_DIR}/config/hooks`, PUBLIC_DIR, `${PUBLIC_DIR}/site`]) {
+        for (const folder of [STATE_DIR, `${STATE_DIR}/config`, `${STATE_DIR}/config/skills`, PUBLIC_DIR, `${PUBLIC_DIR}/site`]) {
             expect(AreaFolderSchema.safeParse(folder).success, folder).toBe(false);
         }
     });

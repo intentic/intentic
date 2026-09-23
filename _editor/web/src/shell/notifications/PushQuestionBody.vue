@@ -18,9 +18,7 @@ const fixModel = useAgentRunPick(
     () => pushFlow.attemptOnOffer.value,
 );
 
-const pushAnywayLabel = computed(() => (pushFlow.question.value?.kind === `push` ? `Try again` : `${pushFlow.pending.value?.verb ?? `Push`} anyway`));
-
-/* A CARD THAT IS NOT NEWS SAYS SO. This one is raised twice for the same failure: once when the suite settles,. */
+/* A CARD THAT IS NOT NEWS SAYS SO: raised once when the push is refused, and again on every reopen. */
 const clock = useNow(() => pushFlow.fromMemory.value);
 const memoryLine = computed<string | undefined>(() => {
     const at = pushFlow.verdictAt.value;
@@ -32,11 +30,6 @@ const memoryLine = computed<string | undefined>(() => {
         ? `${when} Files have changed since, so this may no longer be what happens.`
         : `${when} Nothing has changed since.`;
 });
-
-// A red suite is the one failure a reader can legitimately doubt (flaky, or a fix landed elsewhere), and after a
-// reprint it's the only way to spend the check on purpose. Quiet, beside the terminal link: it's a way back to the
-// truth, not one of the three answers to the question.
-const canRerun = computed(() => pushFlow.question.value?.kind === `checks` && pushFlow.command.value !== ``);
 
 /* ONE SLOT FOR THE AGENT, in three shapes, after the pipelines board's own (PipelineRunRow.vue): no attempt,. */
 const attempt = computed(() => pushFlow.attempt.value);
@@ -84,7 +77,7 @@ const openStartOver = (): void => {
 
         <!-- ONE ROW FOR ALL ANSWERS: the way back to the output on the left, the actions on the right. -->
         <div class="mt-2 flex flex-wrap items-center justify-end gap-2">
-            <!-- Ways back to the truth, not answers to the question: what actually happened, and measuring it again. -->
+            <!-- The way back to what actually happened, not an answer to the question. -->
             <div class="mr-auto flex items-center gap-3">
                 <button
                     v-if="pushFlow.terminal.value !== undefined"
@@ -94,17 +87,6 @@ const openStartOver = (): void => {
                 >
                     <Icon name="terminal" class="text-2xs" />
                     {{ t(`shell.pushQuestionBody.showTerminal`) }}
-                </button>
-
-                <button
-                    v-if="canRerun"
-                    type="button"
-                    class="flex items-center gap-1.5 rounded text-2xs text-muted transition-colors hover:text-content"
-                    v-tooltip.top="t(`shell.pushQuestionBody.runCheckAgainOn`)"
-                    @click="pushFlow.runAgain"
-                >
-                    <Icon name="refresh" class="text-2xs" />
-                    {{ t(`shell.pushQuestionBody.runAgain`) }}
                 </button>
             </div>
 
@@ -145,8 +127,8 @@ const openStartOver = (): void => {
                 @run="startFix"
             />
 
-            <!-- Push anyway, and it never asks twice. -->
-            <Button size="small" severity="warn" :label="pushAnywayLabel" @click="pushFlow.pushAnyway" />
+            <!-- The same push again, hook and all. -->
+            <Button size="small" severity="warn" :label="t(`ui.action.tryAgain`)" @click="pushFlow.retry" />
         </div>
         <!-- Why the last press started nothing, in the daemon's words; the question stays up above it. -->
         <p v-if="pushFlow.fixError.value" class="mt-1.5 break-words text-2xs text-danger">{{ pushFlow.fixError.value }}</p>

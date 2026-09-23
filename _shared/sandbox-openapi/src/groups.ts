@@ -330,14 +330,6 @@ export const SPEC_GROUPS: readonly SpecGroup[] = [
             "Read the runs and the jobs inside them, re-run or cancel one, and mark the board read. The interesting one hands a failing run to an agent rather than to you.",
     },
     {
-        name: "prepush",
-        shelf: "ship",
-        label: "Pre-push check",
-        summary: "The suite that runs before anything leaves the machine",
-        description:
-            "Three verbs about one run, because there is one main working tree and so exactly one check. Starting it answers immediately: a suite takes minutes, and a request held open that long dies at the first proxy. Poll for the verdict; the answer names the terminal where it is really happening.",
-    },
-    {
         name: "public",
         shelf: "ship",
         label: "Outbox",

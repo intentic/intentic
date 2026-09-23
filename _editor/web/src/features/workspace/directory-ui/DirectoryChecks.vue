@@ -27,7 +27,8 @@ const entry = computed(() => (repos.value ?? []).find((candidate) => candidate.r
 
 const EXAMPLE = `{
   "checks": [
-    { "when": "push", "run": "pnpm test" }
+    { "when": "turn", "run": "pnpm lint" },
+    { "when": "land", "run": "pnpm test" }
   ]
 }`;
 </script>
@@ -53,16 +54,17 @@ const EXAMPLE = `{
                     {{ t(`workspace.directoryChecks.appearHereTravelRepository`) }}
                 </p>
                 <pre class="overflow-x-auto rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-2xs text-content">{{ EXAMPLE }}</pre>
-                <p class="text-2xs text-subtle">
-                    <span class="font-mono">when</span> {{ t(`workspace.directoryChecks.is`) }} <span class="font-mono">push</span>
-                    {{ t(`workspace.directoryChecks.or`) }} <span class="font-mono">turn</span
-                    >{{ t(`workspace.directoryChecks.commandRunsInFolder`) }}
-                </p>
+                <i18n-t keypath="workspace.directoryChecks.whenIsOneOf" tag="p" class="text-2xs text-subtle" scope="global">
+                    <template #when><span class="font-mono">when</span></template>
+                    <template #edit><span class="font-mono">edit</span></template>
+                    <template #turn><span class="font-mono">turn</span></template>
+                    <template #land><span class="font-mono">land</span></template>
+                </i18n-t>
             </template>
         </div>
 
         <template #footer>
-            <!-- Where the rest of the answer lives: the sandbox-wide checks and every other repository's. -->
+            <!-- Where the rest of the answer lives: the daemon's own reviews and every other repository's checks. -->
             <RouterLink to="/sandbox/agent?section=finishing" :class="ui.linkButton(`mr-auto gap-1 text-xs text-muted hover:text-content`)">
                 {{ t(`workspace.directoryChecks.allChecksInSandbox`) }} <Icon name="arrow-right" class="text-2xs" />
             </RouterLink>

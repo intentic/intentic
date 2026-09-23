@@ -258,11 +258,10 @@ describe("a held turn", () => {
 });
 
 describe("the daemon's own Stop", () => {
-    const rules = [{ id: "suite", label: "Suite", moment: "turn.ending", action: { kind: "builtin", name: "verify-edits" }, enabled: true }] as const;
+    const rules = [{ id: "suite", label: "Suite", moment: "turn.ending", action: { kind: "builtin", name: "verify-ui-edits" }, enabled: true }] as const;
 
     test("runs for a runtime with no Stop hook, on the rules and ledgers the turn ran with", () => {
         const onRuleFired = (): void => {};
-        const verifyTests = async (): Promise<string | undefined> => undefined;
         const isolation = { plan: { worktree: "/w", root: WORKSPACE_ROOT, mirrors: [], overlays: "/o", fence: undefined } };
         const end = ended([edit], {
             input: { ...input, agent: "codex", model: "gpt-5", effort: "high", actsAs: "reviewer", unattended: true, permissionMode: "plan" },
@@ -273,14 +272,14 @@ describe("the daemon's own Stop", () => {
             request: {
                 ...request,
                 policy: { ...request.policy, turnEndingRules: [...rules] },
-                hooks: { ...request.hooks, onRuleFired, verifyTests },
+                hooks: { ...request.hooks, onRuleFired },
             },
         });
         const { daemonStop } = settleTurn(end);
 
         expect(daemonStop).toStrictEqual({
             conversationId: "c-1",
-            findings: { conversationId: "c-1", isolated: true, request: end.request, edited: ["/work/src/parser.ts"], cwd: "/w", isolation },
+            findings: { conversationId: "c-1", isolated: true, request: end.request, edited: ["/work/src/parser.ts"], cwd: "/w" },
             nudge: {
                 conversationId: "c-1",
                 // The turn's profile whole, and nothing it said or how it was gated.
@@ -288,10 +287,8 @@ describe("the daemon's own Stop", () => {
                 rules: [...rules],
                 ledger: end.frames.verification,
                 view: end.frames.viewing,
-                isolation: isolation.plan,
                 cwd: "/w",
                 onFired: onRuleFired,
-                tests: verifyTests,
             },
         });
     });
@@ -300,7 +297,7 @@ describe("the daemon's own Stop", () => {
         const { daemonStop } = settleTurn(ended([], { provider: "codex", input: { prompt: "p" } }));
         expect(daemonStop).toStrictEqual({
             conversationId: undefined,
-            findings: { conversationId: undefined, isolated: false, request, edited: [], cwd: WORKSPACE_ROOT, isolation: undefined },
+            findings: { conversationId: undefined, isolated: false, request, edited: [], cwd: WORKSPACE_ROOT },
             nudge: undefined,
         });
     });
@@ -309,6 +306,7 @@ describe("the daemon's own Stop", () => {
         ["a runtime with no Stop hook, that ended well", "codex", "ok", "c-1"],
         ["one that failed", "codex", "error", undefined],
         ["one that was stopped", "codex", "cancelled", undefined],
+        ["Cursor, whose hooks gate commands but hold no Stop of their own", "cursor", "ok", "c-1"],
         ["Claude, which runs its own", "claude", "ok", undefined],
     ] as const)("is the daemon's for %s", (_case, provider, outcome, conversationId) => {
         expect(daemonStopConversation(input, provider, outcome, false)).toBe(conversationId);

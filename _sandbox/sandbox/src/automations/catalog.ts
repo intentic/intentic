@@ -150,7 +150,7 @@ const DREAMING_PROMPT =
     `cheaper, proposed as a Dockerfile step through the \`environment\` skill. Installing it at runtime is not the ` +
     `answer: it does not survive, which is exactly why this is one of the four.\n` +
     `- A MISTAKE THAT KEEPS HAPPENING. Where the record shows the same correction being typed again, the fix is a ` +
-    `mechanism rather than a resolution: a hook under .intentic/config/hooks, a skill, or a line in the workspace's own ` +
+    `mechanism rather than a resolution: a check in the repository's own .intentic/checks.json, a skill, or a line in the workspace's own ` +
     `AGENTS.md that would have prevented it.\n\n` +
     `The sessions woke you; they did not decide anything. A count is not a pattern, and one bad afternoon is not a ` +
     `standing problem: quote what you actually read. If they genuinely show nothing worth changing, say so in one line ` +

@@ -1,4 +1,4 @@
-import { type AgentTurn, type Capability, profileOf, type Rule, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
+import { type AgentTurn, type Capability, profileOf, type SandboxSettings, SandboxSettingsSchema } from "@intentic/sandbox-contract";
 import { browserOutputDir } from "../../../browser/cast/browser-artifacts.js";
 import { browserPrepareBridge } from "../../../browser/tools/browser-prepare.js";
 import { browserServersOf, type BrowserTurnTools } from "../../../browser/tools/browser-tools.js";
@@ -143,15 +143,12 @@ const harnessPolicy = (
     input: AgentTurn,
     settings: SandboxSettings,
     safetyPolicy: string,
-    turnEndingRules: readonly Rule[],
 ): TurnPolicy => ({
     ...base,
     // hashlineEdits owns file mutation via its own MCP server, so native Edit/Write are dropped (Read stays, for viewing
     // images/PDFs).
     ...(settings.hashlineEdits ? { disallowedTools: ["Edit", "Write"] } : {}),
     ...delegationCaps(settings),
-    // Forwarded only when rules exist, so a workspace with none wires no hooks; conditions are read at Stop.
-    ...(turnEndingRules.length > 0 ? { turnEndingRules } : {}),
     // The sniffer's rulebook, forwarded only when the owner wrote a rule, the same no-hook economy as above.
     ...(Object.keys(settings.actionRules).length > 0 ? { actionRules: settings.actionRules } : {}),
     // Wired unconditionally, unlike the sniffer's rulebook: triage and the hard rule are facts about the command.
@@ -203,7 +200,6 @@ export const planHarnessTurn = async (
     const plugins = pluginsOf(deps.config, iqLoaded, granted, deps.workspace.root, { extensionAgentDirs, personaKit });
     const secrets = turnSecretAccess(deps, input, context.base.signal);
     const sdkServers = harnessServers(deps, { input, context, persona, browser, secrets, hashlineEdits: settings.hashlineEdits });
-    const turnEndingRules = standing(settings.rules, "turn.ending");
     const tools: TurnTools = {
         ...context.base.tools,
         ...(plugins.length > 0 ? { plugins } : {}),
@@ -225,7 +221,7 @@ export const planHarnessTurn = async (
     const gated = await deps.perf.track("turn.plan.hooks", {}, () =>
         withSettingsHookGate(deps.config.historyRoot, input.conversationId, {
             spec: harnessSpec(deps, input, context, resolved.credentials),
-            policy: harnessPolicy(context.base.policy, input, settings, safetyPolicy, turnEndingRules),
+            policy: harnessPolicy(context.base.policy, input, settings, safetyPolicy),
         }),
     );
     return armPlan(
@@ -240,7 +236,7 @@ export const planHarnessTurn = async (
                     deps,
                     input,
                     context,
-                    { fileEdited: standing(settings.rules, "file.edited"), turnEnding: turnEndingRules },
+                    standing(settings.rules, "file.edited"),
                     { settings, policy: safetyPolicy },
                 ),
                 // A `run_in_background` job outlives this turn, so its completion is delivered to a conversation rather

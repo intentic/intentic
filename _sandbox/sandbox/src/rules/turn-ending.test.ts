@@ -1,25 +1,10 @@
 import { WORKSPACE_ROOT } from "@intentic/constants";
 import type { HookInput } from "@anthropic-ai/claude-agent-sdk";
-import type { GitRunner } from "@intentic/scaffold";
 import type { Rule } from "@intentic/sandbox-contract";
 import { describe, test, expect } from "bun:test";
-import type { ChecksProbe } from "../agent/verification/agent-verification.js";
 import { syncHookOutput } from "../testing.js";
 import type { RuleCommandRun } from "./rule-command.js";
-import { TEST_WRITING_NOTE } from "../agent/verification/agent-tests.js";
 import { commandRuleFindings, type TurnEndingDeps, turnEndingHooks } from "./turn-ending.js";
-
-// Which commands a project offers is the probe's business; covered by agent-verification.integration.test.ts.
-const CHECKS: ChecksProbe = async () => ["pnpm test", "pnpm lint"];
-const NO_PROJECT: ChecksProbe = async () => undefined;
-
-const VERIFY: Rule = {
-    id: "verify-edits",
-    label: "Verify before finishing",
-    moment: "turn.ending",
-    action: { kind: "builtin", name: "verify-edits" },
-    enabled: true,
-};
 
 const rule = (over: Partial<Rule> & Pick<Rule, "id" | "action">): Rule => ({
     label: over.id,
@@ -28,9 +13,14 @@ const rule = (over: Partial<Rule> & Pick<Rule, "id" | "action">): Rule => ({
     ...over,
 });
 
+// A repository's turn check that fails under its own name: the simplest rule that speaks at every Stop it stands at.
+const speaking = (id: string, when?: Rule["when"]): Rule =>
+    rule({ id, ...(when === undefined ? {} : { when }), action: { kind: "command", command: `check-${id}`, timeoutMs: 900_000 } });
+const SAYS_NO: TurnEndingDeps = { runCommand: async (command) => ({ status: "failed", exitCode: 1, output: `${command} said no` }) };
+
 // Drives the hook set the way the SDK does: finds a hook by matcher/tool name, not position, so tests can interleave
 // edits, commands and stops against one ledger.
-const pick = (hooks: ReturnType<typeof turnEndingHooks>, event: "PostToolUse" | "PostToolUseFailure", toolName: string) => {
+const pick = (hooks: ReturnType<typeof turnEndingHooks>, event: "PostToolUse", toolName: string) => {
     const found = hooks[event]?.find((entry) => entry.matcher !== undefined && new RegExp(`^(?:${entry.matcher})$`).test(toolName));
     if (found === undefined) {
         throw new Error(`no ${event} matcher for ${toolName}`);
@@ -63,18 +53,6 @@ const bash = async (hooks: ReturnType<typeof turnEndingHooks>, command: string, 
     return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
 };
 
-const bashFailed = async (hooks: ReturnType<typeof turnEndingHooks>, command: string, error: string) => {
-    const matcher = pick(hooks, "PostToolUseFailure", "Bash");
-    const input = {
-        hook_event_name: "PostToolUseFailure",
-        tool_name: "Bash",
-        tool_input: { command },
-        error,
-        tool_use_id: "t",
-    } as unknown as HookInput;
-    return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
-};
-
 const stop = async (hooks: ReturnType<typeof turnEndingHooks>, stop_hook_active = false) => {
     const matcher = hooks.Stop![0]!;
     const input = { hook_event_name: "Stop", stop_hook_active } as unknown as HookInput;
@@ -82,7 +60,7 @@ const stop = async (hooks: ReturnType<typeof turnEndingHooks>, stop_hook_active 
     return (syncHookOutput(result).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext;
 };
 
-const armed = (rules: readonly Rule[], deps: TurnEndingDeps = {}) => turnEndingHooks(rules, { checks: CHECKS, ...deps });
+const armed = (rules: readonly Rule[], deps: TurnEndingDeps = {}) => turnEndingHooks(rules, deps);
 
 const PASSED = "all good\n--- [exit 0, 2s] 40 lines filtered to 12\n";
 const FAILED = "1 failed\n--- [exit 1, 2s] 40 lines filtered to 12\n";
@@ -93,8 +71,8 @@ describe("no rules", () => {
     });
 
     test("and a rule for another moment says nothing at a stop", async () => {
-        const elsewhere = rule({ id: "x", moment: "push.starting", action: { kind: "command", command: "pnpm test", timeoutMs: 900_000 } });
-        expect(await stop(armed([elsewhere], { runCommand: async () => ({ status: "failed", exitCode: 1, output: "no" }) }))).toBeUndefined();
+        const elsewhere = rule({ id: "x", moment: "agent.finished", action: { kind: "verdict", verdict: "hold" } });
+        expect(await stop(armed([elsewhere], SAYS_NO))).toBeUndefined();
     });
 });
 
@@ -154,14 +132,12 @@ describe("the verify-ui-edits built-in", () => {
         expect(await stop(hooks)).toContain("App.vue");
     });
 
-    test("stands beside verify-edits in a single follow-up", async () => {
-        const verify: Rule = { ...VIEWING, id: "verify-edits", label: "Verify", action: { kind: "builtin", name: "verify-edits" } };
-        const hooks = armed([verify, VIEWING]);
+    test("stands beside a red check in a single follow-up", async () => {
+        const hooks = armed([speaking("suite"), VIEWING], SAYS_NO);
         await edit(hooks, `${WORKSPACE_ROOT}/src/App.vue`);
         const asked = await stop(hooks);
         expect(asked).toContain("App.vue");
-        expect(asked).toContain("pnpm test");
-        expect(asked?.split("\n").length).toBeGreaterThan(1);
+        expect(asked).toContain("check-suite said no");
     });
 
     test("honours a path condition", async () => {
@@ -172,144 +148,9 @@ describe("the verify-ui-edits built-in", () => {
     });
 });
 
-describe("the verify-removals built-in", () => {
-    const REMOVALS: Rule = {
-        id: "verify-removals",
-        label: "Check what it deleted",
-        moment: "turn.ending",
-        action: { kind: "builtin", name: "verify-removals" },
-        enabled: true,
-    };
-
-    const SLEEP = `await sleep(2000); // let the replica catch up`;
-
-    // A PRE hook: reads the file as the turn found it, before this test's own edit changes the tracked tree.
-    const beforeEdit = async (hooks: ReturnType<typeof turnEndingHooks>, file_path: string) => {
-        const matcher = hooks.PreToolUse![0]!;
-        const input = { hook_event_name: "PreToolUse", tool_name: "Edit", tool_input: { file_path }, tool_use_id: "t" } as unknown as HookInput;
-        return matcher.hooks[0]!(input, "t", { signal: new AbortController().signal });
-    };
-
-    const tree = (files: Record<string, string>) => ({
-        read: async (path: string) => files[path],
-        set: (path: string, content: string | undefined) => (content === undefined ? delete files[path] : (files[path] = content)),
-    });
-
-    const git =
-        (rows: readonly (readonly [string, number, string])[]): GitRunner =>
-        async () => ({
-            stdout: rows.map(([hash, at, subject]) => [hash, String(at), subject].join("\u001f")).join("\n"),
-            stderr: "",
-        });
-
-    // 400 days before the fixed clock, so "untouched for a long time" is a stated fact, not a real wait.
-    const NOW = Date.UTC(2026, 7, 28);
-    const OLD = Math.floor((NOW - 400 * 86_400_000) / 1000);
-
-    test("no rule reading it ⇒ no snapshot hook, so no file is read on any edit", () => {
-        expect(turnEndingHooks([VERIFY]).PreToolUse).toBeUndefined();
-        expect(turnEndingHooks([REMOVALS]).PreToolUse).toEqual(expect.any(Array));
-    });
-
-    test("a defended line that went is put back in front of the turn", async () => {
-        const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `${SLEEP}\nconst kept = 1;\n` });
-        const hooks = armed([REMOVALS], {
-            cwd: WORKSPACE_ROOT,
-            read: files.read,
-            git: git([["a91d33", OLD, "fix: export dies on cold replica"]]),
-            now: NOW,
-        });
-        await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        files.set(`${WORKSPACE_ROOT}/src/a.ts`, `const kept = 1;\n`);
-        const nudge = await stop(hooks);
-        expect(nudge).toContain(SLEEP);
-        expect(nudge).toContain(`a91d33 "fix: export dies on cold replica"`);
-    });
-
-    test("adding code says nothing, whatever its history", async () => {
-        const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `const kept = 1;\n` });
-        const hooks = armed([REMOVALS], {
-            cwd: WORKSPACE_ROOT,
-            read: files.read,
-            git: git([["a91d33", OLD, "fix: export dies on cold replica"]]),
-            now: NOW,
-        });
-        await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        files.set(`${WORKSPACE_ROOT}/src/a.ts`, `const kept = 1;\n${SLEEP}\n`);
-        expect(await stop(hooks)).toBeUndefined();
-    });
-
-    test("it rides the same follow-up as the proof ledger", async () => {
-        const files = tree({ [`${WORKSPACE_ROOT}/src/a.ts`]: `${SLEEP}\n` });
-        const hooks = armed([VERIFY, REMOVALS], {
-            cwd: WORKSPACE_ROOT,
-            read: files.read,
-            git: git([["a91d33", OLD, "fix: export dies on cold replica"]]),
-            now: NOW,
-        });
-        await beforeEdit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        files.set(`${WORKSPACE_ROOT}/src/a.ts`, ``);
-        const nudge = await stop(hooks);
-        expect(nudge).toContain(SLEEP);
-        expect(nudge).toContain("a.ts");
-    });
-});
-
-describe("the verify-edits built-in", () => {
-    test("edited code with no check is asked to run the project's own check", async () => {
-        const hooks = armed([VERIFY]);
-        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        const nudge = await stop(hooks);
-        expect(nudge).toContain("/work/src/a.ts");
-        expect(nudge).toContain("`pnpm test`");
-        expect(nudge).toContain("`pnpm lint`");
-    });
-
-    test("a passing check means the turn ends silently", async () => {
-        const hooks = armed([VERIFY]);
-        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        await bash(hooks, "pnpm test", PASSED);
-        expect(await stop(hooks)).toBeUndefined();
-    });
-
-    test("a non-zero exit in the footer is not a pass", async () => {
-        const hooks = armed([VERIFY]);
-        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        await bash(hooks, "pnpm test", FAILED);
-        expect(await stop(hooks)).toContain("did NOT pass");
-    });
-
-    test("a Bash tool failure counts as a failed check", async () => {
-        const hooks = armed([VERIFY]);
-        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        await bashFailed(hooks, "pnpm test", "exit 1: 2 failed");
-        expect(await stop(hooks)).toContain("2 failed");
-    });
-
-    test("a file under no project at all is told to pick its own check, not given an invented one", async () => {
-        const hooks = armed([VERIFY], { checks: NO_PROJECT });
-        await edit(hooks, "/srv/thing.py");
-        const nudge = await stop(hooks);
-        expect(nudge).toContain("thing.py");
-        expect(nudge).not.toContain("pnpm");
-    });
-
-    test("a check that fixes the failure clears the second stop", async () => {
-        const hooks = armed([VERIFY]);
-        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
-        await bash(hooks, "pnpm test", FAILED);
-        expect(await stop(hooks)).toContain("did NOT pass");
-        await edit(hooks, "/work/src/a.ts");
-        await bash(hooks, "pnpm test", PASSED);
-        expect(await stop(hooks)).toBeUndefined();
-    });
-});
-
 describe("the follow-up budget", () => {
     test("at most two asks per turn: the third stop is silent", async () => {
-        const hooks = armed([VERIFY]);
-        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        const hooks = armed([speaking("suite")], SAYS_NO);
         expect(await stop(hooks)).toEqual(expect.any(String));
         expect(await stop(hooks)).toEqual(expect.any(String));
         expect(await stop(hooks)).toBeUndefined();
@@ -378,52 +219,24 @@ describe("the follow-up budget", () => {
     });
 
     test("several rules speaking at one stop spend one ask between them", async () => {
-        const hooks = armed([VERIFY, rule({ id: "changelog", action: { kind: "instruct", text: "Update the changelog." } })]);
-        await edit(hooks, `${WORKSPACE_ROOT}/src/a.ts`);
+        const hooks = armed([speaking("suite"), speaking("changelog")], SAYS_NO);
         const first = await stop(hooks);
-        expect(first).toContain("a.ts");
-        expect(first).toContain("Update the changelog.");
+        expect(first).toContain("check-suite said no");
+        expect(first).toContain("check-changelog said no");
         expect(await stop(hooks)).toEqual(expect.any(String));
         expect(await stop(hooks)).toBeUndefined();
-    });
-});
-
-describe("the verify-tests built-in", () => {
-    const TESTS: Rule = {
-        id: "verify-tests",
-        label: "Check what it did to the tests",
-        moment: "turn.ending",
-        action: { kind: "builtin", name: "verify-tests" },
-        enabled: true,
-    };
-
-    // The answer comes from the planner (agent-tests.ts); this moment only relays it.
-    test("says what the tree said about the turn's tests, and nothing without a tree to read", async () => {
-        const hooks = armed([TESTS], { tests: async () => "src/a.test.ts got weaker than at HEAD" });
-        expect(await stop(hooks)).toContain("src/a.test.ts got weaker than at HEAD");
-        expect(await stop(armed([TESTS], { tests: async () => undefined }))).toBeUndefined();
-        expect(await stop(armed([TESTS]))).toBeUndefined();
-    });
-
-    test("the first test file a turn edits gets the two rules that apply to it, once, and only when the rule stands", async () => {
-        const hooks = armed([TESTS]);
-        const first = await edit(hooks, `${WORKSPACE_ROOT}/src/a.test.ts`);
-        expect((syncHookOutput(first).hookSpecificOutput as { additionalContext?: string } | undefined)?.additionalContext).toBe(TEST_WRITING_NOTE);
-        expect(await edit(hooks, `${WORKSPACE_ROOT}/src/b.test.ts`)).toEqual({});
-        expect(await edit(armed([TESTS]), `${WORKSPACE_ROOT}/src/a.ts`)).toEqual({});
-        expect(await edit(armed([VERIFY]), `${WORKSPACE_ROOT}/src/a.test.ts`)).toEqual({});
     });
 });
 
 describe("conditions", () => {
     // Read at the Stop, not at planning time, since nothing yet knows which files a turn will touch when planned.
     test("a path condition is read against what the turn actually edited", async () => {
-        const sql = rule({ id: "sql", when: { paths: ["**/*.sql"] }, action: { kind: "instruct", text: "Mention the migration." } });
-        const touched = armed([sql], { cwd: WORKSPACE_ROOT });
+        const sql = speaking("sql", { paths: ["**/*.sql"] });
+        const touched = armed([sql], { ...SAYS_NO, cwd: WORKSPACE_ROOT });
         await edit(touched, `${WORKSPACE_ROOT}/db/0001.sql`);
-        expect(await stop(touched)).toContain("Mention the migration.");
+        expect(await stop(touched)).toContain("check-sql said no");
 
-        const untouched = armed([sql], { cwd: "/work" });
+        const untouched = armed([sql], { ...SAYS_NO, cwd: "/work" });
         await edit(untouched, `${WORKSPACE_ROOT}/src/a.ts`);
         expect(await stop(untouched)).toBeUndefined();
     });
@@ -431,22 +244,21 @@ describe("conditions", () => {
     // The edit ledger only hears Edit/Write; a shell rewrite (sed -i, a heredoc) is invisible to it, so the tree's own
     // diff is read too.
     test("a path condition also sees what the tree changed, however it was edited", async () => {
-        const sql = rule({ id: "sql", when: { paths: ["**/*.sql"] }, action: { kind: "instruct", text: "Mention the migration." } });
-        const hooks = armed([sql], { cwd: WORKSPACE_ROOT, changedPaths: async () => ["db/0001.sql"] });
+        const sql = speaking("sql", { paths: ["**/*.sql"] });
+        const hooks = armed([sql], { ...SAYS_NO, cwd: WORKSPACE_ROOT, changedPaths: async () => ["db/0001.sql"] });
         // No Edit or Write reached the ledger: the migration was written by a shell command.
-        expect(await stop(hooks)).toContain("Mention the migration.");
+        expect(await stop(hooks)).toContain("check-sql said no");
     });
 
     test("paths are relativised to the turn's tree before a glob sees them", async () => {
-        const docs = rule({ id: "docs", when: { paths: ["docs/**"] }, action: { kind: "instruct", text: "Check the docs build." } });
-        const hooks = armed([docs], { cwd: `${WORKSPACE_ROOT}/repo` });
+        const docs = speaking("docs", { paths: ["docs/**"] });
+        const hooks = armed([docs], { ...SAYS_NO, cwd: `${WORKSPACE_ROOT}/repo` });
         await edit(hooks, `${WORKSPACE_ROOT}/repo/docs/intro.md`);
-        expect(await stop(hooks)).toContain("Check the docs build.");
+        expect(await stop(hooks)).toContain("check-docs said no");
     });
 
     test("a rule with no condition still fires on a turn that edited nothing", async () => {
-        const always = rule({ id: "always", action: { kind: "instruct", text: "Say what you did." } });
-        expect(await stop(armed([always]))).toContain("Say what you did.");
+        expect(await stop(armed([speaking("always")], SAYS_NO))).toContain("check-always said no");
     });
 });
 
@@ -563,10 +375,9 @@ describe("a command rule", () => {
 describe("reporting", () => {
     test("only rules that actually said something are reported as fired", async () => {
         const fired: string[] = [];
-        const quiet = rule({ id: "quiet", when: { paths: ["**/*.sql"] }, action: { kind: "instruct", text: "unreachable" } });
-        const loud = rule({ id: "loud", action: { kind: "instruct", text: "Say what you did." } });
-        const hooks = armed([VERIFY, quiet, loud], { onFired: (r) => fired.push(r.id) });
-        // No edits: verify-edits has nothing to ask for, and the sql rule's condition cannot hold.
+        const look = rule({ id: "look", action: { kind: "builtin", name: "verify-ui-edits" } });
+        const hooks = armed([look, speaking("quiet", { paths: ["**/*.sql"] }), speaking("loud")], { ...SAYS_NO, onFired: (r) => fired.push(r.id) });
+        // No edits: the look has nothing to ask for, and the sql check's condition cannot hold.
         await stop(hooks);
         expect(fired).toEqual(["loud"]);
     });

@@ -4,6 +4,7 @@ import type { DependencyLandOrigin } from "../../workspace/deps/dependency-origi
 import type { ReconcileOutcome } from "../../workspace/deps/reconcile-deps.js";
 import { type LandBreakage, queueVerify, type VerifyDeps } from "../../workspace/deps/verify-deps.js";
 import { breakageSettled } from "./land-breakage.js";
+import { adoptedLandCheck } from "../../rules/repo-checks.js";
 import { announceUnwatchedWrite } from "../../workspace/watch/workspace-watch.js";
 
 // Every land that reached the tree gets the whole repository's check, whichever door it came through: the auto-land
@@ -12,7 +13,7 @@ import { announceUnwatchedWrite } from "../../workspace/watch/workspace-watch.js
 
 export type LandVerifier = Pick<
     Services,
-    "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "heavyCommands" | "dependencies" | "events"
+    "workspace" | "processes" | "logger" | "verifyStore" | "activity" | "heavyCommands" | "dependencies" | "events" | "sandboxSettings"
 >;
 
 // The check's verdict is announced as a workspace event (deps.broken, deps.fixed) for whatever reacts to it; a red that
@@ -31,6 +32,7 @@ export const verifyLandedTree = async (
         emit: (event) => services.events.publish("workspace", event),
         announce: announceUnwatchedWrite,
         queue: queueWhole(services.heavyCommands.read),
+        landCheck: async (dir) => adoptedLandCheck(services.workspace.root, dir, (await services.sandboxSettings.get()).adoptedChecks),
         ...(route === undefined ? {} : { route, settled: breakageSettled }),
     };
     const deps = await services.dependencies.reconcileLand(origin);

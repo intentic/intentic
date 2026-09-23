@@ -48,7 +48,6 @@ export interface DaemonStopTurn {
     readonly request: AgentRequest;
     readonly edited: readonly string[];
     readonly cwd: string;
-    readonly isolation: TurnPlacement | undefined;
 }
 
 // A ledger row as the store is handed it; the store stamps the instant and the day.
@@ -94,7 +93,7 @@ export interface TurnEnd {
 export const daemonStopConversation = (input: TurnInput, provider: AgentProvider, outcome: TurnOutcome, spawnedChild: boolean): string | undefined =>
     outcome === "ok" &&
     input.conversationId !== undefined &&
-    capabilitiesOf(provider, input.harness ?? "native").rulebook !== "hooks" &&
+    capabilitiesOf(provider, input.harness ?? "native").runtime !== "claude-code" &&
     !spawnedChild
         ? input.conversationId
         : undefined;
@@ -220,9 +219,9 @@ const usageOf = (end: TurnEnd, outcome: TurnOutcome): UsageRow => {
 };
 
 const daemonStopOf = (end: TurnEnd, outcome: TurnOutcome): DaemonStop => {
-    const { input, request, cwd, isolation } = end;
+    const { input, request, cwd } = end;
     const conversationId = daemonStopConversation(input, end.provider, outcome, end.spawnedChild);
-    const findings = { conversationId, isolated: end.isolated, request, edited: end.frames.verification.edited(), cwd, isolation };
+    const findings = { conversationId, isolated: end.isolated, request, edited: end.frames.verification.edited(), cwd };
     const nudge =
         conversationId === undefined
             ? undefined
@@ -232,10 +231,8 @@ const daemonStopOf = (end: TurnEnd, outcome: TurnOutcome): DaemonStop => {
                   rules: request.policy.turnEndingRules ?? [],
                   ledger: end.frames.verification,
                   view: end.frames.viewing,
-                  ...(isolation !== undefined ? { isolation: isolation.plan } : {}),
                   cwd,
                   ...(request.hooks.onRuleFired !== undefined ? { onFired: request.hooks.onRuleFired } : {}),
-                  ...(request.hooks.verifyTests !== undefined ? { tests: request.hooks.verifyTests } : {}),
               };
     return { conversationId, findings, nudge };
 };

@@ -54,7 +54,6 @@
                 "bin/*.test.mjs",
                 "scripts/*.{sh,mjs}"
             ],
-            // vitest is what the test-strength check runs inside a fixture workspace (agent-test-strength.integration.test.ts).
             "ignoreDependencies": ["@intentic/webq", "vitest"]
         },
         "_search/iq": {

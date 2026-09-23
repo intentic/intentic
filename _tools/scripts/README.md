@@ -40,7 +40,7 @@ which jobs a push starts — and it asserts each one exists rather than silently
 | | |
 |---|---|
 | [verify.mjs](verify/verify.mjs) | `pnpm verify`: the whole repository, after every land, off every model's clock |
-| [verify-turn.mjs](verify/verify-turn.mjs) | `pnpm verify:turn`: the affected closure, when a turn tries to end |
+| [verify-turn.mjs](verify/verify-turn.mjs) | `pnpm verify:turn`: the checks, the linter and the assertion ratchet over a turn's changes, then the affected closure (re-run once before a failure is charged), when a turn tries to end |
 | [verify-push.mjs](verify/verify-push.mjs) | `pnpm verify:push` and the pre-push hook: the cheap readers, then a replay of the land's verdict; `--suite` runs CI's three steps here |
 | [test-workers.mjs](verify/test-workers.mjs) | how many workers each `bun test` in a repo-wide run may fork, sized to the cgroup's memory; the three tiers and the root `test` script read it |
 | [affected.mjs](verify/affected.mjs) | which parts of the repo a push touched — CI's `changes` job, walked off the package graph |
@@ -162,8 +162,8 @@ that a vendor changed something, and this is what then takes the version.
 
 Four things run these, and each reaches a different subset:
 
-- **the git hook and the app's push rule** → `verify/verify-push.mjs`, which runs the checks, the ratchet and
-  the suite;
+- **the git hook**, which the app's pushes run too (plain `git push`) → `verify/verify-push.mjs`, which runs the
+  checks, the ratchet and the suite;
 - **the daemon**, after every land → `verify/verify.mjs`, and at every turn's end → `verify/verify-turn.mjs`;
 - **`.github/workflows`** → most of `build/`, `desktop/`, `image/`, `platform/` and `ci/`, plus
   `verify/affected.mjs` as the DAG root that decides which of them run at all;

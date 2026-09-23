@@ -19,7 +19,6 @@ mock.module(`../secrets/AiAccountSection.vue`, () => stub(`AI account`));
 mock.module(`../agent-settings/models/AgentModels.vue`, () => stub(`Models`));
 mock.module(`../agent-settings/skills/AgentInstructions.vue`, () => stub(`Instructions`));
 mock.module(`../agent-settings/skills/AgentSkills.vue`, () => stub(`Skills`));
-mock.module(`../agent-settings/safety/AgentRules.vue`, () => stub(`Rules`));
 mock.module(`../agent-settings/skills/AgentMemory.vue`, () => stub(`Memory`));
 mock.module(`../agent-settings/skills/AgentMemoryImport.vue`, () => stub(`Memory import`));
 mock.module(`../agent-settings/behaviour/AgentCodeSearch.vue`, () => stub(`Code search`));
@@ -29,7 +28,7 @@ mock.module(`../agent-settings/behaviour/AgentRecovery.vue`, () => stub(`When a 
 mock.module(`../agent-settings/safety/AgentSafetyJudge.vue`, () => stub(`Safety judge`));
 mock.module(`../agent-settings/safety/AgentSafetyPolicy.vue`, () => stub(`Safety policy`));
 mock.module(`../agent-settings/safety/AgentSafetyLog.vue`, () => stub(`Recent decisions`));
-mock.module(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`Checks`));
+mock.module(`../agent-settings/behaviour/AgentChecks.vue`, () => stub(`Reviews`));
 mock.module(`../agent-settings/behaviour/AgentFinishedWork.vue`, () => stub(`Finished work`));
 mock.module(`../agent-settings/behaviour/AgentChangelog.vue`, () => stub(`Changelog`));
 
@@ -42,7 +41,6 @@ const EVERY_GROUP = [
     `Models`,
     `Instructions`,
     `Skills`,
-    `Rules`,
     `Memory`,
     `Memory import`,
     `Code search`,
@@ -52,7 +50,7 @@ const EVERY_GROUP = [
     `Safety judge`,
     `Safety policy`,
     `Recent decisions`,
-    `Checks`,
+    `Reviews`,
     `Finished work`,
     `Changelog`,
 ];
@@ -141,7 +139,7 @@ it(`holds delegation under tools, not under the gate rules`, async () => {
 it(`shows accounts for a sign-in link even while another category is named`, async () => {
     const { el } = await mount({ section: `finishing`, connect: `anthropic` });
     expect(shown(el)).toContain(`AI account`);
-    expect(shown(el)).not.toContain(`Checks`);
+    expect(shown(el)).not.toContain(`Reviews`);
 });
 
 // Waits for the navigation, not a render tick, since the strip reads its category back off the address.
@@ -149,7 +147,7 @@ it(`writes the picked category to the address, and the default writes no param`,
     const { el, router } = await mount();
     pill(el, `Finishing`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBe(`finishing`));
-    expect(shown(el)).toEqual([`Checks`, `Finished work`, `Changelog`, `When a turn breaks`]);
+    expect(shown(el)).toEqual([`Reviews`, `Finished work`, `Changelog`, `When a turn breaks`]);
 
     pill(el, `Models`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`section`]).toBeUndefined());
@@ -160,5 +158,5 @@ it(`lets a pill escape a sign-in link`, async () => {
     const { el, router } = await mount({ connect: `anthropic` });
     pill(el, `Instructions`).click();
     await waitFor(() => expect(router.currentRoute.value.query[`connect`]).toBeUndefined());
-    expect(shown(el)).toEqual([`Instructions`, `Skills`, `Rules`, `Memory`, `Memory import`]);
+    expect(shown(el)).toEqual([`Instructions`, `Skills`, `Memory`, `Memory import`]);
 });

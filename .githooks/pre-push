@@ -1,16 +1,9 @@
 #!/bin/sh
-# THE LAST THING BETWEEN THIS CHECKOUT AND main, AND THE ONLY ONE. Wired by the root `prepare` script
-# (core.hooksPath=.githooks) alongside commit-msg. It runs _tools/scripts/verify/verify-push.mjs with git's ref lines on
-# stdin, so the script knows exactly which range is leaving.
+# The push gate, wired by the root `prepare` script (core.hooksPath=.githooks); git's ref lines on stdin name the range.
+# The app pushes with plain `git push`, so its pushes run this hook too, and git's exit is the app's verdict.
 #
-# Which is why this repository declares no `push` check in .intentic/checks.json and the sandbox holds no
-# "Check before you push" rule: the app pushes by running `git push` in this checkout (no --no-verify), so both of those
-# would run this very script a second time, in the same push, minutes apart and against the same tree — and the earlier
-# of the two has to guess its range from `@{u}` where this one is told. A refusal here reaches the app as a refusal:
-# push-run.ts reads git's exit and attributes it to the hook.
-#
-# What that script does, cheapest first, stopping at the first refusal: every check the manifest lists
-# (_tools/checks/run.mjs: the lockfile, the test programs, the workflow policy, the byte scan, the daemon's
+# What _tools/scripts/verify/verify-push.mjs does, cheapest first, stopping at the first refusal: every check the
+# manifest lists (_tools/checks/run.mjs: the lockfile, the test programs, the workflow policy, the byte scan, the daemon's
 # structural gates and the rest, under two seconds and needing nothing installed), the assertion ratchet over
 # the range's test files, the manifest/lockfile lockstep, and the linter; rustfmt on any Rust crate the push
 # touches. The three steps CI's verify groups run (typecheck, build, test) are replayed from the verdict the

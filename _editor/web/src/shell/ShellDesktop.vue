@@ -140,7 +140,7 @@ const workspaceBadge = computed<ViewBadge | undefined>(() => {
     // Orthogonal to whatever the badge SAYS: a running mark is drawn beside the tile, so a land rides whichever badge
     // wins below and stands alone when none does — the count is still 0 until the patch is in the tree.
     const landing: Pick<ViewBadge, `running`> = changes.landing.value === undefined ? {} : { running: changes.landing.value };
-    const push = pushBadge(pushFlow.stage.value, pushFlow.question.value, pushFlow.held.value);
+    const push = pushBadge(pushFlow.running.value, pushFlow.question.value, pushFlow.held.value);
     if (push !== undefined) {
         return { ...push, ...landing };
     }

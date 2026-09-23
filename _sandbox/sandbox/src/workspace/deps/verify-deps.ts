@@ -14,10 +14,10 @@ import { statePath } from "../../state-paths.js";
 import type { VerifyStore } from "./verify-store.js";
 import { installPanelKey, workspaceSetup } from "../layout/workspace-setup.js";
 
-// Runs a project's own check (`verify` script, else `test`) after its install settles, records the verdict, hands
-// failures that appeared with a land back to it (`route`), and emits `deps.broken`/`deps.fixed` for a chore to wake on
-// when nobody took them. A causeless run (the reconciler's own installs, not a land) still checks and records, but never
-// wakes anyone.
+// Runs a project's land check (its repository's declared `land` check, else the `verify` script, else `test`) after its
+// install settles, records the verdict, hands failures that appeared with a land back to it (`route`), and emits
+// `deps.broken`/`deps.fixed` for a chore to wake on when nobody took them. A causeless run (the reconciler's own
+// installs, not a land) still checks and records, but never wakes anyone.
 
 export const verifyPanelKey = (dir: string): string => `${dir === "" ? "root" : dir.replace(/[^a-zA-Z0-9_-]/g, "_")}--verify`;
 
@@ -45,6 +45,8 @@ export interface VerifyDeps {
     readonly route?: (breakage: LandBreakage) => Promise<boolean>;
     // Told when a project comes back green, so whatever `route` counted for it starts over.
     readonly settled?: (project: string) => void;
+    // The land check the project's repository declares and the owner adopted; undefined runs the package's own script.
+    readonly landCheck?: (dir: string) => Promise<{ readonly run: string; readonly timeoutMs?: number | undefined } | undefined>;
     // Test dials; the daemon uses the defaults.
     readonly pollMs?: number;
     readonly watchMaxMs?: number;
@@ -78,8 +80,8 @@ const pending: PendingVerify[] = [];
 let running = false;
 
 // Waits until `key` stops running or the watch window closes; true means it stopped.
-const watchPanel = (deps: VerifyDeps, key: string): Promise<boolean> =>
-    pollUntil(() => !deps.processes.running(key), { intervalMs: deps.pollMs ?? POLL_MS, timeoutMs: deps.watchMaxMs ?? WATCH_MAX_MS });
+const watchPanel = (deps: VerifyDeps, key: string, timeoutMs?: number): Promise<boolean> =>
+    pollUntil(() => !deps.processes.running(key), { intervalMs: deps.pollMs ?? POLL_MS, timeoutMs: timeoutMs ?? deps.watchMaxMs ?? WATCH_MAX_MS });
 
 // A causeless run files under no conversation, which the activity row already supports (both fields optional); blank
 // reads as the daemon acting alone, which is what happened.
@@ -143,7 +145,7 @@ const artifactsOf = (deps: VerifyDeps, dir: string): { key: string; dir: string;
 
 // Runs the check in its panel until it settles or outruns the watch; the wrapped command is one zsh line, and
 // `pipestatus[1]` is the check's exit, not tee's.
-const runPanel = async (verify: PendingVerify, dir: string, command: string): Promise<boolean> => {
+const runPanel = async (verify: PendingVerify, dir: string, command: string, timeoutMs: number | undefined): Promise<boolean> => {
     const { deps } = verify;
     const paths = artifactsOf(deps, dir);
     const queued = await queuedCommand(command, deps);
@@ -159,7 +161,7 @@ const runPanel = async (verify: PendingVerify, dir: string, command: string): Pr
             cwd: join(deps.workspace.root, dir),
             oneShot: true,
         });
-        return await watchPanel(deps, paths.key);
+        return await watchPanel(deps, paths.key, timeoutMs);
     } finally {
         // Closed before the announcement, so the rescan it triggers reads the settled tree rather than the held-back
         // one.
@@ -172,10 +174,10 @@ const runPanel = async (verify: PendingVerify, dir: string, command: string): Pr
 };
 
 // Runs one project's check to a verdict: panel up, exit code read back, store updated, edge announced.
-const verifyProject = async (verify: PendingVerify, dir: string, command: string): Promise<void> => {
+const verifyProject = async (verify: PendingVerify, dir: string, command: string, timeoutMs: number | undefined): Promise<void> => {
     const { deps, origin } = verify;
     const paths = artifactsOf(deps, dir);
-    if (!(await runPanel(verify, dir, command))) {
+    if (!(await runPanel(verify, dir, command, timeoutMs))) {
         await deps.processes.stop(paths.key);
         activity(
             deps,
@@ -308,18 +310,19 @@ const runChain = async (verify: PendingVerify): Promise<void> => {
             );
             continue;
         }
-        const command = await checkCommandFor(deps.workspace.root, dir, status.recipe.manager);
+        const declared = await deps.landCheck?.(dir).catch(() => undefined);
+        const command = declared?.run ?? (await checkCommandFor(deps.workspace.root, dir, status.recipe.manager));
         if (command === undefined) {
             activity(
                 deps,
                 "deps.verify_skipped",
-                `Dependencies installed for ${whereOf(dir)}, but it defines no verify or test script: nothing to check.`,
+                `Dependencies installed for ${whereOf(dir)}, but it declares no land check and defines no verify or test script: nothing to check.`,
                 "ok",
                 origin,
             );
             continue;
         }
-        await verifyProject(verify, dir, command);
+        await verifyProject(verify, dir, command, declared?.timeoutMs);
     }
 };
 

@@ -208,8 +208,6 @@ export interface TurnHooks {
     readonly onCheckRun?: (rule: Rule, run: RuleCommandRun) => void;
     // What the model did after a turn.ending follow-up, at the Stop that followed it.
     readonly onFollowUpOutcome?: (rule: Rule, outcome: FollowUpOutcome) => void;
-    // The verify-tests built-in's answer for this tree, bound while planning; absent means it says nothing.
-    readonly verifyTests?: () => Promise<string | undefined>;
     // What the tree says the turn changed, for the Stop's conditions: a shell edit is invisible to the edit ledger.
     readonly changedPaths?: () => Promise<readonly string[]>;
     // This tree's repositories, for a rule aimed at one; asked at the Stop only when such a rule stands.

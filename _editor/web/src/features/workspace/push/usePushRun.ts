@@ -4,10 +4,9 @@ import { sandboxRpc } from "../../sandbox/client/sandboxRpc";
 import { createRunWatcher, type RunWatcher } from "./runWatcher";
 import { t } from "@intentic/ui/i18n";
 
-// Same watcher the pre-push check rides, over the daemon's push verbs, one per repository. A push runs the
-// repo's own hook, which can take minutes, so it's a run, not one request dying at the header deadline. `at`
-// names another sandbox for the cross-box ledger; watchers are kept per box-and-repo, joining a second press to the run
-// already started.
+// The run watcher over the daemon's push verbs, one per repository. A push runs the repo's own pre-push hook, which can
+// take minutes, so it's a run, not one request dying at the header deadline. `at` names another sandbox for the
+// cross-box ledger; watchers are kept per box-and-repo, joining a second press to the run already started.
 
 // Dropped with the sandbox, cross-box ledger rows included: a run being polled there is about repos the reader has left.
 const watchers = sandboxValue(

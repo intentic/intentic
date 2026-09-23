@@ -28,7 +28,6 @@ import { loopsContract } from "./contracts/loops.contract.js";
 import { panelsContract } from "./contracts/panels.contract.js";
 import { portsContract } from "./contracts/ports.contract.js";
 import { publicContract } from "./contracts/public.contract.js";
-import { prepushContract } from "./contracts/prepush.contract.js";
 import { netdiskContract } from "./contracts/netdisk.contract.js";
 import { providersContract } from "./contracts/providers.contract.js";
 import { pushContract } from "./contracts/push.contract.js";
@@ -89,7 +88,6 @@ export { loopsContract } from "./contracts/loops.contract.js";
 export { panelsContract } from "./contracts/panels.contract.js";
 export { portsContract } from "./contracts/ports.contract.js";
 export { publicContract } from "./contracts/public.contract.js";
-export { prepushContract } from "./contracts/prepush.contract.js";
 export { providersContract, type RunnableProviders, RunnableProvidersSchema } from "./contracts/providers.contract.js";
 export { pushContract } from "./contracts/push.contract.js";
 export { safetyContract } from "./contracts/safety.contract.js";
@@ -272,7 +270,6 @@ export const sandboxContract = {
     panels: panelsContract,
     ports: portsContract,
     public: publicContract,
-    prepush: prepushContract,
     providers: providersContract,
     push: pushContract,
     secrets: secretsContract,

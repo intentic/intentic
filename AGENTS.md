@@ -51,19 +51,22 @@ Every reader below runs without being asked, and each one tells you only about p
 what main already failed, a test that passes when re-run alone, and anything a tool can fix by itself never reaches
 you. Do not run `pnpm verify:turn` yourself.
 
-**After each file you write**: the linter (`.intentic/config/hooks/lint-edit.mjs`, `.oxlintrc.agent.json`,
-`.astro` included), which fixes what it can silently, and every check that can judge one file on its own
-(`node _tools/checks/run.mjs --paths {file}`). What they print rides back with the edit. Fix it there.
+**After each file you write**: the `edit` checks in `.intentic/checks.json`: every check that can judge one file
+on its own (`node _tools/checks/run.mjs --paths {file}`), and the linter (`node _tools/oxlint/lint-edit.mjs {file}`,
+`.oxlintrc.json`, `.astro` included), which fixes what it can silently and reports only what the edit added over
+the file at `HEAD`. What they print rides back with the edit. Fix it there.
 
 **When the turn ends** (`pnpm verify:turn`, `_tools/scripts/verify/verify-turn.mjs`): the branch is first rebased
 onto today's main, and you are told if that moved anything under you. Mechanical fixes come next: rustfmt on the
 crates you touched, a check's own `fix` (`_tools/checks/manifest.mjs`), and `contract.lock.json` regenerated when
 the contract changed. Then the checks run, judged line by line against the main-line commit your branch stands on,
-the linter runs on your changed files, and typecheck and tests run on the affected closure. Failures the last land
-verdict recorded for your base are listed but never held against you (`failure-units.mjs`), and a test that
-passes when re-run alone is logged as a flake (`flakes.mjs`). A turn still red when it ends waits on its branch.
-The `verify-tests` rule reads the test files you touched. If you weakened one on purpose, end your final message
-with one line `Test-Note: <why>`; the land writes it into the commit, and the push reads it there.
+the linter runs on your changed files, the assertion ratchet (`assertion-ratchet.mjs`) measures every test file
+you changed against its main-line self, and typecheck and tests run on the affected closure, once more if they
+fail. Failures the last land verdict recorded for your base are listed but never held against you
+(`failure-units.mjs`), and a failure that passes on the re-run or when re-run alone is logged as a flake
+(`flakes.mjs`). A turn still red when it ends waits on its branch. If you weakened a test file on purpose, commit
+it with a `Test-Note: <why>` trailer (the ratchet reads your branch's commits) and end your final message with the
+same line; the land writes it into the landed commit, and the push reads it there.
 
 **After the land, off your clock** (`pnpm verify`, `_tools/scripts/verify/verify.mjs`, every land, either door):
 the whole repository, plus what the land itself added over the commit it landed on (`land-tiers.mjs`: lint on its
@@ -144,8 +147,8 @@ rules are about what a test stands the code up with, not about how it asserts.
   changed against its earlier self (`@intentic/constants/assertion-measure`: exact matchers, loose matchers, the
   literal text the assertions pin) and refuses a downgrade (`toEqual` → `toMatchObject`) or a narrowing (the
   asserted text cut past a quarter with no test removed) unless a commit in the range carries a `test!:` subject
-  or a `Test-Note:` trailer saying why. The same measure reaches the agent at the Stop (`verify-tests`), where it
-  is a report. On 2026-08-31 about 180 test files were widened in an afternoon with every suite green; that is
+  or a `Test-Note:` trailer saying why. The same measure runs in `pnpm verify:turn`, over the turn's changed test
+  files. On 2026-08-31 about 180 test files were widened in an afternoon with every suite green; that is
   what this reads for.
 - Mock a workspace package with what the code under test imports, or with the original – the `test-programs`
   check reads every `mock.module("@intentic/…", () => ({…}))` factory against the names the test and the modules it stands

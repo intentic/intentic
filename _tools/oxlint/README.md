@@ -10,21 +10,16 @@ weighs against everything else in its context; a failing rule is a fact it has t
 
 | | what it is | run by |
 |---|---|---|
-| `/.oxlintrc.json` | the whole standard — 251 rules, green on main | `pnpm lint`, editors, the stop gate |
-| `/.oxlintrc.agent.json` | the above plus rules main cannot meet yet | the edit hook, `pnpm lint:agent` |
-| `/.oxlintrc.plugins.json` | the above plus anti-slop and cognitive complexity | `pnpm lint:plugins` — installed, not yet what the edit hook runs |
+| `/.oxlintrc.json` | the whole standard — 251 rules, green on main | `pnpm lint`, editors, `lint-edit.mjs`, `pnpm verify:turn` |
+| `/.oxlintrc.plugins.json` | the above plus anti-slop and cognitive complexity | `pnpm lint:plugins` — installed, not what `lint-edit.mjs` runs |
+| `lint-edit.mjs` | the per-edit check | an `edit` check in `/.intentic/checks.json` |
 | `_tools/oxlint/bun-test/` | test-hygiene rules for `bun:test` suites | `/.oxlintrc.json`, so every config above |
 | `_tools/oxlint/anti-slop/` | vendored rule sources | `/.oxlintrc.plugins.json` |
 
-The root config is what main satisfies. The agent config is what code written from here on is held to: it
-currently carries one rule, cyclomatic `complexity: 10`, which 737 existing functions across 517 files exceed —
-too many to gate on and far too many to exempt by path. The edit hook applies it to files an agent touches and
-reports only what an edit made WORSE, so the ratchet turns one way without anyone having to schedule the
-refactor first.
-
 ## How it reaches the agent
 
-`.claude/hooks/oxlint-edit.mjs`, on every `Edit`/`Write`:
+`node _tools/oxlint/lint-edit.mjs {file}`, an `edit` check in `/.intentic/checks.json`, on every file a turn
+writes, in whichever checkout holds that file:
 
 1. **Autofixes first, and reports nothing it fixed.** Telling an agent about work the tool already did is a tax
    on the thing that is actually scarce. The fix loop runs to a fixpoint — one pass is not enough, because a fix
@@ -32,7 +27,7 @@ refactor first.
 2. **Reports only what the edit introduced**, by diffing against the same file at `HEAD`.
 3. **Never blocks on its own failure.** Missing binary, parse error, git failure: exit 0.
 
-`pnpm lint` also runs in the stop gate, so a turn cannot end on a red linter.
+`pnpm lint` also runs in `pnpm verify:turn` over the turn's changed files, so a turn cannot end on a red linter.
 
 ## Complexity
 
@@ -40,7 +35,7 @@ Three different things get called "complexity" and they do not agree:
 
 - **Nesting** — `max-depth: 4`, `max-nested-callbacks: 4`, both live in the root config. This is the part a
   reader actually feels, and it was 41 sites away, so it is enforced everywhere.
-- **Cyclomatic** — `complexity: 10` in the agent config, on new code only. Measured across this repo:
+- **Cyclomatic** — not gated, because it pulls against nesting (below). Measured across this repo:
   737 functions over 10, 299 over 15, 142 over 20 (oxlint's default), 31 over 40. The worst is `runTurn` in
   `agent.routes.ts` at 188. The `modified` variant barely differs (29 vs 31 at a cap of 40), which is how you
   know this is real branching rather than flat `switch` dispatch being punished.
@@ -55,9 +50,7 @@ Three different things get called "complexity" and they do not agree:
   rather than SonarSource's 15 because this plugin also charges +1 per nested-function level and +1 for
   recursion, which Sonar does not, so a loop over callbacks scores 3-6 higher here than the number 15 was
   calibrated for; every sampled function in the 16-20 band was a self-contained algorithm (Kahn's sort, a fuzzy
-  matcher, a streaming line reader) and the first three-deep nesting appears at 21. The builtin `complexity`
-  is off in that config, because the two cyclomatic meters do not agree (`?.` counts in one and not the
-  other) and one function should get one number.
+  matcher, a streaming line reader) and the first three-deep nesting appears at 21.
 
 **The first two pull against each other, and it matters.** Flattening `if (a) { if (b) {` into `if (a && b) {`
 removes a level of depth and ADDS a branch point, so satisfying `max-depth` by merging conditions makes
@@ -114,7 +107,7 @@ autofix walked `no-shadow` from 17 hits to 104 by colliding with outer `error` b
 One rule is off for a different reason entirely: **`unicorn/prefer-dom-node-append`'s autofix is not
 value-safe.** `appendChild()` returns the node it appended; `append()` returns undefined. Oxlint ships the
 rewrite as a plain `--fix`, and it silently broke two call sites that used the return value — caught by tsc,
-not by the linter. The edit hook applies `--fix` without showing the agent what it changed, so a fix that can
+not by the linter. `lint-edit.mjs` applies `--fix` without showing the agent what it changed, so a fix that can
 alter a value is the one kind this setup must not carry.
 
 ## Test assertions, and the half of it a linter cannot see
@@ -170,9 +163,9 @@ namespaces cannot see a suite that imports from `bun:test`, and the hit counts i
 while the suites still imported from `vitest`.
 
 **Neither half says whether a test detects a fault.** That question is answered by running the code broken and
-watching, which is two other things: the `verify-tests` rule, which at the end of a turn re-runs a new test
-against the code as it was before the turn and reads every touched test file's assertions against the same file
-at HEAD, and the `test-strength` chore, which mutates the source and counts what the suite notices. Measured on `sandbox-contract`'s chore module — 109 tests, every line covered — 16 of 58 mutants
+watching: the `test-strength` chore mutates the source and counts what the suite notices. The assertion ratchet
+(`_tools/scripts/verify/assertion-ratchet.mjs`, in `pnpm verify:turn` and the push) measures strength, not
+detection: every changed test file's assertions against the same file at the main-line base. Measured on `sandbox-contract`'s chore module — 109 tests, every line covered — 16 of 58 mutants
 survived.
 
 ## Conflicts, and how they are resolved
@@ -259,8 +252,7 @@ still reading the file.
 ## anti-slop
 
 `anti-slop/` is vendored from [dmmulroy/anti-slop](https://github.com/dmmulroy/anti-slop) at `6d53855`, MIT.
-It is configured in `/.oxlintrc.plugins.json`, installed, and **not yet what the edit hook runs** — that file's
-header says how to switch it over.
+It is configured in `/.oxlintrc.plugins.json`, installed, and **not what `lint-edit.mjs` runs**.
 
 These are the only rules here written against an author rather than a bug. They reject code that type-checks
 and runs but has thrown away the evidence that it is correct — `as unknown as T`, `unknown` in a signature,

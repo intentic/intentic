@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import type { RepoChecksSummary } from "@intentic/sandbox-contract";
-import { Row } from "@intentic/ui";
+import type { RepoCheckMoment, RepoChecksSummary } from "@intentic/sandbox-contract";
+import { Row, timeAgo } from "@intentic/ui";
 import ToggleSwitch from "primevue/toggleswitch";
+import { computed } from "vue";
 import RuleCommand from "../safety/RuleCommand.vue";
 import { useT } from "@intentic/ui/i18n";
 
@@ -25,18 +26,38 @@ const emit = defineEmits<{ switch: [boolean] }>();
 // "root" is the workspace's own repository, which nobody calls "root" when they mean it.
 const name = (): string => (entry.repo === `root` ? `This workspace` : entry.repo);
 
-const whenWords = (when: string): string => (when === `push` ? `before a push` : `before a turn ends`);
+const whenWords = (when: RepoCheckMoment): string =>
+    when === `edit`
+        ? t(`sandbox.repoCheckRow.afterEachEdit`)
+        : when === `turn`
+          ? t(`sandbox.repoCheckRow.beforeTurnEnds`)
+          : t(`sandbox.repoCheckRow.afterItLands`);
+
+// When a check last flagged something; one that never has is either healthy or aimed at nothing, and worth a look.
+const firedWords = (at: number | null | undefined): string =>
+    at === null || at === undefined ? t(`sandbox.repoCheckRow.neverFlagged`) : t(`sandbox.repoCheckRow.lastFlagged`, { ago: timeAgo(at, { days: true }) });
+
+// The package script that runs after a land whether or not anything is adopted; a declared `land` check replaces it.
+const landFallback = computed(() => (entry.checks.some((check) => check.when === `land`) ? undefined : entry.landDefault));
+
+// Declared checks that are not running; with a fallback in the row, only their own lines dim.
+const idle = computed(() => !entry.adopted && !entry.changed);
 </script>
 
 <template>
-    <!-- Dimmed while it is merely declared, like a disabled rule: nothing here is running. -->
-    <Row icon="shield" :title="name()" :class="{ 'opacity-60': !entry.adopted && !entry.changed }">
+    <!-- Dimmed only while nothing in it runs, like a disabled rule. -->
+    <Row icon="shield" :title="name()" :class="{ 'opacity-60': idle && landFallback === undefined }">
         <template #description>
             <span v-if="entry.error !== undefined" class="mt-1 block text-2xs text-danger">{{
                 t(`sandbox.repoCheckRow.checksFileCouldNot`, { error: entry.error })
             }}</span>
             <span v-else class="mt-2 flex flex-col gap-1.5 text-2xs">
-                <span v-for="(check, index) in entry.checks" :key="index" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <span
+                    v-for="(check, index) in entry.checks"
+                    :key="index"
+                    class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                    :class="{ 'opacity-60': idle && landFallback !== undefined }"
+                >
                     <span class="shrink-0 text-subtle">{{ whenWords(check.when) }}</span>
                     <!-- The command wraps so the approval target remains fully readable. -->
                     <span class="min-w-0 max-w-full rounded border border-line-subtle bg-canvas/80 px-2 py-0.5">
@@ -54,14 +75,24 @@ const whenWords = (when: string): string => (when === `push` ? `before a push` :
                             {{ glob }}
                         </span>
                     </span>
+                    <!-- A land's verdict is the activity feed's; only edit and turn checks stamp a firing. -->
+                    <span v-if="check.when !== `land` && entry.adopted" class="shrink-0 text-subtle">{{ firedWords(entry.fired[index]) }}</span>
+                </span>
+                <span v-if="landFallback !== undefined" class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                    <span class="shrink-0 text-subtle">{{ t(`sandbox.repoCheckRow.afterItLands`) }}</span>
+                    <span class="min-w-0 max-w-full rounded border border-line-subtle bg-canvas/80 px-2 py-0.5">
+                        <RuleCommand :command="landFallback" wrap />
+                    </span>
+                    <span class="shrink-0 text-subtle">{{ t(`sandbox.repoCheckRow.packageScript`) }}</span>
                 </span>
             </span>
         </template>
         <template #meta>{{ entry.path }}</template>
-        <template #control>
+        <!-- Only a declaration has anything to adopt; the package script runs regardless. -->
+        <template v-if="entry.checks.length > 0" #control>
             <ToggleSwitch
                 :model-value="entry.adopted"
-                :disabled="disabled || busy || entry.checks.length === 0"
+                :disabled="disabled || busy"
                 :aria-label="t(`sandbox.repoCheckRow.runChecksDeclares`, { name: name() })"
                 @update:model-value="(value: boolean) => emit(`switch`, value)"
             />

@@ -26,12 +26,12 @@ test("a repository with no declaration is not a row at all", async () => {
 test("a declaration is read from inside the repository, and the workspace's own from the root", async () => {
     const root = setup();
     mkdirSync(join(root, "intentic", ".git"), { recursive: true });
-    declare(root, "intentic", JSON.stringify({ checks: [{ when: "push", run: "pnpm verify:push" }] }));
+    declare(root, "intentic", JSON.stringify({ checks: [{ when: "turn", run: "pnpm verify:turn" }] }));
     declare(root, "root", JSON.stringify({ checks: [{ when: "turn", run: "pnpm lint" }] }));
     const found = await declaredRepoChecks(root);
     // "root" leads: the workspace's own repository is the one most sandboxes work in.
     expect(found.map((declaration) => declaration.repo)).toEqual(["root", "intentic"]);
-    expect(found[1]?.checks).toEqual([{ when: "push", run: "pnpm verify:push" }]);
+    expect(found[1]?.checks).toEqual([{ when: "turn", run: "pnpm verify:turn" }]);
 });
 
 test("a file that does not parse reports why and declares nothing, rather than half of something", async () => {

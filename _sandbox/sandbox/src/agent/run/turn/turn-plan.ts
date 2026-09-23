@@ -3,7 +3,9 @@ import type { Services } from "../../../composition.js";
 import type { TurnArmPlan, TurnContext, TurnRefusal } from "../../providers/adapter.js";
 import type { TurnBriefing } from "../../prompt/turn-briefing.js";
 import type { TurnTrimState } from "../../prompt/window/context-trim.js";
+import { standing } from "../../../rules/rules.js";
 import { armSupervisor } from "../../subagents/children.js";
+import { turnEndingHooksOf } from "../harness/harness-hooks.js";
 import { dependencyDirForCommand } from "../../tools/agent-deps.js";
 import type { TurnBase } from "../../providers/agent-request.js";
 import { decideTurn } from "../decide/turn-decision.js";
@@ -66,13 +68,17 @@ export const planTurn = async (services: Services, input: TurnInput, context: Tu
         const { warnings: _logged, spawn: _armed, ...refusal } = decision;
         return refusal;
     }
+    // Every runtime's: the Claude Code loop reads these at its own Stop hook, the daemon for the rest once the frames end.
+    const turnEndingRules = standing(decision.context.settings?.rules ?? [], "turn.ending");
     const base: TurnBase = {
         ...decision.context.base,
+        policy: { ...decision.context.base.policy, ...(turnEndingRules.length > 0 ? { turnEndingRules } : {}) },
         hooks: {
             ...decision.context.base.hooks,
             // The request's one live seam, asked of the main checkout at the start folder when a command fails.
             dependencyIssue: (command) =>
                 services.dependencies.issueAt(dependencyDirForCommand(decision.dependencyDir, services.workspace.root, command)),
+            ...turnEndingHooksOf(services, decision.input, decision.context, turnEndingRules),
         },
     };
     const plan = await services.adapters
