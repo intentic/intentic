@@ -1,10 +1,9 @@
 import type { McpSdkServerConfigWithInstance } from "@anthropic-ai/claude-agent-sdk";
 import { sdk } from "../../engines/claude-sdk.js";
 import { z } from "zod";
-import { unresolvedSummary } from "./dependency-drift.js";
 import type { DependencyRequestOrigin } from "./dependency-origin.js";
 import type { DependencyCoordinator } from "./reconcile-deps.js";
-import { INSTALLABLE, missingCount, type ProjectSetupStatus } from "../layout/workspace-setup.js";
+import { behindSummary, INSTALLABLE, type ProjectSetupStatus } from "../layout/workspace-setup.js";
 
 // Dependency readiness, asked for rather than pushed on every turn: the rule lives in these tool descriptions (paid
 // once, cached), the state is fetched by whoever wants it. `install` requests rather than installs: a turn-side install
@@ -38,9 +37,9 @@ const line = (status: ProjectSetupStatus, canInstall: boolean): string => {
             return `${where(status)}: installing right now. Its checks will be trustworthy once that finishes.`;
         case "stale":
             return (
-                `${where(status)}, behind: ${missingCount(status)} declared dependencies are not installed ` +
-                `(${unresolvedSummary(status.unresolved ?? [])}). Unresolved-import errors naming those are the install being ` +
-                `behind, not a mistake in the code. Queued for repair; nothing to request.`
+                `${where(status)}, behind: ${behindSummary(status)}. Unresolved-import errors naming those, and failures ` +
+                `tracing to those versions, are the install being behind, not a mistake in the code. Queued for repair; ` +
+                `nothing to request.`
             );
         case "needs-setup":
             return canInstall

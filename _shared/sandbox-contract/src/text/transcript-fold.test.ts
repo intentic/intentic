@@ -213,7 +213,7 @@ describe("foldTurn", () => {
             { role: "notice", text: "Context compacted to free up space." },
             {
                 role: "notice",
-                text: "Changes landed in your workspace: review them in the Changes panel. Installing 1 new dependency it added; the project's checks run when that finishes, and the outcome lands in Activity.",
+                text: "Changes landed in your workspace: review them in the Changes panel. Installing 1 dependency it added or changed; the project's checks run when that finishes, and the outcome lands in Activity.",
                 noticeAction: "depsInstall",
             },
         ]);

@@ -5,7 +5,14 @@ import { IGNORED_DIRS, REFERENCE_DIR } from "@intentic/workspace-ignore";
 import { isManifest, managerFromPackageJson, recipeFor, type SetupRecipe } from "@intentic/workspace-setup";
 import { onPath } from "../../platform/boot/on-path.js";
 import type { ManagedProcesses } from "../../processes/managed-processes.js";
-import { unresolvedDependencies, unresolvedSummary, type UnresolvedPackage } from "../deps/dependency-drift.js";
+import {
+    type OutdatedDependency,
+    outdatedDependencies,
+    outdatedSummary,
+    unresolvedDependencies,
+    unresolvedSummary,
+    type UnresolvedPackage,
+} from "../deps/dependency-drift.js";
 
 // Workspace readiness: whether a project's dependencies are actually installed, and the one-shot install that fixes it.
 // A dropped project arrives without node_modules (wrong platform, slow to upload); present files aren't a working
@@ -35,8 +42,10 @@ export const INSTALLABLE: ReadonlySet<SetupState> = new Set<SetupState>(["needs-
 
 export interface ProjectSetupStatus extends WorkspaceProject {
     readonly state: SetupState;
-    // What failed to resolve, present only when stale; carried rather than recomputed by each reader.
+    // What failed to resolve, and what is installed at another version than the lockfile resolves: present only when
+    // stale, each only when non-empty; carried rather than recomputed by each reader.
     readonly unresolved?: readonly UnresolvedPackage[];
+    readonly outdated?: readonly OutdatedDependency[];
 }
 
 // Collapses a dir path to a tmux-safe key; `--install` can't collide with an app's `--<app>` panel key.
@@ -94,7 +103,7 @@ export const setupStateOf = async (
     project: WorkspaceProject,
     processes: ManagedProcesses,
     available: (binary: string) => Promise<boolean> = onPath,
-): Promise<Pick<ProjectSetupStatus, "state" | "unresolved">> => {
+): Promise<Pick<ProjectSetupStatus, "state" | "unresolved" | "outdated">> => {
     if (processes.running(installPanelKey(project.dir))) {
         return { state: "installing" };
     }
@@ -102,8 +111,11 @@ export const setupStateOf = async (
         if (project.recipe.ecosystem !== "node") {
             return { state: "ready" };
         }
-        const unresolved = await unresolvedDependencies(join(root, project.dir));
-        return unresolved.length === 0 ? { state: "ready" } : { state: "stale", unresolved };
+        const [unresolved, outdated] = await Promise.all([unresolvedDependencies(join(root, project.dir)), outdatedDependencies(join(root, project.dir))]);
+        if (unresolved.length === 0 && outdated.length === 0) {
+            return { state: "ready" };
+        }
+        return { state: "stale", ...(unresolved.length === 0 ? {} : { unresolved }), ...(outdated.length === 0 ? {} : { outdated }) };
     }
     return { state: (await available(project.recipe.manager)) ? "needs-setup" : "unsupported" };
 };
@@ -115,8 +127,22 @@ export const workspaceSetup = async (root: string, processes: ManagedProcesses):
     );
 };
 
-// How many names one project contributes, bounded like the wire count: a mid-migration project can be missing hundreds.
-export const missingCount = (status: ProjectSetupStatus): number => (status.unresolved ?? []).reduce((total, entry) => total + entry.names.length, 0);
+// How far one project is behind: names that fail to resolve plus direct dependencies at the wrong version. A
+// mid-migration project can be missing hundreds.
+export const behindCount = (status: ProjectSetupStatus): number =>
+    (status.unresolved ?? []).reduce((total, entry) => total + entry.names.length, 0) + (status.outdated ?? []).length;
+
+// Both halves of a stale project in one clause, for embedding: no leading capital, no trailing period.
+export const behindSummary = (status: ProjectSetupStatus): string => {
+    const missing = (status.unresolved ?? []).reduce((total, entry) => total + entry.names.length, 0);
+    const outdated = status.outdated ?? [];
+    return [
+        ...(missing === 0 ? [] : [`${missing} declared dependencies are not installed (${unresolvedSummary(status.unresolved ?? [])})`]),
+        ...(outdated.length === 0
+            ? []
+            : [`${outdated.length} are installed at another version than the lockfile resolves (${outdatedSummary(outdated)})`]),
+    ].join("; ");
+};
 
 // Starts the install as a one-shot panel process (attachable tmux): survives a reload, output stays in history.
 // `start` no-ops while the session lives, so a re-drop mid-install can't spawn a second one.
@@ -161,15 +187,16 @@ export const setupNoticeFor = (statuses: readonly ProjectSetupStatus[]): string 
     );
     const staleLines = stale.map(
         (status) =>
-            `- ${where(status)}: ${missingCount(status)} declared dependencies are not installed (${unresolvedSummary(status.unresolved ?? [])}).`,
+            `- ${where(status)}: ${behindSummary(status)}.`,
     );
     return [
         ...(lines.length === 0 ? [] : [SETUP_NOTICE_HEADER, "(a dropped project arrives without them on purpose):", ...lines]),
         ...(staleLines.length === 0
             ? []
             : [
-                  `${STALE_NOTICE_HEADER}, so an unresolved import there is the install being behind rather than a mistake ` +
-                      "in the code. Do not edit working source to satisfy one, and do not run an install: from inside a turn " +
+                  `${STALE_NOTICE_HEADER}, so an unresolved import there, or a failure tracing to a package at the wrong ` +
+                      "version below, is the install being behind rather than a mistake in the code. Do not edit working " +
+                      "source to satisfy one, and do not run an install: from inside a turn " +
                       "it writes to a scratch layer that is discarded, and it rewrites the dependency tree other live " +
                       "conversations are reading. The daemon installs it once the turn ends, so the tree is ready on the NEXT " +
                       "turn, not this one. Nothing else is blocked: every already-installed project type-checks and tests " +

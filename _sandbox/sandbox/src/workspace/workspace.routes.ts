@@ -16,7 +16,7 @@ import { readModules } from "./deps/modules.js";
 import { readPackageGraph } from "./deps/package-graph.js";
 import { discoverRepos, isValidRepoId, isValidRepoName } from "./layout/repo-discovery.js";
 import { resolveReference } from "./files/resolve-reference.js";
-import { missingCount } from "./layout/workspace-setup.js";
+import { behindCount } from "./layout/workspace-setup.js";
 import { syncWorkspaceRepos } from "./layout/sync-repos.js";
 import { listTemplates, loadManifest, readTemplatesConfig } from "./layout/templates-config.js";
 import { isControlPlanePath, resolveWithin } from "./files/workspace-files-paths.js";
@@ -345,7 +345,7 @@ export const createWorkspaceRoutes = (services: Services) => {
                         evidence: project.recipe.evidence,
                         state: project.state,
                     },
-                    project.state === "stale" ? { missing: missingCount(project) } : {},
+                    project.state === "stale" ? { missing: behindCount(project) } : {},
                 ),
             ),
         })),

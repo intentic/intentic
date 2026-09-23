@@ -8,7 +8,7 @@ import type { ManagedProcesses } from "../../processes/managed-processes.js";
 import { jsonFile } from "../../store/json-file.js";
 import { unresolvedDependencies } from "./dependency-drift.js";
 import { type DependencyOrigin, type DependencyRequestOrigin, originPriority } from "./dependency-origin.js";
-import { INSTALLABLE, installPanelKey, missingCount, type ProjectSetupStatus, startInstall, workspaceSetup } from "../layout/workspace-setup.js";
+import { behindCount, INSTALLABLE, installPanelKey, type ProjectSetupStatus, startInstall, workspaceSetup } from "../layout/workspace-setup.js";
 
 // One coordinator owns dependency maintenance: every drift or setup path feeds it, none starts a package manager
 // itself. It waits for manifest writes to settle, then starts each install panel once, beside the agents rather than
@@ -332,7 +332,7 @@ export const createDependencyCoordinator = (deps: DependencyCoordinatorDeps): De
             const caused = stale.filter((project) => belongsToLand(project.dir, origin));
             return caused.length === 0
                 ? undefined
-                : { missing: caused.reduce((total, project) => total + missingCount(project), 0), started: [], deferred: true };
+                : { missing: caused.reduce((total, project) => total + behindCount(project), 0), started: [], deferred: true };
         },
         watch: (subscribe) => {
             stopped = false;

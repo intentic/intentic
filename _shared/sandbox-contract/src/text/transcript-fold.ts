@@ -62,10 +62,11 @@ const dependencyLine = (deps: { missing: number; started: string[]; deferred: bo
     if (deps === undefined || deps.missing === 0) {
         return ``;
     }
-    const what = `${deps.missing} new ${deps.missing === 1 ? `dependency` : `dependencies`}`;
+    // `missing` counts versions the turn bumped as well as names it added, so the sentence names both.
+    const what = `${deps.missing} ${deps.missing === 1 ? `dependency` : `dependencies`} it added or changed`;
     return deps.deferred
-        ? ` ${what} are queued: installation starts after this turn and any other active agents finish, appears in Work terminals, then its checks and outcome land in Activity.`
-        : ` Installing ${what} it added; the project's checks run when that finishes, and the outcome lands in Activity.`;
+        ? ` ${what} ${deps.missing === 1 ? `is` : `are`} queued: installation starts after this turn and any other active agents finish, appears in Work terminals, then its checks and outcome land in Activity.`
+        : ` Installing ${what}; the project's checks run when that finishes, and the outcome lands in Activity.`;
 };
 
 // One line reporting the daemon's rebase of this agent's branch onto the current workspace; `blocked` names repos it

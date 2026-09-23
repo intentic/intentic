@@ -1,11 +1,13 @@
-import { opendir, readFile } from "node:fs/promises";
+import { opendir, readFile, stat } from "node:fs/promises";
 import { dirname, join, resolve as resolvePath } from "node:path";
+import { parse } from "yaml";
 import { pathExists } from "../../path-exists.js";
 import { readWorkspaceManifests } from "./package-graph.js";
 
-// Dependency drift: an installed tree that no longer satisfies the manifests above it, missed by workspace-setup's
-// node_modules check. Checks resolvability, not lockfile agreement: overrides/catalogs false-positive, and a lockfile
-// importer can still have zero node_modules. Doesn't claim a version is stale, only that a name fails to resolve.
+// Dependency drift: an installed tree that no longer satisfies what is declared above it, missed by workspace-setup's
+// node_modules check. Two readings of the tree itself, never of pnpm's own install record: a name that fails to resolve
+// against the manifests (a lockfile importer can have zero node_modules), and a direct dependency installed at another
+// version than the committed lockfile resolves (a catalog bump leaves every name resolving).
 
 // Only these two blocks: optional deps may be absent by design, peer deps are the consumer's to provide.
 const INSTALLED_BLOCKS = ["dependencies", "devDependencies"] as const;
@@ -70,6 +72,104 @@ export const unresolvedDependencies = async (projectDir: string): Promise<Unreso
     return found.filter((entry) => entry.names.length > 0).toSorted((left, right) => left.dir.localeCompare(right.dir));
 };
 
+// One direct dependency installed at another version than the lockfile resolves; `dir` is relative to the project.
+export interface OutdatedDependency {
+    readonly dir: string;
+    readonly name: string;
+    readonly installed: string;
+    readonly locked: string;
+}
+
+// Each lockfile document's top-level `importers:` block, up to the next top-level key or the end: parsing the whole
+// lockfile (its `packages:` and `snapshots:`) blocks the event loop for about a second on a large monorepo.
+const IMPORTERS_BLOCK = /^importers:\n([\s\S]*?)(?=^\S|(?![\s\S]))/gm;
+
+// Semver ignores build metadata, and a canary's installed manifest carries it where its lockfile entry does not.
+const withoutBuild = (version: string): string => version.split("+")[0] ?? version;
+
+type LockedVersions = ReadonlyMap<string, ReadonlyMap<string, string>>;
+
+// Importer dir (relative, "" for the root) → direct dependency name → the version the lockfile resolves. Only
+// registry versions: `link:`, `file:` and git entries have no version a manifest could disagree with, and a peer
+// suffix (`1.3.0(zod@4.5.4)`) is not part of the installed version.
+const recordOf = (value: unknown): Record<string, unknown> => (typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {});
+
+const registryVersion = (entry: unknown): string | undefined => {
+    const version = recordOf(entry)["version"];
+    return typeof version === "string" && /^\d/.test(version) ? (version.split("(")[0] ?? version) : undefined;
+};
+
+const importerVersions = (importer: unknown, into: Map<string, string>): void => {
+    for (const block of INSTALLED_BLOCKS) {
+        for (const [name, entry] of Object.entries(recordOf(recordOf(importer)[block]))) {
+            const version = registryVersion(entry);
+            if (version !== undefined) {
+                into.set(name, version);
+            }
+        }
+    }
+};
+
+const lockedVersionsOf = (text: string): LockedVersions => {
+    const importers = new Map<string, Map<string, string>>();
+    for (const match of text.matchAll(IMPORTERS_BLOCK)) {
+        const entries = recordOf(recordOf(parse(`importers:\n${match[1] ?? ""}`))["importers"]);
+        for (const [key, importer] of Object.entries(entries)) {
+            const dir = key === "." ? "" : key;
+            const versions = importers.get(dir) ?? new Map<string, string>();
+            importerVersions(importer, versions);
+            importers.set(dir, versions);
+        }
+    }
+    return importers;
+};
+
+// Keyed by the lockfile's size and mtime: it changes a few times a day and is read on every status check.
+const lockCache = new Map<string, { readonly stamp: string; readonly versions: LockedVersions }>();
+
+const lockedVersions = async (projectDir: string): Promise<LockedVersions> => {
+    const lockfile = join(projectDir, "pnpm-lock.yaml");
+    const stats = await stat(lockfile).catch(() => undefined);
+    if (stats === undefined) {
+        return new Map();
+    }
+    const stamp = `${stats.size}:${stats.mtimeMs}`;
+    const cached = lockCache.get(lockfile);
+    if (cached?.stamp === stamp) {
+        return cached.versions;
+    }
+    const text = await readFile(lockfile, "utf8").catch(() => undefined);
+    let versions: LockedVersions = new Map();
+    try {
+        versions = text === undefined ? versions : lockedVersionsOf(text);
+    } catch {
+        // A lockfile mid-merge (conflict markers) says nothing about versions; resolvability still reports.
+    }
+    lockCache.set(lockfile, { stamp, versions });
+    return versions;
+};
+
+const installedVersion = async (dir: string): Promise<string | undefined> => {
+    const manifest = await manifestAt(dir);
+    return typeof manifest?.["version"] === "string" ? manifest["version"] : undefined;
+};
+
+// Only pnpm's lockfile is read. A dependency with no installed manifest is skipped: missing is the resolvability
+// check's to report, and an optional one may be absent by design.
+export const outdatedDependencies = async (projectDir: string): Promise<OutdatedDependency[]> => {
+    const importers = await lockedVersions(projectDir);
+    const pairs = [...importers].flatMap(([dir, versions]) => [...versions].map(([name, locked]) => ({ dir, name, locked })));
+    const found = await Promise.all(
+        pairs.slice(0, MAX_DEPENDENCIES).map(async ({ dir, name, locked }) => {
+            const installed = await installedVersion(join(projectDir, dir, "node_modules", name));
+            return installed === undefined || withoutBuild(installed) === withoutBuild(locked) ? undefined : { dir, name, installed, locked };
+        }),
+    );
+    return found
+        .filter((entry): entry is OutdatedDependency => entry !== undefined)
+        .toSorted((left, right) => left.dir.localeCompare(right.dir) || left.name.localeCompare(right.name));
+};
+
 // Walks up like TypeScript's resolver, tracking the nearest package.json and nearest node_modules separately. `absent`
 // and `installed` stay apart: they send a reader in opposite directions.
 export type NearbyModules = { readonly kind: "absent" } | { readonly kind: "installed"; readonly missing: readonly string[] };
@@ -126,4 +226,11 @@ export const unresolvedSummary = (unresolved: readonly UnresolvedPackage[]): str
     const names = [...new Set(unresolved.flatMap((entry) => entry.names))];
     const shown = names.slice(0, SAMPLE).join(", ");
     return names.length <= SAMPLE ? shown : `${shown} and ${names.length - SAMPLE} more`;
+};
+
+// Distinct names with both versions, embedded the same way; one bump across six importers is one entry.
+export const outdatedSummary = (outdated: readonly OutdatedDependency[]): string => {
+    const byName = new Map(outdated.map((entry) => [entry.name, `${entry.name} ${entry.installed} → ${entry.locked}`]));
+    const shown = [...byName.values()].slice(0, SAMPLE).join(", ");
+    return byName.size <= SAMPLE ? shown : `${shown} and ${byName.size - SAMPLE} more`;
 };

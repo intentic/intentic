@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, expect } from "bun:test";
-import { modulesNear, unresolvedDependencies, unresolvedSummary } from "./dependency-drift.js";
+import { modulesNear, outdatedDependencies, outdatedSummary, unresolvedDependencies, unresolvedSummary } from "./dependency-drift.js";
 
 const project = async (): Promise<string> => mkdtemp(join(tmpdir(), "drift-"));
 
@@ -141,4 +141,95 @@ test("the summary names a few and counts the rest: the decision is made by the t
             { dir: "c", names: ["shared", "vue"] },
         ]),
     ).toBe("shared, vue");
+});
+
+const installedAt = (root: string, dir: string, name: string, version: string): Promise<void> =>
+    write(root, join(dir, "node_modules", name, "package.json"), JSON.stringify({ name, version }));
+
+// Two documents, as pnpm writes them: its own config document first, the project's importers after the separator.
+const LOCKFILE = `lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies: {}
+
+---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      bun:
+        specifier: 1.4.0-canary.20260903.1
+        version: 1.4.0-canary.20260903.1
+
+  packages/api:
+    dependencies:
+      '@openai/codex-sdk':
+        specifier: 'catalog:'
+        version: 0.156.1
+      shared:
+        specifier: workspace:*
+        version: link:../shared
+      zod-client:
+        specifier: 'catalog:'
+        version: 1.3.0(zod@4.5.4)
+
+packages:
+
+  '@openai/codex-sdk@0.156.1':
+    resolution: {integrity: sha512-x}
+`;
+
+// The bump this exists for: a catalog moves a version, every name still resolves, and the tree keeps the old one.
+test("a direct dependency installed at another version than the lockfile resolves is outdated", async () => {
+    const root = await project();
+    await write(root, "pnpm-lock.yaml", LOCKFILE);
+    await installedAt(root, "", "bun", "1.4.0-canary.20260903.1");
+    await installedAt(root, "packages/api", "@openai/codex-sdk", "0.155.1");
+    await installedAt(root, "packages/api", "zod-client", "1.3.0");
+    expect(await outdatedDependencies(root)).toEqual([{ dir: "packages/api", name: "@openai/codex-sdk", installed: "0.155.1", locked: "0.156.1" }]);
+});
+
+// A peer suffix, a build stamp only the installed manifest carries, and a workspace link are all agreement.
+test("peer suffixes, build metadata and workspace links are not read as a version mismatch", async () => {
+    const root = await project();
+    await write(root, "pnpm-lock.yaml", LOCKFILE);
+    await installedAt(root, "", "bun", "1.4.0-canary.20260903.1+e0a2b82");
+    await installedAt(root, "packages/api", "@openai/codex-sdk", "0.156.1");
+    await installedAt(root, "packages/api", "zod-client", "1.3.0");
+    await installedAt(root, "packages/api", "shared", "0.0.0");
+    expect(await outdatedDependencies(root)).toEqual([]);
+});
+
+// Missing is the resolvability check's to report; saying it twice would count one package as two problems.
+test("a locked dependency with nothing installed is not also reported as outdated", async () => {
+    const root = await project();
+    await write(root, "pnpm-lock.yaml", LOCKFILE);
+    expect(await outdatedDependencies(root)).toEqual([]);
+});
+
+test("no lockfile, or one mid-merge, makes no version claim", async () => {
+    const root = await project();
+    await installedAt(root, "", "bun", "0.0.1");
+    expect(await outdatedDependencies(root)).toEqual([]);
+    await write(root, "pnpm-lock.yaml", "importers:\n<<<<<<< HEAD\n  .: [\n");
+    expect(await outdatedDependencies(root)).toEqual([]);
+});
+
+// A rewritten lockfile is read again, not served from the cache the previous version filled.
+test("a lockfile rewritten after a read is read again", async () => {
+    const root = await project();
+    await write(root, "pnpm-lock.yaml", LOCKFILE);
+    await installedAt(root, "packages/api", "@openai/codex-sdk", "0.156.1");
+    expect(await outdatedDependencies(root)).toEqual([]);
+    await write(root, "pnpm-lock.yaml", LOCKFILE.replaceAll("0.156.1", "0.157.0"));
+    expect(await outdatedDependencies(root)).toEqual([{ dir: "packages/api", name: "@openai/codex-sdk", installed: "0.156.1", locked: "0.157.0" }]);
+});
+
+test("the outdated summary shows both versions once per name", () => {
+    const bump = { name: "@cursor/sdk", installed: "1.0.31", locked: "1.0.32" };
+    expect(outdatedSummary([{ dir: "a", ...bump }, { dir: "b", ...bump }])).toBe("@cursor/sdk 1.0.31 → 1.0.32");
 });
