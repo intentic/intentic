@@ -774,6 +774,8 @@ const walk = async (seed: number, steps: number): Promise<number> => {
                     throw new Error("the job dir could not be minted");
                 }
                 dirs.push(job.dir);
+                // What tmux-run writes first; without it the settle would end the job as one that never ran.
+                writeFileSync(join(job.dir, "cmd"), "pnpm build\n");
                 modelOf(id).jobs.push({ job, finished: false, adopted: false });
             },
         },

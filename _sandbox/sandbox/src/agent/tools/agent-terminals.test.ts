@@ -1,4 +1,4 @@
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HISTORY_ROOT, WORKSPACE_ROOT } from "@intentic/constants";
@@ -106,6 +106,8 @@ test("a background command carries a job dir, and is filed for the turn's ending
     expect(dir).toStartWith(join(tmpdir(), "intentic-run-job-"));
     noteJobShell(actors, "tu-1", "bsh42");
     expect(backgroundJobOf(actors, "conv-bg", "bsh42")?.dir).toBe(dir as string);
+    // What tmux-run writes first; without it the settle would read the job as one that never ran.
+    writeFileSync(join(dir as string, "cmd"), "pnpm build\n");
     // The registry holds the same job, so the settle that follows can hand it to a watch.
     const filed = settledBackgroundJobs(actors, "conv-bg").running;
     expect(filed.map((job: BackgroundJob) => job.dir)).toEqual([dir as string]);

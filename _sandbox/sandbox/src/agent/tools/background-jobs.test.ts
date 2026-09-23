@@ -59,8 +59,12 @@ const opened = (conversationId: string, command = "pnpm build", toolUseId?: stri
         throw new Error("the job dir could not be minted");
     }
     dirs.push(job.dir);
+    ranIn(job);
     return job;
 };
+
+// What bin/tmux-run writes before it opens the pane; a job without it never ran.
+const ranIn = (job: BackgroundJob): void => writeFileSync(join(job.dir, "cmd"), `${job.command}\n`);
 
 // A job dir as a dead daemon left it: on disk with its own `job.json`, and unknown to this process's registry. The
 // prefix and the filename are the on-disk contract a restart reads back, so they are spelled here rather than
@@ -82,6 +86,7 @@ const planted = (conversationId: string, file: Record<string, unknown> = {}): Ba
     };
     const { dir: _dir, profile, ...onDisk } = job;
     writeFileSync(join(dir, "job.json"), JSON.stringify({ ...onDisk, turn: profile, ...file }));
+    ranIn(job);
     return job;
 };
 
@@ -191,6 +196,27 @@ describe("background job registry", () => {
         noteJobShell(actors, "tu-persist", "bsh-persist");
         settledBackgroundJobs(actors, "conv-persist");
         expect(JSON.parse(readFileSync(join(job.dir, "job.json"), "utf8"))).toMatchObject({ id: job.id, shellId: "bsh-persist", adopted: true });
+    });
+
+    it("ends a job whose command never reached a terminal once its turn settles, and hands it out as unseen", async () => {
+        const job = openBackgroundJob(seedOf("conv-never"), { command: "pnpm build", session: "agent-conv-never" });
+        if (job === undefined) {
+            throw new Error("the job dir could not be minted");
+        }
+        dirs.push(job.dir);
+        expect(settledBackgroundJobs(actors, "conv-never")).toEqual({ running: [], unseen: [job] });
+        expect(listed("conv-never")?.map((entry) => ({ id: entry.id, ended: entry.endedAt !== undefined, exitCode: entry.exitCode }))).toEqual([
+            { id: job.id, ended: true, exitCode: undefined },
+        ]);
+        expect(await jobReport(actors, job)).toMatchObject({ running: false, exitCode: undefined });
+        expect(backgroundJobSessions(actors)).not.toContain(job.session);
+    });
+
+    it("ends a restored job whose command never ran rather than taking it back", () => {
+        const job = planted("conv-restart-never", { adopted: true });
+        rmSync(join(job.dir, "cmd"));
+        expect(restoreBackgroundJobs(actors).map((entry) => entry.id)).not.toContain(job.id);
+        expect(readFileSync(jobStatusPath(job), "utf8")).toBe("never-ran\n");
     });
 
     it("leaves a finished or expired job where it lies on a restart", () => {

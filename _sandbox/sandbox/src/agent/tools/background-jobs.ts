@@ -16,6 +16,10 @@ import { whenFileAppears } from "../../file-appears.js";
 const STATUS_FILE = "status";
 // The pane's combined output, tee'd as it runs.
 const OUTPUT_FILE = "out";
+// Written by bin/tmux-run before it touches tmux; its absence once the turn is gone means the command never ran.
+const COMMAND_FILE = "cmd";
+// The status body of a job whose command never ran, which no exit code can be.
+const NEVER_RAN = "never-ran";
 // The job itself, rewritten whole as it is named and adopted, so a restarted daemon can take it back.
 const JOB_FILE = "job.json";
 
@@ -120,6 +124,20 @@ export const jobOutputPath = (job: BackgroundJob): string => join(job.dir, OUTPU
 
 /** Whether the command has exited; never half-true, since the status file is renamed into place last. */
 export const jobFinished = (job: BackgroundJob): boolean => existsSync(jobStatusPath(job));
+
+// Either file is tmux-run's first act, the pane path writing `cmd` and the no-tmux fallback `out`.
+const jobStarted = (job: BackgroundJob): boolean => existsSync(join(job.dir, COMMAND_FILE)) || existsSync(jobOutputPath(job));
+
+// Ends a job whose command never ran the way tmux-run ends one that did, so the card, the watch and `wait` all see it end.
+const endNeverRan = (job: BackgroundJob): void => {
+    try {
+        writeFileSync(jobOutputPath(job), "--- intentic: this command never reached a terminal, so it never ran\n");
+        writeFileSync(`${jobStatusPath(job)}.part`, `${NEVER_RAN}\n`);
+        renameSync(`${jobStatusPath(job)}.part`, jobStatusPath(job));
+    } catch {
+        // A dir that cannot be written is one the tmp sweep already took.
+    }
+};
 
 const cardOf = (job: BackgroundJob): AgentJob => ({ id: job.id, label: job.label, session: job.session, startedAt: job.startedAt });
 
@@ -290,6 +308,10 @@ export const restoreBackgroundJobs = (actors: Actors, now: number = Date.now()):
     const restored: BackgroundJob[] = [];
     for (const entry of readdirSync(tmpdir(), { withFileTypes: true }).filter((candidate) => candidate.isDirectory() && candidate.name.startsWith(JOB_DIR_PREFIX))) {
         const record = recordOf(join(tmpdir(), entry.name));
+        // No turn survives a restart, so a job that had not started by then never will.
+        if (record !== undefined && !jobStarted(record.job)) {
+            endNeverRan(record.job);
+        }
         if (record === undefined || jobs.has(record.job.id) || jobFinished(record.job) || now - record.job.startedAt > JOB_MAX_MS) {
             continue;
         }
@@ -346,6 +368,10 @@ export const settledBackgroundJobs = (actors: Actors, conversationId: string): S
     const running: BackgroundJob[] = [];
     const unseen: BackgroundJob[] = [];
     for (const record of actors.holdings(JOBS).of(conversationId)) {
+        // The turn's CLI is gone, so a call that had not reached tmux-run by now never will.
+        if (!jobStarted(record.job)) {
+            endNeverRan(record.job);
+        }
         if (jobFinished(record.job)) {
             forgetJob(actors, record);
             if (record.notice !== "read" && !record.adopted) {
