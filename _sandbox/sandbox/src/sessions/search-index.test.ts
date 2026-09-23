@@ -72,6 +72,16 @@ test("wildcards a user types are literal, not patterns", () => {
     expect(index.search("_", "conversation", false).size).toBe(0);
 });
 
+// Trigrams alone admit both lines; only the literal re-check tells `_` from the character it stands in for.
+test("a typed underscore stays literal where the trigram index admits a near-miss", () => {
+    const index = fresh();
+    index.put("c1", "conversation", "1", said(["rename snake_case keys", "user"]));
+    index.put("c2", "conversation", "1", said(["rename snakeXcase keys", "user"]));
+
+    expect([...index.search("snake_case", "conversation", false).keys()]).toEqual(["c1"]);
+    expect([...index.search("snake_case", "conversation", true).keys()]).toEqual(["c1"]);
+});
+
 test("a long line comes back windowed around the hit, not cut from the start", () => {
     const index = fresh();
     const line = `${"filler ".repeat(40)}the needle${" trailing".repeat(40)}`;

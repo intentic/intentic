@@ -73,8 +73,22 @@ const windowed = (text: string, at: number, length: number): string => {
     return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
 };
 
-// Escapes LIKE's own wildcards (%, _) so a typed one is literal; unescaped, "100%" would match every line.
-const likePattern = (folded: string): string => `%${folded.replace(/[\\%_]/gu, (char) => `\\${char}`)}%`;
+// Never escaped: sqlite offers fts5 only a two-argument LIKE, so an ESCAPE clause turns the trigram index into a scan.
+const likePattern = (folded: string): string => `%${folded}%`;
+
+// A typed `%` or `_` only widens the LIKE; this literal re-check narrows it back, empty (always true) when none is typed.
+const literalNeedle = (folded: string): string => (/[%_]/u.test(folded) ? folded : "");
+
+// Oldest user line per source, else oldest agent's, via a partition ordered by speaker then rowid. Binds: kind,
+// likePattern, literalNeedle, then the raw needle when case-sensitive or "" when not, since `instr(x, '')` is always 1.
+export const SEARCH_SQL = `
+    SELECT key, speaker, text FROM (
+        SELECT key, speaker, text,
+            row_number() OVER (PARTITION BY key ORDER BY CASE speaker WHEN 'user' THEN 0 ELSE 1 END, rowid) AS rn
+        FROM said
+        WHERE kind = ? AND fold LIKE ? AND instr(fold, ?) > 0 AND instr(text, ?) > 0
+    ) WHERE rn = 1
+`;
 
 const isSpeaker = (value: unknown): value is Speaker => value === "user" || value === "agent";
 
@@ -128,16 +142,7 @@ export const openSearchIndex = (dir: string): SearchIndex => {
     `);
     const listVersions = db.prepare("SELECT key, version FROM source WHERE kind = ?");
     const countSources = db.prepare("SELECT kind, count(*) AS sources, coalesce(sum(lines), 0) AS lines FROM source GROUP BY kind");
-    // Oldest user line per source, else oldest agent's, via a partition ordered by speaker then rowid. `instr(text, ?)`
-    // case-confirms inside the query; empty when insensitive, since `instr(x, '')` is always true.
-    const query = db.prepare(`
-        SELECT key, speaker, text FROM (
-            SELECT key, speaker, text,
-                row_number() OVER (PARTITION BY key ORDER BY CASE speaker WHEN 'user' THEN 0 ELSE 1 END, rowid) AS rn
-            FROM said
-            WHERE kind = ? AND fold LIKE ? ESCAPE '\\' AND instr(text, ?) > 0
-        ) WHERE rn = 1
-    `);
+    const query = db.prepare(SEARCH_SQL);
 
     const write = (run: () => void): void => {
         db.exec("BEGIN");
@@ -179,7 +184,7 @@ export const openSearchIndex = (dir: string): SearchIndex => {
             }),
         search: (needle, kind, caseSensitive) => {
             const folded = needle.toLowerCase();
-            const rows = query.all(kind, likePattern(folded), caseSensitive ? needle : "") as {
+            const rows = query.all(kind, likePattern(folded), literalNeedle(folded), caseSensitive ? needle : "") as {
                 key: string;
                 speaker: string;
                 text: string;
