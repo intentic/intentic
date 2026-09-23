@@ -19,6 +19,7 @@ export function useSandboxTrash() {
 
     // Undefined while unread, so a surface can tell "nothing deleted" from "not asked yet".
     const deleted = computed<readonly TrashedSandbox[] | undefined>(() => query.data.value);
+    const readError = computed<string | undefined>(() => query.error.value?.message ?? undefined);
 
     const restoring = ref<string | undefined>(undefined);
     const failed = ref<string | undefined>(undefined);
@@ -47,6 +48,7 @@ export function useSandboxTrash() {
 
     return {
         deleted,
+        readError,
         // The rows worth drawing: a window that ran out between the fetch and this render promises nothing.
         recoverable: computed<readonly TrashedSandbox[]>(() => (deleted.value ?? []).filter((row) => daysLeft(row.purgeAfter) > 0)),
         restoring,

@@ -62,6 +62,12 @@ export const sandboxSectionGroups = (): readonly SandboxSectionGroup[] => [
             { slug: `devices`, label: t(`sandbox.sandboxNav.devices`), icon: `desktop`, maintainer: true },
         ],
     },
+    {
+        // The account's other boxes, not this one; last, since nothing here is about the sandbox the hub is named for.
+        key: `account`,
+        label: t(`sandbox.sandboxNav.yourSandboxes`),
+        items: [{ slug: `deleted`, label: t(`sandbox.sandboxNav.deleted`), icon: `trash` }],
+    },
 ];
 
 /**

@@ -4,7 +4,6 @@ import { SANDBOX_RECOVERY_DAYS as RECOVERY_DAYS, type SandboxSummary } from "@in
 import {
     AnchoredOverlay,
     browserOwnsClick,
-    Button,
     Code,
     commandLang,
     ConfirmDialog,
@@ -33,8 +32,6 @@ import { attentionByBox, subscribe as watchOtherBoxes } from "../live/fleetAcros
 import { connectedSandboxes, unfinishedSandboxes } from "../live/roster";
 import { useSandboxAvailability } from "../overview/useSandboxAvailability";
 import { useSandbox } from "../client/useSandbox";
-import { daysLeft } from "../client/trashWindow";
-import { useSandboxTrash } from "../client/useSandboxTrash";
 import { useWorkspaceTree } from "../../workspace/explorer/useWorkspaceTree";
 import { manageDeviceSandbox, useHostRunning } from "../devices/useDevices";
 import { bashCommand, psCommand } from "../../../app/environments/scriptCommand";
@@ -143,20 +140,6 @@ const dismiss = (event: MouseEvent): void => {
 
 // Resumes this row's setup rather than offering a blank create form.
 const resumeSetup = (option: SandboxSummary) => ({ path: `/setup`, query: { sandbox: option.id } });
-
-// Sandboxes deleted from this account that the platform is still holding. Below the live rows and the unfinished
-// ones, since these are not places to go either — but unlike an unfinished setup, this section disappears on its
-// own, and the day count is the only reason it is urgent.
-const trash = useSandboxTrash();
-
-const restoreDeleted = async (trashId: string): Promise<void> => {
-    const restored = await trash.restore(trashId);
-    if (restored === undefined) {
-        return;
-    }
-    open.value = false;
-    sandbox.select(restored.id);
-};
 
 // Alt+1…9 picks the Nth switchable sandbox; a digit past the end does nothing rather than clamping.
 const SWITCH_SLOTS = 9;
@@ -483,38 +466,6 @@ const confirmRemove = async (): Promise<void> => {
                 </RouterLink>
             </template>
 
-            <!-- Deleted sandboxes the platform is still holding. Drawn only while something is recoverable, so the
-                 section is its own countdown: it is here, then one day it is not. -->
-            <template v-if="trash.recoverable.value.length > 0">
-                <div class="my-1 border-t border-line"></div>
-                <div class="px-2 py-1.5 text-2xs font-semibold uppercase tracking-wide text-subtle">
-                    {{ t(`sandbox.sandboxSwitcher.recentlyDeleted`) }}
-                </div>
-                <div
-                    v-for="row in trash.recoverable.value"
-                    :key="row.id"
-                    class="group flex items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-content/5"
-                >
-                    <span class="flex h-5 w-5 shrink-0 items-center justify-center text-subtle">
-                        <Icon name="trash" class="text-xs" />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate text-muted">{{ row.name }}</span>
-                    <span class="shrink-0 text-2xs text-subtle">{{
-                        t(`sandbox.sandboxSwitcher.daysLeftToRestore`, { count: daysLeft(row.purgeAfter) }, daysLeft(row.purgeAfter))
-                    }}</span>
-                    <Button
-                        size="small"
-                        severity="secondary"
-                        text
-                        :label="t(`sandbox.sandboxSwitcher.restore`)"
-                        :loading="trash.restoring.value === row.id"
-                        :disabled="trash.restoring.value !== undefined"
-                        @click="void restoreDeleted(row.id)"
-                    />
-                </div>
-                <Notice v-if="trash.failed.value" tone="danger" class="mt-1 text-2xs">{{ trash.failed.value }}</Notice>
-            </template>
-
             <div class="my-1 border-t border-line"></div>
 
             <!-- The sandbox management hub has no rail tile; this chip is its home, and every attention row lands here too. -->
@@ -558,6 +509,7 @@ const confirmRemove = async (): Promise<void> => {
                     ? t(`sandbox.sandboxSwitcher.restorableHostedDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
                     : t(`sandbox.sandboxSwitcher.restorableOwnDays`, { count: RECOVERY_DAYS }, RECOVERY_DAYS)
             }}
+            {{ t(`sandbox.sandboxSwitcher.restoreWhere`) }}
         </p>
         <!-- The hosted lane is the only removal that destroys a machine; no cleanup command, since nothing else exists. -->
         <template v-if="pending?.role === 'owner' && pending.hosted === null && cleanupCommand !== undefined">

@@ -3095,6 +3095,18 @@
         "sandboxConnecting": {
             "runOnMyComputer": "Ejecutarlo en mi ordenador"
         },
+        "sandboxDeleted": {
+            "comesBackAsName": "Vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina donde se ejecutaba",
+            "comesBackWithMachine": "Vuelve con su máquina y sus archivos",
+            "couldntRead": "No se pudieron leer los sandboxes eliminados",
+            "couldntRestore": "No se pudo restaurar ese sandbox",
+            "daysLeftToRestore": "queda {count} día | quedan {count} días",
+            "keptForDays": "Un sandbox eliminado se puede restaurar durante {count} día; después desaparece para siempre. | Un sandbox eliminado se puede restaurar durante {count} días; después desaparece para siempre.",
+            "nothingToRestore": "Nada que restaurar",
+            "reading": "Leyendo los sandboxes eliminados",
+            "recentlyDeleted": "Eliminados recientemente",
+            "restore": "Restaurar"
+        },
         "sandboxDevices": {
             "couldntListDevices": "No se pudieron listar tus dispositivos."
         },
@@ -3133,6 +3145,7 @@
             "areas": "Áreas",
             "box": "Esta caja",
             "configuration": "Configuración",
+            "deleted": "Eliminados recientemente",
             "devices": "Dispositivos",
             "environment": "Entorno",
             "extensions": "Extensiones",
@@ -3140,7 +3153,8 @@
             "personas": "Personas",
             "reach": "Alcance",
             "secrets": "Secretos",
-            "usage": "Uso"
+            "usage": "Uso",
+            "yourSandboxes": "Tus sandboxes"
         },
         "sandboxOverview": {
             "addLogo": "Añadir un logo",
@@ -3214,7 +3228,6 @@
             "alsoDelete": "Eliminarlo también de",
             "cleanupCommand": "Comando de limpieza",
             "containerFilesHistoryGone": "— su contenedor allí se detiene, y sus archivos y su historial se conservan una semana antes de eliminarse.",
-            "daysLeftToRestore": "queda {count} día | quedan {count} días",
             "finishSettingUp": "Terminar de configurar {name}",
             "isntAnsweringWhatsWaiting": "{name} no responde, así que no se sabe qué está esperando allí",
             "leave": "Salir",
@@ -3222,14 +3235,13 @@
             "leaveSandbox": "¿Salir del sandbox?",
             "needs": "Te necesita",
             "notAnswering": "No responde",
-            "recentlyDeleted": "Eliminados recientemente",
             "removeAccount": "Quitar de la cuenta",
             "removeAccount2": "¿Quitar de la cuenta?",
             "removeAccountEveryoneLoses": "¿Quitar «{name}» de tu cuenta? Todos pierden el acceso aquí; el sandbox en sí sigue funcionando donde esté.",
             "removeHostedMachineDestroyed": "¿Eliminar «{name}»? Su máquina se detiene ahora y todos aquí pierden el acceso.",
             "restorableHostedDays": "Puedes restaurarlo durante {count} día; su máquina y sus archivos se conservan hasta entonces. | Puedes restaurarlo durante {count} días; su máquina y sus archivos se conservan hasta entonces.",
             "restorableOwnDays": "Puedes restaurarlo durante {count} día, aunque vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina de allí. | Puedes restaurarlo durante {count} días, aunque vuelve con una dirección nueva, así que habrá que conectar de nuevo la máquina de allí.",
-            "restore": "Restaurar",
+            "restoreWhere": "Puedes restaurarlo desde Ajustes del sandbox ▸ Eliminados recientemente.",
             "sandboxSettings": "Ajustes del sandbox",
             "sandboxes": "Sandboxes",
             "shared": "Compartido",

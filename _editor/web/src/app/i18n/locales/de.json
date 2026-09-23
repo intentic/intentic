@@ -3095,6 +3095,18 @@
         "sandboxConnecting": {
             "runOnMyComputer": "Auf meinem Computer laufen lassen"
         },
+        "sandboxDeleted": {
+            "comesBackAsName": "Kommt mit einer neuen Adresse zurück, die Maschine, auf der sie lief, muss also erneut verbunden werden",
+            "comesBackWithMachine": "Kommt mit Maschine und Dateien zurück",
+            "couldntRead": "Gelöschte Sandboxes konnten nicht gelesen werden",
+            "couldntRestore": "Diese Sandbox konnte nicht wiederhergestellt werden",
+            "daysLeftToRestore": "noch {count} Tag | noch {count} Tage",
+            "keptForDays": "Eine gelöschte Sandbox lässt sich {count} Tag lang wiederherstellen, danach ist sie endgültig weg. | Eine gelöschte Sandbox lässt sich {count} Tage lang wiederherstellen, danach ist sie endgültig weg.",
+            "nothingToRestore": "Nichts wiederherzustellen",
+            "reading": "Gelöschte Sandboxes werden gelesen",
+            "recentlyDeleted": "Kürzlich gelöscht",
+            "restore": "Wiederherstellen"
+        },
         "sandboxDevices": {
             "couldntListDevices": "Ihre Geräte ließen sich nicht auflisten."
         },
@@ -3133,6 +3145,7 @@
             "areas": "Bereiche",
             "box": "Diese Box",
             "configuration": "Konfiguration",
+            "deleted": "Kürzlich gelöscht",
             "devices": "Geräte",
             "environment": "Umgebung",
             "extensions": "Erweiterungen",
@@ -3140,7 +3153,8 @@
             "personas": "Personas",
             "reach": "Reichweite",
             "secrets": "Geheimnisse",
-            "usage": "Nutzung"
+            "usage": "Nutzung",
+            "yourSandboxes": "Deine Sandboxes"
         },
         "sandboxOverview": {
             "addLogo": "Ein Logo hinzufügen",
@@ -3214,7 +3228,6 @@
             "alsoDelete": "Auch löschen von",
             "cleanupCommand": "Aufräum-Befehl",
             "containerFilesHistoryGone": "— der Container dort wird gestoppt, und seine Dateien und seine Historie bleiben eine Woche erhalten, bevor sie gelöscht werden.",
-            "daysLeftToRestore": "noch {count} Tag | noch {count} Tage",
             "finishSettingUp": "{name} fertig einrichten",
             "isntAnsweringWhatsWaiting": "{name} antwortet nicht, deshalb ist nicht bekannt, was dort wartet",
             "leave": "Verlassen",
@@ -3222,14 +3235,13 @@
             "leaveSandbox": "Sandbox verlassen?",
             "needs": "Braucht Sie",
             "notAnswering": "Antwortet nicht",
-            "recentlyDeleted": "Kürzlich gelöscht",
             "removeAccount": "Aus dem Konto entfernen",
             "removeAccount2": "Aus dem Konto entfernen?",
             "removeAccountEveryoneLoses": "„{name}“ aus Ihrem Konto entfernen? Alle verlieren hier den Zugriff; die Sandbox selbst läuft weiter, wo sie ist.",
             "removeHostedMachineDestroyed": "„{name}“ entfernen? Die Maschine wird jetzt gestoppt, und alle hier verlieren den Zugriff.",
             "restorableHostedDays": "Du kannst sie {count} Tag lang wiederherstellen; Maschine und Dateien bleiben bis dahin erhalten. | Du kannst sie {count} Tage lang wiederherstellen; Maschine und Dateien bleiben bis dahin erhalten.",
             "restorableOwnDays": "Du kannst sie {count} Tag lang wiederherstellen, sie kommt aber mit einer neuen Adresse zurück, die Maschine dort muss also erneut verbunden werden. | Du kannst sie {count} Tage lang wiederherstellen, sie kommt aber mit einer neuen Adresse zurück, die Maschine dort muss also erneut verbunden werden.",
-            "restore": "Wiederherstellen",
+            "restoreWhere": "Wiederherstellen kannst du sie unter Sandbox-Einstellungen ▸ Kürzlich gelöscht.",
             "sandboxSettings": "Sandbox-Einstellungen",
             "sandboxes": "Sandboxes",
             "shared": "Geteilt",

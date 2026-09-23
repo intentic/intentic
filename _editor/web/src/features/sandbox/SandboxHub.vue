@@ -18,6 +18,7 @@ import type { HubTab } from "../../shell/hub/hubNav";
 import { hubWorkKey, hubWorkRunning } from "../../shell/hub/hubWork";
 import SandboxAccess from "./access/SandboxAccess.vue";
 import SandboxAgent from "./overview/SandboxAgent.vue";
+import SandboxDeleted from "./deleted/SandboxDeleted.vue";
 import SandboxDevices from "./devices/SandboxDevices.vue";
 import SandboxEnvironment from "./environment/SandboxEnvironment.vue";
 import SandboxExtensions from "./extensions/SandboxExtensions.vue";
@@ -132,6 +133,7 @@ const groups = computed<readonly NavGroup<HubTab>[]>(() => [
             <SandboxAgent v-else-if="slug === `agent`" />
             <SandboxExtensions v-else-if="slug === `extensions`" />
             <SandboxDevices v-else-if="slug === `devices`" />
+            <SandboxDeleted v-else-if="slug === `deleted`" />
             <!-- Extension-contributed sections, with the same error boundary and lazy-view cache the rail's routed host uses. -->
             <ExtensionView v-else-if="extensionFor(slug) !== undefined" v-bind="extensionFor(slug)!" />
         </template>

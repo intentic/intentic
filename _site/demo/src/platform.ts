@@ -1,4 +1,4 @@
-import type { HostedPlanState, SandboxSummary, User } from "@intentic/api-contract";
+import type { HostedPlanState, SandboxSummary, TrashedSandbox, User } from "@intentic/api-contract";
 import { FREE_TIER, hostedTier } from "@intentic/constants";
 import { inviteRecords } from "./fixture/access";
 import { MAKER_SANDBOX_NAME } from "./fixture/maker";
@@ -71,6 +71,26 @@ const DEMO_HOSTED_PLAN: HostedPlanState = {
     },
 };
 
+// One of each lane, so Sandbox ▸ Recently deleted shows both sentences a restore can promise.
+const DEMO_TRASH: readonly TrashedSandbox[] = [
+    {
+        id: `trash-staging`,
+        name: `acme-staging`,
+        image: null,
+        deletedAt: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+        purgeAfter: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+        hosted: true,
+    },
+    {
+        id: `trash-laptop`,
+        name: `ada-laptop`,
+        image: null,
+        deletedAt: new Date(Date.now() - 6 * 86_400_000).toISOString(),
+        purgeAfter: new Date(Date.now() + 1 * 86_400_000).toISOString(),
+        hosted: false,
+    },
+];
+
 const SESSION = {
     session: { id: `demo-session`, userId: DEMO_USER.id, expiresAt: new Date(Date.now() + 30 * 24 * 3_600_000).toISOString() },
     user: DEMO_USER,
@@ -117,6 +137,8 @@ export const platform = async (request: Request, url: URL): Promise<Response> =>
     switch (path) {
         case `/rpc/sandbox/list`:
             return json({ sandboxes: [DEMO_SANDBOX] });
+        case `/rpc/sandbox/trash`:
+            return json({ sandboxes: DEMO_TRASH });
         case `/rpc/billing/plan`:
             return json({ plan: `pro`, entitlements: { sandboxes: 5, members: 10 } });
         // Plan's on/off answer decides whether Settings shows the Billing tab.

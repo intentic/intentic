@@ -3059,6 +3059,18 @@
         "sandboxConnecting": {
             "runOnMyComputer": "Run it on my computer"
         },
+        "sandboxDeleted": {
+            "comesBackAsName": "Comes back with a new address, so the machine it ran on has to be connected again",
+            "comesBackWithMachine": "Comes back with its machine and files",
+            "couldntRead": "Couldn't read deleted sandboxes",
+            "couldntRestore": "Couldn't restore that sandbox",
+            "daysLeftToRestore": "{count} day left | {count} days left",
+            "keptForDays": "A deleted sandbox can be restored for {count} day, then it is gone for good. | A deleted sandbox can be restored for {count} days, then it is gone for good.",
+            "nothingToRestore": "Nothing to restore",
+            "reading": "Reading deleted sandboxes",
+            "recentlyDeleted": "Recently deleted",
+            "restore": "Restore"
+        },
         "sandboxDevices": {
             "couldntListDevices": "Couldn't list your devices."
         },
@@ -3104,7 +3116,9 @@
             "reach": "Reach",
             "secrets": "Secrets",
             "usage": "Usage",
-            "areas": "Areas"
+            "areas": "Areas",
+            "deleted": "Recently deleted",
+            "yourSandboxes": "Your sandboxes"
         },
         "sandboxOverview": {
             "addLogo": "Add a logo",
@@ -3178,7 +3192,6 @@
             "alsoDelete": "Also delete it from",
             "cleanupCommand": "Cleanup command",
             "containerFilesHistoryGone": "— its container there stops, and its files and history are kept for a week before they are deleted.",
-            "daysLeftToRestore": "{count} day left | {count} days left",
             "finishSettingUp": "Finish setting up {name}",
             "isntAnsweringWhatsWaiting": "{name} isn't answering, so what's waiting there isn't known",
             "leave": "Leave",
@@ -3186,14 +3199,13 @@
             "leaveSandbox": "Leave sandbox?",
             "needs": "Needs you",
             "notAnswering": "Not answering",
-            "recentlyDeleted": "Recently deleted",
             "removeAccount": "Remove from account",
             "removeAccount2": "Remove from account?",
             "removeAccountEveryoneLoses": "Remove \"{name}\" from your account? Everyone loses access here; the sandbox itself keeps running wherever it is.",
             "removeHostedMachineDestroyed": "Remove \"{name}\"? Its machine stops now, and everyone here loses access.",
             "restorableHostedDays": "You can restore it for {count} day; its machine and its files are kept until then. | You can restore it for {count} days; its machine and its files are kept until then.",
             "restorableOwnDays": "You can restore it for {count} day, though it comes back with a new address, so the box out there has to be connected again. | You can restore it for {count} days, though it comes back with a new address, so the box out there has to be connected again.",
-            "restore": "Restore",
+            "restoreWhere": "Restore it from Sandbox settings ▸ Recently deleted.",
             "sandboxSettings": "Sandbox settings",
             "sandboxes": "Sandboxes",
             "shared": "Shared",
