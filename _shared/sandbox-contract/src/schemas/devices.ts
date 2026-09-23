@@ -88,6 +88,8 @@ export const DeviceSandboxFlowSchema = z.object({
     pair: z.string().optional().meta({ secret: true }),
     // Required by `reconnect` and `create`; single-sandbox and short-lived, so a leak only buys one recreate.
     setupCode: z.string().optional().meta({ secret: true }),
+    // `reconnect`/`create` only, daemon-filled: the platform that minted `setupCode`, the only one that redeems it.
+    platformUrl: z.string().optional(),
     // `runner-up` only, daemon-filled: `definition` carries no capabilities or secrets; `overlay`/`overlayHash` are
     // re-verified by hash before build.
     definition: z.string().optional(),

@@ -274,6 +274,19 @@ export const icConnectArgs = (setupCode: string | undefined): string[] => {
     return ["sandbox", "connect", "-y", "--", setupCode.trim()];
 };
 
+// A claim is redeemable only on the platform that minted it; host.docker.internal is a container's name for this machine.
+export const icConnectEnv = (platformUrl: string | undefined): { readonly PLATFORM_URL: string } => {
+    if (platformUrl === undefined || platformUrl.trim() === "") {
+        throw new Error(`"platformUrl" is required: a setup code is redeemable only on the platform that minted it.`);
+    }
+    const url = new URL(platformUrl.trim());
+    if (url.hostname === "host.docker.internal") {
+        url.hostname = "localhost";
+    }
+    // ic appends `/setup/claim` itself, so a trailing slash would double it.
+    return { PLATFORM_URL: `${url.origin}${url.pathname.replace(/\/+$/, "")}` };
+};
+
 // The reshape argv, spelled the way `ic sandbox reshape` takes it: a cap as `<n>g`/`<n>`, `null` as ic's
 // `default`, a switch as an explicit on/off. Nothing is interpreted here; a reshape with nothing to change is
 // refused before anything is spawned.
@@ -405,6 +418,7 @@ const runStreamed = (
     binary: string,
     args: readonly string[],
     onLine: (line: string) => void,
+    env: Readonly<Record<string, string>>,
 ): Promise<{ code: number; output: string } | "missing"> => {
     const lines: string[] = [];
     const emit = (chunk: string): void => {
@@ -416,7 +430,7 @@ const runStreamed = (
         }
     };
     return new Promise((resolve) => {
-        const child = spawn(binary, [...args], { windowsHide: true });
+        const child = spawn(binary, [...args], { windowsHide: true, env: { ...process.env, ...env } });
         let missing = false;
         child.stdout.setEncoding("utf8").on("data", emit);
         child.stderr.setEncoding("utf8").on("data", emit);
@@ -434,10 +448,14 @@ const runStreamed = (
 
 // An `ic` run, over the install locations in order: ENOENT means that candidate is not installed, so the next one is
 // tried rather than the run being failed. Exported for the auto-prepare tick.
-export const runIc = async (args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
+export const runIc = async (
+    args: readonly string[],
+    onLine: (line: string) => void,
+    env: Readonly<Record<string, string>> = {},
+): Promise<{ code: number; output: string }> => {
     const candidates = icCandidates(process.platform, homedir());
     for (const [index, binary] of candidates.entries()) {
-        const attempt = await runStreamed(binary, args, onLine);
+        const attempt = await runStreamed(binary, args, onLine, env);
         if (attempt !== "missing") {
             return attempt;
         }
@@ -452,10 +470,15 @@ export const runIc = async (args: readonly string[], onLine: (line: string) => v
 };
 
 // One `ic` run on one slug, marked in flight for its whole length so the background tick never pulls under it.
-export const icFlow = async (slug: string, args: readonly string[], onLine: (line: string) => void): Promise<{ code: number; output: string }> => {
+export const icFlow = async (
+    slug: string,
+    args: readonly string[],
+    onLine: (line: string) => void,
+    env: Readonly<Record<string, string>> = {},
+): Promise<{ code: number; output: string }> => {
     icInFlight.add(slug);
     try {
-        return await runIc(args, onLine);
+        return await runIc(args, onLine, env);
     } finally {
         icInFlight.delete(slug);
     }
@@ -509,14 +532,16 @@ export const reshapeSandbox = async (
 export const reconnectSandbox = async (
     slug: string,
     setupCode: string | undefined,
+    platformUrl: string | undefined,
     scopes: DeviceScopes,
     onLine: (line: string) => void,
 ): Promise<string> => {
     assertScope(scopes, "sandboxes");
     const args = icConnectArgs(setupCode);
+    const env = icConnectEnv(platformUrl);
     // find(slug) first: redeeming the claim for a slug not on this machine would burn it for nothing.
     await find(slug);
-    const run = await icFlow(slug, args, onLine);
+    const run = await icFlow(slug, args, onLine, env);
     if (run.code !== 0) {
         throw new Error(`That reconnect failed on this device.\n\n${run.output}`);
     }
@@ -528,13 +553,20 @@ export const reconnectSandbox = async (
 // hostname the platform minted), so a container already answering to it means the claim would recreate somebody else's
 // sandbox — refused here, before the code is spent, because a setup code is single-use and burning one costs the
 // caller a whole round trip to the platform.
-export const createSandbox = async (slug: string, setupCode: string | undefined, scopes: DeviceScopes, onLine: (line: string) => void): Promise<string> => {
+export const createSandbox = async (
+    slug: string,
+    setupCode: string | undefined,
+    platformUrl: string | undefined,
+    scopes: DeviceScopes,
+    onLine: (line: string) => void,
+): Promise<string> => {
     assertScope(scopes, "sandboxes");
     const args = icConnectArgs(setupCode);
+    const env = icConnectEnv(platformUrl);
     if ((await fleet()).some((box) => box.slug === slug)) {
         throw new Error(`This device already runs a sandbox called "${slug}". Nothing was created and the setup code was not spent.`);
     }
-    const run = await icFlow(slug, args, onLine);
+    const run = await icFlow(slug, args, onLine, env);
     if (run.code !== 0) {
         throw new Error(`That sandbox could not be created on this device.\n\n${run.output}`);
     }

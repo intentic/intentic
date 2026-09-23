@@ -94,14 +94,14 @@ const FLOWS: Record<DeviceSandboxOp, FlowFor> = {
             tailSandboxLogs(slug, scopes, onLine),
     // setupCode carries the values a drifted sandbox is missing; nothing on this machine can supply them.
     reconnect:
-        ({ slug, setupCode }, scopes) =>
+        ({ slug, setupCode, platformUrl }, scopes) =>
         (onLine) =>
-            reconnectSandbox(slug, setupCode, scopes, onLine),
+            reconnectSandbox(slug, setupCode, platformUrl, scopes, onLine),
     // The same claim, for a row that has never run anywhere: `slug` is what the claim will produce, not what is here.
     create:
-        ({ slug, setupCode }, scopes) =>
+        ({ slug, setupCode, platformUrl }, scopes) =>
         (onLine) =>
-            createSandbox(slug, setupCode, scopes, onLine),
+            createSandbox(slug, setupCode, platformUrl, scopes, onLine),
     "runner-up": runnerFlowFor,
     "runner-remove": runnerFlowFor,
 };

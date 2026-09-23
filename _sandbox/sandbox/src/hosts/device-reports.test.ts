@@ -488,14 +488,18 @@ test("carries no container list at all when the machine refuses to list them", a
 
 // Fixture exposing both the flow sent to the machine and what this side minted, revoked or disconnected.
 const runnerServices = (
-    overrides: { publicUrl?: string; online?: boolean; approved?: string; settings?: Record<string, unknown> } = {},
+    overrides: { publicUrl?: string; platformUrl?: string; online?: boolean; approved?: string; settings?: Record<string, unknown> } = {},
 ): { services: Services; sent: DeviceSandboxFlow[]; minted: string[]; revoked: string[]; disconnected: string[] } => {
     const sent: DeviceSandboxFlow[] = [];
     const minted: string[] = [];
     const revoked: string[] = [];
     const disconnected: string[] = [];
     const services = {
-        config: { historyRoot: NO_HISTORY, sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev" } },
+        config: {
+            historyRoot: NO_HISTORY,
+            sandbox: { publicUrl: overrides.publicUrl ?? "https://sandbox-x.intentic.dev" },
+            platform: { url: overrides.platformUrl ?? "https://host.docker.internal:6480" },
+        },
         // Backs runner-up's best-effort reads; empty here so nothing extra appears in the assertions below.
         workspace: { root: "/nowhere" },
         files: { read: async () => overrides.approved },
@@ -572,6 +576,27 @@ test("starting a runner ships the approved overlay with its pinning hash and the
     expect(flow.definition).toContain("hashlineEdits = true");
     expect(flow.definition).not.toContain("[[capabilities]]");
     expect(flow.definition).not.toContain("secrets");
+});
+
+// A setup code exists only on the platform that minted it; a device left to its default redeems it at production.
+test("a create or reconnect names this sandbox's platform, over anything the caller sent", async () => {
+    const { services, sent } = runnerServices();
+    await drain(manageDeviceSandbox(services, "rog", { op: "create", slug: "gate", setupCode: "code-abc" }));
+    await drain(
+        manageDeviceSandbox(services, "rog", { op: "reconnect", slug: "work", setupCode: "code-def", platformUrl: "https://elsewhere.example" }),
+    );
+    expect(sent).toEqual([
+        { op: "create", slug: "gate", setupCode: "code-abc", platformUrl: "https://host.docker.internal:6480" },
+        { op: "reconnect", slug: "work", setupCode: "code-def", platformUrl: "https://host.docker.internal:6480" },
+    ]);
+});
+
+test("a sandbox with no platform relays no setup code at all", async () => {
+    const { services, sent } = runnerServices({ platformUrl: "" });
+    await expect(drain(manageDeviceSandbox(services, "rog", { op: "create", slug: "gate", setupCode: "code-abc" }))).rejects.toThrow(
+        /not connected to a platform/i,
+    );
+    expect(sent).toEqual([]);
 });
 
 test("a removed runner loses its enrollment here, but only when the machine says it worked", async () => {

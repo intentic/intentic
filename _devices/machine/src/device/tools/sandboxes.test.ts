@@ -6,12 +6,14 @@ import {
     FLEET_ARGS,
     icCandidates,
     icConnectArgs,
+    icConnectEnv,
     icRemoveArgs,
     icReshapeArgs,
     icRunnerArgs,
     icSwapArgs,
     listSandboxes,
     manageSandbox,
+    reconnectSandbox,
     removeSandbox,
     reshapeSandbox,
     resourcesFrom,
@@ -122,11 +124,30 @@ test("a reconnect with no claim is refused rather than run as a bare connect", (
 // The claim is single-use: a create that would land on a name already taken has to refuse BEFORE ic runs, or the
 // owner pays a round trip to the platform for a code that bought nothing.
 test("a create with no claim is refused before the fleet is even read", async () => {
-    await expect(createSandbox("reviewer", undefined, scopes(), () => {})).rejects.toThrow(/setupCode.*required/i);
+    await expect(createSandbox("reviewer", undefined, "https://api.intentic.dev", scopes(), () => {})).rejects.toThrow(/setupCode.*required/i);
+});
+
+// Left to its default, ic redeems at production, which answers a dev platform's code with "invalid or expired".
+test("a create or reconnect that does not name the minting platform is refused before the fleet is even read", async () => {
+    await expect(createSandbox("reviewer", "code-abc", undefined, scopes(), () => {})).rejects.toThrow(/platformUrl.*required/i);
+    await expect(reconnectSandbox("work", "code-abc", undefined, scopes(), () => {})).rejects.toThrow(/platformUrl.*required/i);
+    await expect(createSandbox("reviewer", "code-abc", "  ", scopes(), () => {})).rejects.toThrow(/platformUrl.*required/i);
 });
 
 test("creating is refused by the sandboxes switch, like every other verb that runs ic", async () => {
-    await expect(createSandbox("reviewer", "code-abc", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(/Manage sandboxes on this device/);
+    await expect(createSandbox("reviewer", "code-abc", "https://api.intentic.dev", scopes({ sandboxes: "off" }), () => {})).rejects.toThrow(
+        /Manage sandboxes on this device/,
+    );
+});
+
+test("ic redeems the claim at the platform that minted it", () => {
+    expect(icConnectEnv("https://api.intentic.dev")).toEqual({ PLATFORM_URL: "https://api.intentic.dev" });
+    expect(icConnectEnv("https://api.intentic.dev/")).toEqual({ PLATFORM_URL: "https://api.intentic.dev" });
+});
+
+// The daemon's own spelling of a dev platform on this machine resolves nowhere outside a container.
+test("a platform the daemon reaches as host.docker.internal is redeemed at this machine's localhost, port kept", () => {
+    expect(icConnectEnv("https://host.docker.internal:6480")).toEqual({ PLATFORM_URL: "https://localhost:6480" });
 });
 
 test("a rebuild without the approved digest is refused rather than built against nothing", () => {

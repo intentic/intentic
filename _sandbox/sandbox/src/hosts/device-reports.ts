@@ -350,6 +350,17 @@ export const heldHostDevices = async (services: Services): Promise<Device[]> =>
         })),
     );
 
+// A setup code is redeemable only on the platform that minted it, which is this sandbox's own.
+const mintingPlatform = (services: Services): string => {
+    const url = services.config.platform.url;
+    if (url === "") {
+        throw new ORPCError("CONFLICT", {
+            message: "This sandbox is not connected to a platform, so no setup code it relays could be redeemed anywhere.",
+        });
+    }
+    return url;
+};
+
 // One management action relayed to the machine and streamed back verbatim (some flows take minutes); the daemon adds no
 // judgement of its own, only drops the cached pull so the next poll reflects the result.
 export async function* manageDeviceSandbox(services: Services, id: string, input: DeviceSandboxFlow): AsyncGenerator<DeviceFlowLine> {
@@ -359,34 +370,37 @@ export async function* manageDeviceSandbox(services: Services, id: string, input
             message: `"${id}" is not connected right now, the device is asleep, offline, or its agent isn't running.`,
         });
     }
-    // runner-up is the only augmented op: adds a dial URL and a name-bound pairing; refused without a public URL.
+    // Daemon-filled over the caller: reconnect/create name the minting platform, runner-up a dial URL and a pairing.
     const flow: DeviceSandboxFlow =
-        input.op === "runner-up"
-            ? await (async () => {
-                  const parentUrl = services.config.sandbox.publicUrl;
-                  if (parentUrl === "") {
-                      throw new ORPCError("CONFLICT", {
-                          message: "This sandbox has no public address yet, so a runner would have nothing to dial back to. Finish its setup first.",
-                      });
-                  }
-                  // Overlay ships as approved bytes plus sha256, re-checked on the machine; definition ships settings
-                  // only, best-effort.
-                  const definition = await Promise.resolve()
-                      .then(() => settingsDefinition(services))
-                      .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
-                      .catch(() => undefined);
-                  const overlay = await Promise.resolve()
-                      .then(() => services.files.read(approvedPath(services)))
-                      .catch(() => undefined);
-                  return {
-                      ...input,
-                      parentUrl,
-                      pair: services.runners.mintPairing(input.slug, { host: id }).token,
-                      ...(definition !== undefined ? { definition } : {}),
-                      ...(overlay !== undefined && overlay !== "" ? { overlay, overlayHash: sha256Hex(overlay) } : {}),
-                  };
-              })()
-            : input;
+        input.op === "reconnect" || input.op === "create"
+            ? { ...input, platformUrl: mintingPlatform(services) }
+            : input.op === "runner-up"
+              ? await (async () => {
+                    const parentUrl = services.config.sandbox.publicUrl;
+                    if (parentUrl === "") {
+                        throw new ORPCError("CONFLICT", {
+                            message:
+                                "This sandbox has no public address yet, so a runner would have nothing to dial back to. Finish its setup first.",
+                        });
+                    }
+                    // Overlay ships as approved bytes plus sha256, re-checked on the machine; definition ships settings
+                    // only, best-effort.
+                    const definition = await Promise.resolve()
+                        .then(() => settingsDefinition(services))
+                        .then((settings) => (Object.keys(settings.settings).length === 0 ? undefined : emitDefinitionToml(settings)))
+                        .catch(() => undefined);
+                    const overlay = await Promise.resolve()
+                        .then(() => services.files.read(approvedPath(services)))
+                        .catch(() => undefined);
+                    return {
+                        ...input,
+                        parentUrl,
+                        pair: services.runners.mintPairing(input.slug, { host: id }).token,
+                        ...(definition !== undefined ? { definition } : {}),
+                        ...(overlay !== undefined && overlay !== "" ? { overlay, overlayHash: sha256Hex(overlay) } : {}),
+                    };
+                })()
+              : input;
     try {
         // The machine bounds its own work; this ceiling only ever catches a socket that is gone but not closed.
         for await (const line of await client.runSandboxFlow(flow, { signal: AbortSignal.timeout(FLOW_TIMEOUT_MS) })) {
