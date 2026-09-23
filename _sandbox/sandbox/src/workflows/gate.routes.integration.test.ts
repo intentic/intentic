@@ -73,7 +73,17 @@ const judging = (root: string, release: string, prompts: string[] = []): TurnFn 
         yield { kind: "done" } as AgentEvent;
     };
 
-const appFor = (services: Services, wake: TurnFn): Hono => new Hono().post("/workflows/:id/gate", createGateRoute(services, wake));
+// The same judgment, handed in only after `delayMs`: a run that outlasts at least one heartbeat.
+const judgingAfter = (root: string, release: string, delayMs: number): TurnFn => {
+    const judge = judging(root, release);
+    return async function* turn(services, input: AgentTurn, signal) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        yield* judge(services, input, signal);
+    };
+};
+
+const appFor = (services: Services, wake: TurnFn, heartbeatMs?: number): Hono =>
+    new Hono().post("/workflows/:id/gate", createGateRoute(services, wake, heartbeatMs));
 
 const tempRoot = (): string => mkdtempSync(join(tmpdir(), "gate-"));
 
@@ -112,12 +122,13 @@ test("the request body reaches the step as the run's request", async () => {
     const services = fakeServices(root);
     const prompts: string[] = [];
     await services.workflows.save(gated("wf-body"), true);
-    await post(
+    const response = await post(
         appFor(services, judging(root, "pass", prompts)),
         "wf-body",
         `token=${await token("wf-body")}`,
         "sha=deadbeef url=https://preview.example",
     );
+    await response.text();
 
     expect(prompts[0]).toContain("https://preview.example");
 });
@@ -165,6 +176,39 @@ test("a gate pointed at a field nobody declares is refused at call time", async 
 
     expect(response.status).toBe(400);
     expect((await response.json()).error).toContain("shipit");
+});
+
+test("headers leave before the verdict and spaces keep a long hold talking, and the body still parses", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    await services.workflows.save(gated("wf-heartbeat"), true);
+
+    const startedAt = Date.now();
+    const response = await post(appFor(services, judgingAfter(root, "pass", 400), 20), "wf-heartbeat");
+    const headersAfter = Date.now() - startedAt;
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(headersAfter).toBeLessThan(300);
+    expect(text).toMatch(/^ +\{/);
+    expect(JSON.parse(text).outcome).toBe("pass");
+});
+
+test("a caller that hangs up stops the run it started", async () => {
+    const root = tempRoot();
+    const services = fakeServices(root);
+    await services.workflows.save(gated("wf-hangup"), true);
+
+    const response = await post(appFor(services, judgingAfter(root, "pass", 5_000), 20), "wf-hangup");
+    await response.body?.cancel();
+
+    const deadline = Date.now() + 2_000;
+    let state = (await services.workflowRuns.list())[0]?.state;
+    while (state === "running" && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        state = (await services.workflowRuns.list())[0]?.state;
+    }
+    expect(state).toBe("stopped");
 });
 
 test("a run that outlasts the deadline is stopped and answers blocked", async () => {

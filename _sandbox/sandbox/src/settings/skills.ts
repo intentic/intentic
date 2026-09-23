@@ -65,7 +65,7 @@ shadow's age by eye.
 ## What it refuses, and why
 - A scanned PDF on an image without tesseract answers "no usable text layer … OCR is not part of this tier"
   rather than an empty page; images say "no visual description". Treat those notes as "not generated",
-  never as "nothing there". An extension that ships tesseract (paperwork, office) turns the first into OCR.
+  never as "nothing there". An extension that ships tesseract (office) turns the first into OCR.
 - Plain text (md, csv, txt, code) is not fileq's business: Read it directly — but see below for the big ones.
 - Web pages belong to \`webq\`; images for a vision model belong to the Read tool, which shows the pixels.
 

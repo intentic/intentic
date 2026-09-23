@@ -8,9 +8,7 @@ on:
         - cron: "17 3 * * *"
     workflow_dispatch:
 
-# Two things must be true in repo settings or the last step fails on its first run: Settings → Actions →
-# General → "Allow GitHub Actions to create and approve pull requests" must be ON, and a `listing` label must
-# exist (gh pr create --label errors on a label that doesn't).
+# A `listing` label must exist: gh pr create --label errors on a label that doesn't.
 permissions:
     contents: read
 

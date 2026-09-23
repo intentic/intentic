@@ -45,8 +45,8 @@ back at all:
 - **Extension settings** declared with an `env` name (`contributes.settings`) inject their current value
   (`extensions/extension-env.ts`).
 - **`PATH`** is every enabled extension's `contributes.bin` directory, prepended to the image's PATH
-  (`extensions/installed-extensions.ts` `extensionBinDirsOf`), which is how `office`, `voice`, `paperwork`
-  or `discord-voice` resolve by name in every runtime's shell. A file in that directory without the execute bit
+  (`extensions/installed-extensions.ts` `extensionBinDirsOf`), which is how `office`, `voice` or
+  `discord-voice` resolve by name in every runtime's shell. A file in that directory without the execute bit
   is a command that cannot run: PATH resolution skips it.
 - **Then narrowed by the persona** (`personas/personas.ts` `personaCliEnv`): a connector the turn's persona
   was not granted has every variable carrying its suffix REMOVED from the environment, not hidden behind an

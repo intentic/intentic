@@ -13,10 +13,15 @@ Before enabling the workflows:
 2. Install a registry GitHub App with repository Contents + Pull requests read/write, put its id in
    `REGISTRY_APP_ID`, and store its private key as `REGISTRY_APP_PRIVATE_KEY`. App-created proposal/attestation
    commits trigger their required checks; GitHub's built-in workflow token intentionally would not.
-3. Store the intentic gate door as `INTENTIC_EXTENSION_GATE_URL`.
+3. Create the gate's sandbox from [`.intentic/registry-gate.sandbox.toml`](.intentic/registry-gate.sandbox.toml)
+   (`sandboxes create registry-gate --definition .intentic/registry-gate.sandbox.toml`), connect its model, and
+   store the URL of its `extension-security-gate` workflow as `INTENTIC_EXTENSION_GATE_URL`. The audit it runs is
+   [`.intentic/config/workflows.json`](.intentic/config/workflows.json): a change to it merges here first and is
+   then pulled into that sandbox.
 4. Make `extension admission / admission` a required check on the default branch and require branches to be
    up to date before merging. The check is a comparison with the current base registry, so a result computed
-   against an older base is not sufficient.
+   against an older base is not sufficient. Only the registry App may bypass the rule, for the facts refresh
+   the nightly scan pushes to the default branch.
 
 The App tokens are short-lived and explicitly narrowed per job, workflow actions are pinned to commits, npm
 lifecycle scripts are disabled, and the registry scanner and Trivy use exact versions. Trivy parses extension

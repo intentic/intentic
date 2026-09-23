@@ -5,7 +5,9 @@ The one-line CI step for a release gate: POSTs what the pipeline knows to a gate
 ## Responsibilities
 
 A gated workflow (see `_sandbox/sandbox`, gate.routes.ts) already answers a bare `curl`: POST the request, hold
-the connection, read `{outcome, reason, runId}` back. What every team then writes around that curl is the same
+the connection, read `{outcome, reason, runId}` back. The headers arrive at once and the body carries a space every
+30 s until the verdict, so an edge proxy (Cloudflare cuts a silent response at 125 s) or a client's own read timeout
+never ends a long run early; JSON ignores the leading whitespace. What every team then writes around that curl is the same
 six lines of shell: map `pass`/`fail`/`blocked` to exit codes, print the reason where the log will show it,
 keep the client's timeout longer than the server's hold. This package is those six lines, written once:
 

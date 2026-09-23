@@ -4,13 +4,12 @@ name: extension admission
 # author opens a fork pull request. The pull request branch is never checked out or executed: its registry JSON
 # is fetched through the API. Exact extension source is checked out only in the separate no-secrets scan job;
 # author code is never run on any runner.
+# No paths filter: `admission` is a required check, and a pull request the filter skipped would wait on it forever.
 on:
     pull_request_target:
         # `edited` closes the base-branch swap hole: a check computed against another base must not remain the
         # required check after the pull request is retargeted without changing its head commit.
         types: [opened, synchronize, reopened, edited]
-        paths:
-            - .claude-plugin/marketplace.json
 
 permissions:
     contents: read
@@ -149,6 +148,8 @@ jobs:
               with:
                   url: ${{ secrets.INTENTIC_EXTENSION_GATE_URL }}
                   request: ${{ needs.prepare.outputs.request }}
+                  # Seconds; a whole-tree audit outlasts the 30-minute default, and the gate caps any wait at 3 hours.
+                  wait: "7200"
                   blocked-as: failure
 
             # The first passing run writes its run id against the exact source sha. That push creates a new PR

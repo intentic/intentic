@@ -1,0 +1,8 @@
+# The sandbox behind INTENTIC_EXTENSION_GATE_URL: it clones this repository to run .intentic/config/workflows.json,
+# and holds no connection but its model, because what it audits is untrusted code.
+schemaVersion = 1
+name = "registry-gate"
+
+[workspace]
+remote = "https://github.com/intentic/registry.git"
+ref = "main"

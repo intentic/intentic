@@ -1,4 +1,5 @@
 import { setTimeout as sleep } from "node:timers/promises";
+import { errorMessage } from "@intentic/base/errors";
 import { GATE_DAILY_MAX_DEFAULT, type GateVerdict, workflowFaults, workflowRunFaults } from "@intentic/sandbox-contract";
 import type { Context } from "hono";
 import { streamAgent } from "../agent/routes/agent.routes.js";
@@ -32,8 +33,38 @@ const waitMsOf = (raw: string | undefined): number => {
     return Math.min(asked, WAIT_MAX_S) * 1_000;
 };
 
+// Under both the 125 s an edge proxy (Cloudflare) waits between origin bytes and the 300 s a Node fetch waits per chunk.
+export const HEARTBEAT_MS = 30_000;
+
+const encoder = new TextEncoder();
+
+// Headers leave at once and a space every beat until the verdict: whitespace JSON allows before a value, so callers that
+// read the whole body still parse one verdict. A caller that hangs up can no longer be answered, so its run is stopped.
+const verdictStream = (verdict: Promise<GateVerdict>, hangUp: () => void, heartbeatMs: number): Response => {
+    let beat: ReturnType<typeof setInterval> | undefined;
+    let open = true;
+    const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+            beat = setInterval(() => controller.enqueue(encoder.encode(" ")), heartbeatMs);
+            void verdict.then((answer) => {
+                clearInterval(beat);
+                if (open) {
+                    controller.enqueue(encoder.encode(JSON.stringify(answer)));
+                    controller.close();
+                }
+            });
+        },
+        cancel() {
+            open = false;
+            clearInterval(beat);
+            hangUp();
+        },
+    });
+    return new Response(body, { status: 200, headers: { "content-type": "application/json; charset=UTF-8" } });
+};
+
 export const createGateRoute =
-    (services: Services, wake: TurnFn = streamAgent) =>
+    (services: Services, wake: TurnFn = streamAgent, heartbeatMs = HEARTBEAT_MS) =>
     async (c: Context<AppEnv, "/workflows/:id/gate">): Promise<Response> => {
         const workflow = await services.workflows.get(c.req.param("id"));
         // One 404 for both no such workflow and no gate declared; nothing here is fixable by learning which.
@@ -83,19 +114,20 @@ export const createGateRoute =
             () => true,
             () => true,
         );
-        const settled = await Promise.race([finished, sleep(waitMsOf(c.req.query("wait"))).then(() => false)]);
-        // A given-up caller must not leave the fan-out running: stop it rather than abandon it.
-        if (!settled) {
-            stopWorkflowRun(run.runId);
-        }
-
-        // Verdict is read back from the run ledger, not reasoned about; a run past the end of it reads as blocked.
-        const record = await services.workflowRuns.get(run.runId);
-        const verdict: GateVerdict =
-            record === undefined
+        const waitMs = waitMsOf(c.req.query("wait"));
+        const verdict = (async (): Promise<GateVerdict> => {
+            const settled = await Promise.race([finished, sleep(waitMs).then(() => false)]);
+            // A given-up caller must not leave the fan-out running: stop it rather than abandon it.
+            if (!settled) {
+                stopWorkflowRun(run.runId);
+            }
+            // Verdict is read back from the run ledger, not reasoned about; a run past the end of it reads as blocked.
+            const record = await services.workflowRuns.get(run.runId);
+            return record === undefined
                 ? { outcome: "blocked", runId: run.runId, reason: "The run went missing before it could be read." }
                 : gateVerdictOf(record);
+        })().catch((error: unknown): GateVerdict => ({ outcome: "blocked", runId: run.runId, reason: `The run could not be read: ${errorMessage(error)}` }));
 
         // Always 200, even for `fail`: the pipeline reads `outcome` itself, distinct from a wrong-token failure.
-        return c.json(verdict);
+        return verdictStream(verdict, () => stopWorkflowRun(run.runId), heartbeatMs);
     };
